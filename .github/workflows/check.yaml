@@ -449,6 +449,55 @@ jobs:
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
 
+  # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
+  # it lists the files Vitest's `--changed` picks, as each leg will, and sizes the legs from their
+  # measured seconds: none when nothing is picked, then next skips; one when they fit one leg; else
+  # the fewest that fit, up to the full matrix. A small pull request then holds no runner it does not
+  # need, so a big one can claim it. Everywhere else every step skips and it prints nothing, so next
+  # runs its full matrix, the fallback in its `matrix`: the merge queue, main, the reader tests, and a
+  # failed changes. A failed install or list prints nothing too, so it fails open to the full matrix.
+  legs:
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.size.outputs.shards }}
+      vitest: ${{ steps.size.outputs.vitest }}
+      e2e: ${{ steps.size.outputs.e2e }}
+      next: ${{ steps.size.outputs.next }}
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
+        with:
+          # `--changed` compares with the pull request's base commit, so the history must hold it.
+          # Blobless, as in changes: `--changed` reads only names.
+          fetch-depth: 0
+          filter: blob:none
+      - uses: pnpm/action-setup@v6
+        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
+        continue-on-error: true
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
+        continue-on-error: true
+        # No pnpm store cache: it did not pay, and it saved a copy per ref (.github/actions/pnpm).
+        with:
+          node-version: 26.13.0
+      # No install scripts: listing runs no test, and builds nothing.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
+        continue-on-error: true
+      - id: size
+        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
+        continue-on-error: true
+        env:
+          EVENT: ${{ github.event_name }}
+          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node .github/ci/legs.ts
+
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
   # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
@@ -457,18 +506,21 @@ jobs:
   # Chromium is fetched only once an e2e file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
-  # Seven machines. Legs `1` to `5` run vitest, each a fifth of the files by measured seconds
-  # (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no vitest step: each fetches chromium and runs
-  # the end-to-end runner on its half of the end-to-end files, split by the same measured seconds
-  # (vitest.e2e.config.ts). Every leg is a quoted string, so each `if` below compares a string with
-  # a string. workflow-lint.ts pins the legs, each `/N` and each `if`; vitest.shards.test.ts (E4)
-  # pins the count of e2e legs: the fewest whose longest leg fits in half the time limit.
+  # The full matrix is seven machines, the fallback below. Legs `1` to `5` run vitest, each a fifth of
+  # the files by measured seconds (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no vitest step:
+  # each fetches chromium and runs the end-to-end runner on its half of the end-to-end files, split by
+  # the same measured seconds (vitest.e2e.config.ts). On a pull request that tests all of next/, the
+  # legs job prints fewer, with each kind's `/N` to match, or none, and then this job skips. Every leg
+  # is a quoted string, so each `if` below compares a string with a string. workflow-lint.ts pins the
+  # fallback, each `/N` and each `if`; vitest.shards.test.ts (E4) pins the count of e2e legs: the
+  # fewest whose longest leg fits in half the time limit.
   next:
-    needs: changes
+    needs: [changes, legs]
     if: >-
       ${{ !cancelled() &&
           (needs.changes.result != 'success' ||
-           needs.changes.outputs.next != 'false') }}
+           needs.changes.outputs.next != 'false') &&
+          needs.legs.outputs.next != 'false' }}
     runs-on: ubuntu-latest
     # Largest of 30 completed next jobs: 486 s, run 43239450301 attempt 1, job 131255816934.
     # Twice that whole-job time, rounded up to a minute: ceil(972 / 60) = 17.
@@ -476,7 +528,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5"]
+        shard: ${{ fromJSON(needs.legs.outputs.shards || '["e2e-1","e2e-2","1","2","3","4","5"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -499,7 +551,7 @@ jobs:
       - run: pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
-          SHARD: ${{ matrix.shard }}/5
+          SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.vitest || 5 }}
           FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
           CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
@@ -514,7 +566,7 @@ jobs:
       - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:
-          SHARD: ${{ matrix.shard }}/2
+          SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.e2e || 2 }}
           CHANGED: ${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
       # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
       - name: shard times
@@ -542,7 +594,7 @@ jobs:
   # merge anyway.
   ci-required:
     name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
-    needs: [changes, field, check, typecheck, e2e, test, next]
+    needs: [changes, field, check, typecheck, e2e, test, legs, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

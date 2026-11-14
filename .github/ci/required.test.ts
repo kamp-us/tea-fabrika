@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
-import { gated, judge } from "./required.mjs";
+import { gated, judge, sized } from "./required.mjs";
 
 // Today's CI for both versions. Covers required.mjs, the `ci-required` job's verdict. Each law
 // names the edge case it holds from the list at the top of required.mjs.
@@ -61,6 +61,34 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
         const meant = (job: string) => changes === "success" && needs["changes"]!.outputs![job] === "false";
         const expected = changes === "success" && meant(name) && others.every(meant);
         expect(judge(needs).pass).toBe(expected);
+      },
+    ),
+    options,
+  );
+});
+
+it("10: a sized job's skip passes when its sizer succeeded and said exactly false, and only then", () => {
+  // next skips when legs.ts found no next/ test file, while changes still said next runs. Plant, run
+  // once on required.mjs and restored: drop the sizer's `result` check (red: a failed legs that
+  // said false passed).
+  fc.assert(
+    fc.property(
+      green,
+      fc.constantFrom(...Object.keys(sized)),
+      flag,
+      fc.constantFrom("success", "failure", "cancelled", "skipped"),
+      (needs, name, said, end) => {
+        const sizer = sized[name]!;
+        needs["changes"]!.outputs![name] = "true";
+        needs[sizer] = { result: end, outputs: { [name]: said } };
+        needs[name] = { result: "skipped", outputs: {} };
+        const small = end === "success" && said === "false";
+        const verdict = judge(needs);
+        // The sizer is an ungated job, so its own skip or failure fails the run too.
+        expect(verdict.pass).toBe(small);
+        expect(verdict.lines).toContain(
+          small ? `${name}: skipped, as ${sizer} said, pass` : `${name}: skipped, but it should have run, fail`,
+        );
       },
     ),
     options,
