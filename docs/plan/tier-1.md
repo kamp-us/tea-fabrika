@@ -214,6 +214,10 @@ In build order. "Decide first" lists only what no decision answers yet.
   and closes tiles, a split's tile entering the layout only once its process started, and a close
   stopping a process tezgah started. A headless window started with a desk follows tezgah's view
   in place of a fixed tile list, and the Worker's process side now wires `stop_child`.*
+- *2026-11-14: the desk lane's slice S2b is built on the same branch, not yet merged: the browser
+  tab draws workspace 1 of the founder's tezgah, one region per tile named by `tileName`; `C-b %`,
+  `C-b "` and `C-b x` work through the tab's own prefix, a close of a tile tezgah started asks
+  `close t<n>? (y/n)`, and a split that would leave a tile under 220x120 is refused in the tab.*
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read

@@ -1,13 +1,19 @@
 // next/: the page draws the library's window client. React only reads and sends Msgs; the run, its
-// socket and its timers belong to the scope the caller started it in.
+// socket and its timers belong to the scope the caller started it in. The page draws the workspace
+// of its person's tezgah (`Layout.tsx`), reads each press for the window's own prefix (0278), and
+// says the prefix, the close ask and a refused split in its two live regions, made at boot.
 import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
+import * as Keys from "@kampus/libfabrika/client/Keys";
+import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
 import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
+import type { Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
-import { type ReactNode, StrictMode } from "react";
+import { type ReactNode, StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
+import { question, Layout, tileName } from "./Layout.tsx";
 
 type LiveWindow = EffectRun<WindowModel, WindowMsg>;
 type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
@@ -15,11 +21,17 @@ type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
 type PageProps = {
   readonly run: LiveWindow;
   readonly origin: string;
-  readonly windowFor: (name: string) => TileWindow | null;
+  /** The window registered for a program, found by the program a tile shows, never by its name. */
+  readonly windowFor: (program: string) => TileWindow | null;
+  /** The key table the window machine was made with, so the page leaves every other key alone. */
+  readonly keys: Keys.Table;
 };
 
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
+const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
+const pickPrefix = (m: WindowModel) => m.prefix;
+const pickPolite = (m: WindowModel) => m.polite;
 
 const refusalFor = (registration: TileWindow | null, refusal: WindowModel["tiles"][number]["refusal"]) => {
   if (refusal === null) {
@@ -63,83 +75,194 @@ const Waiting = ({
   );
 };
 
-const Tile = ({
-  run,
-  id,
-  windowFor,
-}: {
-  readonly run: LiveWindow;
-  readonly id: string;
-  readonly windowFor: PageProps["windowFor"];
-}) => {
-  const [tile, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === id));
-  const [shown] = useRuntime(run, (m) => {
-    const t = m.tiles.find((t) => t.id === id);
-    return t?.last ? m.client.views[t.last] : undefined;
-  });
-  const [link] = useRuntime(run, pickLink);
+type Row = WindowModel["tiles"][number];
 
-  if (tile === undefined) {
-    return null;
-  }
-
-  const registration = windowFor(tile.name);
-  const data =
-    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+/** The word a tile's title bar says and whether it takes input, from the link and its reach. */
+const tileState = (link: WindowModel["link"], row: Row | undefined) => {
   const offline = link._tag !== "online";
-  const state = offline
+  const word = offline
     ? link._tag === "retrying"
       ? "Retrying"
       : "Connecting"
-    : tile.reach._tag === "missing"
+    : row?.reach._tag === "missing"
       ? "Missing"
-      : tile.reach._tag === "open"
+      : row?.reach._tag === "open"
         ? "Online"
         : "Opening";
-  const refusal = refusalFor(registration, tile.refusal);
+  return { word, live: !offline && row?.reach._tag === "open" };
+};
+
+const TileBody = ({
+  run,
+  tile,
+  windowFor,
+}: {
+  readonly run: LiveWindow;
+  readonly tile: TezgahTile;
+  readonly windowFor: PageProps["windowFor"];
+}) => {
+  const [row, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === tile.id));
+  const [shown] = useRuntime(run, (m) => {
+    const t = m.tiles.find((t) => t.id === tile.id);
+    return t?.last ? m.client.views[t.last] : undefined;
+  });
+  const registration = windowFor(tile.program);
+  const data =
+    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+
+  if (row === undefined || registration === null || data === null) {
+    return <p className="tile-empty">{row?.reach._tag === "missing" ? "Missing" : "Opening"}</p>;
+  }
+
   return (
-    <section
-      className={offline ? "tile disconnected" : "tile"}
-      aria-label={tile.name}
-      inert={offline || tile.reach._tag !== "open"}
-    >
-      <header className="titlebar">
-        <span className="tile-mark" aria-hidden="true">
-          ·
-        </span>
-        <span className="tile-name">{tile.name}</span>
-        <span className="tile-state">{state}</span>
-        <span className="tile-id">{tile.id}</span>
-      </header>
-      <div className="slot">
-        {registration === null || data === null ? (
-          <p>{tile.reach._tag === "missing" ? "Missing" : "Opening"}</p>
+    <registration.View
+      data={data}
+      tile={row.own}
+      press={(m) => send({ type: "press", tile: row.id, m, via: "button" })}
+      send={(msg) => send({ type: "tile", id: row.id, msg })}
+      refusal={refusalFor(registration, row.refusal)}
+    />
+  );
+};
+
+/** What a split with no room says, in the window that asked, as tmux refuses one. */
+const noRoom = (tile: Pick<TezgahTile, "n">): string => `No room to split t${tile.n}`;
+
+/** The prefix line: each key after the prefix and what it does, from the one table. */
+const prefixLine = (table: Keys.Table): string =>
+  [
+    ...table.rows.flatMap((row) => {
+      const keys = row.keys.filter((k) => k.startsWith("<prefix>")).map((k) => k.slice("<prefix>".length));
+      return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
+    }),
+    "Esc cancel",
+  ].join(" · ");
+
+/** Reads every press on the page for the window's prefix. A key the window does not take keeps its
+ *  default and reaches the tile; one it takes goes to the window and nowhere else. */
+const useKeys = (run: LiveWindow, table: Keys.Table, send: (msg: WindowMsg) => void) =>
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => {
+      const key = Keys.spell(e);
+
+      if (key === null) {
+        return;
+      }
+
+      const prefix = run.getState().prefix;
+      const routed = Keys.route(table, prefix, null, { key });
+
+      if (routed._tag === "platform" || (routed._tag === "tile" && prefix._tag === "idle")) {
+        return;
+      }
+
+      // The prefix again passes the prefix key on to the tile, as tmux's send-prefix does.
+      if (routed._tag !== "tile") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      send({ type: "key", key, at: Math.max(0, e.timeStamp) });
+    };
+    document.addEventListener("keydown", listener, true);
+    return () => document.removeEventListener("keydown", listener, true);
+  }, [run, table, send]);
+
+/** Tells the window the size of the area its tiles are drawn in, whenever it changes. */
+const useSize = (send: (msg: WindowMsg) => void) => {
+  const area = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = area.current;
+
+    if (element === null) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) {
+        send({ type: "size", width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [send]);
+  return area;
+};
+
+const Desk = (props: PageProps) => {
+  const [link, send] = useRuntime(props.run, pickLink);
+  const [rows] = useRuntime(props.run, pickTiles);
+  const [client] = useRuntime(props.run, pickTezgah);
+  const [prefix] = useRuntime(props.run, pickPrefix);
+  const [polite] = useRuntime(props.run, pickPolite);
+  const view = client === null ? null : optimisticState(client);
+  const space = view?.workspaces.find((w) => w.n === client?.workspace);
+  const area = useSize(send);
+  const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
+  const focused = view?.tiles.find((t) => t.id === space?.focus);
+  const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
+  const line =
+    asked !== undefined
+      ? question(asked)
+      : prefix._tag === "armed"
+        ? `prefix  ${prefixLine(props.keys)}`
+        : roomless !== undefined
+          ? noRoom(roomless)
+          : focused === undefined
+            ? ""
+            : tileName(focused);
+  return (
+    <>
+      <div className="area" ref={area}>
+        {view === null || space === undefined ? (
+          <main className="desk">
+            <p className="tile-empty">Opening</p>
+          </main>
         ) : (
-          <registration.View
-            data={data}
-            tile={tile.own}
-            press={(m) => send({ type: "press", tile: tile.id, m, via: "button" })}
-            send={(msg) => send({ type: "tile", id: tile.id, msg })}
-            refusal={refusal}
-          />
+          <Layout
+            workspace={space}
+            tiles={view.tiles}
+            state={(t) =>
+              tileState(
+                link,
+                rows.find((r) => r.id === t.id),
+              )
+            }
+            asking={asked?.id ?? null}
+          >
+            {(tile) => <TileBody run={props.run} tile={tile} windowFor={props.windowFor} />}
+          </Layout>
         )}
       </div>
-    </section>
+      <div className={prefix._tag === "idle" ? "statusbar" : "statusbar on"}>{line}</div>
+    </>
   );
 };
 
 const Page = (props: PageProps) => {
   const [link, send] = useRuntime(props.run, pickLink);
   const [tiles] = useRuntime(props.run, pickTiles);
+  const [client] = useRuntime(props.run, pickTezgah);
   const [dials] = useRuntime(props.run, (m) => m.dials);
   const [views] = useRuntime(props.run, (m) => m.client.views);
   const [trouble] = useRuntime(props.run, (m) => m.trouble);
-  const words = tiles
-    .flatMap((t) => {
-      const words = refusalFor(props.windowFor(t.name), t.refusal);
-      return words ? [words] : [];
-    })
-    .join(" ");
+  const [prefix] = useRuntime(props.run, pickPrefix);
+  const [polite] = useRuntime(props.run, pickPolite);
+  useKeys(props.run, props.keys, send);
+  const view = client === null ? null : optimisticState(client);
+  const named = (id: string) => view?.tiles.find((t) => t.id === id);
+  const refused = tiles.flatMap((t) => {
+    const program = named(t.id)?.program;
+    const words = refusalFor(program === undefined ? null : props.windowFor(program), t.refusal);
+    return words ? [words] : [];
+  });
+  const roomless = polite === null ? undefined : named(polite.tile);
+  const words = [
+    ...refused,
+    ...(prefix._tag === "armed" ? ["prefix"] : []),
+    ...(roomless === undefined ? [] : [noRoom(roomless)]),
+  ].join(" ");
+  const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
   const content =
     link._tag === "waiting_grant" ? (
       <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
@@ -169,11 +292,7 @@ const Page = (props: PageProps) => {
             {trouble ? ` ${trouble}` : ""}
           </span>
         </header>
-        <main className="desk">
-          {tiles.map((tile) => (
-            <Tile key={tile.id} run={props.run} id={tile.id} windowFor={props.windowFor} />
-          ))}
-        </main>
+        <Desk {...props} />
       </div>
     );
   return (
@@ -182,7 +301,9 @@ const Page = (props: PageProps) => {
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {words}
       </div>
-      <div className="sr-only" role="alert" aria-atomic="true" />
+      <div className="sr-only" role="alert" aria-atomic="true">
+        {asked === undefined ? "" : question(asked)}
+      </div>
     </>
   );
 };

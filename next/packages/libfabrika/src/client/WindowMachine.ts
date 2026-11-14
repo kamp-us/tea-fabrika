@@ -14,12 +14,14 @@ import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
 import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
-import { order } from "../tezgah/Layout.ts";
-import { tezgahName } from "../tezgah/Workspace.ts";
+import { order, rects } from "../tezgah/Layout.ts";
+import { type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
 import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
+import * as Keys from "./Keys.ts";
+import { Prefix, prefixMachine } from "./Prefix.ts";
 import { optimisticState, TezgahClient, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -70,6 +72,13 @@ const Attach = Schema.Literals(["waiting", "minting", "sent"]);
 const TezgahLink = Schema.Struct({ reach: Reach, client: TezgahClient, attach: Attach });
 type TezgahLink = typeof TezgahLink.Type;
 
+/** What the window says in its polite region on its own: a split refused because a tile would be
+ *  under the 220x120 floor at the window's size. The words are the page's. */
+const Polite = Schema.TaggedUnion({ no_room: { tile: TileId } });
+
+/** The size of the area a window draws its tiles in, in CSS pixels. */
+const Size = Schema.Struct({ width: Ms, height: Ms });
+
 /**
  * Schema for a window's whole state, which a client may save and load again.
  *
@@ -79,7 +88,9 @@ type TezgahLink = typeof TezgahLink.Type;
  * the key the window dials with, once the key store has answered. `flight` holds each written call
  * by its id and dial until its answer comes. `client` holds the program client's letters and views.
  * `tezgah` is null for a window given fixed tiles; a window started on tezgah takes its tiles
- * from its person's tezgah, whose view its tezgah child holds.
+ * from its person's tezgah, whose view its tezgah child holds. `prefix` is the window's own prefix
+ * key (`Prefix`), `polite` what the window says on its own in the polite region, and `size` the
+ * area its tiles are drawn in, once the page has said it.
  *
  * @stability unstable
  * @category models
@@ -111,9 +122,16 @@ export const WindowModel = Schema.Struct({
   rejected: Schema.NullOr(Schema.String),
   trouble: Schema.NullOr(Schema.String),
   // Slot ownership survives reconnects and identifies the tile whose answer is refused.
-  from: Schema.Record(Schema.String, Schema.Struct({ tile: Schema.String, via: Via })),
+  // A letter to tezgah also names its command, as the press row says it.
+  from: Schema.Record(
+    Schema.String,
+    Schema.Struct({ tile: Schema.String, via: Via, does: Schema.optionalKey(Schema.String) }),
+  ),
   redate: Schema.Array(Schema.Int),
   tezgah: Schema.NullOr(TezgahLink),
+  prefix: Prefix,
+  polite: Schema.NullOr(Polite),
+  size: Schema.NullOr(Size),
 });
 
 /**
@@ -144,6 +162,9 @@ const Own = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("press"), tile: Schema.String, m: Schema.Json, via: Schema.optionalKey(Via) }),
   Schema.Struct({ type: Schema.Literal("tile"), id: Schema.String, msg: Schema.Unknown }),
+  // One press, spelled as `Keys` spells it, and the size of the area the tiles are drawn in.
+  Schema.Struct({ type: Schema.Literal("key"), key: Schema.String, at: Ms }),
+  Schema.Struct({ type: Schema.Literal("size"), width: Ms, height: Ms }),
   Schema.Struct({ type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown }),
   Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
   Schema.Struct({ type: Schema.Literal("resend"), dial: Schema.Int }),
@@ -176,9 +197,19 @@ const enroll = Cmd.make("enroll", {
   err: ["closed"],
 });
 
-// A fresh tile id for the tezgah window's own attach, minted as a letter id is.
+// A fresh tile id, minted as a letter id is: for the tezgah window's own attach, or for the new tile
+// of a split, which the input names.
+const Split = Schema.Struct({
+  does: Schema.Literals(["tezgah.split_right", "tezgah.split_down"]),
+  from: Schema.toType(TileId),
+  keys: Schema.String,
+});
+
+/** How a person gave a command to tezgah, in tezgah's own Via: here always by keys. */
+const ByKeys = Schema.TaggedStruct("key", { keys: Schema.String });
+
 const mint = Cmd.make("mint", {
-  input: Schema.Struct({}),
+  input: Schema.Struct({ split: Schema.optionalKey(Split) }),
   ok: Schema.Struct({ tile: Schema.String }),
   err: ["entropy"],
 });
@@ -274,6 +305,8 @@ type ProgramTile<P extends AnyProgram> = Machine<
 type WindowChecks<P extends AnyProgram> = {
   readonly decode?: (pid: string) => (view: unknown) => WindowData<P>;
   readonly tile?: (name: string) => ProgramTile<P> | undefined;
+  /** The window's key table, as `Keys.load` answers it. Without one the window reads no key. */
+  readonly keys?: Keys.Table;
 };
 
 type WindowCtx = {
@@ -514,6 +547,123 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
   return [written, [...reads, ...writes, ...(due ? [mint({})] : [])]];
 };
 
+/** The smallest a tile may be drawn: the readability floor from fold, not tabs (0277). */
+const SMALLEST = { width: 220, height: 120 } as const;
+
+const DIRS: Readonly<Record<(typeof Split.Type)["does"], Dir>> = {
+  "tezgah.split_right": "row",
+  "tezgah.split_down": "column",
+};
+
+/** The workspace a tezgah window draws, in its drawn state, with that state's tiles. */
+const drawnSpace = (link: TezgahLink | null) => {
+  const view = link === null ? null : optimisticState(link.client);
+  const space = view?.workspaces.find((w) => w.n === link?.client.workspace);
+  return view === null || space === undefined ? null : { view, space };
+};
+
+/** Whether a split of `at` in `dir` keeps both halves at least 220x120 in a window of `size`: each
+ *  half takes half of `at`'s share (`Layout.split`). */
+const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type): boolean => {
+  const r = rects(space.layout, size).get(at);
+  return (
+    r !== undefined &&
+    (dir === "row" ? r.width / 2 : r.width) >= SMALLEST.width &&
+    (dir === "column" ? r.height / 2 : r.height) >= SMALLEST.height
+  );
+};
+
+/** One letter to the window's tezgah on the press path, named by its command for the press row. */
+const toTezgah = (s: WindowModel, step: ClientStep, m: Schema.Json, does: string, from: string): Step => {
+  const link = s.tezgah;
+
+  if (link === null || link.reach._tag !== "open") {
+    return [s, []];
+  }
+
+  const n = s.client.written;
+  const [client] = step(s.client, { type: "press", pid: link.reach.pid, m });
+  return [{ ...s, client, from: { ...s.from, [n]: { tile: from, via: "key", does } } }, [now({ n })]];
+};
+
+/** A close of `tile`, given by keys. */
+const closing = (s: WindowModel, step: ClientStep, tile: TileId, keys: string): Step =>
+  toTezgah(
+    s,
+    step,
+    { type: "did", does: "tezgah.close", from: tile, via: ByKeys.make({ keys }) },
+    "tezgah.close",
+    tile,
+  );
+
+const idle = Prefix.cases.idle.make({});
+
+/**
+ * One press in this window, routed by its table (0272) against its own prefix (0278). Nothing but
+ * a record leaves before the command is known. A split is checked against the window's size and
+ * minted its tile; a close of a tile tezgah started asks first; a close of any other goes at once.
+ */
+const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: string, at: number): Step => {
+  const routed = Keys.route(table, s.prefix, null, { key });
+  const prefix = (msg: typeof prefixMachine.msg.Type) => applyCell(prefixMachine, s.prefix, msg)[0];
+
+  if (routed._tag === "platform") {
+    return [s, []];
+  }
+
+  if (routed._tag === "prefix") {
+    return [{ ...s, prefix: prefix({ type: "arm", at }), polite: null }, []];
+  }
+
+  if (routed._tag === "answer") {
+    const asked = s.prefix;
+    const done = { ...s, prefix: prefix({ type: "done" }) };
+    return routed.yes && asked._tag === "asking" ? closing(done, step, asked.tile, `${table.prefix} x y`) : [done, []];
+  }
+
+  if (routed._tag === "tile" || routed._tag === "dropped") {
+    return [s.prefix._tag === "idle" ? s : { ...s, prefix: prefix({ type: "done" }) }, []];
+  }
+
+  const does = routed.does;
+  const keys = s.prefix._tag === "armed" ? `${table.prefix} ${key}` : key;
+  const row = record({
+    record: ClientRecord.cases.prefix.make({
+      does,
+      ms: s.prefix._tag === "armed" ? Math.max(0, at - s.prefix.since) : 0,
+    }),
+  });
+  const done: WindowModel = { ...s, prefix: prefix({ type: "done" }) };
+  const drawn = drawnSpace(s.tezgah);
+
+  if (drawn === null) {
+    return [done, [row]];
+  }
+
+  const from = drawn.space.focus;
+
+  if (does === "tezgah.close") {
+    const tile = drawn.view.tiles.find((t) => t.id === from);
+
+    if (tile?.child === true && order(drawn.space.layout).length > 1) {
+      return [{ ...s, prefix: prefix({ type: "question", tile: from, at }), polite: null }, [row]];
+    }
+
+    const [sent, cmds] = closing({ ...done, polite: null }, step, from, keys);
+    return [sent, [row, ...cmds]];
+  }
+
+  if (does === "tezgah.split_right" || does === "tezgah.split_down") {
+    if (s.size !== null && !roomFor(drawn.space, from, DIRS[does], s.size)) {
+      return [{ ...done, polite: Polite.cases.no_room.make({ tile: from }) }, [row]];
+    }
+
+    return [{ ...done, polite: null }, [row, mint({ split: { does, from, keys } })]];
+  }
+
+  return [done, [row]];
+};
+
 const Whole = Schema.Struct({ type: Schema.Literal("whole"), rev: Schema.Int, view: Schema.Unknown });
 
 const Patched = Schema.Struct({
@@ -544,7 +694,7 @@ const dated = (
     /^[a-z_]{1,40}$/.test(slot.m.type)
       ? slot.m.type
       : "other";
-  const command = `${tile?.name.split(":")[0] ?? "program"}.${type}`;
+  const command = owner?.does ?? `${tile?.name.split(":")[0] ?? "program"}.${type}`;
   const rows =
     before?._tag === "dating" && slot?._tag === "ready" && owner !== undefined
       ? [
@@ -962,12 +1112,17 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                   client: tezgahMachine.init(null, { workspace: ctx.tezgah.workspace })[0],
                   attach: "waiting",
                 },
+          prefix: idle,
+          polite: null,
+          size: null,
         }),
       [key({ rejected: null })],
     ],
     update: {
       ...linkUpdate,
       press: (s, m): Step => pressed(s, step, m.tile, m.m, m.via ?? "button"),
+      key: (s, m): Step => (checks.keys === undefined ? [s, []] : pressedKey(s, step, checks.keys, m.key, m.at)),
+      size: (s, m): Step => [{ ...s, size: { width: m.width, height: m.height } }, []],
       tile: (s, m): Step => {
         const t = s.tiles.find((t) => t.id === m.id);
         const child = t && checks.tile?.(t.name);
@@ -1195,7 +1350,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
             from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
             tiles:
-              m.value._tag !== "refused" || slot === undefined
+              m.value._tag !== "refused" || slot === undefined || s.from[slot.n]?.does !== undefined
                 ? s.tiles
                 : s.tiles.map((t) =>
                     t.id === owner
@@ -1315,6 +1470,25 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       // The window's own attach, as a letter to its tezgah: it makes the workspace when it is missing.
       mint_ok: (s, m): Step => {
         const link = s.tezgah;
+        const split = m.cmd.split;
+
+        // A split's new tile: sent only while its tile is still on the drawn workspace.
+        if (split !== undefined) {
+          const drawn = drawnSpace(link);
+
+          if (drawn === null || !order(drawn.space.layout).includes(split.from)) {
+            return [s, []];
+          }
+
+          const did = {
+            type: "did",
+            does: split.does,
+            from: split.from,
+            tile: m.value.tile,
+            via: ByKeys.make({ keys: split.keys }),
+          };
+          return toTezgah(s, step, did, split.does, split.from);
+        }
 
         if (link === null || link.attach !== "minting") {
           return [s, []];
@@ -1329,8 +1503,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const [client] = step(s.client, { type: "press", pid: link.reach.pid, m: attach });
         return [{ ...s, client, tezgah: { ...link, attach: "sent" } }, [now({ n })]];
       },
-      mint_err: (s): Step =>
-        s.tezgah?.attach === "minting" ? [{ ...s, tezgah: { ...s.tezgah, attach: "waiting" } }, []] : [s, []],
+      mint_err: (s, m): Step =>
+        m.cmd.split === undefined && s.tezgah?.attach === "minting"
+          ? [{ ...s, tezgah: { ...s.tezgah, attach: "waiting" } }, []]
+          : [s, []],
     },
     subs: [
       { type: "timer", deps: (s) => timerDeps(s.link) },

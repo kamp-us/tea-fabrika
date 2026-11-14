@@ -63,6 +63,8 @@ export const ClientRecord = Schema.TaggedUnion({
     /** On a `patch` row only: how many patches the run installed. */
     patches: Schema.optionalKey(Count),
   },
+  /** A command reached through the prefix key: which, and how long after the prefix it came. */
+  prefix: { does: Schema.String, ms: Ms },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),
