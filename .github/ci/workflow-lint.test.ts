@@ -49,8 +49,11 @@ const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e
 // On a pull request only: the merge queue and main run the whole suite.
 const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
-// The vitest step's: also empty when changes' filter names the reader tests, which read files as
-// text, so the import graph would drop them (the plan for CI paths, slice 2).
+// The vitest step's paths: the legs job's list on a sized run, reader tests included, else changes'
+// filter (the plan for CI paths, slice 2), else all of next/.
+const vitestFilter = `\${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
+
+// What 1230 gave the vitest step: `--changed` on a pull request whose filter is all of next/.
 const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 const nextLegs = (count: number) => [
@@ -61,6 +64,28 @@ const nextLegs = (count: number) => [
   "4",
   "5",
 ];
+
+// S1: the matrix is the legs job's `shards`, else this fallback, the full matrix (legs.ts).
+const sizedLegs = (legs: readonly unknown[]) =>
+  `\${{ fromJSON(needs.legs.outputs.shards || '${JSON.stringify(legs)}') }}`;
+
+/** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
+const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
+  JSON.parse(/'(.*)'/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
+
+const setLegs = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]) => {
+  w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
+};
+
+// A leg's `--shard`: its own kind's count from the legs job, else the full matrix's.
+const vitestShard = (gap = " ") => `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.vitest || 5${gap}}}`;
+
+const e2eShard = (count: number | string, gap = " ") =>
+  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.e2e || ${count}${gap}}}`;
+
+// S1: every legs step runs only when legs sizes next.
+const sized =
+  "needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
 
 const valid = (label: string, extra: string) => ({
   name: label,
@@ -165,20 +190,41 @@ const valid = (label: string, extra: string) => ({
         },
       ],
     },
-    next: {
+    legs: {
       needs: "changes",
-      if: guard("next"),
+      if: `\${{ !cancelled() }}`,
+      "timeout-minutes": 5,
+      outputs: Object.fromEntries(
+        ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
+      ) as Record<string, string>,
+      steps: [
+        { uses: "actions/checkout@v7", if: sized, with: { "fetch-depth": 0 } },
+        { uses: "pnpm/action-setup@v6", if: sized, "continue-on-error": true, with: { run_install: false } },
+        { uses: "actions/setup-node@v7", if: sized, "continue-on-error": true, with: { "node-version": "26.13.0" } },
+        { run: "pnpm install --frozen-lockfile --ignore-scripts", if: sized, "continue-on-error": true },
+        {
+          id: "size",
+          if: sized,
+          "continue-on-error": true,
+          env: {
+            EVENT: `\${{ github.event_name }}`,
+            FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
+            BASE: `\${{ github.event.pull_request.base.sha }}`,
+          },
+          run: "node .github/ci/legs.ts",
+        },
+      ] as Record<string, unknown>[],
+    },
+    next: {
+      needs: ["changes", "legs"] as string | string[],
+      if: `${guard("next").slice(0, -3)} && needs.legs.outputs.next != 'false' }}`,
       "timeout-minutes": 17,
-      strategy: { "fail-fast": false, matrix: { shard: nextLegs(2) as (string | number)[] } },
+      strategy: { "fail-fast": false, matrix: { shard: sizedLegs(nextLegs(2)) } },
       steps: [
         {
-          run: 'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
           if: `!${onE2e}`,
-          env: {
-            SHARD: `\${{ matrix.shard }}/5`,
-            FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-            CHANGED: changedUnlessReaders,
-          },
+          env: { SHARD: vitestShard(), FILTER: vitestFilter },
         },
         {
           name: "chromium",
@@ -187,7 +233,7 @@ const valid = (label: string, extra: string) => ({
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
-        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2`, CHANGED: changedOnPullRequests } },
+        { run: e2eCommand, if: onE2e, env: { SHARD: e2eShard(2), CHANGED: changedOnPullRequests } },
         {
           name: "edges",
           if: "matrix.shard == '1' && github.event_name == 'pull_request'",
@@ -220,7 +266,7 @@ const valid = (label: string, extra: string) => ({
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "next"],
+      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "legs", "next"],
       if: "always()",
       "timeout-minutes": 5,
       steps: [
@@ -238,8 +284,8 @@ const wiring = fc
   .map(([label, extra, whitespace, gap, e2es]) => {
     const clean = valid(label, extra);
     // E1 and E2: any count of e2e legs is the lint's shape, with its own `/N` on the end-to-end step.
-    clean.jobs.next.strategy.matrix.shard = nextLegs(e2es);
-    clean.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/${e2es}`;
+    setLegs(clean, nextLegs(e2es));
+    clean.jobs.next.steps[2]!.env!.SHARD = e2eShard(e2es);
     clean.jobs.test.steps.unshift({
       name: "lane tests, one file at a time",
       if: `\${{ needs.changes.outputs.today != 'false' }}`,
@@ -260,8 +306,8 @@ const wiring = fc
     });
 
     if (whitespace) {
-      clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/5`;
-      clean.jobs.next.steps[2]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/${e2es}`;
+      clean.jobs.next.steps[0]!.env!.SHARD = vitestShard(gap);
+      clean.jobs.next.steps[2]!.env!.SHARD = e2eShard(e2es, gap);
 
       // The vitest step's guard and the three leg conditions, respaced around each operator.
       for (const step of clean.jobs.next.steps.slice(0, 4)) {
@@ -491,7 +537,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "review: SHARD matrix.sha rd",
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/5`;
+      w.jobs.next.steps[0]!.env!.SHARD = vitestShard().replace("matrix.shard", "matrix.sha rd");
     },
   ],
   ...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
@@ -538,42 +584,53 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ).map(([fault, legs]): [string, (w: Workflow) => void] => [
     `next ${fault}`,
     (w) => {
-      w.jobs.next.strategy.matrix.shard = [...legs];
+      setLegs(w, legs);
       const count = legs.filter((leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg)).length;
-      w.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/${count}`;
+      w.jobs.next.steps[2]!.env!.SHARD = e2eShard(count);
     },
   ]),
   // E1 and E2: one e2e leg fewer or more than the end-to-end step's `/N`.
   [
     "next drops its last e2e leg and keeps its /N",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.filter(
-        (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+      setLegs(
+        w,
+        legsOf(w).filter(
+          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+        ),
       );
     },
   ],
   [
     "next adds an e2e leg and keeps its /N",
     (w) => {
-      const legs = w.jobs.next.strategy.matrix.shard;
+      const legs = legsOf(w);
       const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
+      setLegs(w, legs);
     },
   ],
-  // E2's denominator, the end-to-end step's own: one more or one fewer than its legs, or not a count.
-  ...([1, -1, "", "/x", "0"] as const).map((fault): [string, (w: Workflow) => void] => [
-    `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
-    (w) => {
-      const env = w.jobs.next.steps[2]!.env!;
-      const count = Number(/\/(\d+)$/.exec(env.SHARD ?? "")?.[1]);
-      env.SHARD =
-        typeof fault === "number"
-          ? `\${{ matrix.shard }}/${count + fault}`
-          : fault === "0"
-            ? `\${{ matrix.shard }}/0${count}`
-            : `\${{ matrix.shard }}${fault}`;
-    },
-  ]),
+  // E2's denominator, the end-to-end step's own: its full count one more or one fewer than its legs,
+  // or not a count; no denominator. S1: the plain full count, which ignores a sized run's own count;
+  // the sized count with no full count for a run that is not sized; the vitest legs' count.
+  ...([1, -1, "", "x", "0", "plain", "sized only", "vitest's"] as const).map(
+    (fault): [string, (w: Workflow) => void] => [
+      `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
+      (w) => {
+        const env = w.jobs.next.steps[2]!.env!;
+        const count = Number(/\|\| (\d+)\s*\}\}$/.exec(env.SHARD ?? "")?.[1]);
+        const wrong: Record<string, string> = {
+          "": `\${{ matrix.shard }}`,
+          x: e2eShard("x"),
+          "0": e2eShard(`0${count}`),
+          plain: `\${{ matrix.shard }}/${count}`,
+          "sized only": `\${{ matrix.shard }}/\${{ needs.legs.outputs.e2e }}`,
+          "vitest's": `\${{ matrix.shard }}/\${{ needs.legs.outputs.vitest || ${count} }}`,
+        };
+        env.SHARD = typeof fault === "number" ? e2eShard(count + fault) : wrong[fault]!;
+      },
+    ],
+  ),
   [
     "next end-to-end step loses its SHARD",
     (w) => {
@@ -631,7 +688,18 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // LE1's denominator: `/6` leaves a sixth of the files on no machine, and a smaller one fails a leg.
-  ...["/6", "/3", "/4", "", "/05", "/5 "].map((denominator): [string, (w: Workflow) => void] => [
+  // S1: the plain `/5`, which ignores a sized run's own count; the sized count alone; the e2e count.
+  ...[
+    `/\${{ needs.legs.outputs.vitest || 6 }}`,
+    `/\${{ needs.legs.outputs.vitest || 3 }}`,
+    `/\${{ needs.legs.outputs.vitest || 4 }}`,
+    "",
+    `/\${{ needs.legs.outputs.vitest || 05 }}`,
+    `/\${{ needs.legs.outputs.vitest || 5 }} `,
+    "/5",
+    `/\${{ needs.legs.outputs.vitest }}`,
+    `/\${{ needs.legs.outputs.e2e || 5 }}`,
+  ].map((denominator): [string, (w: Workflow) => void] => [
     `next wrong denominator ${denominator || "absent"}`,
     (w) => {
       w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}${denominator}`;
@@ -777,6 +845,76 @@ const plants: [string, (workflow: Workflow) => void][] = [
       Object.assign(w.jobs.next.steps[0]!, { if: "false" });
     },
   ],
+  // S1, the legs job and next's sized matrix (legs.ts). Each is red alone in every generated
+  // workflow. The size step without its event check would size the merge queue and main. Source
+  // plants, each run once on workflow-lint.ts and restored: drop S1's check of every legs step's
+  // `if` (red: sizes the merge queue and main, sizes the reader tests, installs on every run); drop
+  // the sizer's clause from the gated `if` (red: every generated workflow).
+  ...(
+    [
+      ["next needs only changes", (w) => (w.jobs.next.needs = "changes")],
+      ["next needs legs first", (w) => (w.jobs.next.needs = ["legs", "changes"])],
+      ["next ignores legs's no", (w) => (w.jobs.next.if = guard("next"))],
+      [
+        "next matrix with no fallback",
+        (w) => (w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.legs.outputs.shards) }}`),
+      ],
+      [
+        "next matrix from another output",
+        (w) => (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(".shards", ".e2e")),
+      ],
+      ["next matrix as a plain list", (w) => Object.assign(w.jobs.next.strategy.matrix, { shard: nextLegs(2) })],
+      ["legs needs nothing", (w) => Reflect.deleteProperty(w.jobs.legs, "needs")],
+      ["legs runs only on success", (w) => (w.jobs.legs.if = "success()")],
+      ["legs has no if", (w) => Reflect.deleteProperty(w.jobs.legs, "if")],
+      ["legs ignores its failure", (w) => Object.assign(w.jobs.legs, { "continue-on-error": true })],
+      ["legs loses an output", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "e2e")],
+      ["legs adds an output", (w) => (w.jobs.legs.outputs["more"] = `\${{ steps.size.outputs.more }}`)],
+      ["legs output from another step", (w) => (w.jobs.legs.outputs["shards"] = `\${{ steps.diff.outputs.shards }}`)],
+      [
+        "legs sizes the merge queue and main",
+        (w) =>
+          (w.jobs.legs.steps[4]!["if"] = String(w.jobs.legs.steps[4]!["if"]).replace(
+            " && github.event_name == 'pull_request'",
+            "",
+          )),
+      ],
+      [
+        "legs sizes the reader tests",
+        (w) =>
+          (w.jobs.legs.steps[4]!["if"] = String(w.jobs.legs.steps[4]!["if"]).replace(
+            " && (needs.changes.outputs.filter || 'next/') == 'next/'",
+            "",
+          )),
+      ],
+      ["legs installs on every run", (w) => Reflect.deleteProperty(w.jobs.legs.steps[3]!, "if")],
+      ["legs size step fails the job", (w) => Reflect.deleteProperty(w.jobs.legs.steps[4]!, "continue-on-error")],
+      ["legs install fails the job", (w) => Reflect.deleteProperty(w.jobs.legs.steps[3]!, "continue-on-error")],
+      ["legs runs another script", (w) => (w.jobs.legs.steps[4]!["run"] = "node .github/ci/legs.ts --all")],
+      ["legs size step renamed", (w) => (w.jobs.legs.steps[4]!["id"] = "sizes")],
+      ["legs installs with scripts", (w) => (w.jobs.legs.steps[3]!["run"] = "pnpm install --frozen-lockfile")],
+      [
+        "legs size step on the merge queue's base",
+        (w) =>
+          Object.assign(w.jobs.legs.steps[4]!["env"] as Record<string, string>, {
+            BASE: `\${{ github.event.merge_group.base_sha }}`,
+          }),
+      ],
+      [
+        "legs size step without its filter",
+        (w) => Reflect.deleteProperty(w.jobs.legs.steps[4]!["env"] as Record<string, string>, "FILTER"),
+      ],
+      [
+        "ci-required does not need legs",
+        (w) => (w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((job) => job !== "legs")),
+      ],
+    ] as [string, (w: Workflow) => unknown][]
+  ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
+    fault,
+    (w) => {
+      mutate(w);
+    },
+  ]),
   [
     "next classifier failure skips",
     (w) => {
@@ -932,6 +1070,51 @@ const plants: [string, (workflow: Workflow) => void][] = [
     (w) => {
       (w.jobs.next.steps[0]!.env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
+  ],
+  // PR 1235: a sized run's vitest legs run the legs job's `files`, which hold every reader test, and
+  // nothing narrows that list again. 1230's own `--changed` back on the step drops the readers; the
+  // legs list ignored or read after filter runs the import graph's files alone or the whole suite;
+  // 1235's first shape, a readers step on leg 1, runs a reader twice and loads leg 1 alone.
+  [
+    "next's vitest step ignores legs's files",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step reads legs's files after filter",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || needs.legs.outputs.files || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step narrows legs's files with 1230's --changed",
+    (w) => {
+      const step = w.jobs.next.steps[0]!;
+      step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
+    },
+  ],
+  [
+    "next's vitest step takes another env key",
+    (w) => {
+      (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
+    },
+  ],
+  [
+    "next runs the reader tests again in a step of their own on leg 1",
+    (w) => {
+      w.jobs.next.steps.splice(1, 0, {
+        name: "readers",
+        if: "!cancelled() && matrix.shard == '1'",
+        run: 'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+      });
+    },
+  ],
+  ["legs hides its files", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "files")],
+  [
+    "legs takes its files from another step",
+    (w) => (w.jobs.legs.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
   ],
   ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
     [
@@ -1208,7 +1391,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
       const env = w.jobs.next.steps[0]!.env!;
 
       if (env.SHARD !== undefined) {
-        env.SHARD = env.SHARD.replace(/\/5$/, "/6");
+        env.SHARD = env.SHARD.replace(/\|\| 5(\s*\}\})$/, "|| 6$1");
       }
     },
     "next's vitest step passes --shard <leg>/<the count of numbered legs>",
@@ -1216,7 +1399,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "leg 5 dropped",
     (w) => {
-      w.jobs.next.strategy.matrix.shard.pop();
+      setLegs(w, legsOf(w).slice(0, -1));
     },
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
   ],
@@ -1239,15 +1422,17 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "the e2e legs written out of order",
     (w) => {
-      const legs = w.jobs.next.strategy.matrix.shard;
+      const legs = legsOf(w);
       const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
       legs.splice(0, count, ...legs.slice(0, count).toReversed());
 
       // One e2e leg cannot be out of order, so a second one comes first.
       if (count === 1) {
         legs.unshift("e2e-2");
-        w.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/2`;
+        w.jobs.next.steps[2]!.env!.SHARD = e2eShard(2);
       }
+
+      setLegs(w, legs);
     },
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
   ],
@@ -1255,7 +1440,10 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "an end-to-end /N one more than the e2e legs",
     (w) => {
       const env = w.jobs.next.steps[2]!.env!;
-      env.SHARD = (env.SHARD ?? "").replace(/\/(\d+)$/, (_, count: string) => `/${Number(count) + 1}`);
+      env.SHARD = (env.SHARD ?? "").replace(
+        /\|\| (\d+)(\s*\}\})$/,
+        (_, count: string, end: string) => `|| ${Number(count) + 1}${end}`,
+      );
     },
     "next's end-to-end step passes --shard <leg>/<the count of e2e legs>",
   ],

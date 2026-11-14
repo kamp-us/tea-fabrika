@@ -120,7 +120,9 @@ describe("next workflow coverage", () => {
   const expression: string = nextWorkflow.steps.find((step: { run?: string }) =>
     step.run?.startsWith("pnpm exec vitest run $FILTER "),
   )?.env.SHARD;
-  const denominator = Number(/\/([1-9]\d*)$/.exec(expression)?.[1]);
+  // The full matrix's count, the fallback in `/${{ needs.legs.outputs.vitest || N }}`; a sized pull
+  // request's own count is legs.ts's, whose split legs.test.ts covers.
+  const denominator = Number(/\|\|\s*([1-9]\d*)\s*\}\}$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];
   let nextSpecs: TestSpecification[];
   const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
