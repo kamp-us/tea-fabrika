@@ -2010,7 +2010,6 @@
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/src/browser/**",
-        "next/packages/tuval/src/window/**",
         "next/programs/counter/src/*",
         "next/programs/inbox/src/*"
       ],
