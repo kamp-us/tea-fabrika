@@ -255,7 +255,7 @@ jobs:
           restore-keys: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-
       - run: pnpm typecheck
       # Each push to main saves its own, so the next pull request starts from the newest.
-      - if: ${{ github.ref == 'refs/heads/main' }}
+      - if: ${{ github.ref == 'refs/heads/main' || github.event.pull_request.number == 1243 }}
         uses: actions/cache/save@v6
         with:
           path: *tsc
