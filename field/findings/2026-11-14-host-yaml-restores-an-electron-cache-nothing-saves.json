@@ -13,5 +13,6 @@
   "proof": "At main 0b9067c64, .github/workflows/host.yaml:57-61 restores `~/Library/Caches/electron` under key `electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}`. Pull request 1263 (merged 2026-11-14) deleted check.yaml's e2e job, the one job that saved a cache under that key, and the agent merging main into pull request 1266 found no other workflow that saves it.",
   "cost": "Each host.yaml run spends the Electron download time on a macOS runner, the costliest runner kind, for a cache it can never hit.",
   "head": "0b9067c646179b18e7f85a1b4da990cccb11f487",
-  "pr": "kamp-us/tea-fabrika#1263"
+  "ticket": "kamp-us/tea-fabrika#997",
+  "pr": "kamp-us/tea-fabrika#1266"
 }
