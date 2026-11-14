@@ -7,9 +7,9 @@ import { configDefaults } from "vitest/config";
 import { BaseSequencer, createVitest } from "vitest/node";
 import { budget as legBudget } from "./.github/ci/legs.ts";
 import { e2eFiles, nextFiles } from "./.github/ci/shard-rows.ts";
-import { e2eLegs, inLaneStep, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
+import { e2eLegs, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
 import e2eDefault, { e2eConfig } from "./vitest.e2e.config.ts";
-import { assign, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+import { assign, inLaneStep, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);

@@ -24,7 +24,7 @@
 import { fileURLToPath } from "node:url";
 
 /** The jobs that skip on changes' output of the same name; workflow-lint.ts reads this list. */
-export const gated = /** @type {const} */ (["check", "typecheck", "test", "next", "e2e"]);
+export const gated = /** @type {const} */ (["check", "typecheck", "test", "next"]);
 
 /**
  * A gated job that also skips on the output of its own name from the job that sizes it: next skips

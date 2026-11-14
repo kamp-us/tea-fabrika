@@ -168,20 +168,19 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", typecheck: "false", test: "true", next: "true", e2e: "true" },
+      outputs: { check: "false", typecheck: "false", test: "true", next: "true" },
     },
     field: { result: "success", outputs: {} },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
     test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
-    e2e: { result: "success", outputs: {} },
   });
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(8);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(7);
   expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
@@ -232,7 +231,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips today's e2e when no file of today's version changed.
+// 0175: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -248,7 +247,7 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: next/ alone, where e2e skips on main.
+    // pinned: next/ alone, where test skips on main.
     { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
   );
 });

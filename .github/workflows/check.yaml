@@ -35,15 +35,15 @@ permissions:
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
 # slowest of that job's last 20 green runs on 2026-11-10 UTC, and at least 5: changes 39 s,
-# field 43 s, check 166 s, test 944 s. e2e (333 s) had its own before. next has one per shard,
-# sized at its job.
+# field 43 s, check 166 s, test 944 s. next has one per shard, sized at its job.
 # workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
   # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
-  # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
-  # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
+  # Today's version is frozen (0525, 0533): its tests and its app end to end run on no event, so no
+  # output here starts them. Its promises gate and build start only when a file of today's version
+  # changed, on every event: the `build` output (0175).
   # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
   # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
   # unknown path does.
@@ -62,10 +62,8 @@ jobs:
       test: ${{ steps.diff.outputs.test }}
       next: ${{ steps.same.outputs.next || steps.diff.outputs.next }}
       filter: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
-      e2e: ${{ steps.diff.outputs.e2e }}
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
-      today: ${{ steps.diff.outputs.today }}
     steps:
       # Every checkout here leaves the token out of .git/config (`persist-credentials: false`), so
       # no test or install script can read the `actions: write` token from it (ticket 990). No job
@@ -288,84 +286,17 @@ jobs:
           key: ${{ steps.tsc.outputs.cache-primary-key }}
       - *stop
 
-  # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
-  # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
-  # the window back), so it runs on a macOS runner; on Linux those rules are not there to check.
-  # It runs when a file of today's version changed, on a pull request, in the merge queue and on a
-  # push to main (0175).
-  # No secret and no key: the API keys are never set here. The one download beyond what the other
-  # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
-  e2e:
-    needs: changes
-    if: >-
-      ${{ !cancelled() &&
-          (needs.changes.result != 'success' ||
-           needs.changes.outputs.e2e != 'false') }}
-    runs-on: macos-latest
-    # 15 for the run, and room for the ARIA stage's own app and its about 35 cells.
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/pnpm
-
-      # Electron fetches its binary the first time it is asked for its path, into this folder. It is
-      # saved on main only, 229 MiB a copy on 2026-11-14; its restore took 3 and 5 s (e2e in runs
-      # 43620728687 and 43623635302).
-      - id: electron
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/Library/Caches/electron
-          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
-
-      - run: pnpm install --frozen-lockfile
-      # Each run makes its own fresh FABRIKA_HOME in the temp folder, and stops the hosts it started.
-      - name: e2e
-        env:
-          SHOTS: ${{ runner.temp }}/e2e-shots
-        run: pnpm --filter @kampus/fabrika-app-old e2e
-      # After the run, which fetched the binary.
-      - if: ${{ github.ref == 'refs/heads/main' && steps.electron.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: ~/Library/Caches/electron
-          key: ${{ steps.electron.outputs.cache-primary-key }}
-      # The trace ruler's labels at widths from 60 to 1600px (apps/fabrika/ruler-e2e.ts): the built
-      # renderer in headless Chromium, as shots.ts draws it. The build above made dist/.
-      - name: ruler labels
-        run: pnpm --filter @kampus/fabrika-app-old exec playwright install chromium && pnpm --filter @kampus/fabrika-app-old exec node ruler-e2e.ts
-      # What the window showed at each step, to see a red run without running it again.
-      - if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-shots
-          path: ${{ runner.temp }}/e2e-shots
-          if-no-files-found: ignore
-      # The ARIA trees (design language call 8, decided 2026-11-07): each key state at the five
-      # layouts, compared with apps/fabrika/aria/. It advises and never blocks: a diff is printed and
-      # the step passes, so `continue-on-error` only covers a state it cannot reach (exit 2). It
-      # blocks once its false alarms are counted (0 noise in 300 clean checks, 0 flakes).
-      - name: aria
-        continue-on-error: true
-        env:
-          SHOTS: ${{ runner.temp }}/e2e-shots
-        run: pnpm --filter @kampus/fabrika-app-old e2e -- --aria
-      - if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: aria-received
-          path: ${{ runner.temp }}/e2e-shots/aria-received
-          if-no-files-found: ignore
-      - *stop
-
-  # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
-  # The tests, split by file over six machines, two when only the tooling tests run (vitest's `--shard`, each machine
-  # given about the same seconds by vitest.shards.ts). The lane's tests were one
-  # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
-  # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
+  # The tooling tests, the ones that belong to neither version's product code: CI's own
+  # (.github/ci), the lint plugins, the root scripts and the skill scripts. Today's version is
+  # frozen (0525, 0533), so its own tests run here on no event: every vitest call below leaves its trees
+  # out, and workflow-lint.ts holds that. Its app end to end, the e2e job until 0533, runs in no
+  # job.
+  # Split by file over two machines (vitest's `--shard`, each given about the same seconds by
+  # vitest.shards.ts). On main run 43615844695 they took 68, 111, 125, 230, 274 and 363 s on six
+  # (19.5 machine-min): four files of 124 to 362 s each sat alone on a machine, and boxrm.test.ts
+  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.ts's table and run three
+  # files at a time, those 97 files' seconds give two machines of 353 and 362 s (11.9 machine-min),
+  # the same longest wait.
   test:
     needs: changes
     if: >-
@@ -376,13 +307,8 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      # Two machines when only the tooling tests run. On main run 43615844695 they took 68, 111,
-      # 125, 230, 274 and 363 s on six (19.5 machine-min): four files of 124 to 362 s each sat alone
-      # on a machine, and boxrm.test.ts alone, 362 s, sets the shortest a run can be. Placed by
-      # vitest.shards.ts's table and run three files at a time, those 97 files' seconds give two
-      # machines of 353 and 362 s (11.9 machine-min), the same longest wait.
       matrix:
-        shard: ${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}
+        shard: [1, 2]
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -395,88 +321,17 @@ jobs:
 
       - uses: ./.github/actions/pnpm
 
-      # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
-      # The runner image has neither, and without them those tests skip.
-      # The os sandbox (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
-      # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
-      # 24.04 restricts by default (its README says so). On CI its tests never skip.
-      # The image has none of the five (image 20261101.360 installs all of them new; its
-      # Ubuntu2404-Readme.md and toolset-2404.json list none of them), so apt always runs here.
-      # The runner's mirrors sometimes stop answering, and apt then waits with no end: 32 min on
-      # pull request 696 (actions/runner-images issue 14594), and on 2026-11-11 every Canonical
-      # host at once (issues 15296, 15297). apt.sh gives each try a wall-clock limit and, after a
-      # failed try, drops the top mirror, walking a chain of six that ends outside Canonical. Its
-      # comment holds the measured limits; the cause is outside this repo (decision 0036). Three
-      # dead mirrors, then a full install, take about 8 min, inside the step's 12.
-      # `ubuntu-latest` is Ubuntu 26.04 for this repository since it moved to the organization on
-      # 2026-11-13 (24.04 on every job before the move, 26.04 on every job after). That image has
-      # bubblewrap already, with an AppArmor profile of its own, `bwrap-userns-restrict`: what bwrap
-      # starts runs as `unpriv_bwrap`, which denies every capability. sandbox-runtime's seccomp
-      # helper needs CAP_SYS_ADMIN in the user namespace it makes inside the box, so every box ended
-      # with exit 1 before its program started: "apply-seccomp: write /proc/self/setgroups (nested
-      # userns is capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied" (run
-      # 43493167395, test (1): refused before the unload, ran after it). The sysctl does not reach a
-      # named profile, and a `deny` in a profile cannot be allowed back from a local file, so the
-      # profile is unloaded where the image has it. 24.04 has none.
-      # Only today's tests need these. No tooling test or script it runs calls expect, zsh, bwrap,
-      # socat or rg, read on 2026-11-14; apt.test.ts names two of them only as arguments to apt.sh,
-      # under a fake apt-get. So the step runs on the flag today's test steps run on, and saves
-      # 11 to 27 s a machine when only the tooling tests run (run 43615844695, test (1) to (6)).
-      - name: apt packages
-        if: ${{ needs.changes.outputs.today != 'false' }}
-        timeout-minutes: 12
-        run: |
-          sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
-            sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
-          fi
-
       - run: pnpm install --frozen-lockfile
-      # Today's tests run only when a file of today's version changed (changes' `today` flag, 0175);
-      # otherwise the last test step runs the tooling tests alone.
-      # BASE is the commit the run's change starts from: a pull request's base, a merge queue group's
-      # base, or what main held before a push. It is empty when there is none (a first push, whose
-      # `before` is all zeros, or a run started by hand), and then every test runs.
-      # With a BASE, a run runs the tests that import what it
-      # changed (vitest's `--changed`, its config's `forceRerunTriggers` for files
-      # tests read without importing), then, on the first machine, the tests that
-      # read the whole repo themselves, which an import walk never picks: the
-      # app's bundles, and the law that every machine has laws.
-      - name: lane tests, one file at a time
-        if: ${{ needs.changes.outputs.today != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
-        run: |
-          if [ -n "$BASE" ]; then
-            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --changed "$BASE" --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
-          else
-            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
-          fi
-      - name: test
-        if: ${{ !cancelled() && needs.changes.outputs.today != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
-        run: |
-          if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
-            if [ "${{ matrix.shard }}" = 1 ]; then
-              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/forced.json"
-            fi
-          else
-            pnpm exec vitest run --shard "$SHARD" --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
-          fi
-      # The tests that belong to neither version's product code: CI's own (.github/ci), the lint
-      # plugins, the root scripts and the skill scripts. With no file of today's version changed
-      # they run alone: every test vitest.config.ts includes, less the three trees of today's tests
-      # and next/. With a BASE the ones that reach the change run; with none, all of them.
+      # Every test vitest.config.ts includes, less next/ and the three trees of today's tests. BASE
+      # is the commit the run's change starts from: a pull request's base, a merge queue group's
+      # base, or what main held before a push. With a BASE the tests that reach the change run
+      # (vitest's `--changed`, its config's `forceRerunTriggers` for files tests read without
+      # importing); with none (a first push, whose `before` is all zeros, or a run started by
+      # hand), all of them.
       - name: tooling tests
-        if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          # The matrix's two machines on this flag.
+          # The matrix's two machines.
           SHARD: ${{ matrix.shard }}/2
         run: |
           if [ -n "$BASE" ]; then
@@ -486,7 +341,7 @@ jobs:
           fi
       - name: shard times
         if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"
       - *stop
 
   # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
@@ -644,7 +499,7 @@ jobs:
   # running: a normal cancel leaves an `always()` job be. It needs no `actions: write`, so it drops it.
   ci-required:
     name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
-    needs: [changes, field, check, typecheck, e2e, test, legs, next]
+    needs: [changes, field, check, typecheck, test, legs, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

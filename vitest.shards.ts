@@ -777,7 +777,8 @@ export const WORKERS = 3;
 export const wall = (seconds: readonly number[]): number =>
   Math.max(0, ...seconds, seconds.reduce((sum, value) => sum + value, 0) / WORKERS);
 
-const inLaneStep = (path: string) => path.includes(`${LANE}.`);
+/** A lane file of today's pipeline, which the rest step's loads leave out. */
+export const inLaneStep = (path: string) => path.includes(`${LANE}.`);
 
 /** Estimated rest-step wall time, excluding next/ and the separate lane step. */
 export const restLoads = (count: number): number[] => {
