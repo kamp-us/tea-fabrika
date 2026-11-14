@@ -134,8 +134,22 @@ const e2eShard = (count: number | string, gap = " ") =>
 const sized =
   "needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
 
+// Fail fast (ticket 990, F1 to F3): the step every job but ci-required ends with. On a pull request
+// or a merge queue group, once an earlier step failed, it cancels the run; ci-required's `always()`
+// keeps it running through a normal cancel. A push to main runs to the end.
+const stop = {
+  name: "stop the run",
+  if: `\${{ failure() && github.event_name != 'push' }}`,
+  env: { GH_TOKEN: `\${{ github.token }}` },
+  run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
+};
+
+// Every job that carries the stop step: all of them but ci-required.
+const stopping = ["changes", "field", "check", "typecheck", "test", "legs", "next", "e2e"] as const;
+
 const valid = (label: string, extra: string) => ({
   name: label,
+  permissions: { actions: "write", contents: "read" } as unknown,
   on: {
     push: { branches: ["main"] },
     pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
@@ -161,7 +175,7 @@ const valid = (label: string, extra: string) => ({
         filter: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
       } as Record<string, string>,
       steps: [
-        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
         { name: "skills check", run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { name: "tracked files", run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
@@ -263,7 +277,12 @@ const valid = (label: string, extra: string) => ({
         ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
       ) as Record<string, string>,
       steps: [
-        { name: "checkout", uses: "actions/checkout@v7", if: sized, with: { "fetch-depth": 0 } },
+        {
+          name: "checkout",
+          uses: "actions/checkout@v7",
+          if: sized,
+          with: { "fetch-depth": 0, "persist-credentials": false },
+        },
         {
           name: "pnpm",
           uses: "pnpm/action-setup@v6",
@@ -342,7 +361,7 @@ const valid = (label: string, extra: string) => ({
     field: {
       "timeout-minutes": 5,
       steps: [
-        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
         { name: "pnpm", uses: "pnpm/action-setup@v6", if: fieldIf },
         { name: "node", uses: "actions/setup-node@v7", if: fieldIf, with: { "node-version": "26.13.0" } },
@@ -359,8 +378,13 @@ const valid = (label: string, extra: string) => ({
       needs: ["changes", "field", "check", "typecheck", "e2e", "test", "legs", "next"],
       if: "always()",
       "timeout-minutes": 5,
+      permissions: { contents: "read" } as unknown,
       steps: [
-        { name: "checkout", uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci" } },
+        {
+          name: "checkout",
+          uses: "actions/checkout@v7",
+          with: { "sparse-checkout": ".github/ci", "persist-credentials": false },
+        },
         { name: "judge", env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
       ] as Record<string, unknown>[],
     },
@@ -368,6 +392,10 @@ const valid = (label: string, extra: string) => ({
 });
 
 type Workflow = ReturnType<typeof valid>;
+
+/** A job's steps as one plain list, whatever its own step type. */
+const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
+  w.jobs[job].steps as Record<string, unknown>[];
 
 const wiring = fc
   .tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"), fc.integer({ min: 1, max: 4 }))
@@ -410,6 +438,18 @@ const wiring = fc
       }
 
       step(clean, "next", "shard times").if = `\${{${gap}!cancelled()${gap}}}`;
+    }
+
+    // F1: the stop step comes last in every job but ci-required, after every step added above, its
+    // `if` spaced as the rest.
+    for (const job of stopping) {
+      const step = structuredClone(stop);
+
+      if (whitespace) {
+        step.if = `\${{${gap}failure()${gap}&&${gap}github.event_name${gap}!=${gap}'push'${gap}}}`;
+      }
+
+      stepsOf(clean, job).push(step);
     }
 
     return clean;
@@ -1470,6 +1510,99 @@ const plants: [string, (workflow: Workflow) => void][] = [
       step(w, "check", "lists only shrink")["run"] = `${ratchet} || true`;
     },
   ],
+  // Fail fast (ticket 990). F1: each job that drops its stop step would hold its run's other jobs
+  // to the end after it failed, as merge queue group 1199 did (run 43633120187).
+  // Plants, each run once on workflow-lint.ts and restored, each red on its plant below: F1's
+  // last-step check dropped; F1's one-cancel count dropped; F2 dropped; F3's per-job check dropped.
+  ...stopping.map((job): [string, (w: Workflow) => void] => [
+    `F1: ${job} drops its stop step`,
+    (w) => {
+      stepsOf(w, job).pop();
+    },
+  ]),
+  [
+    "F1: the stop step cancels a push to main too",
+    (w) => {
+      stepsOf(w, "check").at(-1)!["if"] = `\${{ failure() }}`;
+    },
+  ],
+  [
+    "F1: the stop step runs on every result, cancelling green runs",
+    (w) => {
+      stepsOf(w, "typecheck").at(-1)!["if"] = `\${{ always() && github.event_name != 'push' }}`;
+    },
+  ],
+  [
+    "F1: the stop step force-cancels, which takes ci-required down with the run",
+    (w) => {
+      stepsOf(w, "e2e").at(-1)!["run"] =
+        'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"';
+    },
+  ],
+  [
+    "F1: the stop step comes before the job's last step, so that step's failure stops nothing",
+    (w) => {
+      const list = stepsOf(w, "test");
+      list.splice(-2, 2, list.at(-1)!, list.at(-2)!);
+    },
+  ],
+  [
+    "F1: a second cancel step, with no guard for main",
+    (w) => {
+      stepsOf(w, "test").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
+    },
+  ],
+  // Every job here pins its own `if`, so F2 is for a job added later; this one is right in all else.
+  [
+    "F2: a new job runs on always(), so a canceled run waits for it",
+    (w) => {
+      Object.assign(w.jobs, {
+        extra: { if: "always()", "timeout-minutes": 5, steps: [{ run: "echo extra" }, structuredClone(stop)] },
+      });
+      w.jobs["ci-required"].needs.push("extra");
+    },
+  ],
+  [
+    "F3: ci-required keeps actions: write",
+    (w) => {
+      w.jobs["ci-required"].permissions = { actions: "write", contents: "read" };
+    },
+  ],
+  [
+    "F3: the workflow's token is write-all",
+    (w) => {
+      w.permissions = "write-all";
+    },
+  ],
+  [
+    "F3: the workflow's token loses actions: write, so every stop step is refused",
+    (w) => {
+      w.permissions = { contents: "read" };
+    },
+  ],
+  [
+    "F3: a job sets its own token, which drops the workflow's actions: write",
+    (w) => {
+      Object.assign(w.jobs.legs, { permissions: { contents: "read" } });
+    },
+  ],
+  // F4: a checkout that keeps the token in .git/config hands the `actions: write` token to every
+  // test and install script after it. One plant per job with a checkout, and one that sets it true.
+  // Plant, run once on workflow-lint.ts and restored: F4 dropped (red on each of these).
+  ...(["changes", "field", "legs", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+    `F4: ${job}'s checkout keeps the token in .git/config`,
+    (w) => {
+      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
+    },
+  ]),
+  [
+    "F4: a checkout sets persist-credentials to true",
+    (w) => {
+      const checkout = stepsOf(w, "field")[0]!;
+      (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
+    },
+  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -1638,6 +1771,37 @@ it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, 
     const broken = real();
     mutate(broken);
     expect(lint(JSON.stringify(broken))).not.toEqual([]);
+  }
+});
+
+// F1, ticket 990. The stop step is invisible to every other law, so a job without it gets exactly
+// the one error that names that job, and a job that has it gains no error from the others.
+it.each(stopping)("F1: %s without its stop step is named by that one error", (job) => {
+  fc.assert(
+    fc.property(wiring, (broken) => {
+      stepsOf(broken, job).pop();
+      expect(lint(JSON.stringify(broken))).toEqual([
+        `check.yaml: F1: ${job} ends with the stop step, its one step that cancels the run`,
+      ]);
+    }),
+    options,
+  );
+});
+
+it("F1 scenario: in the checked-in check.yaml every job but ci-required ends with the stop step, and loses it alone", () => {
+  // The YAML anchor `&stop` in changes and its aliases elsewhere, read as GitHub reads them. Each
+  // job's last step taken off gives that job's one error, so each alias lands where the law looks.
+  const real = () => parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  const jobs = Object.keys(real().jobs).filter((job) => job !== "ci-required");
+  expect(jobs.length).toBeGreaterThan(0);
+
+  for (const job of jobs) {
+    const broken = real();
+    expect(broken.jobs[job].steps.at(-1)).toEqual(stop);
+    broken.jobs[job].steps.pop();
+    expect(lint(JSON.stringify(broken))).toEqual([
+      `check.yaml: F1: ${job} ends with the stop step, its one step that cancels the run`,
+    ]);
   }
 });
 

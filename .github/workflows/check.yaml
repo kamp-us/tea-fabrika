@@ -25,6 +25,13 @@ concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
 
+# `actions: write` lets each job's last step, `stop the run` (in changes below), cancel its own run.
+# `contents: read` is the checkout's; no job uses the other scopes the repository's read-only
+# default gave. ci-required takes `actions` back, since it never cancels. workflow-lint.ts holds this.
+permissions:
+  actions: write
+  contents: read
+
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
 # slowest of that job's last 20 green runs on 2026-11-10 UTC, and at least 5: changes 39 s,
@@ -60,6 +67,10 @@ jobs:
       build: ${{ steps.diff.outputs.build }}
       today: ${{ steps.diff.outputs.today }}
     steps:
+      # Every checkout here leaves the token out of .git/config (`persist-credentials: false`), so
+      # no test or install script can read the `actions: write` token from it (ticket 990). No job
+      # pushes, and the two fetches (the promises step, ratchet.ts) read this public repository
+      # without one. The stop step gets the token in its own env alone. workflow-lint.ts holds it.
       # Every commit and tree, and only the head's files: a full clone fetched 803 MB of history
       # and a blobless one 7 MB before its checkout, on 2026-11-14 (`git clone --no-checkout`, with
       # and without `--filter=blob:none`). Names, diffs and merge bases read trees; a file at an
@@ -68,6 +79,7 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -104,6 +116,21 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: node .github/ci/changes.mjs --same
+      # Fail fast (ticket 990): the first red job cancels its own run, so the jobs still running free
+      # their runners and ci-required answers within seconds, not after the slowest job. Merge queue
+      # group 1199 (run 43633120187) waited about 10 minutes behind a lint that failed at 43 s.
+      # `failure()` is true once an earlier step of this job failed (a `continue-on-error` step does
+      # not count). A normal cancel, never `force-cancel`, so ci-required's `always()` keeps it
+      # running, and it reports failure: the red job's own result is `failure`, the others end
+      # `cancelled` or skip without their flag, and required.mjs passes none of those. A push to main
+      # runs to the end, one whole answer per commit. Every other job ends with this same step, the
+      # anchor below; workflow-lint.ts holds it there, last, in every job but ci-required.
+      - &stop
+        name: stop the run
+        if: ${{ failure() && github.event_name != 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.
@@ -117,6 +144,7 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -140,6 +168,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
+      - *stop
 
   # On a draft this job is lint alone, and it says so in its name: a draft's `lint` never stands in
   # for the ready run's `check` on the same head, which catchup.sh waits for.
@@ -154,6 +183,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # pnpm and Node, with no store cache: restoring one did not pay (.github/actions/pnpm).
       - uses: ./.github/actions/pnpm
@@ -198,6 +229,7 @@ jobs:
       # packages. Nothing above needs them.
       - run: pnpm build
         if: ${{ needs.changes.outputs.build != 'false' }}
+      - *stop
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
@@ -213,6 +245,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/pnpm
 
@@ -252,6 +286,7 @@ jobs:
         with:
           path: *tsc
           key: ${{ steps.tsc.outputs.cache-primary-key }}
+      - *stop
 
   # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
   # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
@@ -271,6 +306,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/pnpm
 
@@ -322,6 +359,7 @@ jobs:
           name: aria-received
           path: ${{ runner.temp }}/e2e-shots/aria-received
           if-no-files-found: ignore
+      - *stop
 
   # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
   # The tests, split by file over six machines, two when only the tooling tests run (vitest's `--shard`, each machine
@@ -353,6 +391,7 @@ jobs:
           # history must hold it. Blobless, as in changes: `--changed` reads only names.
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
       - uses: ./.github/actions/pnpm
 
@@ -448,6 +487,7 @@ jobs:
       - name: shard times
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
+      - *stop
 
   # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
   # it lists the files Vitest's `--changed` picks and every reader test, which read files as text so
@@ -477,6 +517,7 @@ jobs:
           # Blobless, as in changes: `--changed` reads only names.
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
         continue-on-error: true
@@ -500,6 +541,7 @@ jobs:
           FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node .github/ci/legs.ts
+      - *stop
 
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
@@ -539,6 +581,7 @@ jobs:
           # it. Blobless, as in changes: edges fetches each changed file's base text when it reads it.
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
       - uses: ./.github/actions/pnpm
 
@@ -584,6 +627,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
+      - *stop
 
   # The one check from this workflow that GitHub's ruleset for main requires, so a merge made outside
   # catchup.sh is refused while a job above is red. The same name and shape as phoenix's (its ci.yml
@@ -596,16 +640,21 @@ jobs:
   # end, so for the whole ready run the draft's green `ci-required` on the same head would be the
   # latest one and would satisfy the ruleset. Under its own name it never does; a draft cannot
   # merge anyway.
+  # When a red job stops the run (`stop the run`, in changes), this is the one job that keeps
+  # running: a normal cancel leaves an `always()` job be. It needs no `actions: write`, so it drops it.
   ci-required:
     name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
     needs: [changes, field, check, typecheck, e2e, test, legs, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/ci
+          persist-credentials: false
       - env:
           NEEDS: ${{ toJSON(needs) }}
         run: node .github/ci/required.mjs
