@@ -67,9 +67,14 @@ jobs:
       build: ${{ steps.diff.outputs.build }}
       today: ${{ steps.diff.outputs.today }}
     steps:
+      # Every checkout here leaves the token out of .git/config (`persist-credentials: false`), so
+      # no test or install script can read the `actions: write` token from it (ticket 990). No job
+      # pushes, and the two fetches (the promises step, ratchet.ts) read this public repository
+      # without one. The stop step gets the token in its own env alone. workflow-lint.ts holds it.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -132,6 +137,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -170,6 +176,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # The pnpm version comes from `packageManager` in package.json.
       - uses: pnpm/action-setup@v6
@@ -237,6 +245,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6
         with:
@@ -269,6 +279,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6
         with:
@@ -343,6 +355,7 @@ jobs:
           # `--changed` compares with the pull request's base commit, so the
           # history must hold it. The whole repository is a few MB.
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6
         with:
@@ -467,6 +480,7 @@ jobs:
         with:
           # `--changed` compares with the pull request's base commit, so the history must hold it.
           fetch-depth: 0
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
         continue-on-error: true
@@ -529,6 +543,7 @@ jobs:
           # The edges step compares the pull request with its merge base, so the history must hold
           # it. The whole repository is a few MB.
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v6
         with:
@@ -608,6 +623,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/ci
+          persist-credentials: false
       - env:
           NEEDS: ${{ toJSON(needs) }}
         run: node .github/ci/required.mjs

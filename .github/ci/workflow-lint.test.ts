@@ -128,7 +128,7 @@ const valid = (label: string, extra: string) => ({
         filter: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
       } as Record<string, string>,
       steps: [
-        { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
         { run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
@@ -212,7 +212,7 @@ const valid = (label: string, extra: string) => ({
         ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
       ) as Record<string, string>,
       steps: [
-        { uses: "actions/checkout@v7", if: sized, with: { "fetch-depth": 0 } },
+        { uses: "actions/checkout@v7", if: sized, with: { "fetch-depth": 0, "persist-credentials": false } },
         { uses: "pnpm/action-setup@v6", if: sized, "continue-on-error": true, with: { run_install: false } },
         { uses: "actions/setup-node@v7", if: sized, "continue-on-error": true, with: { "node-version": "26.13.0" } },
         { run: "pnpm install --frozen-lockfile --ignore-scripts", if: sized, "continue-on-error": true },
@@ -267,7 +267,7 @@ const valid = (label: string, extra: string) => ({
     field: {
       "timeout-minutes": 5,
       steps: [
-        { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
         { uses: "pnpm/action-setup@v6", if: fieldIf },
         { uses: "actions/setup-node@v7", if: fieldIf, with: { "node-version": "26.13.0" } },
@@ -285,7 +285,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       permissions: { contents: "read" } as unknown,
       steps: [
-        { uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci" } },
+        { uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci", "persist-credentials": false } },
         { env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
       ] as Record<string, unknown>[],
     },
@@ -1447,6 +1447,23 @@ const plants: [string, (workflow: Workflow) => void][] = [
     "F3: a job sets its own token, which drops the workflow's actions: write",
     (w) => {
       Object.assign(w.jobs.legs, { permissions: { contents: "read" } });
+    },
+  ],
+  // F4: a checkout that keeps the token in .git/config hands the `actions: write` token to every
+  // test and install script after it. One plant per job with a checkout, and one that sets it true.
+  // Plant, run once on workflow-lint.ts and restored: F4 dropped (red on each of these).
+  ...(["changes", "field", "legs", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+    `F4: ${job}'s checkout keeps the token in .git/config`,
+    (w) => {
+      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
+    },
+  ]),
+  [
+    "F4: a checkout sets persist-credentials to true",
+    (w) => {
+      const checkout = stepsOf(w, "field")[0]!;
+      (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
     },
   ],
 ];

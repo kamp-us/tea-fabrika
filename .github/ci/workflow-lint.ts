@@ -274,6 +274,18 @@ export const lintWorkflow = (text: string): string[] => {
     require(!("permissions" in map(job)), `F3: ${name} keeps the workflow's token, which its stop step needs`);
   }
 
+  // F4. A checkout keeps the token in .git/config unless told not to, where any test or install
+  // script could read it, and that token may cancel and re-run this workflow. No job pushes, and the
+  // fetches read a public repository, so no checkout needs it.
+  for (const [name, job] of Object.entries(jobs)) {
+    for (const step of allSteps(map(job)).filter(
+      (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"),
+    )) {
+      require(map(step["with"])["persist-credentials"] ===
+        false, `F4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);
+    }
+  }
+
   // The one required check: it waits on every other job, never skips, and judges them all.
   const summary = map(jobs["ci-required"]),
     others = Object.keys(jobs).filter((name) => name !== "ci-required");
