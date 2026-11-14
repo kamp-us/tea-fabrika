@@ -303,3 +303,208 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
     expect(seen.nested, "L20: the walks draw nested containers").toBeGreaterThan(0);
   });
 });
+
+// Desk S4, next/: law L31's markup half, written before `Layout.tsx` draws a strip. The library's
+// `tezgah/Fold.laws.test.ts` holds which tiles fold. The shape this law holds `Layout.tsx` to, from
+// the plan, 0506's lessons and the brief (the build may add more props):
+// - `Layout` takes `strips`, the tiles this window draws as strips (`fold(workspace, size)`, which the
+//   page works out from the window's size; never stored, never sent). Without it nothing folds, so
+//   L20's walk is unchanged.
+// - A strip is a real `button`, in the Tab order, named `open <program>, t<n>`: `open ` and then
+//   `tileName`'s words. A strip is not a region, so the regions are the open tiles alone, in reading
+//   order, and `aria-current` stays on the focused tile's region. A strip holds no tile body: a
+//   button may hold no interactive content (HTML, the button element's content model), and programs
+//   know nothing about folds (0506). The focused tile is never a strip.
+// - How a strip opens (Enter or a click focuses its tile, so it opens) is the page's, walked in the
+//   app's `e2e/tezgah-fold.test.ts` (L33).
+//
+// The walk draws a window size from 320x240 to 2560x1600 and a layout walked from one tile with the
+// library's real `Layout.split` and `Layout.remove`. The strips are worked out here, from the plan's
+// rule, never from the product's `fold`: each tile but the focused one that the frame draws under
+// 220x120 at that size (`Layout.rects` with the frame's `GAP`, plan amendment 7).
+const SMALLEST = { width: 220, height: 120 } as const;
+
+/** The plan's fold, written here: every tile but the focused one drawn under 220x120 in `size`. */
+const stripsAt = (w: Workspace, size: { readonly width: number; readonly height: number }): ReadonlySet<TileId> => {
+  const drawn = Layout.rects(w.layout, size, { gap: Layout.GAP });
+  return new Set(
+    Layout.order(w.layout).filter((t) => {
+      const r = drawn.get(t)!;
+      return t !== w.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height);
+    }),
+  );
+};
+
+/** A button: a `button` element, or `role="button"`. */
+const isButton = (n: Node) => n.attrs["role"] === "button" || (n.tag === "button" && n.attrs["role"] === undefined);
+
+/** Every element on the way from `root` down to `node`, `node` last; empty when it is not there. */
+const pathTo = (root: Node, node: Node): ReadonlyArray<Node> => {
+  if (root === node) {
+    return [node];
+  }
+
+  for (const c of root.children) {
+    const below = typeof c === "string" ? [] : pathTo(c, node);
+
+    if (below.length > 0) {
+      return [root, ...below];
+    }
+  }
+
+  return [];
+};
+
+const INTERACTIVE = new Set(["a", "button", "input", "select", "textarea", "details", "iframe", "label"]);
+
+const Folded = fc.record({
+  width: fc.integer({ min: 320, max: 2_560 }),
+  height: fc.integer({ min: 240, max: 1_600 }),
+  cuts: fc.array(fc.record({ at: fc.nat(), down: fc.boolean(), close: fc.boolean(), program: fc.nat() }), {
+    minLength: 0,
+    maxLength: 12,
+  }),
+  focus: fc.nat(),
+});
+
+describe("Desk S4 L31: a strip in the markup is a real button named by its program, never the focused tile", () => {
+  it("L31: at any size and layout, each strip is a button in the Tab order named open <program>, t<n>, outside every region and holding no body; the regions are the open tiles in reading order, and the focused tile is never a strip", () => {
+    const seen = { strips: 0, open: 0, nested: 0 };
+    fc.assert(
+      fc.property(Folded, ({ width, height, cuts, focus }) => {
+        const first = typeId("tile", 1) as TileId;
+        let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+          id: typeId("workspace", 1),
+          n: 1,
+          layout: first,
+          focus: first,
+          recent: [first],
+        });
+        const tiles: Array<Tile> = [
+          {
+            id: first,
+            n: 1,
+            shows: "checklist:1",
+            program: "fabrika/checklist",
+            child: false,
+            keep: "failed",
+            cursor: null,
+          } as Tile,
+        ];
+
+        for (const [k, cut] of cuts.entries()) {
+          const live = Layout.order(w.layout);
+          const at = live[cut.at % live.length]!;
+
+          if (cut.close && live.length > 1) {
+            w = Layout.remove(w, at);
+            continue;
+          }
+
+          const id = typeId("tile", k + 2) as TileId;
+          const program = PROGRAMS[cut.program % PROGRAMS.length]!;
+          w = Layout.split(w, at, cut.down ? "column" : "row", id);
+          tiles.push({
+            id,
+            n: k + 2,
+            shows: `${program.slice(program.indexOf("/") + 1)}:t${k + 2}`,
+            program,
+            child: true,
+            keep: "failed",
+            cursor: null,
+          } as Tile);
+        }
+
+        const live = Layout.order(w.layout);
+        w = Layout.focus(w, live[focus % live.length]!);
+        const shown = tiles.filter((t) => live.includes(t.id));
+        const strips = stripsAt(w, { width, height });
+        const byId = new Map(shown.map((t) => [t.id, t]));
+        const root = parse(
+          renderToStaticMarkup(
+            createElement(Desk, {
+              workspace: w,
+              tiles: shown,
+              strips,
+              children: (t: Tile) => createElement("p", null, `body of ${t.shows}`),
+            } as Parameters<typeof Desk>[0]),
+          ),
+        );
+        const mains = all(root).filter(isMain);
+        expect(mains, "L31: the markup has one main").toHaveLength(1);
+        const open = live.filter((t) => !strips.has(t));
+        const folded = live.filter((t) => strips.has(t));
+        const regions = all(root).filter((n) => isRegion(root, n));
+        expect(
+          regions.map((r) => nameIn(root, r)),
+          `L31: at ${width}x${height} the regions are the open tiles, in reading order`,
+        ).toEqual(open.map((t) => tileName(byId.get(t)!)));
+        expect(
+          all(root)
+            .filter(current)
+            .map((n) => nameIn(root, n)),
+          "L31: aria-current is on the focused tile's region only",
+        ).toEqual([tileName(byId.get(w.focus)!)]);
+        const buttons = all(root).filter((n) => isButton(n) && (nameIn(root, n) ?? "").startsWith("open "));
+        expect(
+          buttons.map((b) => nameIn(root, b)),
+          `L31: at ${width}x${height} each strip is one button named open <program>, t<n>, in reading order`,
+        ).toEqual(folded.map((t) => `open ${tileName(byId.get(t)!)}`));
+        expect(
+          buttons.some((b) => nameIn(root, b) === `open ${tileName(byId.get(w.focus)!)}`),
+          "L31: the focused tile is never a strip",
+        ).toBe(false);
+
+        for (const [i, b] of buttons.entries()) {
+          const name = nameIn(root, b);
+          const way = pathTo(root, b);
+          expect(b.tag, `L31: ${name} is a real button element`).toBe("button");
+          expect(b.attrs["tabindex"] === "-1", `L31: ${name} is in the Tab order`).toBe(false);
+          expect("disabled" in b.attrs, `L31: ${name} is not disabled`).toBe(false);
+          expect(
+            way.some((n) => "inert" in n.attrs || n.attrs["aria-hidden"] === "true"),
+            `L31: ${name} is neither inert nor hidden`,
+          ).toBe(false);
+          expect(way.includes(mains[0]!), `L31: ${name} is inside the main`).toBe(true);
+          expect(
+            way.some((n) => isRegion(root, n)),
+            `L31: ${name} sits in no region`,
+          ).toBe(false);
+          expect(text(b), `L31: ${name} holds no tile body`).not.toContain(`body of ${byId.get(folded[i]!)!.shows}`);
+          expect(
+            all(b)
+              .slice(1)
+              .filter(
+                (n) => INTERACTIVE.has(n.tag) || (n.attrs["tabindex"] !== undefined && n.attrs["tabindex"] !== "-1"),
+              )
+              .map((n) => n.tag),
+            `L31: ${name} holds nothing interactive`,
+          ).toEqual([]);
+        }
+
+        for (const t of folded) {
+          expect(text(root), `L31: the folded tile ${tileName(byId.get(t)!)} draws no body`).not.toContain(
+            `body of ${byId.get(t)!.shows}`,
+          );
+        }
+
+        for (const [i, t] of open.entries()) {
+          expect(text(regions[i]!), `L31: ${tileName(byId.get(t)!)} holds its own body`).toContain(
+            `body of ${byId.get(t)!.shows}`,
+          );
+        }
+
+        seen.strips += folded.length > 0 ? 1 : 0;
+        seen.open += folded.length > 0 && open.length > 1 ? 1 : 0;
+        seen.nested +=
+          folded.length > 0 && typeof w.layout !== "string" && w.layout.parts.some((p) => typeof p.inner !== "string")
+            ? 1
+            : 0;
+      }),
+      { seed: SEED, numRuns: 300 },
+    );
+    expect(seen.strips, "L31: the walks draw strips").toBeGreaterThan(0);
+    expect(seen.open, "L31: the walks draw strips beside more than one open tile").toBeGreaterThan(0);
+    expect(seen.nested, "L31: the walks draw strips inside nested containers").toBeGreaterThan(0);
+  });
+});

@@ -343,3 +343,172 @@ export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: s
       yield* Effect.sleep("250 millis");
     }
   });
+
+// Desk S4, next/: what the fold law reads on top of the frame's helpers.
+
+/** The readability floor from fold, not tabs: a tile drawn under it in a window is a strip there. */
+const SMALLEST = { width: 220, height: 120 } as const;
+
+/** format: a strip's accessible name, `open ` and then `tileName`'s words (the plan's L31). */
+export const stripName = (tile: Pick<Tile, "program" | "n">): string => `open ${regionName(tile)}`;
+
+/** format: Playwright's ARIA snapshot line for a strip, `- button "open <name>"`. */
+const STRIP = /^\s*- button "(open (?:[^"\\]|\\.)*)"/;
+
+/** What the tab draws, with each strip in document order: its name and box. */
+export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name: string; readonly box: Box | null }> };
+
+/** Reads what the tab draws now, strips included, by role and accessible name. */
+export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
+  Effect.gen(function* () {
+    const d = yield* drawn(page);
+    const main = page.getByRole("main").first();
+    const snapshot = d.mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
+    const names = snapshot.split("\n").flatMap((line) => {
+      const m = STRIP.exec(line);
+      return m?.[1] === undefined ? [] : [m[1].replace(/\\(.)/g, "$1")];
+    });
+    const strips = yield* Effect.forEach(
+      names,
+      (name) =>
+        promised(() => main.getByRole("button", { name, exact: true }).first().boundingBox()).pipe(
+          Effect.map((box) => ({ name, box })),
+        ),
+      { concurrency: 1 },
+    );
+    return { ...d, strips };
+  });
+
+/** The tiles of workspace 1 this tab must draw as strips, by the plan's rule written here from its
+ *  words: every tile but the focused one that the frame draws under 220x120 in the tab's own main,
+ *  inside its padding (plan amendment 7). Never read from the product's `fold`. */
+export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => {
+  const space = view.workspaces.find((w) => w.n === WORKSPACE);
+
+  if (space === undefined) {
+    return [];
+  }
+
+  const rects = drawnRule(space.layout, {
+    x: main.x + GAP,
+    y: main.y + GAP,
+    width: main.width - 2 * GAP,
+    height: main.height - 2 * GAP,
+  });
+  return shown(view).filter((t) => {
+    const r = rects.get(t.id);
+    return t.id !== space.focus && r !== undefined && (r.width < SMALLEST.width || r.height < SMALLEST.height);
+  });
+};
+
+/** Every way the tab's drawing differs from workspace 1 of tezgah's `view` folded at the tab's own
+ *  size: the regions are the open tiles in reading order, each strip is a button named
+ *  `open <program>, t<n>` in reading order, the focused tile is never a strip and alone has
+ *  `aria-current`, every open tile but the focused one is drawn at least 220x120, and each strip is
+ *  drawn inside the main. Empty when they agree. */
+export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
+  const space = view.workspaces.find((w) => w.n === WORKSPACE);
+
+  if (space === undefined || d.main === null) {
+    return [space === undefined ? "tezgah has no workspace 1" : "no main is drawn"];
+  }
+
+  const strips = stripsHere(view, d.main);
+  const open = shown(view).filter((t) => !strips.includes(t));
+  const focus = view.tiles.find((t) => t.id === space.focus);
+  const out: Array<string> = [];
+
+  if (d.mains !== 1) {
+    out.push(`${d.mains} mains`);
+  }
+
+  const regions = d.regions.map((r) => r.name);
+  const want = open.map(regionName);
+
+  if (JSON.stringify(regions) !== JSON.stringify(want)) {
+    out.push(`regions ${JSON.stringify(regions)}, open tiles ${JSON.stringify(want)}`);
+  }
+
+  const drawnStrips = d.strips.map((s) => s.name);
+  const wantStrips = strips.map(stripName);
+
+  if (JSON.stringify(drawnStrips) !== JSON.stringify(wantStrips)) {
+    out.push(`strips ${JSON.stringify(drawnStrips)}, tiles under 220x120 here ${JSON.stringify(wantStrips)}`);
+  }
+
+  if (focus !== undefined && drawnStrips.includes(stripName(focus))) {
+    out.push(`the focused tile ${regionName(focus)} is a strip`);
+  }
+
+  if (JSON.stringify(d.current) !== JSON.stringify(focus === undefined ? [] : [regionName(focus)])) {
+    out.push(`aria-current on ${JSON.stringify(d.current)}, tezgah's focus ${focus?.n}`);
+  }
+
+  for (const r of d.regions.filter((x) => focus === undefined || x.name !== regionName(focus))) {
+    if (r.box === null || r.box.width < SMALLEST.width - EDGE || r.box.height < SMALLEST.height - EDGE) {
+      out.push(`open ${r.name} is drawn at ${JSON.stringify(r.box)}, under 220x120`);
+    }
+  }
+
+  for (const s of d.strips) {
+    const b = s.box;
+    const m = d.main;
+
+    if (
+      b === null ||
+      b.x < m.x - EDGE ||
+      b.y < m.y - EDGE ||
+      b.x + b.width > m.x + m.width + EDGE ||
+      b.y + b.height > m.y + m.height + EDGE
+    ) {
+      out.push(`${s.name} is drawn at ${JSON.stringify(b)}, outside the main ${JSON.stringify(m)}`);
+    }
+  }
+
+  return out;
+};
+
+/** Polls until `check` holds of the tab, strips included, and tezgah's view, or fails with the last
+ *  of both after 30 s. */
+export const foldSettle = (
+  page: Page,
+  r: Reader,
+  pid: string,
+  check: (view: TezgahView, d: FoldDrawn) => ReadonlyArray<string>,
+  label: string,
+) =>
+  Effect.gen(function* () {
+    for (let tries = 0; ; tries++) {
+      const view = yield* tezgahView(r, pid);
+      const d = yield* foldDrawn(page);
+      const wrong = check(view, d);
+
+      if (wrong.length === 0 || tries >= 120) {
+        expect(wrong, `${label}: ${JSON.stringify(view)} ${JSON.stringify(d)}`).toEqual([]);
+        return { view, d };
+      }
+
+      yield* Effect.sleep("250 millis");
+    }
+  });
+
+/** The element that has DOM focus: its tag, its accessible name, and whether the page draws a focus
+ *  ring on it (an outline or a box shadow), as a person sees it. */
+export const focusRing = (page: Page) =>
+  promised(() =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+
+      if (el === null) {
+        return { tag: "", name: "", ring: false };
+      }
+
+      const css = getComputedStyle(el);
+      const outline = css.outlineStyle !== "none" && Number.parseFloat(css.outlineWidth) > 0;
+      return {
+        tag: el.tagName.toLowerCase(),
+        name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "",
+        ring: outline || css.boxShadow !== "none",
+      };
+    }),
+  );

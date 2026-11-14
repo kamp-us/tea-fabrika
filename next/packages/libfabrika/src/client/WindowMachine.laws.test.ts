@@ -44,7 +44,7 @@ import { applyCell } from "@demlik/tea";
 // tile is stepped through its registration in the checklist's laws (L22, L24).
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
@@ -54,7 +54,7 @@ import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Wo
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
 import * as Keys from "./Keys.ts";
-import { optimisticState } from "./Tezgah.ts";
+import { optimisticState, type TezgahClient } from "./Tezgah.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
@@ -2801,5 +2801,251 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
     expect(seen.moves, "the walks move focus").toBeGreaterThan(0);
     expect(seen.offline, "the walks press focus keys while the link is down").toBeGreaterThan(0);
     expect(seen.redial, "the walks drop the link and dial again").toBeGreaterThan(0);
+  });
+});
+
+// Desk S4, next/: a smaller window folds what does not fit. The `fold` client row of the plan's "What
+// it records" and law L32, walked on the S3 focus world. Written before a window folds. The shape
+// these hold `WindowMachine.ts` and `transport/ClientRows.ts` to, from the plan (the build may add
+// more):
+// - Size belongs to the viewer (0277). A window's strips are `fold` of its drawn workspace (the
+//   `optimisticState` of its tezgah child) at its last `size`: every tile but the drawn focus that the
+//   frame draws under 220x120 there (`Layout.rects` with `GAP`, plan amendment 7). Before the page
+//   says a size, nothing folds. The rule is written here from the plan's words, never read from the
+//   product's `fold`; `tezgah/Fold.laws.test.ts` holds `fold` to the same rule.
+// - "What it records": `fold {strips, width, height}` on change. On each step whose strips differ from
+//   the step before (a new size, a view, a focus move), the window hands out one `record` Cmd of
+//   `{_tag: "fold", strips, width, height}`: `strips` how many tiles it draws as strips now, and
+//   `width` and `height` the size it folded at. A step that changes no strip writes no fold row. The
+//   tiles folded are not written: the layout, the focus and the size rebuild them.
+// - L32: a fold is never sent to tezgah and never stored. No key of the window's model, its tezgah
+//   link, its tezgah child or tezgah's wire shapes names a fold or a strip; a `size` Msg changes the
+//   model in its `size` alone and writes nothing to the brain; and every letter the window sends
+//   tezgah carries only the keys of tezgah's `did`.
+// A step where a drawn tile sits within half a pixel of the floor is left out of the fold row's
+// check, so float rounding cannot decide it.
+const FOLD_SMALLEST = { width: 220, height: 120 } as const;
+
+/** The tiles a window draws as strips now, by the plan's rule, in reading order. */
+const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
+  const space = drawnHere(s);
+
+  if (s.size === null || space === null) {
+    return [];
+  }
+
+  const drawn = Layout.rects(space.layout, s.size, { gap: Layout.GAP });
+  const boxes = Layout.order(space.layout).map((t) => [t, drawn.get(t)!] as const);
+
+  if (
+    boxes.some(
+      ([, r]) => Math.abs(r.width - FOLD_SMALLEST.width) <= 0.5 || Math.abs(r.height - FOLD_SMALLEST.height) <= 0.5,
+    )
+  ) {
+    return null;
+  }
+
+  return boxes.flatMap(([t, r]) =>
+    t !== space.focus && (r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height) ? [t] : [],
+  );
+};
+
+/** Every key in a value, at any depth. */
+const keysIn = (v: unknown): ReadonlyArray<string> =>
+  Array.isArray(v)
+    ? v.flatMap(keysIn)
+    : v !== null && typeof v === "object"
+      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      : [];
+
+/** A key that would hold a fold: the one thing L32 forbids the model and the wire. */
+type Folded = `${string}${"fold" | "Fold" | "strip" | "Strip"}${string}`;
+const FOLDED = /fold|strip/i;
+
+/** The keys of tezgah's `did`, the plan's "The shape": what a letter from a window may carry. */
+const DID_KEYS = new Set(["type", "does", "from", "via", "tile", "to", "cursor"]);
+
+/** One walk of the focus world, with sizes the page says among its moves. */
+const foldWalk = (
+  cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>,
+  focus: number,
+  picks: ReadonlyArray<DeskPick>,
+  check: (e: DeskEvent) => void,
+) => {
+  const view = focusDesk(cuts, focus);
+  const [s0, cmds0] = focusWindow.init(null, { tiles: [], tezgah: { workspace: 1 } } as never);
+  const w: FocusWorld = {
+    s: s0,
+    waiting: [...cmds0],
+    desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+    shown: null,
+    subscribed: false,
+    up: true,
+    view,
+    pos: 1,
+    notices: [],
+    moves: [],
+    took: [],
+    letters: 0,
+  };
+  /** tezgah takes a move as the socket hands it over and sends its view while the window listens. */
+  const each = (e: DeskEvent) => {
+    for (const c of e.cmds.filter(isWrite)) {
+      const to = Reflect.get(Object(c.call["m"]), "to");
+      const space = w.view.workspaces[0]!;
+      const letter = String(c.call["letter"]);
+
+      if (
+        c.call._tag === "send" &&
+        c.call["pid"] === TEZGAH_PID &&
+        typeof to === "string" &&
+        !w.took.includes(letter) &&
+        Layout.order(space.layout).includes(to as TileId)
+      ) {
+        w.took.push(letter);
+        w.pos++;
+        w.view = { ...w.view, workspaces: [Layout.focus(space, to as TileId)] };
+
+        if (w.subscribed) {
+          w.notices.push({ rev: w.pos, view: w.view });
+        }
+      }
+    }
+
+    check(e);
+  };
+  goOnline(w, focusWindow, each);
+  const dialed = new Set([1]);
+
+  for (const c of picks) {
+    if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+      dialed.add(w.s.link.dial);
+      goOnline(w, focusWindow, each, w.s.link.dial);
+      continue;
+    }
+
+    // The page says a size: often a small one, where tiles fold, sometimes the same one again.
+    const small = c.pick % 2 === 0;
+    const size = {
+      width: small ? 320 + ((c.ms * 13) % 700) : 320 + ((c.ms * 13) % 2_241),
+      height: small ? 240 + ((c.pick * 7) % 400) : 240 + ((c.pick * 7) % 1_361),
+    };
+    const options = [
+      ...focusMoves(w, c, each),
+      () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      () => deskStep(w, { type: "size", ...(w.s.size ?? size) } as WindowMsg, focusWindow, each),
+    ];
+    options[c.move % options.length]!();
+  }
+
+  return w;
+};
+
+const FoldCuts = fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 6 });
+
+describe("Desk S4: a window folds at its own size, records each change of its folds, and keeps no fold", () => {
+  it("fold row: on each step that changes which tiles the window draws as strips, by a size, a view or a focus move, one record fold {strips, width, height}, its count and the size it folded at; a step that changes none writes no fold row", () => {
+    const seen = { rows: 0, bySize: 0, byOther: 0, quiet: 0 };
+    fc.assert(
+      fc.property(
+        FoldCuts,
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
+            const before = stripsNow(prev);
+            const after = stripsNow(next);
+            const rows = cmds.flatMap((c) => {
+              const r = recordIn(c);
+              return r?._tag === "fold" ? [r] : [];
+            });
+
+            if (before === null || after === null) {
+              return;
+            }
+
+            const changed = JSON.stringify([...before].sort()) !== JSON.stringify([...after].sort());
+            expect(
+              rows,
+              changed
+                ? `fold row: after ${m.type} the strips went from ${before.length} to ${after.length}, one fold row`
+                : `fold row: after ${m.type} no strip changed, no fold row`,
+            ).toEqual(
+              changed
+                ? [{ _tag: "fold", strips: after.length, width: next.size!.width, height: next.size!.height }]
+                : [],
+            );
+            seen.rows += rows.length;
+            seen.bySize += changed && m.type === "size" ? 1 : 0;
+            seen.byOther += changed && m.type !== "size" ? 1 : 0;
+            seen.quiet += !changed && m.type === "size" ? 1 : 0;
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.bySize, "fold row: the walks fold and unfold by a new size").toBeGreaterThan(0);
+    expect(seen.byOther, "fold row: the walks fold and unfold by a view or a focus move").toBeGreaterThan(0);
+    expect(seen.quiet, "fold row: the walks say sizes that change no strip").toBeGreaterThan(0);
+  });
+
+  it("L32: a fold is never stored in the window's model nor sent to tezgah: no model or wire key names one, a size Msg changes only the model's size and writes nothing, and every letter to tezgah carries only did's keys", () => {
+    // L32's type half is checked by `tsc` over this file (CI's typecheck job, 0133): a key that names a
+    // fold or a strip on the window's model, its tezgah link, its tezgah child or tezgah's wire shapes
+    // fails typecheck. The walk checks the same at run time, on every state.
+    expectTypeOf<Extract<keyof WindowModel, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof TezgahClient, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof TezgahView, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof Workspace, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof Tile, Folded>>().toEqualTypeOf<never>();
+    const seen = { sizes: 0, folded: 0, letters: 0 };
+    fc.assert(
+      fc.property(
+        FoldCuts,
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
+            expect(
+              keysIn(next).filter((k) => FOLDED.test(k)),
+              `L32: after ${m.type} the window's model holds no fold`,
+            ).toEqual([]);
+
+            if (m.type === "size") {
+              seen.sizes++;
+              seen.folded += (stripsNow(next) ?? []).length > 0 ? 1 : 0;
+              expect({ ...next, size: null }, "L32: a size Msg changes the model in its size alone").toEqual({
+                ...prev,
+                size: null,
+              });
+              expect(
+                cmds.filter(isWrite).map((c) => c.call._tag),
+                "L32: a size Msg writes nothing to the brain",
+              ).toEqual([]);
+            }
+
+            for (const c of cmds
+              .filter(isWrite)
+              .filter((c) => c.call._tag === "send" && c.call["pid"] === TEZGAH_PID)) {
+              seen.letters++;
+              expect(
+                Object.keys(Object(c.call["m"])).filter((k) => !DID_KEYS.has(k)),
+                "L32: a letter to tezgah carries only did's keys",
+              ).toEqual([]);
+              expect(
+                keysIn(c.call["m"]).filter((k) => FOLDED.test(k)),
+                "L32: a letter to tezgah names no fold",
+              ).toEqual([]);
+            }
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.sizes, "L32: the walks say sizes").toBeGreaterThan(0);
+    expect(seen.folded, "L32: the walks say sizes at which tiles fold").toBeGreaterThan(0);
+    expect(seen.letters, "L32: the walks send tezgah letters").toBeGreaterThan(0);
   });
 });
