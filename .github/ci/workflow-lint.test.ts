@@ -3,7 +3,7 @@ import { matchesGlob } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
+import { cacheFiles, lintCaches, lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -21,12 +21,59 @@ const env = {
 };
 
 const diff = {
+  name: "classify",
   id: "diff",
   env: { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` },
   run: "node .github/ci/changes.mjs",
 };
 
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
+
+const LANES = "lane tests, one file at a time";
+
+// The test job's steps: apt has no env.
+type TestStep = { name: string; if: string; env?: Record<string, string>; run: string };
+const testSteps = (list: TestStep[]) => list;
+
+// The next job's steps: a plant may add one with no name, such as a second Vitest call.
+type NextStep = {
+  name?: string;
+  if?: string;
+  env?: Record<string, string>;
+  run: string;
+  "working-directory"?: string;
+};
+
+const nextSteps = (list: NextStep[]) => list;
+
+type StepOf<T> = T extends { steps: readonly (infer S)[] } ? S : never;
+
+/**
+ * The one step of `job` named `name`, so a plant never depends on where a step sits. Lookups by
+ * position broke three times on 2026-11-14, each time a job gained a step. Throws when no step or
+ * more than one has the name.
+ */
+const step = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(
+  w: W,
+  job: J,
+  name: string,
+): StepOf<W["jobs"][J]> => {
+  const steps = (w.jobs as Record<string, { steps: StepOf<W["jobs"][J]>[] }>)[job]!.steps;
+  const found = steps.filter((s) => (s as { name?: unknown }).name === name);
+
+  if (found.length !== 1) {
+    throw new Error(`${job} has ${found.length} steps named "${name}"; a lookup needs exactly one`);
+  }
+
+  return found[0]!;
+};
+
+/** Where `job`'s step named `name` sits, for a plant that moves or removes it. */
+const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) =>
+  (w.jobs as Record<string, { steps: unknown[] }>)[job]!.steps.indexOf(step(w, job, name));
+
+// T5: six machines for today's tests, two when only the tooling tests run.
+const testLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
 
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
@@ -49,8 +96,11 @@ const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e
 // On a pull request only: the merge queue and main run the whole suite.
 const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
-// The vitest step's: also empty when changes' filter names the reader tests, which read files as
-// text, so the import graph would drop them (the plan for CI paths, slice 2).
+// The vitest step's paths: the legs job's list on a sized run, reader tests included, else changes'
+// filter (the plan for CI paths, slice 2), else all of next/.
+const vitestFilter = `\${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
+
+// What 1230 gave the vitest step: `--changed` on a pull request whose filter is all of next/.
 const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 const nextLegs = (count: number) => [
@@ -62,8 +112,44 @@ const nextLegs = (count: number) => [
   "5",
 ];
 
+// S1: the matrix is the legs job's `shards`, else this fallback, the full matrix (legs.ts).
+const sizedLegs = (legs: readonly unknown[]) =>
+  `\${{ fromJSON(needs.legs.outputs.shards || '${JSON.stringify(legs)}') }}`;
+
+/** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
+const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
+  JSON.parse(/'(.*)'/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
+
+const setLegs = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]) => {
+  w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
+};
+
+// A leg's `--shard`: its own kind's count from the legs job, else the full matrix's.
+const vitestShard = (gap = " ") => `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.vitest || 5${gap}}}`;
+
+const e2eShard = (count: number | string, gap = " ") =>
+  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.e2e || ${count}${gap}}}`;
+
+// S1: every legs step runs only when legs sizes next.
+const sized =
+  "needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
+
+// Fail fast (ticket 990, F1 to F3): the step every job but ci-required ends with. On a pull request
+// or a merge queue group, once an earlier step failed, it cancels the run; ci-required's `always()`
+// keeps it running through a normal cancel. A push to main runs to the end.
+const stop = {
+  name: "stop the run",
+  if: `\${{ failure() && github.event_name != 'push' }}`,
+  env: { GH_TOKEN: `\${{ github.token }}` },
+  run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
+};
+
+// Every job that carries the stop step: all of them but ci-required.
+const stopping = ["changes", "field", "check", "typecheck", "test", "legs", "next", "e2e"] as const;
+
 const valid = (label: string, extra: string) => ({
   name: label,
+  permissions: { actions: "write", contents: "read" } as unknown,
   on: {
     push: { branches: ["main"] },
     pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
@@ -89,25 +175,40 @@ const valid = (label: string, extra: string) => ({
         filter: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
       } as Record<string, string>,
       steps: [
-        { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
-        { run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
-        { run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
+        { name: "skills check", run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
+        { name: "tracked files", run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
         { name: extra, run: "echo checked" },
         // The parser's setup and pass, only when every changed line looks like a comment.
-        { uses: "pnpm/action-setup@v6", if: probe, "continue-on-error": true, with: { run_install: false } },
         {
+          name: "parser pnpm",
+          uses: "pnpm/action-setup@v6",
+          if: probe,
+          "continue-on-error": true,
+          with: { run_install: false },
+        },
+        {
+          name: "parser node",
           uses: "actions/setup-node@v7",
           if: probe,
           "continue-on-error": true,
           with: { "node-version": "26.13.0" },
         },
         {
+          name: "parser install",
           run: "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts",
           if: probe,
           "continue-on-error": true,
         },
-        { ...diff, id: "same", if: probe, "continue-on-error": true, run: "node .github/ci/changes.mjs --same" },
+        {
+          ...diff,
+          name: "parser pass",
+          id: "same",
+          if: probe,
+          "continue-on-error": true,
+          run: "node .github/ci/changes.mjs --same",
+        },
       ] as Record<string, unknown>[],
     },
     check: {
@@ -116,9 +217,9 @@ const valid = (label: string, extra: string) => ({
       if: guard("check"),
       "timeout-minutes": 10,
       steps: [
-        { run: "pnpm lint" },
+        { name: "lint", run: "pnpm lint" },
         { name: "promises", if: build, run: "pnpm promises gate" },
-        { run: "pnpm build", if: build },
+        { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", env: testEnv, run: ratchet },
       ] as Record<string, unknown>[],
     },
@@ -126,18 +227,21 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("typecheck"),
       "timeout-minutes": 10,
-      steps: [{ run: "pnpm install --frozen-lockfile" }, { run: "pnpm typecheck" }],
+      steps: [
+        { name: "install", run: "pnpm install --frozen-lockfile" },
+        { name: "typecheck", run: "pnpm typecheck" },
+      ],
     },
     test: {
       needs: "changes",
       if: guard("test"),
       "timeout-minutes": 30,
-      strategy: { matrix: { shard: [1, 2, 3, 4, 5, 6] } },
-      steps: [
+      strategy: { matrix: { shard: testLegs } },
+      steps: testSteps([
         {
           name: "test",
           if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
-          env: testEnv,
+          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
           run: [
             'if [ -n "$BASE" ]; then',
             'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
@@ -154,7 +258,7 @@ const valid = (label: string, extra: string) => ({
         {
           name: "tooling tests",
           if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
-          env: testEnv,
+          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` },
           run: [
             'if [ -n "$BASE" ]; then',
             `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
@@ -163,22 +267,67 @@ const valid = (label: string, extra: string) => ({
             "fi",
           ].join("\n"),
         },
-      ],
+      ]),
     },
-    next: {
+    legs: {
       needs: "changes",
-      if: guard("next"),
-      "timeout-minutes": 17,
-      strategy: { "fail-fast": false, matrix: { shard: nextLegs(2) as (string | number)[] } },
+      if: `\${{ !cancelled() }}`,
+      "timeout-minutes": 5,
+      outputs: Object.fromEntries(
+        ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
+      ) as Record<string, string>,
       steps: [
         {
-          run: 'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
-          if: `!${onE2e}`,
+          name: "checkout",
+          uses: "actions/checkout@v7",
+          if: sized,
+          with: { "fetch-depth": 0, "persist-credentials": false },
+        },
+        {
+          name: "pnpm",
+          uses: "pnpm/action-setup@v6",
+          if: sized,
+          "continue-on-error": true,
+          with: { run_install: false },
+        },
+        {
+          name: "node",
+          uses: "actions/setup-node@v7",
+          if: sized,
+          "continue-on-error": true,
+          with: { "node-version": "26.13.0" },
+        },
+        {
+          name: "install",
+          run: "pnpm install --frozen-lockfile --ignore-scripts",
+          if: sized,
+          "continue-on-error": true,
+        },
+        {
+          name: "size",
+          id: "size",
+          if: sized,
+          "continue-on-error": true,
           env: {
-            SHARD: `\${{ matrix.shard }}/5`,
+            EVENT: `\${{ github.event_name }}`,
             FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-            CHANGED: changedUnlessReaders,
+            BASE: `\${{ github.event.pull_request.base.sha }}`,
           },
+          run: "node .github/ci/legs.ts",
+        },
+      ] as Record<string, unknown>[],
+    },
+    next: {
+      needs: ["changes", "legs"] as string | string[],
+      if: `${guard("next").slice(0, -3)} && needs.legs.outputs.next != 'false' }}`,
+      "timeout-minutes": 17,
+      strategy: { "fail-fast": false, matrix: { shard: sizedLegs(nextLegs(2)) } },
+      steps: nextSteps([
+        {
+          name: "vitest",
+          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          if: `!${onE2e}`,
+          env: { SHARD: vitestShard(), FILTER: vitestFilter },
         },
         {
           name: "chromium",
@@ -187,45 +336,56 @@ const valid = (label: string, extra: string) => ({
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
-        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2`, CHANGED: changedOnPullRequests } },
+        {
+          name: "end to end",
+          run: e2eCommand,
+          if: onE2e,
+          env: { SHARD: e2eShard(2), CHANGED: changedOnPullRequests },
+        },
         {
           name: "edges",
           if: "matrix.shard == '1' && github.event_name == 'pull_request'",
           env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
           run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
         },
-        { run: "pnpm install --frozen-lockfile" },
+        { name: "install", run: "pnpm install --frozen-lockfile" },
         { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"' },
-      ],
+      ]),
     },
     e2e: {
       needs: "changes",
       if: guard("e2e"),
       "timeout-minutes": 25,
-      steps: [{ run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
+      steps: [{ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
     },
     field: {
       "timeout-minutes": 5,
       steps: [
-        { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
+        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         diff,
-        { uses: "pnpm/action-setup@v6", if: fieldIf },
-        { uses: "actions/setup-node@v7", if: fieldIf, with: { "node-version": "26.13.0" } },
+        { name: "pnpm", uses: "pnpm/action-setup@v6", if: fieldIf },
+        { name: "node", uses: "actions/setup-node@v7", if: fieldIf, with: { "node-version": "26.13.0" } },
         {
+          name: "install",
           run: "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts",
           if: fieldIf,
         },
-        { run: "node .github/ci/field-check.ts", if: fieldIf, env },
+        { name: "row check", run: "node .github/ci/field-check.ts", if: fieldIf, env },
       ],
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "next"],
+      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "legs", "next"],
       if: "always()",
       "timeout-minutes": 5,
+      permissions: { contents: "read" } as unknown,
       steps: [
-        { uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci" } },
-        { env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
+        {
+          name: "checkout",
+          uses: "actions/checkout@v7",
+          with: { "sparse-checkout": ".github/ci", "persist-credentials": false },
+        },
+        { name: "judge", env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
       ] as Record<string, unknown>[],
     },
   },
@@ -233,17 +393,21 @@ const valid = (label: string, extra: string) => ({
 
 type Workflow = ReturnType<typeof valid>;
 
+/** A job's steps as one plain list, whatever its own step type. */
+const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
+  w.jobs[job].steps as Record<string, unknown>[];
+
 const wiring = fc
   .tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"), fc.integer({ min: 1, max: 4 }))
   .map(([label, extra, whitespace, gap, e2es]) => {
     const clean = valid(label, extra);
     // E1 and E2: any count of e2e legs is the lint's shape, with its own `/N` on the end-to-end step.
-    clean.jobs.next.strategy.matrix.shard = nextLegs(e2es);
-    clean.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/${e2es}`;
+    setLegs(clean, nextLegs(e2es));
+    step(clean, "next", "end to end").env!.SHARD = e2eShard(e2es);
     clean.jobs.test.steps.unshift({
       name: "lane tests, one file at a time",
       if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      env: testEnv,
+      env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
       run: [
         'if [ -n "$BASE" ]; then',
         `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
@@ -251,6 +415,11 @@ const wiring = fc
         `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
         "fi",
       ].join("\n"),
+    });
+    clean.jobs.test.steps.unshift({
+      name: "apt packages",
+      if: `\${{ needs.changes.outputs.today != 'false' }}`,
+      run: "sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep",
     });
     clean.jobs.test.steps.push({
       name: "shard times",
@@ -260,15 +429,27 @@ const wiring = fc
     });
 
     if (whitespace) {
-      clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/5`;
-      clean.jobs.next.steps[2]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/${e2es}`;
+      step(clean, "next", "vitest").env!.SHARD = vitestShard(gap);
+      step(clean, "next", "end to end").env!.SHARD = e2eShard(e2es, gap);
 
       // The vitest step's guard and the three leg conditions, respaced around each operator.
-      for (const step of clean.jobs.next.steps.slice(0, 4)) {
-        step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
+      for (const guarded of ["vitest", "chromium", "end to end", "edges"].map((n) => step(clean, "next", n))) {
+        guarded.if = `\${{${gap}${guarded.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
       }
 
-      clean.jobs.next.steps[5]!.if = `\${{${gap}!cancelled()${gap}}}`;
+      step(clean, "next", "shard times").if = `\${{${gap}!cancelled()${gap}}}`;
+    }
+
+    // F1: the stop step comes last in every job but ci-required, after every step added above, its
+    // `if` spaced as the rest.
+    for (const job of stopping) {
+      const step = structuredClone(stop);
+
+      if (whitespace) {
+        step.if = `\${{${gap}failure()${gap}&&${gap}github.event_name${gap}!=${gap}'push'${gap}}}`;
+      }
+
+      stepsOf(clean, job).push(step);
     }
 
     return clean;
@@ -288,10 +469,10 @@ const extraCommands = [
   { run: "pnpm --filter @kampus/fabrika exec playwright -- install chromium" },
 ];
 
-it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run", (step) => {
+it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run", (added) => {
   const workflow = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
   expect(lint(JSON.stringify(workflow))).toEqual([]);
-  workflow.jobs.next.steps.push(step);
+  workflow.jobs.next.steps.push(added);
   expect(lint(JSON.stringify(workflow))).not.toEqual([]);
 });
 
@@ -330,19 +511,19 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "the build runs on a draft",
     (w) => {
-      delete w.jobs.check.steps[2]!["if"];
+      delete step(w, "check", "build")["if"];
     },
   ],
   [
     "the promises gate skips on the check flag",
     (w) => {
-      w.jobs.check.steps[1]!["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+      step(w, "check", "promises")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
     },
   ],
   [
     "lint skips on a draft",
     (w) => {
-      w.jobs.check.steps[0]!["if"] = build;
+      step(w, "check", "lint")["if"] = build;
     },
   ],
   [
@@ -354,30 +535,31 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "the classifier is not told the draft",
     (w) => {
-      for (const step of [w.jobs.changes.steps[1]!, w.jobs.field.steps[1]!]) {
-        Object.assign(step, { env });
+      for (const classifier of [step(w, "changes", "classify"), step(w, "field", "classify")]) {
+        Object.assign(classifier, { env });
       }
     },
   ],
   [
     "L1: main loses lane exclude",
     (w) => {
-      const step = w.jobs.test.steps[1]!;
-      const lines = step.run.split("\n");
+      const rest = step(w, "test", "test");
+      const lines = rest.run.split("\n");
       lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
-      step.run = lines.join("\n");
+      rest.run = lines.join("\n");
     },
   ],
   [
     "L2: two lane workers",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace("--maxWorkers=1", "--maxWorkers=2");
+      const lanes = step(w, "test", LANES);
+      lanes.run = lanes.run.replace("--maxWorkers=1", "--maxWorkers=2");
     },
   ],
   [
     "L3: failure skips rest",
     (w) => {
-      w.jobs.test.steps[1]!.if = "";
+      step(w, "test", "test").if = "";
     },
   ],
   [
@@ -389,44 +571,46 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L3: failure skips advice",
     (w) => {
-      w.jobs.test.steps[3]!.if = "";
+      step(w, "test", "shard times").if = "";
     },
   ],
   // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
   [
     "T1: the lane tests run with no file of today's version changed",
     (w) => {
-      w.jobs.test.steps[0]!.if = "";
+      step(w, "test", LANES).if = "";
     },
   ],
   [
     "T1: today's tests run with no file of today's version changed",
     (w) => {
-      w.jobs.test.steps[1]!.if = "!cancelled()";
+      step(w, "test", "test").if = "!cancelled()";
     },
   ],
   [
     "T2: the tooling tests are gone",
     (w) => {
-      w.jobs.test.steps.splice(2, 1);
+      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 1);
     },
   ],
   [
     "T2: the tooling tests run beside today's",
     (w) => {
-      w.jobs.test.steps[2]!.if = "!cancelled()";
+      step(w, "test", "tooling tests").if = "!cancelled()";
     },
   ],
   [
     "T3: the tooling tests run today's packages' tests",
     (w) => {
-      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(" --exclude 'packages/**'", "");
+      const tooling = step(w, "test", "tooling tests");
+      tooling.run = tooling.run.replace(" --exclude 'packages/**'", "");
     },
   ],
-  ...[0, 1, 2].map((index): [string, (w: Workflow) => void] => [
+  ...[LANES, "test", "tooling tests"].map((named, index): [string, (w: Workflow) => void] => [
     `T4: test step ${index} reads its base from a pull request alone`,
     (w) => {
-      w.jobs.test.steps[index]!.env = { BASE: `\${{ github.event.pull_request.base.sha }}` };
+      const found = step(w, "test", named);
+      found.env = { ...found.env!, BASE: `\${{ github.event.pull_request.base.sha }}` };
     },
   ]),
   [
@@ -438,29 +622,31 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L4: nonexistent lane filter",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replaceAll(LANE_FILTER, "missing/lane.");
+      const lanes = step(w, "test", LANES);
+      lanes.run = lanes.run.replaceAll(LANE_FILTER, "missing/lane.");
     },
   ],
-  ...extraCommands.map((step): [string, (w: Workflow) => void] => [
-    `review2 extra command: ${step.run}`,
+  ...extraCommands.map((added): [string, (w: Workflow) => void] => [
+    `review2 extra command: ${added.run}`,
     (w) => {
-      w.jobs.next.steps.push(step);
+      w.jobs.next.steps.push(added);
     },
   ]),
   ...["missing", "duplicate"].map((fault): [string, (w: Workflow) => void] => [
     `next ${fault} install`,
     (w) => {
       if (fault === "missing") {
-        w.jobs.next.steps.splice(4, 1);
+        w.jobs.next.steps.splice(place(w, "next", "install"), 1);
       } else {
-        w.jobs.next.steps.push({ ...w.jobs.next.steps[4]! });
+        w.jobs.next.steps.push({ ...step(w, "next", "install") });
       }
     },
   ]),
   [
     "review: extra exec Vitest invocation",
     (w) => {
-      w.jobs.next.steps.push({ ...w.jobs.next.steps[0]!, run: `exec ${w.jobs.next.steps[0]!.run}` });
+      const vitest = step(w, "next", "vitest");
+      w.jobs.next.steps.push({ ...vitest, run: `exec ${vitest.run}` });
     },
   ],
   ...[
@@ -476,40 +662,53 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((run): [string, (w: Workflow) => void] => [
     `extra Vitest spelling: ${run}`,
     (w) => {
-      w.jobs.next.steps.push({ ...w.jobs.next.steps[0]!, run });
+      w.jobs.next.steps.push({ ...step(w, "next", "vitest"), run });
     },
   ]),
-  ...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
-    `review: extra multiline ${["", "Chromium", "e2e", "edges"][index]} invocation`,
+  ...(
+    [
+      ["chromium", "Chromium"],
+      ["end to end", "e2e"],
+      ["edges", "edges"],
+    ] as const
+  ).map(([named, label]): [string, (w: Workflow) => void] => [
+    `review: extra multiline ${label} invocation`,
     (w) => {
-      w.jobs.next.steps.push({
-        ...w.jobs.next.steps[index]!,
-        run: `echo before\n${w.jobs.next.steps[index]!.run}\necho after`,
-      });
+      const found = step(w, "next", named);
+      w.jobs.next.steps.push({ ...found, run: `echo before\n${found.run}\necho after` });
     },
   ]),
   [
     "review: SHARD matrix.sha rd",
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/5`;
+      step(w, "next", "vitest").env!.SHARD = vitestShard().replace("matrix.shard", "matrix.sha rd");
     },
   ],
-  ...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
-    `review: ${["", "Chromium", "e2e", "edges"][index]} guard matrix.sha rd`,
+  ...(
+    [
+      ["chromium", "Chromium"],
+      ["end to end", "e2e"],
+      ["edges", "edges"],
+    ] as const
+  ).map(([named, label]): [string, (w: Workflow) => void] => [
+    `review: ${label} guard matrix.sha rd`,
     (w) => {
-      w.jobs.next.steps[index]!.if = w.jobs.next.steps[index]!.if!.replace("matrix.shard", "matrix.sha rd");
+      const found = step(w, "next", named);
+      found.if = found.if!.replace("matrix.shard", "matrix.sha rd");
     },
   ]),
   [
     "review: Chromium path next/ apps",
     (w) => {
-      w.jobs.next.steps[1]!.if = w.jobs.next.steps[1]!.if!.replace("next/apps", "next/ apps");
+      const chromium = step(w, "next", "chromium");
+      chromium.if = chromium.if!.replace("next/apps", "next/ apps");
     },
   ],
   [
     "review: edges event pull_ request",
     (w) => {
-      w.jobs.next.steps[3]!.if = w.jobs.next.steps[3]!.if!.replace("pull_request", "pull_ request");
+      const edges = step(w, "next", "edges");
+      edges.if = edges.if!.replace("pull_request", "pull_ request");
     },
   ],
   // E1's legs (T967, after LE1). Each list is one fault, and the end-to-end step's `/N` is set to the
@@ -538,46 +737,57 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ).map(([fault, legs]): [string, (w: Workflow) => void] => [
     `next ${fault}`,
     (w) => {
-      w.jobs.next.strategy.matrix.shard = [...legs];
+      setLegs(w, legs);
       const count = legs.filter((leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg)).length;
-      w.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/${count}`;
+      step(w, "next", "end to end").env!.SHARD = e2eShard(count);
     },
   ]),
   // E1 and E2: one e2e leg fewer or more than the end-to-end step's `/N`.
   [
     "next drops its last e2e leg and keeps its /N",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.filter(
-        (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+      setLegs(
+        w,
+        legsOf(w).filter(
+          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+        ),
       );
     },
   ],
   [
     "next adds an e2e leg and keeps its /N",
     (w) => {
-      const legs = w.jobs.next.strategy.matrix.shard;
+      const legs = legsOf(w);
       const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
+      setLegs(w, legs);
     },
   ],
-  // E2's denominator, the end-to-end step's own: one more or one fewer than its legs, or not a count.
-  ...([1, -1, "", "/x", "0"] as const).map((fault): [string, (w: Workflow) => void] => [
-    `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
-    (w) => {
-      const env = w.jobs.next.steps[2]!.env!;
-      const count = Number(/\/(\d+)$/.exec(env.SHARD ?? "")?.[1]);
-      env.SHARD =
-        typeof fault === "number"
-          ? `\${{ matrix.shard }}/${count + fault}`
-          : fault === "0"
-            ? `\${{ matrix.shard }}/0${count}`
-            : `\${{ matrix.shard }}${fault}`;
-    },
-  ]),
+  // E2's denominator, the end-to-end step's own: its full count one more or one fewer than its legs,
+  // or not a count; no denominator. S1: the plain full count, which ignores a sized run's own count;
+  // the sized count with no full count for a run that is not sized; the vitest legs' count.
+  ...([1, -1, "", "x", "0", "plain", "sized only", "vitest's"] as const).map(
+    (fault): [string, (w: Workflow) => void] => [
+      `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
+      (w) => {
+        const env = step(w, "next", "end to end").env!;
+        const count = Number(/\|\| (\d+)\s*\}\}$/.exec(env.SHARD ?? "")?.[1]);
+        const wrong: Record<string, string> = {
+          "": `\${{ matrix.shard }}`,
+          x: e2eShard("x"),
+          "0": e2eShard(`0${count}`),
+          plain: `\${{ matrix.shard }}/${count}`,
+          "sized only": `\${{ matrix.shard }}/\${{ needs.legs.outputs.e2e }}`,
+          "vitest's": `\${{ matrix.shard }}/\${{ needs.legs.outputs.vitest || ${count} }}`,
+        };
+        env.SHARD = typeof fault === "number" ? e2eShard(count + fault) : wrong[fault]!;
+      },
+    ],
+  ),
   [
     "next end-to-end step loses its SHARD",
     (w) => {
-      Reflect.deleteProperty(w.jobs.next.steps[2]!, "env");
+      Reflect.deleteProperty(step(w, "next", "end to end"), "env");
     },
   ],
   // E2's command: each part the leg needs, dropped alone, so the run is no longer the pinned one.
@@ -590,29 +800,29 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((flag): [string, (w: Workflow) => void] => [
     `next end-to-end step loses ${flag}`,
     (w) => {
-      const step = w.jobs.next.steps[2]!;
-      step.run = step.run.replace(flag, "");
+      const e2e = step(w, "next", "end to end");
+      e2e.run = e2e.run.replace(flag, "");
     },
   ]),
   [
     "next end-to-end step passes the whole leg name",
     (w) => {
-      const step = w.jobs.next.steps[2]!;
-      step.run = step.run.replace(`"\${SHARD#e2e-}"`, '"$SHARD"');
+      const e2e = step(w, "next", "end to end");
+      e2e.run = e2e.run.replace(`"\${SHARD#e2e-}"`, '"$SHARD"');
     },
   ],
   // E2's guard: exactly `startsWith(matrix.shard, 'e2e-')`.
   [
     "next end-to-end step loses its guard",
     (w) => {
-      Reflect.deleteProperty(w.jobs.next.steps[2]!, "if");
+      Reflect.deleteProperty(step(w, "next", "end to end"), "if");
     },
   ],
   ...["matrix.shard == 'e2e-1'", "matrix.shard == 'e2e'", `${onE2e} && false`, `${onE2e} || true`].map(
     (condition): [string, (w: Workflow) => void] => [
       `next end-to-end guard ${condition}`,
       (w) => {
-        w.jobs.next.steps[2]!.if = condition;
+        step(w, "next", "end to end").if = condition;
       },
     ],
   ),
@@ -620,28 +830,39 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "next timing advice before the end-to-end step",
     (w) => {
-      const [advice] = w.jobs.next.steps.splice(5, 1);
-      w.jobs.next.steps.splice(2, 0, advice!);
+      const [advice] = w.jobs.next.steps.splice(place(w, "next", "shard times"), 1);
+      w.jobs.next.steps.splice(place(w, "next", "end to end"), 0, advice!);
     },
   ],
   [
     "next chromium on every leg",
     (w) => {
-      w.jobs.next.steps[1]!.if = "hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''";
+      step(w, "next", "chromium").if = "hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''";
     },
   ],
   // LE1's denominator: `/6` leaves a sixth of the files on no machine, and a smaller one fails a leg.
-  ...["/6", "/3", "/4", "", "/05", "/5 "].map((denominator): [string, (w: Workflow) => void] => [
+  // S1: the plain `/5`, which ignores a sized run's own count; the sized count alone; the e2e count.
+  ...[
+    `/\${{ needs.legs.outputs.vitest || 6 }}`,
+    `/\${{ needs.legs.outputs.vitest || 3 }}`,
+    `/\${{ needs.legs.outputs.vitest || 4 }}`,
+    "",
+    `/\${{ needs.legs.outputs.vitest || 05 }}`,
+    `/\${{ needs.legs.outputs.vitest || 5 }} `,
+    "/5",
+    `/\${{ needs.legs.outputs.vitest }}`,
+    `/\${{ needs.legs.outputs.e2e || 5 }}`,
+  ].map((denominator): [string, (w: Workflow) => void] => [
     `next wrong denominator ${denominator || "absent"}`,
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}${denominator}`;
+      step(w, "next", "vitest").env!.SHARD = `\${{ matrix.shard }}${denominator}`;
     },
   ]),
   // E3's vitest guard (after LE1): exactly one `if`, and it is `!startsWith(matrix.shard, 'e2e-')`.
   [
     "next vitest step loses its guard",
     (w) => {
-      Reflect.deleteProperty(w.jobs.next.steps[0]!, "if");
+      Reflect.deleteProperty(step(w, "next", "vitest"), "if");
     },
   ],
   ...[
@@ -654,24 +875,32 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((condition): [string, (w: Workflow) => void] => [
     `next vitest guard ${condition}`,
     (w) => {
-      w.jobs.next.steps[0]!.if = condition;
+      step(w, "next", "vitest").if = condition;
     },
   ]),
   // E2 and E3's leg steps: chromium and the end-to-end runner only on the e2e legs, edges only on 1.
   ...(
     [
-      ["Chromium back on leg 1", 1, "matrix.shard == '1' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
-      ["Chromium on the old e2e leg", 1, "matrix.shard == 'e2e' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
-      ["e2e back on leg 1", 2, "matrix.shard == '1'"],
-      ["e2e back on the number 1", 2, "matrix.shard == 1"],
-      ["e2e on every numbered leg", 2, `!${onE2e}`],
-      ["edges on the e2e legs", 3, `${onE2e} && github.event_name == 'pull_request'`],
-      ["edges on the number 1", 3, "matrix.shard == 1 && github.event_name == 'pull_request'"],
+      [
+        "Chromium back on leg 1",
+        "chromium",
+        "matrix.shard == '1' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+      ],
+      [
+        "Chromium on the old e2e leg",
+        "chromium",
+        "matrix.shard == 'e2e' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+      ],
+      ["e2e back on leg 1", "end to end", "matrix.shard == '1'"],
+      ["e2e back on the number 1", "end to end", "matrix.shard == 1"],
+      ["e2e on every numbered leg", "end to end", `!${onE2e}`],
+      ["edges on the e2e legs", "edges", `${onE2e} && github.event_name == 'pull_request'`],
+      ["edges on the number 1", "edges", "matrix.shard == 1 && github.event_name == 'pull_request'"],
     ] as const
-  ).map(([fault, index, condition]): [string, (w: Workflow) => void] => [
+  ).map(([fault, named, condition]): [string, (w: Workflow) => void] => [
     `next ${fault}`,
     (w) => {
-      w.jobs.next.steps[index]!.if = condition;
+      step(w, "next", named).if = condition;
     },
   ]),
   [
@@ -707,7 +936,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "next duplicate command",
     (w) => {
-      w.jobs.next.steps.push({ ...w.jobs.next.steps[0]! });
+      w.jobs.next.steps.push({ ...step(w, "next", "vitest") });
     },
   ],
   ...[
@@ -718,21 +947,21 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((flag): [string, (w: Workflow) => void] => [
     `next loses ${flag}`,
     (w) => {
-      const step = w.jobs.next.steps[0]!;
-      step.run = step.run.replace(flag, "");
+      const vitest = step(w, "next", "vitest");
+      vitest.run = vitest.run.replace(flag, "");
     },
   ]),
   ...["missing", "duplicate", "before tests", "wrong report"].map((fault): [string, (w: Workflow) => void] => [
     `next timing advice ${fault}`,
     (w) => {
-      const advice = w.jobs.next.steps[5]!;
+      const advice = step(w, "next", "shard times");
 
       if (fault === "missing") {
-        w.jobs.next.steps.splice(5, 1);
+        w.jobs.next.steps.splice(place(w, "next", "shard times"), 1);
       } else if (fault === "duplicate") {
         w.jobs.next.steps.push({ ...advice });
       } else if (fault === "before tests") {
-        w.jobs.next.steps.splice(5, 1);
+        w.jobs.next.steps.splice(place(w, "next", "shard times"), 1);
         w.jobs.next.steps.unshift(advice);
       } else {
         advice.run = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/other.json"';
@@ -750,81 +979,151 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((condition): [string, (w: Workflow) => void] => [
     `next timing advice condition ${condition || "absent"}`,
     (w) => {
-      w.jobs.next.steps[5]!.if = condition;
+      step(w, "next", "shard times").if = condition;
     },
   ]),
   ...[" --changed main", " --passWithNoTests", " file.test.ts"].map((suffix): [string, (w: Workflow) => void] => [
     suffix,
     (w) => {
-      w.jobs.next.steps[0]!.run += suffix;
+      step(w, "next", "vitest").run += suffix;
     },
   ]),
   [
     "next test command inside a longer step",
     (w) => {
-      w.jobs.next.steps[0]!.run = `echo before\n${w.jobs.next.steps[0]!.run}`;
+      step(w, "next", "vitest").run = `echo before\n${step(w, "next", "vitest").run}`;
     },
   ],
   [
     "next no shard flag",
     (w) => {
-      w.jobs.next.steps[0]!.run = "pnpm exec vitest run next/";
+      step(w, "next", "vitest").run = "pnpm exec vitest run next/";
     },
   ],
   [
     "next guarded test",
     (w) => {
-      Object.assign(w.jobs.next.steps[0]!, { if: "false" });
+      Object.assign(step(w, "next", "vitest"), { if: "false" });
     },
   ],
+  // S1, the legs job and next's sized matrix (legs.ts). Each is red alone in every generated
+  // workflow. The size step without its event check would size the merge queue and main. Source
+  // plants, each run once on workflow-lint.ts and restored: drop S1's check of every legs step's
+  // `if` (red: sizes the merge queue and main, sizes the reader tests, installs on every run); drop
+  // the sizer's clause from the gated `if` (red: every generated workflow).
+  ...(
+    [
+      ["next needs only changes", (w) => (w.jobs.next.needs = "changes")],
+      ["next needs legs first", (w) => (w.jobs.next.needs = ["legs", "changes"])],
+      ["next ignores legs's no", (w) => (w.jobs.next.if = guard("next"))],
+      [
+        "next matrix with no fallback",
+        (w) => (w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.legs.outputs.shards) }}`),
+      ],
+      [
+        "next matrix from another output",
+        (w) => (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(".shards", ".e2e")),
+      ],
+      ["next matrix as a plain list", (w) => Object.assign(w.jobs.next.strategy.matrix, { shard: nextLegs(2) })],
+      ["legs needs nothing", (w) => Reflect.deleteProperty(w.jobs.legs, "needs")],
+      ["legs runs only on success", (w) => (w.jobs.legs.if = "success()")],
+      ["legs has no if", (w) => Reflect.deleteProperty(w.jobs.legs, "if")],
+      ["legs ignores its failure", (w) => Object.assign(w.jobs.legs, { "continue-on-error": true })],
+      ["legs loses an output", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "e2e")],
+      ["legs adds an output", (w) => (w.jobs.legs.outputs["more"] = `\${{ steps.size.outputs.more }}`)],
+      ["legs output from another step", (w) => (w.jobs.legs.outputs["shards"] = `\${{ steps.diff.outputs.shards }}`)],
+      [
+        "legs sizes the merge queue and main",
+        (w) =>
+          (step(w, "legs", "size")["if"] = String(step(w, "legs", "size")["if"]).replace(
+            " && github.event_name == 'pull_request'",
+            "",
+          )),
+      ],
+      [
+        "legs sizes the reader tests",
+        (w) =>
+          (step(w, "legs", "size")["if"] = String(step(w, "legs", "size")["if"]).replace(
+            " && (needs.changes.outputs.filter || 'next/') == 'next/'",
+            "",
+          )),
+      ],
+      ["legs installs on every run", (w) => Reflect.deleteProperty(step(w, "legs", "install"), "if")],
+      ["legs size step fails the job", (w) => Reflect.deleteProperty(step(w, "legs", "size"), "continue-on-error")],
+      ["legs install fails the job", (w) => Reflect.deleteProperty(step(w, "legs", "install"), "continue-on-error")],
+      ["legs runs another script", (w) => (step(w, "legs", "size")["run"] = "node .github/ci/legs.ts --all")],
+      ["legs size step renamed", (w) => (step(w, "legs", "size")["id"] = "sizes")],
+      ["legs installs with scripts", (w) => (step(w, "legs", "install")["run"] = "pnpm install --frozen-lockfile")],
+      [
+        "legs size step on the merge queue's base",
+        (w) =>
+          Object.assign(step(w, "legs", "size")["env"] as Record<string, string>, {
+            BASE: `\${{ github.event.merge_group.base_sha }}`,
+          }),
+      ],
+      [
+        "legs size step without its filter",
+        (w) => Reflect.deleteProperty(step(w, "legs", "size")["env"] as Record<string, string>, "FILTER"),
+      ],
+      [
+        "ci-required does not need legs",
+        (w) => (w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((job) => job !== "legs")),
+      ],
+    ] as [string, (w: Workflow) => unknown][]
+  ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
+    fault,
+    (w) => {
+      mutate(w);
+    },
+  ]),
   [
     "next classifier failure skips",
     (w) => {
       w.jobs.next.if = "needs.changes.outputs.next == 'true'";
     },
   ],
-  ...[1, 2, 3].flatMap((index): [string, (w: Workflow) => void][] => [
+  ...["chromium", "end to end", "edges"].flatMap((named, at): [string, (w: Workflow) => void][] => [
     [
-      `next missing step ${index}`,
+      `next missing step ${at + 1}`,
       (w) => {
-        w.jobs.next.steps.splice(index, 1);
+        w.jobs.next.steps.splice(place(w, "next", named), 1);
       },
     ],
     [
-      `next duplicate step ${index}`,
+      `next duplicate step ${at + 1}`,
       (w) => {
-        w.jobs.next.steps.push({ ...w.jobs.next.steps[index]! });
+        w.jobs.next.steps.push({ ...step(w, "next", named) });
       },
     ],
     [
-      `next false step ${index}`,
+      `next false step ${at + 1}`,
       (w) => {
-        w.jobs.next.steps[index]!.if = "false";
+        step(w, "next", named).if = "false";
       },
     ],
   ]),
   [
     "next e2e everywhere",
     (w) => {
-      w.jobs.next.steps[2]!.if = "true";
+      step(w, "next", "end to end").if = "true";
     },
   ],
   [
     "next chromium without file guard",
     (w) => {
-      w.jobs.next.steps[1]!.if = onE2e;
+      step(w, "next", "chromium").if = onE2e;
     },
   ],
   [
     "next edges without event guard",
     (w) => {
-      w.jobs.next.steps[3]!.if = "matrix.shard == '1'";
+      step(w, "next", "edges").if = "matrix.shard == '1'";
     },
   ],
   [
     "scan skips after failure",
     (w) => {
-      Object.assign(w.jobs.changes.steps[2]!, { if: "success()" });
+      Object.assign(step(w, "changes", "skills check"), { if: "success()" });
     },
   ],
   [
@@ -842,13 +1141,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "checker ignores failure",
     (w) => {
-      Object.assign(w.jobs.field.steps[5]!, { "continue-on-error": true });
+      Object.assign(step(w, "field", "row check"), { "continue-on-error": true });
     },
   ],
   [
     "missing field setup",
     (w) => {
-      w.jobs.field.steps.splice(2, 1);
+      w.jobs.field.steps.splice(place(w, "field", "pnpm"), 1);
     },
   ],
   [
@@ -878,19 +1177,19 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "classifier bypass",
     (w) => {
-      Object.assign(w.jobs.changes.steps[1]!, { run: "echo check=false" });
+      Object.assign(step(w, "changes", "classify"), { run: "echo check=false" });
     },
   ],
   [
     "missing skills scan",
     (w) => {
-      w.jobs.changes.steps.splice(2, 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "skills check"), 1);
     },
   ],
   [
     "missing ignore scan",
     (w) => {
-      w.jobs.changes.steps.splice(3, 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "tracked files"), 1);
     },
   ],
   [
@@ -904,25 +1203,25 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "next loses its path fallback",
     (w) => {
-      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter }}`;
+      step(w, "next", "vitest").env!.FILTER = `\${{ needs.changes.outputs.filter }}`;
     },
   ],
   [
     "next runs all of next/ whatever filter says",
     (w) => {
-      w.jobs.next.steps[0]!.run = w.jobs.next.steps[0]!.run.replace("$FILTER", "next/");
+      step(w, "next", "vitest").run = step(w, "next", "vitest").run.replace("$FILTER", "next/");
     },
   ],
   [
     "next quotes its path, so the reader paths are one argument",
     (w) => {
-      w.jobs.next.steps[0]!.run = w.jobs.next.steps[0]!.run.replace("$FILTER", '"$FILTER"');
+      step(w, "next", "vitest").run = step(w, "next", "vitest").run.replace("$FILTER", '"$FILTER"');
     },
   ],
   [
     "next has no filter",
     (w) => {
-      delete (w.jobs.next.steps[0]!.env as Record<string, string>)["FILTER"];
+      delete (step(w, "next", "vitest").env as Record<string, string>)["FILTER"];
     },
   ],
   // After PR 1230: under the reader filter, `--changed` would drop the reader tests, which reach a
@@ -930,8 +1229,53 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "next narrows the reader tests with --changed",
     (w) => {
-      (w.jobs.next.steps[0]!.env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
+      (step(w, "next", "vitest").env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
+  ],
+  // PR 1235: a sized run's vitest legs run the legs job's `files`, which hold every reader test, and
+  // nothing narrows that list again. 1230's own `--changed` back on the step drops the readers; the
+  // legs list ignored or read after filter runs the import graph's files alone or the whole suite;
+  // 1235's first shape, a readers step on leg 1, runs a reader twice and loads leg 1 alone.
+  [
+    "next's vitest step ignores legs's files",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step reads legs's files after filter",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || needs.legs.outputs.files || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step narrows legs's files with 1230's --changed",
+    (w) => {
+      const step = w.jobs.next.steps[0]!;
+      step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
+    },
+  ],
+  [
+    "next's vitest step takes another env key",
+    (w) => {
+      (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
+    },
+  ],
+  [
+    "next runs the reader tests again in a step of their own on leg 1",
+    (w) => {
+      w.jobs.next.steps.splice(1, 0, {
+        name: "readers",
+        if: "!cancelled() && matrix.shard == '1'",
+        run: 'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+      });
+    },
+  ],
+  ["legs hides its files", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "files")],
+  [
+    "legs takes its files from another step",
+    (w) => (w.jobs.legs.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
   ],
   ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
     [
@@ -953,34 +1297,37 @@ const plants: [string, (workflow: Workflow) => void][] = [
       },
     ],
   ]),
-  ...[5, 6, 7, 8].map((index): [string, (w: Workflow) => void] => [
-    `the parser's step ${index} fails changes`,
-    (w) => {
-      delete w.jobs.changes.steps[index]!["continue-on-error"];
-    },
-  ]),
+  ...["parser pnpm", "parser node", "parser install", "parser pass"].map(
+    (named, at): [string, (w: Workflow) => void] => [
+      `the parser's step ${at + 5} fails changes`,
+      (w) => {
+        delete step(w, "changes", named)["continue-on-error"];
+      },
+    ],
+  ),
   [
     "the parser's pass is gone",
     (w) => {
-      w.jobs.changes.steps.splice(8, 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "parser pass"), 1);
     },
   ],
   [
     "the parser's install is gone",
     (w) => {
-      w.jobs.changes.steps.splice(7, 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "parser install"), 1);
     },
   ],
   [
     "the parser's pass runs before its install",
     (w) => {
-      w.jobs.changes.steps.splice(7, 0, w.jobs.changes.steps.splice(8, 1)[0]!);
+      const [pass] = w.jobs.changes.steps.splice(place(w, "changes", "parser pass"), 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "parser install"), 0, pass!);
     },
   ],
   [
     "the parser's pass is not told the draft",
     (w) => {
-      w.jobs.changes.steps[8]!["env"] = env;
+      step(w, "changes", "parser pass")["env"] = env;
     },
   ],
   [
@@ -1004,28 +1351,29 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "field unconditional install",
     (w) => {
-      Object.assign(w.jobs.field.steps[4]!, { if: "true" });
+      Object.assign(step(w, "field", "install"), { if: "true" });
     },
   ],
   [
     "field bypass",
     (w) => {
-      Object.assign(w.jobs.field.steps[5]!, { run: "echo passed" });
+      Object.assign(step(w, "field", "row check"), { run: "echo passed" });
     },
   ],
   [
     "next job excludes next",
     (w) => {
-      w.jobs.next.steps[0]!.run += " --exclude 'next/**'";
+      step(w, "next", "vitest").run += " --exclude 'next/**'";
     },
   ],
   ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
     `exclusion branch ${branch}`,
     (w) => {
-      const lines = w.jobs.test.steps[1]!.run.split("\n");
+      const rest = step(w, "test", "test");
+      const lines = rest.run.split("\n");
       const line = [1, 3, 6][branch]!;
       lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      w.jobs.test.steps[1]!.run = lines.join("\n");
+      rest.run = lines.join("\n");
     },
   ]),
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
@@ -1041,7 +1389,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "the typecheck job runs no typecheck",
     (w) => {
-      w.jobs.typecheck.steps = [{ run: "pnpm install --frozen-lockfile" }];
+      w.jobs.typecheck.steps = [{ name: "install", run: "pnpm install --frozen-lockfile" }];
     },
   ],
   [
@@ -1071,19 +1419,19 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "ci-required judge ignores its failure",
     (w) => {
-      Object.assign(w.jobs["ci-required"].steps[1]!, { "continue-on-error": true });
+      Object.assign(step(w, "ci-required", "judge"), { "continue-on-error": true });
     },
   ],
   [
     "ci-required bypassed",
     (w) => {
-      w.jobs["ci-required"].steps[1]!["run"] = "echo pass";
+      step(w, "ci-required", "judge")["run"] = "echo pass";
     },
   ],
   [
     "ci-required reads needs.*.result only",
     (w) => {
-      w.jobs["ci-required"].steps[1]!["env"] = { NEEDS: `\${{ toJSON(needs.*.result) }}` };
+      step(w, "ci-required", "judge")["env"] = { NEEDS: `\${{ toJSON(needs.*.result) }}` };
     },
   ],
   [
@@ -1110,13 +1458,16 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "duplicate forced tests",
     (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
+      step(w, "test", "test").run = step(w, "test", "test").run.replace(
+        " --exclude apps/fabrika/src/bundles.test.ts",
+        "",
+      );
     },
   ],
   [
     "forced tests on all shards",
     (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(
+      step(w, "test", "test").run = step(w, "test", "test").run.replace(
         `if [ "\${{ matrix.shard }}" = 1 ]; then`,
         "if true; then",
       );
@@ -1126,37 +1477,130 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L7: the ratchet step is deleted",
     (w) => {
-      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+      w.jobs.check.steps.splice(place(w, "check", "lists only shrink"), 1);
     },
   ],
   [
     "L7: the ratchet step skips on a condition",
     (w) => {
-      w.jobs.check.steps[3]!["if"] = build;
+      step(w, "check", "lists only shrink")["if"] = build;
     },
   ],
   [
     "L7: the ratchet step's failure does not block",
     (w) => {
-      w.jobs.check.steps[3]!["continue-on-error"] = true;
+      step(w, "check", "lists only shrink")["continue-on-error"] = true;
     },
   ],
   [
     "L7: the ratchet step takes a base that keeps a first push's zeros",
     (w) => {
-      w.jobs.check.steps[3]!["env"] = { BASE: env.BASE };
+      step(w, "check", "lists only shrink")["env"] = { BASE: env.BASE };
     },
   ],
   [
     "L7: the ratchet step runs twice, once muted",
     (w) => {
-      w.jobs.check.steps.push({ ...w.jobs.check.steps[3]!, "continue-on-error": true });
+      w.jobs.check.steps.push({ ...step(w, "check", "lists only shrink"), "continue-on-error": true });
     },
   ],
   [
     "L7: the ratchet command swallows its exit",
     (w) => {
-      w.jobs.check.steps[3]!["run"] = `${ratchet} || true`;
+      step(w, "check", "lists only shrink")["run"] = `${ratchet} || true`;
+    },
+  ],
+  // Fail fast (ticket 990). F1: each job that drops its stop step would hold its run's other jobs
+  // to the end after it failed, as merge queue group 1199 did (run 43633120187).
+  // Plants, each run once on workflow-lint.ts and restored, each red on its plant below: F1's
+  // last-step check dropped; F1's one-cancel count dropped; F2 dropped; F3's per-job check dropped.
+  ...stopping.map((job): [string, (w: Workflow) => void] => [
+    `F1: ${job} drops its stop step`,
+    (w) => {
+      stepsOf(w, job).pop();
+    },
+  ]),
+  [
+    "F1: the stop step cancels a push to main too",
+    (w) => {
+      stepsOf(w, "check").at(-1)!["if"] = `\${{ failure() }}`;
+    },
+  ],
+  [
+    "F1: the stop step runs on every result, cancelling green runs",
+    (w) => {
+      stepsOf(w, "typecheck").at(-1)!["if"] = `\${{ always() && github.event_name != 'push' }}`;
+    },
+  ],
+  [
+    "F1: the stop step force-cancels, which takes ci-required down with the run",
+    (w) => {
+      stepsOf(w, "e2e").at(-1)!["run"] =
+        'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"';
+    },
+  ],
+  [
+    "F1: the stop step comes before the job's last step, so that step's failure stops nothing",
+    (w) => {
+      const list = stepsOf(w, "test");
+      list.splice(-2, 2, list.at(-1)!, list.at(-2)!);
+    },
+  ],
+  [
+    "F1: a second cancel step, with no guard for main",
+    (w) => {
+      stepsOf(w, "test").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
+    },
+  ],
+  // Every job here pins its own `if`, so F2 is for a job added later; this one is right in all else.
+  [
+    "F2: a new job runs on always(), so a canceled run waits for it",
+    (w) => {
+      Object.assign(w.jobs, {
+        extra: { if: "always()", "timeout-minutes": 5, steps: [{ run: "echo extra" }, structuredClone(stop)] },
+      });
+      w.jobs["ci-required"].needs.push("extra");
+    },
+  ],
+  [
+    "F3: ci-required keeps actions: write",
+    (w) => {
+      w.jobs["ci-required"].permissions = { actions: "write", contents: "read" };
+    },
+  ],
+  [
+    "F3: the workflow's token is write-all",
+    (w) => {
+      w.permissions = "write-all";
+    },
+  ],
+  [
+    "F3: the workflow's token loses actions: write, so every stop step is refused",
+    (w) => {
+      w.permissions = { contents: "read" };
+    },
+  ],
+  [
+    "F3: a job sets its own token, which drops the workflow's actions: write",
+    (w) => {
+      Object.assign(w.jobs.legs, { permissions: { contents: "read" } });
+    },
+  ],
+  // F4: a checkout that keeps the token in .git/config hands the `actions: write` token to every
+  // test and install script after it. One plant per job with a checkout, and one that sets it true.
+  // Plant, run once on workflow-lint.ts and restored: F4 dropped (red on each of these).
+  ...(["changes", "field", "legs", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+    `F4: ${job}'s checkout keeps the token in .git/config`,
+    (w) => {
+      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
+    },
+  ]),
+  [
+    "F4: a checkout sets persist-credentials to true",
+    (w) => {
+      const checkout = stepsOf(w, "field")[0]!;
+      (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
     },
   ],
 ];
@@ -1184,13 +1628,24 @@ it.each(plants)("rejects isolated wiring plant: %s", (plant, mutate) => {
 
 it("names the next command whose step or condition is wrong", () => {
   fc.assert(
-    fc.property(wiring, fc.constantFrom(1, 2, 3), fc.boolean(), (broken, index, missingGuard) => {
-      const step = broken.jobs.next.steps[index]!;
-      step.if = missingGuard ? (index === 2 ? "true" : index === 1 ? onE2e : "matrix.shard == '1'") : "false";
-      expect(lint(JSON.stringify(broken))).toEqual([
-        `check.yaml: next runs ${step.run} once, only on ${index === 3 ? "leg 1" : "the e2e legs"}, with its pinned condition`,
-      ]);
-    }),
+    fc.property(
+      wiring,
+      fc.constantFrom("chromium", "end to end", "edges"),
+      fc.boolean(),
+      (broken, named, missingGuard) => {
+        const found = step(broken, "next", named);
+        found.if = missingGuard
+          ? named === "end to end"
+            ? "true"
+            : named === "chromium"
+              ? onE2e
+              : "matrix.shard == '1'"
+          : "false";
+        expect(lint(JSON.stringify(broken))).toEqual([
+          `check.yaml: next runs ${found.run} once, only on ${named === "edges" ? "leg 1" : "the e2e legs"}, with its pinned condition`,
+        ]);
+      },
+    ),
     options,
   );
 });
@@ -1205,10 +1660,10 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "a /6 denominator",
     (w) => {
       // Keeps the generated spacing; LE2's one-error check fails if there is no SHARD to change.
-      const env = w.jobs.next.steps[0]!.env!;
+      const env = step(w, "next", "vitest").env!;
 
       if (env.SHARD !== undefined) {
-        env.SHARD = env.SHARD.replace(/\/5$/, "/6");
+        env.SHARD = env.SHARD.replace(/\|\| 5(\s*\}\})$/, "|| 6$1");
       }
     },
     "next's vitest step passes --shard <leg>/<the count of numbered legs>",
@@ -1216,21 +1671,21 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "leg 5 dropped",
     (w) => {
-      w.jobs.next.strategy.matrix.shard.pop();
+      setLegs(w, legsOf(w).slice(0, -1));
     },
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
   ],
   [
     "the end-to-end step back on leg 1",
     (w) => {
-      w.jobs.next.steps[2]!.if = w.jobs.next.steps[2]!.if!.replace(onE2e, "matrix.shard == '1'");
+      step(w, "next", "end to end").if = step(w, "next", "end to end").if!.replace(onE2e, "matrix.shard == '1'");
     },
     `next runs ${e2eCommand} once, only on the e2e legs, with its pinned condition`,
   ],
   [
     "the `if` taken off the vitest step",
     (w) => {
-      Reflect.deleteProperty(w.jobs.next.steps[0]!, "if");
+      Reflect.deleteProperty(step(w, "next", "vitest"), "if");
     },
     "next's vitest step runs only on the numbered legs, and has no other guard",
   ],
@@ -1239,31 +1694,36 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "the e2e legs written out of order",
     (w) => {
-      const legs = w.jobs.next.strategy.matrix.shard;
+      const legs = legsOf(w);
       const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
       legs.splice(0, count, ...legs.slice(0, count).toReversed());
 
       // One e2e leg cannot be out of order, so a second one comes first.
       if (count === 1) {
         legs.unshift("e2e-2");
-        w.jobs.next.steps[2]!.env!.SHARD = `\${{ matrix.shard }}/2`;
+        step(w, "next", "end to end").env!.SHARD = e2eShard(2);
       }
+
+      setLegs(w, legs);
     },
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
   ],
   [
     "an end-to-end /N one more than the e2e legs",
     (w) => {
-      const env = w.jobs.next.steps[2]!.env!;
-      env.SHARD = (env.SHARD ?? "").replace(/\/(\d+)$/, (_, count: string) => `/${Number(count) + 1}`);
+      const env = step(w, "next", "end to end").env!;
+      env.SHARD = (env.SHARD ?? "").replace(
+        /\|\| (\d+)(\s*\}\})$/,
+        (_, count: string, end: string) => `|| ${Number(count) + 1}${end}`,
+      );
     },
     "next's end-to-end step passes --shard <leg>/<the count of e2e legs>",
   ],
   [
     "the timing advice before the end-to-end step",
     (w) => {
-      const [advice] = w.jobs.next.steps.splice(5, 1);
-      w.jobs.next.steps.splice(2, 0, advice!);
+      const [advice] = w.jobs.next.steps.splice(place(w, "next", "shard times"), 1);
+      w.jobs.next.steps.splice(place(w, "next", "end to end"), 0, advice!);
     },
     "next timing advice follows both test steps even after failure, unless cancelled",
   ],
@@ -1284,7 +1744,7 @@ it.each(faults)("LE2: names %s when it alone is planted", (_fault, mutate, error
 it("L7: a check job without its ratchet step is named by that one error", () => {
   fc.assert(
     fc.property(wiring, (broken) => {
-      broken.jobs.check.steps = broken.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+      broken.jobs.check.steps.splice(place(broken, "check", "lists only shrink"), 1);
       const errors = lint(JSON.stringify(broken));
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain("ratchet.ts");
@@ -1295,23 +1755,53 @@ it("L7: a check job without its ratchet step is named by that one error", () => 
 
 it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, given an if, or given another base", () => {
   const real = () => parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
-  const step = (w: Workflow) => w.jobs.check.steps.find((s) => s["run"] === ratchet)!;
   expect(lint(JSON.stringify(real()))).toEqual([]);
 
   for (const mutate of [
     (w: Workflow) => {
-      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+      w.jobs.check.steps.splice(place(w, "check", "lists only shrink"), 1);
     },
     (w: Workflow) => {
-      step(w)["if"] = build;
+      step(w, "check", "lists only shrink")["if"] = build;
     },
     (w: Workflow) => {
-      step(w)["env"] = { BASE: env.BASE };
+      step(w, "check", "lists only shrink")["env"] = { BASE: env.BASE };
     },
   ]) {
     const broken = real();
     mutate(broken);
     expect(lint(JSON.stringify(broken))).not.toEqual([]);
+  }
+});
+
+// F1, ticket 990. The stop step is invisible to every other law, so a job without it gets exactly
+// the one error that names that job, and a job that has it gains no error from the others.
+it.each(stopping)("F1: %s without its stop step is named by that one error", (job) => {
+  fc.assert(
+    fc.property(wiring, (broken) => {
+      stepsOf(broken, job).pop();
+      expect(lint(JSON.stringify(broken))).toEqual([
+        `check.yaml: F1: ${job} ends with the stop step, its one step that cancels the run`,
+      ]);
+    }),
+    options,
+  );
+});
+
+it("F1 scenario: in the checked-in check.yaml every job but ci-required ends with the stop step, and loses it alone", () => {
+  // The YAML anchor `&stop` in changes and its aliases elsewhere, read as GitHub reads them. Each
+  // job's last step taken off gives that job's one error, so each alias lands where the law looks.
+  const real = () => parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  const jobs = Object.keys(real().jobs).filter((job) => job !== "ci-required");
+  expect(jobs.length).toBeGreaterThan(0);
+
+  for (const job of jobs) {
+    const broken = real();
+    expect(broken.jobs[job].steps.at(-1)).toEqual(stop);
+    broken.jobs[job].steps.pop();
+    expect(lint(JSON.stringify(broken))).toEqual([
+      `check.yaml: F1: ${job} ends with the stop step, its one step that cancels the run`,
+    ]);
   }
 });
 
@@ -1348,3 +1838,174 @@ it("L5: lane selection and rest exclusion agree on today's test paths", () => {
     },
   );
 });
+
+// The caches: saved on main only, the shared setup never saves, full-history checkouts are
+// blobless, and the typecheck's buildinfo cache keys on the lockfile and every tsconfig.
+type Step = Record<string, unknown> & { with?: Record<string, unknown> };
+type Jobs = Record<string, { steps: Step[]; strategy?: { matrix: Record<string, unknown> } }>;
+type Files = { workflows: Record<string, Parsed>; action: Parsed; workspace: Parsed; typecheck: string };
+type Parsed = Record<string, unknown> & { jobs: Jobs; runs: { steps: Step[] } };
+
+const realFiles = (): Files => {
+  const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+  const files = cacheFiles(read);
+  return {
+    workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, text]) => [path, parse(text)])),
+    action: parse(files.action),
+    workspace: parse(files.workspace),
+    typecheck: files.typecheck,
+  };
+};
+
+const text = (files: Files) => ({
+  workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
+  action: JSON.stringify(files.action),
+  workspace: JSON.stringify(files.workspace),
+  typecheck: files.typecheck,
+});
+
+const checkYaml = (files: Files) => files.workflows[".github/workflows/check.yaml"]!;
+const typecheckStep = (files: Files, name: string) => step(checkYaml(files), "typecheck", name);
+// The shared setup's steps, read as the one job of a workflow.
+const setup = (files: Files) => ({ jobs: { setup: files.action.runs } });
+
+it("C0: the checked-in workflows, setup, workspace and typecheck pass the cache lint", () => {
+  expect(lintCaches(text(realFiles()))).toEqual([]);
+});
+
+it("C0 state: a workflow that runs by hand on main may keep setup-node's cache", () => {
+  const files = realFiles();
+  const mutation = files.workflows[".github/workflows/mutation.yaml"];
+  expect(mutation?.["on"]).not.toHaveProperty("pull_request");
+  expect(JSON.stringify(mutation)).toContain('"cache":"pnpm"');
+  expect(lintCaches(text(files))).toEqual([]);
+});
+
+// Each plant on the checked-in files, one at a time, and the one error it must give.
+for (const [name, plant, error] of [
+  [
+    "C1: actions/cache, which saves on every ref",
+    (f: Files) => {
+      step(f.workflows[".github/workflows/host.yaml"]!, "launchd", "restore electron")["uses"] = "actions/cache@v6";
+    },
+    ".github/workflows/host.yaml: use actions/cache/restore, and actions/cache/save on main only",
+  ],
+  [
+    "C1: setup-node's own cache in the shared setup",
+    (f: Files) => {
+      step(setup(f), "setup", "node").with!["cache"] = "pnpm";
+    },
+    ".github/actions/pnpm/action.yml: setup-node's cache saves on every ref; use .github/actions/pnpm",
+  ],
+  [
+    "C2: the shared setup saving on main",
+    (f: Files) => {
+      f.action.runs.steps.push({ uses: "actions/cache/save@v6", if: `\${{ github.ref == 'refs/heads/main' }}` });
+    },
+    "the pnpm action caches nothing: a restored pnpm store cost more than its download",
+  ],
+  [
+    "C2: the shared setup restoring the store",
+    (f: Files) => {
+      f.action.runs.steps.push({ uses: "actions/cache/restore@v6", with: { path: "~/.local/share/pnpm/store" } });
+    },
+    "the pnpm action caches nothing: a restored pnpm store cost more than its download",
+  ],
+  [
+    "C2: a save with no if",
+    (f: Files) => {
+      delete typecheckStep(f, "save the tsc cache")["if"];
+    },
+    ".github/workflows/check.yaml: a cache save runs on main only, its if starting github.ref=='refs/heads/main'",
+  ],
+  [
+    "C2: a save on every ref after a failure",
+    (f: Files) => {
+      typecheckStep(f, "save the tsc cache")["if"] = `\${{ always() }}`;
+    },
+    ".github/workflows/check.yaml: a cache save runs on main only, its if starting github.ref=='refs/heads/main'",
+  ],
+  [
+    "C3: a full-history checkout with every blob",
+    (f: Files) => {
+      delete step(checkYaml(f), "test", "checkout").with!["filter"];
+    },
+    "check.yaml: test's full-history checkout is blobless (filter: blob:none)",
+  ],
+  [
+    "C4: a restore prefix without the lockfile and tsconfig hash",
+    (f: Files) => {
+      typecheckStep(f, "restore the tsc cache").with!["restore-keys"] = `tsc-\${{ runner.os }}-`;
+    },
+    `check.yaml: the tsc cache's key is tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-<sha>, and it restores only that prefix`,
+  ],
+  [
+    "C4: a hash that leaves the tsconfigs out",
+    (f: Files) => {
+      typecheckStep(f, "tsc key")["run"] =
+        'echo "hash=$(git ls-files -s pnpm-lock.yaml | git hash-object --stdin)" >> "$GITHUB_OUTPUT"';
+    },
+    "check.yaml: the typecheck job's tsc-key step hashes git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin",
+  ],
+  [
+    "C4: a workspace package glob the cache does not hold",
+    (f: Files) => {
+      (f.workspace["packages"] as string[]).push("tools/*");
+    },
+    "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc in each pnpm-workspace.yaml package glob, in its order",
+  ],
+  [
+    "C4: a buildinfo folder the cache does not hold",
+    (f: Files) => {
+      f.typecheck = f.typecheck.replace("node_modules/.cache/tsc/", "node_modules/.cache/tsc-old/");
+    },
+    "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc-old in each pnpm-workspace.yaml package glob, in its order",
+  ],
+  [
+    "C4: a restore after the typecheck",
+    (f: Files) => {
+      const workflow = checkYaml(f);
+      const list = workflow.jobs["typecheck"]!.steps;
+      const [restore] = list.splice(place(workflow, "typecheck", "restore the tsc cache"), 1);
+      list.splice(place(workflow, "typecheck", "typecheck") + 1, 0, restore!);
+    },
+    "check.yaml: the typecheck job installs, restores the tsc cache, typechecks, then saves",
+  ],
+] as const) {
+  it(`${name} is named by its one error`, () => {
+    const files = realFiles();
+    plant(files);
+    expect(lintCaches(text(files))).toEqual([error]);
+  });
+}
+
+// T5 and T6 on the checked-in check.yaml: each plant gives its one error.
+for (const [name, plant, error] of [
+  [
+    "T5: six machines on every flag",
+    (w: Parsed) => {
+      w.jobs["test"]!.strategy!.matrix["shard"] = [1, 2, 3, 4, 5, 6];
+    },
+    "check.yaml: T5: six machines for today's tests, two when only the tooling tests run",
+  ],
+  [
+    "T5: the tooling step dividing by six on two machines",
+    (w: Parsed) => {
+      (step(w, "test", "tooling tests")["env"] as Record<string, string>)["SHARD"] = `\${{ matrix.shard }}/6`;
+    },
+    "check.yaml: T5: each test step's SHARD divides by its flag's machine count",
+  ],
+  [
+    "T6: apt only when the tooling tests run",
+    (w: Parsed) => {
+      step(w, "test", "apt packages")["if"] = `\${{ needs.changes.outputs.today == 'false' }}`;
+    },
+    "check.yaml: T6: apt runs on the today flag, before today's tests",
+  ],
+] as const) {
+  it(`${name} is named by its one error`, () => {
+    const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+    plant(workflow);
+    expect(lint(JSON.stringify(workflow))).toEqual([error]);
+  });
+}

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
-import { gated, judge } from "./required.mjs";
+import { gated, judge, sized } from "./required.mjs";
 
 // Today's CI for both versions. Covers required.mjs, the `ci-required` job's verdict. Each law
 // names the edge case it holds from the list at the top of required.mjs.
@@ -61,6 +61,34 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
         const meant = (job: string) => changes === "success" && needs["changes"]!.outputs![job] === "false";
         const expected = changes === "success" && meant(name) && others.every(meant);
         expect(judge(needs).pass).toBe(expected);
+      },
+    ),
+    options,
+  );
+});
+
+it("10: a sized job's skip passes when its sizer succeeded and said exactly false, and only then", () => {
+  // next skips when legs.ts found no next/ test file, while changes still said next runs. Plant, run
+  // once on required.mjs and restored: drop the sizer's `result` check (red: a failed legs that
+  // said false passed).
+  fc.assert(
+    fc.property(
+      green,
+      fc.constantFrom(...Object.keys(sized)),
+      flag,
+      fc.constantFrom("success", "failure", "cancelled", "skipped"),
+      (needs, name, said, end) => {
+        const sizer = sized[name]!;
+        needs["changes"]!.outputs![name] = "true";
+        needs[sizer] = { result: end, outputs: { [name]: said } };
+        needs[name] = { result: "skipped", outputs: {} };
+        const small = end === "success" && said === "false";
+        const verdict = judge(needs);
+        // The sizer is an ungated job, so its own skip or failure fails the run too.
+        expect(verdict.pass).toBe(small);
+        expect(verdict.lines).toContain(
+          small ? `${name}: skipped, as ${sizer} said, pass` : `${name}: skipped, but it should have run, fail`,
+        );
       },
     ),
     options,
@@ -242,5 +270,49 @@ it("property: a draft passes with its heavy jobs skipped; a ready PR fails when 
       },
     ),
     options,
+  );
+});
+
+// Ticket 990, fail fast: on a pull request or a merge queue group, the first red job cancels its
+// run. Its own result is `failure` (or `cancelled`, when the cancel reaches it before it ends); a job
+// still running ends `cancelled` or, as a matrix, folds a canceled leg into its result; a job not yet
+// started skips, since its `!cancelled()` is now false, while its flag still said it runs. Whatever
+// the others ended as, such a run never passes: a leg canceled because a sibling failed is no pass.
+it("property: a run stopped at its first red job never passes", () => {
+  const succeeded = (needs: Record<string, Job>) =>
+    Object.keys(needs).filter((name) => needs[name]!.result === "success");
+  fc.assert(
+    fc.property(
+      paths,
+      fc.constantFrom("pull_request", "merge_group"),
+      fc.nat(),
+      fc.constantFrom("failure", "cancelled"),
+      fc.array(fc.constantFrom("success", "cancelled", "skipped"), { minLength: 7, maxLength: 7 }),
+      (p, event, pick, own, ends) => {
+        const needs = ran(jobs(p, event, false));
+        const started = succeeded(needs);
+        const red = started[pick % started.length]!;
+
+        for (const [i, name] of started.filter((name) => name !== red).entries()) {
+          needs[name]!.result = ends[i % ends.length];
+        }
+
+        needs[red]!.result = own;
+        expect(judge(needs).pass).toBe(false);
+      },
+    ),
+    // pinned: run 43633120187's shape, check (lint) red, typecheck, next and e2e stopped mid-run, test not yet started.
+    {
+      ...options,
+      examples: [
+        [
+          ["next/packages/libfabrika/src/a.ts", "apps/fabrika/src/a.ts"],
+          "merge_group",
+          2,
+          "failure",
+          ["success", "success", "cancelled", "skipped", "cancelled", "cancelled", "cancelled"],
+        ],
+      ],
+    },
   );
 });
