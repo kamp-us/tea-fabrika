@@ -5,6 +5,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { configDefaults } from "vitest/config";
 import { BaseSequencer, createVitest } from "vitest/node";
+import { budget as legBudget } from "./.github/ci/legs.ts";
 import { e2eFiles, nextFiles } from "./.github/ci/shard-rows.ts";
 import { e2eLegs, inLaneStep, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
 import e2eDefault, { e2eConfig } from "./vitest.e2e.config.ts";
@@ -1152,6 +1153,8 @@ describe("the end-to-end legs", () => {
     const limit = nextMinutes(workflow) * 60;
     expect(limit).toBeGreaterThan(0);
     const budget = limit / 2 - median(e2eSamples.overhead);
+    // legs.ts sizes a pull request's legs, vitest and e2e alike, on this same budget.
+    expect(legBudget(nextMinutes(workflow))).toBe(budget);
     const files = (await e2eFiles(ROOT)).map((path) => ({ path, seconds: rowOf(path) }));
     expect(files.length).toBeGreaterThan(0);
     const heaviest = files.toSorted((x, y) => (y.seconds ?? noRow) - (x.seconds ?? noRow))[0]!;
