@@ -82,7 +82,12 @@ At the laptop, in the app or a tab, a person can:
   [0278](../../.decisions/0278-each-window-runs-its-own-prefix.md),
   [0272](../../.decisions/0272-a-press-finds-its-command.md)), never a fixed layout first;
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
-  ([0276](../../.decisions/0276-a-tile-shows-one-process.md));
+  ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
+  the member whose line caused it, never against `fabsh`'s program
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
+  The start still checks only program to program, `StartGrant` in
+  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
+  `StartGrant` is the owner's open question;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
@@ -247,11 +252,13 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Designed by: [0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md),
   [0103](../../.decisions/0103-a-program-may-mail-another-by-name.md), program guidelines G6.
 - In code now: program mail (above). A program's `outputs` are declared
-  (`runtime/Program.ts:144`) and nothing reads them. Delivery reads the sender's whole outbox
-  (`processes/ProgramMailLedger.ts:50`), and the recovery save rereads every receipt
-  ([finding](../../field/findings/2026-11-11-recovery-save-rereads-every-receipt.json)): 0109 makes
-  fixing both a binding first step.
-- Not built: the two fixes; the inbox cap and its `full` answer; chunked sends from the writer; the
+  (`runtime/Program.ts:144`) and nothing reads them. The two fixes 0109 binds first are built
+  (ticket 936, https://github.com/kamp-us/tea-fabrika/pull/1203): delivery looks a letter up by
+  its ID and reads a stream's head by the ledger's index, so it reads the same rows whatever the
+  outbox and inbox hold, and the recovery save keeps the rows it last read or wrote, so a save
+  after a load reads one row
+  ([finding](../../field/findings/2026-11-11-recovery-save-rereads-every-receipt.json)).
+- Not built: the inbox cap and its `full` answer; chunked sends from the writer; the
   inbox cap and chunk size as settings (P38); the right for two programs on one line to mail each
   other, which today needs a host grant (`ProgramMailLedger.ts:172`).
 - Decide first: how a pipe carries one program's output to the next one's input (not decided in
@@ -494,7 +501,7 @@ log           one row per agent run, with the sha of the commit it made, and a n
 P1, PR 402, the frame
   pnpm-workspace.yaml, vitest.config.ts   next/{packages,programs,apps}/* are packages; pnpm test runs their src/**/*.test.ts
   .github/workflows/check.yaml            a `next` job: vitest run next/, Chromium once an e2e file exists, then the runner
-  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time; passes while there are none
+  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
   src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)

@@ -18,10 +18,20 @@
 // 7. A gated job, or changes, absent from `needs`: fails.
 // 8. `needs` that is not an object, or JSON that does not parse: fails.
 // 9. A matrix job (test, next) is one `needs` entry; GitHub folds its shards into one result.
+// 10. A sized job (next) `skipped` also passes when its sizer (legs) succeeded and its output of the
+//     job's name is exactly "false": the pull request picked no next/ test file. Any other sizer
+//     result or output fails, as in 3 and 4, and the sizer itself is judged like any ungated job.
 import { fileURLToPath } from "node:url";
 
 /** The jobs that skip on changes' output of the same name; workflow-lint.ts reads this list. */
 export const gated = /** @type {const} */ (["check", "typecheck", "test", "next", "e2e"]);
+
+/**
+ * A gated job that also skips on the output of its own name from the job that sizes it: next skips
+ * when legs.ts found no next/ test file to run. workflow-lint.ts reads this map too.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const sized = { next: "legs" };
 
 /** @typedef {{ pass: boolean, lines: string[] }} Verdict */
 
@@ -51,10 +61,19 @@ export const judge = (needs) => {
 
   for (const [name, job] of Object.entries(needs)) {
     const result = field(job, "result");
-    const meant = skippable.includes(name) && field(outputs, name) === "false";
+    const sizer = Object.hasOwn(sized, name) ? needs[sized[name] ?? ""] : undefined;
+    const small = field(sizer, "result") === "success" && field(field(sizer, "outputs"), name) === "false";
+    const meant = skippable.includes(name) && (field(outputs, name) === "false" || small);
     const ok = result === "success" || (result === "skipped" && meant);
     const shown = typeof result === "string" && result !== "" ? result : "no result";
-    const note = result !== "skipped" ? "" : meant ? ", as changes said" : ", but it should have run";
+    const note =
+      result !== "skipped"
+        ? ""
+        : meant
+          ? field(outputs, name) === "false"
+            ? ", as changes said"
+            : `, as ${sized[name]} said`
+          : ", but it should have run";
     lines.push(`${name}: ${shown}${note}, ${ok ? "pass" : "fail"}`);
     pass &&= ok;
   }
