@@ -1003,10 +1003,82 @@ describe("measured", () => {
 });
 
 describe("Shards", () => {
-  it("is vitest's own sequencer with only its sharding changed: vitest's sort is kept", () => {
+  it("pinned: is vitest's own sequencer with its sharding and its sort changed", () => {
+    // The two methods vitest documents for a custom sequencer; L18 and L19 say what `sort` does.
     expect(Object.getPrototypeOf(Shards.prototype)).toBe(BaseSequencer.prototype);
     expect(Object.hasOwn(Shards.prototype, "shard")).toBe(true);
-    expect(Shards.prototype.sort).toBe(BaseSequencer.prototype.sort);
+    expect(Object.hasOwn(Shards.prototype, "sort")).toBe(true);
+  });
+
+  it("scenario: L18 each next vitest leg starts its heaviest file first, and runs the rest heaviest first", async () => {
+    // Today's CI: the real config, the real next/ files and the workflow's own count of vitest legs,
+    // each leg as vitest runs it, `sort` after `shard`. On main runs 43615844695 and 43618656328
+    // vitest's own order, by file size with no cache in CI, started StartChild 266 s and 284 s in on
+    // leg 3, which then took 748 s and 816 s while leg 4 took 415 s and 468 s.
+    // Plants, each run once and restored: `sort` returns `super.sort(files)` (red: leg 1 starts
+    // smaller files before Watchers); `sort` orders lightest first (red).
+    const legs = vitestLegs(readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8")).length;
+    const seen: string[] = [];
+
+    for (let index = 1; index <= legs; index++) {
+      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/${legs}` });
+
+      try {
+        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
+          relative(ROOT, spec.moduleId).startsWith("next/"),
+        );
+        const sequencer = new vitest.config.sequence.sequencer(vitest);
+        const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
+        const seconds = order.map((path) => rowOf(path) ?? noRow);
+        expect(seconds, `leg ${index}`).toEqual(seconds.toSorted((a, b) => b - a));
+        seen.push(...order);
+      } finally {
+        await vitest.close();
+      }
+    }
+
+    expect(seen.toSorted()).toEqual((await nextFiles(ROOT)).toSorted());
+  });
+
+  it("vector: L19 sort keeps vitest's groups and its failed-first, then the heaviest row, and equal rows keep vitest's order", async () => {
+    // vitest runs projects one after another by name, and a file that failed last time first; `sort`
+    // keeps both and orders only by seconds inside them. clock and compiler both have rows of 0.0 s,
+    // so vitest's own order of the two (larger file first) stands.
+    // Plants, each run once and restored: order by seconds alone (red: Watchers, in project b, comes
+    // first); drop the failed-first term (red: the failed light file comes after the heavier one);
+    // break equal seconds by path (red: clock comes before compiler).
+    const project = (name: string) => ({ name, config: { sequence: { groupOrder: 0 }, isolate: true } });
+    const spec = (path: string, name: string) => ({ moduleId: join(ROOT, path), project: project(name) });
+    const watchers = spec("next/packages/libfabrika/src/node/Watchers.test.ts", "b");
+    const admission = spec("next/packages/libfabrika/src/node/RunnerAdmission.test.ts", "a");
+    const runner = spec("next/packages/libfabrika/src/runtime/Runner.test.ts", "a");
+    const clock = spec("next/apps/fabrika/src/exam/clock.test.ts", "a");
+    const compiler = spec("next/apps/fabrika/src/exam/compiler.test.ts", "a");
+    const failedLight = spec("next/packages/libfabrika/src/ledger/Ledger.test.ts", "a");
+    expect(
+      [watchers, admission, runner, clock, compiler, failedLight].map((s) => rowOf(relative(ROOT, s.moduleId))),
+    ).toEqual([492.4, 258.9, 123.8, 0, 0, 3.2]);
+    const vitest = await createVitest("test", { root: ROOT, watch: false });
+
+    try {
+      const lastRun = vitest.cache.getTestSpecificationResult.bind(vitest.cache);
+      vitest.cache.getTestSpecificationResult = (s) =>
+        s === (failedLight as never) ? { failed: true, duration: 3200 } : lastRun(s);
+      const ties = await new BaseSequencer(vitest).sort([clock, compiler] as never);
+      const order = await new vitest.config.sequence.sequencer(vitest).sort([
+        clock,
+        watchers,
+        compiler,
+        runner,
+        failedLight,
+        admission,
+      ] as never);
+      const paths = (specs: readonly { readonly moduleId: string }[]) => specs.map((s) => relative(ROOT, s.moduleId));
+      expect(paths(order)).toEqual(paths([failedLight, admission, runner, ...ties, watchers]));
+      expect(paths(ties)).toEqual(paths([compiler, clock]));
+    } finally {
+      await vitest.close();
+    }
   });
 
   it("scenario: L13 lane-only shards cover every lane once and balance on top of the rest", async () => {
