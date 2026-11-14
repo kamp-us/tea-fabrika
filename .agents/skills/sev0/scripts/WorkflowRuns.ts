@@ -1,0 +1,46 @@
+// WorkflowRuns: what a sev0 asks GitHub Actions about its workflow runs, and the two writes it makes,
+// a cancel and a rerun. This file is the contract only (0095): `WorkflowRunsGh.layer` asks GitHub
+// through `gh`, `WorkflowRunsTest.layer` answers from a list in memory. Today's lead tooling, run on
+// our own laptop; it is not product.
+import { Context, Schema } from "effect";
+import type { Effect } from "effect";
+
+/** GitHub could not be asked, refused, or answered in a shape we do not read. */
+export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError>()("WorkflowRunsError", {
+  reason: Schema.String,
+}) {}
+
+/** One workflow run, as GitHub lists it. */
+export const Run = Schema.Struct({
+  /** GitHub's run id, the one `gh run cancel` and `gh run rerun` take. */
+  id: Schema.Number,
+  /** The workflow's name, such as `check`. */
+  workflow: Schema.String,
+  /** What started it: `pull_request`, `merge_group`, `push`, `workflow_dispatch` and the rest. */
+  event: Schema.String,
+  /** The branch it ran on; a queue run's is GitHub's own `gh-readonly-queue/...` branch. */
+  branch: Schema.String,
+  /** The commit it ran on. */
+  sha: Schema.String,
+  /** `queued`, `in_progress`, `waiting`, `requested`, `pending` or `completed`. */
+  status: Schema.String,
+  /** Once completed: `success`, `failure`, `cancelled` and the rest; `null` before. */
+  conclusion: Schema.NullOr(Schema.String),
+  /** When GitHub made it, as GitHub wrote it (ISO 8601). */
+  created: Schema.String,
+});
+export type Run = typeof Run.Type;
+
+export class WorkflowRuns extends Context.Service<
+  WorkflowRuns,
+  {
+    /** Every run of the repo that has not completed yet. */
+    readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
+    /** Every run at commit `sha`, finished or not. */
+    readonly at: (sha: string) => Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
+    /** Asks GitHub to cancel run `id`. */
+    readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError>;
+    /** Asks GitHub to run every job of run `id` again, as a new attempt of the same run. */
+    readonly rerun: (id: number) => Effect.Effect<void, WorkflowRunsError>;
+  }
+>()("sev0/WorkflowRuns") {}
