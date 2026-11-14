@@ -1260,6 +1260,12 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
             } else if (move === "arm") {
               timer = now + (Math.abs(cell.value) % 100) + 1;
               yield* runner().msg(input({ type: "arm", at: timer }));
+
+              // 0528: the step read every letter. With no failed send waiting, nothing is left
+              // behind the mail wake, so it clears; a wake with a failed send behind it is kept.
+              if (retry === null) {
+                wake = null;
+              }
             } else if (move === "send") {
               world.fault.wake = true;
               yield* runner()
