@@ -74,9 +74,9 @@ const experiment = (path) => path.startsWith("experiments/") && !read.some((fold
 
 /**
  * A file of today's version: its trees, the design package today's app imports, and the toy
- * projects its tests read. Only these start today's build (0175): the promises gate and
- * `pnpm build`. Its tests and its e2e run on no event (0525, 0533). A file that reruns every test, such
- * as the lockfile or a root config, is not one.
+ * projects its tests read. Only these start today's build (0175), `pnpm build`. Its tests, its
+ * promise checks and its e2e run on no event (0525, 0533). A file that reruns every test, such as
+ * the lockfile or a root config, is not one.
  * @param {string} path
  */
 const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
@@ -168,8 +168,8 @@ export const scope = (paths, event, proven = []) => {
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
- * `build` is true only when a path is one of today's version's files: it gates check's promises
- * gate and `pnpm build`, the slow half of check. `test` starts the test job, which runs only the
+ * `build` is true only when a path is one of today's version's files: it gates check's
+ * `pnpm build`, the slow half of check. `test` starts the test job, which runs only the
  * tooling tests (0525, 0533). History that cannot be read, no path at all, or an event that is not
  * scoped runs everything.
  * `proven` is taken so a caller can pass what it has, and never changes a flag: a proof only narrows
