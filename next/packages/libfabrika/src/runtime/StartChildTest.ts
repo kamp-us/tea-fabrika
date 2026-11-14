@@ -1440,8 +1440,89 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     expect(done.size, "L11: the operation walk was not empty").toBeGreaterThan(0);
   });
 
+const secretsLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  it.effect(
+    "L11: a secret in a Cmd's operands or a storage cause stays out of Cmd answers, spans and logs",
+    () =>
+      Effect.gen(function* () {
+        const seen = new Set<string>();
+        const law = secrets(open, seen);
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
+        const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
+        const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+        // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+        yield* Effect.promise(() => fc.assert(property, checks));
+        expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);
+      }),
+    600_000,
+  );
+
+// scenario: L13. Resource lifetime is one path, not a space to walk: one walk interrupted with
+// its runners built must still give back every database handle its scope opened.
+const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  it.effect("scenario: L13: an interrupted walk gives back every store and runner its scope acquired", () =>
+    Effect.gen(function* () {
+      let probe: Store["probe"] | undefined;
+      let opened = 0;
+      const held = Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* open;
+          const world: World = {
+            names: new Map([["starter:1", { program: "starter", pid: PIDS[0] as string, live: true }]]),
+            starts: new Map(),
+            parents: new Map(),
+            watches: [],
+            fault: { exited: false, message: "" },
+            n: 0,
+          };
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const life = yield* host(store, world, ids(...PIDS).next, scope);
+          yield* ProcessManager.use((p) =>
+            p.start(
+              Start.cases.first.make({
+                id: "boot:starter:1",
+                name: "starter:1",
+                code: { program: "starter", hash: BUILD },
+              }),
+              brainFrom(),
+            ),
+          ).pipe(Effect.provide(life.context), Effect.orDie);
+          const runner = yield* life.runner("starter:1");
+          yield* runner
+            .msg({
+              id: "letter-1",
+              envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input: { type: "ping" } },
+              sentAt: "2026-11-11T01:00:00Z",
+              seen: 0,
+              span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
+            })
+            .pipe(Effect.result);
+          opened = store.probe.open();
+          probe = store.probe;
+          return yield* Effect.never;
+        }),
+      );
+      const fiber = yield* Effect.forkChild(held);
+
+      for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
+        yield* Effect.yieldNow;
+      }
+
+      yield* Fiber.interrupt(fiber);
+      expect(probe, "the walk acquired its store and a runner").toBeDefined();
+      expect(opened, "the walk had databases open when it was interrupted").toBeGreaterThan(0);
+      expect(probe?.open(), "L13: no database handle outlives its scope").toBe(0);
+    }),
+  );
+
+// The laws come in three suites, one test file each, so CI can run them on different machines. The
+// boundary law alone took 210 s there (CI run 43615844695), and all of them together 482 to 531 s.
+const TITLE = "P42 slice 1: start_child and exit on real runners";
+
+/** L5, L6's refusals, L8, L11 and L13. */
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  describe("P42 slice 1: start_child and exit on real runners", () => {
+  describe(TITLE, () => {
     prop(
       "L5: every start a start_child wrote keeps the life that ran the step as requester, never its letter's sender; extra fields are bad_cmd",
       open,
@@ -1458,6 +1539,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["missing", "typed", "no_program", "bad_name", "bad_input", "undeclared"],
       200,
     );
+    prop(
+      "L8: start_child and exit run only when declared, and both refuse extra fields as bad_cmd",
+      open,
+      ["forged", "exit_extra", "undeclared", "undeclared_exit", "door_start"],
+      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
+      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
+      100,
+    );
+    secretsLaw(open);
+    lifetimeLaw(open);
+  });
+
+/** L7, its four exit orders, and L6's starts that an exit's checkpoint carries past one row. */
+export const exitSuite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  describe(TITLE, () => {
     prop(
       "L7: exit ends only its own life with normal, after the Cmds before it and none after; watchers get one DOWN; children outlive it",
       open,
@@ -1479,15 +1575,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     }
 
     prop(
-      "L6: a valid first-letter row survives when its full command exceeds the row limit",
-      open,
-      ["boundary_start"],
-      ["boundary_start"],
-      ["boundary_start"],
-      200,
-    );
-
-    prop(
       "L6: individually valid starts survive a checkpoint larger than one platform row",
       open,
       ["checkpoint_starts"],
@@ -1495,87 +1582,17 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["checkpoint_starts"],
       200,
     );
+  });
 
+/** L6 at the platform's row limit: a first letter just under it, whose full Cmd is over it. */
+export const boundarySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  describe(TITLE, () => {
     prop(
-      "L8: start_child and exit run only when declared, and both refuse extra fields as bad_cmd",
+      "L6: a valid first-letter row survives when its full command exceeds the row limit",
       open,
-      ["forged", "exit_extra", "undeclared", "undeclared_exit", "door_start"],
-      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
-      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
-      100,
-    );
-
-    it.effect(
-      "L11: a secret in a Cmd's operands or a storage cause stays out of Cmd answers, spans and logs",
-      () =>
-        Effect.gen(function* () {
-          const seen = new Set<string>();
-          const law = secrets(open, seen);
-          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-          const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
-          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-          yield* Effect.promise(() => fc.assert(property, checks));
-          expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);
-        }),
-      600_000,
-    );
-
-    // scenario: L13. Resource lifetime is one path, not a space to walk: one walk interrupted with
-    // its runners built must still give back every database handle its scope opened.
-    it.effect("scenario: L13: an interrupted walk gives back every store and runner its scope acquired", () =>
-      Effect.gen(function* () {
-        let probe: Store["probe"] | undefined;
-        let opened = 0;
-        const held = Effect.scoped(
-          Effect.gen(function* () {
-            const store = yield* open;
-            const world: World = {
-              names: new Map([["starter:1", { program: "starter", pid: PIDS[0] as string, live: true }]]),
-              starts: new Map(),
-              parents: new Map(),
-              watches: [],
-              fault: { exited: false, message: "" },
-              n: 0,
-            };
-            const scope = yield* Scope.make();
-            yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-            const life = yield* host(store, world, ids(...PIDS).next, scope);
-            yield* ProcessManager.use((p) =>
-              p.start(
-                Start.cases.first.make({
-                  id: "boot:starter:1",
-                  name: "starter:1",
-                  code: { program: "starter", hash: BUILD },
-                }),
-                brainFrom(),
-              ),
-            ).pipe(Effect.provide(life.context), Effect.orDie);
-            const runner = yield* life.runner("starter:1");
-            yield* runner
-              .msg({
-                id: "letter-1",
-                envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input: { type: "ping" } },
-                sentAt: "2026-11-11T01:00:00Z",
-                seen: 0,
-                span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
-              })
-              .pipe(Effect.result);
-            opened = store.probe.open();
-            probe = store.probe;
-            return yield* Effect.never;
-          }),
-        );
-        const fiber = yield* Effect.forkChild(held);
-
-        for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
-          yield* Effect.yieldNow;
-        }
-
-        yield* Fiber.interrupt(fiber);
-        expect(probe, "the walk acquired its store and a runner").toBeDefined();
-        expect(opened, "the walk had databases open when it was interrupted").toBeGreaterThan(0);
-        expect(probe?.open(), "L13: no database handle outlives its scope").toBe(0);
-      }),
+      ["boundary_start"],
+      ["boundary_start"],
+      ["boundary_start"],
+      200,
     );
   });
