@@ -109,6 +109,15 @@ export const readers = [
 /** Only a next/ source file can be proven, so only it can lower what next/ needs. @param {string} path */
 const provable = (path) => path.startsWith("next/") && /\.tsx?$/.test(path);
 
+/**
+ * CI's own files: the workflows, the shared setup, and CI's scripts with their tests. No next/ test
+ * reads one (0534; `rg '\.github' next --glob '*.test.ts'` finds only commits.test.ts, which names
+ * the glob as a string), so a change here needs none of next/. The tooling tests that read them as
+ * text reach them through vitest.config.ts's `githubReads`, and the schedule runs all of next/.
+ * @param {string} path
+ */
+const ci = (path) => path.startsWith(".github/");
+
 const rank = { none: 0, readers: 1, all: 2 };
 
 /**
@@ -122,7 +131,7 @@ const needs = (path, proven) => {
     return "all";
   }
 
-  if (quiet(path) || script(path) || old(path) || experiment(path) || skill(path)) {
+  if (quiet(path) || script(path) || old(path) || experiment(path) || skill(path) || ci(path)) {
     return "none";
   }
 
@@ -205,11 +214,21 @@ export const classify = (paths, event, _proven = []) => {
 /** @typedef {Flags & {build: boolean}} Jobs */
 
 /**
+ * An event on the merge line past the pull request: a merge queue's group or a push to main. Each
+ * runs only what the change reaches in next/, never the tooling tests (0534).
+ * @param {string} event
+ */
+const merged = (event) => event === "merge_group" || event === "push";
+
+/**
  * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
  * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
  * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
  * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
  * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
+ * The test job runs on a pull request alone (0534): a merge queue's group and a push to main never
+ * start it, whatever their paths or history say, and the schedule (scheduled.yaml) runs the
+ * tooling tests. Today's tests run in no CI job anyway (0533).
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
@@ -223,7 +242,7 @@ export const jobs = (paths, event, draft, _proven = []) => {
     return { ...flags, test: false, next: false, e2e: false, build: false };
   }
 
-  return { ...flags, build: flags.today };
+  return { ...flags, test: flags.test && !merged(event), build: flags.today };
 };
 
 /** @param {string} sha */

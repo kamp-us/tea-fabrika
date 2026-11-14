@@ -20,6 +20,10 @@ const options = { seed: 119120, numRuns: 100 };
 // script Markdown counted as prose, scripts skipping test, all Markdown safe,
 // prose masking shared paths, and every skill-tree path counted as prose.
 const heavy = { check: true, typecheck: true, test: true, next: true, e2e: true };
+// 0534: the test job (the tooling tests) runs on a pull request alone. A merge queue's group and a
+// push to main never start it, whatever their paths or history, and the schedule runs every
+// tooling test. Every other event keeps what classify says.
+const testsOn = (event: string) => event !== "merge_group" && event !== "push";
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
@@ -469,13 +473,18 @@ const events = fc.constantFrom("pull_request", "push", "merge_group", "workflow_
 const paths = fc.option(list, { nil: null });
 
 // 0175 narrowed this law: the build is today's library, so it follows `today`, no longer `check`.
-it("property: a ready pull request and every other event run what classify says, build with today's checks", () => {
+// 0534 narrowed it again: the merge queue's group and a push never start the test job.
+it("property: a ready pull request and every other event run what classify says, build with today's checks, and the test job only off the merge line", () => {
   fc.assert(
     fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
       const flags = ci.classify(paths, event);
       const ready = event !== "pull_request" || !draft;
       fc.pre(ready);
-      expect(ci.jobs(paths, event, draft)).toEqual({ ...flags, build: flags.today });
+      expect(ci.jobs(paths, event, draft)).toEqual({
+        ...flags,
+        test: flags.test && testsOn(event),
+        build: flags.today,
+      });
     }),
     // Lists where check is off are rare in `list`, so one is pinned: a docs-only ready PR builds nothing.
     { ...options, examples: [[["docs/a.md"], "pull_request", false]] },
@@ -501,11 +510,12 @@ it("property: a draft keeps lint, typecheck and field as ready, and skips build,
   );
 });
 
-// 0175 narrowed this law: main no longer runs every job. A push is still never a draft.
-it("property: a push runs what a ready pull request runs for the same paths, and ignores the draft flag", () => {
+// 0175 narrowed this law: main no longer runs every job. A push is still never a draft. 0534
+// narrowed it again: a push never starts the test job, whatever a pull request would.
+it("property: a push runs what a ready pull request runs for the same paths, less the test job, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
-      expect(ci.jobs(paths, "push", draft)).toEqual(ci.jobs(paths, "pull_request", false));
+      expect(ci.jobs(paths, "push", draft)).toEqual({ ...ci.jobs(paths, "pull_request", false), test: false });
     }),
     {
       ...options,
@@ -515,8 +525,9 @@ it("property: a push runs what a ready pull request runs for the same paths, and
   );
 });
 
-// 0175: the fallbacks. A run that cannot say what changed runs everything.
-it("property: unreadable history, no path at all, or an event with no paths of its own runs every job", () => {
+// 0175: the fallbacks. A run that cannot say what changed runs everything. 0534 narrowed it: on
+// the merge queue's group and a push, everything but the test job, which only a pull request runs.
+it("property: unreadable history, no path at all, or an event with no paths of its own runs every job, less the test job on the merge line", () => {
   fc.assert(
     fc.property(
       fc.constantFrom("pull_request", "merge_group", "push"),
@@ -525,7 +536,9 @@ it("property: unreadable history, no path at all, or an event with no paths of i
       fc.constantFrom("workflow_dispatch", "schedule", ""),
       fc.boolean(),
       (event, none, paths, other, draft) => {
-        expect(Object.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
+        const { test, ...rest } = ci.jobs(none, event, false);
+        expect(Object.values(rest).every(Boolean)).toBe(true);
+        expect(test).toBe(testsOn(event));
         expect(Object.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
       },
     ),
@@ -533,7 +546,7 @@ it("property: unreadable history, no path at all, or an event with no paths of i
   );
 });
 
-it("scenario: a push with no commit before it reads no paths, so it runs every job", () => {
+it("scenario: a push with no commit before it reads no paths, so it runs every job but the test job", () => {
   // scenario: a first push has an all-zero `before`, and a hand-started run has none. No git runs.
   const run: Runner = () => {
     throw new Error("git must not run");
@@ -542,7 +555,9 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
   for (const base of ["0".repeat(40), ""]) {
     const read = ci.readPaths(base, "c".repeat(40), "push", run);
     expect(read).toBeNull();
-    expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
+    const { test, ...rest } = ci.jobs(read, "push", false);
+    expect(Object.values(rest).every(Boolean)).toBe(true);
+    expect(test).toBe(false);
   }
 });
 
@@ -597,7 +612,7 @@ it("property: a run that touches a file of today's version starts today's checks
       expect(ci.jobs([...paths, file], event, false)).toMatchObject({
         check: true,
         typecheck: true,
-        test: true,
+        test: testsOn(event),
         e2e: true,
         today: true,
         build: true,
@@ -616,15 +631,61 @@ it("property: a pull request, a merge queue's group or a push of next/ files alo
   );
 });
 
-it("property: a tooling file starts the test job with today's tests off, on a pull request, a merge queue's group and a push", () => {
+// 0534 narrowed this law: the tooling tests leave the merge queue and main. A tooling file starts
+// the test job on a pull request alone; the schedule runs every tooling test.
+it("property: a tooling file starts the test job with today's tests off on a pull request, and no test job in a merge queue's group or a push", () => {
   fc.assert(
     fc.property(
       fc.array(tooling, { minLength: 1, maxLength: 12 }),
       fc.constantFrom("pull_request", "merge_group", "push"),
       (paths, event) => {
-        expect(ci.jobs(paths, event, false)).toMatchObject({ test: true, ...off });
+        expect(ci.jobs(paths, event, false)).toMatchObject({ test: event === "pull_request", ...off });
       },
     ),
+    {
+      ...options,
+      // pinned: a change to check.yaml alone, which ran every tooling test in each queue group.
+      examples: [[[".github/workflows/check.yaml"], "merge_group"]],
+    },
+  );
+});
+
+// 0534: no next/ test reads a file under .github/ (`rg '\.github' next --glob '*.test.ts'` finds
+// only commits.test.ts, naming the glob as a string), so CI's own files need none of next/, on every
+// event that follows its paths. Beside a next/ file, that file decides.
+const ciFile = fc.oneof(
+  word.map((s) => `.github/ci/${s}.ts`),
+  word.map((s) => `.github/ci/${s}.test.ts`),
+  word.map((s) => `.github/workflows/${s}.yaml`),
+  fc.constantFrom(".github/actions/pnpm/action.yml", ".github/CODEOWNERS", ".github/ci/changes.mjs"),
+);
+
+it("property: CI's own files alone run check, typecheck and the pull request's test job, and none of next/", () => {
+  fc.assert(
+    fc.property(fc.array(ciFile, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
+      expect(ci.scope(paths, event)).toBe("none");
+      expect(ci.jobs(paths, event, false)).toEqual({
+        ...heavy,
+        test: event === "pull_request",
+        next: false,
+        field: false,
+        ...off,
+      });
+    }),
+    {
+      ...options,
+      // pinned: one workflow file, which ran all of next/ on every CI pull request (experiment 291).
+      examples: [[[".github/workflows/check.yaml"], "pull_request"]],
+    },
+  );
+});
+
+it("property: a CI file beside other paths never changes what next/ they need", () => {
+  fc.assert(
+    fc.property(list, fc.array(ciFile, { minLength: 1, maxLength: 4 }), scopedEvent, (paths, extra, event) => {
+      fc.pre(paths.length > 0);
+      expect(ci.scope([...paths, ...extra], event)).toBe(ci.scope(paths, event));
+    }),
     options,
   );
 });
@@ -635,11 +696,12 @@ it("scenario: plain Markdown under today's trees is no file of today's version",
   expect(ci.jobs(["apps/fabrika/README.md"], "push", false)).toMatchObject({ test: false, ...off });
 });
 
-// 0174 narrowed this law: the group no longer runs every job, and it is still never a draft.
-it("property: a merge queue's group runs what a ready pull request runs, and ignores the draft flag", () => {
+// 0174 narrowed this law: the group no longer runs every job, and it is still never a draft. 0534
+// narrowed it again: the group never starts the test job.
+it("property: a merge queue's group runs what a ready pull request runs, less the test job, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
-      expect(ci.jobs(paths, "merge_group", draft)).toEqual(ci.jobs(paths, "pull_request", false));
+      expect(ci.jobs(paths, "merge_group", draft)).toEqual({ ...ci.jobs(paths, "pull_request", false), test: false });
     }),
     {
       ...options,
@@ -672,10 +734,11 @@ it("property: a skill file under .agents/skills/ that is no script and no prose 
       claudeSkill,
       scopedEvent,
       (paths, claude, event) => {
-        expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, next: false, field: false, ...off });
+        const test = testsOn(event);
+        expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, test, next: false, field: false, ...off });
         // A file under .claude/skills/<name>/ still runs everything, alone or beside them.
-        expect(ci.jobs([claude], event, false)).toEqual({ ...heavy, field: false, ...off });
-        expect(ci.jobs([...paths, claude], event, false)).toEqual({ ...heavy, field: false, ...off });
+        expect(ci.jobs([claude], event, false)).toEqual({ ...heavy, test, field: false, ...off });
+        expect(ci.jobs([...paths, claude], event, false)).toEqual({ ...heavy, test, field: false, ...off });
       },
     ),
     {

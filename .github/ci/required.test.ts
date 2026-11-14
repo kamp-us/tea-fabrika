@@ -261,6 +261,59 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
   );
 });
 
+// 0534: the merge queue's group and a push to main never start the test job, and next runs the
+// tests their change reaches, so it skips when the size step picked none (changes' `next`, which
+// the size step prints first). Both skips pass, as changes said; the same skip on a pull request
+// whose change reaches a tooling test does not.
+it("property: on the merge line past the pull request a skipped test job always passes, and a skipped next passes only when changes said so", () => {
+  // Plants: drop `test` from `gates` (red: the skip fails as ungated); let a skip pass on any flag
+  // but "true" (red: next skipped with the size step's output empty passed).
+  const line = fc.option(
+    fc.array(
+      fc.constantFrom(
+        "docs/a.md",
+        "next/packages/libfabrika/src/a.ts",
+        ".github/workflows/check.yaml",
+        ".github/ci/legs.ts",
+        "oxlint-plugins/a.mjs",
+        "pnpm-lock.yaml",
+      ),
+      { maxLength: 4 },
+    ),
+    { nil: null },
+  );
+  fc.assert(
+    fc.property(
+      line,
+      fc.constantFrom("merge_group", "push"),
+      fc.constantFrom("true", "false", ""),
+      (p, event, said) => {
+        const flags = jobs(p, event, false);
+        const needs = ran(flags);
+        expect(flags.test).toBe(false);
+        expect(needs["test"]!.result).toBe("skipped");
+        expect(judge(needs).pass).toBe(true);
+        // The size step's `next`: "false" when it picked no next/ test file; "true" or empty otherwise.
+        fc.pre(flags.next);
+        const sized = ran(flags);
+        sized["changes"]!.outputs!["next"] = said;
+        sized["next"] = { result: "skipped" };
+        expect(judge(sized).pass).toBe(said === "false");
+      },
+    ),
+    {
+      ...options,
+      // pinned: a CI change alone, which ran all of next/ and every tooling test in each queue group.
+      examples: [[[".github/workflows/check.yaml"], "merge_group", "false"]],
+    },
+  );
+  // The same skipped test job on a ready pull request that reaches a tooling test fails.
+  const pr = ran(jobs([".github/ci/legs.ts"], "pull_request", false));
+  expect(pr["test"]!.result).toBe("success");
+  pr["test"] = { result: "skipped" };
+  expect(judge(pr).pass).toBe(false);
+});
+
 it("property: a draft passes with its heavy jobs skipped; a ready PR fails when a job it needs skips", () => {
   fc.assert(
     fc.property(

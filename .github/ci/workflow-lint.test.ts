@@ -112,7 +112,11 @@ const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
 const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
 
-// On a pull request only: the merge queue and main run the whole suite.
+// 0534: the end-to-end legs narrow from changes' `base`, the commit the size step sized them from, on
+// every run it sized: a pull request, a merge queue group and a push to main alike.
+const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
+
+// Before 0534: on a pull request only, so the merge queue and main ran every end-to-end file.
 const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 // The vitest step's paths: changes' size step's list on a sized run, reader tests included, else changes'
@@ -152,9 +156,9 @@ const e2eShard = (count: number | string, gap = " ") =>
 
 // S1: changes' sizing install and size step run only when it sizes next; its setup also for the parser.
 const sized =
-  "(steps.same.outputs.next || steps.diff.outputs.next) != 'false' && github.event_name == 'pull_request' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'";
+  "(steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'";
 
-const toolsFor = `${probe} || (steps.diff.outputs.next != 'false' && github.event_name == 'pull_request' && steps.diff.outputs.filter == 'next/')`;
+const toolsFor = `${probe} || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')`;
 
 // Fail fast (ticket 990, F1 to F3): the step every job but ci-required ends with. On a pull request
 // or a merge queue group, once an earlier step failed, it cancels the run; ci-required's `always()`
@@ -200,6 +204,7 @@ const valid = (label: string, extra: string) => ({
         files: `\${{ steps.size.outputs.files }}`,
         "vitest-legs": `\${{ steps.size.outputs.vitest }}`,
         "e2e-legs": `\${{ steps.size.outputs.e2e }}`,
+        base: `\${{ steps.size.outputs.base }}`,
       } as Record<string, string>,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
@@ -250,7 +255,7 @@ const valid = (label: string, extra: string) => ({
           env: {
             EVENT: `\${{ github.event_name }}`,
             FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
-            BASE: `\${{ github.event.pull_request.base.sha }}`,
+            BASE: env.BASE,
           },
           run: "node .github/ci/legs.ts",
         },
@@ -341,7 +346,7 @@ const valid = (label: string, extra: string) => ({
           name: "end to end",
           run: e2eCommand,
           if: onE2e,
-          env: { SHARD: e2eShard(2), CHANGED: changedOnPullRequests },
+          env: { SHARD: e2eShard(2), CHANGED: changedFromBase },
         },
         {
           name: "edges",
@@ -1074,13 +1079,53 @@ const plants: [string, (workflow: Workflow) => void][] = [
         "changes' next ignores the size step",
         (w) => (w.jobs.changes.outputs["next"] = `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`),
       ],
+      // 0534: the merge queue and main size their legs too, from their own base, so none of the three
+      // runs the whole suite. Each plant puts back a piece of the pull-request-only shape.
       [
-        "the size step sizes the merge queue and main",
+        "the size step sizes pull requests alone, so the queue and main run the whole suite",
         (w) =>
           (step(w, "changes", "size")["if"] = String(step(w, "changes", "size")["if"]).replace(
-            " && github.event_name == 'pull_request'",
-            "",
+            " && (steps.same",
+            " && github.event_name == 'pull_request' && (steps.same",
           )),
+      ],
+      [
+        "the sizing install runs on pull requests alone",
+        (w) =>
+          (step(w, "changes", "install for sizing")["if"] = String(
+            step(w, "changes", "install for sizing")["if"],
+          ).replace(" && (steps.same", " && github.event_name == 'pull_request' && (steps.same")),
+      ],
+      [
+        "the size step's base is a pull request's alone",
+        (w) =>
+          ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
+            `\${{ github.event.pull_request.base.sha }}`),
+      ],
+      [
+        "the size step's base skips the merge queue's group",
+        (w) =>
+          ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
+            `\${{ github.event.pull_request.base.sha || github.event.before }}`),
+      ],
+      ["changes drops the size step's base", (w) => Reflect.deleteProperty(w.jobs.changes.outputs, "base")],
+      [
+        "changes takes the base from the classify step",
+        (w) => (w.jobs.changes.outputs["base"] = `\${{ steps.diff.outputs.base }}`),
+      ],
+      [
+        "the end-to-end legs narrow on pull requests alone, so the queue and main run every end-to-end file",
+        (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = changedOnPullRequests),
+      ],
+      [
+        "the end-to-end legs narrow from the event's base, even when the size step did not size them",
+        (w) =>
+          ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] =
+            `\${{ format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before) }}`),
+      ],
+      [
+        "the end-to-end legs never narrow",
+        (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = ""),
       ],
       [
         "the size step sizes the reader tests",

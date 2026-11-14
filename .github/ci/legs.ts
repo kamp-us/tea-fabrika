@@ -1,11 +1,13 @@
-// Today's CI, next/. How many of the next job's machines a pull request starts: the size step of
-// check.yaml's changes job prints them, and next's matrix reads them. A small pull request started
-// all seven machines, each spending about a minute on setup to run 0 or 1 files, and held runners a
-// big one could use.
+// Today's CI, next/. How many of the next job's machines a run starts: the size step of check.yaml's
+// changes job prints them, and next's matrix reads them. A small pull request started all seven
+// machines, each spending about a minute on setup to run 0 or 1 files, and held runners a big one
+// could use. The merge queue and main ran the whole suite; since 0534 they run what their change
+// reaches too, and only the schedule (scheduled.yaml) runs all of next/.
 //
-//   event and path              legs
-//   pull request, all of next/  sized from the files Vitest's `--changed` picks, and every reader test
-//   anything else               the full matrix: the merge queue, main, the reader tests
+//   event and path                               legs
+//   pull request, merge queue group or push to   sized from the files Vitest's `--changed` picks
+//   main, all of next/, with a base commit       from the base, and every reader test
+//   anything else                                the full matrix: the reader tests, no base
 //
 // The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
@@ -21,14 +23,19 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assign, measured, median } from "../../vitest.shards.ts";
-import { readers } from "./changes.mjs";
+import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
 export type Legs = { readonly vitest: number; readonly e2e: number };
 
-/** What the run tests: every next/ file a change reaches, or only the reader tests (changes' filter). */
-export type Run = { readonly event: string; readonly scope: "all" | "readers" };
+/**
+ * What the run tests: every next/ file a change reaches, or only the reader tests (changes' filter),
+ * and `base`, the commit its change starts from, which Vitest's `--changed` diffs with: a pull
+ * request's base, a merge queue group's base, or what main held before a push. Empty when there is
+ * none, as on a first push.
+ */
+export type Run = { readonly event: string; readonly scope: "all" | "readers"; readonly base: string };
 
 /** Each kind's selected test files, from the repo root. */
 export type Selected = { readonly vitest: readonly string[]; readonly e2e: readonly string[] };
@@ -76,10 +83,16 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
   return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
 };
 
-/** A run legs.ts sizes: a pull request that tests all of next/. Every other run is the full matrix. */
-const sizes = (run: Run) => run.event === "pull_request" && run.scope === "all";
+/** The events on the merge line, each of which runs only what its change reaches (0534). */
+const LINE = new Set(["pull_request", "merge_group", "push"]);
 
-/** The legs a run starts: sized on a pull request that tests all of next/, else `full`. */
+/**
+ * A run legs.ts sizes: one on the merge line that tests all of next/ from a base commit. Every
+ * other run is the full matrix: the reader tests, and a run with no base to diff with.
+ */
+const sizes = (run: Run) => LINE.has(run.event) && run.scope === "all" && validSha(run.base);
+
+/** The legs a run starts: sized on a merge line run that tests all of next/, else `full`. */
 export const size = (run: Run, selected: Selected, full: Legs, limit: number, table = measured): Legs =>
   sizes(run)
     ? { vitest: fewest(selected.vitest, full.vitest, limit, table), e2e: fewest(selected.e2e, full.e2e, limit, table) }
@@ -105,6 +118,9 @@ export const withReaders = (changed: readonly string[], readerFiles: readonly st
  * throws, the step prints nothing, and next runs its full matrix on every file. No other run
  * prints `files`, so its legs keep changes' filter. With no leg, no `shards` line: if GitHub ever
  * expanded the matrix before next's `if`, it would expand the fallback, never an empty matrix.
+ * A sized run with an end-to-end leg prints `base`, so those legs run the end-to-end files the
+ * size step sized them with, `--changed` from the same commit; every other run prints none, and its
+ * end-to-end legs run every file.
  */
 export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
   const some = legs.vitest + legs.e2e > 0;
@@ -117,6 +133,7 @@ export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
   return [
     ...(some ? [`shards=${JSON.stringify(shards(legs))}`] : []),
     ...(listed ? [`files=${selected.vitest.join(" ")}`] : []),
+    ...(sizes(run) && legs.e2e > 0 ? [`base=${run.base}`] : []),
     `vitest=${legs.vitest}`,
     `e2e=${legs.e2e}`,
     `next=${some}`,
@@ -155,8 +172,9 @@ if (import.meta.main) {
   const run: Run = {
     event: process.env["EVENT"] ?? "",
     scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
+    base: process.env["BASE"] ?? "",
   };
-  const changed = `--changed=${process.env["BASE"] ?? ""}`;
+  const changed = `--changed=${run.base}`;
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
   const picked = sized ? list(root, ["next/", changed]) : [];
@@ -172,7 +190,7 @@ if (import.meta.main) {
   const missed = selected.vitest.length - picked.length;
   const note = sized
     ? `legs: ${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s, ${missed} of them reader tests \`--changed\` missed) on ${legs.vitest} legs, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
-    : `legs: the full matrix, on ${run.event || "an unknown event"} with ${run.scope === "all" ? "all of next/" : "the reader tests"}`;
+    : `legs: the full matrix, on ${run.event || "an unknown event"} with ${run.scope === "all" ? "all of next/" : "the reader tests"}${validSha(run.base) ? "" : " and no base commit"}`;
   console.log(note);
   console.log(lines.join("\n"));
   const output = process.env["GITHUB_OUTPUT"];
