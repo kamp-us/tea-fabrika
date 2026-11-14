@@ -1,5 +1,5 @@
-// T878, next/, L1/L2/L10. Real Git owns the objects; failures are injected at its process edge.
-// Lead runs the real-Git laws in the isolated, network-disabled container after build.
+// T878, next/, L1/L2/L10. Git owns the objects; failures are injected at its process edge.
+// The repository laws run on memory git, and on real git too at depth `full` (0535, GitLaws).
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
@@ -8,6 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import * as GitLaws from "./GitLaws.test-support.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
 const runs = { seed: 119120, numRuns: 200 };
@@ -73,7 +74,7 @@ const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", branch: 
 const withReader = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
   body.pipe(Effect.provide(RepositoriesGit.layer({ person })));
 
-describe("T878 pinned repository reads", () => {
+describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves",
     async () => {
@@ -132,7 +133,7 @@ describe("T878 pinned repository reads", () => {
                     }),
                   );
                 }),
-              ).pipe(Effect.provide(services)),
+              ).pipe(Effect.provide(layer.services)),
             ),
         ),
         runs,
@@ -203,7 +204,7 @@ describe("T878 pinned repository reads", () => {
                     expect(yield* key(f.repo, `${destination}-${cell}`)).not.toBe(initial);
                   }
                 }),
-              ).pipe(Effect.provide(services)),
+              ).pipe(Effect.provide(layer.services)),
             ),
         ),
         identityRuns,
@@ -339,7 +340,7 @@ describe("T878 pinned repository reads", () => {
                 ).pipe(Effect.exit);
                 expect(Exit.isFailure(refused)).toBe(true);
               }),
-            ).pipe(Effect.provide(services)),
+            ).pipe(Effect.provide(layer.services)),
           ),
         ),
         runs,
@@ -403,7 +404,7 @@ describe("T878 pinned repository reads", () => {
                   }
                 }
               }),
-            ).pipe(Effect.provide(services)),
+            ).pipe(Effect.provide(layer.services)),
           ),
         ),
         runs,
@@ -500,7 +501,7 @@ describe("T878 pinned repository reads", () => {
               }),
             );
             expect(yield* fs.exists(directory)).toBe(false);
-          }).pipe(Effect.scoped, Effect.provide(services)),
+          }).pipe(Effect.scoped, Effect.provide(layer.services)),
         );
       }),
       { seed: 119120, numRuns: 100 },
