@@ -35,7 +35,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Layout from "../tezgah/Layout.ts";
-import { type Dir, type TezgahView, type Tile, type TileId, type Workspace } from "../tezgah/Workspace.ts";
+import { type Dir, type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
 import { Prefix } from "./Prefix.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
@@ -82,7 +82,8 @@ const SPLITS: Readonly<Record<string, { readonly does: string; readonly dir: Dir
 };
 
 const machine = windowMachineFor({
-  decode: () => Schema.decodeUnknownSync(Schema.Unknown),
+  // A tile's own view: the laws read none of it, so any object will do.
+  decode: () => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown)),
   tile: () => undefined,
   keys: TABLE!,
 });
@@ -284,7 +285,13 @@ const online = (world: World, i: number) => {
  *  boot list's `checklist:1`, every other tile a process tezgah started. */
 const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = { id: typeId("workspace", 1), n: 1, layout: first, focus: first, recent: [first] } as Workspace;
+  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+    id: typeId("workspace", 1),
+    n: 1,
+    layout: first,
+    focus: first,
+    recent: [first],
+  });
   const tiles: Array<Tile> = [tileRow(first, 1, false)];
 
   for (const [k, cut] of cuts.entries()) {

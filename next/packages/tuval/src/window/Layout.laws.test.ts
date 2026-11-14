@@ -15,7 +15,8 @@
 // React's own server render, read back into a tree of elements by role and accessible name.
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
-import type { Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -272,7 +273,13 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
         (cmds) => {
           const first = typeId("tile", 1) as TileId;
           const real: Desk = {
-            w: { id: typeId("workspace", 1), n: 1, layout: first, focus: first, recent: [first] } as Workspace,
+            w: Schema.decodeUnknownSync(Workspace)({
+              id: typeId("workspace", 1),
+              n: 1,
+              layout: first,
+              focus: first,
+              recent: [first],
+            }),
             tiles: [
               {
                 id: first,

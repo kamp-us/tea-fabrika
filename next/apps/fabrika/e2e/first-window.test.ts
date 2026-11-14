@@ -105,10 +105,12 @@ const blockKeyStore = () => {
   };
 };
 
-/** Let the brain settle each press, then lose its first answer and the socket. The next dial
- *  must resend that press before the page can see its terminal answer. Each close the page starts
- *  is kept as the page is told of it: its code, whether it was clean, and how long it took. */
-const loseFirstAnswers = () => {
+/** Let the brain settle each press to `pid`, the checklist's process, then lose its first answer
+ *  and the socket. The next dial must resend that press before the page can see its terminal
+ *  answer. Each close the page starts is kept as the page is told of it: its code, whether it was
+ *  clean, and how long it took. A letter to another process, such as the window's own attach to its
+ *  tezgah (Desk S2b), passes untouched and joins no group. */
+const loseFirstAnswers = (pid: string) => {
   const NativeSocket = WebSocket;
   const observed: {
     groups: Array<{
@@ -164,7 +166,7 @@ const loseFirstAnswers = () => {
       if (typeof data === "string" && data !== "ping") {
         const frame = JSON.parse(data);
 
-        if (frame.method === "process.send") {
+        if (frame.method === "process.send" && frame.params?.pid === pid) {
           if (active === undefined) {
             active = { attempts: [], firstAnswer: null, result: null, closed: null };
             observed.groups.push(active);
@@ -179,6 +181,18 @@ const loseFirstAnswers = () => {
     }
   };
 };
+
+/** The checklist's process id, from the `started` entry of `processes/<NAME>`. */
+const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
+  Effect.gen(function* () {
+    const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+    const pids = (yield* r.read(`processes/${NAME}`)).flatMap((e) => {
+      const started = Schema.decodeUnknownOption(Started)(e);
+      return started._tag === "Some" ? [started.value.body.process] : [];
+    });
+    expect(pids.length, `the brain started ${NAME}`).toBeGreaterThan(0);
+    return pids.at(-1) ?? "";
+  });
 
 const Resends = Schema.Struct({
   groups: Schema.Array(
@@ -392,7 +406,10 @@ describe("L15: use in two tabs (W2)", () => {
               const dev = yield* devServer(h);
               const b = yield* browser;
               const context = yield* profile(b);
-              yield* Effect.promise(() => context.addInitScript(loseFirstAnswers));
+              // The checklist's pid, read as any client finds it, so only its letters are lost and resent.
+              const r = yield* reader(h, dev);
+              const pid = yield* checklistPid(r);
+              yield* Effect.promise(() => context.addInitScript(loseFirstAnswers, pid));
               const tabs = [yield* tab(context, dev.url), yield* tab(context, dev.url)];
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
@@ -439,7 +456,6 @@ describe("L15: use in two tabs (W2)", () => {
                 }),
               );
               // No letter id lands twice: a duplicated add could hide as a taken refusal.
-              const r = yield* reader(h, dev);
               const inbox = yield* r.read(`${NAME}/inbox`);
               const ids = inbox.map((e) => e.id);
               expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
