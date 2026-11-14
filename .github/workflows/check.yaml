@@ -60,9 +60,14 @@ jobs:
       build: ${{ steps.diff.outputs.build }}
       today: ${{ steps.diff.outputs.today }}
     steps:
+      # Every commit and tree, and only the head's files: a full clone fetched 803 MB of history
+      # and a blobless one 7 MB before its checkout, on 2026-11-14 (`git clone --no-checkout`, with
+      # and without `--filter=blob:none`). Names, diffs and merge bases read trees; a file at an
+      # older commit is fetched the first time a command reads it (git's partial clone).
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -107,9 +112,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Blobless, as in changes.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
       - id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -148,15 +155,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      # pnpm and Node, with no store cache: restoring one did not pay (.github/actions/pnpm).
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
@@ -214,17 +214,44 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      # What each package's last check found (scripts/typecheck.sh's `--incremental`), from main's
+      # latest run. The key holds the lockfile and every tsconfig, so a change to the compiler, the
+      # Effect checks or their settings starts cold; inside one key, tsc checks again every file
+      # whose text changed and every file that reaches one. On the laptop on 2026-11-14 the whole
+      # typecheck took 12.9 s cold and 3.7 s warm, with a fresh mtime on every file. One path per
+      # pnpm-workspace.yaml package glob (workflow-lint.ts holds that).
+      - name: tsc key
+        id: tsc-key
+        run: echo "hash=$(git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
+      - name: restore the tsc cache
+        id: tsc
+        uses: actions/cache/restore@v6
+        with:
+          path: &tsc |
+            apps/*/node_modules/.cache/tsc
+            packages/*/node_modules/.cache/tsc
+            programs/*/node_modules/.cache/tsc
+            docs/tutorials/*/node_modules/.cache/tsc
+            oxlint-plugins/node_modules/.cache/tsc
+            .github/ci/node_modules/.cache/tsc
+            .agents/node_modules/.cache/tsc
+            next/packages/*/node_modules/.cache/tsc
+            next/programs/*/node_modules/.cache/tsc
+            next/apps/*/node_modules/.cache/tsc
+          key: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-${{ github.sha }}
+          restore-keys: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-
+      - name: typecheck
+        run: pnpm typecheck
+      # Each push to main saves its own, so the next pull request starts from the newest.
+      - name: save the tsc cache
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v6
+        with:
+          path: *tsc
+          key: ${{ steps.tsc.outputs.cache-primary-key }}
 
   # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
   # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
@@ -245,17 +272,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
+      - uses: ./.github/actions/pnpm
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
-
-      # Electron fetches its binary the first time it is asked for its path, into this folder.
-      - uses: actions/cache@v6
+      # Electron fetches its binary the first time it is asked for its path, into this folder. It is
+      # saved on main only, 229 MiB a copy on 2026-11-14; its restore took 3 and 5 s (e2e in runs
+      # 43620728687 and 43623635302).
+      - id: electron
+        uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -267,6 +290,12 @@ jobs:
         env:
           SHOTS: ${{ runner.temp }}/e2e-shots
         run: pnpm --filter @kampus/fabrika-app-old e2e
+      # After the run, which fetched the binary.
+      - if: ${{ github.ref == 'refs/heads/main' && steps.electron.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/electron
+          key: ${{ steps.electron.outputs.cache-primary-key }}
       # The trace ruler's labels at widths from 60 to 1600px (apps/fabrika/ruler-e2e.ts): the built
       # renderer in headless Chromium, as shots.ts draws it. The build above made dist/.
       - name: ruler labels
@@ -295,7 +324,7 @@ jobs:
           if-no-files-found: ignore
 
   # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
-  # The tests, split by file over six machines (vitest's `--shard`, each machine
+  # The tests, split by file over six machines, two when only the tooling tests run (vitest's `--shard`, each machine
   # given about the same seconds by vitest.shards.ts). The lane's tests were one
   # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
   # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
@@ -309,23 +338,23 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      # Two machines when only the tooling tests run. On main run 43615844695 they took 68, 111,
+      # 125, 230, 274 and 363 s on six (19.5 machine-min): four files of 124 to 362 s each sat alone
+      # on a machine, and boxrm.test.ts alone, 362 s, sets the shortest a run can be. Placed by
+      # vitest.shards.ts's table and run three files at a time, those 97 files' seconds give two
+      # machines of 353 and 362 s (11.9 machine-min), the same longest wait.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}
     steps:
-      - uses: actions/checkout@v7
+      - name: checkout
+        uses: actions/checkout@v7
         with:
           # `--changed` compares with the pull request's base commit, so the
-          # history must hold it. The whole repository is a few MB.
+          # history must hold it. Blobless, as in changes: `--changed` reads only names.
           fetch-depth: 0
+          filter: blob:none
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      - uses: ./.github/actions/pnpm
 
       # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
       # The runner image has neither, and without them those tests skip.
@@ -350,7 +379,12 @@ jobs:
       # 43493167395, test (1): refused before the unload, ran after it). The sysctl does not reach a
       # named profile, and a `deny` in a profile cannot be allowed back from a local file, so the
       # profile is unloaded where the image has it. 24.04 has none.
+      # Only today's tests need these. No tooling test or script it runs calls expect, zsh, bwrap,
+      # socat or rg, read on 2026-11-14; apt.test.ts names two of them only as arguments to apt.sh,
+      # under a fake apt-get. So the step runs on the flag today's test steps run on, and saves
+      # 11 to 27 s a machine when only the tooling tests run (run 43615844695, test (1) to (6)).
       - name: apt packages
+        if: ${{ needs.changes.outputs.today != 'false' }}
         timeout-minutes: 12
         run: |
           sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
@@ -403,7 +437,8 @@ jobs:
         if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
+          # The matrix's two machines on this flag.
+          SHARD: ${{ matrix.shard }}/2
         run: |
           if [ -n "$BASE" ]; then
             pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
@@ -439,7 +474,9 @@ jobs:
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
         with:
           # `--changed` compares with the pull request's base commit, so the history must hold it.
+          # Blobless, as in changes: `--changed` reads only names.
           fetch-depth: 0
+          filter: blob:none
       - uses: pnpm/action-setup@v6
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
         continue-on-error: true
@@ -448,9 +485,9 @@ jobs:
       - uses: actions/setup-node@v7
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
         continue-on-error: true
+        # No pnpm store cache: it did not pay, and it saved a copy per ref (.github/actions/pnpm).
         with:
           node-version: 26.13.0
-          cache: pnpm
       # No install scripts: listing runs no test, and builds nothing.
       - run: pnpm install --frozen-lockfile --ignore-scripts
         if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
@@ -499,17 +536,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           # The edges step compares the pull request with its merge base, so the history must hold
-          # it. The whole repository is a few MB.
+          # it. Blobless, as in changes: edges fetches each changed file's base text when it reads it.
           fetch-depth: 0
+          filter: blob:none
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
       # FILTER is the paths. On a pull request whose filter is all of next/, the legs job's `files`:
