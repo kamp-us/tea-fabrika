@@ -9,7 +9,7 @@ import { Program, type Refusal } from "@kampus/libfabrika";
 import { programs } from "@kampus/libfabrika/runtime/Programs";
 import { startChild } from "@kampus/libfabrika/runtime/StartChild";
 import { Schema } from "effect";
-import { builtins, type Known, read, run } from "./read.ts";
+import { builtins, type Known, read, toStart } from "./read.ts";
 
 /** The longest line, in string indices: the tty line discipline's own buffer (Linux
  *  `N_TTY_BUF_SIZE`, 4096). Its letter fits one letter row with room to spare. */
@@ -71,7 +71,7 @@ const HELP: Readonly<Record<string, string>> = {
 };
 
 /** What `help` says of a line that starts a program. */
-const RUN = "<program> [as <name>]   start a program; its process is <program>:1 unless you name it";
+const START = "<program> [as <name>]   start a program; its process is <program>:1 unless you name it";
 
 const known = (m: Model): Known => ({ builtins, programs: m.programs });
 
@@ -91,10 +91,10 @@ const says = (m: Model, words: ReadonlyArray<string>): ReadonlyArray<string> => 
 
   // `read` refused every other first word, and `clear` says nothing, so this is `help`.
   if (word === undefined) {
-    return [...builtins.map((b) => HELP[b] ?? b), RUN];
+    return [...builtins.map((b) => HELP[b] ?? b), START];
   }
 
-  const started = run(word, known(m));
+  const started = toStart(word, known(m));
   return [
     HELP[word] ??
       (started === null
@@ -160,7 +160,7 @@ export const fabshMachine = Machine.make({
       }
 
       // A program word. The start goes out from this letter's own step and from no other (L20).
-      const start = run(line, known(m));
+      const start = toStart(line, known(m));
 
       if (start === null) {
         // `read` takes a line that ends at `as` so far, but it names no process yet.

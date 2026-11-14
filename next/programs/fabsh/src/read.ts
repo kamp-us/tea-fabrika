@@ -2,9 +2,9 @@
 // turns a line into spans with roles; the process decides with it, and the tile colors, Tab and the
 // error mark read the same spans, never a regex of their own. Pure: no clock, no service.
 //
-//   line      blank | builtin | run
+//   line      blank | builtin | start
 //   builtin   'help' [word] | 'clear' | 'history' | 'programs'
-//   run       program ['as' name]      program: one known program, by its last part or whole name
+//   start     program ['as' name]      program: one known program, by its last part or whole name
 import { ProcessName } from "@kampus/libfabrika/processes/Process";
 import { Schema } from "effect";
 
@@ -16,7 +16,7 @@ export type Role = typeof Role.Type;
 export const Reason = Schema.Literals(["no_word", "extra", "no_name", "bad_name", "ambiguous"]);
 export type Reason = typeof Reason.Type;
 
-/** One run of a line's characters, `start` to `end` in string indices. Only `unknown` has a reason. */
+/** One stretch of a line's characters, `start` to `end` in string indices. Only `unknown` has a reason. */
 export const Span = Schema.Struct({
   start: Schema.Int,
   end: Schema.Int,
@@ -128,15 +128,15 @@ export const read = (line: string, known: Known): Reading => {
   return extra === undefined ? { spans, expects: [] } : refused(extra, "extra");
 };
 
-/** What a line `read` takes as a run starts: one program, under its name. */
-export type Run = { readonly program: string; readonly name: string };
+/** The start a line asks for, as `read` takes it: one program, under its process's name. */
+export type Start = { readonly program: string; readonly name: string };
 
 /**
  * The start a line asks for, read with `read`: the one program its first word names, under the
- * name after `as`, or `<last part>:1` with no `as`. `null` for a line that is no whole run: a
+ * name after `as`, or `<last part>:1` with no `as`. `null` for a line that is no whole start: a
  * built-in, a refused line, or one that ends at `as` and still waits for its name.
  */
-export const run = (line: string, known: Known): Run | null => {
+export const toStart = (line: string, known: Known): Start | null => {
   const { spans } = read(line, known);
   const [verb, as, name] = spans;
   const first = verb === undefined ? "" : line.slice(verb.start, verb.end);
