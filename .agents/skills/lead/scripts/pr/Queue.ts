@@ -14,7 +14,7 @@
 // it happened. Read through its module: `Queue.add(...)`.
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
-import { type Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
+import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
@@ -205,9 +205,11 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
 });
 
 /** A pull request read once: merged into main at a commit, or why it is not. */
-type Standing =
-  | { readonly stands: "unmerged"; readonly found: Detail; readonly lines: ReadonlyArray<string> }
-  | { readonly stands: "merged"; readonly found: Detail; readonly commit: string };
+const Standing = Schema.TaggedUnion({
+  unmerged: { found: Detail, lines: Schema.Array(Schema.String) },
+  merged: { found: Detail, commit: Schema.String },
+});
+type Standing = typeof Standing.Type;
 
 const standing = Effect.fn("Queue.standing")(function* (
   pr: number,
@@ -225,18 +227,17 @@ const standing = Effect.fn("Queue.standing")(function* (
         : found.state === "CLOSED"
           ? "closed, not merged"
           : "not confirmed merged";
-    return { stands: "unmerged", found, lines: [said(`${stands}; closed no tickets`)] };
+    return Standing.cases.unmerged.make({ found, lines: [said(`${stands}; closed no tickets`)] });
   }
 
   if (found.base !== "main") {
-    return {
-      stands: "unmerged",
+    return Standing.cases.unmerged.make({
       found,
       lines: [said(`merged into ${found.base}, not main; closed no tickets`)],
-    };
+    });
   }
 
-  return { stands: "merged", found, commit: found.mergeCommit };
+  return Standing.cases.merged.make({ found, commit: found.mergeCommit });
 });
 
 /**
@@ -246,7 +247,7 @@ const standing = Effect.fn("Queue.standing")(function* (
 export const closeOnly = Effect.fn("Queue.closeOnly")(function* (a: { readonly repo: string; readonly pr: number }) {
   const at = yield* standing(a.pr);
 
-  if (at.stands === "unmerged") {
+  if (at._tag === "unmerged") {
     return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
   }
 
@@ -268,7 +269,7 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
   const sweeps = yield* Sweeps;
   const at = yield* standing(a.pr);
 
-  if (at.stands === "unmerged") {
+  if (at._tag === "unmerged") {
     return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
   }
 
