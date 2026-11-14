@@ -1,7 +1,7 @@
 ---
 id: 0164
 title: The bot pushes agent branches and opens their pull requests, with no step signature and the owner as co-author, and a step's agent stays in its box
-status: accepted
+status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
 date: 2026-11-13
 tags: [bot, push, pull-request, co-author, box, token, signing, lead, hand-run, security]
 ---
