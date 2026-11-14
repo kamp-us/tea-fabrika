@@ -246,7 +246,13 @@ export const lawShape: CreateRule = {
               for (const check of CHECKS) {
                 checks.add(`${name}.${check}`);
               }
-            } else if (vitest && imported !== null && CHECKS.has(imported) && spec.importKind !== "type") {
+            } else if (
+              vitest &&
+              spec.type === "ImportSpecifier" &&
+              spec.importKind !== "type" &&
+              imported !== null &&
+              CHECKS.has(imported)
+            ) {
               checks.add(name);
             }
           }
