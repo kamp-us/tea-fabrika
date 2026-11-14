@@ -12,6 +12,8 @@
 // - A shared suite file (`SinkTest.ts`, 0062) is read, and a test file that only calls
 //   `SinkTest.suite(...)` holds no test.
 // - A body that calls a function this file declares is read through it; an imported helper is not.
+//   A body given by name is read the same way, so under `type:` an imported one fires.
+// - Each of the five labels meets every line, in its own planted file each run.
 // - `fast-check` under any local name, and `@demlik/tea/pbt`'s runners named or through a namespace.
 // - The shared runner, `property` from a `Testing.test-support.ts` module, named, renamed or through
 //   a namespace. A `property` from any other module, another name from that module, a type-only
@@ -28,11 +30,11 @@
 // - The two names count from a value import of `vitest` or `@effect/vitest`, named, renamed or
 //   through a namespace. Another module, a type-only import and a local function of that name fire.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { MESSAGE, TYPE_MESSAGE } from "./law-shape.ts";
 
 const CODE = "fabrika(law-shape)";
@@ -44,51 +46,10 @@ const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
 type Fire = readonly [number, string];
 type Fires = typeof MESSAGE | typeof TYPE_MESSAGE | null;
 
-/**
- * Lints planted files as `pnpm lint` does, in a fresh folder that holds the repo's own config and
- * plugin folder, and answers the law-shape fires in one of them, each as its line and message.
- */
-const linted = (files: Readonly<Record<string, string>>): ((file: string) => readonly Fire[]) => {
-  const at = realpathSync(mkdtempSync(join(tmpdir(), "law-shape-")));
-
-  try {
-    copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
-    symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
-
-    for (const [path, text] of Object.entries(files)) {
-      mkdirSync(dirname(join(at, path)), { recursive: true });
-      writeFileSync(join(at, path), text);
-    }
-
-    const ran = spawnSync(
-      join(ROOT, "node_modules", ".bin", "oxlint"),
-      [
-        `--config=${join(at, ".oxlintrc.json")}`,
-        "--disable-nested-config",
-        "--no-ignore",
-        "--format=json",
-        ...Object.keys(files),
-      ],
-      { cwd: at, encoding: "utf8", timeout: 60_000, maxBuffer: 2 ** 28 },
-    );
-    const report: {
-      readonly number_of_files: number;
-      readonly diagnostics: ReadonlyArray<{
-        readonly code?: string;
-        readonly filename: string;
-        readonly message: string;
-        readonly labels?: ReadonlyArray<{ readonly span: { readonly line: number } }>;
-      }>;
-    } = JSON.parse(ran.stdout);
-    expect(report.number_of_files, ran.stderr).toBe(Object.keys(files).length);
-    return (file) =>
-      report.diagnostics
-        .filter((d) => d.code === CODE && d.filename === file)
-        .map((d): Fire => [d.labels?.[0]?.span.line ?? 0, d.message])
-        .sort((a, b) => a[0] - b[0]);
-  } finally {
-    rmSync(at, { recursive: true, force: true });
-  }
+/** Lints planted files as `pnpm lint` does, and answers the law-shape fires in one of them, each as its line and message. */
+const linted = async (files: Readonly<Record<string, string>>): Promise<(file: string) => readonly Fire[]> => {
+  const result = await plant(files, (f): Fire => [f.line, f.message]);
+  return (file) => result(CODE, file);
 };
 
 // Source text has no domain Schema: titles are plain words, none of them a label.
@@ -212,6 +173,20 @@ const cases: readonly ((s: Spelling) => readonly [string, Fires])[] = [
   ({ reason }) => [`it("type: ${reason}", () => { expectTypeOf(String.raw\`x\`).toBeString(); });`, TYPE_MESSAGE],
   ({ reason }) => [`it("type: ${reason}", () => { expectTypeOf(import("./helper.ts")).toBeObject(); });`, TYPE_MESSAGE],
   ({ reason }) => [`it("type: ${reason}", function* () { yield 1; expectTypeOf<1>().toBeNumber(); });`, TYPE_MESSAGE],
+  // A template title with `${}` after its label, and a body that runs: labeled, and under type: it fires.
+  ({ label }) => [
+    `it(\`${label}: \${x} opens\`, () => { expect(1).toBe(1); });`,
+    label === "type" ? TYPE_MESSAGE : null,
+  ],
+  ({ id, label }) => [
+    `it(\`${id} ${label}: \${x} opens\`, () => { expect(1).toBe(1); });`,
+    label === "type" ? TYPE_MESSAGE : null,
+  ],
+  // A body given by name: one this file declares is read through, and one imported cannot be, so under
+  // type: it fires.
+  ({ label, reason }) => [`it("${label}: ${reason}", typed);`, null],
+  ({ label, reason }) => [`it("${label}: ${reason}", local);`, label === "type" ? TYPE_MESSAGE : null],
+  ({ label, reason }) => [`it("${label}: ${reason}", helper);`, label === "type" ? TYPE_MESSAGE : null],
 ];
 
 const preamble = (a: string, star: boolean) => [
@@ -223,37 +198,45 @@ const preamble = (a: string, star: boolean) => [
   `const local = () => ${a}.assert(${a}.property(${a}.nat(), (n) => n >= 0));`,
   "const deeper = () => local();",
   "const plain = () => 1;",
+  "const typed = () => { expectTypeOf<1>().toBeNumber(); };",
   `const law = (name: string) => it(name, () => ${a}.assert(${a}.property(${a}.nat(), (n) => n >= 0)));`,
   "const example = (name: string) => it(name, () => {});",
 ];
 
-it("fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling", () => {
-  fc.assert(
-    fc.property(
+// Every run plants one file per label, so each of the five labels meets every case line in each run,
+// whatever the seed draws.
+it("fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling", async () => {
+  await fc.assert(
+    fc.asyncProperty(
       fc.record({
         a: alias,
         id,
         star: fc.boolean(),
         title: words,
         reason: words,
-        label: fc.constantFrom(...LABELS),
         order: fc.shuffledSubarray(
           cases.map((_, i) => i),
           { minLength: cases.length },
         ),
       }),
-      ({ a, id, star, title, reason, label, order }) => {
+      async ({ a, id, star, title, reason, order }) => {
         const head = preamble(a, star);
-        const lines = order.flatMap((i) => {
-          const make = cases[i];
-          return make === undefined ? [] : [make({ a, id, title, label, reason })];
+        const files = LABELS.map((label) => {
+          const lines = order.flatMap((i) => {
+            const make = cases[i];
+            return make === undefined ? [] : [make({ a, id, title, label, reason })];
+          });
+          const text = [...head, ...lines.map(([line]) => line)].join("\n");
+          const expected = lines.flatMap(([, fires], i): Fire[] =>
+            fires === null ? [] : [[head.length + i + 1, fires]],
+          );
+          return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
         });
-        const text = [...head, ...lines.map(([line]) => line)].join("\n");
-        const expected = lines.flatMap(([, fires], i): Fire[] =>
-          fires === null ? [] : [[head.length + i + 1, fires]],
-        );
-        const path = "next/packages/libfabrika/src/thing.test.ts";
-        expect(linted({ [path]: text })(path), text).toEqual(expected);
+        const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+
+        for (const { path, text, expected } of files) {
+          expect(result(path), text).toEqual(expected);
+        }
       },
     ),
     runs,
@@ -278,9 +261,9 @@ const checks: readonly (readonly [string, string, boolean])[] = [
   ["const expectTypeOf = () => ({ toEqualTypeOf: () => true });", "expectTypeOf<1>().toEqualTypeOf<1>();", true],
 ];
 
-it("counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace", () => {
-  fc.assert(
-    fc.property(fc.record({ reason: words, nested: fc.boolean() }), ({ reason, nested }) => {
+it("counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ reason: words, nested: fc.boolean() }), async ({ reason, nested }) => {
       const files = checks.map(([source, call, fires], i) => {
         const law = `it("type: ${reason}", () => { ${call} });`;
         const text = [
@@ -290,7 +273,7 @@ it("counts expectTypeOf and assertType only from a value import of vitest or @ef
         ].join("\n");
         return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
       });
-      const result = linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
       const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
       const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]));
       expect(fired, files[0]?.text).toEqual(expected);
@@ -317,9 +300,9 @@ const sources: readonly (readonly [string, string, boolean])[] = [
   ["const property = (a: unknown, law: unknown, p: unknown) => 1;", "property", true],
 ];
 
-it("counts the shared runner, property from Testing.test-support.ts, as a property, and no other property", () => {
-  fc.assert(
-    fc.property(fc.record({ title: words, nested: fc.boolean() }), ({ title, nested }) => {
+it("counts the shared runner, property from Testing.test-support.ts, as a property, and no other property", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ title: words, nested: fc.boolean() }), async ({ title, nested }) => {
       const files = sources.map(([source, call, fires], i) => {
         const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
         const body = nested ? `Effect.gen(function* () { yield* ${run}; })` : run;
@@ -332,7 +315,7 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
         ].join("\n");
         return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
       });
-      const result = linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
       const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
       const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
       expect(fired, files[0]?.text).toEqual(expected);
@@ -341,24 +324,24 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
   );
 }, 120_000);
 
-it("reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone", () => {
-  fc.assert(
-    fc.property(fc.record({ title: words, label: fc.constantFrom(...LABELS) }), ({ title, label }) => {
+it("reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ title: words }), async ({ title }) => {
       const text = [
         'import { describe, expectTypeOf, it } from "vitest";',
-        `it("${label}: kept", () => ${ok(label)});`,
+        ...LABELS.map((label) => `it("${label}: kept", () => ${ok(label)});`),
         `export const suite = (sql: unknown) => describe("s", () => { it("${title}", () => {}); });`,
       ].join("\n");
       const read = ["next/a.test.ts", "next/a.test.tsx", "next/a/SinkTest.ts", ".agents/skills/x/a.test.ts"];
       const left = ["next/a.ts", "packages/a.test.ts", "apps/a.test.ts", "programs/a.test.ts", "docs/a.test.ts"];
       const caller = "next/a/sink.test.ts";
-      const result = linted({
+      const result = await linted({
         ...Object.fromEntries([...read, ...left].map((path) => [path, text])),
         [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
       });
 
       for (const path of read) {
-        expect(result(path), path).toEqual([[3, MESSAGE]]);
+        expect(result(path), path).toEqual([[LABELS.length + 2, MESSAGE]]);
       }
 
       for (const path of [...left, caller]) {
