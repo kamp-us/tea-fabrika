@@ -84,10 +84,15 @@ At the laptop, in the app or a tab, a person can:
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
   ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
   the member whose line caused it, never against `fabsh`'s program
-  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
-  The start still checks only program to program, `StartGrant` in
-  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
-  `StartGrant` is the owner's open question;*
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: the check
+  is built ([PR 1231](https://github.com/kamp-us/tea-fabrika/pull/1231), the desk lane's S1). The
+  runner checks a start that a member's letter caused against that member, never the program that
+  asked, with `mayStart` in `next/packages/libfabrika/src/access/StartRule.ts`. Its first rule lets
+  any member start any program. A start with no member's letter behind it still checks the
+  program-to-program `StartGrant`. `fabsh` is not built, so no line typed in it starts anything yet.
+  Ticket 953 moves this check onto the one permission system as its first real use
+  ([0526](../../.decisions/0526-one-rebac-permission-system.md)), and carries the member down a chain
+  of starts ([0531](../../.decisions/0531-a-start-carries-its-member-down.md));*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
@@ -203,27 +208,42 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Designed by: [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md),
   [0276](../../.decisions/0276-a-tile-shows-one-process.md), 0278, 0272,
   [0267](../../.decisions/0267-commands-and-one-mode-field.md), 0279 as 0159 amends it, and P42's row.
-- In code now: `start_child` and the one-pair start right (above). No desk program, no prefix and no
-  focus code.
-- *2026-11-14: the desk lane's slice S1 is built on branch `fabrikalfa/cloud-desk-tezgah`, not yet
-  merged: a start a member's letter caused is checked against that member with `mayStart`, which
-  lets any member start any program (0170), and `stop_child`, OTP's `terminate_child` with
-  `shutdown`. The Worker's process side does not wire `stop_child` yet.*
-- *2026-11-14: the desk lane's slice S2a is built on the same branch, not yet merged:
-  `fabrika/tezgah` runs in the brain, one process per person, booted for the founder; it splits
-  and closes tiles, a split's tile entering the layout only once its process started, and a close
-  stopping a process tezgah started. A headless window started with a desk follows tezgah's view
-  in place of a fixed tile list, and the Worker's process side now wires `stop_child`.*
-- *2026-11-14: the desk lane's slice S2b is built on the same branch, not yet merged: the browser
-  tab draws workspace 1 of the founder's tezgah, one region per tile named by `tileName`; `C-b %`,
-  `C-b "` and `C-b x` work through the tab's own prefix, a close of a tile tezgah started asks
-  `close t<n>? (y/n)`, and a split that would leave a tile under 220x120 is refused in the tab.*
-- *2026-11-14: the desk lane's slice S3 is built on the same branch, not yet merged: `C-b o`,
-  `C-b ;`, `C-b h j k l`, the arrows after the prefix, F6 and Shift-F6 where the backend has them,
-  a click and Tab move focus at once in the tab (0167), tezgah confirms, a second tab follows, and
-  a return to a tile lands on its cursor (0165). The screen reader run of the cursor is owed.*
-- Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
-  and focus as a process in the brain (0274); each window running the prefix itself (0278).
+- In code now ([PR 1231](https://github.com/kamp-us/tea-fabrika/pull/1231), the desk lane, slices
+  S1 to S3; its plan is [`lanes/desk-PLAN.md`](./lanes/desk-PLAN.md)):
+  - **The start check (S1).** A start a member's letter caused is checked against that member
+    (0170), as the done line above says. This is where the start check meets the one permission
+    system ([0526](../../.decisions/0526-one-rebac-permission-system.md)): ticket 953 moves the
+    check onto it.
+  - **`stop_child` (S1).** A program may end its own child, as OTP's `terminate_child`: the child
+    ends with `shutdown` and each watcher gets a `DOWN`. Another program's child is `not_child`,
+    and a child already ended is `noproc`. It works on the real instance too.
+  - **tezgah in the brain (S2a).** `fabrika/tezgah` runs in the brain, one process per person,
+    `tezgah:<the person id's body>`, and the boot starts the founder's
+    ([0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md)). It holds each
+    workspace's layout and focus. A split's new tile enters the layout only once its process has
+    started, and a close stops the tile's process when tezgah started it. A window started with
+    the `tezgah` option takes its tiles from tezgah's view, never from a fixed list. A window whose
+    person has no tezgah says "tezgah is not running for you yet" and reads tezgah again on its
+    next dial.
+  - **The tab's prefix, split and close (S2b).** Each window runs the prefix itself (0278), with
+    one commands table beside the program. In the browser tab, `C-b %` and `C-b "` split, and
+    `C-b x` closes. A close of a tile tezgah started asks `close t<n>? (y/n)` first. A split that
+    would leave a tile under 220x120 is refused in the tab, in words, and nothing is sent.
+  - **Focus moves and cursors (S3).** `C-b o`, `C-b ;`, `C-b h j k l`, the arrows after the
+    prefix, F6 and Shift-F6 where the backend has them, a click and Tab all move focus at once in
+    the window ([0167](../../.decisions/0167-focus-moves-in-the-window-first.md)). tezgah confirms
+    each move, and a second tab follows. A return to a tile lands on its cursor
+    ([0165](../../.decisions/0165-a-tile-keeps-its-cursor.md)).
+- Not built:
+  - P42 past slice 1.
+  - The fold (the desk lane's S4): a smaller second window folds tiles under 220x120 into strips
+    ([0277](../../.decisions/0277-size-belongs-to-the-viewer.md)).
+  - The Electron app (S5): the same suite and shots in Electron, after P19 slice 3. The row counts
+    as done only after S5 (0159's third amendment).
+  - A start with no member's letter behind it acting as the member its requester was checked
+    against, down the whole chain of starts
+    ([0531](../../.decisions/0531-a-start-carries-its-member-down.md)). Ticket 953 builds it.
+  - Owed by a person: the screen reader run of the cursor (0165), VoiceOver on the Mac.
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
   two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program when a start right names
   one exact pair (open; no decision found). Whether the desk's commands need the palette now: 0278 says every command also

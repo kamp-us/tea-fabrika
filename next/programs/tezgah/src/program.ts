@@ -68,11 +68,12 @@ const Msg = Schema.Union([
 ]);
 type Msg = typeof Msg.Type;
 
-/** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. */
+/** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. As on the
+ *  wire, `workspace` is a workspace's number; a split's workspace is kept by its id, as `space`. */
 const Starting = Schema.TaggedUnion({
   attach: { workspace: Schema.Int, tile: Workspace.TileId, name: Schema.String },
   split: {
-    workspace: Workspace.WorkspaceId,
+    space: Workspace.WorkspaceId,
     at: Workspace.TileId,
     dir: Workspace.Dir,
     tile: Workspace.TileId,
@@ -143,7 +144,7 @@ const placed = (m: Model, s: Starting, answer: Started): Model => {
     return { ...rest, workspaces: [...m.workspaces, space], tiles: [...m.tiles, made(m, s, answer)], next: m.next + 1 };
   }
 
-  const w = m.workspaces.find((x) => x.id === s.workspace);
+  const w = m.workspaces.find((x) => x.id === s.space);
 
   if (w === undefined) {
     return rest;
@@ -205,7 +206,7 @@ export const tezgahMachine = Machine.make({
 
       const name = Workspace.childName(NEW_TILE, msg.tile);
       const split = Starting.cases.split.make({
-        workspace: w.id,
+        space: w.id,
         at: msg.from,
         dir: DIRS[msg.does],
         tile: msg.tile,

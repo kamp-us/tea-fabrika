@@ -34,6 +34,9 @@ type PageProps = {
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
 const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
+/** Whether the window's read of its person's tezgah found no process: the boot starts only the
+ *  founder's tezgah, so any other person's window finds none until one is started for them. */
+const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
 const pickPrefix = (m: WindowModel) => m.prefix;
 const pickPolite = (m: WindowModel) => m.polite;
 
@@ -128,6 +131,10 @@ const TileBody = ({
     />
   );
 };
+
+/** What a window says while its person has no tezgah process, in its status bar and polite region,
+ *  never "Opening": the window reads tezgah again on its next dial (plan amendment 11). */
+const NO_TEZGAH = "tezgah is not running for you yet";
 
 /** What a split with no room says, in the window that asked, as tmux refuses one. */
 const noRoom = (tile: Pick<TezgahTile, "n">): string => `No room to split t${tile.n}`;
@@ -267,7 +274,8 @@ const Desk = (props: PageProps) => {
   const [client] = useRuntime(props.run, pickTezgah);
   const [prefix] = useRuntime(props.run, pickPrefix);
   const [polite] = useRuntime(props.run, pickPolite);
-  const view = client === null ? null : optimisticState(client);
+  const [none] = useRuntime(props.run, pickNoTezgah);
+  const view = none || client === null ? null : optimisticState(client);
   const space = view?.workspaces.find((w) => w.n === client?.workspace);
   const area = useSize(send);
   const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
@@ -283,8 +291,9 @@ const Desk = (props: PageProps) => {
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
   const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
-  const line =
-    asked !== undefined
+  const line = none
+    ? NO_TEZGAH
+    : asked !== undefined
       ? question(asked)
       : prefix._tag === "armed"
         ? `prefix  ${prefixLine(props.keys)}`
@@ -298,7 +307,8 @@ const Desk = (props: PageProps) => {
       <div className="area" ref={area}>
         {view === null || space === undefined ? (
           <main className="desk">
-            <p className="tile-empty">Opening</p>
+            {/* With no tezgah the status bar says so, once; the empty desk repeats nothing. */}
+            {none ? null : <p className="tile-empty">Opening</p>}
           </main>
         ) : (
           <Layout
@@ -330,6 +340,7 @@ const Page = (props: PageProps) => {
   const [trouble] = useRuntime(props.run, (m) => m.trouble);
   const [prefix] = useRuntime(props.run, pickPrefix);
   const [polite] = useRuntime(props.run, pickPolite);
+  const [none] = useRuntime(props.run, pickNoTezgah);
   useKeys(props.run, props.keys, send);
   const view = client === null ? null : optimisticState(client);
   const named = (id: string) => view?.tiles.find((t) => t.id === id);
@@ -340,6 +351,7 @@ const Page = (props: PageProps) => {
   });
   const roomless = polite === null ? undefined : named(polite.tile);
   const words = [
+    ...(none ? [NO_TEZGAH] : []),
     ...refused,
     ...(prefix._tag === "armed" ? ["prefix"] : []),
     ...(roomless === undefined ? [] : [noRoom(roomless)]),
