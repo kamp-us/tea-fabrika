@@ -6,7 +6,7 @@
 // What these laws hold the page to, from the plan: `/` boots `startWindow` outside React and mounts
 // `Window` under Strict Mode; the screens by link state are a waiting screen with the code, the
 // fingerprint and the one `grant.ts client` line, the desk with one named tile region per tile (the
-// checklist `checklist:1`: a box per item named by the item, a `Remove <name>` button per item, and a
+// checklist `checklist:1`, named `checklist, t1` by `tileName` since Desk S2b: a box per item named by the item, a `Remove <name>` button per item, and a
 // text field named by the add input's description, with its refusal words tied to it by
 // `aria-describedby`), a removed screen with an Ask again button, and a blocked screen. A lost link dims
 // the tile and makes it `inert`.
@@ -45,7 +45,11 @@ import {
 import { stored } from "./stored.test-support.ts";
 
 const SEED = 119120;
+/** The registered name of the process the window's one tile shows: its streams are read by it. */
 const NAME = "checklist:1";
+/** format: that tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program first, then
+ *  `t<n>`. The window draws workspace 1 of the founder's tezgah, whose first tile, t1, shows NAME. */
+const REGION = "checklist, t1";
 /** How a red law ends: at its first failing run, with that run's seed, path and moves, and no
  *  shrinking. Each retry of a shrink starts a brain and a browser again and may wait 30 s for what
  *  never shows, so a shrink outlasts CI's job. The seed and the run counts stay as they are. */
@@ -215,11 +219,11 @@ const useChecklist = (
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
     const words = tabs.map(() => "");
-    yield* settle(tile(tabs[0]!.page, NAME).shown, (r) => r.length === 0, "a fresh brain's list is empty");
+    yield* settle(tile(tabs[0]!.page, REGION).shown, (r) => r.length === 0, "a fresh brain's list is empty");
 
     for (const p of moves) {
       const at = p.tab % tabs.length;
-      const t = tile(tabs[at]!.page, NAME);
+      const t = tile(tabs[at]!.page, REGION);
       // A tab whose last answer was lost has dialed again: its tile takes no press until it is live.
       yield* t.live;
       const shown = yield* t.shown;
@@ -260,7 +264,7 @@ const useChecklist = (
     for (const [at, t] of tabs.entries()) {
       const want = foldRows(model);
       yield* settle(
-        Effect.all([tile(t.page, NAME).shown, tile(t.page, NAME).refusal], { concurrency: 1 }),
+        Effect.all([tile(t.page, REGION).shown, tile(t.page, REGION).refusal], { concurrency: 1 }),
         ([r, said]) => JSON.stringify(r) === JSON.stringify(want) && said === words[at],
         `tab ${at} at the end`,
       );
@@ -337,16 +341,16 @@ describe("L14: the first window (p29)", () => {
           // The person's grant brings both tabs online on the same socket: no reload, no new dial.
           const before = first.seen.sockets.length;
           expect((yield* grant(h, w1)).ok).toBe(true);
-          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
-          yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, REGION).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(second.page, REGION).field.waitFor({ timeout: 30_000 }));
           expect(first.seen.sockets.length, "online without a new dial").toBe(before);
           expect(
-            yield* Effect.promise(() => tile(first.page, NAME).region.getAttribute("inert")),
+            yield* Effect.promise(() => tile(first.page, REGION).region.getAttribute("inert")),
             "an online tile is live",
           ).toBeNull();
           // A reload uses the same key and needs no new grant.
           yield* Effect.promise(() => first.page.reload());
-          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, REGION).field.waitFor({ timeout: 30_000 }));
           expect(
             yield* Effect.promise(() => first.page.locator("body").innerText()),
             "a reload shows no code",
@@ -393,7 +397,7 @@ describe("L15: use in two tabs (W2)", () => {
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
                 tabs,
-                (t) => Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 })),
+                (t) => Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })),
                 { concurrency: 1 },
               );
               const settled = tabs.map(() => 0);
@@ -514,9 +518,9 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 yield* grant(h, w);
                 // A sentinel item name, added twice: the second add is refused `taken`. The name is
                 // input text, so the page may show it but no row, record, URL or console line may.
-                const field = tile(t.page, NAME).field;
+                const field = tile(t.page, REGION).field;
                 yield* Effect.promise(() => field.waitFor({ timeout: 30_000 }));
-                yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
+                yield* Effect.promise(() => tile(second.page, REGION).field.waitFor({ timeout: 30_000 }));
                 yield* observe;
                 yield* useChecklist([t, second], moves, ["milk", "bread", "eggs"], observe);
 
@@ -526,13 +530,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
 
                   if (n === 0) {
                     yield* settle(
-                      tile(t.page, NAME).shown,
+                      tile(t.page, REGION).shown,
                       (shown) => shown.some((row) => row.name === `itm_${item}`),
                       "the sentinel item lands",
                     );
                   } else {
                     yield* settle(
-                      tile(t.page, NAME).refusal,
+                      tile(t.page, REGION).refusal,
                       (words) => words === checklistWindow.refused!({ type: "add", name: `itm_${item}` }, "taken"),
                       "the duplicate sentinel is refused",
                     );
@@ -542,7 +546,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 yield* Effect.promise(() => t.page.reload());
-                yield* Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 }));
+                yield* Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 }));
                 yield* observe;
                 const r = yield* reader(h, dev);
                 const revoked = yield* remove(h, dev, tt);
