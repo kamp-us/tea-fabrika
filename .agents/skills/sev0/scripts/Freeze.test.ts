@@ -85,7 +85,7 @@ describe("verdict", () => {
   });
 
   it.prop(
-    "property: a merge queue run is kept whatever its branch and the allow list, so nothing leaves the queue",
+    "property: a merge queue run is kept whatever its branch and the allow list, so the script never takes an entry out of the queue",
     { run: Run, allow: Schema.Array(Schema.String) },
     ({ run, allow }) => Freeze.verdict({ ...run, event: "merge_group" }, allow)._tag === "keep",
   );
