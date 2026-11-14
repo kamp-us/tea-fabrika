@@ -86,6 +86,8 @@ type Script = {
   open: boolean;
   send: boolean;
   waiting?: boolean;
+  /** The live process every `ledger.read` names; `PID` unless a law picks its own. */
+  pid?: string;
   /** The malformed frames L12 sends once the page is online, in order. */
   junk: ReadonlyArray<(ids: ReadonlyMap<string, number | string>) => string>;
 };
@@ -179,7 +181,9 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
       }
     } else if (frame.method === "ledger.read") {
       result({
-        entries: [{ _tag: "started", by: "brain", body: { process: PID, name: "checklist:1" }, rev: 1, pos: 1 }],
+        entries: [
+          { _tag: "started", by: "brain", body: { process: script.pid ?? PID, name: "checklist:1" }, rev: 1, pos: 1 },
+        ],
       });
     } else if (frame.method === "view.open" && script.open) {
       result({ rev: 0, view: list(0) });
@@ -1257,5 +1261,97 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         ).toBe(1);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// --- P18 slice 2, next/ (ticket 979): the window's two new calls on the wire ------------------------
+//
+// The shape this law holds `client/WindowStart.ts` to, from the approved plan (the build may add
+// more): the start passes its tab in the window's ctx, `{tiles, tab}`, the same tab its dial URL
+// ends in, and maps the window's two new calls: `wait {stream, after}` is `ledger.wait {stream,
+// after}` and `monitor {ref, pid}` is `process.monitor {ref, pid}`, each a JSON-RPC 2.0 call whose
+// id is the write's own.
+
+/** Process ids a door could name for the checklist, so the monitor's pid is the read's. */
+const LIVE = Schema.Literals([
+  "process_01m6v5270hf3c8x2q7w9z4k5mn",
+  "process_0000000000e008000000000000",
+  "process_0000000000e00800000000000z",
+]);
+
+/** The real window, with every write Cmd its update hands the start kept, in order. */
+const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => ({
+  ...window,
+  update: Object.fromEntries(
+    Object.entries(window.update).map(([type, handler]) => [
+      type,
+      (s: never, m: never) => {
+        const [next, cmds] = (handler as (s: never, m: never) => readonly [unknown, ReadonlyArray<{ type: string }>])(
+          s,
+          m,
+        );
+        writes.push(...cmds.filter((c): c is ReturnType<typeof write> => c.type === "write"));
+        return [next, cmds];
+      },
+    ]),
+  ) as typeof window.update,
+});
+
+describe("P18 slice 2: the start's wire for wait and monitor", () => {
+  it.effect.prop(
+    "format: the window's wait is written as ledger.wait {stream, after} on client:<the dial's tab>/inbox and its monitor as process.monitor {ref, pid} before the view.open of the same pid, each under its write's own id",
+    { pid: LIVE },
+    ({ pid }) =>
+      Effect.gen(function* () {
+        const script: Script = { pong: true, open: false, send: false, junk: [], pid };
+        const door = peer(script);
+        const writes: Array<ReturnType<typeof write>> = [];
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+        const booting = yield* start({
+          tiles,
+          window: recorded(writes),
+          build: BUILD,
+          origin: ORIGIN,
+          client: BROWSER,
+        }).pipe(Effect.provide(services(door.socket, [])), Scope.provide(scope));
+        const run = yield* booting.ready;
+
+        for (let n = 0; n < 6; n++) {
+          yield* door.tick(500);
+        }
+
+        expect(run.getState().link._tag, "the page went online").toBe("online");
+        const tab = decodeURIComponent(door.dials[0]!.split("/").at(-1)!);
+        const frames = door.sent.flatMap((t) => Option.toArray(decodeFrame(t)));
+        const waits = writes.filter((w) => w.call._tag === "wait");
+        const monitors = writes.filter((w) => w.call._tag === "monitor");
+        expect(waits.length, "the window waited on its inbox").toBeGreaterThan(0);
+        expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
+
+        for (const w of [...waits, ...monitors]) {
+          const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
+          const params =
+            call._tag === "wait"
+              ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }
+              : { method: "process.monitor", params: { ref: call["ref"], pid: call["pid"] } };
+          expect(
+            door.sent.map((t) => JSON.parse(t) as unknown).filter((f) => Reflect.get(Object(f), "id") === w.id),
+            `the frame of write ${w.id}`,
+          ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
+        }
+
+        expect(
+          waits.map((w) => Reflect.get(w.call, "stream")),
+          "the wait is on the dial's own tab's inbox",
+        ).toContain(`client:${tab}/inbox`);
+        const monitored = frames.findIndex((f) => f.method === "process.monitor");
+        const opened = frames.findIndex((f) => f.method === "view.open");
+        expect(Reflect.get(Object(frames[monitored]?.params), "pid"), "the monitor names the read's pid").toBe(pid);
+        expect(opened, "the open went out").toBeGreaterThan(-1);
+        expect(monitored, "the monitor goes before the open").toBeLessThan(opened);
+        expect(Reflect.get(Object(frames[opened]?.params), "pid")).toBe(pid);
+        yield* Scope.close(scope, Exit.void);
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    { arbitrary: { seed: SEED, runs: 12 } },
   );
 });

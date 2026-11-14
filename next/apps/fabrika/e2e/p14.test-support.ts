@@ -492,6 +492,9 @@ export const tile = (page: Page, name: string) => {
     box: (item: string) =>
       region.locator("label").filter({ has: page.getByRole("checkbox", { name: item, exact: true }) }),
     remove: (item: string) => region.getByRole("button", { name: `Remove ${item}`, exact: true }),
+    /** The words of the tile's state slot as a person reads them: `Online`, `Ended (crashed)` and so on. */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's innerText is a Promise
+    state: Effect.promise(() => region.locator(".tile-state").innerText()),
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>
