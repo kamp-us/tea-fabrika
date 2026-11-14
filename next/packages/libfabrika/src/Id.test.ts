@@ -159,6 +159,11 @@ const increasing = (ids: ReadonlyArray<string>): void => {
 
 const compare = (left: string, right: string): -1 | 0 | 1 => (left < right ? -1 : left > right ? 1 : 0);
 
+/** A stand-in for `crypto.getRandomValues` that fails as the platform's does: it throws. */
+const refuses = (marker: string) => (): never => {
+  throw new Error(marker);
+};
+
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock }));
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 128 }));
 const Prefix = Schema.String.check(Schema.isPattern(/^[a-z](?:[a-z_]{0,61}[a-z])?$/));
@@ -856,9 +861,7 @@ describe("T518 Id order and generation", () => {
     { at: Time, marker: Schema.String },
     ({ at, marker }) =>
       Effect.gen(function* () {
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
-          throw new Error(marker);
-        });
+        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker));
 
         try {
           yield* TestClock.setTime(at);

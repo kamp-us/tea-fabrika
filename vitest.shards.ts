@@ -339,7 +339,6 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/settings/Toml.types.test.ts": 0.0,
   "next/packages/libfabrika/src/settings/TomlEdit.test.ts": 3.8,
   "next/packages/libfabrika/src/settings/TomlParser.test.ts": 0.2,
-  "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0.0,
   "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": 0.2,
   "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.2,
   "next/packages/libfabrika/src/telemetry/Records.test.ts": 5.2,
