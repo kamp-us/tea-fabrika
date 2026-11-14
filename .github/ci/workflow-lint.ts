@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { gated } from "./required.mjs";
+import { gated, sized } from "./required.mjs";
 
 export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
 export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
@@ -78,15 +78,23 @@ const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/
 
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
-// vitest.shards.test.ts (E4) pins N from measured seconds.
+// vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is the legs job's `shards`,
+// else its fallback, the full matrix: what a run that is not sized runs (legs.ts).
 const E2E_PREFIX = "e2e-";
 const VITEST_LEGS = ["1", "2", "3", "4", "5"];
 const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+const SIZED_SHARDS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|'(.*)'\)$/s;
 
-/** A job's matrix legs as the workflow wrote them, numbers and strings kept apart. */
+/** The fallback in next's `fromJSON(needs.legs.outputs.shards || '<legs>')`, numbers and strings kept apart. */
 const legs = (job: Record<string, unknown>): unknown[] => {
-  const shard = map(map(job["strategy"])["matrix"])["shard"];
-  return Array.isArray(shard) ? shard : [];
+  const fallback = SIZED_SHARDS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]))?.[1];
+
+  try {
+    const parsed: unknown = JSON.parse(fallback ?? "");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
@@ -97,12 +105,31 @@ const numbered = (all: readonly unknown[]): string[] =>
 const ends = (all: readonly unknown[]): string[] =>
   all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
 
+// When the legs job sizes next: a pull request that tests all of next/, whose changes passed.
+const SIZED =
+  "needs.changes.result=='success'&&needs.changes.outputs.next!='false'&&github.event_name=='pull_request'&&(needs.changes.outputs.filter||'next/')=='next/'";
+
+const LEGS_OUTPUTS = ["shards", "vitest", "e2e", "next"];
+
+const SIZE_ENV = {
+  EVENT: `\${{ github.event_name }}`,
+  FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
+  BASE: `\${{ github.event.pull_request.base.sha }}`,
+};
+
+// A leg's `--shard`: `${{ matrix.shard }}/${{ needs.legs.outputs.<kind> || <full count> }}`, so a sized
+// run divides by its own count of that kind, and every other run by the full matrix's.
+const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
+
+const denominator = (kind: "vitest" | "e2e", full: number) =>
+  String.raw`\$\{\{\s*needs\.legs\.outputs\.${kind}\s*\|\|\s*${full}\s*\}\}`;
+
 const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 
-/** The next job's vitest legs in a workflow's text, for the law on how the table splits. */
+/** The next job's full vitest legs in a workflow's text, for the law on how the table splits. */
 export const vitestLegs = (text: string): string[] => numbered(legs(nextJob(text)));
 
-/** The next job's end-to-end legs in a workflow's text, for the law on how many there are. */
+/** The next job's full end-to-end legs in a workflow's text, for the law on how many there are. */
 export const e2eLegs = (text: string): string[] => ends(legs(nextJob(text)));
 
 /** The next job's `timeout-minutes` in a workflow's text, for the same law: a leg gets half of it. */
@@ -173,14 +200,19 @@ export const lintWorkflow = (text: string): string[] => {
     ratchets[0]?.["continue-on-error"] ===
       undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
 
+  // A sized job (next) also needs its sizer, and skips on that one's false flag too (required.mjs).
   for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
-    require(needs === "changes" ||
-      (Array.isArray(needs) && needs.length === 1 && needs[0] === "changes"), `${name} needs changes`);
+    const sizer = Object.hasOwn(sized, name) ? sized[name] : undefined;
+    const expected = sizer === undefined ? ["changes"] : ["changes", sizer];
+    require((sizer === undefined && needs === "changes") ||
+      JSON.stringify(needs) === JSON.stringify(expected), `${name} needs ${expected.join(" and ")}`);
     require(compact(job["if"]) ===
       compact(
-        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')`,
+        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')${
+          sizer === undefined ? "" : ` && needs.${sizer}.outputs.${name} != 'false'`
+        }`,
       ), `${name} must run after classifier failure and skip only its false flag`);
   }
 
@@ -396,8 +428,11 @@ export const lintWorkflow = (text: string): string[] => {
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
   require(!("name" in nextJob), "next keeps the default matrix check names");
-  // E1. The end-to-end legs `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all
-  // strings. The count N is E4's, in vitest.shards.test.ts; here only its shape and its `/N`.
+  // E1. The matrix is `fromJSON(needs.legs.outputs.shards || '<full>')`: on a pull request that tests
+  // all of next/ the legs job's sized legs, else the full matrix. The full one is the end-to-end legs
+  // `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all strings. The count N is E4's,
+  // in vitest.shards.test.ts; here only its shape and its `/N`. The sized legs are legs.ts's
+  // `shards`, the same shape cut shorter (legs.test.ts).
   // Plants (T967), each run once on check.yaml and restored, each exit 1: drop e2e-2 and keep `/2`
   // (E2's count error); `e2e-2, e2e-1` (E1); a leg named plain `e2e` (E1 and E2); `/3` with two legs
   // (E2); the end-to-end step's guard dropped (E2); `--shard` dropped (E2's command); shard times back
@@ -448,7 +483,7 @@ export const lintWorkflow = (text: string): string[] => {
     compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
   // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
   require(typeof shard === "string" &&
-    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${VITEST_LEGS.length}$`).test(
+    new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
   require(compact(map(testStep?.["env"])["FILTER"]) ===
@@ -457,7 +492,7 @@ export const lintWorkflow = (text: string): string[] => {
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
   require(typeof e2eShard === "string" &&
-    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${e2eCount}$`).test(
+    new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
 
@@ -496,6 +531,40 @@ export const lintWorkflow = (text: string): string[] => {
     require(matches.length === 1 &&
       compact(matches[0]?.["if"]) ===
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
+  }
+
+  // S1. The legs job (legs.ts) runs after changes on every run that is not canceled, so next always
+  // has its answer. Each of its steps runs only on a pull request that tests all of next/ and whose
+  // changes passed. Everywhere else it prints nothing, so next runs the full matrix: the merge queue
+  // and main always do. Its setup and its sizing may fail without failing it, so a failure there is
+  // the full matrix too, never a skipped next.
+  const sizer = map(jobs["legs"]),
+    sizeSteps = steps(sizer),
+    sizeOutputs = map(sizer["outputs"]);
+  require(sizer["needs"] === "changes" &&
+    compact(sizer["if"]) === "!cancelled()" &&
+    sizer["continue-on-error"] === undefined, "legs runs after changes on every run that is not canceled");
+  require(Object.keys(sizeOutputs).length === LEGS_OUTPUTS.length &&
+    LEGS_OUTPUTS.every(
+      (name) => compact(sizeOutputs[name]) === `steps.size.outputs.${name}`,
+    ), `legs exposes ${LEGS_OUTPUTS.join(", ")} from its size step, and nothing else`);
+  require(sizeSteps.length > 0 &&
+    sizeSteps.every(
+      (s) => compact(s["if"]) === SIZED,
+    ), "every legs step runs only on a pull request that tests all of next/");
+  const sizeRuns = sizeSteps.filter((s) => "run" in s);
+  const size = sizeRuns[1];
+  require(sizeRuns.length === 2 &&
+    sizeRuns[0]?.["run"] === "pnpm install --frozen-lockfile --ignore-scripts" &&
+    size?.["id"] === "size" &&
+    size["run"] === "node .github/ci/legs.ts", "legs installs, then runs legs.ts as its size step");
+  require(sizeSteps.every(
+    (s) =>
+      (typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@")) || s["continue-on-error"] === true,
+  ), "a failed legs setup or sizing fails open to the full matrix");
+
+  for (const [key, expected] of Object.entries(SIZE_ENV)) {
+    require(map(size?.["env"])[key] === expected, `legs's size step gets ${key} through env`);
   }
 
   return errors;
