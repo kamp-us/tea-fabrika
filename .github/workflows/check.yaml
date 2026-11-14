@@ -155,8 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # pnpm, Node and the pnpm store main saved (.github/actions/pnpm). Only the typecheck and e2e
-      # jobs save it, on a push to main.
+      # pnpm and Node, with no store cache: restoring one did not pay (.github/actions/pnpm).
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -215,20 +214,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - id: pnpm
-        uses: ./.github/actions/pnpm
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # This job saves the Linux pnpm store, once per lockfile, on a push to main only. A store
-      # restored from an older lockfile keeps packages this one no longer names; prune drops them,
-      # so the saved copy stays this lockfile's size.
-      - if: ${{ github.ref == 'refs/heads/main' && steps.pnpm.outputs.hit != 'true' }}
-        run: pnpm store prune
-      - if: ${{ github.ref == 'refs/heads/main' && steps.pnpm.outputs.hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ steps.pnpm.outputs.store }}
-          key: ${{ steps.pnpm.outputs.key }}
       # What each package's last check found (scripts/typecheck.sh's `--incremental`), from main's
       # latest run. The key holds the lockfile and every tsconfig, so a change to the compiler, the
       # Effect checks or their settings starts cold; inside one key, tsc checks again every file
@@ -255,7 +243,7 @@ jobs:
           restore-keys: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-
       - run: pnpm typecheck
       # Each push to main saves its own, so the next pull request starts from the newest.
-      - if: ${{ github.ref == 'refs/heads/main' || github.event.pull_request.number == 1243 }}
+      - if: ${{ github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v6
         with:
           path: *tsc
@@ -280,11 +268,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - id: pnpm
-        uses: ./.github/actions/pnpm
+      - uses: ./.github/actions/pnpm
 
-      # Electron fetches its binary the first time it is asked for its path, into this folder. Like
-      # the pnpm store, it is saved on a push to main only, 229 MiB a copy on 2026-11-14.
+      # Electron fetches its binary the first time it is asked for its path, into this folder. It is
+      # saved on main only, 229 MiB a copy on 2026-11-14; its restore took 3 and 5 s (e2e in runs
+      # 43620728687 and 43623635302).
       - id: electron
         uses: actions/cache/restore@v6
         with:
@@ -293,14 +281,6 @@ jobs:
           restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
 
       - run: pnpm install --frozen-lockfile
-      # This job saves the macOS pnpm store, as the typecheck job saves Linux's.
-      - if: ${{ github.ref == 'refs/heads/main' && steps.pnpm.outputs.hit != 'true' }}
-        run: pnpm store prune
-      - if: ${{ github.ref == 'refs/heads/main' && steps.pnpm.outputs.hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ steps.pnpm.outputs.store }}
-          key: ${{ steps.pnpm.outputs.key }}
       # Each run makes its own fresh FABRIKA_HOME in the temp folder, and stops the hosts it started.
       - name: e2e
         env:

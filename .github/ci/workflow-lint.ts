@@ -598,11 +598,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
     ), `${path}: setup-node's cache saves on every ref; use .github/actions/pnpm`);
   }
 
-  // C2. The shared setup restores and never saves; each save is on a push to main.
-  require(actionSteps.some((step) => uses(step, "actions/cache/restore")) &&
-    !actionSteps.some((step) =>
-      uses(step, "actions/cache/save"),
-    ), "the pnpm action restores the store and never saves it");
+  // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
+  // (action.yml gives the seconds). Each save anywhere is on main.
+  require(!actionSteps.some((step) =>
+    String(step["uses"]).startsWith("actions/cache"),
+  ), "the pnpm action caches nothing: a restored pnpm store cost more than its download");
 
   for (const [path, step] of everyStep.filter(([, s]) => uses(s, "actions/cache/save"))) {
     const condition = compact(step["if"]);

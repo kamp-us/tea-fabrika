@@ -48,8 +48,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # pnpm, Node and the macOS pnpm store check.yaml's e2e job saved on main. This job saves
-      # nothing: a copy per pull request filled the repository's cache (.github/actions/pnpm).
+      # pnpm and Node, with no store cache (.github/actions/pnpm says why). This job saves nothing:
+      # a copy per pull request filled the repository's cache.
       - uses: ./.github/actions/pnpm
 
       # Electron fetches its binary the first time it is asked for its path, into this folder.

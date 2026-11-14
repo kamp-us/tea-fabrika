@@ -1423,11 +1423,18 @@ for (const [name, plant, error] of [
     ".github/actions/pnpm/action.yml: setup-node's cache saves on every ref; use .github/actions/pnpm",
   ],
   [
-    "C2: the shared setup saving",
+    "C2: the shared setup saving on main",
     (f: Files) => {
       f.action.runs.steps.push({ uses: "actions/cache/save@v6", if: `\${{ github.ref == 'refs/heads/main' }}` });
     },
-    "the pnpm action restores the store and never saves it",
+    "the pnpm action caches nothing: a restored pnpm store cost more than its download",
+  ],
+  [
+    "C2: the shared setup restoring the store",
+    (f: Files) => {
+      f.action.runs.steps.push({ uses: "actions/cache/restore@v6", with: { path: "~/.local/share/pnpm/store" } });
+    },
+    "the pnpm action caches nothing: a restored pnpm store cost more than its download",
   ],
   [
     "C2: a save with no if",
