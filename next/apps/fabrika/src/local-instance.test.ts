@@ -9,6 +9,7 @@ import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenera
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { vi } from "vitest";
+import { Quotas, Settings } from "./settings.ts";
 
 // P12, next/. Exercise startDev twice with one real home. Deployment and HTTP are fake.
 // The link law skips only the flush-to-disk waits. The outbox's own law in
@@ -82,6 +83,81 @@ const spyOnFetch = (impl: typeof fetch) =>
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
+
+it.live.prop(
+  "Q11-start rejects invalid quota byte sizes before making a request",
+  {
+    field: Schema.Literals([
+      "storage",
+      "project.bytes",
+      "project.letter.bytes",
+      "process.bytes",
+      "process.letter.bytes",
+    ]),
+    suffix: Schema.String,
+  },
+  ({ field, suffix }) =>
+    Effect.gen(function* () {
+      const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
+      const folder = yield* sandbox;
+      const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
+      const limits = {
+        recordBytes: 1_000_000_000,
+        writes: 13_760,
+        storage: "1000000000 B",
+        recovery: {
+          project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+          process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+        },
+      };
+      const invalid = `invalid:${suffix}`;
+
+      switch (field) {
+        case "storage":
+          limits.storage = invalid;
+          break;
+        case "project.bytes":
+          limits.recovery.project.bytes = invalid;
+          break;
+        case "project.letter.bytes":
+          limits.recovery.project.letter.bytes = invalid;
+          break;
+        case "process.bytes":
+          limits.recovery.process.bytes = invalid;
+          break;
+        case "process.letter.bytes":
+          limits.recovery.process.letter.bytes = invalid;
+          break;
+      }
+
+      // The encoded snapshot accepts strings; each declared byte-size codec must still reject them.
+      const config = {
+        ...Settings.make({
+          build: "quota-start",
+          name: "quota-start",
+          person: "person-test",
+          founder: "public-test-key",
+          window: null,
+          port: 18787,
+          rateLimit: { limit: 100_000, window: 60_000 },
+          limits,
+        }),
+        home: folder,
+      };
+      expect(Schema.decodeUnknownResult(Quotas)(config.limits)._tag).toBe("Failure");
+      const result = yield* Effect.scoped(
+        startDev({ build: config.build, brain: "unused.mjs", programs: {} }, config),
+      ).pipe(
+        Effect.provide(ProcessIdGenerator.layer),
+        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide(filesWithoutSync),
+        Effect.result,
+      );
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
+      expect(fetched).not.toHaveBeenCalled();
+    }),
+  { arbitrary: { seed: 119120, runs: 40 } },
+);
 
 it.live.prop(
   "a later dev command links its first start to the last runtime in that home",
