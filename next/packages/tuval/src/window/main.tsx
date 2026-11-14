@@ -132,11 +132,17 @@ const TileBody = ({
 /** What a split with no room says, in the window that asked, as tmux refuses one. */
 const noRoom = (tile: Pick<TezgahTile, "n">): string => `No room to split t${tile.n}`;
 
+/** How the prefix line prints a key the table spells by name: an arrow as its arrow. */
+const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓" };
+
 /** The prefix line: each key after the prefix and what it does, from the one table. */
 const prefixLine = (table: Keys.Table): string =>
   [
     ...table.rows.flatMap((row) => {
-      const keys = row.keys.filter((k) => k.startsWith("<prefix>")).map((k) => k.slice("<prefix>".length));
+      const keys = row.keys
+        .filter((k) => k.startsWith("<prefix>"))
+        .map((k) => k.slice("<prefix>".length))
+        .map((k) => PRINTED[k] ?? k);
       return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
     }),
     "Esc cancel",
