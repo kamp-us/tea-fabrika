@@ -2652,6 +2652,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
             desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
             shown: null,
             subscribed: false,
+            up: true,
             view,
             pos: 1,
             notices: [],
