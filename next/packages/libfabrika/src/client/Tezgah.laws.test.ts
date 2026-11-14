@@ -876,9 +876,9 @@ type Stored = "focus" | "drawn" | `optimistic${string}` | `drawn${string}`;
 const STORED = /^(focus|drawn|optimistic)/;
 
 describe("Desk S3 L23: the window stores no optimistic focus", () => {
-  // pinned: L23's type half is checked by `tsc` over this file (CI's typecheck job, 0133); vitest
-  // only runs the runtime half below. Plant: a stored focus beside the server state fails typecheck.
-  it("pinned: the window's tezgah child holds the server state and the pending moves, and no focus of its own", () => {
+  // L23's type half is checked by `tsc` over this file (CI's typecheck job, 0133): a stored focus
+  // beside the server state fails typecheck. The walk checks the same at run time, on every state.
+  it("L23: the window's tezgah child holds the server state and the pending moves and no focus of its own, and on any walk the drawn focus is the newest pending move's to, or the server's focus when none is pending", () => {
     expectTypeOf<TezgahClient>().toHaveProperty("serverState");
     expectTypeOf<TezgahClient>().toHaveProperty("pendingMutations");
     expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("to");
@@ -891,9 +891,6 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
       Object.keys(fresh).filter((k) => STORED.test(k)),
       "L23: the tezgah child stores no drawn focus",
     ).toEqual([]);
-  });
-
-  it("L23: on any walk, the drawn focus is the newest pending move's to, or the server's focus when none is pending", () => {
     expect(TABLE, "the laws' key table loads").not.toBeNull();
     const seen = { pending: 0, none: 0 };
     fc.assert(
@@ -903,6 +900,12 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
           const open = w.moves.filter((m) => !answered(w, m));
           const pending = waitingMoves(next);
           seen[pending.length > 0 ? "pending" : "none"]++;
+          expect(
+            [next, next.tezgah ?? {}, next.tezgah?.client ?? {}]
+              .flatMap((o) => Object.keys(o))
+              .filter((k) => STORED.test(k)),
+            `L23: window ${win} stores no drawn focus`,
+          ).toEqual([]);
           expect(pending, `L23: window ${win} keeps one pending mutation per move not answered`).toHaveLength(
             open.length,
           );

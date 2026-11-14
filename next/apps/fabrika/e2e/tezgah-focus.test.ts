@@ -149,6 +149,27 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             fresh.cursor === null || fresh.cursor === fresh.first,
             "L28: a tile never focused lands at its top",
           ).toBe(true);
+          // Desk round R (finding desk-dom-focus-not-following): after C-b %, keyboard focus is in the
+          // new tile, so what a person types lands in the new tile's field, never t1's, and C-b x
+          // closes the new tile: its ask names it.
+          const typed = tile(page, regionName(t2));
+          yield* promised(() => page.keyboard.type("q"));
+          yield* promised(() => typed.field.waitFor({ timeout: 30_000 }));
+          expect(yield* promised(() => typed.field.inputValue()), "R4: typing after C-b % lands in the new tile").toBe(
+            "q",
+          );
+          expect(yield* promised(() => list.field.inputValue()), "R4: typing after C-b % never lands in t1").toBe("");
+          yield* promised(() => page.keyboard.press("Backspace"));
+          expect(yield* promised(() => typed.field.inputValue()), "R4: the new tile's field takes the Backspace").toBe(
+            "",
+          );
+          yield* keys(page, "Control+b", "x");
+          yield* promised(() => page.getByText(`close t${t2.n}? (y/n)`).first().waitFor({ timeout: 30_000 }));
+          yield* keys(page, "n");
+          yield* promised(() =>
+            page.getByText(`close t${t2.n}? (y/n)`).first().waitFor({ state: "detached", timeout: 30_000 }),
+          );
+          yield* domIn(page, side, t2.id, "the new tile, after the close ask is answered n");
           yield* shoot(page, `focus-t${t2.n}`, "side-by-side");
           expect(
             side.tiles.find((t) => t.id === t1.id)?.cursor,

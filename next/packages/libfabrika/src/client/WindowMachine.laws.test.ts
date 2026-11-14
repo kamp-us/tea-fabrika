@@ -2028,6 +2028,10 @@ type DeskWorld = {
   /** The workspace-1 tiles of the last view the window was sent, or null before any. */
   shown: ReadonlyArray<{ readonly id: string; readonly name: string }> | null;
   subscribed: boolean;
+  /** Whether the brain has started this person's tezgah: the boot starts only the founder's, so for
+   *  any other person a read of `processes/tezgah:<person>` finds no process until something starts it
+   *  (plan amendment 11, point 2). */
+  up: boolean;
 };
 
 type DeskEvent = {
@@ -2108,10 +2112,12 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
       if (f.call._tag === "read") {
         const name = f.call.stream.replace(/^processes\//, "");
         const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        // A stream no process was ever started on reads as the brain sends it: no entries.
+        const none = name.startsWith("tezgah:") && !w.up;
         return {
           type: "read_ok",
           ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          value: none ? [] : [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
           ms: c.ms,
         } as WindowMsg;
       }
@@ -2169,6 +2175,14 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
     );
   }
 
+  // The brain starts this person's tezgah, which tells the window nothing on its own.
+  if (!w.up) {
+    out.push(() => {
+      w.up = true;
+      return null;
+    });
+  }
+
   // tezgah's edits: a tile joins or leaves workspace 1, or workspace 2, which this window never shows.
   for (const n of [1, 1, 2]) {
     out.push(() => {
@@ -2205,6 +2219,7 @@ const deskFold = (
   machine: typeof deskWindow,
   withDesk: boolean,
   each: (e: DeskEvent) => void,
+  up = true,
 ) => {
   const desk: Desk = {
     rev: 1,
@@ -2214,7 +2229,7 @@ const deskFold = (
   };
   const ctx = withDesk ? { tiles: GIVEN, tezgah: { workspace: 1 } } : { tiles: GIVEN };
   const [s0, cmds0] = machine.init(null, ctx as never);
-  const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false };
+  const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false, up };
   each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
   goOnline(w, machine, each);
   const dialed = new Set([1]);
@@ -2317,6 +2332,68 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
       { seed: SEED, numRuns: 200 },
     );
     expect(opened, "L10: the walks go online and open the given tiles").toBeGreaterThan(0);
+  });
+});
+
+// Desk round R, next/: plan amendment 11, point 2. The boot starts only the founder's tezgah, so a
+// window whose person has none finds no process at `processes/tezgah:<person>`. The walk is L10's,
+// started with no tezgah for the window's person; one of its moves has the brain start it later.
+describe("Desk R: a window whose person has no tezgah says so, and follows tezgah once it exists", () => {
+  it("R2: a read that finds no tezgah takes the window's tezgah link to missing, with no tile and nothing opened; each redial reads processes/tezgah:<person> again, and once tezgah exists the window opens it and takes its tiles", () => {
+    const stream = `processes/tezgah:${DESK_PERSON.slice("person_".length)}`;
+    const seen = { missing: 0, redialed: 0, followed: 0 };
+    fc.assert(
+      fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
+        let wasMissing = false;
+        let counted = false;
+        deskFold(
+          picks,
+          deskWindow,
+          true,
+          ({ prev, m, next, cmds, w }) => {
+            const reach = next.tezgah?.reach._tag;
+            const tezgahRead = (x: WindowModel) =>
+              x.flight.some((f) => f.call._tag === "read" && f.call.stream === stream);
+
+            const emptied = m.type === "read_ok" && m.value.length === 0 && tezgahRead(prev) && !tezgahRead(next);
+            const opened = writes(cmds, "open").map((c) => c.call["pid"]);
+            seen.missing += emptied ? 1 : 0;
+            wasMissing ||= emptied;
+            expect(emptied ? reach : "missing", "R2: a read that finds no tezgah takes the link to missing").toBe(
+              "missing",
+            );
+            expect(emptied ? opened : [], "R2: no tezgah, nothing opened").toEqual([]);
+            expect(reach === "missing" ? next.tiles : [], "R2: a window with no tezgah shows no tile").toEqual([]);
+            expect(reach === "missing" && opened.includes(TEZGAH_PID), "R2: a missing tezgah is never opened").toBe(
+              false,
+            );
+
+            const online = next.link._tag === "online" && prev.link._tag !== "online";
+            seen.redialed += online && wasMissing ? 1 : 0;
+            expect(
+              online ? reads(cmds).filter((r) => r.startsWith("processes/tezgah:")) : [stream],
+              "R2: each time the window goes online it reads its own person's tezgah once",
+            ).toEqual([stream]);
+
+            const follows = wasMissing && w.up && reach === "open" && !counted;
+            counted ||= follows;
+            seen.followed += follows ? 1 : 0;
+            const want = deskTiles(w.desk)
+              .map((t) => t.name)
+              .sort();
+            expect(
+              follows ? [...next.tiles].map((t) => t.name).sort() : want,
+              "R2: once tezgah exists, the window takes workspace 1's tiles from its view",
+            ).toEqual(want);
+          },
+          false,
+        );
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.missing, "R2: the walks reach a window with no tezgah").toBeGreaterThan(0);
+    expect(seen.redialed, "R2: the walks redial after finding no tezgah").toBeGreaterThan(0);
+    expect(seen.followed, "R2: the walks follow tezgah once it exists").toBeGreaterThan(0);
   });
 });
 

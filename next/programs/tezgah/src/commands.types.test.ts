@@ -26,8 +26,9 @@ const PLATFORMS = ["browser", "electron", "headless"] as const;
 const OSES = ["macos", "windows", "linux", "android", "ios", "unknown"] as const;
 
 describe("L19: every tezgah command is named tezgah.<word> and carries a word and a label", () => {
-  // pinned: L19 is a type law; these checks fail CI's typecheck when a row loses its name, word or label.
-  it("pinned: each row is a Binding named tezgah.<word> that tezgah's did takes, and a Binding needs its word and its label", () => {
+  // L19's type half is checked by `tsc` over this file (CI's typecheck job, 0133): a row that loses its
+  // name, word or label fails typecheck. The walk checks the rows each backend is shipped at run time.
+  it("L19: each row is a Binding named tezgah.<word> that tezgah's did takes; the slice ships split right, split down and close, each named once with a word and a label; the rows ship to and load on every backend, and each command keeps its word wherever its keys are dropped", () => {
     expectTypeOf<Row>().toExtend<Binding>();
     expectTypeOf<Row["does"]>().toExtend<`tezgah.${string}`>();
     expectTypeOf<Row["does"]>().toExtend<Did["does"]>();
@@ -39,28 +40,22 @@ describe("L19: every tezgah command is named tezgah.<word> and carries a word an
     rows({ does: "tezgah.zoom", keys: ["<prefix>z"], label: "Zoom" });
     // @ts-expect-error a command with no label is not a binding
     rows({ does: "tezgah.zoom", keys: ["<prefix>z"], word: "zoom" });
-    expect(rows(commands[0]!)).toBe(commands[0]);
-  });
-
-  it("pinned: the slice ships split right, split down and close, each named once with a word and a label", () => {
-    const names = commands.map((c) => c.does);
-    expect(new Set(names).size, "L19: each command is named once").toBe(names.length);
-    expect(names, "L19: the slice's three commands").toEqual(
-      expect.arrayContaining(["tezgah.split_right", "tezgah.split_down", "tezgah.close"]),
-    );
-
-    for (const c of commands) {
-      expect(c.does, "L19: a command is tezgah.<word>").toMatch(/^tezgah\.[a-z][a-z_]*$/);
-      expect(c.word.trim(), `L19: ${c.does} carries a shell word`).not.toBe("");
-      expect(c.label.trim(), `L19: ${c.does} carries a palette label`).not.toBe("");
-    }
-  });
-
-  it("L19: the rows ship to and load on every backend, and each command keeps its word wherever its keys are dropped", () => {
     fc.assert(
       fc.property(fc.constantFrom(...PLATFORMS), fc.constantFrom(...OSES), (platform, os) => {
         const backend = Keys.backend(platform, os);
         const shipped = Keys.ship(commands, backend);
+        const names = shipped.map((c) => c.does);
+        expect(new Set(names).size, `L19: ${platform} on ${os} is shipped each command once`).toBe(names.length);
+        expect(names, `L19: ${platform} on ${os} is shipped the slice's three commands`).toEqual(
+          expect.arrayContaining(["tezgah.split_right", "tezgah.split_down", "tezgah.close"]),
+        );
+
+        for (const c of shipped) {
+          expect(c.does, "L19: a command is tezgah.<word>").toMatch(/^tezgah\.[a-z][a-z_]*$/);
+          expect(c.word.trim(), `L19: ${c.does} carries a shell word`).not.toBe("");
+          expect(c.label.trim(), `L19: ${c.does} carries a palette label`).not.toBe("");
+        }
+
         expect(
           shipped.map((c) => [c.does, c.word, c.label]),
           `L19: ${platform} on ${os} is shipped every command`,

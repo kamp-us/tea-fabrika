@@ -914,12 +914,12 @@ const focusCommands = async () => {
 };
 
 describe("Desk S3: focus moves at the program", () => {
-  // pinned: the plan's S3 default rows (tezgah's commands table in "The shape"); the walk below
-  // draws its moves from this table, so every row is also a command tezgah's did takes.
-  it("pinned: S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and each is a command tezgah's did takes", async () => {
+  // The plan's S3 default rows (tezgah's commands table in "The shape"); the walk below draws its
+  // moves from this table, so every row is also a command tezgah's did takes, between any two tiles.
+  it("S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and tezgah's did takes each, and the click's, from any tile to another", async () => {
     const { commands } = await loadCommands();
     const boundKeys = (does: string) => commands.find((c) => c.does === does)?.keys ?? [];
-    // pinned: the plan's default key rows for S3 ("The shape", tezgah's commands table).
+    // The plan's default key rows for S3 ("The shape", tezgah's commands table).
     const want: Readonly<Record<string, ReadonlyArray<string>>> = {
       "tezgah.focus_next": ["<prefix>o", "f6"],
       "tezgah.focus_previous": ["shift+f6"],
@@ -930,27 +930,44 @@ describe("Desk S3: focus moves at the program", () => {
       "tezgah.focus_down": ["<prefix>j", "<prefix>arrowdown"],
     };
 
-    for (const [does, keys] of Object.entries(want)) {
-      expect(boundKeys(does), `S3: ${does} is bound to ${keys.join(", ")}`).toEqual(expect.arrayContaining([...keys]));
-    }
-
     const p = await loaded();
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(want), CLICK),
+        fc.array(fc.record({ down: fc.boolean(), at: fc.nat() }), { minLength: 1, maxLength: 4 }),
+        fc.nat(),
+        fc.nat(),
+        (does, cuts, from, to) => {
+          seen.add(does);
+          expect(boundKeys(does), `S3: ${does} is bound to its default keys`).toEqual(
+            expect.arrayContaining([...(want[does] ?? [])]),
+          );
+          const w = begin(p);
+          move(p, w, "attach", 0);
+          move(p, w, "answer", 0);
 
-    for (const does of [...Object.keys(want), CLICK]) {
-      const w = begin(p);
-      move(p, w, "attach", 0);
-      move(p, w, "answer", 0);
-      move(p, w, "split_right", 0);
-      move(p, w, "answer", 0);
-      const [a, b] = live(w.view);
-      const e = take(
-        p,
-        w,
-        { type: "did", does, from: a, to: b, via: { _tag: "key", keys: "ctrl+b o" }, cursor: null },
-        false,
-      );
-      expect(e.result, `S3: tezgah takes ${does}`).toEqual({ _tag: "stepped" });
-    }
+          for (const cut of cuts) {
+            move(p, w, cut.down ? "split_down" : "split_right", cut.at);
+            move(p, w, "answer", 0);
+          }
+
+          const tiles = live(w.view);
+          const a = tiles[from % tiles.length]!;
+          const others = tiles.filter((t) => t !== a);
+          const b = others[to % others.length]!;
+          const e = take(
+            p,
+            w,
+            { type: "did", does, from: a, to: b, via: { _tag: "key", keys: "ctrl+b o" }, cursor: null },
+            false,
+          );
+          expect(e.result, `S3: tezgah takes ${does} from ${a} to ${b}`).toEqual({ _tag: "stepped" });
+        },
+      ),
+      { seed: SEED, numRuns: 100 },
+    );
+    expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Object.keys(want).length + 1);
   });
 
   it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again", async () => {

@@ -618,34 +618,60 @@ describe("L18: a split with no room is refused in the window", () => {
     expect(seen.sent, "L18: the walks send splits").toBeGreaterThan(0);
   });
 
-  // pinned: the first review of S2b (bug: the room check measured bare percent shares, ignoring the
-  // frame's 4px padding and its 4px divider). A 444x600 area drawn with its padding is a size Msg of
-  // 436x592; C-b % there drew two tiles about 216px wide. The cases sit on both sides of the floor,
-  // the middle one where bare shares say 220 and drawn tiles are 218.
-  it('pinned: one tile in a 436x592, 440x592 area refuses C-b % and in 444x592 takes it; 592x236, 592x240 refuse C-b " and 592x244 takes it', () => {
-    const cases = [
-      { width: 436, height: 592, key: "%", taken: false },
-      { width: 440, height: 592, key: "%", taken: false },
-      { width: 444, height: 592, key: "%", taken: true },
-      { width: 592, height: 236, key: '"', taken: false },
-      { width: 592, height: 240, key: '"', taken: false },
-      { width: 592, height: 244, key: '"', taken: true },
-    ] as const;
-
-    for (const c of cases) {
-      const view = desk([], 0);
-      const at = view.workspaces[0]!.focus;
-      expect(fits(view, at, SPLITS[c.key]!.dir, c), `the drawn rule at ${c.width}x${c.height}`).toBe(c.taken);
-      const w = world(view, 1, { width: c.width, height: c.height });
-      press(w, 0, PREFIX);
-      const { sent } = press(w, 0, c.key);
-      expect(
-        dids(sent).length,
-        `L18: ${c.key} in a ${c.width}x${c.height} area is ${c.taken ? "taken" : "refused"}`,
-      ).toBe(c.taken ? 1 : 0);
-      expect(polite(w.wins[0]!.s), `L18: ${c.width}x${c.height} says the refusal, or nothing`).toEqual(
-        c.taken ? null : { _tag: "no_room", tile: at },
-      );
-    }
+  it("L18: at the floor's edge, one tile's split is taken exactly when its drawn halves, one gap between them, reach 220x120", () => {
+    const seen = { refused: 0, taken: 0 };
+    /** One tile, its area a few pixels either side of two floors and a gap on the split's own side. */
+    const Edge = fc.oneof(
+      fc.record({
+        key: fc.constantFrom("%", "|"),
+        width: fc.integer({ min: 2 * SMALLEST.width + GAP - 12, max: 2 * SMALLEST.width + GAP + 12 }),
+        height: fc.integer({ min: SMALLEST.height, max: 1_700 }),
+      }),
+      fc.record({
+        key: fc.constantFrom('"', "-"),
+        width: fc.integer({ min: SMALLEST.width, max: 2_600 }),
+        height: fc.integer({ min: 2 * SMALLEST.height + GAP - 12, max: 2 * SMALLEST.height + GAP + 12 }),
+      }),
+    );
+    fc.assert(
+      fc.property(Edge, (c) => {
+        const view = desk([], 0);
+        const at = view.workspaces[0]!.focus;
+        const dir = SPLITS[c.key]!.dir;
+        // The rule as decided (plan amendment 7): each drawn half is what is left after one gap, halved.
+        const half = ((dir === "row" ? c.width : c.height) - GAP) / 2;
+        const taken = half >= (dir === "row" ? SMALLEST.width : SMALLEST.height);
+        seen[taken ? "taken" : "refused"]++;
+        expect(fits(view, at, dir, c), `the drawn rule at ${c.width}x${c.height}`).toBe(taken);
+        const w = world(view, 1, { width: c.width, height: c.height });
+        press(w, 0, PREFIX);
+        const { sent } = press(w, 0, c.key);
+        expect(
+          dids(sent).length,
+          `L18: ${c.key} in a ${c.width}x${c.height} area is ${taken ? "taken" : "refused"}`,
+        ).toBe(taken ? 1 : 0);
+        expect(polite(w.wins[0]!.s), `L18: ${c.width}x${c.height} says the refusal, or nothing`).toEqual(
+          taken ? null : { _tag: "no_room", tile: at },
+        );
+      }),
+      {
+        seed: SEED,
+        numRuns: 200,
+        // pinned: the first review of S2b (bug: the room check measured bare percent shares, ignoring
+        // the frame's 4px padding and its 4px divider). A 444x600 area drawn with its padding is a size
+        // Msg of 436x592; C-b % there drew two tiles about 216px wide. The cases sit on both sides of
+        // the floor, the middle one where bare shares say 220 and drawn tiles are 218.
+        examples: [
+          [{ key: "%", width: 436, height: 592 }],
+          [{ key: "%", width: 440, height: 592 }],
+          [{ key: "%", width: 444, height: 592 }],
+          [{ key: '"', width: 592, height: 236 }],
+          [{ key: '"', width: 592, height: 240 }],
+          [{ key: '"', width: 592, height: 244 }],
+        ],
+      },
+    );
+    expect(seen.refused, "L18: the walks refuse splits at the edge").toBeGreaterThan(0);
+    expect(seen.taken, "L18: the walks take splits at the edge").toBeGreaterThan(0);
   });
 });

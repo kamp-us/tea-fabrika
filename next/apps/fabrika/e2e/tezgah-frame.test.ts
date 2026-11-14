@@ -203,3 +203,120 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
       ),
   );
 });
+
+// Desk round R, next/: plan amendment 11, point 2, in the real tab. The boot starts only the founder's
+// tezgah, and this app admits one person, the founder (`access/Access.ts`: a founded ledger has one
+// `person`, and any other is `not_member`), so no second person can be granted here. The law makes
+// the founder's tab meet the brain's own answer for a person with no tezgah: while `hide` is on, the
+// tab's read of `processes/tezgah:<person>` is sent to the real brain as a read of a tezgah no one
+// started, and the brain answers it as it answers any stream never written, with no entries.
+// Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
+// tab's own tezgah, which exists.
+const NOBODY = `processes/tezgah:${typeId("person", 77).slice("person_".length)}`;
+const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
+
+describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah once it exists", () => {
+  it(
+    "scenario: on the real dev.ts, a tab whose tezgah read finds no process says tezgah is not running in the status bar and the polite region, never Opening, and after a redial reads its tezgah again and draws its workspace",
+    { timeout: LIMIT },
+    (context) =>
+      suite(
+        Effect.gen(function* () {
+          const h = yield* home;
+          const dev = yield* devServer(h);
+          const b = yield* browser;
+          const profiled = yield* profile(b);
+          const wire = {
+            hide: true,
+            /** Per socket, the tezgah streams the tab read on it, in order. */
+            reads: [] as Array<Array<string>>,
+            sockets: [] as Array<{ close: () => Promise<void> }>,
+          };
+          yield* promised(() =>
+            profiled.routeWebSocket(/.*/, (ws) => {
+              const server = ws.connectToServer();
+              const read: Array<string> = [];
+              wire.reads.push(read);
+              wire.sockets.push({ close: () => ws.close({ code: 4000, reason: "the law drops the socket" }) });
+              ws.onMessage((message) => {
+                const found = typeof message === "string" ? TEZGAH_READ.exec(message) : null;
+
+                if (typeof message !== "string" || found === null) {
+                  server.send(message);
+                  return;
+                }
+
+                read.push(found[0]);
+                server.send(wire.hide ? message.replace(TEZGAH_READ, `"stream":"${NOBODY}"`) : message);
+              });
+            }),
+          );
+          const { page } = yield* tab(profiled, dev.url);
+          yield* promised(() => page.setViewportSize({ width: 1440, height: 900 }));
+          expect((yield* grant(h, yield* waiting(page))).ok, "the grant line as shown grants").toBe(true);
+          const r = yield* reader(h, dev);
+          const pid = yield* tezgahPid(r);
+          const words = /tezgah is not running for you yet/i;
+
+          /** What the page says now: its status bar (the line under the desk), its polite region, and
+           *  whether it says Opening anywhere. */
+          const says = Effect.gen(function* () {
+            const status = yield* promised(() =>
+              page.evaluate(() => document.querySelector(".statusbar")?.textContent ?? ""),
+            );
+            const opening = yield* promised(() => page.getByText("Opening", { exact: true }).count());
+            return { status, polite: (yield* drawn(page)).polite, opening };
+          });
+
+          // No tezgah: the page says so, in both places, and never Opening.
+          for (let tries = 0; ; tries++) {
+            const now = yield* says;
+
+            if ((words.test(now.status) && words.test(now.polite)) || tries >= 120) {
+              const seen = `the page says ${JSON.stringify(now)}, the tab read ${JSON.stringify(wire.reads)}`;
+              expect(now.status, `R2: the status bar says tezgah is not running for this person; ${seen}`).toMatch(
+                words,
+              );
+              expect(now.polite, `R2: the polite region says it too; ${seen}`).toMatch(words);
+              break;
+            }
+
+            yield* Effect.sleep("250 millis");
+          }
+
+          for (let k = 0; k < QUIET / 250; k++) {
+            const now = yield* says;
+            expect(now.opening, "R2: a tab with no tezgah never says Opening").toBe(0);
+            expect(now.status, "R2: the status bar keeps saying tezgah is not running").toMatch(words);
+            yield* Effect.sleep("250 millis");
+          }
+
+          yield* shoot(page, "no-tezgah", "one-tile");
+          const before = wire.reads.filter((x) => x.length > 0).length;
+          expect(before, "R2: the tab read its tezgah on its dial").toBeGreaterThan(0);
+
+          // tezgah exists for this person now; the socket drops, and the next dial finds it.
+          wire.hide = false;
+          yield* promised(() => wire.sockets.at(-1)!.close());
+          const one = yield* settle(
+            page,
+            r,
+            pid,
+            (view, d) => [...(shown(view).length === 1 ? [] : ["not yet one tile"]), ...differences(view, d)],
+            "R2: after a redial, the tab follows its tezgah and draws workspace 1",
+          );
+          expect(shown(one), "R2: the tab draws tezgah's one tile").toHaveLength(1);
+          expect((yield* says).status, "R2: once tezgah is there, the status bar no longer says it is not").not.toMatch(
+            words,
+          );
+          const read = wire.reads.filter((x) => x.length > 0);
+          expect(read.length, "R2: the redial read the tab's tezgah again, on a new socket").toBeGreaterThan(before);
+
+          for (const streams of read) {
+            expect(streams, "R2: each dial reads the tab's own processes/tezgah:<person> once").toHaveLength(1);
+          }
+        }),
+        context,
+      ),
+  );
+});

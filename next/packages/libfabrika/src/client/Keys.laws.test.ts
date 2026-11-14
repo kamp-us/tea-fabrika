@@ -65,13 +65,27 @@ const freeRows = fc
   );
 
 describe("L15: a binding on a key the backend cannot have fails at load; a default on one is never shipped", () => {
-  // pinned: the plan's lean (65%) that Chrome owns F6 on Windows and Linux, so a tab's defaults drop it.
-  it("L15 pinned: some backend has keys it cannot have, and a browser tab on Windows or Linux cannot have F6", () => {
+  // The plan's lean (65%) that Chrome owns F6 on Windows and Linux, so a tab's defaults drop it, and
+  // its other half: F6 stays in Electron (L34) and a headless client keeps every key. Walked over
+  // every backend a window can be, so a backend that loses or gains F6 is found wherever it is.
+  it("L15: some backend has keys it cannot have; a browser tab on Windows or Linux cannot have F6, and Electron and a headless client can", () => {
     expect(CANNOT.length, "L15: some backend has keys it cannot have").toBeGreaterThan(0);
-
-    for (const os of ["windows", "linux"] as const) {
-      expect(Keys.backend("browser", os).cannot, `L15: Chrome owns F6 on ${os}`).toContain("f6");
-    }
+    const seen = { owned: 0, kept: 0 };
+    // A browser tab on any other OS is not walked: the plan decides F6 for Windows and Linux only.
+    const decided = BACKENDS.filter((b) => b.platform !== "browser" || b.os === "windows" || b.os === "linux");
+    fc.assert(
+      fc.property(fc.constantFrom(...decided), ({ platform, os }) => {
+        const owned = platform === "browser";
+        seen[owned ? "owned" : "kept"]++;
+        expect(
+          Keys.backend(platform, os).cannot.includes("f6"),
+          owned ? `L15: Chrome owns F6 on ${os}` : `L15: ${platform} on ${os} keeps F6`,
+        ).toBe(owned);
+      }),
+      { seed: SEED, numRuns: decided.length * 8 },
+    );
+    expect(seen.owned, "L15: the walk meets a tab where Chrome owns F6").toBeGreaterThan(0);
+    expect(seen.kept, "L15: the walk meets a backend that keeps F6").toBeGreaterThan(0);
   });
 
   it("L15: a person's row on a cannot key fails the load and names its command and its key, whatever rows sit beside it", () => {
