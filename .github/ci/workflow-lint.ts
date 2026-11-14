@@ -64,6 +64,12 @@ const BUILD = "needs.changes.outputs.build!='false'";
 // (0175). An unreadable flag is not 'false', so it runs today's tests.
 const TODAY = "needs.changes.outputs.today!='false'";
 const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
+// The test job's machines: six for today's tests, two when only the tooling tests run (check.yaml
+// gives the seconds). An unreadable flag is not 'false', so it gets six.
+const TODAY_LEGS = 6;
+const TOOLING_LEGS = 2;
+const legList = (count: number) => `[${Array.from({ length: count }, (_, i) => i + 1).join(", ")}]`;
+const TEST_LEGS = `fromJSON(needs.changes.outputs.today=='false'&&'${legList(TOOLING_LEGS)}'||'${legList(TODAY_LEGS)}')`;
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
@@ -318,11 +324,23 @@ export const lintWorkflow = (text: string): string[] => {
 
   const test = map(jobs["test"]),
     scripts = commands(test);
-  require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
+  require(compact(map(map(test["strategy"])["matrix"])["shard"]) ===
+    TEST_LEGS, "T5: six machines for today's tests, two when only the tooling tests run");
   const testSteps = steps(test);
   const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
   const rest = testSteps.find((s) => s["name"] === "test");
   const tooling = testSteps.find((s) => s["name"] === "tooling tests");
+  const apt = testSteps.find((s) => s["name"] === "apt packages");
+  // T5. Each step's `--shard k/N` counts the machines of the flag it runs on.
+  require([lane, rest].every((step) => map(step?.["env"])["SHARD"] === `\${{ matrix.shard }}/${TODAY_LEGS}`) &&
+    map(tooling?.["env"])["SHARD"] ===
+      `\${{ matrix.shard }}/${TOOLING_LEGS}`, "T5: each test step's SHARD divides by its flag's machine count");
+  // T6. Without its packages today's tsh and sandbox tests skip, so apt runs on today's flag,
+  // before them; the tooling tests need none of the five.
+  require(apt !== undefined &&
+    compact(apt["if"]) === TODAY &&
+    lane !== undefined &&
+    testSteps.indexOf(apt) < testSteps.indexOf(lane), "T6: apt runs on the today flag, before today's tests");
   const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
   const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
   require(runs.length === 5, "today has five test commands, including two lane commands");

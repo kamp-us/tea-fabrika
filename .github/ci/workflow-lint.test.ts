@@ -28,6 +28,13 @@ const diff = {
 
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 
+// The test job's steps: apt has no env.
+type TestStep = { name: string; if: string; env?: Record<string, string>; run: string };
+const testSteps = (list: TestStep[]) => list;
+
+// T5: six machines for today's tests, two when only the tooling tests run.
+const testLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
+
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
@@ -132,12 +139,12 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("test"),
       "timeout-minutes": 30,
-      strategy: { matrix: { shard: [1, 2, 3, 4, 5, 6] } },
-      steps: [
+      strategy: { matrix: { shard: testLegs } },
+      steps: testSteps([
         {
           name: "test",
           if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
-          env: testEnv,
+          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
           run: [
             'if [ -n "$BASE" ]; then',
             'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
@@ -154,7 +161,7 @@ const valid = (label: string, extra: string) => ({
         {
           name: "tooling tests",
           if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
-          env: testEnv,
+          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` },
           run: [
             'if [ -n "$BASE" ]; then',
             `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
@@ -163,7 +170,7 @@ const valid = (label: string, extra: string) => ({
             "fi",
           ].join("\n"),
         },
-      ],
+      ]),
     },
     next: {
       needs: "changes",
@@ -243,7 +250,7 @@ const wiring = fc
     clean.jobs.test.steps.unshift({
       name: "lane tests, one file at a time",
       if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      env: testEnv,
+      env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
       run: [
         'if [ -n "$BASE" ]; then',
         `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
@@ -251,6 +258,11 @@ const wiring = fc
         `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
         "fi",
       ].join("\n"),
+    });
+    clean.jobs.test.steps.unshift({
+      name: "apt packages",
+      if: `\${{ needs.changes.outputs.today != 'false' }}`,
+      run: "sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep",
     });
     clean.jobs.test.steps.push({
       name: "shard times",
@@ -362,7 +374,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L1: main loses lane exclude",
     (w) => {
-      const step = w.jobs.test.steps[1]!;
+      const step = w.jobs.test.steps[2]!;
       const lines = step.run.split("\n");
       lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
       step.run = lines.join("\n");
@@ -371,13 +383,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L2: two lane workers",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace("--maxWorkers=1", "--maxWorkers=2");
+      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace("--maxWorkers=1", "--maxWorkers=2");
     },
   ],
   [
     "L3: failure skips rest",
     (w) => {
-      w.jobs.test.steps[1]!.if = "";
+      w.jobs.test.steps[2]!.if = "";
     },
   ],
   [
@@ -389,44 +401,45 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L3: failure skips advice",
     (w) => {
-      w.jobs.test.steps[3]!.if = "";
+      w.jobs.test.steps[4]!.if = "";
     },
   ],
   // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
   [
     "T1: the lane tests run with no file of today's version changed",
     (w) => {
-      w.jobs.test.steps[0]!.if = "";
+      w.jobs.test.steps[1]!.if = "";
     },
   ],
   [
     "T1: today's tests run with no file of today's version changed",
     (w) => {
-      w.jobs.test.steps[1]!.if = "!cancelled()";
+      w.jobs.test.steps[2]!.if = "!cancelled()";
     },
   ],
   [
     "T2: the tooling tests are gone",
     (w) => {
-      w.jobs.test.steps.splice(2, 1);
+      w.jobs.test.steps.splice(3, 1);
     },
   ],
   [
     "T2: the tooling tests run beside today's",
     (w) => {
-      w.jobs.test.steps[2]!.if = "!cancelled()";
+      w.jobs.test.steps[3]!.if = "!cancelled()";
     },
   ],
   [
     "T3: the tooling tests run today's packages' tests",
     (w) => {
-      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(" --exclude 'packages/**'", "");
+      w.jobs.test.steps[3]!.run = w.jobs.test.steps[3]!.run.replace(" --exclude 'packages/**'", "");
     },
   ],
   ...[0, 1, 2].map((index): [string, (w: Workflow) => void] => [
     `T4: test step ${index} reads its base from a pull request alone`,
     (w) => {
-      w.jobs.test.steps[index]!.env = { BASE: `\${{ github.event.pull_request.base.sha }}` };
+      const step = w.jobs.test.steps[index + 1]!;
+      step.env = { ...step.env!, BASE: `\${{ github.event.pull_request.base.sha }}` };
     },
   ]),
   [
@@ -438,7 +451,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L4: nonexistent lane filter",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replaceAll(LANE_FILTER, "missing/lane.");
+      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replaceAll(LANE_FILTER, "missing/lane.");
     },
   ],
   ...extraCommands.map((step): [string, (w: Workflow) => void] => [
@@ -1022,10 +1035,10 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
     `exclusion branch ${branch}`,
     (w) => {
-      const lines = w.jobs.test.steps[1]!.run.split("\n");
+      const lines = w.jobs.test.steps[2]!.run.split("\n");
       const line = [1, 3, 6][branch]!;
       lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      w.jobs.test.steps[1]!.run = lines.join("\n");
+      w.jobs.test.steps[2]!.run = lines.join("\n");
     },
   ]),
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
@@ -1110,13 +1123,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "duplicate forced tests",
     (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
+      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
     },
   ],
   [
     "forced tests on all shards",
     (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(
+      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(
         `if [ "\${{ matrix.shard }}" = 1 ]; then`,
         "if true; then",
       );
@@ -1480,5 +1493,38 @@ for (const [name, plant, error] of [
     const files = realFiles();
     plant(files);
     expect(lintCaches(text(files))).toEqual([error]);
+  });
+}
+
+// T5 and T6 on the checked-in check.yaml: each plant gives its one error.
+for (const [name, plant, error] of [
+  [
+    "T5: six machines on every flag",
+    (jobs: Jobs & Record<string, { strategy?: { matrix: { shard: unknown } } }>) => {
+      jobs["test"]!.strategy!.matrix.shard = [1, 2, 3, 4, 5, 6];
+    },
+    "check.yaml: T5: six machines for today's tests, two when only the tooling tests run",
+  ],
+  [
+    "T5: the tooling step dividing by six on two machines",
+    (jobs: Jobs) => {
+      (jobs["test"]!.steps.find((s) => s["name"] === "tooling tests")!["env"] as Record<string, string>)["SHARD"] =
+        `\${{ matrix.shard }}/6`;
+    },
+    "check.yaml: T5: each test step's SHARD divides by its flag's machine count",
+  ],
+  [
+    "T6: apt only when the tooling tests run",
+    (jobs: Jobs) => {
+      jobs["test"]!.steps.find((s) => s["name"] === "apt packages")!["if"] =
+        `\${{ needs.changes.outputs.today == 'false' }}`;
+    },
+    "check.yaml: T6: apt runs on the today flag, before today's tests",
+  ],
+] as const) {
+  it(`${name} is named by its one error`, () => {
+    const workflow = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+    plant(workflow.jobs);
+    expect(lint(JSON.stringify(workflow))).toEqual([error]);
   });
 }

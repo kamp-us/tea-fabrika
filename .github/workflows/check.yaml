@@ -340,7 +340,7 @@ jobs:
           if-no-files-found: ignore
 
   # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
-  # The tests, split by file over six machines (vitest's `--shard`, each machine
+  # The tests, split by file over six machines, two when only the tooling tests run (vitest's `--shard`, each machine
   # given about the same seconds by vitest.shards.ts). The lane's tests were one
   # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
   # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
@@ -354,8 +354,13 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      # Two machines when only the tooling tests run. On main run 43615844695 they took 68, 111,
+      # 125, 230, 274 and 363 s on six (19.5 machine-min): four files of 124 to 362 s each sat alone
+      # on a machine, and boxrm.test.ts alone, 362 s, sets the shortest a run can be. Placed by
+      # vitest.shards.ts's table and run three files at a time, those 97 files' seconds give two
+      # machines of 353 and 362 s (11.9 machine-min), the same longest wait.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -389,7 +394,12 @@ jobs:
       # 43493167395, test (1): refused before the unload, ran after it). The sysctl does not reach a
       # named profile, and a `deny` in a profile cannot be allowed back from a local file, so the
       # profile is unloaded where the image has it. 24.04 has none.
+      # Only today's tests need these. No tooling test or script it runs calls expect, zsh, bwrap,
+      # socat or rg, read on 2026-11-14; apt.test.ts names two of them only as arguments to apt.sh,
+      # under a fake apt-get. So the step runs on the flag today's test steps run on, and saves
+      # 11 to 27 s a machine when only the tooling tests run (run 43615844695, test (1) to (6)).
       - name: apt packages
+        if: ${{ needs.changes.outputs.today != 'false' }}
         timeout-minutes: 12
         run: |
           sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
@@ -442,7 +452,8 @@ jobs:
         if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
+          # The matrix's two machines on this flag.
+          SHARD: ${{ matrix.shard }}/2
         run: |
           if [ -n "$BASE" ]; then
             pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
