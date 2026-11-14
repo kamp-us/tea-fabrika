@@ -12,8 +12,15 @@ exec python3 - <<'PY'
 import fcntl, os, subprocess, sys
 
 INSTALL = ["pnpm", "install", "--offline", "--frozen-lockfile"]
+# Each package keeps what its last check found in this file, relative to the package, and checks
+# again only the files whose text changed and the files that reach them. tsc keys each file by a
+# hash of its text, never its mtime, so a fresh checkout reads it too. CI keeps these files in its
+# cache (check.yaml's typecheck job). Planted on next/packages/libfabrika, 2026-11-14: an error in
+# one file, an error only an unchanged importer shows, a change under the old mtime and an Effect
+# check each failed the warm run; fresh mtimes on every file kept it warm.
 commands = [["pnpm", "exec", "effect-tsgo", "patch", "--typescript"],
-            ["pnpm", "-r", "typecheck"]]
+            ["pnpm", "-r", "typecheck", "--incremental",
+             "--tsBuildInfoFile", "node_modules/.cache/tsc/typecheck.tsbuildinfo"]]
 
 # Keep this file in place. Unlinking it could give waiters different locks.
 # The OS releases a dead holder's lock, including after SIGKILL.

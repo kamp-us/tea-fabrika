@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { gated } from "./required.mjs";
+import { gated, sized } from "./required.mjs";
 
 export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
 export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
@@ -64,6 +64,12 @@ const BUILD = "needs.changes.outputs.build!='false'";
 // (0175). An unreadable flag is not 'false', so it runs today's tests.
 const TODAY = "needs.changes.outputs.today!='false'";
 const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
+// The test job's machines: six for today's tests, two when only the tooling tests run (check.yaml
+// gives the seconds). An unreadable flag is not 'false', so it gets six.
+const TODAY_LEGS = 6;
+const TOOLING_LEGS = 2;
+const legList = (count: number) => `[${Array.from({ length: count }, (_, i) => i + 1).join(", ")}]`;
+const TEST_LEGS = `fromJSON(needs.changes.outputs.today=='false'&&'${legList(TOOLING_LEGS)}'||'${legList(TODAY_LEGS)}')`;
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
@@ -78,15 +84,23 @@ const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/
 
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
-// vitest.shards.test.ts (E4) pins N from measured seconds.
+// vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is the legs job's `shards`,
+// else its fallback, the full matrix: what a run that is not sized runs (legs.ts).
 const E2E_PREFIX = "e2e-";
 const VITEST_LEGS = ["1", "2", "3", "4", "5"];
 const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+const SIZED_SHARDS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|'(.*)'\)$/s;
 
-/** A job's matrix legs as the workflow wrote them, numbers and strings kept apart. */
+/** The fallback in next's `fromJSON(needs.legs.outputs.shards || '<legs>')`, numbers and strings kept apart. */
 const legs = (job: Record<string, unknown>): unknown[] => {
-  const shard = map(map(job["strategy"])["matrix"])["shard"];
-  return Array.isArray(shard) ? shard : [];
+  const fallback = SIZED_SHARDS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]))?.[1];
+
+  try {
+    const parsed: unknown = JSON.parse(fallback ?? "");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
@@ -97,12 +111,32 @@ const numbered = (all: readonly unknown[]): string[] =>
 const ends = (all: readonly unknown[]): string[] =>
   all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
 
+// When the legs job sizes next: a pull request that tests all of next/, whose changes passed.
+const SIZED =
+  "needs.changes.result=='success'&&needs.changes.outputs.next!='false'&&github.event_name=='pull_request'&&(needs.changes.outputs.filter||'next/')=='next/'";
+
+// `files` is a sized run's vitest list, the reader tests included (legs.ts).
+const LEGS_OUTPUTS = ["shards", "files", "vitest", "e2e", "next"];
+
+const SIZE_ENV = {
+  EVENT: `\${{ github.event_name }}`,
+  FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
+  BASE: `\${{ github.event.pull_request.base.sha }}`,
+};
+
+// A leg's `--shard`: `${{ matrix.shard }}/${{ needs.legs.outputs.<kind> || <full count> }}`, so a sized
+// run divides by its own count of that kind, and every other run by the full matrix's.
+const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
+
+const denominator = (kind: "vitest" | "e2e", full: number) =>
+  String.raw`\$\{\{\s*needs\.legs\.outputs\.${kind}\s*\|\|\s*${full}\s*\}\}`;
+
 const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 
-/** The next job's vitest legs in a workflow's text, for the law on how the table splits. */
+/** The next job's full vitest legs in a workflow's text, for the law on how the table splits. */
 export const vitestLegs = (text: string): string[] => numbered(legs(nextJob(text)));
 
-/** The next job's end-to-end legs in a workflow's text, for the law on how many there are. */
+/** The next job's full end-to-end legs in a workflow's text, for the law on how many there are. */
 export const e2eLegs = (text: string): string[] => ends(legs(nextJob(text)));
 
 /** The next job's `timeout-minutes` in a workflow's text, for the same law: a leg gets half of it. */
@@ -173,14 +207,19 @@ export const lintWorkflow = (text: string): string[] => {
     ratchets[0]?.["continue-on-error"] ===
       undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
 
+  // A sized job (next) also needs its sizer, and skips on that one's false flag too (required.mjs).
   for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
-    require(needs === "changes" ||
-      (Array.isArray(needs) && needs.length === 1 && needs[0] === "changes"), `${name} needs changes`);
+    const sizer = Object.hasOwn(sized, name) ? sized[name] : undefined;
+    const expected = sizer === undefined ? ["changes"] : ["changes", sizer];
+    require((sizer === undefined && needs === "changes") ||
+      JSON.stringify(needs) === JSON.stringify(expected), `${name} needs ${expected.join(" and ")}`);
     require(compact(job["if"]) ===
       compact(
-        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')`,
+        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')${
+          sizer === undefined ? "" : ` && needs.${sizer}.outputs.${name} != 'false'`
+        }`,
       ), `${name} must run after classifier failure and skip only its false flag`);
   }
 
@@ -318,11 +357,23 @@ export const lintWorkflow = (text: string): string[] => {
 
   const test = map(jobs["test"]),
     scripts = commands(test);
-  require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
+  require(compact(map(map(test["strategy"])["matrix"])["shard"]) ===
+    TEST_LEGS, "T5: six machines for today's tests, two when only the tooling tests run");
   const testSteps = steps(test);
   const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
   const rest = testSteps.find((s) => s["name"] === "test");
   const tooling = testSteps.find((s) => s["name"] === "tooling tests");
+  const apt = testSteps.find((s) => s["name"] === "apt packages");
+  // T5. Each step's `--shard k/N` counts the machines of the flag it runs on.
+  require([lane, rest].every((step) => map(step?.["env"])["SHARD"] === `\${{ matrix.shard }}/${TODAY_LEGS}`) &&
+    map(tooling?.["env"])["SHARD"] ===
+      `\${{ matrix.shard }}/${TOOLING_LEGS}`, "T5: each test step's SHARD divides by its flag's machine count");
+  // T6. Without its packages today's tsh and sandbox tests skip, so apt runs on today's flag,
+  // before them; the tooling tests need none of the five.
+  require(apt !== undefined &&
+    compact(apt["if"]) === TODAY &&
+    lane !== undefined &&
+    testSteps.indexOf(apt) < testSteps.indexOf(lane), "T6: apt runs on the today flag, before today's tests");
   const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
   const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
   require(runs.length === 5, "today has five test commands, including two lane commands");
@@ -396,8 +447,11 @@ export const lintWorkflow = (text: string): string[] => {
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
   require(!("name" in nextJob), "next keeps the default matrix check names");
-  // E1. The end-to-end legs `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all
-  // strings. The count N is E4's, in vitest.shards.test.ts; here only its shape and its `/N`.
+  // E1. The matrix is `fromJSON(needs.legs.outputs.shards || '<full>')`: on a pull request that tests
+  // all of next/ the legs job's sized legs, else the full matrix. The full one is the end-to-end legs
+  // `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all strings. The count N is E4's,
+  // in vitest.shards.test.ts; here only its shape and its `/N`. The sized legs are legs.ts's
+  // `shards`, the same shape cut shorter (legs.test.ts).
   // Plants (T967), each run once on check.yaml and restored, each exit 1: drop e2e-2 and keep `/2`
   // (E2's count error); `e2e-2, e2e-1` (E1); a leg named plain `e2e` (E1 and E2); `/3` with two legs
   // (E2); the end-to-end step's guard dropped (E2); `--shard` dropped (E2's command); shard times back
@@ -411,20 +465,18 @@ export const lintWorkflow = (text: string): string[] => {
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
-  // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
-  // unquoted so each reader path is its own argument. A missing filter runs all of next/.
-  // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
-  // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
+  // The vitest step's paths, unquoted so each path is its own argument. On a sized pull request the
+  // legs job's `files`: what `--changed` picked and every reader test, each once (legs.ts), so the
+  // step takes no `--changed` of its own, which would drop the readers again. Else the plan for CI
+  // paths, slice 2: `filter` from changes, the reader tests or `next/`, and a missing filter runs all
+  // of next/, as the merge queue and main do, the whole suite as the backstop.
   const nextCommand =
-    'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
   // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
   // pull request's change reaches, and every one in the queue and on main.
   const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
-  // The vitest step's own: empty when the filter names the reader tests too. They read files as
-  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
-  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -448,29 +500,29 @@ export const lintWorkflow = (text: string): string[] => {
     compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
   // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
   require(typeof shard === "string" &&
-    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${VITEST_LEGS.length}$`).test(
+    new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
+  // The legs job's list first, so a sized run runs the files it was sized with; changes' filter
+  // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
+  // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.changes.outputs.filter||'next/'", "next takes its path from filter, with the fallback next/");
+    "needs.legs.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes legs's files, else filter, with the fallback next/");
+  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
   require(typeof e2eShard === "string" &&
-    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${e2eCount}$`).test(
+    new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
 
-  // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
-  // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
-  // The vitest step also leaves it empty when the filter names the reader tests.
-  for (const [step, name, expected] of [
-    [testStep, "vitest", changedUnlessReaders],
-    [e2eStep, "end-to-end", changedOnPullRequests],
-  ] as const) {
-    require(map(step?.["env"])["CHANGED"] ===
-      expected, `next's ${name} step narrows with --changed on pull requests only`);
-  }
+  // The end-to-end step narrows to the changed files on a pull request only. Any other value could
+  // narrow the merge queue or main, where the whole suite is the backstop for what the import graph
+  // misses.
+  require(map(e2eStep?.["env"])["CHANGED"] ===
+    changedOnPullRequests, "next's end-to-end step narrows with --changed on pull requests only");
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
@@ -498,13 +550,201 @@ export const lintWorkflow = (text: string): string[] => {
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
   }
 
+  // S1. The legs job (legs.ts) runs after changes on every run that is not canceled, so next always
+  // has its answer. Each of its steps runs only on a pull request that tests all of next/ and whose
+  // changes passed. Everywhere else it prints nothing, so next runs the full matrix: the merge queue
+  // and main always do. Its setup and its sizing may fail without failing it, so a failure there is
+  // the full matrix too, never a skipped next.
+  const sizer = map(jobs["legs"]),
+    sizeSteps = steps(sizer),
+    sizeOutputs = map(sizer["outputs"]);
+  require(sizer["needs"] === "changes" &&
+    compact(sizer["if"]) === "!cancelled()" &&
+    sizer["continue-on-error"] === undefined, "legs runs after changes on every run that is not canceled");
+  require(Object.keys(sizeOutputs).length === LEGS_OUTPUTS.length &&
+    LEGS_OUTPUTS.every(
+      (name) => compact(sizeOutputs[name]) === `steps.size.outputs.${name}`,
+    ), `legs exposes ${LEGS_OUTPUTS.join(", ")} from its size step, and nothing else`);
+  require(sizeSteps.length > 0 &&
+    sizeSteps.every(
+      (s) => compact(s["if"]) === SIZED,
+    ), "every legs step runs only on a pull request that tests all of next/");
+  const sizeRuns = sizeSteps.filter((s) => "run" in s);
+  const size = sizeRuns[1];
+  require(sizeRuns.length === 2 &&
+    sizeRuns[0]?.["run"] === "pnpm install --frozen-lockfile --ignore-scripts" &&
+    size?.["id"] === "size" &&
+    size["run"] === "node .github/ci/legs.ts", "legs installs, then runs legs.ts as its size step");
+  require(sizeSteps.every(
+    (s) =>
+      (typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@")) || s["continue-on-error"] === true,
+  ), "a failed legs setup or sizing fails open to the full matrix");
+
+  for (const [key, expected] of Object.entries(SIZE_ENV)) {
+    require(map(size?.["env"])[key] === expected, `legs's size step gets ${key} through env`);
+  }
+
   return errors;
 };
+
+/** The files the cache lint reads, each as its text. */
+export interface CacheFiles {
+  /** Each workflow by its path, check.yaml among them. */
+  readonly workflows: Readonly<Record<string, string>>;
+  /** .github/actions/pnpm/action.yml, the one setup every pnpm job uses. */
+  readonly action: string;
+  readonly workspace: string;
+  readonly typecheck: string;
+}
+
+// A cache is saved on main only: a pull request runs on refs/pull/<n>/merge and a merge queue group
+// on gh-readonly-queue/main/..., so only a push to main has this ref here. Any ref can restore
+// main's, and a copy per pull request or group filled the repository's 10 GB
+// (.github/actions/pnpm/action.yml says when).
+const ON_MAIN = "github.ref=='refs/heads/main'";
+// scripts/typecheck.sh's buildinfo path, relative to each package.
+const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
+const TSC_HASH = "git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin";
+const TSC_PREFIX = `tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-`;
+const TSC_SAVED = `\${{ steps.tsc.outputs.cache-primary-key }}`;
+
+const uses = (step: Record<string, unknown>, action: string) =>
+  typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
+
+const lines = (value: unknown) =>
+  typeof value === "string"
+    ? value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+    : [];
+
+export const lintCaches = (files: CacheFiles): string[] => {
+  const errors: string[] = [];
+  const require = (holds: boolean, reason: string) => {
+    if (!holds) {
+      errors.push(reason);
+    }
+  };
+  let action: Record<string, unknown>, workspace: Record<string, unknown>;
+  const workflows: [string, Record<string, unknown>][] = [];
+
+  try {
+    action = map(parse(files.action));
+    workspace = map(parse(files.workspace));
+
+    for (const [path, text] of Object.entries(files.workflows)) {
+      workflows.push([path, map(parse(text))]);
+    }
+  } catch {
+    return ["cache lint: a file is not valid YAML"];
+  }
+
+  const actionSteps = steps(map(action["runs"]));
+  // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
+  // mutation.yaml runs by hand on main, so its setup-node cache saves on main.
+  const perRef = workflows.filter(([, workflow]) => {
+    const on = workflow["on"];
+    return ["pull_request", "merge_group"].some((event) =>
+      Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
+    );
+  });
+  const everyStep: [string, Record<string, unknown>][] = [
+    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+    ...perRef.flatMap(([path, workflow]) =>
+      Object.values(map(workflow["jobs"])).flatMap((job) =>
+        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+      ),
+    ),
+  ];
+
+  // C1. Neither of these can be told to restore only: each saves from whatever ref it runs on.
+  for (const [path, step] of everyStep) {
+    require(!uses(step, "actions/cache"), `${path}: use actions/cache/restore, and actions/cache/save on main only`);
+    require(!(
+      uses(step, "actions/setup-node") && "cache" in map(step["with"])
+    ), `${path}: setup-node's cache saves on every ref; use .github/actions/pnpm`);
+  }
+
+  // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
+  // (action.yml gives the seconds). Each save anywhere is on main.
+  require(!actionSteps.some((step) =>
+    String(step["uses"]).startsWith("actions/cache"),
+  ), "the pnpm action caches nothing: a restored pnpm store cost more than its download");
+
+  for (const [path, step] of everyStep.filter(([, s]) => uses(s, "actions/cache/save"))) {
+    const condition = compact(step["if"]);
+    require(condition === ON_MAIN ||
+      condition.startsWith(`${ON_MAIN}&&`), `${path}: a cache save runs on main only, its if starting ${ON_MAIN}`);
+  }
+
+  const check = map(workflows.find(([path]) => path.endsWith("check.yaml"))?.[1]),
+    jobs = map(check["jobs"]);
+
+  // C3. A full-history checkout fetches every commit and tree, and only the head's files.
+  for (const [name, job] of Object.entries(jobs)) {
+    for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+      const options = map(step["with"]);
+      require(options["fetch-depth"] !== 0 ||
+        options["filter"] ===
+          "blob:none", `check.yaml: ${name}'s full-history checkout is blobless (filter: blob:none)`);
+    }
+  }
+
+  // C4. The typecheck job's buildinfo cache. Its key and restore prefix both hold the lockfile and
+  // every tsconfig, so a change to the compiler or its settings never starts from old answers; its
+  // paths are where scripts/typecheck.sh writes, one per workspace package glob.
+  const typecheckSteps = steps(map(jobs["typecheck"]));
+  const buildinfo = BUILDINFO.exec(files.typecheck)?.[1];
+  const folder = buildinfo?.slice(0, buildinfo.lastIndexOf("/"));
+  const globs = Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
+  const paths = globs.map((glob) => `${String(glob)}/${folder}`);
+  const keyStep = typecheckSteps.find((s) => s["id"] === "tsc-key");
+  const restore = typecheckSteps.find((s) => s["id"] === "tsc");
+  const save = typecheckSteps.find((s) => uses(s, "actions/cache/save") && map(s["with"])["key"] === TSC_SAVED);
+  const at = (step: Record<string, unknown> | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
+  const install = typecheckSteps.find((s) => s["run"] === "pnpm install --frozen-lockfile");
+  const run = typecheckSteps.find((s) => s["run"] === "pnpm typecheck");
+  require(folder !== undefined && folder !== "", "scripts/typecheck.sh passes --tsBuildInfoFile under a folder");
+  require(keyStep?.["run"] ===
+    `echo "hash=$(${TSC_HASH})" >> "$GITHUB_OUTPUT"`, `check.yaml: the typecheck job's tsc-key step hashes ${TSC_HASH}`);
+  require(restore !== undefined &&
+    uses(restore, "actions/cache/restore") &&
+    map(restore["with"])["key"] === `${TSC_PREFIX}\${{ github.sha }}` &&
+    map(restore["with"])["restore-keys"] ===
+      TSC_PREFIX, `check.yaml: the tsc cache's key is ${TSC_PREFIX}<sha>, and it restores only that prefix`);
+  require(JSON.stringify(lines(map(restore?.["with"])["path"])) === JSON.stringify(paths) &&
+    JSON.stringify(lines(map(save?.["with"])["path"])) ===
+      JSON.stringify(
+        paths,
+      ), `check.yaml: the tsc cache restores and saves ${folder} in each pnpm-workspace.yaml package glob, in its order`);
+  require(at(install) >= 0 &&
+    at(install) < at(keyStep) &&
+    at(keyStep) < at(restore) &&
+    at(restore) < at(run) &&
+    at(run) < at(save), "check.yaml: the typecheck job installs, restores the tsc cache, typechecks, then saves");
+
+  return errors;
+};
+
+/** The checked-in files lintCaches reads, through a reader of repo-relative paths. */
+export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
+  workflows: Object.fromEntries(
+    globSync([".github/workflows/*.yaml", ".github/workflows/*.yml"], {
+      cwd: fileURLToPath(new URL("../../", import.meta.url)),
+    })
+      .toSorted()
+      .map((path) => [path, read(path)]),
+  ),
+  action: read(".github/actions/pnpm/action.yml"),
+  workspace: read("pnpm-workspace.yaml"),
+  typecheck: read("scripts/typecheck.sh"),
+});
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    const errors = lintWorkflow(read(".github/workflows/check.yaml"));
+    const errors = [...lintWorkflow(read(".github/workflows/check.yaml")), ...lintCaches(cacheFiles(read))];
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
