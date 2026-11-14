@@ -35,6 +35,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
+import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Dir, type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
@@ -65,7 +66,7 @@ const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 
 /** tezgah's default rows for this slice, as `next/programs/tezgah/src/commands.ts` ships them. The
  *  library may not import a program, so the laws hand the window the same rows themselves. */
-const ROWS: ReadonlyArray<Keys.Binding> = [
+const ROWS: ReadonlyArray<Binding> = [
   { does: "tezgah.split_right", keys: ["<prefix>%", "<prefix>|"], word: "split right", label: "Split right" },
   { does: "tezgah.split_down", keys: ['<prefix>"', "<prefix>-"], word: "split down", label: "Split down" },
   { does: "tezgah.close", keys: ["<prefix>x"], word: "close", label: "Close tile" },
