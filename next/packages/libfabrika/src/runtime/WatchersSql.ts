@@ -119,7 +119,7 @@ export const layer = (
             yield* end(client, whole.rev);
           }
         }),
-        publish: Effect.fn("watchers.publish")(function* (patch: Extract<Update, { type: "patch" }>) {
+        publish: Effect.fn("watchers.publish")(function* (patch: Update) {
           const state = yield* stored(() => sql.transaction(() => load(sql, descriptor.name)));
           const clients = state._tag === "empty" ? [] : state.clients;
           let failures = 0;

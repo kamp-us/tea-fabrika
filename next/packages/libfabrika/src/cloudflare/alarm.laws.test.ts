@@ -79,7 +79,12 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               armed = null;
               eligible = null;
             },
-            sql: { exec: unexpected },
+            sql: {
+              exec: (query: string) => {
+                expect(query).toBe("SELECT name FROM sqlite_master WHERE name='process_state'");
+                return [];
+              },
+            },
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
@@ -110,6 +115,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                       due: () => Effect.void,
                       mailed: Effect.void,
                       restart: () => Effect.void,
+                      swap: () => Effect.sync(unexpected),
                     });
                   }),
                 ),
