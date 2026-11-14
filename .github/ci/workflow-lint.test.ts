@@ -1,9 +1,8 @@
-import { readFileSync, globSync } from "node:fs";
-import { matchesGlob } from "node:path";
+import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { cacheFiles, lintCaches, lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
+import { cacheFiles, lintCaches, lintWorkflow as lint } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -29,10 +28,8 @@ const diff = {
 
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 
-const LANES = "lane tests, one file at a time";
-
-// The test job's steps: apt has no env.
-type TestStep = { name: string; if: string; env?: Record<string, string>; run: string };
+// The test job's steps: a plant may give one an `if` or add one with no name.
+type TestStep = { name?: string; if?: string; env?: Record<string, string>; run: string };
 const testSteps = (list: TestStep[]) => list;
 
 // The next job's steps: a plant may add one with no name, such as a second Vitest call.
@@ -72,8 +69,8 @@ const step = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(
 const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) =>
   (w.jobs as Record<string, { steps: unknown[] }>)[job]!.steps.indexOf(step(w, job, name));
 
-// T5: six machines for today's tests, two when only the tooling tests run.
-const testLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
+// T5 before 0533: six machines for today's tests, two when only the tooling tests ran.
+const todayLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
 
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
@@ -83,6 +80,32 @@ const testEnv = {
 const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
 const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
+const toolingReport = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
+
+// 0533: the test job's one test step, the tooling tests, on two machines and no flag.
+const tooling = [
+  'if [ -n "$BASE" ]; then',
+  `  pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${toolingReport}`,
+  "else",
+  `  pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${toolingReport}`,
+  "fi",
+  "",
+].join("\n");
+
+const testTimes = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
+
+// What changes exposed before 0533: the flags that started today's tests and its app end to end.
+const todayFlags = ["today", "e2e"] as const;
+
+// The e2e job as it was before 0533, with its own place in ci-required's needs and its stop step
+// last (F1), so T2 alone names it.
+const todaysE2e = (run: Record<string, string>) => (w: Workflow) => {
+  Object.assign(w.jobs, {
+    e2e: { needs: "changes", if: guard("e2e"), "timeout-minutes": 25, steps: [run, stop] },
+  });
+  w.jobs["ci-required"].needs.push("e2e");
+};
+
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const probe = "steps.diff.outputs.probe == 'true'";
 const name = fc.string({ maxLength: 20 });
@@ -145,7 +168,7 @@ const stop = {
 };
 
 // Every job that carries the stop step: all of them but ci-required.
-const stopping = ["changes", "field", "check", "typecheck", "test", "legs", "next", "e2e"] as const;
+const stopping = ["changes", "field", "check", "typecheck", "test", "legs", "next"] as const;
 
 const valid = (label: string, extra: string) => ({
   name: label,
@@ -165,10 +188,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       outputs: {
         ...Object.fromEntries(
-          ["check", "typecheck", "test", "e2e", "field", "build", "today"].map((key) => [
-            key,
-            `\${{ steps.diff.outputs.${key} }}`,
-          ]),
+          ["check", "typecheck", "test", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again.
         next: `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`,
@@ -218,7 +238,6 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 10,
       steps: [
         { name: "lint", run: "pnpm lint" },
-        { name: "promises", if: build, run: "pnpm promises gate" },
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", env: testEnv, run: ratchet },
       ] as Record<string, unknown>[],
@@ -236,37 +255,11 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("test"),
       "timeout-minutes": 30,
-      strategy: { matrix: { shard: testLegs } },
+      strategy: { "fail-fast": false, matrix: { shard: [1, 2] as unknown } },
       steps: testSteps([
-        {
-          name: "test",
-          if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
-          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
-          run: [
-            'if [ -n "$BASE" ]; then',
-            'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
-            `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-            "pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**'",
-            "fi",
-            "else",
-            "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
-            "fi",
-          ]
-            .map((line) => (line.startsWith("pnpm exec vitest run") ? `${line} --exclude '${LANE_GLOB}'` : line))
-            .join("\n"),
-        },
-        {
-          name: "tooling tests",
-          if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
-          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` },
-          run: [
-            'if [ -n "$BASE" ]; then',
-            `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
-            "else",
-            `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
-            "fi",
-          ].join("\n"),
-        },
+        { name: "install", run: "pnpm install --frozen-lockfile" },
+        { name: "tooling tests", env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` }, run: tooling },
+        { name: "shard times", if: "!cancelled()", run: testTimes },
       ]),
     },
     legs: {
@@ -352,12 +345,6 @@ const valid = (label: string, extra: string) => ({
         { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"' },
       ]),
     },
-    e2e: {
-      needs: "changes",
-      if: guard("e2e"),
-      "timeout-minutes": 25,
-      steps: [{ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
-    },
     field: {
       "timeout-minutes": 5,
       steps: [
@@ -375,7 +362,7 @@ const valid = (label: string, extra: string) => ({
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "legs", "next"],
+      needs: ["changes", "field", "check", "typecheck", "test", "legs", "next"],
       if: "always()",
       "timeout-minutes": 5,
       permissions: { contents: "read" } as unknown,
@@ -404,29 +391,6 @@ const wiring = fc
     // E1 and E2: any count of e2e legs is the lint's shape, with its own `/N` on the end-to-end step.
     setLegs(clean, nextLegs(e2es));
     step(clean, "next", "end to end").env!.SHARD = e2eShard(e2es);
-    clean.jobs.test.steps.unshift({
-      name: "lane tests, one file at a time",
-      if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
-      run: [
-        'if [ -n "$BASE" ]; then',
-        `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "else",
-        `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "fi",
-      ].join("\n"),
-    });
-    clean.jobs.test.steps.unshift({
-      name: "apt packages",
-      if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      run: "sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep",
-    });
-    clean.jobs.test.steps.push({
-      name: "shard times",
-      if: "!cancelled()",
-      env: testEnv,
-      run: "node .github/ci/shard-times.ts",
-    });
 
     if (whitespace) {
       step(clean, "next", "vitest").env!.SHARD = vitestShard(gap);
@@ -515,9 +479,33 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   [
-    "the promises gate skips on the check flag",
+    "the build skips on the check flag",
     (w) => {
-      step(w, "check", "promises")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+      step(w, "check", "build")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+    },
+  ],
+  // 0533: the promises gate tests today's pipeline code, so no step runs it, under any spelling or
+  // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
+  // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
+  // test job's are also held by the build-flag law and T1.
+  ...[
+    { name: "promises", if: build, run: "pnpm promises gate" },
+    { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
+    { name: "promises", run: "pnpm -s promises gate" },
+    { name: "promises", run: "pnpm run promises confirm ship" },
+    { name: "promises", run: "node packages/promises/src/main.ts gate" },
+    { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
+  ].map((planted): [string, (w: Workflow) => void] => [
+    `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
+    (w) => {
+      // Before the stop step, which stays last (F1).
+      w.jobs.check.steps.splice(-1, 0, planted);
+    },
+  ]),
+  [
+    "T6: the test job runs today's promise checks",
+    (w) => {
+      w.jobs.test.steps.splice(place(w, "test", "shard times"), 0, { name: "promises", run: "pnpm promises" });
     },
   ],
   [
@@ -540,92 +528,132 @@ const plants: [string, (workflow: Workflow) => void][] = [
       }
     },
   ],
-  [
-    "L1: main loses lane exclude",
+  // 0533: no event runs the tests of today's version or its app end to end. T1: no output
+  // of changes can start them, and the test job runs only its three whole scripts. T2: no job runs
+  // today's app. Each plant puts back one way today's tests ran before, or a new spelling of one.
+  // Source plants, each run once on workflow-lint.ts and restored: drop T1's outputs check (red:
+  // the today and e2e flags back), drop T2's loop (red: every e2e plant), let T1's allowlist take
+  // any step that holds an allowed script (red: today's tests in a step of their own, the lane
+  // tests, today's tests after the tooling tests in one step, and the tooling step twice).
+  ...todayFlags.map((flag): [string, (w: Workflow) => void] => [
+    `T1: changes exposes the ${flag} flag again`,
     (w) => {
-      const rest = step(w, "test", "test");
-      const lines = rest.run.split("\n");
-      lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
-      rest.run = lines.join("\n");
+      w.jobs.changes.outputs[flag] = `\${{ steps.diff.outputs.${flag} }}`;
+    },
+  ]),
+  [
+    "T1: today's tests are back in the test job, on the today flag",
+    (w) => {
+      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 0, {
+        name: "test",
+        if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
+        env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
+        run: "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
+      });
     },
   ],
   [
-    "L2: two lane workers",
+    "T1: the lane tests are back, one file at a time",
     (w) => {
-      const lanes = step(w, "test", LANES);
-      lanes.run = lanes.run.replace("--maxWorkers=1", "--maxWorkers=2");
+      w.jobs.test.steps.unshift({
+        name: "lane tests, one file at a time",
+        env: testEnv,
+        run: "pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --maxWorkers=1 --exclude 'next/**'",
+      });
+    },
+  ],
+  ...["apps", "packages", "programs", "next"].map((tree): [string, (w: Workflow) => void] => [
+    `T1: the tooling tests run ${tree}/'s tests`,
+    (w) => {
+      const found = step(w, "test", "tooling tests");
+      found.run = found.run.replace(` --exclude '${tree}/**'`, "");
+    },
+  ]),
+  [
+    "T1: the tooling step runs today's tests after its own",
+    (w) => {
+      const found = step(w, "test", "tooling tests");
+      found.run += "pnpm exec vitest run packages/\n";
     },
   ],
   [
-    "L3: failure skips rest",
+    "T1: the tooling step runs twice",
     (w) => {
-      step(w, "test", "test").if = "";
+      w.jobs.test.steps.splice(place(w, "test", "shard times"), 0, {
+        ...step(w, "test", "tooling tests"),
+        name: "again",
+      });
     },
   ],
   [
-    "L3: rest before lanes",
-    (w) => {
-      w.jobs.test.steps.reverse();
-    },
-  ],
-  [
-    "L3: failure skips advice",
-    (w) => {
-      step(w, "test", "shard times").if = "";
-    },
-  ],
-  // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
-  [
-    "T1: the lane tests run with no file of today's version changed",
-    (w) => {
-      step(w, "test", LANES).if = "";
-    },
-  ],
-  [
-    "T1: today's tests run with no file of today's version changed",
-    (w) => {
-      step(w, "test", "test").if = "!cancelled()";
-    },
-  ],
-  [
-    "T2: the tooling tests are gone",
+    "T1: the tooling tests are gone",
     (w) => {
       w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 1);
     },
   ],
   [
-    "T2: the tooling tests run beside today's",
+    "T1: shard times read today's reports again",
     (w) => {
-      step(w, "test", "tooling tests").if = "!cancelled()";
+      step(w, "test", "shard times").run =
+        'node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/tooling.json"';
+    },
+  ],
+  ["T2: the e2e job is back", todaysE2e({ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" })],
+  ["T2: the e2e job is back, from the app's folder", todaysE2e({ name: "e2e", run: "cd apps/fabrika && node e2e.ts" })],
+  [
+    "T2: the ruler's end to end is back, with the folder as its working directory",
+    todaysE2e({ name: "ruler", run: "node ruler-e2e.ts", "working-directory": "apps/fabrika" }),
+  ],
+  [
+    "T2: check runs today's app end to end",
+    (w) => {
+      // Before the stop step, which stays last (F1).
+      w.jobs.check.steps.splice(-1, 0, { run: "pnpm --filter @kampus/fabrika-app-old e2e -- --aria" });
     },
   ],
   [
-    "T3: the tooling tests run today's packages' tests",
+    "T3: shard times skip after a failure",
     (w) => {
-      const tooling = step(w, "test", "tooling tests");
-      tooling.run = tooling.run.replace(" --exclude 'packages/**'", "");
+      step(w, "test", "shard times").if = "";
     },
   ],
-  ...[LANES, "test", "tooling tests"].map((named, index): [string, (w: Workflow) => void] => [
-    `T4: test step ${index} reads its base from a pull request alone`,
+  [
+    "T3: shard times run before the tooling tests",
     (w) => {
-      const found = step(w, "test", named);
-      found.env = { ...found.env!, BASE: `\${{ github.event.pull_request.base.sha }}` };
+      const [times] = w.jobs.test.steps.splice(place(w, "test", "shard times"), 1);
+      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 0, times!);
+    },
+  ],
+  [
+    "T4: the tooling tests run on the old today flag",
+    (w) => {
+      step(w, "test", "tooling tests").if = `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`;
+    },
+  ],
+  [
+    "T4: the tooling tests divide by six on two machines",
+    (w) => {
+      step(w, "test", "tooling tests").env!.SHARD = `\${{ matrix.shard }}/6`;
+    },
+  ],
+  [
+    "T4: the tooling tests read their base from a pull request alone",
+    (w) => {
+      step(w, "test", "tooling tests").env!.BASE = `\${{ github.event.pull_request.base.sha }}`;
+    },
+  ],
+  ...(
+    [
+      ["six machines on the old today flag", todayLegs],
+      ["six machines", [1, 2, 3, 4, 5, 6]],
+      ["two machines as strings", ["1", "2"]],
+    ] as const
+  ).map(([label, legs]): [string, (w: Workflow) => void] => [
+    `T5: ${label}`,
+    (w) => {
+      w.jobs.test.strategy.matrix.shard = legs;
     },
   ]),
-  [
-    "changes hides the today flag",
-    (w) => {
-      delete (w.jobs.changes.outputs as Record<string, string>)["today"];
-    },
-  ],
-  [
-    "L4: nonexistent lane filter",
-    (w) => {
-      const lanes = step(w, "test", LANES);
-      lanes.run = lanes.run.replaceAll(LANE_FILTER, "missing/lane.");
-    },
-  ],
   ...extraCommands.map((added): [string, (w: Workflow) => void] => [
     `review2 extra command: ${added.run}`,
     (w) => {
@@ -1163,12 +1191,6 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   [
-    "missing e2e dependency",
-    (w) => {
-      w.jobs.e2e.needs = "";
-    },
-  ],
-  [
     "failure skips tests",
     (w) => {
       w.jobs.test.if = "needs.changes.outputs.test == 'true'";
@@ -1366,18 +1388,8 @@ const plants: [string, (workflow: Workflow) => void][] = [
       step(w, "next", "vitest").run += " --exclude 'next/**'";
     },
   ],
-  ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
-    `exclusion branch ${branch}`,
-    (w) => {
-      const rest = step(w, "test", "test");
-      const lines = rest.run.split("\n");
-      const line = [1, 3, 6][branch]!;
-      lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      rest.run = lines.join("\n");
-    },
-  ]),
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
-  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e"] as const).map(
+  ...(["changes", "field", "check", "typecheck", "test", "next"] as const).map(
     (job): [string, (w: Workflow) => void] => [
       `ci-required does not need ${job}`,
       (w) => {
@@ -1441,7 +1453,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e", "ci-required"] as const).map(
+  ...(["changes", "field", "check", "typecheck", "test", "next", "ci-required"] as const).map(
     (job): [string, (w: Workflow) => void] => [
       `${job} without a time limit`,
       (w) => {
@@ -1453,24 +1465,6 @@ const plants: [string, (workflow: Workflow) => void][] = [
     "a time limit past the default",
     (w) => {
       w.jobs.test["timeout-minutes"] = 360;
-    },
-  ],
-  [
-    "duplicate forced tests",
-    (w) => {
-      step(w, "test", "test").run = step(w, "test", "test").run.replace(
-        " --exclude apps/fabrika/src/bundles.test.ts",
-        "",
-      );
-    },
-  ],
-  [
-    "forced tests on all shards",
-    (w) => {
-      step(w, "test", "test").run = step(w, "test", "test").run.replace(
-        `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-        "if true; then",
-      );
     },
   ],
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
@@ -1535,7 +1529,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "F1: the stop step force-cancels, which takes ci-required down with the run",
     (w) => {
-      stepsOf(w, "e2e").at(-1)!["run"] =
+      stepsOf(w, "check").at(-1)!["run"] =
         'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"';
     },
   ],
@@ -1810,39 +1804,20 @@ it("format: the checked-in workflow passes the same wiring lint", () => {
   expect(lint(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"))).toEqual([]);
 });
 
-it("L5: lane selection and rest exclusion agree on today's test paths", () => {
-  // Vitest includes .test.ts only; next/ is excluded by both commands.
-  // Plant: lane*.test.ts also excludes lane-fixture.test.ts.
-  const real = globSync(["packages/**/*.test.ts", "apps/**/*.test.ts", ".github/**/*.test.ts"]);
-  const made = fc
-    .stringMatching(/^[a-z][a-z.-]{0,30}$/)
-    .chain((name) =>
-      fc.constantFrom(
-        `${LANE_FILTER}${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/lane-${name}.test.ts`,
-        `stages/lane/${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/${name}.test.ts`,
-      ),
-    );
-  fc.assert(
-    fc.property(fc.oneof(fc.constantFrom(...real), made), (path) => {
-      expect(inLaneStep(path), path).toBe(matchesGlob(path, LANE_GLOB));
-    }),
-    {
-      ...options,
-      examples: [
-        ["packages/pipeline/src/stages/pipeline/lane-fixture.test.ts"],
-        [`${LANE_FILTER}x.y.test.ts`],
-        ["stages/lane/lane.test.ts"],
-      ],
-    },
-  );
-});
-
 // The caches: saved on main only, the shared setup never saves, full-history checkouts are
 // blobless, and the typecheck's buildinfo cache keys on the lockfile and every tsconfig.
 type Step = Record<string, unknown> & { with?: Record<string, unknown> };
-type Jobs = Record<string, { steps: Step[]; strategy?: { matrix: Record<string, unknown> } }>;
+
+type Jobs = Record<
+  string,
+  {
+    steps: Step[];
+    strategy?: { matrix: Record<string, unknown> };
+    outputs?: Record<string, string>;
+    needs?: string | string[];
+  }
+>;
+
 type Files = { workflows: Record<string, Parsed>; action: Parsed; workspace: Parsed; typecheck: string };
 type Parsed = Record<string, unknown> & { jobs: Jobs; runs: { steps: Step[] } };
 
@@ -1979,31 +1954,69 @@ for (const [name, plant, error] of [
   });
 }
 
-// T5 and T6 on the checked-in check.yaml: each plant gives its one error.
+// T1 to T5 on the checked-in check.yaml: each plant puts back one piece of how today's tests ran
+// before 0533, and gives its one error.
+const testError = "check.yaml: T1: the test job runs exactly its install, the tooling tests and shard times, once each";
+
 for (const [name, plant, error] of [
   [
-    "T5: six machines on every flag",
+    "T1: the today flag back on changes",
+    (w: Parsed) => {
+      w.jobs["changes"]!.outputs = { ...w.jobs["changes"]!.outputs, today: `\${{ steps.diff.outputs.today }}` };
+    },
+    "check.yaml: changes exposes only check, typecheck, test, field, build, next, filter",
+  ],
+  [
+    "T1: today's six-machine test step back beside the tooling tests",
+    (w: Parsed) => {
+      w.jobs["test"]!.steps.splice(place(w, "test", "tooling tests"), 0, {
+        name: "test",
+        run: "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
+      });
+    },
+    testError,
+  ],
+  [
+    "T2: the e2e job back, with its place in ci-required's needs",
+    (w: Parsed) => {
+      // With the stop step last, as every job but ci-required ends (F1).
+      const run = { run: "pnpm --filter @kampus/fabrika-app-old e2e" };
+      Object.assign(w.jobs, {
+        e2e: { needs: "changes", "timeout-minutes": 25, steps: [run, w.jobs["check"]!.steps.at(-1)] },
+      });
+      w.jobs["ci-required"]!.needs = [...[w.jobs["ci-required"]!.needs ?? []].flat(), "e2e"];
+    },
+    "check.yaml: T2: e2e runs nothing of today's app",
+  ],
+  [
+    "T6: the promises gate back in check, before its stop step",
+    (w: Parsed) => {
+      w.jobs["check"]!.steps.splice(-1, 0, {
+        name: "promises",
+        env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
+        run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nelse\n  pnpm promises gate\nfi\n',
+      });
+    },
+    "check.yaml: T6: check runs no promise check of today's version",
+  ],
+  [
+    "T5: six machines",
     (w: Parsed) => {
       w.jobs["test"]!.strategy!.matrix["shard"] = [1, 2, 3, 4, 5, 6];
     },
-    "check.yaml: T5: six machines for today's tests, two when only the tooling tests run",
+    "check.yaml: T5: the test job runs on 2 machines, a plain list",
   ],
   [
-    "T5: the tooling step dividing by six on two machines",
+    "T4: the tooling step dividing by six on two machines",
     (w: Parsed) => {
       (step(w, "test", "tooling tests")["env"] as Record<string, string>)["SHARD"] = `\${{ matrix.shard }}/6`;
     },
-    "check.yaml: T5: each test step's SHARD divides by its flag's machine count",
-  ],
-  [
-    "T6: apt only when the tooling tests run",
-    (w: Parsed) => {
-      step(w, "test", "apt packages")["if"] = `\${{ needs.changes.outputs.today == 'false' }}`;
-    },
-    "check.yaml: T6: apt runs on the today flag, before today's tests",
+    "check.yaml: T4: the tooling tests run on every test run, their shard of two, on the pull request's, the group's or the push's base",
   ],
 ] as const) {
-  it(`${name} is named by its one error`, () => {
+  it(`scenario: ${name} is named by its one error`, () => {
+    // scenario: the real workflow with one of the old pieces planted back, so the lint's own words
+    // for each are read here.
     const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
     plant(workflow);
     expect(lint(JSON.stringify(workflow))).toEqual([error]);
