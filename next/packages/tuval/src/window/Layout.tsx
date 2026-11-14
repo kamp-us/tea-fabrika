@@ -4,7 +4,9 @@
 // between two parts and around the workspace, so what is drawn is what the room check measures
 // (plan amendment 7). A tile is the tile guidelines' look: one 1px edge, a 20px mono title bar on
 // its wash, and the slate focus edge on the focused tile with its name at weight 500, so color is
-// never the only cue (WCAG 1.4.1). Nothing on a tile moves.
+// never the only cue (WCAG 1.4.1). Nothing on a tile moves. Each region carries its tile's id for
+// the page's focus reading, and takes focus itself only as the last place DOM focus can land in it:
+// a click on its title bar, or a tile with nothing to focus yet. It is never a Tab stop.
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import type { Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import type { ReactElement } from "react";
@@ -56,6 +58,8 @@ const TileRegion = ({
     className={["tile", focused ? "focused" : "", state.live ? "" : "disconnected"].filter((c) => c !== "").join(" ")}
     aria-label={tileName(tile)}
     aria-current={focused ? "true" : undefined}
+    data-tile={tile.id}
+    tabIndex={-1}
     inert={!state.live}
   >
     <header className="titlebar">

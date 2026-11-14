@@ -1,7 +1,10 @@
 // next/: the page draws the library's window client. React only reads and sends Msgs; the run, its
 // socket and its timers belong to the scope the caller started it in. The page draws the workspace
 // of its person's tezgah (`Layout.tsx`), reads each press for the window's own prefix (0278), and
-// says the prefix, the close ask and a refused split in its two live regions, made at boot.
+// says the prefix, the close ask and a refused split in its two live regions, made at boot. Desk
+// focus follows DOM focus, and DOM focus follows desk focus (0503's lesson): a click or Tab into a
+// tile tells the window, and a move lands DOM focus on the tile's cursor (0165). A focus move says
+// nothing in either live region (the tile guidelines); `aria-current` shows it.
 import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
@@ -9,7 +12,7 @@ import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
 import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
-import type { Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
+import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef } from "react";
@@ -193,6 +196,65 @@ const useSize = (send: (msg: WindowMsg) => void) => {
   return area;
 };
 
+/** What a tile's DOM focus can land on, in document order. */
+const FOCUSABLE =
+  'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+const isCursor = Schema.is(CursorKey);
+
+/** Where DOM focus is, for the window: the tile whose region holds `target`, and the `data-cursor`
+ *  key of the nearest element around it that carries one. A key too long to keep is none. */
+const focusAt = (target: EventTarget | null) => {
+  const element = target instanceof Element ? target : null;
+  const tile = element?.closest("section[data-tile]")?.getAttribute("data-tile") ?? null;
+  const cursor = element?.closest("[data-cursor]")?.getAttribute("data-cursor") ?? null;
+  return tile === null ? null : { tile, cursor: cursor !== null && isCursor(cursor) ? cursor : null };
+};
+
+/** Desk focus follows DOM focus: each time DOM focus enters an element inside a tile, by a click,
+ *  by Tab or by the page itself, the window is told the tile and the cursor key there. */
+const useFocusIn = (send: (msg: WindowMsg) => void) =>
+  useEffect(() => {
+    const listener = (e: FocusEvent) => {
+      const at = focusAt(e.target);
+
+      if (at !== null) {
+        send({ type: "focus", ...at });
+      }
+    };
+    document.addEventListener("focusin", listener, true);
+    return () => document.removeEventListener("focusin", listener, true);
+  }, [send]);
+
+/** What DOM focus follows: the drawn focus, its cursor key, whether the tile takes input (an inert
+ *  region takes no focus), and the drawn layout, whose change may draw the focused tile anew. */
+type Follow = {
+  readonly focus: string | null;
+  readonly cursor: string | null;
+  readonly live: boolean;
+  readonly layout: string;
+};
+
+/** DOM focus follows desk focus: whenever the drawn focus, its tile's state or the layout changes and
+ *  DOM focus is not in the focused tile, it lands on the tile's cursor, the element its `data-cursor`
+ *  key names, when it is there, else at the top of the tile: its first control, or the region itself
+ *  while it has none. */
+const useFollow = (area: { readonly current: HTMLDivElement | null }, { focus, cursor, live, layout }: Follow) =>
+  useEffect(() => {
+    const region = focus === null ? null : area.current?.querySelector<HTMLElement>(`section[data-tile="${focus}"]`);
+
+    if (region === null || region === undefined || region.contains(document.activeElement)) {
+      return;
+    }
+
+    const row =
+      cursor === null
+        ? undefined
+        : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
+    const target = (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
+    target.focus({ preventScroll: true });
+  }, [area, focus, cursor, live, layout]);
+
 const Desk = (props: PageProps) => {
   const [link, send] = useRuntime(props.run, pickLink);
   const [rows] = useRuntime(props.run, pickTiles);
@@ -204,6 +266,16 @@ const Desk = (props: PageProps) => {
   const area = useSize(send);
   const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
   const focused = view?.tiles.find((t) => t.id === space?.focus);
+  useFocusIn(send);
+  useFollow(area, {
+    focus: focused?.id ?? null,
+    cursor: focused?.cursor ?? null,
+    live: tileState(
+      link,
+      rows.find((r) => r.id === focused?.id),
+    ).live,
+    layout: space === undefined ? "" : JSON.stringify(space.layout),
+  });
   const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
   const line =
     asked !== undefined

@@ -218,6 +218,10 @@ In build order. "Decide first" lists only what no decision answers yet.
   tab draws workspace 1 of the founder's tezgah, one region per tile named by `tileName`; `C-b %`,
   `C-b "` and `C-b x` work through the tab's own prefix, a close of a tile tezgah started asks
   `close t<n>? (y/n)`, and a split that would leave a tile under 220x120 is refused in the tab.*
+- *2026-11-14: the desk lane's slice S3 is built on the same branch, not yet merged: `C-b o`,
+  `C-b ;`, `C-b h j k l`, the arrows after the prefix, F6 and Shift-F6 where the backend has them,
+  a click and Tab move focus at once in the tab (0167), tezgah confirms, a second tab follows, and
+  a return to a tile lands on its cursor (0165). The screen reader run of the cursor is owed.*
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
