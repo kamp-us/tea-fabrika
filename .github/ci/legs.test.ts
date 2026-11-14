@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import { budget, fewest, type Legs, outputs, type Run, shards, size, split, withReaders } from "./legs.ts";
-import { e2eFiles, nextFiles } from "./shard-rows.ts";
+import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on a pull request. Paths are
@@ -18,13 +18,15 @@ const workflow = readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8"
 const full: Legs = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
 const limit = budget(nextMinutes(workflow));
 const options = { seed: 119120, numRuns: 100 };
-const pr: Run = { event: "pull_request", scope: "all" };
+// A pull request that asked for its visual tests with the `visual` label, and one that did not (0536).
+const pr: Run = { event: "pull_request", scope: "all", visual: true };
+const plainPr: Run = { event: "pull_request", scope: "all", visual: false };
 
 let vitest: string[] = [];
 let e2e: string[] = [];
 
 beforeAll(async () => {
-  [vitest, e2e] = await Promise.all([nextFiles(ROOT), e2eFiles(ROOT)]);
+  [vitest, e2e] = await Promise.all([nextFiles(ROOT), visualFiles(ROOT)]);
 });
 
 /** Some of the real files, with a scratch table that gives each a row or none. */
@@ -115,22 +117,39 @@ it("scenario: every next/ file selected, with today's table, gives exactly today
   expect(shards(full)).toEqual([...e2eLegs(workflow), ...vitestLegs(workflow)]);
 });
 
-it("property: the merge queue, a push and the reader tests always give the full matrix", () => {
+it("property: the merge queue, a push and the reader tests always give the full vitest legs, and visual legs only where asked", () => {
   // Plant: drop the event check from `size` (red on merge_group and push, here and in the main's scenario).
+  // 0536, plants, each run once on legs.ts and restored: `visual` always true (red: the merge queue
+  // got e2e legs); `visual` without the push case (red: main lost them).
   fc.assert(
     fc.property(
       picked(),
       fc.constantFrom<Run>(
-        { event: "merge_group", scope: "all" },
-        { event: "push", scope: "all" },
-        { event: "merge_group", scope: "readers" },
-        { event: "push", scope: "readers" },
-        { event: "pull_request", scope: "readers" },
+        { event: "merge_group", scope: "all", visual: false },
+        { event: "push", scope: "all", visual: false },
+        { event: "merge_group", scope: "readers", visual: false },
+        { event: "push", scope: "readers", visual: false },
+        { event: "pull_request", scope: "readers", visual: false },
+        { event: "pull_request", scope: "readers", visual: true },
       ),
       ({ selected, table }, run) => {
-        expect(size(run, selected, full, limit, table)).toEqual(full);
+        const asked = run.event === "push" || (run.event === "pull_request" && run.visual);
+        expect(size(run, selected, full, limit, table)).toEqual({ vitest: full.vitest, e2e: asked ? full.e2e : 0 });
       },
     ),
+    options,
+  );
+});
+
+it("property: a sized pull request without the visual label starts no end-to-end leg, whatever it selected", () => {
+  // 0536. Plant, run once on legs.ts and restored: size e2e as if every pull request asked (red).
+  fc.assert(
+    fc.property(picked(), ({ selected, table }) => {
+      const legs = size(plainPr, selected, full, limit, table);
+      expect(legs.e2e).toBe(0);
+      expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
+      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
+    }),
     options,
   );
 });
@@ -175,9 +194,8 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
     env: { PATH: process.env["PATH"], EVENT: "merge_group", FILTER: "next/", GITHUB_OUTPUT: output },
   });
   expect(done.status).toBe(0);
-  expect(readFileSync(output, "utf8")).toBe(
-    'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
-  );
+  // 0536: the merge queue never starts the visual legs.
+  expect(readFileSync(output, "utf8")).toBe('shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n');
 });
 
 // PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
@@ -235,9 +253,9 @@ it("property: the size step prints files only on a sized run with a vitest leg, 
       picked(),
       fc.constantFrom<Run>(
         pr,
-        { event: "merge_group", scope: "all" },
-        { event: "push", scope: "all" },
-        { event: "pull_request", scope: "readers" },
+        { event: "merge_group", scope: "all", visual: false },
+        { event: "push", scope: "all", visual: false },
+        { event: "pull_request", scope: "readers", visual: false },
       ),
       ({ selected, table }, run) => {
         const legs = size(run, selected, full, limit, table);
@@ -255,5 +273,7 @@ it("scenario: a vitest file whose path holds a space throws, so the step prints 
   // `files` is passed unquoted, one path per word. Plant: drop the space check (red: no throw).
   const selected = { vitest: ["next/a b.test.ts"], e2e: [] };
   expect(() => outputs(pr, { vitest: 1, e2e: 0 }, selected)).toThrow(/space/);
-  expect(outputs({ event: "merge_group", scope: "all" }, full, selected)).not.toContain("files=next/a b.test.ts");
+  expect(outputs({ event: "merge_group", scope: "all", visual: false }, full, selected)).not.toContain(
+    "files=next/a b.test.ts",
+  );
 });

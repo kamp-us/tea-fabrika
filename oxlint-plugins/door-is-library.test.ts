@@ -25,7 +25,7 @@ describe("P17a, the library owns the door", async () => {
       "export default function check() { return true; }",
     ].join("\n"),
     "next/packages/libfabrika/src/gateway/Gateway.ts": "export const guard = () => true;",
-    "next/apps/fabrika/src/door.test.ts": "const guard = () => true;",
+    "next/apps/fabrika/src/door.integration.test.ts": "const guard = () => true;",
     "next/apps/fabrika/src/brain.ts": "export const wire = () => true;",
   };
   const linted = await plant(files);

@@ -81,9 +81,16 @@ const DRAFT_NAMES = {
   "ci-required": "github.event.pull_request.draft&&'ci-required (draft)'||'ci-required'",
 };
 
-// Marking a draft ready starts the full run; only a new head cancels the run before it.
-const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
-const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
+// Marking a draft ready starts the full run; only a new head cancels the run before it. Adding the
+// `visual` label starts the same run with the visual legs (0536), and it cancels the one it repeats.
+const TYPES = ["opened", "synchronize", "reopened", "ready_for_review", "labeled"];
+
+const CANCEL =
+  "github.event_name=='pull_request'&&(github.event.action=='synchronize'||(github.event.action=='labeled'&&github.event.label.name=='visual'))";
+
+// A pull request that asked for its visual tests (0536). Only a pull request has labels, so this is
+// false in the merge queue and on main.
+const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, 'visual')";
 const BUILD = "needs.changes.outputs.build!='false'";
 // What changes exposes from its first pass, and nothing more: no output starts today's tests or its
 // app end to end, which run on no event (0525, 0533).
@@ -94,19 +101,19 @@ const TOOLING_LEGS = [1, 2];
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
-// next/ and the three trees of today's tests. Today's version is frozen (0525, 0533), so every vitest
-// call in the test job leaves all four out.
-const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
+// Today's version is frozen (0525, 0533), so every vitest call in the test job runs the `tooling`
+// project alone: next/ and the three trees of today's tests are projects of their own, and a project
+// ignores `--exclude` (vitest.config.ts; workflow-lint.test.ts holds the tooling project's globs).
+const TOOLING_PROJECT = "--project tooling";
 const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
-const toolingExcludes = TOOLING_EXCLUDES.map((glob) => `--exclude '${glob}'`).join(" ");
 
 // The test job's one test step, whole: the tests that reach the change with a base, all of them
 // without one, each on its machine's share.
 const TOOLING = [
   'if [ -n "$BASE" ]; then',
-  `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${TOOLING_REPORT}`,
+  `pnpm exec vitest run ${TOOLING_PROJECT} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
   "else",
-  `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${TOOLING_REPORT}`,
+  `pnpm exec vitest run ${TOOLING_PROJECT} --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
   "fi",
 ];
 
@@ -124,23 +131,36 @@ const chromium =
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
 // vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is the legs job's `shards`,
-// else its fallback, the full matrix: what a run that is not sized runs (legs.ts).
+// else its fallback: the full matrix on main and on a pull request with the `visual` label, and the
+// vitest legs alone everywhere else, the merge queue among them (0536, legs.ts).
 const E2E_PREFIX = "e2e-";
 const VITEST_LEGS = ["1", "2", "3", "4", "5"];
 const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
-const SIZED_SHARDS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|'(.*)'\)$/s;
+// Chromium is fetched only once a visual file exists.
+const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
+const FULL_ON = `(github.event_name=='push'||${VISUAL_LABEL})`;
+const FALLBACKS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
-/** The fallback in next's `fromJSON(needs.legs.outputs.shards || '<legs>')`, numbers and strings kept apart. */
-const legs = (job: Record<string, unknown>): unknown[] => {
-  const fallback = SIZED_SHARDS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]))?.[1];
-
+const parsed = (text: string | undefined): unknown[] => {
   try {
-    const parsed: unknown = JSON.parse(fallback ?? "");
-    return Array.isArray(parsed) ? parsed : [];
+    const value: unknown = JSON.parse(text ?? "");
+    return Array.isArray(value) ? value : [];
   } catch {
     return [];
   }
 };
+
+/**
+ * next's matrix, `fromJSON(needs.legs.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
+ * when the full fallback runs, the full legs, and the other legs, numbers and strings kept apart.
+ */
+const fallbacks = (job: Record<string, unknown>) => {
+  const found = FALLBACKS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]));
+  return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
+};
+
+/** The full fallback's legs: what main and a pull request with the `visual` label run unsized. */
+const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).full;
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
 const numbered = (all: readonly unknown[]): string[] =>
@@ -161,6 +181,7 @@ const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
   FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
   BASE: `\${{ github.event.pull_request.base.sha }}`,
+  VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };
 
 // A leg's `--shard`: `${{ matrix.shard }}/${{ needs.legs.outputs.<kind> || <full count> }}`, so a sized
@@ -514,6 +535,16 @@ export const lintWorkflow = (text: string): string[] => {
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
+  // E10 (0536). The visual tests never start unasked: the full fallback runs on main and on a pull
+  // request with the `visual` label, and every other unsized run, the merge queue among them, gets
+  // the vitest legs alone. Plants, each run once on check.yaml and restored: the full fallback alone,
+  // as before (red); `merge_group` in place of `push` (red); the vitest fallback with e2e-1 (red).
+  const { when, plain } = fallbacks(nextJob);
+  require(compact(when) === compact(FULL_ON) &&
+    JSON.stringify(plain) ===
+      JSON.stringify(
+        VITEST_LEGS,
+      ), "E10: next's full fallback runs only on main or with the visual label, else the vitest legs 1 to 5 alone");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
   // The vitest step's paths, unquoted so each path is its own argument. On a sized pull request the
   // legs job's `files`: what `--changed` picked and every reader test, each once (legs.ts), so the
@@ -521,11 +552,16 @@ export const lintWorkflow = (text: string): string[] => {
   // paths, slice 2: `filter` from changes, the reader tests or `next/`, and a missing filter runs all
   // of next/, as the merge queue and main do, the whole suite as the backstop.
   const nextCommand =
-    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
-  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
-  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
-  // pull request's change reaches, and every one in the queue and on main.
-  const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+    'pnpm exec vitest run $PROJECTS $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  // E11 (0536). The layers the vitest step tests: `next` alone on a pull request and in the merge
+  // queue, `next-integration` beside it on main until the schedule carries it. Plants, each run once
+  // on check.yaml and restored: `--project next --project next-integration` on every event (red);
+  // PROJECTS dropped from the env (red).
+  const projects = "github.event_name=='push'&&'--project next --project next-integration'||'--project next'";
+  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the visual files, the
+  // `next-visual` project. It takes no filter, so under the reader filter the e2e legs still run every
+  // visual file a pull request's change reaches, and every one on main.
+  const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
@@ -558,8 +594,10 @@ export const lintWorkflow = (text: string): string[] => {
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.legs.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes legs's files, else filter, with the fallback next/");
+  require(compact(map(testStep?.["env"])["PROJECTS"]) ===
+    projects, "E11: next's vitest step tests --project next, and next-integration too only on a push to main");
   require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
-    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
+    JSON.stringify(["FILTER", "PROJECTS", "SHARD"]), "next's vitest step's env is SHARD, FILTER and PROJECTS alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
@@ -586,7 +624,7 @@ export const lintWorkflow = (text: string): string[] => {
 
   // E2 and E3. Chromium and the end-to-end runner only on the e2e legs, edges only on leg 1.
   for (const [command, leg, condition] of [
-    [chromium, "the e2e legs", `${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`],
+    [chromium, "the e2e legs", `${ON_E2E} && ${VISUAL_FILES}`],
     [e2eCommand, "the e2e legs", ON_E2E],
     [
       'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',

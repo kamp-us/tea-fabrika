@@ -8,13 +8,15 @@ on:
     branches:
       - main
   # A draft runs only the fast jobs; marking it ready (`ready_for_review`) starts the full set on
-  # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11).
+  # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11). Adding a label
+  # (`labeled`) runs it again, so the `visual` label starts the visual tests (0536): they are
+  # opt-in on a pull request, and never run in the merge queue.
   # A pull request that changes only plan files and field rows starts no run (ticket 988): CI runs
   # nothing on them but the row check, which `pnpm lint` runs on the writer's laptop. GitHub
   # compares the whole pull request with its base, so a later push of any other path starts the
   # run. The list is changes.mjs's `ignored`; workflow-lint.ts holds this copy to it.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths-ignore:
       - docs/plan/*.md
       - docs/plan/lanes/*.md
@@ -30,10 +32,12 @@ on:
 
 # A newer push to the same pull request stops the run it replaces. Main's runs
 # all finish, one per commit. Only a new head cancels: the run that marking ready starts waits for
-# the draft run on the same head to end, so no check of that head is left canceled.
+# the draft run on the same head to end, so no check of that head is left canceled. The `visual`
+# label's run cancels too: it is the same run on the same head, plus the visual legs. Any other
+# label's run waits, as marking ready does.
 concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'labeled' && github.event.label.name == 'visual')) }}
 
 # `actions: write` lets each job's last step, `stop the run` (in changes below), cancel its own run.
 # `contents: read` is the checkout's; no job uses the other scopes the repository's read-only
@@ -318,7 +322,9 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # Every test vitest.config.ts includes, less next/ and the three trees of today's tests. BASE
+      # The `tooling` project of vitest.config.ts: every test it includes, less next/ and the three
+      # trees of today's tests, which are projects of their own (`next`, `next-integration`,
+      # `next-visual` and `today`); a project ignores `--exclude`, so `--project` keeps them out. BASE
       # is the commit the run's change starts from: a pull request's base, a merge queue group's
       # base, or what main held before a push. With a BASE the tests that reach the change run
       # (vitest's `--changed`, its config's `forceRerunTriggers` for files tests read without
@@ -331,9 +337,9 @@ jobs:
           SHARD: ${{ matrix.shard }}/2
         run: |
           if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+            pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
           else
-            pnpm exec vitest run --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+            pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
           fi
       - name: shard times
         if: ${{ !cancelled() }}
@@ -341,14 +347,17 @@ jobs:
       - *stop
 
   # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
-  # it lists the files Vitest's `--changed` picks and every reader test, which read files as text so
+  # it lists the `next` project's files Vitest's `--changed` picks and every reader test, which read files as text so
   # `--changed` misses them, and sizes the legs from their measured seconds: none when nothing is
   # picked, then next skips; one when they fit one leg; else the fewest that fit, up to the full
   # matrix. `files` is that vitest list, each file once, and every vitest leg runs exactly it. A small
   # pull request then holds no runner it does not need, so a big one can claim it. Everywhere else
   # every step skips and it prints nothing, so next runs its full matrix, the fallback in its
   # `matrix`, on changes' filter: the merge queue, main, the reader tests, and a failed changes. A
-  # failed install or list prints nothing too, so it fails open to the full matrix and every file.
+  # failed install or list prints nothing too, so it fails open to the fallback and every file. The
+  # end-to-end legs run the visual tests, so a pull request sizes them only when it carries the
+  # `visual` label (VISUAL), and the fallback holds them only on main and on such a pull request:
+  # never in the merge queue (0536).
   legs:
     needs: changes
     if: ${{ !cancelled() }}
@@ -391,21 +400,29 @@ jobs:
           EVENT: ${{ github.event_name }}
           FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
         run: node .github/ci/legs.ts
       - *stop
 
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
   # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
-  # imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/, which takes
-  # no filter, so the e2e legs run every end-to-end file, and which fails on a leg with no file.
-  # Chromium is fetched only once an e2e file exists, by
+  # imports, would not pick them up. The e2e legs run the `next-visual` project, which takes no
+  # filter, so they run every visual file a change reaches, and which fails on a leg with no file.
+  # Chromium is fetched only once a visual file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
-  # The full matrix is seven machines, the fallback below. Legs `1` to `5` run vitest, each a fifth of
-  # the files by measured seconds (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no vitest step:
-  # each fetches chromium and runs the end-to-end runner on its half of the end-to-end files, split by
-  # the same measured seconds (vitest.e2e.config.ts). On a pull request that tests all of next/, the
+  # Which tests (0536): a pull request and the merge queue run the `next` project alone, the tests
+  # on our interfaces' in-memory layers. A test that drives a real resource is named
+  # `*.integration.test.ts` and runs on the 3-hour schedule; until that workflow lands, a push to
+  # main runs `next-integration` beside `next`, so no real-driver run is dropped meanwhile. A
+  # visual test (`*.visual.test.ts`, a browser or Electron) runs on the end-to-end legs, on main and
+  # on a pull request with the `visual` label only.
+  # The full matrix is seven machines, the last fallback below. Legs `1` to `5` run vitest, each a
+  # fifth of the files by measured seconds (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no
+  # vitest step: each fetches chromium and runs the `next-visual` project on its half of the visual
+  # files, split by the same measured seconds. The merge queue and a pull request without the label
+  # fall back to the five vitest legs alone. On a pull request that tests all of next/, the
   # legs job prints fewer, with each kind's `/N` to match, or none, and then this job skips. Every leg
   # is a quoted string, so each `if` below compares a string with a string. workflow-lint.ts pins the
   # fallback, each `/N` and each `if`; vitest.shards.test.ts (E4) pins the count of e2e legs: the
@@ -424,7 +441,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.legs.outputs.shards || '["e2e-1","e2e-2","1","2","3","4","5"]') }}
+        shard: ${{ fromJSON(needs.legs.outputs.shards || ((github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'visual')) && '["e2e-1","e2e-2","1","2","3","4","5"]' || '["1","2","3","4","5"]')) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -446,22 +463,26 @@ jobs:
       # paths, slice 2), as on the merge queue and main, which run the whole suite before main moves,
       # and on a pull request whose legs job printed nothing, which then runs every file. A missing
       # filter runs all of next/. FILTER stays unquoted so each path is its own argument.
-      - run: pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # PROJECTS is the layers this run tests: `next` alone on a pull request and in the merge queue,
+      # `next-integration` too on main until the schedule carries it (0536). Unquoted, so each word is
+      # its own argument.
+      - run: pnpm exec vitest run $PROJECTS $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.vitest || 5 }}
           FILTER: ${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}
+          PROJECTS: ${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
-        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''
         run: |
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
-      # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
-      # On a pull request only the end-to-end files whose imports reach a changed file run, the ones
-      # the legs job sized these legs with.
-      - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
+      # On a pull request only the visual files whose imports reach a changed file run, the ones the
+      # legs job sized these legs with.
+      - run: pnpm exec vitest run --project next-visual $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.e2e || 2 }}
