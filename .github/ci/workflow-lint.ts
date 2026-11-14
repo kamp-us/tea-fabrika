@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { ignored } from "./changes.mjs";
 import { gated, sized } from "./required.mjs";
 
 export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
@@ -161,11 +162,22 @@ export const lintWorkflow = (text: string): string[] => {
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
 
+  // A pull request's one exclusion is changes.mjs's `ignored`: plan files and rows alone start no
+  // run. GitHub compares the whole pull request with its base, so one more path starts it again.
   for (const trigger of [on, push, pr, queue]) {
-    require(!["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"].some(
-      (key) => key in trigger,
-    ), "no workflow path or branch exclusions");
+    require(!["paths", "branches-ignore", "tags", "tags-ignore"].some((key) => key in trigger) &&
+      (trigger === pr || !("paths-ignore" in trigger)), "no workflow path or branch exclusions");
   }
+
+  require(JSON.stringify(pr["paths-ignore"]) ===
+    JSON.stringify(ignored), "pull requests ignore exactly changes.mjs's ignored paths");
+  // Each `*` is a name without a `/`, and no other wildcard is used, so the test's reading of a
+  // pattern is GitHub's (its filter pattern cheat sheet).
+  const skipped = pr["paths-ignore"];
+  require(Array.isArray(skipped) &&
+    skipped.every(
+      (pattern) => typeof pattern === "string" && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
+    ), "ignored paths use no wildcard but a single *");
 
   require(!("branches" in pr), "all PR bases remain enabled");
   // A merge queue takes a required check only from a `merge_group` run, so without this trigger
@@ -576,8 +588,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
-    if (!String(map(map(manifest)["scripts"])["lint"]).includes("node .github/ci/workflow-lint.ts")) {
+    const lint = String(map(map(manifest)["scripts"])["lint"]);
+
+    if (!lint.includes("node .github/ci/workflow-lint.ts")) {
       errors.push("pnpm lint must run workflow-lint.ts");
+    }
+
+    // A pull request of ignored paths starts no run, so its rows are checked only here.
+    if (!lint.includes("node .github/ci/field-check.ts --local")) {
+      errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
     }
 
     if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {

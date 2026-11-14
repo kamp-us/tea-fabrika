@@ -1,8 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, globSync } from "node:fs";
 import { matchesGlob } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
+import { ignored, jobs } from "./changes.mjs";
+import { isFieldPath } from "./field-check.ts";
 import { lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
@@ -91,7 +94,10 @@ const valid = (label: string, extra: string) => ({
   name: label,
   on: {
     push: { branches: ["main"] },
-    pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+    pull_request: {
+      types: ["opened", "synchronize", "reopened", "ready_for_review"],
+      "paths-ignore": [...ignored] as string[] | undefined,
+    },
     merge_group: { types: ["checks_requested"] },
   },
   concurrency: {
@@ -349,6 +355,44 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
     },
   ]),
+  // Ticket 988: a pull request ignores exactly changes.mjs's `ignored`, and no other trigger ignores
+  // a path.
+  [
+    "pull requests ignore one more path",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = [...ignored, "apps/**"];
+    },
+  ],
+  [
+    "pull requests ignore one path fewer",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = ignored.slice(1);
+    },
+  ],
+  [
+    "pull requests lose the ignore list",
+    (w) => {
+      delete w.on.pull_request["paths-ignore"];
+    },
+  ],
+  [
+    "pull requests ignore every plan file, a brief folder's included",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = ["docs/plan/**", ...ignored.slice(2)];
+    },
+  ],
+  [
+    "a push to main ignores the same paths",
+    (w) => {
+      Object.assign(w.on.push, { "paths-ignore": [...ignored] });
+    },
+  ],
+  [
+    "the merge queue's group ignores the same paths",
+    (w) => {
+      Object.assign(w.on.merge_group, { "paths-ignore": [...ignored] });
+    },
+  ],
   [
     "the merge queue's group stops running the checks",
     (w) => {
@@ -1500,6 +1544,91 @@ it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, 
     const broken = real();
     mutate(broken);
     expect(lint(JSON.stringify(broken))).not.toEqual([]);
+  }
+});
+
+// Ticket 988. A pull request whose every path matches check.yaml's `paths-ignore` starts no run, so
+// each such path must be one changes.mjs already runs no heavy job for: no check, typecheck, test,
+// next, e2e, build or today's checks, on a draft and on a ready pull request. Only the field flag
+// may be on, for a row, and `pnpm lint` checks rows (field-check.ts --local). The paths are made
+// from each pattern, each `*` any name without a `/` as in GitHub's filters (the lint allows no
+// other wildcard), with the repo's own tracked files that match. Plants, each run once on
+// changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
+const globOf = (glob: string) =>
+  new RegExp(
+    `^${glob
+      .split("*")
+      .map((part) => part.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`))
+      .join("[^/]*")}$`,
+  );
+
+const ignoredBy = (path: string) => ignored.some((glob) => globOf(glob).test(path));
+const fill = fc.string({ maxLength: 12 }).filter((text) => !text.includes("/") && !text.includes("\0"));
+
+const fromGlob = fc.constantFrom(...ignored).chain((glob) => {
+  const [first = "", ...rest] = glob.split("*");
+  return fc
+    .array(fill, { minLength: rest.length, maxLength: rest.length })
+    .map((fills) => rest.reduce((path, part, i) => `${path}${fills[i]}${part}`, first));
+});
+
+const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+  .stdout.split("\0")
+  .filter((path) => path !== "" && ignoredBy(path));
+
+it("ticket 988: every path a pull request ignores runs no heavy job in changes.mjs, on a draft and a ready one", () => {
+  expect(tracked.length).toBeGreaterThan(0);
+  fc.assert(
+    fc.property(
+      fc.array(fc.oneof(fromGlob, fc.constantFrom(...tracked)), { minLength: 1, maxLength: 4 }),
+      fc.boolean(),
+      (paths, draft) => {
+        expect(paths.every(ignoredBy)).toBe(true);
+        const { check, typecheck, test, next, e2e, build, today, field } = jobs(paths, "pull_request", draft);
+        expect({ check, typecheck, test, next, e2e, build, today }).toEqual({
+          check: false,
+          typecheck: false,
+          test: false,
+          next: false,
+          e2e: false,
+          build: false,
+          today: false,
+        });
+        expect(field).toBe(paths.some(isFieldPath));
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // Pull request 1248, the waste ticket 988 names: one lane plan and two finding rows.
+        [
+          [
+            "docs/plan/lanes/t290-s2-PLAN.md",
+            "field/findings/2026-11-14-a-row.json",
+            "field/findings/2026-11-14-another-row.json",
+          ],
+          true,
+        ],
+        [["docs/plan/.md", "field/runs/.json"], false],
+      ],
+    },
+  );
+});
+
+it("pinned: ticket 988's list leaves out what changes.mjs or a reader still checks", () => {
+  // A folder a program reads, skill prose, the old logs, a row of the wrong kind and a nested plan
+  // folder all start the run: each is outside the list.
+  for (const path of [
+    "docs/plan/brief/x.md",
+    "docs/plan/lanes/prompts/x.md",
+    ".agents/skills/lead/SKILL.md",
+    "field/runs.jsonl",
+    "field/findings/x.md",
+    "field/findings/a/b.json",
+    "docs/plan/x.ts",
+    "AGENTS.md",
+  ]) {
+    expect(ignoredBy(path), path).toBe(false);
   }
 });
 
