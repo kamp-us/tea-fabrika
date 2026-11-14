@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
-import { gated, judge, sized } from "./required.mjs";
+import { gated, gates, judge } from "./required.mjs";
 
 // Today's CI for both versions. Covers required.mjs, the `ci-required` job's verdict. Each law
 // names the edge case it holds from the list at the top of required.mjs.
@@ -11,18 +11,17 @@ const options = { seed: 119120, numRuns: 100 };
 
 type Job = { result?: unknown; outputs?: Record<string, unknown> };
 
-const ungated = fc.constantFrom("changes", "field", "lint", "extra-job");
+const ungated = fc.constantFrom("changes", "field", "legs", "lint", "extra-job");
 const bad = fc.constantFrom("failure", "cancelled", "", "neutral", undefined, 1);
 const flag = fc.constantFrom("true", "false", "", undefined);
 const result = fc.constantFrom("success", "skipped", "failure", "cancelled", "");
 
 // A workflow's needs where every job passed; gated jobs skip when their flag is "false".
 const green = fc.tuple(...gated.map(() => fc.constantFrom("true", "false"))).map((flags) => {
-  const outputs = Object.fromEntries(gated.map((name, i) => [name, flags[i]]));
-  const needs: Record<string, Job> = {
-    changes: { result: "success", outputs: { ...outputs, field: "true" } },
-    field: { result: "success", outputs: {} },
-  };
+  const outputs: Record<string, string | undefined> = Object.fromEntries(
+    gated.flatMap((name, i) => gates[name].map((flag) => [flag, flags[i]])),
+  );
+  const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
   for (const name of gated) {
     needs[name] = { result: outputs[name] === "false" ? "skipped" : "success", outputs: {} };
@@ -55,10 +54,15 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
       fc.constantFrom("success", "failure", "cancelled", "skipped"),
       (needs, name, said, changes) => {
         needs["changes"]!.result = changes;
-        needs["changes"]!.outputs![name] = said;
+
+        for (const own of gates[name]) {
+          needs["changes"]!.outputs![own] = said;
+        }
+
         needs[name]!.result = "skipped";
         const others = gated.filter((other) => other !== name && needs[other]!.result === "skipped");
-        const meant = (job: string) => changes === "success" && needs["changes"]!.outputs![job] === "false";
+        const meant = (job: (typeof gated)[number]) =>
+          changes === "success" && gates[job].every((own) => needs["changes"]!.outputs![own] === "false");
         const expected = changes === "success" && meant(name) && others.every(meant);
         expect(judge(needs).pass).toBe(expected);
       },
@@ -67,32 +71,32 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
   );
 });
 
-it("10: a sized job's skip passes when its sizer succeeded and said exactly false, and only then", () => {
-  // next skips when legs.ts found no next/ test file, while changes still said next runs. Plant, run
-  // once on required.mjs and restored: drop the sizer's `result` check (red: a failed legs that
-  // said false passed).
+it("10: check, which also holds the field row check, skips only when check and field both said exactly false", () => {
+  // Field rows alone start check for its row step. Plant, run once on required.mjs and restored:
+  // gates.check as ["check"] alone (red: a skip with field "true" passed).
   fc.assert(
-    fc.property(
-      green,
-      fc.constantFrom(...Object.keys(sized)),
-      flag,
-      fc.constantFrom("success", "failure", "cancelled", "skipped"),
-      (needs, name, said, end) => {
-        const sizer = sized[name]!;
-        needs["changes"]!.outputs![name] = "true";
-        needs[sizer] = { result: end, outputs: { [name]: said } };
-        needs[name] = { result: "skipped", outputs: {} };
-        const small = end === "success" && said === "false";
-        const verdict = judge(needs);
-        // The sizer is an ungated job, so its own skip or failure fails the run too.
-        expect(verdict.pass).toBe(small);
-        expect(verdict.lines).toContain(
-          small ? `${name}: skipped, as ${sizer} said, pass` : `${name}: skipped, but it should have run, fail`,
-        );
-      },
-    ),
+    fc.property(green, flag, flag, (needs, check, rows) => {
+      needs["changes"]!.outputs!["check"] = check;
+      needs["changes"]!.outputs!["field"] = rows;
+      needs["check"] = { result: "skipped", outputs: {} };
+      const others = gated.filter((other) => other !== "check" && needs[other]!.result === "skipped");
+      const meant = check === "false" && rows === "false";
+      expect(judge(needs).pass).toBe(meant && others.every((job) => needs["changes"]!.outputs![job] === "false"));
+      expect(judge(needs).lines).toContain(
+        meant ? "check: skipped, as changes said, pass" : "check: skipped, but it should have run, fail",
+      );
+    }),
     options,
   );
+});
+
+it("scenario: the gates are the jobs check.yaml gates, with check on its own flag and field", () => {
+  expect(gates).toEqual({
+    check: ["check", "field"],
+    typecheck: ["typecheck"],
+    test: ["test"],
+    next: ["next"],
+  });
 });
 
 it("5: an ungated job that skipped fails, even when changes has an output of its name", () => {
@@ -110,9 +114,9 @@ it("5: an ungated job that skipped fails, even when changes has an output of its
 
 it("6: a failed, cancelled, empty or unknown result fails, whatever the output says", () => {
   fc.assert(
-    fc.property(green, fc.constantFrom("changes", "field", ...gated), bad, flag, (needs, name, value, said) => {
+    fc.property(green, fc.constantFrom("changes", ...gated), bad, flag, (needs, name, value, said) => {
       needs["changes"]!.outputs![name] = said;
-      needs[name]!.result = value;
+      needs[name] = { result: value };
       expect(judge(needs).pass).toBe(false);
     }),
     options,
@@ -135,13 +139,15 @@ it("the verdict passes exactly when every job passes on its own", () => {
   // An oracle written apart from the judge: random results and flags for every job.
   fc.assert(
     fc.property(
-      fc.record({ changes: result, field: result }),
+      fc.record({ changes: result, field: flag }),
       fc.tuple(...gated.map(() => fc.tuple(result, flag))),
       (top, rows) => {
-        const outputs = Object.fromEntries(gated.map((name, i) => [name, rows[i]![1]]));
+        const outputs: Record<string, string | undefined> = {
+          ...Object.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
+          field: top.field,
+        };
         const needs: Record<string, Job> = {
           changes: { result: top.changes, outputs },
-          field: { result: top.field },
           ...Object.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
         };
         const passes = (name: string) =>
@@ -149,7 +155,8 @@ it("the verdict passes exactly when every job passes on its own", () => {
           (needs[name]!.result === "skipped" &&
             (gated as readonly string[]).includes(name) &&
             top.changes === "success" &&
-            outputs[name] === "false");
+            outputs[name] === "false" &&
+            (name !== "check" || top.field === "false"));
         expect(judge(needs).pass).toBe(Object.keys(needs).every(passes));
       },
     ),
@@ -168,20 +175,18 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", typecheck: "false", test: "true", next: "true", e2e: "true" },
+      outputs: { check: "false", field: "false", typecheck: "false", test: "true", next: "true" },
     },
-    field: { result: "success", outputs: {} },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
     test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
-    e2e: { result: "success", outputs: {} },
   });
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(8);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(6);
   expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
@@ -202,10 +207,11 @@ const paths = fc.option(
 /** The needs one run gives when every job its flags turned on passed, from changes.mjs's own flags. */
 const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   const outputs = Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)]));
-  const needs: Record<string, Job> = { changes: { result: "success", outputs }, field: { result: "success" } };
+  const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
+  // A job runs when any of its flags is on: check for lint or for field rows.
   for (const name of gated) {
-    needs[name] = { result: flags[name] ? "success" : "skipped" };
+    needs[name] = { result: gates[name].some((flag) => flags[flag]) ? "success" : "skipped" };
   }
 
   return needs;
@@ -232,7 +238,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips today's e2e when no file of today's version changed.
+// 0175: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -248,9 +254,62 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: next/ alone, where e2e skips on main.
+    // pinned: next/ alone, where test skips on main.
     { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
   );
+});
+
+// 0534: the merge queue's group and a push to main never start the test job, and next runs the
+// tests their change reaches, so it skips when the size step picked none (changes' `next`, which
+// the size step prints first). Both skips pass, as changes said; the same skip on a pull request
+// whose change reaches a tooling test does not.
+it("property: on the merge line past the pull request a skipped test job always passes, and a skipped next passes only when changes said so", () => {
+  // Plants: drop `test` from `gates` (red: the skip fails as ungated); let a skip pass on any flag
+  // but "true" (red: next skipped with the size step's output empty passed).
+  const line = fc.option(
+    fc.array(
+      fc.constantFrom(
+        "docs/a.md",
+        "next/packages/libfabrika/src/a.ts",
+        ".github/workflows/check.yaml",
+        ".github/ci/legs.ts",
+        "oxlint-plugins/a.mjs",
+        "pnpm-lock.yaml",
+      ),
+      { maxLength: 4 },
+    ),
+    { nil: null },
+  );
+  fc.assert(
+    fc.property(
+      line,
+      fc.constantFrom("merge_group", "push"),
+      fc.constantFrom("true", "false", ""),
+      (p, event, said) => {
+        const flags = jobs(p, event, false);
+        const needs = ran(flags);
+        expect(flags.test).toBe(false);
+        expect(needs["test"]!.result).toBe("skipped");
+        expect(judge(needs).pass).toBe(true);
+        // The size step's `next`: "false" when it picked no next/ test file; "true" or empty otherwise.
+        fc.pre(flags.next);
+        const sized = ran(flags);
+        sized["changes"]!.outputs!["next"] = said;
+        sized["next"] = { result: "skipped" };
+        expect(judge(sized).pass).toBe(said === "false");
+      },
+    ),
+    {
+      ...options,
+      // pinned: a CI change alone, which ran all of next/ and every tooling test in each queue group.
+      examples: [[[".github/workflows/check.yaml"], "merge_group", "false"]],
+    },
+  );
+  // The same skipped test job on a ready pull request that reaches a tooling test fails.
+  const pr = ran(jobs([".github/ci/legs.ts"], "pull_request", false));
+  expect(pr["test"]!.result).toBe("success");
+  pr["test"] = { result: "skipped" };
+  expect(judge(pr).pass).toBe(false);
 });
 
 it("property: a draft passes with its heavy jobs skipped; a ready PR fails when a job it needs skips", () => {
@@ -301,7 +360,7 @@ it("property: a run stopped at its first red job never passes", () => {
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: run 43633120187's shape, check (lint) red, typecheck, next and e2e stopped mid-run, test not yet started.
+    // pinned: run 43633120187's shape, check (lint) red, typecheck and next stopped mid-run, test not yet started.
     {
       ...options,
       examples: [

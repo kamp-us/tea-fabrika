@@ -13,6 +13,8 @@ export const testConfig = {
   test: {
     setupFiles: ["./scripts/vitest.setup.ts"],
     // A changed trigger selects every test in CI. Tests read these files without importing them.
+    // `.github/` is not one (0534): no next/ test reads it, so a CI change no longer runs all of
+    // next/, and the tooling tests that read it reach it through `githubReads` below.
     forceRerunTriggers: [
       ...configDefaults.forceRerunTriggers,
       "**/pnpm-lock.yaml",
@@ -23,7 +25,6 @@ export const testConfig = {
       "**/oxlint-plugins/**",
       "**/layer-rules.json",
       "**/fixtures/**",
-      "**/.github/**",
       "**/.gitattributes",
     ],
     // One run over every package. `fixtures/` holds toy repos with their own
@@ -161,9 +162,39 @@ const scriptReads: Plugin = {
   },
 };
 
+// A tooling test that reads CI's files as text (check.yaml, the pnpm action, the CI scripts) names
+// them in its source: `.github/...` from the top, or `../workflows/...` beside it. Each such test
+// outside next/ gets every file under `.github/` as a watched file, so `--changed` picks it when one
+// changes, now that `.github/` is no rerun trigger (0534). A name in a comment or a fixture counts,
+// as in `scriptReads`: that over-matches, which reruns a test and never misses one. next/ is left
+// out: none of its tests reads `.github/`, and the merge line runs none of next/ for a CI change.
+const GITHUB_NAME = /\.github\/|\bworkflows\//;
+let githubFiles: string[] | undefined;
+
+const githubReads: Plugin = {
+  name: "fabrika-github-reads",
+  transform(code, id) {
+    const path = relative(root, id);
+
+    if (isTest(path) && !path.startsWith("next/") && GITHUB_NAME.test(code)) {
+      // The tracked ones: a diff, and so `--changed`, only ever names those.
+      githubFiles ??= spawnSync("git", ["ls-files", "-z", "--", ".github"], { cwd: root, encoding: "utf8" })
+        .stdout.split("\0")
+        .filter((file) => file !== "")
+        .map((file) => join(root, file));
+
+      for (const file of githubFiles) {
+        this.addWatchFile(file);
+      }
+    }
+
+    return null;
+  },
+};
+
 export default defineConfig({
   ...testConfig,
   test: { ...testConfig.test, maxWorkers: workers },
   // Vite runs this hook only while resolving a run. Importers can merge or spread the object.
-  plugins: [{ name: "fabrika-local-test-limits", enforce: "post", config: localLimits }, scriptReads],
+  plugins: [{ name: "fabrika-local-test-limits", enforce: "post", config: localLimits }, scriptReads, githubReads],
 });

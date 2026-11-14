@@ -1,7 +1,7 @@
 ---
 id: 0123
 title: GitHub's schedule starts the hourly mutation run and its heartbeat, code picks the range, and an agent only judges the survivors
-status: accepted
+status: amended-in-part by [0535](0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md)
 date: 2026-11-11
 tags: [mutation, schedule, cron, ci, github-actions, heartbeat, trial]
 ---
