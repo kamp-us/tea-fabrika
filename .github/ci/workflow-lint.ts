@@ -105,8 +105,6 @@ const TOOLING_LEGS = [1, 2];
 // are projects of their own, and a project ignores `--exclude` (vitest.config.ts;
 // workflow-lint.test.ts holds the tooling project's globs).
 const TOOLING_PROJECT = "--project tooling";
-// next/ and the three trees of today's tests, which the schedule's tooling job leaves out.
-const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
 
 // The test job's one test step, whole: the tests that reach the change with a base, all of them
@@ -717,9 +715,14 @@ const REPORT_ENV = {
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
 const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
-const WHOLE_NEXT = `pnpm exec vitest run next/ --shard "$SHARD" ${REPORTERS}`;
-const WHOLE_E2E = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" ${REPORTERS}`;
-const WHOLE_TOOLING = `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${TOOLING_EXCLUDES.map((glob) => `--exclude '${glob}'`).join(" ")} ${REPORTERS}`;
+// Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
+// the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
+// `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
+const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
+const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "$SHARD" --passWithNoTests ${REPORTERS}`;
+// The schedule's test depth (pull request 1274): its laws run their full case count.
+const DEPTH = "full";
 
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
@@ -863,16 +866,14 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(vitest.length === 1 &&
     compact(vitest[0]?.["if"]) === compact(`!${ON_E2E}`) &&
     map(vitest[0]?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest over all of next/ once, on the numbered legs, each its share of them");
+      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest over the next and next-integration projects once, on the numbered legs, each its share of them");
   require(e2e.length === 1 &&
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${e2eCount}`, "SC7: next runs every end-to-end file once, on the e2e legs, each its share of them");
+      `\${{ matrix.shard }}/${e2eCount}`, "SC7: next runs every visual file once, on the e2e legs, each its share of them");
   require(nextSteps.some(
-    (s) =>
-      s["run"] === chromium &&
-      compact(s["if"]) === compact(`${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`),
-  ), "SC7: next fetches chromium on the e2e legs");
+    (s) => s["run"] === chromium && compact(s["if"]) === compact(`${ON_E2E} && ${VISUAL_FILES}`),
+  ), "SC7: next fetches chromium on the e2e legs, once a visual file exists");
 
   // SC8. Every tooling test on the tooling job's legs, nothing narrowed.
   const tooling = map(jobs["tooling"]),
@@ -905,6 +906,16 @@ export const lintScheduled = (text: string, check: string): string[] => {
     require(kept.length === 1 &&
       compact(kept[0]?.["if"]) === "!cancelled()" &&
       list.indexOf(kept[0] ?? {}) > last, `SC10: ${name} uploads its report after its tests, even after a red one`);
+  }
+
+  // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
+  // count here, and unset means `fast`, as on the merge line (pull request 1274).
+  for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
+    const found = Object.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
+    require(found.length > 0 &&
+      found.every(
+        (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
+      ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
   return errors;
