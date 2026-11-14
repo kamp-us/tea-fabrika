@@ -47,6 +47,7 @@ export { apply, diff, type Patch } from "./runtime/Patch.ts";
 export * as ProgramClient from "./runtime/Client.ts";
 export { clientMachineFor } from "./runtime/Client.ts";
 export {
+  type Binding,
   EventPolicy,
   Input,
   Program,
@@ -110,3 +111,15 @@ export { Started } from "./processes/Children.ts";
  * @stability unstable
  */
 export * as Setting from "./settings/Setting.ts";
+// tezgah's wire contract: its view's shapes and the layout's geometry, pure and browser-safe. A
+// program's box reaches them here; a window may also take each by its own subpath.
+/**
+ * tezgah's view: workspaces, tiles and their ids, and the names of tezgah's processes.
+ * @stability unstable
+ */
+export * as Workspace from "./tezgah/Workspace.ts";
+/**
+ * The layout's pure functions: its tile order, a split, a remove, the rects and the check.
+ * @stability unstable
+ */
+export * as Layout from "./tezgah/Layout.ts";
