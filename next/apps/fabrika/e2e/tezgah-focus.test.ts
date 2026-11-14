@@ -45,6 +45,10 @@ const QUIET = 2_000;
 
 const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
 
+/** A checklist row whose name is the field's longest, 80 characters, so its cursor key `item:<name>`
+ *  is 85: past the 80 a cursor key once held (plan amendment 10: up to 256). */
+const LONG = "a row whose name is as long as the checklist field takes, eighty characters in all".slice(0, 80);
+
 type View = Parameters<typeof differences>[0];
 type Page = Parameters<typeof drawn>[0];
 
@@ -117,7 +121,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           const list = tile(page, regionName(t1));
           yield* list.live;
 
-          for (const item of ["milk", "eggs"]) {
+          for (const item of ["milk", "eggs", LONG]) {
             yield* promised(() => list.field.fill(item));
             yield* promised(() => list.field.press("Enter"));
           }
@@ -242,6 +246,23 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             top.cursor === null || top.cursor === top.first,
             `L28: with its row gone, the return lands at t1's top, not ${top.cursor}`,
           ).toBe(true);
+
+          // L28: a row of 80 characters, whose key is 85, is a cursor too: away and back lands on it.
+          yield* promised(() =>
+            page
+              .getByRole("region", { name: regionName(t1), exact: true })
+              .getByRole("checkbox", { name: LONG, exact: true })
+              .focus(),
+          );
+          yield* domSettles(page, (f) => f.region === regionName(t1) && f.cursor === `item:${LONG}`, "on the long row");
+          yield* move(page, ["Control+b", "o"], t4.id, "away from t1 on its long row");
+          yield* keys(page, "Control+b", ";");
+          yield* at(page, t1.id, () => true, "C-b ; back to t1 on its long row");
+          yield* domSettles(
+            page,
+            (f) => f.region === regionName(t1) && f.cursor === `item:${LONG}`,
+            "L28: back on t1, DOM focus is on the 80-character row it was left on",
+          );
 
           // L30: a click on a tile focuses it, and tezgah agrees.
           yield* promised(() =>

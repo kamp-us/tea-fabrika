@@ -807,6 +807,16 @@ const loadCommands = () => import("./commands.ts");
 /** A move by a click or by Tab: the window's `focus` Msg, which no key row names. */
 const CLICK = "tezgah.focus";
 const CURSORS = ["item:milk", "item:eggs", "item:bread", null] as const;
+
+/** A cursor key up to `CursorKey`'s real limit of 256 (plan amendment 10): the checklist's keys,
+ *  any short key, or one of 81 to 256 characters, or none. fast-check, so the limit itself is
+ *  reached, not the schema's cap. */
+const Cursor = fc.oneof(
+  fc.constantFrom(...CURSORS),
+  fc.string({ minLength: 1, maxLength: 80 }),
+  fc.string({ minLength: 81, maxLength: 256 }),
+);
+
 const VIAS = [{ _tag: "key", keys: "ctrl+b o" }, { _tag: "click" }, { _tag: "key", keys: "f6" }] as const;
 
 const FocusPick = fc.record({
@@ -827,7 +837,7 @@ const FocusPick = fc.record({
     "split_cursor",
   ),
   pick: fc.nat(),
-  cursor: fc.constantFrom(...CURSORS),
+  cursor: Cursor,
   sentAt: fc.integer({ min: 0, max: 10_000_000 }),
 });
 type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
@@ -946,7 +956,7 @@ describe("Desk S3: focus moves at the program", () => {
   it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again", async () => {
     const p = await loaded();
     const does = await focusCommands();
-    const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0, split: 0 };
+    const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0, split: 0, long: 0 };
     fc.assert(
       fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), (picks) => {
         const w = begin(p);
@@ -1010,6 +1020,7 @@ describe("Desk S3: focus moves at the program", () => {
 
             cursors.set(e.from!, e.cursor);
             seen.cursor += e.cursor === null ? 0 : 1;
+            seen.long += (e.cursor?.length ?? 0) > 80 ? 1 : 0;
           }
 
           // Every tile's cursor is the one the last move that left it carried, through splits,
@@ -1034,7 +1045,7 @@ describe("Desk S3: focus moves at the program", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 2, max: 6 }),
-        fc.array(fc.record({ from: fc.nat(), to: fc.nat(), cursor: fc.constantFrom(...CURSORS), does: fc.nat() }), {
+        fc.array(fc.record({ from: fc.nat(), to: fc.nat(), cursor: Cursor, does: fc.nat() }), {
           minLength: 2,
           maxLength: 20,
         }),

@@ -380,6 +380,26 @@ const drawnFocus = (s: WindowModel) => drawnSpace(s)?.focus ?? null;
 const serverFocus = (s: WindowModel) =>
   s.tezgah?.client.serverState?.workspaces.find((w) => w.n === s.tezgah?.client.workspace)?.focus ?? null;
 
+/** A pending move's letter, wherever its state keeps it (plan amendment 10: `waiting {n}`, `sent
+ *  {letter}`, `answered {letter, pos, ms}`), or null while it waits for one. */
+const letterIn = (p: object): string | null => {
+  const own: unknown = Reflect.get(p, "letter");
+
+  if (typeof own === "string") {
+    return own;
+  }
+
+  for (const v of Object.values(p)) {
+    const inner: unknown = typeof v === "object" && v !== null ? Reflect.get(v, "letter") : undefined;
+
+    if (typeof inner === "string") {
+      return inner;
+    }
+  }
+
+  return null;
+};
+
 const waitingMoves = (s: WindowModel): ReadonlyArray<typeof PendingMutation.Type> =>
   s.tezgah?.client.pendingMutations ?? [];
 
@@ -748,11 +768,23 @@ const answered = (w: Win, m: Move): boolean => {
   return (m.letter !== null && w.refused.has(m.letter)) || (pos !== undefined && w.seen >= pos);
 };
 
+/** A `data-cursor` key a view may give, up to `CursorKey`'s real limit of 256 (plan amendment 10),
+ *  with keys past the checklist's 85 drawn as often as short ones, or none. fast-check, not the
+ *  schema's Arbitrary: the walk must reach the limit itself, not the schema's cap. */
+const CURSOR_MOST = 256;
+
+const Cursor = fc.oneof(
+  fc.constant(null),
+  fc.string({ minLength: 1, maxLength: 80 }),
+  fc.string({ minLength: 81, maxLength: CURSOR_MOST }),
+);
+
 const Pick = fc.record({
   type: fc.constant("pick" as const),
   win: fc.integer({ min: 0, max: 1 }),
   move: fc.nat(),
   pick: fc.nat(),
+  cursor: Cursor,
 });
 type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
 
@@ -772,8 +804,8 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
   const options: Array<() => void> = [
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
-    () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", CURSORS[c.pick % 3]!, each),
-    () => focusIn(world, i, drawnFocus(w.s) ?? "", CURSORS[(c.pick >> 2) % 3]!, each),
+    () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", c.cursor, each),
+    () => focusIn(world, i, drawnFocus(w.s) ?? "", c.cursor, each),
     ...(w.waiting.some((x) => x.type === "now") ? [() => date(world, i, each)] : []),
     ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i), () => reject(world, i)] : []),
     ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
@@ -783,7 +815,28 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
 };
 
 /** Everything that waits, delivered, until the world is quiet. */
-const settle = (world: World, each: (e: Event) => void) => {
+const settle = (world: World, each: (e: Event) => void, batched = false) => {
+  // Batched: every letter dated, arrived and replied before any view, so one view answers two or more
+  // of one window's moves at once (plan amendment 10's case of an earlier move its next superseded).
+  for (let guard = 0; batched && guard < 2_000; guard++) {
+    const busy = world.wins.findIndex(
+      (w) => w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0,
+    );
+
+    if (busy < 0) {
+      break;
+    }
+
+    date(world, busy, each);
+    arrive(world, busy);
+    reply(world, busy, each);
+  }
+
+  // tezgah's whole views coalesce: a window that was behind takes only the newest one.
+  for (const w of batched ? world.wins : []) {
+    w.notices = w.notices.slice(-1);
+  }
+
   for (let guard = 0; guard < 2_000; guard++) {
     const busy = world.wins.findIndex(
       (w) =>
@@ -812,7 +865,8 @@ const walk = (desk: TezgahView, picks: ReadonlyArray<Pick>, each: (e: Event) => 
     play(world, c, each);
   }
 
-  settle(world, each);
+  // Half the walks end batched, half with views before replies (a jump back), by the picks' count.
+  settle(world, each, picks.length % 2 === 0);
   return world;
 };
 
@@ -826,7 +880,6 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
   it("pinned: the window's tezgah child holds the server state and the pending moves, and no focus of its own", () => {
     expectTypeOf<TezgahClient>().toHaveProperty("serverState");
     expectTypeOf<TezgahClient>().toHaveProperty("pendingMutations");
-    expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("letter");
     expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("to");
     expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("cursor");
     expectTypeOf<Extract<keyof TezgahClient, Stored>>().toEqualTypeOf<never>();
@@ -877,7 +930,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
           // A mutation is matched by its letter: while it waits, its letter is in the pending list.
           for (const x of open.filter((x) => x.letter !== null)) {
             expect(
-              pending.map((p) => p.letter),
+              pending.map(letterIn),
               `L24: window ${win}'s move to ${x.to} waits under its letter ${x.letter}`,
             ).toContain(x.letter);
           }
@@ -920,10 +973,12 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
     expect(seen.both, "L24: both windows move in one walk").toBeGreaterThan(0);
     expect(seen.lost, "L24: a window's last move loses to the other's").toBeGreaterThan(0);
     expect(seen.refused, "L24: the walks refuse moves, which leave as their refusal arrives").toBeGreaterThan(0);
+    expect(seen.early, "L24: the walks deliver a view before a move's reply").toBeGreaterThan(0);
   });
 
   it("L24: every letter a window sends for a move names the drawn focus it left, the tile it drew and its command, with the cursor the page last said there", () => {
     let checked = 0;
+    let long = 0;
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         walk(makeDesk(d.cuts, d.focus), picks, ({ win, cmds, world }) => {
@@ -941,6 +996,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
             const move = world.wins[win]!.moves.find((x) => x.letter === call["letter"]);
             expect(move, `L24: window ${win}'s letter ${String(call["letter"])} is one of its moves`).toBeDefined();
             checked += move!.cursor === null ? 0 : 1;
+            long += (move!.cursor?.length ?? 0) > 80 ? 1 : 0;
             expect(did, "L24: the letter is the move").toMatchObject({
               type: "did",
               does: move!.does,
@@ -959,6 +1015,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
       { seed: SEED, numRuns: 200 },
     );
     expect(checked, "L24: the walks send moves that leave a cursor").toBeGreaterThan(0);
+    expect(long, "L24: the walks send cursor keys of 81 to 256 characters").toBeGreaterThan(0);
   });
 });
 
@@ -1035,46 +1092,48 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
 });
 
 describe("Desk S3 L29: a move the server overrode is recorded", () => {
-  it("L29: each answered move writes one focus row with its letter on the step it is dropped: kept when the server's focus is its to, overridden when the drawn focus jumped back or tezgah refused it", () => {
-    const seen = { kept: 0, overridden: 0, refused: 0 };
+  it("L29: each answered move writes one focus row with its letter on the step it is dropped: overridden when tezgah refused it or dropping it moves the drawn focus, else kept", () => {
+    const seen = { kept: 0, overridden: 0, refused: 0, batch: 0, superseded: 0 };
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const rows = [new Map<string, number>(), new Map<string, number>()];
-        const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, prev, next, cmds, world: at }) => {
+        const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, prev, next, cmds, world: at }) => {
           const w = at.wins[win]!;
           const focusRows = cmds.flatMap((c) => {
             const record =
               c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
             return record?._tag === "focus" ? [record] : [];
           });
-          const before = new Set(waitingMoves(prev).map((p) => p.letter));
-          const after = new Set(waitingMoves(next).map((p) => p.letter));
+          const before = new Set(waitingMoves(prev).map(letterIn));
+          const after = new Set(waitingMoves(next).map(letterIn));
           const dropped = w.moves.filter((x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));
           expect(
             focusRows.map((r) => r["letter"]).sort(),
             `L29: window ${win} writes one focus row per move dropped on this step`,
           ).toEqual(dropped.map((x) => x.letter).sort());
 
-          for (const r of focusRows) {
-            rows[win]!.set(String(r["letter"]), (rows[win]!.get(String(r["letter"])) ?? 0) + 1);
-            const move = dropped.find((x) => x.letter === r["letter"])!;
-            expect(["kept", "overridden"], "L29: a focus row's result").toContain(r["result"]);
+          seen.batch += dropped.length > 1 ? 1 : 0;
+          // The amendment's rule, written here: drop the moves one by one, oldest first, against the
+          // server state this step left. Each is `overridden` when tezgah refused it or when dropping it
+          // moves the drawn focus (the newest still pending move's `to`, else the server's focus);
+          // otherwise `kept`, so an earlier move its own next move superseded is kept.
+          const drawnWith = (list: ReadonlyArray<Move>) => list.at(-1)?.to ?? serverFocus(next);
+          let current = w.moves.filter((x) => x.letter !== null && before.has(x.letter));
 
-            if (w.refused.has(move.letter!)) {
-              seen.refused++;
-              expect(r["result"], `L29: the refused move to ${move.to} was overridden`).toBe("overridden");
-              continue;
-            }
-
-            if (serverFocus(next) === move.to) {
-              seen.kept++;
-              expect(r["result"], `L29: the server kept ${move.to}`).toBe("kept");
-            }
-
-            if (move === dropped.at(-1) && drawnFocus(next) !== drawnFocus(prev)) {
-              seen.overridden++;
-              expect(r["result"], `L29: the drawn focus jumped back from ${move.to}`).toBe("overridden");
-            }
+          for (const move of dropped) {
+            const was = drawnWith(current);
+            current = current.filter((x) => x !== move);
+            const jumped = drawnWith(current) !== was;
+            const refused = w.refused.has(move.letter!);
+            const want = refused || jumped ? "overridden" : "kept";
+            const row = focusRows.find((r) => r["letter"] === move.letter);
+            rows[win]!.set(move.letter!, (rows[win]!.get(move.letter!) ?? 0) + 1);
+            seen[refused ? "refused" : jumped ? "overridden" : "kept"]++;
+            seen.superseded += !refused && !jumped && move !== dropped.at(-1) ? 1 : 0;
+            expect(
+              row?.["result"],
+              `L29: window ${win}'s move to ${move.to}, ${refused ? "refused" : jumped ? "jumped back" : "kept"} on ${m.type}`,
+            ).toBe(want);
           }
         });
 
@@ -1089,6 +1148,8 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
     expect(seen.kept, "L29: the walks keep moves").toBeGreaterThan(0);
     expect(seen.overridden, "L29: the walks override moves").toBeGreaterThan(0);
     expect(seen.refused, "L29: the walks refuse moves").toBeGreaterThan(0);
+    expect(seen.batch, "L29: the walks drop two of one window's moves on one step").toBeGreaterThan(0);
+    expect(seen.superseded, "L29: the walks keep a move its own next move superseded").toBeGreaterThan(0);
   });
 });
 
