@@ -263,6 +263,8 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-codehost": "data",
   "next-repositories": "data",
   "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
+  // T953: the permission core is coordination on its own layer 3: it imports only the ledger, telemetry and id.
+  "next-permissions": "coordination",
   "next-processes": "coordination",
   "next-presence": "coordination",
   // P39: the jobs module is coordination, so it may import data and id and nothing above them.
@@ -273,7 +275,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-mcp": "mcp",
   "next-door": "door",
   "next-desktop-core": "desktop-core",
-  "next-schedules": "door", // T762: layer 6 beside the door; it imports only tea and effect today
+  "next-schedules": "door", // T762: beside the door; it imports only tea and effect today
   "next-node": "node",
   "next-workers": "workers",
 };
@@ -1226,12 +1228,13 @@ describe("layers", () => {
   );
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
-  // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
+  // put on the runtime's layer (6 since T953): an import from the runtime to access, which went down,
   // must now fail, and no other pair changes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
-      const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
+      const runtime = REAL.find((row) => row.name === "next-runtime")?.layer ?? expect.fail("the runtime has a layer");
+      const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
       const before = runTool(realTree, REAL).edges;
       const after = runTool(realTree, beside);
       expect(after.edges).toEqual(expectedEdges(beside));
@@ -1245,8 +1248,40 @@ describe("layers", () => {
 
   // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and this
   // is the one place that says which module is on which layer.
+  // T953 moved every row from the processes up by one, to put the permission core on layer 3 between
+  // the ledger and the processes.
   it("pinned: the modules are on the layers the plan gives them", () => {
     expect(Object.fromEntries(layersByName(REAL))).toEqual({
+      "next-node": 10,
+      "next-workers": 9,
+      "next-libfabrika-entry": 8,
+      "next-door": 7,
+      "next-desktop-core": 7,
+      "next-schedules": 7,
+      "next-runtime": 6,
+      "next-access": 5,
+      "next-processes": 4,
+      "next-presence": 4,
+      "next-jobs": 4,
+      "next-packs": 4,
+      "next-permissions": 3,
+      "next-ci": 2,
+      "next-codehost": 2,
+      "next-repositories": 2,
+      "next-ledger": 2,
+      "next-transport": 2,
+      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
+      "next-telemetry": 1,
+      "next-shared": 0,
+    });
+  });
+
+  // pinned: T953 L19, main's layer table at 85cb7c224, the last commit before the permission core took
+  // layer 3. Moving every row from the processes up by one may change numbers only: for each two rows
+  // that had a layer then, one is below the other now exactly when it was below then, so no import
+  // that was refused becomes allowed and none that was allowed becomes refused.
+  it("pinned: T953 L19 the renumbered layers keep the order of every pair of rows main had", () => {
+    const main: Readonly<Record<string, number>> = {
       "next-node": 9,
       "next-workers": 8,
       "next-libfabrika-entry": 7,
@@ -1264,10 +1299,22 @@ describe("layers", () => {
       "next-repositories": 2,
       "next-ledger": 2,
       "next-transport": 2,
-      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
+      "next-settings": 2,
       "next-telemetry": 1,
       "next-shared": 0,
-    });
+    };
+    const now = layersByName(REAL);
+    const changed = Object.entries(main).flatMap(([a, before]) =>
+      Object.entries(main).flatMap(([b, other]) => {
+        const [after, then] = [now.get(a), now.get(b)];
+        return after === undefined || then === undefined
+          ? [`${a} or ${b} lost its layer`]
+          : before < other === after < then
+            ? []
+            : [`${a} (${before} -> ${after}) and ${b} (${other} -> ${then})`];
+      }),
+    );
+    expect(changed).toEqual([]);
   });
 
   // Plant: derive a row's rank from its place in the list, not from its `layer`. Then changing

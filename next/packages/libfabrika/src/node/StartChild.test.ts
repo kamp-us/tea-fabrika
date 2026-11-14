@@ -4,12 +4,15 @@
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Path, Stream, Tracer } from "effect";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient } from "../processes/Process.ts";
@@ -101,7 +104,11 @@ const databases = Effect.gen(function* () {
     );
   const shared: StartChildTest.Store["shared"] = (sql, next) =>
     Layer.mergeAll(
-      ChildrenLedger.layer({ grants: StartChildTest.STARTS }),
+      ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: Model.ref("fabrika", "p42") }).pipe(
+        // T953: these laws pin `StartGrant`, so the person inputs they send are given no member behind them.
+        Layer.provide(RelationsMemory.layer([])),
+        Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+      ),
       ProgramMailLedger.layer({ grants: StartChildTest.HOST }),
     ).pipe(
       Layer.provideMerge(
