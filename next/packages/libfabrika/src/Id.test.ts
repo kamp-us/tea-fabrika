@@ -764,8 +764,11 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
 
+        // One past each edge, then generated distances past it.
         for (const now of [
+          -1,
           -extra,
+          maxClock + 1,
           maxClock + extra,
           Number.MAX_SAFE_INTEGER + extra,
           extra + 0.5,

@@ -116,8 +116,13 @@ const Seed = fc.record({
 });
 
 // Short deadlines expire often inside one walk; long ones and late starts reach the real clock's
-// range, where a row lives up to 1,000,000 ms from a knock up to 1,000,000,000 ms in.
+// range, where a row lives up to 1,000,000 ms from a knock up to 1,000,000,000 ms in. Keys and
+// clients are any text, the empty string included: one fresh name per knock, at most 60.
+const names = fc.uniqueArray(fc.string(), { minLength: 60, maxLength: 60 });
+
 const Walk = fc.record({
+  keys: names,
+  clients: names,
   most: fc.integer({ min: 1, max: 4 }),
   ttl: fc.oneof(fc.integer({ min: 1, max: 30 }), fc.integer({ min: 1, max: 1_000_000 })),
   start: fc.oneof(fc.constant(0), fc.nat({ max: 1_000_000_000 })),
@@ -130,7 +135,14 @@ type Step = { readonly before: Model; readonly msg: Msg; readonly after: Model }
 
 const at = <A>(list: ReadonlyArray<A>, n: number): A | undefined => list[n % Math.max(1, list.length)];
 
-const resolve = (s: Model, seed: Seed, memory: { now: number; keys: Array<string>; clients: number }): Msg => {
+type Memory = {
+  now: number;
+  readonly names: { readonly keys: ReadonlyArray<string>; readonly clients: ReadonlyArray<string> };
+  keys: Array<string>;
+  clients: number;
+};
+
+const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   const rows = s.rows;
   const row = at(rows, seed.pick);
   const gone = memory.keys.filter((k) => !rows.some((r) => r.key === k));
@@ -140,7 +152,7 @@ const resolve = (s: Model, seed: Seed, memory: { now: number; keys: Array<string
     return t;
   };
   const freshKey = () => {
-    const k = `k${memory.keys.length}`;
+    const k = memory.names.keys[memory.keys.length]!;
     memory.keys.push(k);
     return k;
   };
@@ -170,7 +182,9 @@ const resolve = (s: Model, seed: Seed, memory: { now: number; keys: Array<string
         : row.key;
   const own = rows.find((r) => r.key === key);
   const client =
-    own !== undefined && seed.other % 3 !== 0 ? (at(own.clients, seed.other) ?? "x") : `c${memory.clients++}`;
+    own !== undefined && seed.other % 3 !== 0
+      ? (at(own.clients, seed.other) ?? "x")
+      : memory.names.clients[memory.clients++]!;
   return {
     type: "knock",
     key,
@@ -186,7 +200,7 @@ const resolve = (s: Model, seed: Seed, memory: { now: number; keys: Array<string
 };
 
 const fold = (walk: Walk) => {
-  const memory = { now: walk.start, keys: [] as Array<string>, clients: 0 };
+  const memory: Memory = { now: walk.start, names: walk, keys: [], clients: 0 };
   const steps: Array<Step> = [];
   let s = state(walk.ttl, walk.most);
 
