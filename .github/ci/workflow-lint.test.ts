@@ -238,7 +238,6 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 10,
       steps: [
         { name: "lint", run: "pnpm lint" },
-        { name: "promises", if: build, run: "pnpm promises gate" },
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", env: testEnv, run: ratchet },
       ] as Record<string, unknown>[],
@@ -480,9 +479,33 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   [
-    "the promises gate skips on the check flag",
+    "the build skips on the check flag",
     (w) => {
-      step(w, "check", "promises")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+      step(w, "check", "build")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+    },
+  ],
+  // 0533: the promises gate tests today's pipeline code, so no step runs it, under any spelling or
+  // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
+  // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
+  // test job's are also held by the build-flag law and T1.
+  ...[
+    { name: "promises", if: build, run: "pnpm promises gate" },
+    { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
+    { name: "promises", run: "pnpm -s promises gate" },
+    { name: "promises", run: "pnpm run promises confirm ship" },
+    { name: "promises", run: "node packages/promises/src/main.ts gate" },
+    { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
+  ].map((planted): [string, (w: Workflow) => void] => [
+    `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
+    (w) => {
+      // Before the stop step, which stays last (F1).
+      w.jobs.check.steps.splice(-1, 0, planted);
+    },
+  ]),
+  [
+    "T6: the test job runs today's promise checks",
+    (w) => {
+      w.jobs.test.steps.splice(place(w, "test", "shard times"), 0, { name: "promises", run: "pnpm promises" });
     },
   ],
   [
@@ -1964,6 +1987,17 @@ for (const [name, plant, error] of [
       w.jobs["ci-required"]!.needs = [...[w.jobs["ci-required"]!.needs ?? []].flat(), "e2e"];
     },
     "check.yaml: T2: e2e runs nothing of today's app",
+  ],
+  [
+    "T6: the promises gate back in check, before its stop step",
+    (w: Parsed) => {
+      w.jobs["check"]!.steps.splice(-1, 0, {
+        name: "promises",
+        env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
+        run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nelse\n  pnpm promises gate\nfi\n',
+      });
+    },
+    "check.yaml: T6: check runs no promise check of today's version",
   ],
   [
     "T5: six machines",

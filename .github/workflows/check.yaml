@@ -41,9 +41,9 @@ jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
   # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
-  # Today's version is frozen (0525, 0533): its tests and its app end to end run on no event, so no
-  # output here starts them. Its promises gate and build start only when a file of today's version
-  # changed, on every event: the `build` output (0175).
+  # Today's version is frozen (0525, 0533): its tests, its promise checks and its app end to end run
+  # on no event, so no output here starts them. Its build starts only when a file of today's
+  # version changed, on every event: the `build` output (0175).
   # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
   # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
   # unknown path does.
@@ -67,8 +67,7 @@ jobs:
     steps:
       # Every checkout here leaves the token out of .git/config (`persist-credentials: false`), so
       # no test or install script can read the `actions: write` token from it (ticket 990). No job
-      # pushes, and the two fetches (the promises step, ratchet.ts) read this public repository
-      # without one. The stop step gets the token in its own env alone. workflow-lint.ts holds it.
+      # pushes, and the one fetch (ratchet.ts) reads this public repository without one. The stop step gets the token in its own env alone. workflow-lint.ts holds it.
       # Every commit and tree, and only the head's files: a full clone fetched 803 MB of history
       # and a blobless one 7 MB before its checkout, on 2026-11-14 (`git clone --no-checkout`, with
       # and without `--filter=blob:none`). Names, diffs and merge bases read trees; a file at an
@@ -208,21 +207,8 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
         run: node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"
-      # Experiment 117: each formal check is tied to the code it covers (promises/).
-      # It fails when covered code changed and its record was not confirmed again, when
-      # a check is red at this head, or when a planted break is not caught. A change to a
-      # check itself is listed for the owner, here and in the step summary.
-      - name: promises
-        if: ${{ needs.changes.outputs.build != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-        run: |
-          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] \
-            && git fetch --no-tags --depth=1 origin "$BASE"; then
-            pnpm promises gate --base "$BASE"
-          else
-            pnpm promises gate
-          fi
+      # No step runs `pnpm promises`: its formal checks and planted breaks test today's pipeline
+      # code, and CI runs no test of today's version (0533). They run on the laptop.
       # The builds of @kampus/fabrika-old and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build

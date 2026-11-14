@@ -112,6 +112,9 @@ const TOOLING = [
 const TEST_TIMES = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
+// Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
+// and planted breaks test today's pipeline code, so no command in check.yaml runs them (0533).
+const TODAYS_PROMISES = /\bpnpm\s+(?:-\S+\s+|run\s+)*promises\b|packages\/promises\//;
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 const chromium =
@@ -222,12 +225,12 @@ export const lintWorkflow = (text: string): string[] => {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
 
-  // A draft's check is lint alone: the promises gate and the build skip on changes' build flag.
+  // A draft's check is lint alone: the build skips on changes' build flag.
   const checkSteps = steps(map(jobs["check"]));
 
   for (const step of checkSteps) {
-    const slow = step["name"] === "promises" || step["run"] === "pnpm build";
-    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
+    const slow = step["run"] === "pnpm build";
+    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only the build skips, on the build flag");
   }
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
@@ -464,12 +467,16 @@ export const lintWorkflow = (text: string): string[] => {
     testSteps.indexOf(tooling) <
       testSteps.indexOf(times), "T3: shard times follow the tooling tests, even after a failure");
 
-  // T2 (0525, 0533). No job runs today's app, end to end or otherwise.
+  // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
+  // today's promise checks.
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of steps(map(job))) {
       require(![step["run"], step["working-directory"]].some(
         (text) => typeof text === "string" && TODAYS_APP.test(text),
       ), `T2: ${name} runs nothing of today's app`);
+      require(!(
+        typeof step["run"] === "string" && TODAYS_PROMISES.test(step["run"])
+      ), `T6: ${name} runs no promise check of today's version`);
     }
   }
 
