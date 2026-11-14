@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
-import { budget, fewest, type Legs, type Run, shards, size, split } from "./legs.ts";
+import { readers } from "./changes.mjs";
+import { budget, fewest, type Legs, outputs, type Run, shards, size, split, withReaders } from "./legs.ts";
 import { e2eFiles, nextFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
@@ -177,4 +178,82 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
   expect(readFileSync(output, "utf8")).toBe(
     'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
   );
+});
+
+// PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
+// them. A sized run adds them to the vitest files, each once, and every vitest leg runs that list.
+// Each plant was run once on legs.ts and restored; each turned its law red.
+
+/** The real reader test files, as Vitest matches changes' paths: the file's path holds one. */
+const readerFiles = () => vitest.filter((path) => readers.some((reader) => path.includes(reader)));
+
+it("property: a sized run's vitest files are what --changed picked and every reader test, each once", () => {
+  // Plants: `[...changed].toSorted()` (red: a reader --changed missed is gone); the two lists joined
+  // with no Set (red: a reader --changed picked too is there twice).
+  expect(readerFiles().length).toBeGreaterThan(0);
+  fc.assert(
+    fc.property(fc.subarray(vitest), (changed) => {
+      const files = withReaders(changed, readerFiles());
+      expect(new Set(files).size).toBe(files.length);
+      expect(files).toEqual([...new Set([...changed, ...readerFiles()])].toSorted());
+    }),
+    options,
+  );
+});
+
+it("property: on a sized run each reader test lands on exactly one leg, whatever --changed picked", () => {
+  // The leg split is `Shards`'s on each leg, over the one list every leg runs. Plant: the two lists
+  // joined with no Set (red: a reader on two legs, or twice on one).
+  fc.assert(
+    fc.property(picked(), ({ selected, table }) => {
+      const files = withReaders(selected.vitest, readerFiles());
+      const legs = size(pr, { vitest: files, e2e: selected.e2e }, full, limit, table);
+      expect(legs.vitest).toBeGreaterThan(0);
+      const placed = split(files, legs.vitest, table);
+
+      for (const reader of readerFiles()) {
+        expect(placed.flat().filter((path) => path === reader)).toHaveLength(1);
+      }
+    }),
+    options,
+  );
+});
+
+it("scenario: a change that picks every next/ file runs each reader once, on today's legs", () => {
+  // A forceRerunTrigger (a .github/ change, as 1235's own run) picks every file: the readers add
+  // nothing, so no file runs twice and the legs are today's five. Plant: no Set (red: 40 more files).
+  const files = withReaders(vitest, readerFiles());
+  expect(files).toEqual(vitest.toSorted());
+  expect(size(pr, { vitest: files, e2e: [] }, full, limit).vitest).toBe(full.vitest);
+});
+
+it("property: the size step prints files only on a sized run with a vitest leg, as the one list", () => {
+  // Plants: drop `sizes(run) &&` from `listed` (red: the merge queue printed a list, so its legs
+  // would run it and not the whole suite); drop the files line (red: a sized run printed none).
+  fc.assert(
+    fc.property(
+      picked(),
+      fc.constantFrom<Run>(
+        pr,
+        { event: "merge_group", scope: "all" },
+        { event: "push", scope: "all" },
+        { event: "pull_request", scope: "readers" },
+      ),
+      ({ selected, table }, run) => {
+        const legs = size(run, selected, full, limit, table);
+        const lines = outputs(run, legs, selected);
+        const files = lines.filter((line) => line.startsWith("files="));
+        const listed = run === pr && legs.vitest > 0;
+        expect(files).toEqual(listed ? [`files=${selected.vitest.join(" ")}`] : []);
+      },
+    ),
+    options,
+  );
+});
+
+it("scenario: a vitest file whose path holds a space throws, so the step prints nothing", () => {
+  // `files` is passed unquoted, one path per word. Plant: drop the space check (red: no throw).
+  const selected = { vitest: ["next/a b.test.ts"], e2e: [] };
+  expect(() => outputs(pr, { vitest: 1, e2e: 0 }, selected)).toThrow(/space/);
+  expect(outputs({ event: "merge_group", scope: "all" }, full, selected)).not.toContain("files=next/a b.test.ts");
 });
