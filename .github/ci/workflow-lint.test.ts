@@ -3,7 +3,7 @@ import { matchesGlob } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
+import { cacheFiles, lintCaches, lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -1348,3 +1348,137 @@ it("L5: lane selection and rest exclusion agree on today's test paths", () => {
     },
   );
 });
+
+// The caches: saved on main only, the shared setup never saves, full-history checkouts are
+// blobless, and the typecheck's buildinfo cache keys on the lockfile and every tsconfig.
+type Step = Record<string, unknown> & { with?: Record<string, unknown> };
+type Jobs = Record<string, { steps: Step[] }>;
+type Files = { workflows: Record<string, Parsed>; action: Parsed; workspace: Parsed; typecheck: string };
+type Parsed = Record<string, unknown> & { jobs: Jobs; runs: { steps: Step[] } };
+
+const realFiles = (): Files => {
+  const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+  const files = cacheFiles(read);
+  return {
+    workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, text]) => [path, parse(text)])),
+    action: parse(files.action),
+    workspace: parse(files.workspace),
+    typecheck: files.typecheck,
+  };
+};
+
+const text = (files: Files) => ({
+  workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
+  action: JSON.stringify(files.action),
+  workspace: JSON.stringify(files.workspace),
+  typecheck: files.typecheck,
+});
+
+const check = (files: Files) => files.workflows[".github/workflows/check.yaml"]!.jobs;
+const typecheckStep = (files: Files, id: string) => check(files)["typecheck"]!.steps.find((s) => s["id"] === id)!;
+
+const tscSave = (files: Files) =>
+  check(files)["typecheck"]!.steps.find((s) => s.with?.["key"] === `\${{ steps.tsc.outputs.cache-primary-key }}`)!;
+
+it("C0: the checked-in workflows, setup, workspace and typecheck pass the cache lint", () => {
+  expect(lintCaches(text(realFiles()))).toEqual([]);
+});
+
+it("C0 state: a workflow that runs by hand on main may keep setup-node's cache", () => {
+  const files = realFiles();
+  const mutation = files.workflows[".github/workflows/mutation.yaml"];
+  expect(mutation?.["on"]).not.toHaveProperty("pull_request");
+  expect(JSON.stringify(mutation)).toContain('"cache":"pnpm"');
+  expect(lintCaches(text(files))).toEqual([]);
+});
+
+// Each plant on the checked-in files, one at a time, and the one error it must give.
+for (const [name, plant, error] of [
+  [
+    "C1: actions/cache, which saves on every ref",
+    (f: Files) => {
+      const host = f.workflows[".github/workflows/host.yaml"]!.jobs["launchd"]!.steps;
+      host.find((s) => String(s["uses"]).startsWith("actions/cache/restore@"))!["uses"] = "actions/cache@v6";
+    },
+    ".github/workflows/host.yaml: use actions/cache/restore, and actions/cache/save on main only",
+  ],
+  [
+    "C1: setup-node's own cache in the shared setup",
+    (f: Files) => {
+      f.action.runs.steps.find((s) => String(s["uses"]).startsWith("actions/setup-node@"))!.with!["cache"] = "pnpm";
+    },
+    ".github/actions/pnpm/action.yml: setup-node's cache saves on every ref; use .github/actions/pnpm",
+  ],
+  [
+    "C2: the shared setup saving",
+    (f: Files) => {
+      f.action.runs.steps.push({ uses: "actions/cache/save@v6", if: `\${{ github.ref == 'refs/heads/main' }}` });
+    },
+    "the pnpm action restores the store and never saves it",
+  ],
+  [
+    "C2: a save with no if",
+    (f: Files) => {
+      delete tscSave(f)["if"];
+    },
+    ".github/workflows/check.yaml: a cache save runs on main only, its if starting github.ref=='refs/heads/main'",
+  ],
+  [
+    "C2: a save on every ref after a failure",
+    (f: Files) => {
+      tscSave(f)["if"] = `\${{ always() }}`;
+    },
+    ".github/workflows/check.yaml: a cache save runs on main only, its if starting github.ref=='refs/heads/main'",
+  ],
+  [
+    "C3: a full-history checkout with every blob",
+    (f: Files) => {
+      delete check(f)["test"]!.steps.find((s) => String(s["uses"]).startsWith("actions/checkout@"))!.with!["filter"];
+    },
+    "check.yaml: test's full-history checkout is blobless (filter: blob:none)",
+  ],
+  [
+    "C4: a restore prefix without the lockfile and tsconfig hash",
+    (f: Files) => {
+      typecheckStep(f, "tsc").with!["restore-keys"] = `tsc-\${{ runner.os }}-`;
+    },
+    `check.yaml: the tsc cache's key is tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-<sha>, and it restores only that prefix`,
+  ],
+  [
+    "C4: a hash that leaves the tsconfigs out",
+    (f: Files) => {
+      typecheckStep(f, "tsc-key")["run"] =
+        'echo "hash=$(git ls-files -s pnpm-lock.yaml | git hash-object --stdin)" >> "$GITHUB_OUTPUT"';
+    },
+    "check.yaml: the typecheck job's tsc-key step hashes git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin",
+  ],
+  [
+    "C4: a workspace package glob the cache does not hold",
+    (f: Files) => {
+      (f.workspace["packages"] as string[]).push("tools/*");
+    },
+    "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc in each pnpm-workspace.yaml package glob, in its order",
+  ],
+  [
+    "C4: a buildinfo folder the cache does not hold",
+    (f: Files) => {
+      f.typecheck = f.typecheck.replace("node_modules/.cache/tsc/", "node_modules/.cache/tsc-old/");
+    },
+    "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc-old in each pnpm-workspace.yaml package glob, in its order",
+  ],
+  [
+    "C4: a restore after the typecheck",
+    (f: Files) => {
+      const list = check(f)["typecheck"]!.steps;
+      const restore = list.splice(list.indexOf(typecheckStep(f, "tsc")), 1)[0]!;
+      list.splice(list.findIndex((s) => s["run"] === "pnpm typecheck") + 1, 0, restore);
+    },
+    "check.yaml: the typecheck job installs, restores the tsc cache, typechecks, then saves",
+  ],
+] as const) {
+  it(`${name} is named by its one error`, () => {
+    const files = realFiles();
+    plant(files);
+    expect(lintCaches(text(files))).toEqual([error]);
+  });
+}
