@@ -30,13 +30,20 @@ const Line = Schema.String.check(Schema.isMaxLength(LINE_MOST));
  *  echo names the edit it confirms. */
 export const Draft = Schema.Struct({ text: Line, cursor: Schema.Int, n: Schema.Int });
 
+/** One row of `help`'s table: how a line is written, and what it does, as a man page's synopsis. */
+const Usage = Schema.Struct({ usage: Schema.String, does: Schema.String });
+
+/** One thing a built-in says: a line of text, or a row of `help`'s table. */
+export const Said = Schema.Union([Schema.String, Usage]);
+type Said = typeof Said.Type;
+
 /**
  * One scrollback entry: a built-in's lines, a refused line with its one unknown span, or a start.
  * A start is `starting` until its answer settles it, once, as `started` (a live process, `fresh`
  * when this start made it) or `failed` with the host's reason.
  */
 const Entry = Schema.TaggedUnion({
-  answered: { line: Line, says: Schema.Array(Schema.String) },
+  answered: { line: Line, says: Schema.Array(Said) },
   refused: { line: Line, start: Schema.Int, end: Schema.Int, reason: Schema.String },
   starting: { line: Line, program: Schema.String, name: Schema.String },
   started: { line: Line, process: Schema.String, name: Schema.String, fresh: Schema.Boolean },
@@ -63,20 +70,23 @@ const Msg = Schema.Union([
 ]);
 
 /** What `help` says of each built-in. */
-const HELP: Readonly<Record<string, string>> = {
-  help: "help [word]   the words fabsh knows, or what one of them does",
-  clear: "clear         empty the scrollback",
-  history: `history       the newest ${LISTED} lines you ran`,
-  programs: "programs      the programs a line can start",
+const HELP: Readonly<Record<string, typeof Usage.Type>> = {
+  help: { usage: "help [word]", does: "the words fabsh knows, or what one of them does" },
+  clear: { usage: "clear", does: "empty the scrollback" },
+  history: { usage: "history", does: `the newest ${LISTED} lines you ran` },
+  programs: { usage: "programs", does: "the programs a line can start" },
 };
 
 /** What `help` says of a line that starts a program. */
-const START = "<program> [as <name>]   start a program; its process is <program>:1 unless you name it";
+const START: typeof Usage.Type = {
+  usage: "<program> [as <name>]",
+  does: "start a program; its process is <program>:1 unless you name it",
+};
 
 const known = (m: Model): Known => ({ builtins, programs: m.programs });
 
 /** A built-in's answer to a line `read` took, as the lines it says. */
-const says = (m: Model, words: ReadonlyArray<string>): ReadonlyArray<string> => {
+const says = (m: Model, words: ReadonlyArray<string>): ReadonlyArray<Said> => {
   const [verb, word] = words;
 
   if (verb === "history") {
@@ -91,7 +101,7 @@ const says = (m: Model, words: ReadonlyArray<string>): ReadonlyArray<string> => 
 
   // `read` refused every other first word, and `clear` says nothing, so this is `help`.
   if (word === undefined) {
-    return [...builtins.map((b) => HELP[b] ?? b), START];
+    return [...builtins.flatMap((b) => HELP[b] ?? []), START];
   }
 
   const started = toStart(word, known(m));

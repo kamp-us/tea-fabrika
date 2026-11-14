@@ -174,6 +174,7 @@ input {
   gap: var(--s-2);
   max-width: 56rem;
   font-family: var(--mono);
+  container: fabsh / inline-size;
 }
 .fabsh-log {
   max-height: 24rem;
@@ -190,6 +191,36 @@ input {
 }
 .fabsh-says {
   color: var(--text-faint);
+}
+/* help's table, a definition list: the usage column is as wide as its widest row, at most half the
+   tile, and each description wraps under itself. A tile too narrow for two columns stacks them. */
+.fabsh-usage {
+  display: grid;
+  grid-template-columns: fit-content(50%) minmax(0, 1fr);
+  column-gap: 3ch;
+  margin: 0;
+  color: var(--text-faint);
+}
+.fabsh-usage > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+/* The log breaks anywhere; a usage breaks only where a word would not fit, so a short tile never
+   splits `<program>` into letters. */
+.fabsh-usage dt {
+  overflow-wrap: break-word;
+}
+.fabsh-usage dd {
+  margin: 0;
+}
+@container fabsh (width < 40ch) {
+  .fabsh-usage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fabsh-usage dd {
+    padding-inline-start: 2ch;
+  }
 }
 .fabsh-refused {
   color: var(--role-unknown);

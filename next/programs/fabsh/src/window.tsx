@@ -7,8 +7,8 @@ import { defineWindow, type TileProps, type WindowProps } from "@kampus/libfabri
 import { Input } from "@manti-ui/react";
 import { Schema } from "effect";
 import { type ReactElement, type ReactNode, useId, useLayoutEffect, useRef } from "react";
-import { fabsh, LINE_MOST } from "./program.ts";
-import { builtins, read, Reason, type Span } from "./read.ts";
+import { fabsh, LINE_MOST, Said } from "./program.ts";
+import { builtins, read, Reason, type Span, toStart } from "./read.ts";
 import { drawn, tile } from "./tile.ts";
 
 /** The checked view: the submitted lines, the scrollback, and what may be started. */
@@ -16,7 +16,7 @@ const data = Schema.Struct({
   history: Schema.Array(Schema.String),
   scroll: Schema.Array(
     Schema.Union([
-      Schema.TaggedStruct("answered", { line: Schema.String, says: Schema.Array(Schema.String) }),
+      Schema.TaggedStruct("answered", { line: Schema.String, says: Schema.Array(Said) }),
       Schema.TaggedStruct("refused", {
         line: Schema.String,
         start: Schema.Int,
@@ -73,26 +73,67 @@ const layered = (line: string, spans: ReadonlyArray<Span>): ReadonlyArray<ReactN
   return out;
 };
 
-/** Why a start did not give a live process, in words: `already_present` and each host refusal. */
-const FAILED: Readonly<Record<string, string>> = {
-  already_present: "That name's process has ended, so nothing was started.",
-  no_program: "No program by that name is built here.",
-  forbidden: "You may not start that program here.",
-  stale_sender: "This shell's process ended before the start.",
-  bad_name: "That is not a name a process can have.",
-  bad_input: "The program could not take its first input.",
-  id_reused: "This start's id was already used for another start.",
-  name_taken: "That name belongs to a process of another program.",
+/** What a start asked for: the program, and the name its process goes by. */
+type Asked = { readonly program: string; readonly name: string };
+
+/**
+ * Why a start did not give a live process, in words: `already_present` and each host refusal,
+ * naming what the start asked for. A refusal carries only its reason: `name_taken` cannot say which
+ * program holds the name.
+ */
+const FAILED: Readonly<Record<string, (asked: Asked) => string>> = {
+  already_present: (a) => `${a.name} has ended, so nothing was started.`,
+  no_program: (a) => `No program called ${a.program} is built here.`,
+  forbidden: (a) => `You may not start ${a.program} here.`,
+  stale_sender: () => "This shell's process ended before the start.",
+  bad_name: (a) => `${a.name} is not a name a process can have.`,
+  bad_input: (a) => `${a.program} could not take its first input.`,
+  id_reused: () => "This start's id was already used for another start.",
+  name_taken: (a) => `${a.name} is the name of another program's process, so ${a.program} was not started.`,
 };
 
-/** What one scrollback entry says under its line, in words. */
-const answer = (entry: Entry): ReactElement | ReadonlyArray<ReactElement> => {
+/** One row of `help`'s table. */
+type Usage = Exclude<typeof Said.Type, string>;
+
+/** A built-in's lines in order, each run of usage rows gathered into one table. */
+const blocks = (says: ReadonlyArray<typeof Said.Type>): ReadonlyArray<string | ReadonlyArray<Usage>> => {
+  const out: Array<string | Array<Usage>> = [];
+
+  for (const say of says) {
+    const last = out.at(-1);
+
+    if (typeof say === "string") {
+      out.push(say);
+    } else if (Array.isArray(last)) {
+      last.push(say);
+    } else {
+      out.push([say]);
+    }
+  }
+
+  return out;
+};
+
+/** What one scrollback entry says under its line, in words. `programs` reads a start's line again,
+ *  as the process read it, to name what it asked for. */
+const answer = (entry: Entry, programs: ReadonlyArray<string>): ReactElement | ReadonlyArray<ReactElement> => {
   if (entry._tag === "answered") {
-    return entry.says.map((say, j) => (
-      <p className="fabsh-says" key={j}>
-        {say}
-      </p>
-    ));
+    return blocks(entry.says).map((block, j) =>
+      typeof block === "string" ? (
+        <p className="fabsh-says" key={j}>
+          {block}
+        </p>
+      ) : (
+        <dl className="fabsh-usage" key={j}>
+          {block.map((row) => (
+            <div key={row.usage}>
+              <dt>{row.usage}</dt>
+              <dd>{row.does}</dd>
+            </div>
+          ))}
+        </dl>
+      ),
+    );
   }
 
   if (entry._tag === "refused") {
@@ -107,19 +148,30 @@ const answer = (entry: Entry): ReactElement | ReadonlyArray<ReactElement> => {
     return <p className="fabsh-says">{`Starting ${entry.program} as ${entry.name}.`}</p>;
   }
 
+  // The fabsh process asked for programs once, before any start, so its line reads the same again.
+  const asked = toStart(entry.line, { builtins, programs });
+
+  // A person knows a process by its name; the process ID stays on the line, out of the sentence.
   if (entry._tag === "started") {
     return (
-      <p className="fabsh-says">
+      <p className="fabsh-says" title={`Process ID ${entry.process}`} data-process={entry.process}>
         {entry.fresh
-          ? `Started ${entry.name}, process ${entry.process}.`
-          : `${entry.name} is already running, process ${entry.process}.`}
+          ? asked === null
+            ? `Started ${entry.name}.`
+            : `Started ${entry.name}, a ${asked.program} process.`
+          : `${entry.name} is already running.`}
       </p>
     );
   }
 
+  const failed = FAILED[entry.reason];
   return (
     <p className="fabsh-refused">
-      {FAILED[entry.reason] ?? `The start was refused for a reason fabsh does not know: ${entry.reason}.`}
+      {failed === undefined
+        ? `The start was refused for a reason fabsh does not know: ${entry.reason}.`
+        : asked === null
+          ? `Not started (${entry.reason}).`
+          : failed(asked)}
     </p>
   );
 };
@@ -175,7 +227,7 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
         {view.scroll.map((entry, i) => (
           <div className="fabsh-entry" key={i}>
             <p className="fabsh-ran">{entry.line}</p>
-            {answer(entry)}
+            {answer(entry, view.programs)}
           </div>
         ))}
       </div>
