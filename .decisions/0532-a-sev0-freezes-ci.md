@@ -76,6 +76,9 @@ land one at a time by admin merge, until every fix has merged.**
 - **Unfreeze ends it.** It stops the freeze, then reruns the newest canceled pull request run of each
   workflow at each open pull request's head, so a pull request armed to merge gets its
   `ci-required` back.
+- **Only the emergency spends tokens.** Every agent, session and cloud job that is not working on a
+  fix saves where it is (a pushed branch, a state file, a note) and stops until the sev0 ends. The
+  lead tells each one, and pings them again when it ends.
 - **The lead tells the owner in one line** when the freeze starts and when it unfreezes.
 - **Code holds the canceling and the reruns:** `.agents/skills/sev0/scripts/sev0.ts`, with
   `freeze`, `next`, `allow`, `stop` and `unfreeze`. Its log of every cancel and rerun is
@@ -89,6 +92,7 @@ land one at a time by admin merge, until every fix has merged.**
 - Admin merges under a sev0 cover only the fix on the allow list, once its required checks are
   green.
 - A red required check on a fix stops the line.
+- No agent works on anything but the fixes while the sev0 is on.
 
 ## Consequences
 
