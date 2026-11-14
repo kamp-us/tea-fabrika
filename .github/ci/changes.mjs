@@ -6,9 +6,11 @@ import { appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean, today: boolean}} Flags */
+// Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
+// is no such flag, on any event. The test job runs the tooling tests alone.
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, field: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true, today: true };
+const all = { check: true, typecheck: true, test: true, next: true, field: true, build: true };
 const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
@@ -55,6 +57,23 @@ const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.start
 const quiet = (path) => safe(path) || prose(path);
 
 /**
+ * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
+ * run at all (ticket 988). Plan files and row files, a few of the quiet paths above. Each `*`
+ * stands for any name without a `/`, as in GitHub's filters, and no other wildcard is used, so a
+ * folder named `brief` under docs/plan/ is never matched. Skill prose stays out: the changes job's
+ * skills check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds
+ * every path the list matches to no heavy job here. `pnpm lint` checks the rows instead, with
+ * field-check.ts's `--local`.
+ */
+export const ignored = [
+  "docs/plan/*.md",
+  "docs/plan/lanes/*.md",
+  "field/findings/*.json",
+  "field/notes/*.json",
+  "field/runs/*.json",
+];
+
+/**
  * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script
  * and no prose, the lead's gc.plist, is read by the lead's tooling tests, so it still starts test.
  * @param {string} path
@@ -72,8 +91,9 @@ const experiment = (path) => path.startsWith("experiments/") && !read.some((fold
 
 /**
  * A file of today's version: its trees, the design package today's app imports, and the toy
- * projects its tests read. Only these start today's own checks (0175): its tests, e2e and build.
- * A file that reruns every test, such as the lockfile or a root config, is not one.
+ * projects its tests read. Only these start today's build (0175), `pnpm build`. Its tests, its
+ * promise checks and its e2e run on no event (0525, 0533). A file that reruns every test, such as
+ * the lockfile or a root config, is not one.
  * @param {string} path
  */
 const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
@@ -174,9 +194,9 @@ export const scope = (paths, event, proven = []) => {
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
- * `today` and `e2e` are true only when a path is one of today's version's files.
- * `test` starts the test job, which runs today's tests when `today` is true and only the tooling
- * tests when it is false. History that cannot be read, no path at all, or an event that is not
+ * `build` is true only when a path is one of today's version's files: it gates check's
+ * `pnpm build`, the slow half of check. `test` starts the test job, which runs only the
+ * tooling tests (0525, 0533). History that cannot be read, no path at all, or an event that is not
  * scoped runs everything.
  * `proven` is taken so a caller can pass what it has, and never changes a flag: a proof only narrows
  * which next/ tests run (`scope`), never whether next runs.
@@ -193,7 +213,7 @@ export const classify = (paths, event, _proven = []) => {
   const touched = paths.some(todays);
 
   if (paths.some(reads)) {
-    return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
+    return { ...all, field: paths.some(rows), build: touched };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
@@ -205,13 +225,10 @@ export const classify = (paths, event, _proven = []) => {
       (path) => quiet(path) || experiment(path) || (path.startsWith("next/") && path !== helper && path !== commits),
     ),
     next: scope(paths, event) !== "none",
-    e2e: touched,
     field: paths.some(rows),
-    today: touched,
+    build: touched,
   };
 };
-
-/** @typedef {Flags & {build: boolean}} Jobs */
 
 /**
  * An event on the merge line past the pull request: a merge queue's group or a push to main. Each
@@ -221,28 +238,27 @@ export const classify = (paths, event, _proven = []) => {
 const merged = (event) => event === "merge_group" || event === "push";
 
 /**
- * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
- * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
- * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
- * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
- * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
- * The test job runs on a pull request alone (0534): a merge queue's group and a push to main never
- * start it, whatever their paths or history say, and the schedule (scheduled.yaml) runs the
- * tooling tests. Today's tests run in no CI job anyway (0533).
+ * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes,
+ * field, typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
+ * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
+ * request can be a draft; on any other event, a merge queue's group and a push included, the flag
+ * is ignored. The test job runs on a pull request alone (0534): a merge queue's group and a push
+ * to main never start it, whatever their paths or history say, and the schedule (scheduled.yaml)
+ * runs the tooling tests.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
  * @param {readonly string[]} [_proven] never changes a job, as in classify
- * @returns {Jobs}
+ * @returns {Flags}
  */
 export const jobs = (paths, event, draft, _proven = []) => {
   const flags = classify(paths, event);
 
   if (event === "pull_request" && draft) {
-    return { ...flags, test: false, next: false, e2e: false, build: false };
+    return { ...flags, test: false, next: false, build: false };
   }
 
-  return { ...flags, test: flags.test && !merged(event), build: flags.today };
+  return { ...flags, test: flags.test && !merged(event) };
 };
 
 /** @param {string} sha */
@@ -311,12 +327,11 @@ export const readPaths = (base, head, event, run = git) => {
 
 /**
  * What a push asks GitHub. Each call may reject, and any rejection runs every job.
- * `runs` lists this workflow's passed merge queue runs, `commit` reads one commit's tree and
- * parents, and `caches` lists the keys of main's Actions caches that start with a prefix.
+ * `runs` lists this workflow's passed merge queue runs, and `commit` reads one commit's tree and
+ * parents.
  * @typedef {{
  *   runs: () => Promise<readonly QueueRun[]>,
  *   commit: (sha: string) => Promise<{tree: string, parents: readonly string[]}>,
- *   caches: (prefix: string) => Promise<readonly string[]>,
  * }} Api
  */
 
@@ -370,10 +385,6 @@ export const github = (env, get = globalThis.fetch) => {
       const commit = await read(`git/commits/${sha}`);
       return { tree: commit.tree.sha, parents: commit.parents.map((/** @type {{sha: string}} */ p) => p.sha) };
     },
-    caches: async (prefix) =>
-      (
-        await read(`actions/caches?ref=refs%2Fheads%2Fmain&key=${encodeURIComponent(prefix)}&per_page=100`)
-      ).actions_caches.map((/** @type {{key: string}} */ cache) => cache.key),
   };
 };
 
@@ -430,34 +441,13 @@ const tested = async (before, head, run, api) => {
 };
 
 /**
- * Whether main holds an Electron cache for this lockfile, the one the e2e job saves on main only:
- * a key `electron-<os>-<arch>-<lock>`, where `lock` is `hashFiles('pnpm-lock.yaml')`. An
- * unreadable answer is `false`, so e2e runs and saves one.
- * @param {string} lock
- * @param {Api} api
- */
-const warm = async (lock, api) => {
-  if (!/^[a-f0-9]{64}$/.test(lock)) {
-    return false;
-  }
-
-  try {
-    return (await api.caches("electron-")).some((key) => key.startsWith("electron-") && key.endsWith(`-${lock}`));
-  } catch {
-    return false;
-  }
-};
-
-/**
  * A push whose tree and base tree a passed queue run already tested skips the jobs that would
- * repeat it: test, next and e2e. e2e still runs when main has no Electron cache for this lockfile,
- * since only e2e on main saves one. check and typecheck run: they are light, and typecheck saves
- * main's tsc cache. A skip only turns a flag off.
- * @param {Jobs} flags
- * @param {boolean} cached
- * @returns {Jobs}
+ * repeat it: next, and test, which a push never starts anyway (0534). check and typecheck run: they
+ * are light, and typecheck saves main's tsc cache. A skip only turns a flag off.
+ * @param {Flags} flags
+ * @returns {Flags}
  */
-const skipTested = (flags, cached) => ({ ...flags, test: false, next: false, e2e: flags.e2e && !cached });
+const skipTested = (flags) => ({ ...flags, test: false, next: false });
 
 /** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
 const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
@@ -478,7 +468,7 @@ const commentLike = (line) => /^\s*(?:\/\/|\/\*|\*|$)/.test(line);
  * or is blank, from `git diff -U0`. It decides no skip; only the parser's pass can.
  * @param {readonly string[]} paths
  * @param {string} event
- * @param {Jobs} flags
+ * @param {Flags} flags
  * @param {string} from
  * @param {string} head
  * @param {Runner} run
@@ -539,7 +529,7 @@ const parserVersion = () => {
  * program.ts cannot load, it prints what the first pass printed, so a failed install runs every
  * next/ test. `note` hears one line per candidate file and the parser's version.
  * On a push, the first pass also asks `api` whether a merge queue run already passed the same
- * change (`tested`), and then prints test, next and e2e off and that run's id as `tested`. With no
+ * change (`tested`), and then prints test and next off and that run's id as `tested`. With no
  * `api`, as when the run gave no token, it asks nothing. Since next is then off, `probe` is false
  * and the parser's pass does not run.
  * @param {{same: boolean, env: Record<string, string | undefined>, run?: Runner, load?: () => Promise<{samePaths: (base: string, head: string, paths: readonly string[], run: Runner, note?: (path: string, verdict: string) => void) => string[]}>, note?: (line: string) => void, api?: Api | null}} options
@@ -565,18 +555,10 @@ export const outputs = async ({
 
   if (!same) {
     const queued = event === "push" && paths !== null && api !== null ? await tested(base, head, run, api) : null;
-    const flags =
-      queued === null || api === null
-        ? changed
-        : skipTested(changed, changed.e2e && (await warm(env["LOCK"] ?? "", api)));
+    const flags = queued === null ? changed : skipTested(changed);
 
     if (queued !== null) {
       note(`merge queue run ${queued} passed this tree from the same base tree, so test and next skip`);
-      note(
-        flags.e2e
-          ? "e2e runs: main has no Electron cache for this lockfile, and only e2e on main saves one"
-          : "e2e skips",
-      );
     }
 
     const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);

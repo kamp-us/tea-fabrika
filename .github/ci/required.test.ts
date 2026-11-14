@@ -96,7 +96,6 @@ it("scenario: the gates are the jobs check.yaml gates, with check on its own fla
     typecheck: ["typecheck"],
     test: ["test"],
     next: ["next"],
-    e2e: ["e2e"],
   });
 });
 
@@ -176,19 +175,18 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", field: "false", typecheck: "false", test: "true", next: "true", e2e: "true" },
+      outputs: { check: "false", field: "false", typecheck: "false", test: "true", next: "true" },
     },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
     test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
-    e2e: { result: "success", outputs: {} },
   });
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(7);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(6);
   expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
@@ -240,7 +238,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips today's e2e when no file of today's version changed.
+// 0175: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -256,7 +254,7 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: next/ alone, where e2e skips on main.
+    // pinned: next/ alone, where test skips on main.
     { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
   );
 });
@@ -362,7 +360,7 @@ it("property: a run stopped at its first red job never passes", () => {
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: run 43633120187's shape, check (lint) red, typecheck, next and e2e stopped mid-run, test not yet started.
+    // pinned: run 43633120187's shape, check (lint) red, typecheck and next stopped mid-run, test not yet started.
     {
       ...options,
       examples: [

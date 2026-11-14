@@ -23,7 +23,7 @@
 import { fileURLToPath } from "node:url";
 
 /** The jobs that may skip, each a key of `gates`. */
-export const gated = /** @type {const} */ (["check", "typecheck", "test", "next", "e2e"]);
+export const gated = /** @type {const} */ (["check", "typecheck", "test", "next"]);
 
 /**
  * Each job that may skip, and the changes outputs it runs on: its `if:` starts it when any of them
@@ -37,7 +37,6 @@ export const gates = {
   typecheck: ["typecheck"],
   test: ["test"],
   next: ["next"],
-  e2e: ["e2e"],
 };
 
 /** @typedef {{ pass: boolean, lines: string[] }} Verdict */

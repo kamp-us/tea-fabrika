@@ -2,15 +2,8 @@
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { ignored } from "./changes.mjs";
 import { gated, gates } from "./required.mjs";
-
-export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
-export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
-export const inLaneStep = (path: string) => path.includes(LANE_FILTER);
-
-const testFiles = globSync("packages/pipeline/**/*.test.ts", {
-  cwd: fileURLToPath(new URL("../../", import.meta.url)),
-});
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -49,6 +42,14 @@ const commands = (job: Record<string, unknown>) =>
     typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
   );
 
+const lines = (value: unknown) =>
+  typeof value === "string"
+    ? value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+    : [];
+
 const compact = (value: unknown) => {
   if (typeof value !== "string") {
     return "";
@@ -84,31 +85,40 @@ const DRAFT_NAMES = {
 const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
 const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
 const BUILD = "needs.changes.outputs.build!='false'";
-// Today's tests run only when a file of today's version changed; else the tooling tests run alone
-// (0175). An unreadable flag is not 'false', so it runs today's tests.
-const TODAY = "needs.changes.outputs.today!='false'";
-const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
-// The test job's machines: six for today's tests, two when only the tooling tests run (check.yaml
-// gives the seconds). An unreadable flag is not 'false', so it gets six.
-const TODAY_LEGS = 6;
-const TOOLING_LEGS = 2;
-const legList = (count: number) => `[${Array.from({ length: count }, (_, i) => i + 1).join(", ")}]`;
-const TEST_LEGS = `fromJSON(needs.changes.outputs.today=='false'&&'${legList(TOOLING_LEGS)}'||'${legList(TODAY_LEGS)}')`;
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
-// The token and the lockfile's hash changes' classify step reads, and where Electron keeps its binary.
+// The token changes' classify step reads.
 const TOKEN = `\${{ github.token }}`;
-const LOCK = `\${{ hashFiles('pnpm-lock.yaml') }}`;
-const ELECTRON = "~/Library/Caches/electron";
+// The test job's two machines, for the tooling tests alone (check.yaml gives the seconds).
+const TOOLING_LEGS = [1, 2];
+// next/ and the three trees of today's tests. Today's version is frozen (0525, 0533), so every vitest
+// call in the test job leaves all four out.
 const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
+const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
+const toolingExcludes = TOOLING_EXCLUDES.map((glob) => `--exclude '${glob}'`).join(" ");
+
+// The test job's one test step, whole: the tests that reach the change with a base, all of them
+// without one, each on its machine's share. It runs on a pull request alone (0534).
+const TOOLING = [
+  'if [ -n "$BASE" ]; then',
+  `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${TOOLING_REPORT}`,
+  "else",
+  `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${TOOLING_REPORT}`,
+  "fi",
+];
+
+const TEST_TIMES = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
+// Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
+const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
+// Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
+// and planted breaks test today's pipeline code, so no command in check.yaml runs them (0533).
+const TODAYS_PROMISES = /\bpnpm\s+(?:-\S+\s+|run\s+)*promises\b|packages\/promises\//;
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 const chromium =
   "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
-
-const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
@@ -172,7 +182,8 @@ const SIZE_ENV = {
 // when only rows changed.
 const CHECK = "needs.changes.outputs.check!='false'";
 // changes' flags from its first pass, each a job's or a step's.
-const FLAGS = ["check", "typecheck", "test", "e2e", "field", "build", "today"];
+// No flag starts today's tests or its app end to end, which run on no event (0525, 0533).
+const FLAGS = ["check", "typecheck", "test", "field", "build"];
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
@@ -220,11 +231,22 @@ export const lintWorkflow = (text: string): string[] => {
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
 
+  // A pull request's one exclusion is changes.mjs's `ignored`: plan files and rows alone start no
+  // run. GitHub compares the whole pull request with its base, so one more path starts it again.
   for (const trigger of [on, push, pr, queue]) {
-    require(!["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"].some(
-      (key) => key in trigger,
-    ), "no workflow path or branch exclusions");
+    require(!["paths", "branches-ignore", "tags", "tags-ignore"].some((key) => key in trigger) &&
+      (trigger === pr || !("paths-ignore" in trigger)), "no workflow path or branch exclusions");
   }
+
+  require(JSON.stringify(pr["paths-ignore"]) ===
+    JSON.stringify(ignored), "pull requests ignore exactly changes.mjs's ignored paths");
+  // Each `*` is a name without a `/`, and no other wildcard is used, so the test's reading of a
+  // pattern is GitHub's (its filter pattern cheat sheet).
+  const skipped = pr["paths-ignore"];
+  require(Array.isArray(skipped) &&
+    skipped.every(
+      (pattern) => typeof pattern === "string" && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
+    ), "ignored paths use no wildcard but a single *");
 
   require(!("branches" in pr), "all PR bases remain enabled");
   // A merge queue takes a required check only from a `merge_group` run, so without this trigger
@@ -240,7 +262,7 @@ export const lintWorkflow = (text: string): string[] => {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
 
-  // A draft's check is lint alone: the promises gate and the build skip on changes' build flag.
+  // A draft's check is lint alone: the build skips on changes' build flag.
   // F1. check also holds the field row check (ticket 985): its setup runs on any flag, its full
   // install and lint on the check flag, the CI package's install when only rows changed, and the
   // row check last, after any failure, on the field flag, so a red lint never hides red rows.
@@ -249,13 +271,13 @@ export const lintWorkflow = (text: string): string[] => {
   const rowInstall = checkSteps.filter((s) => s["run"] === ROW_INSTALL);
 
   for (const step of checkSteps) {
-    const slow = step["name"] === "promises" || step["run"] === "pnpm build";
+    const slow = step["run"] === "pnpm build";
     const setup = typeof step["uses"] === "string";
     const expected = slow ? BUILD : rows.includes(step) ? ROWS : rowInstall.includes(step) ? ROWS_ALONE : CHECK;
     require(setup
       ? !("if" in step)
       : compact(step["if"]) ===
-          expected, "F1: check's lint steps run on the check flag, promises and build on build, the rows on field, its setup on every run");
+          expected, "F1: check's lint steps run on the check flag, the build on build, the rows on field, its setup on every run");
   }
 
   require(rows.length === 1 &&
@@ -271,12 +293,6 @@ export const lintWorkflow = (text: string): string[] => {
     ), "F1: check installs everything for lint, and only the CI package for rows alone");
   const checkout = checkSteps.find((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
   require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the row check diffs");
-  // F2. A depth-1 fetch makes a full clone shallow, and the row check would lose its history.
-  const promises = checkSteps.find((s) => s["name"] === "promises");
-  require(typeof promises?.["run"] === "string" &&
-    promises["run"].includes(
-      'git cat-file -e "$BASE^{commit}" || git fetch',
-    ), "F2: the promises step fetches its base only when the history lacks it");
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
   // pass with a grown list; a first push's zeros map to no base, as for the test steps.
@@ -448,23 +464,15 @@ export const lintWorkflow = (text: string): string[] => {
     (s) => s["run"] === ROW_INSTALL && compact(s["if"]) === PROBE,
   ), "changes installs the parser for its pass");
 
-  // M1. A push that a merge queue run already tested skips test, next and e2e (changes.mjs's
+  // M1. A push that a merge queue run already tested skips next (changes.mjs's
   // `tested`). The classify step asks GitHub with the job's own token, the workflow's (F3 holds
   // that map to actions and contents, and changes' stop step needs it whole), and it is the one step
-  // in the workflow but the stop steps that gets the token. LOCK is the lockfile's hash, the last
-  // part of the Electron cache's key, so it can see whether main holds one.
+  // in the workflow but the stop steps that gets the token.
   const classify = changeSteps.find((s) => s["id"] === "diff");
-  require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN &&
-    map(classify?.["env"])["LOCK"] === LOCK, "M1: changes' classify step gets the token and the lockfile's hash");
+  require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
   require(Object.entries(jobs).every(([, job]) =>
     steps(map(job)).every((s) => s === classify || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s))),
   ), "M1: only changes' classify step gets the token");
-  const electron = steps(map(jobs["e2e"])).find(
-    (s) =>
-      typeof s["uses"] === "string" && s["uses"].startsWith("actions/cache") && map(s["with"])["path"] === ELECTRON,
-  );
-  require(map(electron?.["with"])["key"] ===
-    `electron-\${{ runner.os }}-\${{ runner.arch }}-${LOCK}`, "M1: e2e's Electron cache key is electron-<os>-<arch>-<LOCK>, as changes looks for it");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -497,93 +505,50 @@ export const lintWorkflow = (text: string): string[] => {
     require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
 
+  // The test job runs the tooling tests alone, on two machines, on a pull request alone (0534).
+  // Today's version is frozen (0525, 0533), so its tests run on no event: T1, with the outputs law
+  // above and the app law below.
   const test = map(jobs["test"]),
-    scripts = commands(test);
-  require(compact(map(map(test["strategy"])["matrix"])["shard"]) ===
-    TEST_LEGS, "T5: six machines for today's tests, two when only the tooling tests run");
-  const testSteps = steps(test);
-  const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
-  const rest = testSteps.find((s) => s["name"] === "test");
+    testSteps = steps(test);
+  require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) ===
+    JSON.stringify(TOOLING_LEGS), `T5: the test job runs on ${TOOLING_LEGS.length} machines, a plain list`);
   const tooling = testSteps.find((s) => s["name"] === "tooling tests");
-  const apt = testSteps.find((s) => s["name"] === "apt packages");
-  // T5. Each step's `--shard k/N` counts the machines of the flag it runs on.
-  require([lane, rest].every((step) => map(step?.["env"])["SHARD"] === `\${{ matrix.shard }}/${TODAY_LEGS}`) &&
-    map(tooling?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${TOOLING_LEGS}`, "T5: each test step's SHARD divides by its flag's machine count");
-  // T6. Without its packages today's tsh and sandbox tests skip, so apt runs on today's flag,
-  // before them; the tooling tests need none of the five.
-  require(apt !== undefined &&
-    compact(apt["if"]) === TODAY &&
-    lane !== undefined &&
-    testSteps.indexOf(apt) < testSteps.indexOf(lane), "T6: apt runs on the today flag, before today's tests");
-  const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
-  require(runs.length === 5, "today has five test commands, including two lane commands");
-  require(compact(lane?.["if"]) === TODAY &&
-    compact(rest?.["if"]) === `!cancelled()&&${TODAY}`, "T1: today's tests run only on the today flag");
-  require(tooling !== undefined &&
-    compact(tooling["if"]) === TOOLING &&
-    rest !== undefined &&
-    testSteps.indexOf(rest) < testSteps.indexOf(tooling), "T2: the tooling tests run when today's do not");
-  require([lane, rest, tooling].every(
-    (step) => compact(map(step?.["env"])["BASE"]) === compact(TEST_BASE),
-  ), "T4: each test step takes its base from the pull request, the merge queue's group or the push");
-  require(toolingRuns.length === 2 &&
-    toolingRuns.every(
-      (line) =>
-        line.includes('--shard "$SHARD"') &&
-        line.includes("--passWithNoTests") &&
-        TOOLING_EXCLUDES.every((glob) => line.includes(`--exclude '${glob}'`)),
-    ) &&
-    toolingRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "T3: the tooling commands leave out today's trees and next/, on a pull request and on main");
   const times = testSteps.find((s) => s["name"] === "shard times");
-  const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(restRuns.length === 3 &&
-    restRuns.every((line) => line.includes(`--exclude '${LANE_GLOB}'`)), "L1: every rest command excludes lane files");
-  require(laneRuns.length === 2 &&
-    laneRuns.every(
-      (line) =>
-        line.startsWith(`pnpm exec vitest run ${LANE_FILTER} `) &&
-        line.includes('--shard "$SHARD"') &&
-        /--maxWorkers=1(?:\s|$)/.test(line) &&
-        line.includes("--passWithNoTests") &&
-        line.includes("--exclude 'next/**'"),
-    ) &&
-    laneRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "L2: lane commands run one file at a time on PR and main");
-  require(lane !== undefined &&
-    rest !== undefined &&
-    times !== undefined &&
-    testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
-    testSteps.indexOf(rest) < testSteps.indexOf(times) &&
-    compact(rest["if"]).startsWith("!cancelled()") &&
-    compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
-  require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
+  // T1. Only these whole scripts, each once: no step, flag or spelling adds today's tests.
+  // Each script as its trimmed lines, so the shell's indenting is no part of it.
+  const testAllowed = ["pnpm install --frozen-lockfile", TOOLING.join("\n"), TEST_TIMES];
+  const testRuns = testSteps.filter((s) => "run" in s).map((s) => lines(s["run"]).join("\n"));
+  require(testRuns.length === testAllowed.length &&
+    testAllowed.every(
+      (command) => testRuns.filter((run) => run === command).length === 1,
+    ), "T1: the test job runs exactly its install, the tooling tests and shard times, once each");
+  require(tooling !== undefined &&
+    !("if" in tooling) &&
+    map(tooling["env"])["SHARD"] === `\${{ matrix.shard }}/${TOOLING_LEGS.length}` &&
+    compact(map(tooling["env"])["BASE"]) ===
+      compact(
+        TEST_BASE,
+      ), "T4: the tooling tests run on every test run, their shard of two, on the pull request's, the group's or the push's base");
+  require(times !== undefined &&
+    times["run"] === TEST_TIMES &&
+    compact(times["if"]) === "!cancelled()" &&
+    tooling !== undefined &&
+    testSteps.indexOf(tooling) <
+      testSteps.indexOf(times), "T3: shard times follow the tooling tests, even after a failure");
 
-  for (const line of runs) {
-    require(/--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line), "every today command excludes next/**");
+  // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
+  // today's promise checks.
+  for (const [name, job] of Object.entries(jobs)) {
+    for (const step of steps(map(job))) {
+      require(![step["run"], step["working-directory"]].some(
+        (text) => typeof text === "string" && TODAYS_APP.test(text),
+      ), `T2: ${name} runs nothing of today's app`);
+      require(!(
+        typeof step["run"] === "string" && TODAYS_PROMISES.test(step["run"])
+      ), `T6: ${name} runs no promise check of today's version`);
+    }
   }
 
-  const changed = restRuns.find((line) => line.includes("--changed"));
-  require(changed !== undefined &&
-    changed.includes('--changed "$BASE"') &&
-    changed.includes('--shard "$SHARD"') &&
-    forced.every((path) => changed.includes(`--exclude ${path}`)), "changed shards exclude the two forced files");
-  require(runs.some(
-    (line) => !line.includes("--changed") && line.includes('--shard "$SHARD"'),
-  ), "main keeps its full shard command");
-  const forcedLine = scripts.findIndex(
-    (line) =>
-      line.startsWith("pnpm exec vitest run") &&
-      forced.every((path) => line.includes(path)) &&
-      !line.includes("--changed"),
-  );
-  require(forcedLine > 0 &&
-    scripts[forcedLine - 1] === `if [ "\${{ matrix.shard }}" = 1 ]; then`, "forced tests run once on shard 1");
-  require(scripts.includes('if [ -n "$BASE" ]; then') &&
-    scripts.includes("else"), "PR and main branches remain separate");
   const nextJob = map(jobs["next"]),
     strategy = map(nextJob["strategy"]),
     matrix = map(strategy["matrix"]),
@@ -956,14 +921,6 @@ const TSC_SAVED = `\${{ steps.tsc.outputs.cache-primary-key }}`;
 const uses = (step: Record<string, unknown>, action: string) =>
   typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
 
-const lines = (value: unknown) =>
-  typeof value === "string"
-    ? value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "")
-    : [];
-
 export const lintCaches = (files: CacheFiles): string[] => {
   const errors: string[] = [];
   const require = (holds: boolean, reason: string) => {
@@ -1100,8 +1057,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
-    if (!String(map(map(manifest)["scripts"])["lint"]).includes("node .github/ci/workflow-lint.ts")) {
+    const lint = String(map(map(manifest)["scripts"])["lint"]);
+
+    if (!lint.includes("node .github/ci/workflow-lint.ts")) {
       errors.push("pnpm lint must run workflow-lint.ts");
+    }
+
+    // A pull request of ignored paths starts no run, so its rows are checked only here.
+    if (!lint.includes("node .github/ci/field-check.ts --local")) {
+      errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
     }
 
     if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {

@@ -19,7 +19,7 @@ const options = { seed: 119120, numRuns: 100 };
 // T375 plants caught: skill readTrees and shared scripts at the red baseline;
 // script Markdown counted as prose, scripts skipping test, all Markdown safe,
 // prose masking shared paths, and every skill-tree path counted as prose.
-const heavy = { check: true, typecheck: true, test: true, next: true, e2e: true };
+const heavy = { check: true, typecheck: true, test: true, next: true };
 // 0534: the test job (the tooling tests) runs on a pull request alone. A merge queue's group and a
 // push to main never start it, whatever their paths or history, and the schedule runs every
 // tooling test. Every other event keeps what classify says.
@@ -105,9 +105,9 @@ const path = fc.oneof(
 
 const list = fc.array(path, { maxLength: 12 });
 
-// 0175: a file of today's version, written apart from changes.mjs. Only these start today's own
-// checks (its tests, e2e and build), on every event. No generator above makes a quiet path, plain
-// Markdown or a field row, under these trees; the scenario near the end pins that case.
+// 0175: a file of today's version, written apart from changes.mjs. Only these start today's build,
+// on every event; its tests and e2e start on none (0525, 0533). No generator above makes a quiet path,
+// plain Markdown or a field row, under these trees; the scenario near the end pins that case.
 const todays = (p: string) => /^(?:apps|programs|packs|wip|legacy|packages|fixtures)\//.test(p);
 const touched = (paths: readonly string[]) => paths.some(todays);
 
@@ -117,7 +117,7 @@ const touched = (paths: readonly string[]) => paths.some(todays);
 it("every event that is no pull request, merge queue's group or push enables every job for every path list", () => {
   fc.assert(
     fc.property(list, fc.constantFrom("workflow_dispatch", "schedule", ""), (paths, event) => {
-      expect(ci.classify(paths, event)).toEqual({ ...heavy, field: true, today: true });
+      expect(ci.classify(paths, event)).toEqual({ ...heavy, field: true, build: true });
     }),
     options,
   );
@@ -136,7 +136,7 @@ it("property: a merge queue's group and a push get the flags a pull request gets
         [[".decisions/0174-a-queue-run-follows-its-paths.md"], "merge_group"],
         // pinned: the same decision file as a push to main, which started every job after its merge.
         [[".decisions/0174-a-queue-run-follows-its-paths.md"], "push"],
-        // pinned: next/ alone, where a pull request skips test and e2e.
+        // pinned: next/ alone, where a pull request skips test and the build.
         [["next/packages/libfabrika/src/a.ts"], "push"],
       ],
     },
@@ -146,15 +146,13 @@ it("property: a merge queue's group and a push get the flags a pull request gets
 it("scenario: a merge queue's group of Markdown skips the heavy jobs, and one of next/ files runs check and next", () => {
   // scenario: the two cases named in 0174, written out so the flags are read here and not only
   // compared with a pull request's.
-  const quiet = { check: false, typecheck: false, test: false, next: false, e2e: false, field: false, today: false };
-  expect(ci.jobs(["docs/a.md"], "merge_group", false)).toEqual({ ...quiet, build: false });
+  const quiet = { check: false, typecheck: false, test: false, next: false, field: false, build: false };
+  expect(ci.jobs(["docs/a.md"], "merge_group", false)).toEqual(quiet);
   // 0175: the build is today's library, so a group of next/ files alone no longer builds.
   expect(ci.jobs(["next/packages/libfabrika/src/a.ts"], "merge_group", false)).toEqual({
     ...heavy,
     test: false,
-    e2e: false,
     field: false,
-    today: false,
     build: false,
   });
 });
@@ -167,9 +165,8 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
         typecheck: false,
         test: false,
         next: false,
-        e2e: false,
         field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p) || /^field\/(?:notes|runs|findings)\//.test(p)),
-        today: false,
+        build: false,
       });
     }),
     options,
@@ -185,9 +182,8 @@ it("skill scripts run check and test; other version flags follow their readers",
         expect(ci.classify(scripts, "pull_request")).toEqual({
           ...heavy,
           next: false,
-          e2e: false,
           field: false,
-          today: false,
+          build: false,
         });
         // A Markdown file beside a script is still script input, even though prose is quiet.
         expect(
@@ -195,16 +191,15 @@ it("skill scripts run check and test; other version flags follow their readers",
             scripts.map((path) => path.replace(/\.[^.]+$/, ".md")),
             "pull_request",
           ),
-        ).toEqual({ ...heavy, next: false, e2e: false, field: false, today: false });
+        ).toEqual({ ...heavy, next: false, field: false, build: false });
         const flags = ci.classify([...scripts, ...others], "pull_request");
         expect(flags).toEqual({
           check: true,
           typecheck: true,
           test: true,
           next: others.some((p) => p.startsWith("next/")),
-          e2e: others.some((p) => !p.startsWith("next/")),
           field: false,
-          today: others.some((p) => !p.startsWith("next/")),
+          build: others.some((p) => !p.startsWith("next/")),
         });
       },
     ),
@@ -212,7 +207,7 @@ it("skill scripts run check and test; other version flags follow their readers",
   );
 });
 
-// 0175 narrowed this law: e2e is today's app, so a skill-tree path no longer starts it.
+// 0175 narrowed this law: the build is today's library, so a skill-tree path no longer starts it.
 // The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): a file
 // under .agents/skills/ no longer starts next, since no next/ test reads one, so this law says
 // nothing of next for a list of those alone (the case 4 law below does). Next still starts when a
@@ -225,8 +220,7 @@ it("other skill-tree paths still run check, typecheck and test, next only for .c
         typecheck: true,
         test: true,
         ...(paths.some((p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
-        e2e: false,
-        today: false,
+        build: false,
       });
     }),
     options,
@@ -248,11 +242,11 @@ const readMarkdown = fc.oneof(
     .map(([above, dir, below, name]) => [...above, dir, ...below, `${name}.md`].join("/")),
 );
 
-// 0175 narrowed this law: today's checks start only when the Markdown is under today's trees.
-it("Markdown a check reads runs check, typecheck, test and next, alone or beside safe paths, and today's checks by its tree", () => {
+// 0175 narrowed this law: today's build starts only when the Markdown is under today's trees.
+it("Markdown a check reads runs check, typecheck, test and next, alone or beside safe paths, and today's build by its tree", () => {
   fc.assert(
     fc.property(readMarkdown, fc.array(safe, { maxLength: 6 }), (read, paths) => {
-      const expected = { ...heavy, e2e: todays(read), today: todays(read) };
+      const expected = { ...heavy, build: todays(read) };
       expect(ci.classify([read], "pull_request")).toMatchObject(expected);
       expect(ci.classify([...paths, read], "pull_request")).toMatchObject(expected);
     }),
@@ -269,26 +263,22 @@ it("Markdown a check reads runs check, typecheck, test and next, alone or beside
 });
 
 // 0175 narrowed this law: a shared path that is no file of today's version, the lockfile among
-// them, no longer starts today's checks.
+// them, no longer starts today's build.
 // The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): lint rule
 // files (`.oxlintrc.json`, `oxlint-plugins/`) are no longer shared paths. They give scope readers,
 // so next runs only the next/ tests that lint, read or bundle source, and the lint rule files law
 // below says so. This law keeps its generators, which hold no lint rule file; its `next` means
 // every next/ test only for the paths those generators make.
-it("shared paths run check, typecheck, test and next, and today's checks by the paths; adding paths never disables a job", () => {
+it("shared paths run check, typecheck, test and next, and today's build by the paths; adding paths never disables a job", () => {
   fc.assert(
     fc.property(fc.array(path, { minLength: 1, maxLength: 10 }), list, shared, (paths, more, unknown) => {
-      expect(ci.classify([unknown], "pull_request")).toMatchObject({
-        ...heavy,
-        e2e: todays(unknown),
-        today: todays(unknown),
-      });
+      expect(ci.classify([unknown], "pull_request")).toMatchObject({ ...heavy, build: todays(unknown) });
       const on = touched([...paths, unknown]);
-      expect(ci.classify([...paths, unknown], "pull_request")).toMatchObject({ ...heavy, e2e: on, today: on });
+      expect(ci.classify([...paths, unknown], "pull_request")).toMatchObject({ ...heavy, build: on });
       const before = ci.classify(paths, "pull_request");
       const after = ci.classify([...paths, ...more], "pull_request");
 
-      for (const key of ["check", "typecheck", "test", "next", "e2e", "field", "today"] as const) {
+      for (const key of ["check", "typecheck", "test", "next", "field", "build"] as const) {
         expect(!before[key] || after[key]).toBe(true);
       }
 
@@ -305,17 +295,12 @@ it("today, next, mixed and the shared plant helper have separate version flags",
       fc.array(today, { minLength: 1, maxLength: 12 }),
       fc.array(next, { minLength: 1, maxLength: 12 }),
       (old, fresh) => {
-        expect(ci.classify(old, "pull_request")).toMatchObject({ ...heavy, next: false, today: true });
-        expect(ci.classify(fresh, "pull_request")).toMatchObject({
-          ...heavy,
-          test: false,
-          e2e: false,
-          today: false,
-        });
-        expect(ci.classify([...old, ...fresh], "pull_request")).toMatchObject({ ...heavy, today: true });
+        expect(ci.classify(old, "pull_request")).toMatchObject({ ...heavy, next: false, build: true });
+        expect(ci.classify(fresh, "pull_request")).toMatchObject({ ...heavy, test: false, build: false });
+        expect(ci.classify([...old, ...fresh], "pull_request")).toMatchObject({ ...heavy, build: true });
         expect(ci.classify([...fresh, "next/apps/fabrika/src/exam/plant.ts"], "pull_request")).toMatchObject({
           test: true,
-          e2e: false,
+          build: false,
         });
       },
     ),
@@ -323,19 +308,14 @@ it("today, next, mixed and the shared plant helper have separate version flags",
   );
 });
 
-it("next's exam signer runs today's tests, alone or beside other paths", () => {
+it("next's exam signer runs the test job, alone or beside other paths", () => {
   // T375 Amendment 1: box, plancheck and stepcommit tests read the signer.
   // Plant caught: let commits.ts skip test like any other next/ path.
   const commits = "next/apps/fabrika/src/exam/commits.ts";
   const helper = "next/apps/fabrika/src/exam/plant.ts";
   fc.assert(
     fc.property(list, (paths) => {
-      expect(ci.classify([commits], "pull_request")).toEqual({
-        ...heavy,
-        e2e: false,
-        field: false,
-        today: false,
-      });
+      expect(ci.classify([commits], "pull_request")).toEqual({ ...heavy, field: false, build: false });
       expect(ci.classify([...paths, commits], "pull_request")).toEqual(ci.classify([...paths, helper], "pull_request"));
     }),
     options,
@@ -445,19 +425,17 @@ it("skill script and prose rules apply only at the repo root", () => {
       expect(ci.classify([`${prefix}/${script}`], "pull_request")).toEqual({
         ...heavy,
         test: false,
-        e2e: false,
         field: false,
-        today: false,
+        build: false,
       });
 
       for (const root of ["next", "docs"]) {
         expect(ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request")).toEqual({
           ...heavy,
           test: root !== "next",
-          // 0175: neither root is today's version, so e2e stays off for both.
-          e2e: false,
           field: false,
-          today: false,
+          // 0175: neither root is today's version, so the build stays off for both.
+          build: false,
         });
       }
     }),
@@ -472,26 +450,23 @@ it("skill script and prose rules apply only at the repo root", () => {
 const events = fc.constantFrom("pull_request", "push", "merge_group", "workflow_dispatch", "");
 const paths = fc.option(list, { nil: null });
 
-// 0175 narrowed this law: the build is today's library, so it follows `today`, no longer `check`.
-// 0534 narrowed it again: the merge queue's group and a push never start the test job.
-it("property: a ready pull request and every other event run what classify says, build with today's checks, and the test job only off the merge line", () => {
+// 0175 narrowed this law: the build is today's library, so it follows today's files, no longer
+// `check`. Since 0533 that rule is classify's own `build` flag. 0534 narrowed it again: the merge
+// queue's group and a push never start the test job.
+it("property: a ready pull request and every other event run what classify says, and the test job only off the merge line", () => {
   fc.assert(
     fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
       const flags = ci.classify(paths, event);
       const ready = event !== "pull_request" || !draft;
       fc.pre(ready);
-      expect(ci.jobs(paths, event, draft)).toEqual({
-        ...flags,
-        test: flags.test && testsOn(event),
-        build: flags.today,
-      });
+      expect(ci.jobs(paths, event, draft)).toEqual({ ...flags, test: flags.test && testsOn(event) });
     }),
     // Lists where check is off are rare in `list`, so one is pinned: a docs-only ready PR builds nothing.
     { ...options, examples: [[["docs/a.md"], "pull_request", false]] },
   );
 });
 
-it("property: a draft keeps lint, typecheck and field as ready, and skips build, test, next and e2e", () => {
+it("property: a draft keeps lint, typecheck and field as ready, and skips build, test and next", () => {
   fc.assert(
     fc.property(paths, (paths) => {
       const ready = ci.jobs(paths, "pull_request", false);
@@ -499,11 +474,9 @@ it("property: a draft keeps lint, typecheck and field as ready, and skips build,
         check: ready.check,
         typecheck: ready.typecheck,
         field: ready.field,
-        today: ready.today,
         build: false,
         test: false,
         next: false,
-        e2e: false,
       });
     }),
     options,
@@ -564,15 +537,16 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
 it("property: a push of Markdown no check reads, field rows or skill prose starts no heavy job", () => {
   fc.assert(
     fc.property(fc.array(fc.oneof(safe, prose), { minLength: 1, maxLength: 12 }), (paths) => {
-      expect(ci.jobs(paths, "push", false)).toMatchObject({ ...quietJobs, build: false });
+      expect(ci.jobs(paths, "push", false)).toMatchObject(quietJobs);
     }),
     // pinned: one decision file, the push that started every job.
     { ...options, examples: [[[".decisions/0175-every-run-follows-its-paths.md"]]] },
   );
 });
 
-// 0175: today's own checks (its tests, e2e and build) start only when a file of today's version
-// changed, on every event. A file that reruns every test is not one.
+// 0175: today's build starts only when a file of today's version changed, on every event. A file
+// that reruns every test is not one. Its tests and e2e, which 0175 started the same way, start on
+// no event since 0533 (the law at the end).
 const rerun = fc.constantFrom("pnpm-lock.yaml", "package.json", "tsconfig.json", "pnpm-workspace.yaml");
 
 const tooling = fc.oneof(
@@ -585,11 +559,11 @@ const tooling = fc.oneof(
 
 const elsewhere = fc.oneof(safe, next, prose, tooling, otherSkill, rerun);
 const todaysFile = fc.oneof(today, fc.constantFrom("packages/fabrika-design/src/colors.ts", "fixtures/toy/src/a.ts"));
-const off = { today: false, e2e: false, build: false };
+const off = { build: false };
 const scopedEvent = fc.constantFrom("pull_request", "merge_group", "push");
-const quietJobs = { check: false, typecheck: false, test: false, next: false, e2e: false, today: false };
+const quietJobs = { check: false, typecheck: false, test: false, next: false, build: false };
 
-it("property: a run that touches no file of today's version starts none of today's checks, on a pull request, a merge queue's group and a push", () => {
+it("property: a run that touches no file of today's version does not build it, on a pull request, a merge queue's group and a push", () => {
   fc.assert(
     fc.property(fc.array(elsewhere, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
       expect(ci.jobs(paths, event, false)).toMatchObject(off);
@@ -606,15 +580,13 @@ it("property: a run that touches no file of today's version starts none of today
   );
 });
 
-it("property: a run that touches a file of today's version starts today's checks, on a pull request, a merge queue's group and a push", () => {
+it("property: a run that touches a file of today's version runs check, typecheck, test and its build, on a pull request, a merge queue's group and a push", () => {
   fc.assert(
     fc.property(fc.array(elsewhere, { maxLength: 12 }), todaysFile, scopedEvent, (paths, file, event) => {
       expect(ci.jobs([...paths, file], event, false)).toMatchObject({
         check: true,
         typecheck: true,
         test: testsOn(event),
-        e2e: true,
-        today: true,
         build: true,
       });
     }),
@@ -622,7 +594,7 @@ it("property: a run that touches a file of today's version starts today's checks
   );
 });
 
-it("property: a pull request, a merge queue's group or a push of next/ files alone runs check, typecheck and next, and none of today's checks", () => {
+it("property: a pull request, a merge queue's group or a push of next/ files alone runs check, typecheck and next, and not today's build", () => {
   fc.assert(
     fc.property(fc.array(next, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
       expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, test: false, field: false, ...off });
@@ -691,7 +663,7 @@ it("property: a CI file beside other paths never changes what next/ they need", 
 });
 
 it("scenario: plain Markdown under today's trees is no file of today's version", () => {
-  // scenario: an app's README is read by no check, so it starts none of today's, on any event.
+  // scenario: an app's README is read by no check, so it starts no test and no build, on any event.
   expect(ci.jobs(["apps/fabrika/README.md"], "pull_request", false)).toMatchObject({ test: false, ...off });
   expect(ci.jobs(["apps/fabrika/README.md"], "push", false)).toMatchObject({ test: false, ...off });
 });
@@ -825,11 +797,7 @@ it("property: a path nobody listed gives scope all and every flag on, whatever p
       // The path itself counts as proven too: only a next/ path can be.
       const all = [...same, unknown];
       expect(ci.scope([unknown], event, all)).toBe("all");
-      expect(ci.classify([unknown], event, all)).toMatchObject({
-        ...heavy,
-        e2e: todays(unknown),
-        today: todays(unknown),
-      });
+      expect(ci.classify([unknown], event, all)).toMatchObject({ ...heavy, build: todays(unknown) });
       expect(ci.scope([...others, unknown], event, [...all, ...others])).toBe("all");
     }),
     options,
@@ -851,7 +819,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
         const flags = ci.classify(paths, event, same);
         const grown = ci.classify([...paths, ...more], event, same);
 
-        for (const key of ["check", "typecheck", "test", "next", "e2e", "field", "today"] as const) {
+        for (const key of ["check", "typecheck", "test", "next", "field", "build"] as const) {
           expect(!flags[key] || grown[key]).toBe(true);
         }
 
@@ -1067,10 +1035,9 @@ it("scenario: with no parser to import, --same prints what the first pass printe
 
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
 // main to the commit it tested, so a push and its queue run share their tree and their base tree;
-// then test, next and e2e would repeat that run, and skip. Every other case runs what `jobs` says.
+// then test and next would repeat that run, and skip. Every other case runs what `jobs` says.
 const tree = { base: "1".repeat(40), head: "2".repeat(40), other: "3".repeat(40) };
 const queue = { head: "d".repeat(40), base: "e".repeat(40) };
-const lock = "f".repeat(64);
 
 /** The fake git above, plus the trees of the push's base and head. */
 const pushGit =
@@ -1104,12 +1071,11 @@ const passed: QueueRun = {
 type Fake = {
   runs?: readonly QueueRun[];
   baseTree?: string;
-  caches?: readonly string[];
-  fails?: "runs" | "commit" | "caches";
+  fails?: "runs" | "commit";
 };
 
-/** A fake GitHub: the queue's runs, its head's tree and parent, that parent's tree, main's caches. */
-const fakeApi = ({ runs = [passed], baseTree = tree.base, caches = [`electron-macOS-ARM64-${lock}`], fails }: Fake) => {
+/** A fake GitHub: the queue's runs, its head's tree and parent, and that parent's tree. */
+const fakeApi = ({ runs = [passed], baseTree = tree.base, fails }: Fake) => {
   const calls: string[] = [];
   const reject = (what: string) => Promise.reject(new Error(`${what}: 502`));
   return {
@@ -1132,15 +1098,11 @@ const fakeApi = ({ runs = [passed], baseTree = tree.base, caches = [`electron-ma
             ? Promise.resolve({ tree: baseTree, parents: [] })
             : reject(`no commit ${commit}`);
       },
-      caches: (prefix: string) => {
-        calls.push(`caches ${prefix}`);
-        return fails === "caches" ? reject("caches") : Promise.resolve(caches);
-      },
     },
   };
 };
 
-const pushEnv = { ...envOf("push", false), LOCK: lock };
+const pushEnv = envOf("push", false);
 
 const changedPaths = fc
   .array(known, { minLength: 1, maxLength: 10 })
@@ -1160,16 +1122,15 @@ const prints = (printed: Record<string, string>, expected: Record<string, boolea
 };
 
 // Plants in changes.mjs, each run once and each caught by a law below: any conclusion counts, a run
-// not ended counts, any head tree counts, any base tree counts, an API error counts as tested, the
-// Electron cache is never asked, an unreadable cache list counts as warm, every event asks, a tested
-// push skips check too, the reader ignores a refused answer, the reader asks with no token, any
-// cache key ending in the lock counts, and a tree git cannot read is ignored.
-it("property: a push whose tree and base tree a passed queue run tested skips test, next and e2e, and nothing else", async () => {
+// not ended counts, any head tree counts, any base tree counts, an API error counts as tested, every
+// event asks, a tested push skips check too, the reader ignores a refused answer, the reader asks
+// with no token, and a tree git cannot read is ignored.
+it("property: a push whose tree and base tree a passed queue run tested skips test and next, and nothing else", async () => {
   await fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, {});
       const expected = ci.jobs(paths, "push", false);
-      prints(printed, { ...expected, test: false, next: false, e2e: false });
+      prints(printed, { ...expected, test: false, next: false });
       expect(printed["tested"]).toBe("7");
       expect(printed["probe"]).toBe("false");
     }),
@@ -1185,9 +1146,7 @@ it("scenario: a tested push of today's and next/ files keeps check, typecheck, b
     typecheck: "true",
     test: "false",
     next: "false",
-    e2e: "false",
     build: "true",
-    today: "true",
     tested: "7",
   });
 });
@@ -1310,33 +1269,6 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
   expect(calls).toEqual([]);
 });
 
-it("property: a tested push still runs e2e when main has no Electron cache for its lockfile, or its caches cannot be read", async () => {
-  // Only e2e on main saves that cache (check.yaml), so skipping it would leave every later run cold.
-  await fc.assert(
-    fc.asyncProperty(
-      fc
-        .array(fc.oneof(known, today), { minLength: 1, maxLength: 10 })
-        .map((list) => [...list, "apps/fabrika/src/a.ts"]),
-      fc.constantFrom<[Fake, Record<string, string>]>(
-        [{ caches: [] }, pushEnv],
-        [{ caches: [`electron-macOS-ARM64-${"0".repeat(64)}`] }, pushEnv],
-        [{ caches: [`tsc-Linux-${lock}`] }, pushEnv],
-        [{ fails: "caches" }, pushEnv],
-        [{}, envOf("push", false)],
-        [{}, { ...pushEnv, LOCK: "" }],
-      ),
-      async (paths, [fake, env]) => {
-        const { printed } = await pushed(paths, fake, env);
-        const expected = ci.jobs(paths, "push", false);
-        expect(expected.e2e).toBe(true);
-        prints(printed, { ...expected, test: false, next: false });
-        expect(printed["tested"]).toBe("7");
-      },
-    ),
-    options,
-  );
-});
-
 it("property: a pull request or a merge queue's group never asks GitHub, and runs what jobs says", async () => {
   await fc.assert(
     fc.asyncProperty(
@@ -1345,12 +1277,7 @@ it("property: a pull request or a merge queue's group never asks GitHub, and run
       fc.boolean(),
       async (paths, event, draft) => {
         const { api, calls } = fakeApi({});
-        const printed = await ci.outputs({
-          same: false,
-          env: { ...envOf(event, draft), LOCK: lock },
-          run: pushGit(paths),
-          api,
-        });
+        const printed = await ci.outputs({ same: false, env: envOf(event, draft), run: pushGit(paths), api });
         prints(printed, ci.jobs(paths, event, draft));
         expect(printed["tested"]).toBe("");
         expect(calls).toEqual([]);
@@ -1376,7 +1303,6 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   const answers: Record<string, unknown> = {
     runs: { workflow_runs: [passed] },
     commits: { tree: { sha: tree.head }, parents: [{ sha: queue.base }] },
-    caches: { actions_caches: [{ key: `electron-macOS-ARM64-${lock}` }] },
   };
   const api = ci.github(runEnv, (url, init) => {
     asked.push({ url, auth: init.headers["authorization"] });
@@ -1391,14 +1317,42 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   expect(api).not.toBeNull();
   expect(await api?.runs()).toEqual([passed]);
   expect(await api?.commit(queue.head)).toEqual({ tree: tree.head, parents: [queue.base] });
-  expect(await api?.caches("electron-")).toEqual([`electron-macOS-ARM64-${lock}`]);
   expect(asked.map((a) => a.url)).toEqual([
     "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
     `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
-    "https://api.example/repos/owner/repo/actions/caches?ref=refs%2Fheads%2Fmain&key=electron-&per_page=100",
   ]);
   expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
 
   const refused = ci.github(runEnv, () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
   await expect(refused?.runs()).rejects.toThrow("403");
+});
+
+// 0533: CI runs none of the tests of today's version. No event, path list or draft flag
+// turns its tests or its app end to end back on: there is no flag for them, in the flags or in what
+// the script prints for check.yaml. workflow-lint.ts holds the other half: no job runs them.
+// Plants, each run once on changes.mjs and restored, each red: `today: touched` back in classify's
+// flags; `e2e: true` back in the fallback `all`; `e2e: false` back in a draft's override.
+const flagNames = ["build", "check", "field", "next", "test", "typecheck"];
+const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflow_dispatch", "schedule", "");
+
+it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests or e2e", async () => {
+  await fc.assert(
+    fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
+      expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
+      expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
+      // Unreadable history is the fallback that runs every job.
+      const run: Runner = paths === null ? () => ({ status: 128, stdout: "" }) : git(paths, "");
+      const printed = await ci.outputs({ same: false, env: envOf(event, draft), run });
+      expect(Object.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
+    }),
+    {
+      ...options,
+      examples: [
+        // pinned: a push of today's app, which ran its six test machines and its e2e before 0533.
+        [["apps/fabrika/src/a.ts"], "push", false],
+        // pinned: a hand-started run, which ran every job.
+        [null, "workflow_dispatch", false],
+      ],
+    },
+  );
 });
