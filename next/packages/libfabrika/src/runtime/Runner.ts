@@ -197,6 +197,8 @@ const EXIT = "exit";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, START_CHILD, EXIT]);
+/** This life still owes a host Cmd, a send under `mail`'s first name: the next alarm tries it again. */
+const owesSend = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -500,7 +502,7 @@ export class ProgramRunner extends Context.Service<
 
           const running = !recovering(supervision) && (supervision === null || (yield* manager.isLive(process.id)));
           const waited = waitUntil(supervision);
-          const owes = running && (live?.cmds.some((cmd) => cmd.mail === true) ?? false);
+          const owes = running && live !== null && owesSend(live.cmds);
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
@@ -1247,6 +1249,13 @@ export class ProgramRunner extends Context.Service<
             cmds,
           };
           yield* store.save(checkpoint(next, null), placed);
+
+          // 0528: every letter is read and no failed send waits, so nothing is left behind the mail
+          // wake. The permit is held, and a ping or a failed send after this sets it again.
+          if (stop === letters.length && !owesSend(cmds)) {
+            mailRetry = null;
+          }
+
           drained = [...drained, ...drain];
           live = next;
           yield* publish(state, next);
