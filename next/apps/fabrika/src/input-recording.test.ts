@@ -55,13 +55,20 @@ const field = (bytes: Uint8Array) => {
   return Buffer.concat([n, bytes]);
 };
 
+// The live instance writes these files from its own connection while the test opens a second one:
+// once a reply write is cut, the process retries about every 100 ms, each write holding the lock
+// for 0.3 to 11.5 ms on a laptop (ticket 962). node:sqlite's default busy timeout is 0, so a
+// CREATE or DROP TRIGGER that met one of those writes failed with "database is locked"
+// (PR 1242's run 43623892315). SQLite's busy timeout waits for the lock like any second client.
+const LOCK_WAIT_MS = 5000;
+
 const recovery = Effect.fnUntraced(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
   for (const file of yield* fs.glob("**/*.{sqlite,db}", { root: home, dot: true, exclude: ["node_modules/"] })) {
     const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, file))),
+      Effect.sync(() => new DatabaseSync(path.join(home, file), { timeout: LOCK_WAIT_MS })),
       (db) => Effect.sync(() => db.close()),
     );
     const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_recovery'").get();
