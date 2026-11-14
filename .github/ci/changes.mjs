@@ -285,6 +285,161 @@ export const readPaths = (base, head, event, run = git) => {
   return diff.stdout === "" ? [] : diff.stdout.slice(0, -1).split("\0");
 };
 
+/**
+ * A merge queue's run of this workflow, as GitHub's API lists it: the fields `tested` reads.
+ * @typedef {{id: number, status: string, conclusion: string | null, head_sha: string, head_commit: {tree_id: string} | null}} QueueRun
+ */
+
+/**
+ * What a push asks GitHub. Each call may reject, and any rejection runs every job.
+ * `runs` lists this workflow's passed merge queue runs, `commit` reads one commit's tree and
+ * parents, and `caches` lists the keys of main's Actions caches that start with a prefix.
+ * @typedef {{
+ *   runs: () => Promise<readonly QueueRun[]>,
+ *   commit: (sha: string) => Promise<{tree: string, parents: readonly string[]}>,
+ *   caches: (prefix: string) => Promise<readonly string[]>,
+ * }} Api
+ */
+
+/** @typedef {(url: string, init: {headers: Record<string, string>, signal: AbortSignal}) => Promise<{ok: boolean, status: number, json: () => Promise<any>}>} Fetch */
+
+/**
+ * GitHub's REST API for this run's repository and workflow, read with the job's own token.
+ * `null` when the run gave no token, repository or workflow file: then no push asks, and every job
+ * runs. Only the changes job's classify step is given the token (workflow-lint.ts holds that).
+ * @param {Record<string, string | undefined>} env
+ * @param {Fetch} [get]
+ * @returns {Api | null}
+ */
+export const github = (env, get = globalThis.fetch) => {
+  const token = env["GITHUB_TOKEN"];
+  const repository = env["GITHUB_REPOSITORY"];
+  // `owner/repo/.github/workflows/check.yaml@refs/heads/main`: the file this run started from.
+  const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
+
+  if (!token || !repository || workflow === undefined) {
+    return null;
+  }
+
+  const api = env["GITHUB_API_URL"] || "https://api.github.com";
+  /** @param {string} path */
+  const read = async (path) => {
+    const response = await get(`${api}/repos/${repository}/${path}`, {
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${token}`,
+        "x-github-api-version": "2022-11-28",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`GET ${path}: ${response.status}`);
+    }
+
+    return response.json();
+  };
+
+  return {
+    runs: async () =>
+      (
+        await read(
+          `actions/workflows/${workflow}/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50`,
+        )
+      ).workflow_runs,
+    commit: async (sha) => {
+      const commit = await read(`git/commits/${sha}`);
+      return { tree: commit.tree.sha, parents: commit.parents.map((/** @type {{sha: string}} */ p) => p.sha) };
+    },
+    caches: async (prefix) =>
+      (
+        await read(`actions/caches?ref=refs%2Fheads%2Fmain&key=${encodeURIComponent(prefix)}&per_page=100`)
+      ).actions_caches.map((/** @type {{key: string}} */ cache) => cache.key),
+  };
+};
+
+/** @param {string} sha @param {Runner} run @returns {string | null} */
+const treeOf = (sha, run) => {
+  if (!validSha(sha)) {
+    return null;
+  }
+
+  const tree = run(["rev-parse", "--verify", "--quiet", `${sha}^{tree}`]);
+  const id = tree.stdout.trim();
+  return tree.status === 0 && validSha(id) ? id : null;
+};
+
+/**
+ * The merge queue run that already tested what this push brings, or `null`. A queue run counts
+ * only when it passed, its head has the push's tree, and its head's first parent, the commit the
+ * queue built it on, has the tree main held before the push. Same base tree and same head tree
+ * give the same changed paths and the same `--changed` tests, so its jobs were this push's jobs on
+ * the same files. The match is by tree, never by commit message. Any doubt is `null`: a tree git
+ * cannot read, a rejected or malformed answer, or no such run (an admin merge, a direct push, a
+ * queue run that failed or was canceled, or a push of more than one queue entry at once).
+ * @param {string} before what main held before the push
+ * @param {string} head the push's commit
+ * @param {Runner} run
+ * @param {Api} api
+ * @returns {Promise<number | null>}
+ */
+const tested = async (before, head, run, api) => {
+  const tree = treeOf(head, run);
+  const from = treeOf(before, run);
+
+  if (tree === null || from === null) {
+    return null;
+  }
+
+  try {
+    for (const queued of await api.runs()) {
+      if (queued.status !== "completed" || queued.conclusion !== "success" || queued.head_commit?.tree_id !== tree) {
+        continue;
+      }
+
+      const [base] = (await api.commit(queued.head_sha)).parents;
+
+      if (base !== undefined && validSha(base) && (await api.commit(base)).tree === from) {
+        return queued.id;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+/**
+ * Whether main holds an Electron cache for this lockfile, the one the e2e job saves on main only:
+ * a key `electron-<os>-<arch>-<lock>`, where `lock` is `hashFiles('pnpm-lock.yaml')`. An
+ * unreadable answer is `false`, so e2e runs and saves one.
+ * @param {string} lock
+ * @param {Api} api
+ */
+const warm = async (lock, api) => {
+  if (!/^[a-f0-9]{64}$/.test(lock)) {
+    return false;
+  }
+
+  try {
+    return (await api.caches("electron-")).some((key) => key.startsWith("electron-") && key.endsWith(`-${lock}`));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * A push whose tree and base tree a passed queue run already tested skips the jobs that would
+ * repeat it: test, next and e2e. e2e still runs when main has no Electron cache for this lockfile,
+ * since only e2e on main saves one. check and typecheck run: they are light, and typecheck saves
+ * main's tsc cache. A skip only turns a flag off.
+ * @param {Jobs} flags
+ * @param {boolean} cached
+ * @returns {Jobs}
+ */
+const skipTested = (flags, cached) => ({ ...flags, test: false, next: false, e2e: flags.e2e && !cached });
+
 /** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
 const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
 
@@ -364,30 +519,57 @@ const parserVersion = () => {
  * parser's install and prints `next` and `filter` again, with the paths program.ts proved; when
  * program.ts cannot load, it prints what the first pass printed, so a failed install runs every
  * next/ test. `note` hears one line per candidate file and the parser's version.
- * @param {{same: boolean, env: Record<string, string | undefined>, run?: Runner, load?: () => Promise<{samePaths: (base: string, head: string, paths: readonly string[], run: Runner, note?: (path: string, verdict: string) => void) => string[]}>, note?: (line: string) => void}} options
+ * On a push, the first pass also asks `api` whether a merge queue run already passed the same
+ * change (`tested`), and then prints test, next and e2e off and that run's id as `tested`. With no
+ * `api`, as when the run gave no token, it asks nothing. Since next is then off, `probe` is false
+ * and the parser's pass does not run.
+ * @param {{same: boolean, env: Record<string, string | undefined>, run?: Runner, load?: () => Promise<{samePaths: (base: string, head: string, paths: readonly string[], run: Runner, note?: (path: string, verdict: string) => void) => string[]}>, note?: (line: string) => void, api?: Api | null}} options
  * @returns {Promise<Record<string, string>>}
  */
-export const outputs = async ({ same, env, run = git, load = () => import("./program.ts"), note = () => {} }) => {
+export const outputs = async ({
+  same,
+  env,
+  run = git,
+  load = () => import("./program.ts"),
+  note = () => {},
+  api = github(env),
+}) => {
   const event = env["EVENT"] ?? "";
   const base = env["BASE"] ?? "";
   const head = env["HEAD"] ?? "";
   const paths = readPaths(base, head, event, run);
   // `github.event.pull_request.draft`: "true" on a draft, "false" or empty otherwise. Anything but
   // "true" runs the full set, so a value we cannot read never skips a job.
-  const flags = jobs(paths, event, env["DRAFT"] === "true");
+  const changed = jobs(paths, event, env["DRAFT"] === "true");
   const from = start(base, head, event, run);
   const first = scope(paths, event);
 
   if (!same) {
+    const queued = event === "push" && paths !== null && api !== null ? await tested(base, head, run, api) : null;
+    const flags =
+      queued === null || api === null
+        ? changed
+        : skipTested(changed, changed.e2e && (await warm(env["LOCK"] ?? "", api)));
+
+    if (queued !== null) {
+      note(`merge queue run ${queued} passed this tree from the same base tree, so test and next skip`);
+      note(
+        flags.e2e
+          ? "e2e runs: main has no Electron cache for this lockfile, and only e2e on main saves one"
+          : "e2e skips",
+      );
+    }
+
     const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);
     return {
       ...Object.fromEntries(Object.entries(flags).map(([job, on]) => [job, String(on)])),
       filter: filterOf(first),
       probe: String(worth),
+      tested: queued === null ? "" : String(queued),
     };
   }
 
-  const stand = { next: String(flags.next), filter: filterOf(first) };
+  const stand = { next: String(changed.next), filter: filterOf(first) };
 
   if (paths === null || from === null) {
     return stand;

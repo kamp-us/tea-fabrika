@@ -1001,3 +1001,341 @@ it("scenario: with no parser to import, --same prints what the first pass printe
   });
   expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/" });
 });
+
+// A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
+// main to the commit it tested, so a push and its queue run share their tree and their base tree;
+// then test, next and e2e would repeat that run, and skip. Every other case runs what `jobs` says.
+const tree = { base: "1".repeat(40), head: "2".repeat(40), other: "3".repeat(40) };
+const queue = { head: "d".repeat(40), base: "e".repeat(40) };
+const lock = "f".repeat(64);
+
+/** The fake git above, plus the trees of the push's base and head. */
+const pushGit =
+  (paths: readonly string[]): Runner =>
+  (args) => {
+    if (args[0] === "rev-parse") {
+      const target = args.at(-1);
+      const found = target === `${sha.base}^{tree}` ? tree.base : target === `${sha.head}^{tree}` ? tree.head : null;
+      return found === null ? { status: 128, stdout: "" } : { status: 0, stdout: `${found}\n` };
+    }
+
+    return git(paths, "")(args);
+  };
+
+type QueueRun = {
+  id: number;
+  status: string;
+  conclusion: string | null;
+  head_sha: string;
+  head_commit: { tree_id: string } | null;
+};
+
+const passed: QueueRun = {
+  id: 7,
+  status: "completed",
+  conclusion: "success",
+  head_sha: queue.head,
+  head_commit: { tree_id: tree.head },
+};
+
+type Fake = {
+  runs?: readonly QueueRun[];
+  baseTree?: string;
+  caches?: readonly string[];
+  fails?: "runs" | "commit" | "caches";
+};
+
+/** A fake GitHub: the queue's runs, its head's tree and parent, that parent's tree, main's caches. */
+const fakeApi = ({ runs = [passed], baseTree = tree.base, caches = [`electron-macOS-ARM64-${lock}`], fails }: Fake) => {
+  const calls: string[] = [];
+  const reject = (what: string) => Promise.reject(new Error(`${what}: 502`));
+  return {
+    calls,
+    api: {
+      runs: () => {
+        calls.push("runs");
+        return fails === "runs" ? reject("runs") : Promise.resolve(runs);
+      },
+      commit: (commit: string) => {
+        calls.push(`commit ${commit}`);
+
+        if (fails === "commit") {
+          return reject("commit");
+        }
+
+        return commit === queue.head
+          ? Promise.resolve({ tree: tree.head, parents: [queue.base] })
+          : commit === queue.base
+            ? Promise.resolve({ tree: baseTree, parents: [] })
+            : reject(`no commit ${commit}`);
+      },
+      caches: (prefix: string) => {
+        calls.push(`caches ${prefix}`);
+        return fails === "caches" ? reject("caches") : Promise.resolve(caches);
+      },
+    },
+  };
+};
+
+const pushEnv = { ...envOf("push", false), LOCK: lock };
+
+const changedPaths = fc
+  .array(known, { minLength: 1, maxLength: 10 })
+  .filter((list) => list.every((p) => !p.includes("\0")));
+
+/** What a push prints, through `outputs`, with the fake git and a fake GitHub. */
+const pushed = (paths: readonly string[], fake: Fake, env: Record<string, string> = pushEnv) => {
+  const { api, calls } = fakeApi(fake);
+  return ci.outputs({ same: false, env, run: pushGit(paths), api }).then((printed) => ({ printed, calls }));
+};
+
+/** Every flag `outputs` printed is the one `expected` holds. */
+const prints = (printed: Record<string, string>, expected: Record<string, boolean>) => {
+  for (const [key, on] of Object.entries(expected)) {
+    expect(printed[key], key).toBe(String(on));
+  }
+};
+
+// Plants in changes.mjs, each run once and each caught by a law below: any conclusion counts, a run
+// not ended counts, any head tree counts, any base tree counts, an API error counts as tested, the
+// Electron cache is never asked, an unreadable cache list counts as warm, every event asks, a tested
+// push skips check too, the reader ignores a refused answer, the reader asks with no token, any
+// cache key ending in the lock counts, and a tree git cannot read is ignored.
+it("property: a push whose tree and base tree a passed queue run tested skips test, next and e2e, and nothing else", async () => {
+  await fc.assert(
+    fc.asyncProperty(changedPaths, async (paths) => {
+      const { printed } = await pushed(paths, {});
+      const expected = ci.jobs(paths, "push", false);
+      prints(printed, { ...expected, test: false, next: false, e2e: false });
+      expect(printed["tested"]).toBe("7");
+      expect(printed["probe"]).toBe("false");
+    }),
+    options,
+  );
+});
+
+it("scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run", async () => {
+  // scenario: the shape of most queue merges, written out so the flags are read and not compared.
+  const { printed } = await pushed(["apps/fabrika/src/a.ts", "next/packages/libfabrika/src/b.ts"], {});
+  expect(printed).toMatchObject({
+    check: "true",
+    typecheck: "true",
+    test: "false",
+    next: "false",
+    e2e: "false",
+    build: "true",
+    today: "true",
+    tested: "7",
+  });
+});
+
+it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.oneof(
+        fc
+          .constantFrom("failure", "cancelled", "timed_out", "skipped", "neutral", "action_required", "stale")
+          .map((conclusion) => ({ ...passed, conclusion })),
+        fc.constant({ ...passed, conclusion: null }),
+        fc.constantFrom("in_progress", "queued", "waiting").map((status) => ({ ...passed, status })),
+      ),
+      async (paths, run) => {
+        const { printed } = await pushed(paths, { runs: [run] });
+        prints(printed, ci.jobs(paths, "push", false));
+        expect(printed["tested"]).toBe("");
+      },
+    ),
+    options,
+  );
+});
+
+it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", async () => {
+  await fc.assert(
+    fc.asyncProperty(changedPaths, async (paths) => {
+      const { printed } = await pushed(paths, { runs: [] });
+      prints(printed, ci.jobs(paths, "push", false));
+      expect(printed["tested"]).toBe("");
+    }),
+    options,
+  );
+});
+
+it("property: a passed queue run of another tree, or of no readable tree, tests nothing", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.constantFrom<QueueRun["head_commit"]>({ tree_id: tree.other }, { tree_id: tree.base }, { tree_id: "" }, null),
+      async (paths, head_commit) => {
+        const { printed } = await pushed(paths, { runs: [{ ...passed, head_commit }] });
+        prints(printed, ci.jobs(paths, "push", false));
+        expect(printed["tested"]).toBe("");
+      },
+    ),
+    options,
+  );
+});
+
+it("property: a passed queue run of the same tree built on another base tree tests nothing", async () => {
+  // A push of two queue entries at once: the last entry's run started from the first's head, so
+  // its `--changed` tests missed what the first brought.
+  await fc.assert(
+    fc.asyncProperty(changedPaths, fc.constantFrom(tree.other, tree.head, ""), async (paths, baseTree) => {
+      const { printed } = await pushed(paths, { baseTree });
+      prints(printed, ci.jobs(paths, "push", false));
+      expect(printed["tested"]).toBe("");
+    }),
+    options,
+  );
+});
+
+it("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.constantFrom("runs", "commit") satisfies fc.Arbitrary<Fake["fails"]>,
+      async (paths, fails) => {
+        const { printed } = await pushed(paths, { fails });
+        prints(printed, ci.jobs(paths, "push", false));
+        expect(printed["tested"]).toBe("");
+      },
+    ),
+    options,
+  );
+
+  // Answers of the wrong shape, read through the real GitHub reader: each throws or matches nothing.
+  const runEnv = {
+    ...pushEnv,
+    GITHUB_TOKEN: "token",
+    GITHUB_REPOSITORY: "owner/repo",
+    GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
+  };
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.constantFrom<[unknown, unknown]>(
+        [{}, {}],
+        [null, null],
+        [{ workflow_runs: null }, {}],
+        [{ workflow_runs: "runs" }, {}],
+        [{ workflow_runs: [{}] }, {}],
+        [{ workflow_runs: [passed] }, {}],
+        [{ workflow_runs: [passed] }, { tree: { sha: tree.head }, parents: null }],
+        [{ workflow_runs: [passed] }, { tree: null, parents: [{ sha: queue.base }] }],
+      ),
+      async (paths, [runs, commit]) => {
+        const api = ci.github(runEnv, (url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(url.includes("/runs?") ? runs : commit),
+          }),
+        );
+        const printed = await ci.outputs({ same: false, env: runEnv, run: pushGit(paths), api });
+        prints(printed, ci.jobs(paths, "push", false));
+        expect(printed["tested"]).toBe("");
+      },
+    ),
+    options,
+  );
+
+  // git cannot read the push's trees: no question goes to GitHub, and every job the paths need runs.
+  const paths = ["apps/fabrika/src/a.ts"];
+  const { api, calls } = fakeApi({});
+  const printed = await ci.outputs({ same: false, env: pushEnv, run: git(paths, ""), api });
+  prints(printed, ci.jobs(paths, "push", false));
+  expect(calls).toEqual([]);
+});
+
+it("property: a tested push still runs e2e when main has no Electron cache for its lockfile, or its caches cannot be read", async () => {
+  // Only e2e on main saves that cache (check.yaml), so skipping it would leave every later run cold.
+  await fc.assert(
+    fc.asyncProperty(
+      fc
+        .array(fc.oneof(known, today), { minLength: 1, maxLength: 10 })
+        .map((list) => [...list, "apps/fabrika/src/a.ts"]),
+      fc.constantFrom<[Fake, Record<string, string>]>(
+        [{ caches: [] }, pushEnv],
+        [{ caches: [`electron-macOS-ARM64-${"0".repeat(64)}`] }, pushEnv],
+        [{ caches: [`tsc-Linux-${lock}`] }, pushEnv],
+        [{ fails: "caches" }, pushEnv],
+        [{}, envOf("push", false)],
+        [{}, { ...pushEnv, LOCK: "" }],
+      ),
+      async (paths, [fake, env]) => {
+        const { printed } = await pushed(paths, fake, env);
+        const expected = ci.jobs(paths, "push", false);
+        expect(expected.e2e).toBe(true);
+        prints(printed, { ...expected, test: false, next: false });
+        expect(printed["tested"]).toBe("7");
+      },
+    ),
+    options,
+  );
+});
+
+it("property: a pull request or a merge queue's group never asks GitHub, and runs what jobs says", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.constantFrom("pull_request", "merge_group"),
+      fc.boolean(),
+      async (paths, event, draft) => {
+        const { api, calls } = fakeApi({});
+        const printed = await ci.outputs({
+          same: false,
+          env: { ...envOf(event, draft), LOCK: lock },
+          run: pushGit(paths),
+          api,
+        });
+        prints(printed, ci.jobs(paths, event, draft));
+        expect(printed["tested"]).toBe("");
+        expect(calls).toEqual([]);
+      },
+    ),
+    options,
+  );
+});
+
+it("scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer", async () => {
+  const runEnv = {
+    GITHUB_TOKEN: "token",
+    GITHUB_REPOSITORY: "owner/repo",
+    GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
+    GITHUB_API_URL: "https://api.example",
+  };
+
+  for (const missing of ["GITHUB_TOKEN", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF"]) {
+    expect(ci.github({ ...runEnv, [missing]: "" }), missing).toBeNull();
+  }
+
+  const asked: { url: string; auth: string | undefined }[] = [];
+  const answers: Record<string, unknown> = {
+    runs: { workflow_runs: [passed] },
+    commits: { tree: { sha: tree.head }, parents: [{ sha: queue.base }] },
+    caches: { actions_caches: [{ key: `electron-macOS-ARM64-${lock}` }] },
+  };
+  const api = ci.github(runEnv, (url, init) => {
+    asked.push({ url, auth: init.headers["authorization"] });
+    const kind = Object.keys(answers).find((key) => url.includes(`/${key}`));
+    return Promise.resolve({
+      ok: kind !== undefined,
+      status: kind === undefined ? 404 : 200,
+      json: () => Promise.resolve(answers[kind ?? ""]),
+    });
+  });
+
+  expect(api).not.toBeNull();
+  expect(await api?.runs()).toEqual([passed]);
+  expect(await api?.commit(queue.head)).toEqual({ tree: tree.head, parents: [queue.base] });
+  expect(await api?.caches("electron-")).toEqual([`electron-macOS-ARM64-${lock}`]);
+  expect(asked.map((a) => a.url)).toEqual([
+    "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
+    `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
+    "https://api.example/repos/owner/repo/actions/caches?ref=refs%2Fheads%2Fmain&key=electron-&per_page=100",
+  ]);
+  expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
+
+  const refused = ci.github(runEnv, () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
+  await expect(refused?.runs()).rejects.toThrow("403");
+});
