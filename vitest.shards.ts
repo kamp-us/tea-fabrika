@@ -3,7 +3,9 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 // How `--shard k/n` splits the test files over the check's machines: each machine gets about the
 // same seconds, not the same count of files. vitest's own split gives each the same count, so two
-// two-minute lane files can land on one machine while another runs only one-second files.
+// two-minute lane files can land on one machine while another runs only one-second files. On each
+// machine the heaviest file starts first, so its workers end near the same time and the split's
+// sums hold; a heavy file that starts late runs alone at the end.
 
 const LANE = "packages/pipeline/src/stages/pipeline/lane";
 const E2E = "next/apps/fabrika/e2e";
@@ -791,7 +793,13 @@ export const restLoads = (count: number): number[] => {
   );
 };
 
-/** vitest's own sequencer, with only `shard` changed: it keeps this machine's files of `assign`. */
+/** A file's row, or undefined when the table has none. */
+const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
+
+/**
+ * vitest's own sequencer with two changes: `shard` keeps this machine's files of `assign`, and
+ * `sort` starts the heaviest file first.
+ */
 export class Shards extends BaseSequencer {
   override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
     const { root, shard } = this.ctx.config;
@@ -804,11 +812,38 @@ export class Shards extends BaseSequencer {
     const machines = assign(
       files.map((spec) => {
         const path = relative(root, spec.moduleId);
-        return { path, seconds: Object.hasOwn(measured, path) ? measured[path] : undefined };
+        return { path, seconds: rowOf(path) };
       }),
       shard.count,
       files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],
     );
     return files.filter((_, i) => machines[i] === shard.index - 1);
+  }
+
+  /**
+   * vitest's own order, with the table's seconds where vitest's results cache has none. vitest keeps
+   * its groups apart (group order, then project, then isolated files first) and runs a failed file
+   * first, then the longer one, by its cache. CI keeps no cache, so vitest falls back to file size,
+   * and on main run 43618656328 StartChild (531 s) started 284 s in, behind smaller files, and its
+   * machine took 816 s. Here each group runs a failed file first, then the heaviest row, a file with
+   * no row counting the median as in `assign`; equal seconds keep vitest's order.
+   */
+  override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    const { root } = this.ctx.config;
+    const sorted = await super.sort(files);
+    const groupOf = (spec: TestSpecification) =>
+      `${spec.project.config.sequence.groupOrder}\0${spec.project.name}\0${spec.project.config.isolate}`;
+    const groups = new Map<string, number>();
+
+    for (const spec of sorted) {
+      groups.set(groupOf(spec), groups.get(groupOf(spec)) ?? groups.size);
+    }
+
+    const rank = (spec: TestSpecification) => groups.get(groupOf(spec)) ?? groups.size;
+    const failed = (spec: TestSpecification) => this.ctx.cache.getTestSpecificationResult(spec)?.failed === true;
+    const seconds = (spec: TestSpecification) => rowOf(relative(root, spec.moduleId)) ?? guess;
+    return sorted.toSorted(
+      (a, b) => rank(a) - rank(b) || Number(failed(b)) - Number(failed(a)) || seconds(b) - seconds(a),
+    );
   }
 }
