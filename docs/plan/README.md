@@ -67,9 +67,8 @@ not written yet.*
 *2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
 ticket 502) is part of this plan and keeps a slot beside the four primitives
 ([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
-landed on 2026-11-11, and `Connection` follows in slice S1 of
-[its plan](./ticket-502-alchemy-port.md); `Project`, `Process` and `Control` are still plain
-classes. *It said: the plan for what is left is being written.*
+landed on 2026-11-11, `Connection` in slice S1 and `Process` in slice S2 of
+[its plan](./ticket-502-alchemy-port.md); `Project` and `Control` are still plain classes.
 
 *2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
 help and 12 wait. The build order is the merge line, the window, a person starting a program and
@@ -107,6 +106,13 @@ the first cloud deploy. The other open calls are listed in
 *2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
 ([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
 store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
+
+*2026-11-13:* P18's slice 1 (tracker ticket 290) is built in `next/` as
+[PR 1208](https://github.com/kamp-us/tea-fabrika/pull/1208): one window client in the library,
+`@kampus/libfabrika/client/*`, with the hello exchange as its own tea machine. A program with no
+DOM and a browser tab dial, wait, are granted and work through the same machine and start, on
+Effect's socket; CI's end-to-end job runs one round trip against both. This finishes no Tier 1 row:
+P18 has three slices left.
 
 *2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
 review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
@@ -302,6 +308,17 @@ Its first open question is answered
 application, so one program past its restart limit stops alone. Isolation gets hard walls
 ([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
+
+*2026-11-13:* the layering debt has its plan, a draft ([the plan](./layering-debt.md), ticket 921).
+`runtime/`, `access/` and `gateway/` stop importing `ledger/`, as rule 11 of
+[0043](../../.decisions/0043-rooms-on-floors.md) asks, and the 71 import rows of `next-ledger.json`
+go to zero in seven slices ([0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). Nothing of
+it is on main yet. The lead approved slices 1 to 3, which only build 0043,
+[0055](../../.decisions/0055-errors-named-by-their-service.md),
+[0062](../../.decisions/0062-test-files-keep-the-floors.md) and
+[0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md). Slices 4 to 7 wait on the
+plan's open question 1: may `processes/` get one small service for a named stream?
+→ the owner answers question 1; slice 1, stores name their own faults, is in its steps.
 
 *2026-11-10:* P8, the notes small exam, is in (ticket 274): saved notes letters frozen in
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
