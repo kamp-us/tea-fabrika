@@ -13,11 +13,16 @@
 //   one that does not changes nothing. `optimisticState(model)` is derived from the server state
 //   and the pending mutations, never stored: with none pending it is the server state.
 import { applyCell } from "@demlik/tea";
-import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import { arbMsgSequence } from "@demlik/tea/pbt";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import { Arbitrary, Result, Schema } from "effect";
+import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
-import { TezgahView } from "../tezgah/Workspace.ts";
-import { optimisticState, tezgahMachine } from "./Tezgah.ts";
+import * as Layout from "../tezgah/Layout.ts";
+import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
+import * as Keys from "./Keys.ts";
+import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
+import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
 /** JSON text, the only form a view takes on the wire. */
@@ -183,4 +188,868 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
     },
     { arbitrary: { seed: SEED, runs: 200 } },
   );
+});
+
+// Desk S3, next/: laws L23, L24, L25 and L29 of the approved plan, the window's optimistic focus
+// (0167), on the real window parent (`windowMachineFor`) and its real tezgah child. Written before a
+// window moves focus. The shape these laws hold `WindowMachine.ts`, `Tezgah.ts` and `ClientRows.ts`
+// to, from the plan's "The shape" and "The lead's lean" (the build may add more):
+// - The window's key table holds tezgah's focus rows (`commands.ts`; the library may not import a
+//   program, so the laws hand the window the same rows): `tezgah.focus_next` on `<prefix>o` and
+//   `f6`, `focus_previous` on `shift+f6`, `focus_last` on `<prefix>;`, `focus_left` ... `_down` on
+//   `<prefix>h l k j` and the arrows after the prefix.
+// - A focus key is resolved on the window's own drawn state, `optimisticState` of its tezgah child:
+//   `from` is the drawn workspace's focus; next and previous follow reading order and wrap; last is
+//   the drawn `recent[1]`; a direction is `Layout.neighbor(drawn layout, from, side)`. A move whose
+//   target is none, or `from` itself, changes nothing and sends nothing.
+// - Any other move is drawn on the same step that reads its key, as one entry in the tezgah child's
+//   `pendingMutations` (never a stored focus, L23), and goes out on the press path to tezgah's pid
+//   as one letter `{type: "did", does, from, to, via, cursor}`, `to` absolute (the lead's lean).
+// - The window takes one more Msg from the page, `{type: "focus", tile, cursor}`: DOM focus is now in
+//   tile `tile`, on an element whose `data-cursor` key is `cursor` (null for none). On the drawn
+//   focus it is only noted; on another tile of the drawn workspace it is a move there, `does:
+//   "tezgah.focus"`, `via: {_tag: "click"}`. A move's `cursor` is the last one the page said for
+//   `from`, null when it said none.
+// - A pending mutation is matched by its letter id. It is dropped once its reply has come and a view
+//   at or past the reply's inbox position (`accepted.pos`, the number a view's `rev` counts) has
+//   arrived, in either order. An offline window keeps its pending mutations.
+// - Each drop writes one client row `record {focus {letter, result, ms}}`: `kept` when the server's
+//   focus is the move's `to`, `overridden` when the drawn focus jumped back on that drop (the lead's
+//   lean: a jump back is recorded, never announced).
+//
+// The walk: two windows of one person, each online through the real hello exchange with tezgah's
+// view and every tile open, then each step picks one move possible in the state the walk folded: a
+// focus key or a click in either window, an answer to a `now` Cmd really waiting, a written letter
+// arriving at the fake tezgah, a reply or a view notice tezgah sent reaching its window. The fake
+// tezgah applies a move as the program does (L27: in arrival order), answers `accepted {rev, pos}`
+// (a ledger revision unlike the inbox position, as the brain's are), and sends its whole view to
+// every window that opened it. Records and writes are answered as soon as they are handed out.
+const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+const TEZGAH_PID = "process_of_tezgah";
+const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: PERSON, as: "window" } };
+const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
+const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+/** How far a reply's ledger revision runs ahead of its inbox position: the ledger holds more. */
+const LEDGER = 1_000;
+
+const typeId = (prefix: string, n: number): string => {
+  let uuid = (BigInt(n) << 80n) | (7n << 76n) | (2n << 62n);
+  let suffix = "";
+
+  for (let i = 0; i < 26; i++) {
+    suffix = ID_ALPHABET[Number(uuid & 31n)] + suffix;
+    uuid >>= 5n;
+  }
+
+  return `${prefix}_${suffix}`;
+};
+
+/** tezgah's default rows as `next/programs/tezgah/src/commands.ts` ships them after S3. */
+const ROWS: ReadonlyArray<Keys.Binding> = [
+  { does: "tezgah.split_right", keys: ["<prefix>%", "<prefix>|"], word: "split right", label: "Split right" },
+  { does: "tezgah.split_down", keys: ['<prefix>"', "<prefix>-"], word: "split down", label: "Split down" },
+  { does: "tezgah.close", keys: ["<prefix>x"], word: "close", label: "Close tile" },
+  { does: "tezgah.focus_next", keys: ["<prefix>o", "f6"], word: "focus next", label: "Focus next tile" },
+  { does: "tezgah.focus_previous", keys: ["shift+f6"], word: "focus previous", label: "Focus previous tile" },
+  { does: "tezgah.focus_last", keys: ["<prefix>;"], word: "focus last", label: "Focus last tile" },
+  { does: "tezgah.focus_left", keys: ["<prefix>h", "<prefix>arrowleft"], word: "focus left", label: "Focus left" },
+  { does: "tezgah.focus_right", keys: ["<prefix>l", "<prefix>arrowright"], word: "focus right", label: "Focus right" },
+  { does: "tezgah.focus_up", keys: ["<prefix>k", "<prefix>arrowup"], word: "focus up", label: "Focus up" },
+  { does: "tezgah.focus_down", keys: ["<prefix>j", "<prefix>arrowdown"], word: "focus down", label: "Focus down" },
+];
+
+// A Mac's browser keeps F6 for the page, so F6 and Shift-F6 are walked too (Chrome keeps F6 only on
+// Windows and Linux, the S2b backend rule).
+const BACKEND = Keys.backend("browser", "macos");
+const loadedTable = Keys.load(Keys.ship(ROWS, BACKEND), BACKEND);
+const TABLE = Result.isSuccess(loadedTable) ? loadedTable.success : null;
+
+const focusWindow = windowMachineFor({
+  decode: () => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown)),
+  tile: () => undefined,
+  keys: TABLE!,
+});
+
+type Side = "left" | "right" | "up" | "down";
+
+/** Each focus key as a person presses it, and what it asks for. */
+const FOCUS_KEYS: ReadonlyArray<{
+  readonly keys: ReadonlyArray<string>;
+  readonly does: string;
+  readonly to: "next" | "previous" | "last" | Side;
+}> = [
+  { keys: ["ctrl+b", "o"], does: "tezgah.focus_next", to: "next" },
+  { keys: ["f6"], does: "tezgah.focus_next", to: "next" },
+  { keys: ["shift+f6"], does: "tezgah.focus_previous", to: "previous" },
+  { keys: ["ctrl+b", ";"], does: "tezgah.focus_last", to: "last" },
+  { keys: ["ctrl+b", "h"], does: "tezgah.focus_left", to: "left" },
+  { keys: ["ctrl+b", "arrowleft"], does: "tezgah.focus_left", to: "left" },
+  { keys: ["ctrl+b", "l"], does: "tezgah.focus_right", to: "right" },
+  { keys: ["ctrl+b", "arrowright"], does: "tezgah.focus_right", to: "right" },
+  { keys: ["ctrl+b", "k"], does: "tezgah.focus_up", to: "up" },
+  { keys: ["ctrl+b", "arrowup"], does: "tezgah.focus_up", to: "up" },
+  { keys: ["ctrl+b", "j"], does: "tezgah.focus_down", to: "down" },
+  { keys: ["ctrl+b", "arrowdown"], does: "tezgah.focus_down", to: "down" },
+];
+
+type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Call = { readonly _tag: string; readonly [key: string]: unknown };
+
+/** One move a window drew: where from and to, its command, the cursor the page last said in `from`
+ *  when it was made, and its letter once written. */
+type Move = {
+  readonly from: string;
+  readonly to: string;
+  readonly does: string;
+  readonly cursor: string | null;
+  letter: string | null;
+};
+
+type Did = { readonly type: string; readonly does: string; readonly from: string; readonly to?: string };
+
+/** One window: its model, the Cmds it handed out not answered yet, and what reached it or left it. */
+type Win = {
+  s: WindowModel;
+  waiting: Array<Cmd>;
+  answered: Set<string>;
+  subscribed: boolean;
+  /** Letters it wrote to tezgah that have not arrived yet, in order. */
+  outbox: Array<{ readonly id: number; readonly dial: number; readonly letter: string; readonly m: unknown }>;
+  replies: Array<{ readonly id: number; readonly dial: number; readonly pos: number }>;
+  notices: Array<{ readonly rev: number; readonly view: TezgahView }>;
+  /** The highest view revision it took, and each letter's reply position once the reply reached it. */
+  seen: number;
+  got: Map<string, number>;
+  /** Every move it drew, in order, with its letter once written. */
+  moves: Array<Move>;
+  /** The cursor the page last said for each tile. */
+  cursors: Map<string, string | null>;
+};
+
+type World = { pos: number; view: TezgahView; wins: Array<Win>; letters: number };
+
+const tileRow = (id: string, n: number): Tile =>
+  ({
+    id: id as TileId,
+    n,
+    shows: n === 1 ? "checklist:1" : `checklist:t${n}`,
+    program: "fabrika/checklist",
+    child: n > 1,
+    keep: "failed",
+    cursor: null,
+  }) as Tile;
+
+/** A workspace of 1 + cuts tiles, split by `cuts`, focus on the tile `focus` picks. */
+const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  const first = typeId("tile", 1) as TileId;
+  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+    id: typeId("workspace", 1),
+    n: 1,
+    layout: first,
+    focus: first,
+    recent: [first],
+  });
+  const tiles: Array<Tile> = [tileRow(first, 1)];
+
+  for (const [k, cut] of cuts.entries()) {
+    const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    const id = typeId("tile", k + 2) as TileId;
+    w = Layout.split(w, at, cut.down ? "column" : "row", id);
+    tiles.push(tileRow(id, k + 2));
+  }
+
+  const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+  return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
+};
+
+/** The workspace a window draws: workspace 1 of its tezgah child's `optimisticState`. */
+const drawnSpace = (s: WindowModel) => {
+  const client = s.tezgah?.client;
+  const view = client === undefined ? null : optimisticState(client);
+  return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
+};
+
+const drawnFocus = (s: WindowModel) => drawnSpace(s)?.focus ?? null;
+
+const serverFocus = (s: WindowModel) =>
+  s.tezgah?.client.serverState?.workspaces.find((w) => w.n === s.tezgah?.client.workspace)?.focus ?? null;
+
+const waitingMoves = (s: WindowModel): ReadonlyArray<typeof PendingMutation.Type> =>
+  s.tezgah?.client.pendingMutations ?? [];
+
+/** Where a focus key goes on the drawn workspace, by the plan's words; null when nowhere new. */
+const target = (s: WindowModel, to: (typeof FOCUS_KEYS)[number]["to"]): string | null => {
+  const space = drawnSpace(s);
+
+  if (space === null) {
+    return null;
+  }
+
+  const tiles = Layout.order(space.layout);
+  const i = tiles.indexOf(space.focus);
+  const found =
+    to === "next"
+      ? tiles[(i + 1) % tiles.length]
+      : to === "previous"
+        ? tiles[(i - 1 + tiles.length) % tiles.length]
+        : to === "last"
+          ? space.recent[1]
+          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  return found === undefined || found === space.focus ? null : found;
+};
+
+type Event = {
+  readonly win: number;
+  readonly m: WindowMsg;
+  readonly prev: WindowModel;
+  readonly next: WindowModel;
+  readonly cmds: ReadonlyArray<Cmd>;
+  readonly world: World;
+};
+
+/** Steps window `i`, keeps what it handed out, and hands every letter it wrote to tezgah's outbox. */
+const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const prev = w.s;
+  const [next, cmds] = applyCell(focusWindow, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
+  w.waiting = [...w.waiting.filter((c) => !("cmd" in m) || m.cmd !== c), ...cmds];
+  w.s = next;
+
+  for (const c of cmds) {
+    const call = c["call"] as Call | undefined;
+
+    if (c.type === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
+      const did = call["m"] as Did;
+      const letter = String(call["letter"]);
+
+      if (did?.type === "did" && !w.outbox.some((o) => o.letter === letter) && !w.got.has(letter)) {
+        const move = w.moves.find((x) => x.letter === null);
+
+        if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
+          move.letter = letter;
+        }
+      }
+
+      w.outbox.push({ id: Number(c["id"]), dial: Number(c["dial"]), letter, m: call["m"] });
+    }
+  }
+
+  if (m.type === "view" && Reflect.get(Object(m.note), "type") === "whole") {
+    w.seen = Math.max(w.seen, Number(Reflect.get(Object(m.note), "rev")));
+  }
+
+  each({ win: i, m, prev, next, cmds, world });
+};
+
+/** Answers every record, write, ping and persist Cmd window `i` handed out: they change no focus. */
+const housekeep = (world: World, i: number, each: (e: Event) => void) => {
+  for (let guard = 0; guard < 200; guard++) {
+    const w = world.wins[i]!;
+    const cmd = w.waiting.find((c) => ["record", "write", "ping", "persist"].includes(c.type));
+
+    if (cmd === undefined) {
+      return;
+    }
+
+    stepWin(world, i, { type: `${cmd.type}_ok`, cmd, value: cmd.type === "persist" ? true : null } as WindowMsg, each);
+  }
+};
+
+/** tezgah takes the next letter window `i` wrote: a focus move whose `to` is on workspace 1 focuses
+ *  it, keeps the cursor on `from`, answers accepted and sends its view to every window that opened it. */
+const arrive = (world: World, i: number) => {
+  const w = world.wins[i]!;
+  const letter = w.outbox.shift();
+
+  if (letter === undefined) {
+    return;
+  }
+
+  const did = letter.m as Did & { readonly cursor?: string | null };
+  const space = world.view.workspaces[0]!;
+  const tiles = Layout.order(space.layout);
+
+  if (
+    did?.type !== "did" ||
+    did.to === undefined ||
+    !tiles.includes(did.to as TileId) ||
+    !tiles.includes(did.from as TileId)
+  ) {
+    w.replies.push({ id: letter.id, dial: letter.dial, pos: -1 });
+    return;
+  }
+
+  world.pos++;
+  const to = did.to as TileId;
+  world.view = {
+    workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
+    tiles: world.view.tiles.map((t) =>
+      t.id === did.from && did.cursor !== undefined ? { ...t, cursor: did.cursor } : t,
+    ),
+  };
+  w.replies.push({ id: letter.id, dial: letter.dial, pos: world.pos });
+
+  for (const win of world.wins) {
+    if (win.subscribed) {
+      win.notices.push({ rev: world.pos, view: world.view });
+    }
+  }
+};
+
+/** Window `i` takes the next reply tezgah sent it. */
+const reply = (world: World, i: number, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const r = w.replies.shift();
+
+  if (r === undefined) {
+    return;
+  }
+
+  const flight = w.s.flight.find((f) => f.id === r.id && f.dial === r.dial && f.call._tag === "send");
+  const letter = flight?.call._tag === "send" ? flight.call.letter : null;
+
+  if (letter !== null && r.pos >= 0) {
+    w.got.set(letter, r.pos);
+  }
+
+  stepWin(
+    world,
+    i,
+    {
+      type: "send_ok",
+      id: r.id,
+      dial: r.dial,
+      value: r.pos < 0 ? { _tag: "refused", reason: "missing" } : { _tag: "accepted", rev: r.pos + LEDGER, pos: r.pos },
+      ms: 3,
+    } as WindowMsg,
+    each,
+  );
+  housekeep(world, i, each);
+};
+
+const notice = (world: World, i: number, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const n = w.notices.shift();
+
+  if (n === undefined) {
+    return;
+  }
+
+  stepWin(
+    world,
+    i,
+    { type: "view", pid: TEZGAH_PID, note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view } } as WindowMsg,
+    each,
+  );
+  housekeep(world, i, each);
+};
+
+/** Window `i` takes its oldest `now` Cmd's answer: its letter id and clock. */
+const date = (world: World, i: number, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const cmd = w.waiting.find((c) => c.type === "now");
+
+  if (cmd === undefined) {
+    return;
+  }
+
+  stepWin(
+    world,
+    i,
+    {
+      type: "now_ok",
+      cmd,
+      value: { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" },
+    } as WindowMsg,
+    each,
+  );
+  housekeep(world, i, each);
+};
+
+let clock = 10;
+
+/** A focus key in window `i`, one step per key, with the move it should draw noted first. */
+const pressFocus = (world: World, i: number, k: (typeof FOCUS_KEYS)[number], each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+
+  for (const [n, key] of k.keys.entries()) {
+    if (n === k.keys.length - 1) {
+      const from = drawnFocus(w.s);
+      const to = target(w.s, k.to);
+
+      if (from !== null && to !== null) {
+        w.moves.push({ from, to, does: k.does, cursor: w.cursors.get(from) ?? null, letter: null });
+      }
+    }
+
+    stepWin(world, i, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
+    housekeep(world, i, each);
+  }
+};
+
+/** The page says DOM focus is in tile `tile` of window `i`, on an element with cursor `cursor`. */
+const focusIn = (world: World, i: number, tile: string, cursor: string | null, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const from = drawnFocus(w.s);
+
+  if (from !== null && tile !== from && Layout.order(drawnSpace(w.s)!.layout).includes(tile as TileId)) {
+    w.moves.push({ from, to: tile, does: "tezgah.focus", cursor: w.cursors.get(from) ?? null, letter: null });
+  }
+
+  stepWin(world, i, { type: "focus", tile, cursor } as WindowMsg, each);
+  w.cursors.set(tile, cursor);
+  housekeep(world, i, each);
+};
+
+/** The hello exchange on dial 1, then every read and open answered, so the window is online with
+ *  tezgah's view and every tile open. */
+const online = (world: World, i: number, each: (e: Event) => void) => {
+  const w = world.wins[i]!;
+  const key = w.waiting.find((c) => c.type === "key");
+
+  if (key !== undefined) {
+    stepWin(
+      world,
+      i,
+      { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
+      each,
+    );
+  }
+
+  stepWin(world, i, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg, each);
+  stepWin(
+    world,
+    i,
+    { type: "frame", dial: 1, text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }), at: 1 } as WindowMsg,
+    each,
+  );
+  const hello = w.waiting.find((c) => c.type === "hello");
+
+  if (hello !== undefined) {
+    stepWin(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, each);
+    stepWin(
+      world,
+      i,
+      { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg,
+      each,
+    );
+  }
+
+  for (let guard = 0; guard < 200; guard++) {
+    housekeep(world, i, each);
+    const flight = w.s.flight.find((f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`));
+
+    if (flight === undefined) {
+      return;
+    }
+
+    w.answered.add(`${flight.dial} ${flight.id}`);
+    const on = { id: flight.id, dial: flight.dial };
+
+    if (flight.call._tag === "read") {
+      const name = flight.call.stream.replace(/^processes\//, "");
+      const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+      stepWin(
+        world,
+        i,
+        {
+          type: "read_ok",
+          ...on,
+          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          ms: 1,
+        } as WindowMsg,
+        each,
+      );
+    } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
+      w.subscribed = true;
+      w.seen = Math.max(w.seen, world.pos);
+      stepWin(
+        world,
+        i,
+        { type: "open_ok", ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
+        each,
+      );
+    } else if (flight.call._tag === "open") {
+      stepWin(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg, each);
+    } else {
+      stepWin(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg, each);
+    }
+  }
+};
+
+/** A world of `count` windows on workspace 1 of `view`, each online with every tile open. */
+const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): World => {
+  const world: World = { pos: 1, view, wins: [], letters: 0 };
+
+  for (let i = 0; i < count; i++) {
+    const [s, cmds] = focusWindow.init(null, { tiles: [], tezgah: { workspace: 1 } } as never) as readonly [
+      WindowModel,
+      ReadonlyArray<Cmd>,
+    ];
+    world.wins.push({
+      s,
+      waiting: [...cmds],
+      answered: new Set(),
+      subscribed: false,
+      outbox: [],
+      replies: [],
+      notices: [],
+      seen: 0,
+      got: new Map(),
+      moves: [],
+      cursors: new Map(),
+    });
+    stepWin(world, i, { type: "size", width: 1440, height: 868 } as WindowMsg, each);
+    online(world, i, each);
+  }
+
+  for (const [i, w] of world.wins.entries()) {
+    expect(drawnFocus(w.s), `window ${i} draws tezgah's focus before the first key`).toBe(view.workspaces[0]!.focus);
+    expect(
+      w.s.tiles.map((t) => t.reach._tag),
+      `window ${i}: every tile is open before the first key`,
+    ).toEqual(Layout.order(view.workspaces[0]!.layout).map(() => "open"));
+  }
+
+  return world;
+};
+
+/** Whether move `m` of window `w` is answered: its reply came and a view at or past its position. */
+const answered = (w: Win, m: Move): boolean => {
+  const pos = m.letter === null ? undefined : w.got.get(m.letter);
+  return pos !== undefined && w.seen >= pos;
+};
+
+const Pick = fc.record({
+  type: fc.constant("pick" as const),
+  win: fc.integer({ min: 0, max: 1 }),
+  move: fc.nat(),
+  pick: fc.nat(),
+});
+type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
+
+const Desk = fc.record({
+  cuts: fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 5 }),
+  focus: fc.nat(),
+});
+
+const CURSORS = ["item:milk", "item:eggs", null] as const;
+
+/** One pick: the move it names among those possible in window `win` now. */
+const play = (world: World, c: Pick, each: (e: Event) => void) => {
+  const i = c.win;
+  const w = world.wins[i]!;
+  const space = drawnSpace(w.s);
+  const tiles = space === null ? [] : Layout.order(space.layout);
+  const options: Array<() => void> = [
+    () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
+    () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
+    () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", CURSORS[c.pick % 3]!, each),
+    () => focusIn(world, i, drawnFocus(w.s) ?? "", CURSORS[(c.pick >> 2) % 3]!, each),
+    ...(w.waiting.some((x) => x.type === "now") ? [() => date(world, i, each)] : []),
+    ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i)] : []),
+    ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
+    ...(w.notices.length > 0 ? [() => notice(world, i, each)] : []),
+  ];
+  options[c.move % options.length]!();
+};
+
+/** Everything that waits, delivered, until the world is quiet. */
+const settle = (world: World, each: (e: Event) => void) => {
+  for (let guard = 0; guard < 2_000; guard++) {
+    const busy = world.wins.findIndex(
+      (w) =>
+        w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0 || w.notices.length > 0,
+    );
+
+    if (busy < 0) {
+      return;
+    }
+
+    date(world, busy, each);
+    arrive(world, busy);
+    reply(world, busy, each);
+    notice(world, busy, each);
+  }
+
+  throw new Error("the world never went quiet");
+};
+
+/** Runs one walk: two windows on `desk`, then `picks`, then everything delivered. */
+const walk = (desk: TezgahView, picks: ReadonlyArray<Pick>, each: (e: Event) => void, count = 2) => {
+  const world = makeWorld(desk, count, () => {});
+
+  for (const c of picks) {
+    play(world, c, each);
+  }
+
+  settle(world, each);
+  return world;
+};
+
+/** A key that would hold a drawn focus beside the server state: the one thing L23 forbids. */
+type Stored = "focus" | "drawn" | `optimistic${string}` | `drawn${string}`;
+const STORED = /^(focus|drawn|optimistic)/;
+
+describe("Desk S3 L23: the window stores no optimistic focus", () => {
+  // pinned: L23's type half is checked by `tsc` over this file (CI's typecheck job, 0133); vitest
+  // only runs the runtime half below. Plant: a stored focus beside the server state fails typecheck.
+  it("pinned: the window's tezgah child holds the server state and the pending moves, and no focus of its own", () => {
+    expectTypeOf<TezgahClient>().toHaveProperty("serverState");
+    expectTypeOf<TezgahClient>().toHaveProperty("pendingMutations");
+    expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("letter");
+    expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("to");
+    expectTypeOf<typeof PendingMutation.Type>().toHaveProperty("cursor");
+    expectTypeOf<Extract<keyof TezgahClient, Stored>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof WindowModel, Stored>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Stored>>().toEqualTypeOf<never>();
+    const fresh = tezgahMachine.init(null, { workspace: 1 })[0];
+    expect(
+      Object.keys(fresh).filter((k) => STORED.test(k)),
+      "L23: the tezgah child stores no drawn focus",
+    ).toEqual([]);
+  });
+
+  it("L23: on any walk, the drawn focus is the newest pending move's to, or the server's focus when none is pending", () => {
+    expect(TABLE, "the laws' key table loads").not.toBeNull();
+    const seen = { pending: 0, none: 0 };
+    fc.assert(
+      fc.property(Desk, arbMsgSequence(Pick, { minLength: 4, maxLength: 40, size: "max" }), (d, picks) => {
+        walk(makeDesk(d.cuts, d.focus), picks, ({ win, next, world }) => {
+          const w = world.wins[win]!;
+          const open = w.moves.filter((m) => !answered(w, m));
+          const pending = waitingMoves(next);
+          seen[pending.length > 0 ? "pending" : "none"]++;
+          expect(pending, `L23: window ${win} keeps one pending mutation per move not answered`).toHaveLength(
+            open.length,
+          );
+          expect(drawnFocus(next), `L23: window ${win}'s drawn focus`).toBe(
+            open.length > 0 ? open.at(-1)!.to : serverFocus(next),
+          );
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.pending, "L23: the walks hold pending moves").toBeGreaterThan(0);
+    expect(seen.none, "L23: the walks answer every move").toBeGreaterThan(0);
+  });
+});
+
+describe("Desk S3 L24: two windows' moves and the server's answers, in any order", () => {
+  it("L24: each window's drawn focus is the server's once its mutations are answered, a pending mutation goes only once its reply and a view at or past its position came, and a window whose move lost follows the server", () => {
+    const seen = { lost: 0, both: 0, early: 0, moves: 0 };
+    fc.assert(
+      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+        const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, next, world: at }) => {
+          const w = at.wins[win]!;
+          const open = w.moves.filter((x) => !answered(w, x));
+          const pending = waitingMoves(next);
+
+          // A mutation is matched by its letter: while it waits, its letter is in the pending list.
+          for (const x of open.filter((x) => x.letter !== null)) {
+            expect(
+              pending.map((p) => p.letter),
+              `L24: window ${win}'s move to ${x.to} waits under its letter ${x.letter}`,
+            ).toContain(x.letter);
+          }
+
+          // A view before its reply keeps the mutation: the reply has not come.
+          seen.early +=
+            m.type === "view" && w.moves.some((x) => x.letter !== null && !w.got.has(x.letter) && w.seen > 0) ? 1 : 0;
+          expect(
+            pending,
+            `L24: window ${win} after ${m.type}: one pending mutation per move not answered`,
+          ).toHaveLength(open.length);
+
+          if (open.length === 0) {
+            expect(drawnFocus(next), `L24: window ${win} with every move answered draws the server's focus`).toBe(
+              serverFocus(next),
+            );
+          }
+        });
+        const focus = world.view.workspaces[0]!.focus;
+
+        for (const [i, w] of world.wins.entries()) {
+          seen.moves += w.moves.length;
+          const dids = w.moves.map((x) => x.letter);
+          expect(
+            dids.every((l) => l !== null),
+            `L24: every move window ${i} drew went out as a letter`,
+          ).toBe(true);
+          expect(waitingMoves(w.s), `L24: window ${i} holds nothing pending once all is answered`).toEqual([]);
+          expect(drawnFocus(w.s), `L24: window ${i} follows the server`).toBe(focus);
+          const last = w.moves.at(-1);
+          seen.lost += last !== undefined && last.to !== focus ? 1 : 0;
+        }
+
+        seen.both += world.wins.every((w) => w.moves.length > 0) ? 1 : 0;
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.moves, "L24: the walks move focus").toBeGreaterThan(0);
+    expect(seen.both, "L24: both windows move in one walk").toBeGreaterThan(0);
+    expect(seen.lost, "L24: a window's last move loses to the other's").toBeGreaterThan(0);
+  });
+
+  it("L24: every letter a window sends for a move names the drawn focus it left, the tile it drew and its command, with the cursor the page last said there", () => {
+    let checked = 0;
+    fc.assert(
+      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+        walk(makeDesk(d.cuts, d.focus), picks, ({ win, cmds, world }) => {
+          for (const c of cmds) {
+            const call = c["call"] as Call | undefined;
+
+            if (c.type !== "write" || call?._tag !== "send" || call["pid"] !== TEZGAH_PID) {
+              continue;
+            }
+
+            const did = call["m"] as Did & {
+              readonly via?: { readonly _tag: string };
+              readonly cursor?: string | null;
+            };
+            const move = world.wins[win]!.moves.find((x) => x.letter === call["letter"]);
+            expect(move, `L24: window ${win}'s letter ${String(call["letter"])} is one of its moves`).toBeDefined();
+            checked += move!.cursor === null ? 0 : 1;
+            expect(did, "L24: the letter is the move").toMatchObject({
+              type: "did",
+              does: move!.does,
+              from: move!.from,
+              to: move!.to,
+            });
+            expect(did.via?._tag, "L24: a key move says so, a click says so").toBe(
+              move!.does === "tezgah.focus" ? "click" : "key",
+            );
+            expect(did.cursor ?? null, `L24: the move carries the cursor the page last said in ${move!.from}`).toBe(
+              move!.cursor,
+            );
+          }
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(checked, "L24: the walks send moves that leave a cursor").toBeGreaterThan(0);
+  });
+});
+
+describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
+  it("L25: with the link slow or down, each focus key and click draws its move on its own step, before any frame from the brain, sends nothing while down, and keeps every move pending", () => {
+    const seen = { slow: 0, down: 0, drawn: 0, still: 0 };
+    fc.assert(
+      fc.property(
+        Desk,
+        fc.boolean(),
+        fc.array(fc.record({ key: fc.nat(), click: fc.boolean(), pick: fc.nat() }), { minLength: 1, maxLength: 30 }),
+        (d, down, presses) => {
+          const world = makeWorld(makeDesk(d.cuts, d.focus), 1, () => {});
+          const w = world.wins[0]!;
+
+          if (down) {
+            stepWin(world, 0, { type: "socket_closed", dial: 1, code: 1006, at: 3 } as WindowMsg, () => {});
+            housekeep(world, 0, () => {});
+            expect(w.s.link._tag, "the socket dropped").not.toBe("online");
+          }
+
+          seen[down ? "down" : "slow"]++;
+
+          for (const p of presses) {
+            const before = drawnFocus(w.s);
+            const moves = w.moves.length;
+            const check = ({ m, next, cmds }: Event) => {
+              if (m.type !== "key" && m.type !== "focus") {
+                return;
+              }
+
+              if (down) {
+                expect(
+                  cmds.filter((c) => c.type === "write"),
+                  "L25: nothing is written while the link is down",
+                ).toEqual([]);
+              }
+
+              const last =
+                m.type === "focus" ||
+                (FOCUS_KEYS.some((k) => k.keys.at(-1) === Reflect.get(m, "key")) && Reflect.get(m, "key") !== "ctrl+b");
+
+              if (!last) {
+                return;
+              }
+
+              const made = w.moves.length > moves ? w.moves.at(-1)! : null;
+              seen[made === null ? "still" : "drawn"]++;
+              expect(
+                drawnFocus(next),
+                `L25: ${String(Reflect.get(m, "key") ?? "a click")} is drawn on its own step`,
+              ).toBe(made === null ? before : made.to);
+            };
+
+            if (p.click) {
+              const space = drawnSpace(w.s)!;
+              const tiles = Layout.order(space.layout);
+              focusIn(world, 0, tiles[p.pick % tiles.length]!, CURSORS[p.pick % 3]!, check);
+            } else {
+              pressFocus(world, 0, FOCUS_KEYS[p.key % FOCUS_KEYS.length]!, check);
+            }
+
+            expect(waitingMoves(w.s), "L25: every move waits, none answered").toHaveLength(w.moves.length);
+          }
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(
+      Object.values(seen).every((n) => n > 0),
+      `L25: the walks reached every case ${JSON.stringify(seen)}`,
+    ).toBe(true);
+  });
+});
+
+describe("Desk S3 L29: a move the server overrode is recorded", () => {
+  it("L29: each answered move writes one focus row with its letter on the step it is dropped: kept when the server's focus is its to, overridden when the drawn focus jumped back", () => {
+    const seen = { kept: 0, overridden: 0 };
+    fc.assert(
+      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+        const rows = [new Map<string, number>(), new Map<string, number>()];
+        const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, prev, next, cmds, world: at }) => {
+          const w = at.wins[win]!;
+          const focusRows = cmds.flatMap((c) => {
+            const record =
+              c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
+            return record?._tag === "focus" ? [record] : [];
+          });
+          const before = new Set(waitingMoves(prev).map((p) => p.letter));
+          const after = new Set(waitingMoves(next).map((p) => p.letter));
+          const dropped = w.moves.filter((x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));
+          expect(
+            focusRows.map((r) => r["letter"]).sort(),
+            `L29: window ${win} writes one focus row per move dropped on this step`,
+          ).toEqual(dropped.map((x) => x.letter).sort());
+
+          for (const r of focusRows) {
+            rows[win]!.set(String(r["letter"]), (rows[win]!.get(String(r["letter"])) ?? 0) + 1);
+            const move = dropped.find((x) => x.letter === r["letter"])!;
+            expect(["kept", "overridden"], "L29: a focus row's result").toContain(r["result"]);
+
+            if (serverFocus(next) === move.to) {
+              seen.kept++;
+              expect(r["result"], `L29: the server kept ${move.to}`).toBe("kept");
+            }
+
+            if (move === dropped.at(-1) && drawnFocus(next) !== drawnFocus(prev)) {
+              seen.overridden++;
+              expect(r["result"], `L29: the drawn focus jumped back from ${move.to}`).toBe("overridden");
+            }
+          }
+        });
+
+        for (const [i, w] of world.wins.entries()) {
+          for (const x of w.moves) {
+            expect(rows[i]!.get(x.letter ?? ""), `L29: window ${i}'s move to ${x.to} has one focus row`).toBe(1);
+          }
+        }
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.kept, "L29: the walks keep moves").toBeGreaterThan(0);
+    expect(seen.overridden, "L29: the walks override moves").toBeGreaterThan(0);
+  });
 });

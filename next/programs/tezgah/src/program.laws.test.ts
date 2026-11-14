@@ -776,3 +776,274 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
     );
   });
 });
+
+// Desk S3, next/: law L27, each tile's cursor (0165), and the focus moves' rows in tezgah's one
+// commands table, on the real program through the same `stepper`. Written before tezgah takes a
+// focus move. The shape these laws hold `program.ts` and `commands.ts` to, from the plan's "The
+// shape" and "The lead's lean" (the build may add more):
+// - `commands.ts` gains the focus rows, tmux's keys after the prefix (0503's lesson): `focus_next`
+//   on `<prefix>o` and `f6`, `focus_previous` on `shift+f6`, `focus_last` on `<prefix>;`, and
+//   `focus_left`, `_right`, `_up`, `_down` on `<prefix>h`, `l`, `k`, `j` and the arrows after the
+//   prefix (`<prefix>arrowleft` and so on, as `Keys.spell` spells an arrow). L19 holds each row to
+//   its word and label.
+// - Msg `did {does, from, to, via, cursor}` is a focus move: `does` is one of those commands, or
+//   `tezgah.focus` for a move by a click or by Tab (the window's `focus` Msg, which no key row
+//   names); `from` the tile the window had focus on, `to` the tile it moved to, an absolute tile id
+//   the window worked out on its own drawn layout (the lead's lean, 80%); `cursor` the `data-cursor`
+//   key of the element that had DOM focus in `from` (the checklist's `item:<name>`), or null.
+// - A move is taken in arrival order: the workspace holding `to` focuses `to`, `recent` becomes `to`
+//   then the rest in their order, and `from`'s tile keeps `cursor` as its cursor, which every later
+//   view shows until a move leaves that tile again. Nothing else changes and no Cmd is asked.
+// - `refuse`: `missing` for a `to` that is not on `from`'s workspace (an unknown tile, or another
+//   workspace's), as for an unknown `from`. A refusal changes nothing.
+// - L27: tezgah never reads `sentAt`. A letter's body may carry one, as a window's clock wrote it;
+//   the moves are applied in the order they arrive, whatever their clocks say.
+const loadCommands = () => import("./commands.ts");
+
+/** A move by a click or by Tab: the window's `focus` Msg, which no key row names. */
+const CLICK = "tezgah.focus";
+const CURSORS = ["item:milk", "item:eggs", "item:bread", null] as const;
+const VIAS = [{ _tag: "key", keys: "ctrl+b o" }, { _tag: "click" }, { _tag: "key", keys: "f6" }] as const;
+
+const FocusPick = fc.record({
+  type: fc.constant("pick" as const),
+  kind: fc.constantFrom(
+    "split_right",
+    "split_down",
+    "answer",
+    "answer",
+    "attach",
+    "close",
+    "focus",
+    "focus",
+    "focus",
+    "focus",
+    "focus_far",
+  ),
+  pick: fc.nat(),
+  cursor: fc.constantFrom(...CURSORS),
+  sentAt: fc.integer({ min: 0, max: 10_000_000 }),
+});
+type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
+
+const iso = (ms: number) => new Date(Date.UTC(2026, 10, 14) + ms).toISOString();
+
+/** A focus move from a live tile to another tile on its workspace, picked in the state `w` reached,
+ *  or for `focus_far` a `to` that is on no workspace or on another one. */
+const focusMove = (
+  p: Stepper,
+  w: World,
+  does: ReadonlyArray<string>,
+  c: FocusPick,
+): (Event & { readonly to: string; readonly cursor: string | null; readonly far: boolean }) | null => {
+  const tiles = live(w.view);
+  const from = tiles[c.pick % Math.max(tiles.length, 1)];
+  const space = from === undefined ? undefined : spaceWith(w.view, from);
+
+  if (from === undefined || space === undefined) {
+    return null;
+  }
+
+  const others = tiles.filter((t) => !order(space.layout).includes(t));
+  const near = order(space.layout).filter((t) => t !== from);
+  const far = c.kind === "focus_far";
+  const pool = far ? [...others, typeId("tile", 80_000 + (c.pick % 997))] : near;
+  const to = pool[(c.pick >> 4) % Math.max(pool.length, 1)];
+
+  if (to === undefined) {
+    return null;
+  }
+
+  const name = does[(c.pick >> 2) % does.length]!;
+  const msg = {
+    type: "did",
+    does: name,
+    from,
+    to,
+    via: name === CLICK ? { _tag: "click" } : VIAS[c.pick % VIAS.length],
+    cursor: c.cursor,
+    sentAt: iso(c.sentAt),
+  };
+  w.at++;
+  return { move: `${name} ${from} -> ${to}`, ...take(p, w, msg, false), from, to, cursor: c.cursor, far };
+};
+
+/** tezgah's focus commands, from its one commands table, and the click's move. */
+const focusCommands = async () => {
+  const { commands } = await loadCommands();
+  return [...commands.map((c) => c.does as string).filter((d) => d.startsWith("tezgah.focus_")), CLICK];
+};
+
+describe("Desk S3: focus moves at the program", () => {
+  // pinned: the plan's S3 default rows (tezgah's commands table in "The shape"); the walk below
+  // draws its moves from this table, so every row is also a command tezgah's did takes.
+  it("pinned: S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and each is a command tezgah's did takes", async () => {
+    const { commands } = await loadCommands();
+    const boundKeys = (does: string) => commands.find((c) => c.does === does)?.keys ?? [];
+    // pinned: the plan's default key rows for S3 ("The shape", tezgah's commands table).
+    const want: Readonly<Record<string, ReadonlyArray<string>>> = {
+      "tezgah.focus_next": ["<prefix>o", "f6"],
+      "tezgah.focus_previous": ["shift+f6"],
+      "tezgah.focus_last": ["<prefix>;"],
+      "tezgah.focus_left": ["<prefix>h", "<prefix>arrowleft"],
+      "tezgah.focus_right": ["<prefix>l", "<prefix>arrowright"],
+      "tezgah.focus_up": ["<prefix>k", "<prefix>arrowup"],
+      "tezgah.focus_down": ["<prefix>j", "<prefix>arrowdown"],
+    };
+
+    for (const [does, keys] of Object.entries(want)) {
+      expect(boundKeys(does), `S3: ${does} is bound to ${keys.join(", ")}`).toEqual(expect.arrayContaining([...keys]));
+    }
+
+    const p = await loaded();
+
+    for (const does of [...Object.keys(want), CLICK]) {
+      const w = begin(p);
+      move(p, w, "attach", 0);
+      move(p, w, "answer", 0);
+      move(p, w, "split_right", 0);
+      move(p, w, "answer", 0);
+      const [a, b] = live(w.view);
+      const e = take(
+        p,
+        w,
+        { type: "did", does, from: a, to: b, via: { _tag: "key", keys: "ctrl+b o" }, cursor: null },
+        false,
+      );
+      expect(e.result, `S3: tezgah takes ${does}`).toEqual({ _tag: "stepped" });
+    }
+  });
+
+  it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, which every later view shows until a move leaves that tile again", async () => {
+    const p = await loaded();
+    const does = await focusCommands();
+    const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0 };
+    fc.assert(
+      fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), (picks) => {
+        const w = begin(p);
+        move(p, w, "attach", 0);
+        move(p, w, "answer", 0);
+        /** Each tile's cursor as the moves that left it set it; a tile never left has none. */
+        const cursors = new Map<string, string | null>();
+
+        for (const c of picks) {
+          const model = JSON.stringify(w.model);
+          const e =
+            c.kind === "focus" || c.kind === "focus_far"
+              ? focusMove(p, w, does, c)
+              : move(p, w, c.kind as Kind, c.pick);
+
+          if (e !== null && "to" in e) {
+            const before = spaceWith(e.before, e.from!)!;
+
+            if (e.far) {
+              seen.far++;
+              expect(e.result, `S3: ${e.move} names a tile not on its workspace`).toEqual({
+                _tag: "refused",
+                reason: "missing",
+              });
+              expect(e.after, "S3: a refused move changes no view").toEqual(e.before);
+              expect(JSON.stringify(w.model), "S3: a refused move writes nothing").toBe(model);
+              continue;
+            }
+
+            seen.moved++;
+            seen.stale += before.focus === e.from ? 0 : 1;
+            expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
+            expect(e.cmds, `S3: ${e.move} asks for no Cmd`).toEqual([]);
+            const now = e.after.workspaces.find((s) => s.id === before.id)!;
+            expect(now.focus, `S3: ${e.move} focuses its to`).toBe(e.to);
+            expect(now.recent, `S3: ${e.move} puts its to first in recent, the rest in their order`).toEqual([
+              e.to,
+              ...before.recent.filter((t) => t !== e.to),
+            ]);
+            expect(now.layout, `S3: ${e.move} changes no layout`).toEqual(before.layout);
+
+            for (const space of e.after.workspaces.filter((s) => s.id !== before.id)) {
+              expect(space, "S3: another workspace is untouched").toEqual(
+                e.before.workspaces.find((s) => s.id === space.id),
+              );
+            }
+
+            cursors.set(e.from!, e.cursor);
+            seen.cursor += e.cursor === null ? 0 : 1;
+          }
+
+          // Every tile's cursor is the one the last move that left it carried, through splits,
+          // closes and other moves alike; a tile no move left has none (0165).
+          for (const t of w.view.tiles) {
+            seen.kept += cursors.has(t.id) && cursors.get(t.id) !== null ? 1 : 0;
+            expect(t.cursor, `S3: ${t.id}'s cursor after ${e?.move ?? c.kind}`).toBe(cursors.get(t.id) ?? null);
+          }
+        }
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(
+      Object.values(seen).every((n) => n > 0),
+      `S3: the walks reached every case ${JSON.stringify(seen)}`,
+    ).toBe(true);
+  });
+
+  it("L27: tezgah applies moves in arrival order and never reads sentAt", async () => {
+    const p = await loaded();
+    const does = await focusCommands();
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2, max: 6 }),
+        fc.array(fc.record({ from: fc.nat(), to: fc.nat(), cursor: fc.constantFrom(...CURSORS), does: fc.nat() }), {
+          minLength: 2,
+          maxLength: 20,
+        }),
+        fc.array(fc.integer({ min: 0, max: 10_000_000 }), { minLength: 20, maxLength: 20 }),
+        (count, moves, clocks) => {
+          /** A workspace of `count` tiles, then `moves` with the clocks `clock(i)`; the views in order. */
+          const run = (clock: (i: number) => number) => {
+            const w = begin(p);
+            move(p, w, "attach", 0);
+            move(p, w, "answer", 0);
+
+            for (let i = 1; i < count; i++) {
+              move(p, w, i % 2 === 0 ? "split_down" : "split_right", i);
+              move(p, w, "answer", 0);
+            }
+
+            const tiles = live(w.view);
+            const views: Array<View> = [];
+            const tos: Array<string> = [];
+
+            for (const [i, m] of moves.entries()) {
+              const from = tiles[m.from % tiles.length]!;
+              const to = tiles.filter((t) => t !== from)[m.to % (tiles.length - 1)]!;
+              const name = does[m.does % does.length]!;
+              const e = take(
+                p,
+                w,
+                { type: "did", does: name, from, to, via: { _tag: "click" }, cursor: m.cursor, sentAt: iso(clock(i)) },
+                false,
+              );
+              expect(e.result, `L27: move ${i} is taken`).toEqual({ _tag: "stepped" });
+              views.push(w.view);
+              tos.push(to);
+            }
+
+            return { views, tos };
+          };
+          const shuffled = run((i) => clocks[i] ?? 0);
+          const ascending = run((i) => i * 1_000);
+          const descending = run((i) => (moves.length - i) * 1_000);
+
+          for (const [i, view] of shuffled.views.entries()) {
+            expect(view.workspaces[0]!.focus, `L27: after move ${i} the focus is that move's to`).toBe(shuffled.tos[i]);
+          }
+
+          expect(shuffled.views, "L27: the clocks a letter carries change no view").toEqual(ascending.views);
+          expect(descending.views, "L27: moves whose clocks run backward are still taken in arrival order").toEqual(
+            ascending.views,
+          );
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+  });
+});

@@ -378,3 +378,113 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
     expect(nested, "the walks reach nested containers").toBeGreaterThan(0);
   });
 });
+
+// Desk S3, next/: law L26's layout half, `Layout.neighbor(layout, from, to)`. Written before it
+// exists. The shape it holds the build to, from the plan's "The shape" (the build may add more):
+// - `neighbor(layout, from, "left" | "right" | "up" | "down")` answers the tile on that side of
+//   `from` with the most overlap along that side, or null when `from` sits on the workspace's edge
+//   there, or is not in the layout. It is pure geometry of the percents: a tile on that side touches
+//   `from`'s edge, and its overlap is how much of that edge they share. Two tiles that share the same
+//   most overlap may answer either; the plan settles no tie.
+// The walk is L5's own fc.commands of splits and closes, so the layouts are every tidy tree a desk
+// reaches, nested and uneven. The law's oracle reads each tile's box in the unit square from the
+// percents, written here and never from the product's `rects`.
+type Side = "left" | "right" | "up" | "down";
+const SIDES: ReadonlyArray<Side> = ["left", "right", "up", "down"];
+
+/** Each tile's box in the unit square, from the percents alone. */
+const unit = (node: Node, box: Box = { x: 0, y: 0, width: 1, height: 1 }, out = new Map<string, Box>()) => {
+  if (typeof node === "string") {
+    out.set(node, box);
+    return out;
+  }
+
+  let at = 0;
+
+  for (const p of node.parts) {
+    const share = p.percent / 100;
+    unit(
+      p.inner,
+      node.dir === "row"
+        ? { x: box.x + box.width * at, y: box.y, width: box.width * share, height: box.height }
+        : { x: box.x, y: box.y + box.height * at, width: box.width, height: box.height * share },
+      out,
+    );
+    at += share;
+  }
+
+  return out;
+};
+
+const EPS = 1e-9;
+
+/** How much of `from`'s `side` edge `other` shares, or 0 when it does not touch that edge. */
+const overlap = (from: Box, other: Box, side: Side): number => {
+  const touches =
+    side === "left"
+      ? Math.abs(other.x + other.width - from.x) < EPS
+      : side === "right"
+        ? Math.abs(from.x + from.width - other.x) < EPS
+        : side === "up"
+          ? Math.abs(other.y + other.height - from.y) < EPS
+          : Math.abs(from.y + from.height - other.y) < EPS;
+  const across =
+    side === "left" || side === "right"
+      ? Math.min(from.y + from.height, other.y + other.height) - Math.max(from.y, other.y)
+      : Math.min(from.x + from.width, other.x + other.width) - Math.max(from.x, other.x);
+  return touches && across > EPS ? across : 0;
+};
+
+describe("Desk S3 L26: neighbor picks the tile with the most overlap on that side", () => {
+  it("L26: on any walked layout, neighbor answers a tile touching that side with the most overlap, and null only when no tile touches it", () => {
+    const seen = { found: 0, edge: 0, uneven: 0 };
+    fc.assert(
+      fc.property(commands, fc.nat(), (cmds, pick) => {
+        const t1 = typeId("tile", 1);
+        const real = { w: first() };
+        fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
+        const layout = encode(real.w).layout;
+        const boxes = unit(layout);
+
+        for (const from of order(layout)) {
+          const box = boxes.get(from)!;
+
+          for (const side of SIDES) {
+            const shares = order(layout)
+              .filter((t) => t !== from)
+              .map((t) => ({ t, share: overlap(box, boxes.get(t)!, side) }))
+              .filter((x) => x.share > 0);
+            const most = Math.max(0, ...shares.map((x) => x.share));
+            const got = Layout.neighbor(real.w.layout, tileId(from), side);
+
+            if (shares.length === 0) {
+              seen.edge++;
+              expect(got, `L26: ${from} is on the ${side} edge of ${JSON.stringify(layout)}`).toBeNull();
+              continue;
+            }
+
+            seen.found++;
+            seen.uneven += new Set(shares.map((x) => x.share.toFixed(9))).size > 1 ? 1 : 0;
+            const picked = shares.find((x) => x.t === got);
+            expect(
+              picked,
+              `L26: ${side} of ${from} is a tile touching that side in ${JSON.stringify(layout)}`,
+            ).toBeDefined();
+            expect(
+              picked!.share,
+              `L26: ${side} of ${from} has the most overlap of ${JSON.stringify(shares)} in ${JSON.stringify(layout)}`,
+            ).toBeGreaterThan(most - 1e-6);
+          }
+        }
+
+        // A tile the layout does not hold has no neighbor.
+        const ghost = tileId(typeId("tile", 70_000 + (pick % 1_000)));
+        expect(Layout.neighbor(real.w.layout, ghost, SIDES[pick % 4]!), "L26: a tile not in the layout").toBeNull();
+      }),
+      { seed: SEED, numRuns: 300 },
+    );
+    expect(seen.found, "L26: the walks find neighbors").toBeGreaterThan(0);
+    expect(seen.edge, "L26: the walks reach the workspace's edges").toBeGreaterThan(0);
+    expect(seen.uneven, "L26: the walks reach a side shared unevenly by two or more tiles").toBeGreaterThan(0);
+  });
+});

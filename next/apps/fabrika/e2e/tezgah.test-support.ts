@@ -292,3 +292,54 @@ export const shoot = (page: Page, state: string, layout: Shot) => {
     ? Effect.void
     : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false }));
 };
+
+// Desk S3, next/: what the focus law reads on top of the frame's helpers.
+
+/** A registered process's id, from `processes/<name>`, as a window finds it. */
+export const processId = (r: Reader, name: string) =>
+  Effect.gen(function* () {
+    const entries = yield* r.read(`processes/${name}`);
+    const started = entries.flatMap((e) => {
+      const decoded = Schema.decodeUnknownOption(Started)(e);
+      return decoded._tag === "Some" ? [decoded.value.body.process] : [];
+    });
+    const pid = started.at(-1);
+    return pid === undefined ? yield* Effect.die(new Error(`the brain did not start ${name}`)) : pid;
+  });
+
+/** Where DOM focus is in a tab: the name of the tile region holding it (null outside every tile),
+ *  the `data-cursor` key of the nearest element around it that carries one (0165), and the first
+ *  `data-cursor` key in that region, the top of the tile. */
+export type DomFocus = {
+  readonly region: string | null;
+  readonly cursor: string | null;
+  readonly first: string | null;
+};
+
+export const domFocus = (page: Page): Effect.Effect<DomFocus> =>
+  promised(() =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      const region = active?.closest("section[aria-label]") ?? null;
+      return {
+        region: region?.getAttribute("aria-label") ?? null,
+        cursor: active?.closest("[data-cursor]")?.getAttribute("data-cursor") ?? null,
+        first: region?.querySelector("[data-cursor]")?.getAttribute("data-cursor") ?? null,
+      };
+    }),
+  );
+
+/** Polls until `check` holds of where DOM focus is, or fails with the last reading after 30 s. */
+export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: string) =>
+  Effect.gen(function* () {
+    for (let tries = 0; ; tries++) {
+      const f = yield* domFocus(page);
+
+      if (check(f) || tries >= 120) {
+        expect(check(f), `${label}: DOM focus is ${JSON.stringify(f)}`).toBe(true);
+        return f;
+      }
+
+      yield* Effect.sleep("250 millis");
+    }
+  });

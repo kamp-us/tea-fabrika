@@ -45,11 +45,15 @@ import { applyCell } from "@demlik/tea";
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Option, Schema } from "effect";
+import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
+import * as Layout from "../tezgah/Layout.ts";
+import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
+import * as Keys from "./Keys.ts";
+import { optimisticState } from "./Tezgah.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
@@ -2312,5 +2316,411 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
       { seed: SEED, numRuns: 200 },
     );
     expect(opened, "L10: the walks go online and open the given tiles").toBeGreaterThan(0);
+  });
+});
+
+// Desk S3, next/: the window's focus moves walked through the link's life, L26's window half and the
+// lean's offline rule. Written before a window moves focus; `client/Tezgah.laws.test.ts` holds L23 to
+// L25 and L29 on two windows. The shape it holds `WindowMachine.ts` to, from the plan's "The lead's
+// lean" (the build may add more):
+// - A focus key is resolved on the window's own drawn state (`optimisticState` of its tezgah child),
+//   never on tezgah's: `focus_next` and `focus_previous` follow reading order and wrap, `focus_last`
+//   goes to the drawn `recent[1]`, and a direction goes to `Layout.neighbor` of the drawn layout. A
+//   key that finds no other tile changes nothing. The move is drawn on the step that reads the key,
+//   online or not, and the page's `{type: "focus", tile, cursor}` on another tile is a move too.
+// - An offline window keeps its pending mutations, and each move's letter reaches tezgah once the
+//   link is back, as every letter on the press path does (the lean, 70%).
+// The walk goes online through the real hello exchange, and each step picks one move possible in the
+// state it folded: a focus key or a click, an answer to a call in flight or a Cmd waiting, a socket
+// drop while online, the link's timer, or a view tezgah sent. The fake tezgah takes a letter when its
+// send is answered, focuses its `to` and sends its whole view to the window while it is subscribed.
+const FOCUS_ROWS: ReadonlyArray<Keys.Binding> = [
+  { does: "tezgah.focus_next", keys: ["<prefix>o", "f6"], word: "focus next", label: "Focus next tile" },
+  { does: "tezgah.focus_previous", keys: ["shift+f6"], word: "focus previous", label: "Focus previous tile" },
+  { does: "tezgah.focus_last", keys: ["<prefix>;"], word: "focus last", label: "Focus last tile" },
+  { does: "tezgah.focus_left", keys: ["<prefix>h", "<prefix>arrowleft"], word: "focus left", label: "Focus left" },
+  { does: "tezgah.focus_right", keys: ["<prefix>l", "<prefix>arrowright"], word: "focus right", label: "Focus right" },
+  { does: "tezgah.focus_up", keys: ["<prefix>k", "<prefix>arrowup"], word: "focus up", label: "Focus up" },
+  { does: "tezgah.focus_down", keys: ["<prefix>j", "<prefix>arrowdown"], word: "focus down", label: "Focus down" },
+];
+
+const FOCUS_BACKEND = Keys.backend("electron", "linux");
+const focusTable = Keys.load(Keys.ship(FOCUS_ROWS, FOCUS_BACKEND), FOCUS_BACKEND);
+
+const focusWindow = windowMachineFor({
+  decode: () => Schema.decodeUnknownSync(ListView),
+  tile: tileFor,
+  keys: Result.getOrThrow(focusTable),
+});
+
+type FocusTo = "next" | "previous" | "last" | "left" | "right" | "up" | "down";
+
+const FOCUS_PRESSES: ReadonlyArray<{ readonly keys: ReadonlyArray<string>; readonly to: FocusTo }> = [
+  { keys: ["ctrl+b", "o"], to: "next" },
+  { keys: ["f6"], to: "next" },
+  { keys: ["shift+f6"], to: "previous" },
+  { keys: ["ctrl+b", ";"], to: "last" },
+  { keys: ["ctrl+b", "h"], to: "left" },
+  { keys: ["ctrl+b", "arrowright"], to: "right" },
+  { keys: ["ctrl+b", "k"], to: "up" },
+  { keys: ["ctrl+b", "arrowdown"], to: "down" },
+];
+
+/** The workspace the window draws. */
+const drawnHere = (s: WindowModel) => {
+  const client = s.tezgah?.client;
+  const view = client === undefined ? null : optimisticState(client);
+  return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
+};
+
+/** Where a focus key goes on the drawn workspace, by the lean's words; null when nowhere new. */
+const resolved = (s: WindowModel, to: FocusTo): string | null => {
+  const space = drawnHere(s);
+
+  if (space === null) {
+    return null;
+  }
+
+  const tiles = Layout.order(space.layout);
+  const i = tiles.indexOf(space.focus);
+  const found =
+    to === "next"
+      ? tiles[(i + 1) % tiles.length]
+      : to === "previous"
+        ? tiles[(i - 1 + tiles.length) % tiles.length]
+        : to === "last"
+          ? space.recent[1]
+          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  return found === undefined || found === space.focus ? null : found;
+};
+
+type FocusWorld = DeskWorld & {
+  view: TezgahView;
+  pos: number;
+  notices: Array<{ readonly rev: number; readonly view: TezgahView }>;
+  moves: Array<{ readonly to: string; letter: string | null }>;
+  /** Letters tezgah took, in the order it took them. */
+  took: Array<string>;
+  letters: number;
+};
+
+/** A workspace split by `cuts`, focus on the tile `focus` picks. */
+const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  const first = typeId("tile", 1) as TileId;
+  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+    id: typeId("workspace", 1),
+    n: 1,
+    layout: first,
+    focus: first,
+    recent: [first],
+  });
+  const tiles: Array<Tile> = [];
+  const row = (id: string, n: number) =>
+    ({
+      id,
+      n,
+      shows: n === 1 ? "checklist:1" : `plain:${n}`,
+      program: "fabrika/checklist",
+      child: n > 1,
+      keep: "failed",
+      cursor: null,
+    }) as Tile;
+  tiles.push(row(first, 1));
+
+  for (const [k, cut] of cuts.entries()) {
+    const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    const id = typeId("tile", k + 2) as TileId;
+    w = Layout.split(w, at, cut.down ? "column" : "row", id);
+    tiles.push(row(id, k + 2));
+  }
+
+  const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+  return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
+};
+
+/** Every move the focus world allows now. */
+const focusMoves = (w: FocusWorld, c: DeskPick, each: (e: DeskEvent) => void): ReadonlyArray<() => void> => {
+  const s = w.s;
+  const out: Array<() => void> = [];
+  const send = (m: WindowMsg) => deskStep(w, m, focusWindow, each);
+
+  for (const f of s.flight) {
+    const on = { id: f.id, dial: f.dial };
+    out.push(() => {
+      if (f.call._tag === "read") {
+        const name = f.call.stream.replace(/^processes\//, "");
+        const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        send({
+          type: "read_ok",
+          ...on,
+          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          ms: c.ms,
+        } as WindowMsg);
+      } else if (f.call._tag === "open" && f.call.pid === TEZGAH_PID) {
+        w.subscribed = true;
+        send({ type: "open_ok", ...on, value: { rev: w.pos, view: w.view }, ms: c.ms } as WindowMsg);
+      } else if (f.call._tag === "open") {
+        send({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms } as WindowMsg);
+      } else if (f.call._tag === "send") {
+        const pos = w.took.indexOf(f.call.letter) + 2;
+        send({
+          type: "send_ok",
+          ...on,
+          value: { _tag: "accepted", rev: pos + 1_000, pos },
+          ms: c.ms,
+        } as WindowMsg);
+      } else {
+        send({ type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg);
+      }
+    });
+  }
+
+  for (const cmd of w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
+    out.push(() =>
+      send({
+        type: `${cmd.type}_ok`,
+        cmd,
+        value:
+          cmd.type === "now"
+            ? { letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
+            : cmd.type === "persist"
+              ? true
+              : null,
+      } as WindowMsg),
+    );
+  }
+
+  if (s.link._tag === "online") {
+    const dial = s.link.dial;
+    out.push(() => {
+      w.subscribed = false;
+      w.notices = [];
+      send({ type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg);
+    });
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null && s.link._tag === "retrying") {
+    out.push(() => send(timer.msg));
+  }
+
+  const n = w.notices.shift();
+
+  if (n !== undefined) {
+    w.notices.unshift(n);
+    out.push(() => {
+      w.notices.shift();
+      send({
+        type: "view",
+        pid: TEZGAH_PID,
+        note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view },
+      } as WindowMsg);
+    });
+  }
+
+  // A person's moves, three times as likely as any one answer.
+  for (let k = 0; k < 3; k++) {
+    out.push(() => {
+      const press = FOCUS_PRESSES[(c.pick + k) % FOCUS_PRESSES.length]!;
+
+      for (const [i, key] of press.keys.entries()) {
+        if (i === press.keys.length - 1) {
+          const to = resolved(w.s, press.to);
+
+          if (to !== null) {
+            w.moves.push({ to, letter: null });
+          }
+        }
+
+        send({ type: "key", key, at: 10 } as WindowMsg);
+      }
+    });
+  }
+
+  out.push(() => {
+    const space = drawnHere(w.s);
+
+    if (space === null) {
+      return;
+    }
+
+    const tile = Layout.order(space.layout)[c.pick % Layout.order(space.layout).length]!;
+
+    if (tile !== space.focus) {
+      w.moves.push({ to: tile, letter: null });
+    }
+
+    send({ type: "focus", tile, cursor: c.pick % 2 === 0 ? "item:milk" : null } as WindowMsg);
+  });
+
+  return out;
+};
+
+describe("Desk S3: the window's focus moves, walked through the link's life", () => {
+  it("L26 (the window's half): each focus key and click is drawn on its step, resolved on the window's drawn layout, offline too; each move reaches tezgah as one letter once the link is back, and the window ends on tezgah's focus", () => {
+    const seen = { offline: 0, redial: 0, moves: 0 };
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 5 }),
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          const view = focusDesk(cuts, focus);
+          const [s0, cmds0] = focusWindow.init(null, { tiles: [], tezgah: { workspace: 1 } } as never);
+          const w: FocusWorld = {
+            s: s0,
+            waiting: [...cmds0],
+            desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+            shown: null,
+            subscribed: false,
+            view,
+            pos: 1,
+            notices: [],
+            moves: [],
+            took: [],
+            letters: 0,
+          };
+          /** tezgah takes a letter as the socket hands it over, in order: a move to a tile on its
+           *  workspace focuses it, and its view goes to the window while it is subscribed. */
+          const take = (letter: string, m: unknown) => {
+            const did = m as { readonly to?: string };
+            const space = w.view.workspaces[0]!;
+
+            if (
+              w.took.includes(letter) ||
+              did.to === undefined ||
+              !Layout.order(space.layout).includes(did.to as TileId)
+            ) {
+              return;
+            }
+
+            w.took.push(letter);
+            w.pos++;
+            const to = did.to as TileId;
+            w.view = {
+              ...w.view,
+              workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
+            };
+
+            if (w.subscribed) {
+              w.notices.push({ rev: w.pos, view: w.view });
+            }
+          };
+          /** The tile each letter to tezgah named, by letter. */
+          const named = new Map<string, unknown>();
+          const each = ({ m, next, cmds }: DeskEvent) => {
+            for (const c of cmds.filter(isWrite)) {
+              if (c.call._tag === "send" && c.call["pid"] === TEZGAH_PID) {
+                const letter = String(c.call["letter"]);
+                take(letter, c.call["m"]);
+                named.set(letter, Reflect.get(Object(c.call["m"]), "to"));
+                const move = w.moves.find((x) => x.letter === null);
+
+                if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
+                  move.letter = letter;
+                }
+              }
+            }
+
+            seen.offline += (m.type === "key" || m.type === "focus") && next.link._tag !== "online" ? 1 : 0;
+          };
+          goOnline(w, focusWindow, each);
+          const dialed = new Set([1]);
+          const pump = (c: DeskPick) => {
+            if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+              dialed.add(w.s.link.dial);
+              seen.redial++;
+              goOnline(w, focusWindow, each, w.s.link.dial);
+              return;
+            }
+
+            const options = focusMoves(w, c, each);
+            options[c.move % options.length]!();
+          };
+
+          for (const c of picks) {
+            const before = w.moves.length;
+            pump(c);
+
+            // A key or a click that made a move draws it at once.
+            if (w.moves.length > before) {
+              expect(drawnHere(w.s)?.focus, "L26: the window draws the move it made").toBe(w.moves.at(-1)!.to);
+            }
+          }
+
+          // Settle: back online, every call and Cmd answered, every view delivered.
+          for (let guard = 0; guard < 3_000; guard++) {
+            const s = w.s;
+
+            if (s.link._tag === "dialing" && !dialed.has(s.link.dial)) {
+              dialed.add(s.link.dial);
+              goOnline(w, focusWindow, each, s.link.dial);
+              continue;
+            }
+
+            const options = focusMoves(w, { type: "pick", move: 0, pick: 0, ms: 1 }, each);
+            const quiet =
+              s.link._tag === "online" &&
+              s.flight.length === 0 &&
+              w.notices.length === 0 &&
+              !w.waiting.some((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)) &&
+              w.moves.every((x) => x.letter !== null && w.took.includes(x.letter));
+
+            if (quiet) {
+              break;
+            }
+
+            // The first options are the answers; a timer when retrying; never a socket drop or a key.
+            const answers =
+              s.flight.length +
+              w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
+
+            if (answers > 0) {
+              options[0]!();
+            } else if (s.link._tag === "retrying" && linkTimer(s.link) !== null) {
+              deskStep(w, linkTimer(s.link)!.msg, focusWindow, each);
+            } else if (w.notices.length > 0) {
+              const n = w.notices.shift()!;
+              deskStep(
+                w,
+                {
+                  type: "view",
+                  pid: TEZGAH_PID,
+                  note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view },
+                } as WindowMsg,
+                focusWindow,
+                each,
+              );
+            } else {
+              const timer = linkTimer(s.link);
+              const resend = { type: "resend", dial: s.link._tag === "online" ? s.link.dial : 0 } as WindowMsg;
+              deskStep(w, s.link._tag === "online" ? resend : timer!.msg, focusWindow, each);
+            }
+          }
+
+          seen.moves += w.moves.length;
+          expect(
+            w.moves.filter((x) => x.letter === null || !w.took.includes(x.letter)).map((x) => x.to),
+            "L26: every move the window drew reached tezgah as one letter, after any drop of the link",
+          ).toEqual([]);
+          expect(
+            w.moves.map((x) => named.get(x.letter ?? "")),
+            "L26: each move's letter names the tile the window drew",
+          ).toEqual(w.moves.map((x) => x.to));
+          expect(w.took, "L26: tezgah took each move once, in the order they were made").toEqual(
+            w.moves.map((x) => x.letter),
+          );
+          expect(drawnHere(w.s)?.focus, "L26: once all is answered the window draws tezgah's focus").toBe(
+            w.view.workspaces[0]!.focus,
+          );
+          expect(w.s.tezgah?.client.pendingMutations, "L26: nothing is left pending").toEqual([]);
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.moves, "the walks move focus").toBeGreaterThan(0);
+    expect(seen.offline, "the walks press focus keys while the link is down").toBeGreaterThan(0);
+    expect(seen.redial, "the walks drop the link and dial again").toBeGreaterThan(0);
   });
 });
