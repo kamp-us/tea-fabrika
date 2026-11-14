@@ -2,29 +2,14 @@
 // (decision 0043 rule 12). Audit sites: `internal/binary.ts:81` (the one callback digest, importKey
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged.
-import { describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
+import * as Testing from "../Testing.test-support.ts";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
-const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
-
-/** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
-  it(name, () =>
-    fc.assert(
-      fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
-      { seed: SEED, numRuns: RUNS },
-    ),
-  );
-
-const failures: fc.Arbitrary<object> = fc.oneof(
-  fc.string().map((message) => new Error(message)),
-  fc.string().map((message) => new DOMException(message, "OperationError")),
-  fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
-);
+const failures = Testing.failures((message) => new DOMException(message, "OperationError"));
 
 type Method = "digest" | "importKey" | "verify";
 
@@ -51,7 +36,7 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
   // C5, internal/binary.ts:81. Plant: `const fail = () => new WebCryptoError({})`.
-  law(
+  Testing.law(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
     fc.record({
       steps: fc.array(
@@ -151,7 +136,7 @@ const damagedClients = fc.oneof(
 
 describe("T695, the passkey writer keeps why client data was refused", () => {
   // C3, Webauthn.ts:176. Plant: `catch: () => new BadAssertion({})`.
-  law(
+  Testing.law(
     "C3: client data that does not decode is BadAssertion carrying the decoder's or text decoder's failure",
     fc.record({ client: damagedClients, text: fc.string() }),
     ({ client, text }) =>

@@ -3,29 +3,15 @@
 // Audit sites: `local-dev.ts:42` (reading the pending file), `:63` (a durable write), `:82` (the
 // last start's file), `:99` (an event to add that does not decode). An `id_reused` refusal has no
 // cause. `dev.ts`'s sites run inside `startDev`, against the local runtime's socket: a container's job.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
+import * as Testing from "../../Testing.test-support.ts";
 import { brainOutbox } from "./local-dev.ts";
 
-const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
 const HOME = "/home-t695";
 
-/** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
-  it(name, () =>
-    fc.assert(
-      fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
-      { seed: SEED, numRuns: RUNS },
-    ),
-  );
-
-const failures: fc.Arbitrary<object> = fc.oneof(
-  fc.string().map((message) => new Error(message)),
-  fc.string().map((message) => new RangeError(message, { cause: { detail: message } })),
-  fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
-);
+const failures = Testing.failures((message) => new RangeError(message, { cause: { detail: message } }));
 
 const started = (id: string) => ({
   _tag: "started",
@@ -64,7 +50,7 @@ const run = (call: Call) =>
 
 describe("T695, the brain's outbox keeps what the disk did", () => {
   // C1 and C3, local-dev.ts:42, through every call that reads. Plant: `Effect.mapError(() => new BrainError(...))`.
-  law(
+  Testing.law(
     "C1: reading the pending file fails `bad_row` with the disk's failure or the decoder's SchemaError",
     fc.record({
       read: fc.constantFrom<Read>("exists", "read", "decode"),
@@ -91,7 +77,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
   );
 
   // C1, local-dev.ts:63. Plant: `Effect.mapError(() => new BrainError({ reason: "storage" }))`.
-  law(
+  Testing.law(
     "C1: a durable write whose disk call fails is `storage` with that failure as its cause",
     fc.record({
       step: fc.constantFrom("makeDirectory", "open", "rename"),
@@ -116,7 +102,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
   );
 
   // C3, local-dev.ts:82. Plant: `Effect.mapError(() => new BrainError({ reason: "bad_row" }))`.
-  law(
+  Testing.law(
     "C3: a last-start file that does not decode fails `bad_row` with the decoder's SchemaError",
     fc.record({
       bad: fc.oneof(
@@ -138,7 +124,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
   );
 
   // C3, local-dev.ts:99. Plant: `Effect.mapError(() => new BrainError({ reason: "bad_row" }))`.
-  law(
+  Testing.law(
     "C3: an event with a damaged field fails `bad_row` with the decoder's SchemaError",
     fc.record({
       field: fc.constantFrom("id", "start", "at", "pid", "reason"),
@@ -156,7 +142,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
   );
 
   // C6, local-dev.ts:107: a reused id with other content is refused with no underlying failure.
-  law(
+  Testing.law(
     "C6: an event that reuses a pending id with other content fails `id_reused` with no cause",
     fc.record({ id: fc.string({ minLength: 1 }), pid: fc.integer({ min: 8, max: 1_000 }) }),
     ({ id, pid }) =>

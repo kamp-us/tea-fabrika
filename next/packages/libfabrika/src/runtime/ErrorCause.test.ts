@@ -8,31 +8,16 @@
 // C7: `Execution.ts:38`, the RPC failure reply, carries no input-bearing text of a cause, and
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
+import * as Testing from "../Testing.test-support.ts";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { executionFailure, nodeExecution } from "./Execution.ts";
 import { ProgramDown, stepper } from "./Program.ts";
 
-const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
-
-/** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
-  it(name, () =>
-    fc.assert(
-      fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
-      { seed: SEED, numRuns: RUNS },
-    ),
-  );
-
-const failures: fc.Arbitrary<object> = fc.oneof(
-  fc.string().map((message) => new Error(message)),
-  fc.string().map((message) => new RangeError(message, { cause: { detail: message } })),
-  fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
-);
+const failures = Testing.failures((message) => new RangeError(message, { cause: { detail: message } }));
 
 /** A cause that is, or holds, a decoder's failure: one value, or the list a check met. */
 const holdsSchemaError = (cause: unknown): boolean =>
@@ -116,7 +101,7 @@ const notInt = fc.oneof(fc.string(), fc.boolean(), fc.double({ noInteger: true, 
 
 describe("T695, a step's ProgramDown keeps what failed", () => {
   // C3, Program.ts:474. Plant: `throw new ProgramDown({ reason })` without the decode failure.
-  law(
+  Testing.law(
     "C3: a saved model with a damaged field fails `saved_state` with the decoder's SchemaError",
     fc.record({ call: fc.constantFrom("init", "step", "fold"), bad: notInt }),
     ({ call, bad }) =>
@@ -137,7 +122,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
   );
 
   // C3, Program.ts:529 and :536: several results meet at one check. Plant: drop the failures.
-  law(
+  Testing.law(
     "C3: a step whose model, view or both fail to encode keeps `step` and those failures",
     fc
       .record({
@@ -159,7 +144,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
   );
 
   // C3, Program.ts:565. Plant: `throw new ProgramDown({ reason: "step" })` with no cause.
-  law(
+  Testing.law(
     "C3: a refusal with a damaged field fails `step` with the decoder's SchemaError",
     fc.record({
       count: fc.integer(),
@@ -180,7 +165,7 @@ describe("T695, saved state keeps what failed", () => {
   const row = (v: number, model: unknown) => ({ v, build: "b-1", model, after: 0 });
 
   // C3, State.ts:36. Plant: replace `row.failure` with `undefined`.
-  law(
+  Testing.law(
     "C3: a saved row with a damaged required field fails `saved_state` with the decoder's SchemaError",
     fc.record({
       field: fc.constantFrom("v", "build", "after"),
@@ -196,7 +181,7 @@ describe("T695, saved state keeps what failed", () => {
   );
 
   // C6, State.ts:36. Plant: make the cause field required, or invent an error for the branch.
-  law(
+  Testing.law(
     "C6: a saved row from a future version fails `saved_state` with no cause",
     fc.record({ ahead: fc.integer({ min: 1, max: 1_000 }), count: fc.integer() }),
     ({ ahead, count }) =>
@@ -208,7 +193,7 @@ describe("T695, saved state keeps what failed", () => {
   );
 
   // C1, State.ts:19 and :56. Plant: the zero-argument `down` as the upgrade's `catch`.
-  law(
+  Testing.law(
     "C1: an upgrade that throws a generated value fails `saved_state` with that value as its cause",
     fc.record({ failure: failures, count: fc.integer() }),
     ({ failure, count }) =>
@@ -221,7 +206,7 @@ describe("T695, saved state keeps what failed", () => {
   );
 
   // C3, State.ts:69. Plant: replace `decoded.failure` with `undefined`.
-  law(
+  Testing.law(
     "C3: an upgrade that gives a damaged model fails `saved_state` with the decoder's SchemaError",
     fc.record({ bad: notInt }),
     ({ bad }) =>
@@ -241,7 +226,7 @@ describe("T695, a declaration that does not load keeps why", () => {
   );
 
   // C1, Execution.ts:151 and Entry.ts:92. Plant: `Effect.mapError(() => new ProgramDown({ reason: "load" }))`.
-  law(
+  Testing.law(
     "C1: a damaged declaration fails `load` with the stepper's own failure, from the execution and the loader",
     fc.record({ declared: broken, call: fc.constantFrom("execution", "loader") }),
     ({ declared, call }) =>
@@ -264,7 +249,7 @@ describe("T695, a declaration that does not load keeps why", () => {
   );
 
   // C3, Built.ts:63. Plant: `Effect.mapError(() => new BuildError({ reason: "table" }))`.
-  law(
+  Testing.law(
     "C3: built tables with a damaged program or asset map fail `table` with the decoder's SchemaError",
     fc.record({ programs: fc.oneof(fc.string(), fc.array(fc.integer())), assets: fc.constant({}) }),
     (raw) =>
@@ -296,7 +281,7 @@ const causedAt = {
 // crosses RPC and is stored as an observation's `error`. A cause kept in memory leaves it as it
 // was before the cause was kept: the cause-free ProgramDown's own class. Plant: `errorClass` reads
 // the cause first, as it does for a program's own throw.
-law(
+Testing.law(
   "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
   fc.record({
     site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
@@ -347,7 +332,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
     }
   };
 
-  law(
+  Testing.law(
     "C7: generated failures of input holding sentinel keys and values leave none in the RPC reply",
     fc.record({
       steps: fc.array(fc.record({ call: fc.constantFrom(...calls), key: words, value: words }), {

@@ -1,5 +1,6 @@
 // Shared by libfabrika's own laws: a fast-check property whose check is a scoped Effect, run as one
 // Effect from the shared seed, so a law file does not paste its own runner and failure type.
+import { it } from "@effect/vitest";
 import { Effect, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 
@@ -27,3 +28,21 @@ export const property = <A>(
   // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
   return Effect.tryPromise({ try: () => fc.assert(checked, options), catch: (cause) => new PropertyFailed({ cause }) });
 };
+
+/** A law titled `name`: `check` holds on 100 values from `input`, each one Effect, from the shared seed. */
+export const law = <A>(
+  name: string,
+  input: fc.Arbitrary<A>,
+  check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
+) => it.effect(name, () => property(input, check, { numRuns: 100 }));
+
+/**
+ * A failure as a platform gives one: an `Error`, the caller's own kind (`own` makes it from generated
+ * text), or a plain object.
+ */
+export const failures = (own: (message: string) => object): fc.Arbitrary<object> =>
+  fc.oneof(
+    fc.string().map((message) => new Error(message)),
+    fc.string().map(own),
+    fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
+  );
