@@ -192,21 +192,61 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next narrows to what changed",
     (w) => {
       const s = step(w, "next", "vitest");
-      s["run"] = String(s["run"]).replace("next/ ", 'next/ --changed "$BASE" ');
+      s["run"] = String(s["run"]).replace("--shard", '--changed "$BASE" --shard');
     },
   ],
   [
     "SC7: next runs a list",
     (w) => {
       const s = step(w, "next", "vitest");
-      s["run"] = String(s["run"]).replace("next/ ", "$FILTER ");
+      s["run"] = String(s["run"]).replace("--shard", "$FILTER --shard");
     },
   ],
   [
     "SC7: the end-to-end legs narrow",
     (w) => {
       const s = step(w, "next", "end to end");
-      s["run"] = String(s["run"]).replace("e2e.ts ", "e2e.ts --changed=main ");
+      s["run"] = String(s["run"]).replace("--project next-visual ", "--project next-visual --changed=main ");
+    },
+  ],
+  // 0536: a project, not a path, picks each leg's files. Each plant was run once on the real
+  // scheduled.yaml too, and restored.
+  [
+    "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
+    (w) => {
+      const s = step(w, "next", "vitest");
+      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "next/ ");
+    },
+  ],
+  [
+    "SC7: next drops next-integration, so the real-resource tests run nowhere",
+    (w) => {
+      const s = step(w, "next", "vitest");
+      s["run"] = String(s["run"]).replace(" --project next-integration", "");
+    },
+  ],
+  [
+    "SC7: the end-to-end legs lose their project, so they run every next/ test",
+    (w) => {
+      const s = step(w, "next", "end to end");
+      s["run"] = String(s["run"]).replace("--project next-visual ", "");
+    },
+  ],
+  [
+    "SC7: the end-to-end legs run the old runner, which 0536 removed",
+    (w) => {
+      const s = step(w, "next", "end to end");
+      s["run"] = String(s["run"]).replace(
+        "pnpm exec vitest run --project next-visual ",
+        "node next/apps/fabrika/e2e.ts ",
+      );
+    },
+  ],
+  [
+    "SC7: chromium waits on the old end-to-end folder",
+    (w) => {
+      const s = step(w, "next", "chromium");
+      s["if"] = "startsWith(matrix.shard, 'e2e-') && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''";
     },
   ],
   ["SC7: vitest runs on the e2e legs too", (w) => Reflect.deleteProperty(step(w, "next", "vitest"), "if")],
@@ -225,7 +265,24 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC8: tooling runs today's tests too",
     (w) => {
       const s = step(w, "tooling", "tooling tests");
-      s["run"] = String(s["run"]).replace(" --exclude 'packages/**'", "");
+      s["run"] = String(s["run"]).replace("--project tooling", "--project tooling --project today");
+    },
+  ],
+  [
+    "SC8: tooling loses its project, so it runs every project",
+    (w) => {
+      const s = step(w, "tooling", "tooling tests");
+      s["run"] = String(s["run"]).replace("--project tooling ", "");
+    },
+  ],
+  [
+    "SC8: tooling leaves the trees out with --exclude, which a project ignores",
+    (w) => {
+      const s = step(w, "tooling", "tooling tests");
+      s["run"] = String(s["run"]).replace(
+        "--project tooling ",
+        "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
+      );
     },
   ],
   [
@@ -237,6 +294,17 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => w.jobs["next"]!.steps.splice(3, 0, { run: "pnpm exec vitest run next/apps" }),
   ],
   ["SC9: tooling runs one more command", (w) => w.jobs["tooling"]!.steps.splice(3, 0, { run: "pnpm test" })],
+  // SC11: every test leg at full depth (pull request 1274). Each plant was run once on workflow-lint.ts
+  // with SC11 dropped, and that turned this law red.
+  [
+    "SC11: next's vitest legs run at the merge line's depth",
+    (w) => Reflect.deleteProperty(step(w, "next", "vitest").env!, "FABRIKA_TEST_DEPTH"),
+  ],
+  ["SC11: the end-to-end legs run fast", (w) => (step(w, "next", "end to end").env!["FABRIKA_TEST_DEPTH"] = "fast")],
+  [
+    "SC11: tooling runs at the merge line's depth",
+    (w) => Reflect.deleteProperty(step(w, "tooling", "tooling tests").env!, "FABRIKA_TEST_DEPTH"),
+  ],
   // SC10: the reports the issue names its tests from.
   ["SC10: next's report is dropped after a red step", (w) => (step(w, "next", "results")["if"] = "success()")],
   [

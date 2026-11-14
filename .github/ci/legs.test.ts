@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import { budget, fewest, type Legs, outputs, type Run, shards, size, split, withReaders } from "./legs.ts";
-import { e2eFiles, nextFiles } from "./shard-rows.ts";
+import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
@@ -20,19 +20,22 @@ const full: Legs = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow)
 const limit = budget(nextMinutes(workflow));
 const options = { seed: 119120, numRuns: 100 };
 const base = "b".repeat(40);
-const pr: Run = { event: "pull_request", scope: "all", base };
+// A pull request that asked for its visual tests with the `visual` label, and one that did not (0536).
+const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
+const plainPr: Run = { ...pr, visual: false };
 
-// A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534).
+// A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534), with
+// the visual flag either way: only a pull request's counts (0536).
 const line = fc
-  .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.stringMatching(/^[a-f0-9]{40}$/))
+  .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.stringMatching(/^[a-f0-9]{40}$/), fc.boolean())
   .filter(([, sha]) => !/^0+$/.test(sha))
-  .map(([event, sha]): Run => ({ event, scope: "all", base: sha }));
+  .map(([event, sha, visual]): Run => ({ event, scope: "all", base: sha, visual }));
 
 let vitest: string[] = [];
 let e2e: string[] = [];
 
 beforeAll(async () => {
-  [vitest, e2e] = await Promise.all([nextFiles(ROOT), e2eFiles(ROOT)]);
+  [vitest, e2e] = await Promise.all([nextFiles(ROOT), visualFiles(ROOT)]);
 });
 
 /** Some of the real files, with a scratch table that gives each a row or none. */
@@ -125,59 +128,89 @@ it("scenario: every next/ file selected, with today's table, gives exactly today
 
 // 0534 narrowed this law: the merge queue and a push to main left it. They size their legs as a pull
 // request does, so none of the three runs the whole suite; the schedule does.
-it("property: the reader tests, a run with no base commit, or an event off the merge line give the full matrix", () => {
+it("property: the reader tests, a run with no base commit, or an event off the merge line give the full vitest legs, and visual legs only where asked", () => {
   // Plants: drop the scope check from `sizes` (red on readers); drop the base check (red on no base).
+  // 0536, plants, each run once on legs.ts and restored: `visual` always true (red: the merge queue
+  // got e2e legs); `visual` without the pull request check (red: a push with the flag got them).
   fc.assert(
     fc.property(
       picked(),
       fc.oneof(
         fc
-          .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.constant(base))
-          .map(([event, sha]): Run => ({ event, scope: "readers", base: sha })),
+          .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.constant(base), fc.boolean())
+          .map(([event, sha, visual]): Run => ({ event, scope: "readers", base: sha, visual })),
         fc
           .tuple(
             fc.constantFrom("pull_request", "merge_group", "push"),
             fc.constantFrom("", "0".repeat(40), "main", "b".repeat(39), "B".repeat(40)),
+            fc.boolean(),
           )
-          .map(([event, sha]): Run => ({ event, scope: "all", base: sha })),
-        fc.constantFrom("workflow_dispatch", "schedule", "").map((event): Run => ({ event, scope: "all", base })),
+          .map(([event, sha, visual]): Run => ({ event, scope: "all", base: sha, visual })),
+        fc
+          .tuple(fc.constantFrom("workflow_dispatch", "schedule", ""), fc.boolean())
+          .map(([event, visual]): Run => ({ event, scope: "all", base, visual })),
       ),
       ({ selected, table }, run) => {
-        expect(size(run, selected, full, limit, table)).toEqual(full);
+        const asked = run.event === "pull_request" && run.visual;
+        expect(size(run, selected, full, limit, table)).toEqual({ vitest: full.vitest, e2e: asked ? full.e2e : 0 });
       },
     ),
     {
       ...options,
-      // pinned: a first push to main, whose `before` is all zeros.
+      // pinned: a first push to main, whose `before` is all zeros; and the same push with the flag,
+      // which only a pull request's label can set.
       examples: [
         [
           { selected: { vitest: [], e2e: [] }, table: {} },
-          { event: "push", scope: "all", base: "0".repeat(40) },
+          { event: "push", scope: "all", base: "0".repeat(40), visual: false },
+        ],
+        [
+          { selected: { vitest: [], e2e: [] }, table: {} },
+          { event: "push", scope: "all", base: "0".repeat(40), visual: true },
         ],
       ],
     },
   );
 });
 
-it("property: a merge queue group and a push to main size their legs as a pull request does", () => {
-  // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push).
+it("property: a merge queue group and a push to main size their legs as a pull request without the visual label does", () => {
+  // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push). 0536,
+  // plant, run once on legs.ts and restored: `visual` without the pull request check (red: a queue
+  // group with the flag got e2e legs).
   fc.assert(
-    fc.property(picked(), line, ({ selected, table }, run) => {
-      expect(size(run, selected, full, limit, table)).toEqual(size(pr, selected, full, limit, table));
-      expect(outputs(run, size(run, selected, full, limit, table), selected)).toEqual(
-        outputs({ ...pr, base: run.base }, size(pr, selected, full, limit, table), selected),
-      );
-    }),
+    fc.property(
+      picked(),
+      line.filter((run) => run.event !== "pull_request"),
+      ({ selected, table }, run) => {
+        expect(size(run, selected, full, limit, table)).toEqual(size(plainPr, selected, full, limit, table));
+        expect(outputs(run, size(run, selected, full, limit, table), selected)).toEqual(
+          outputs({ ...plainPr, base: run.base }, size(plainPr, selected, full, limit, table), selected),
+        );
+      },
+    ),
     {
       ...options,
       // pinned: an empty selection in the queue, which ran seven machines on nothing before 0534.
       examples: [
         [
           { selected: { vitest: [], e2e: [] }, table: {} },
-          { event: "merge_group", scope: "all", base },
+          { event: "merge_group", scope: "all", base, visual: false },
         ],
       ],
     },
+  );
+});
+
+it("property: a sized pull request without the visual label starts no end-to-end leg, whatever it selected", () => {
+  // 0536. Plant, run once on legs.ts and restored: size e2e as if every pull request asked (red).
+  fc.assert(
+    fc.property(picked(), ({ selected, table }) => {
+      const legs = size(plainPr, selected, full, limit, table);
+      expect(legs.e2e).toBe(0);
+      expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
+      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
+    }),
+    options,
   );
 });
 
@@ -222,9 +255,8 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
     env: { PATH: process.env["PATH"], EVENT: "merge_group", FILTER: "next/", GITHUB_OUTPUT: output },
   });
   expect(done.status).toBe(0);
-  expect(readFileSync(output, "utf8")).toBe(
-    'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
-  );
+  // 0536: the merge queue never starts the visual legs.
+  expect(readFileSync(output, "utf8")).toBe('shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n');
 });
 
 // PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
@@ -276,10 +308,11 @@ it("scenario: a change that picks every next/ file runs each reader once, on tod
 
 // A run legs.ts never sizes: the reader tests, or no base commit to diff with.
 const unsized = fc.constantFrom<Run>(
-  { event: "pull_request", scope: "readers", base },
-  { event: "merge_group", scope: "readers", base },
-  { event: "merge_group", scope: "all", base: "" },
-  { event: "push", scope: "all", base: "0".repeat(40) },
+  { event: "pull_request", scope: "readers", base, visual: false },
+  { event: "pull_request", scope: "readers", base, visual: true },
+  { event: "merge_group", scope: "readers", base, visual: false },
+  { event: "merge_group", scope: "all", base: "", visual: false },
+  { event: "push", scope: "all", base: "0".repeat(40), visual: false },
 );
 
 it("property: the size step prints files only on a sized run with a vitest leg, as the one list", () => {
@@ -317,7 +350,7 @@ it("scenario: a vitest file whose path holds a space throws, so the step prints 
   // `files` is passed unquoted, one path per word. Plant: drop the space check (red: no throw).
   const selected = { vitest: ["next/a b.test.ts"], e2e: [] };
   expect(() => outputs(pr, { vitest: 1, e2e: 0 }, selected)).toThrow(/space/);
-  expect(outputs({ event: "merge_group", scope: "readers", base }, full, selected)).not.toContain(
+  expect(outputs({ event: "merge_group", scope: "readers", base, visual: false }, full, selected)).not.toContain(
     "files=next/a b.test.ts",
   );
 });

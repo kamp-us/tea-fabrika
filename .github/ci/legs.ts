@@ -5,9 +5,12 @@
 // reaches too, and only the schedule (scheduled.yaml) runs all of next/.
 //
 //   event and path                               legs
-//   pull request, merge queue group or push to   sized from the files Vitest's `--changed` picks
-//   main, all of next/, with a base commit       from the base, and every reader test
+//   pull request, merge queue group or push to   sized from the `next` files Vitest's `--changed`
+//   main, all of next/, with a base commit       picks from the base, and every reader test
 //   anything else                                the full matrix: the reader tests, no base
+//
+// Only a pull request with the `visual` label starts end-to-end legs, which run `next-visual`; the
+// merge queue and main never do, and the schedule runs every layer (0536).
 //
 // The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
@@ -31,11 +34,16 @@ export type Legs = { readonly vitest: number; readonly e2e: number };
 
 /**
  * What the run tests: every next/ file a change reaches, or only the reader tests (changes' filter),
- * and `base`, the commit its change starts from, which Vitest's `--changed` diffs with: a pull
- * request's base, a merge queue group's base, or what main held before a push. Empty when there is
- * none, as on a first push.
+ * `base`, the commit its change starts from, which Vitest's `--changed` diffs with: a pull request's
+ * base, a merge queue group's base, or what main held before a push, empty when there is none, as on
+ * a first push; and whether a pull request asked for its visual tests with the `visual` label (0536).
  */
-export type Run = { readonly event: string; readonly scope: "all" | "readers"; readonly base: string };
+export type Run = {
+  readonly event: string;
+  readonly scope: "all" | "readers";
+  readonly base: string;
+  readonly visual: boolean;
+};
 
 /** Each kind's selected test files, from the repo root. */
 export type Selected = { readonly vitest: readonly string[]; readonly e2e: readonly string[] };
@@ -92,11 +100,23 @@ const LINE = new Set(["pull_request", "merge_group", "push"]);
  */
 const sizes = (run: Run) => LINE.has(run.event) && run.scope === "all" && validSha(run.base);
 
-/** The legs a run starts: sized on a merge line run that tests all of next/, else `full`. */
-export const size = (run: Run, selected: Selected, full: Legs, limit: number, table = measured): Legs =>
-  sizes(run)
-    ? { vitest: fewest(selected.vitest, full.vitest, limit, table), e2e: fewest(selected.e2e, full.e2e, limit, table) }
-    : full;
+/**
+ * Whether a run's end-to-end legs, which run the visual tests, may start: only on a pull request
+ * that asked with the `visual` label; never in the merge queue or on main, since the schedule runs
+ * them (0536). check.yaml's fallback says the same (workflow-lint.ts, E10).
+ */
+const visual = (run: Run) => run.event === "pull_request" && run.visual;
+
+/**
+ * The legs a run starts: sized on a merge line run that tests all of next/, else `full`, each with
+ * no end-to-end leg where the visual tests may not start.
+ */
+export const size = (run: Run, selected: Selected, full: Legs, limit: number, table = measured): Legs => {
+  const e2e = visual(run) ? full.e2e : 0;
+  return sizes(run)
+    ? { vitest: fewest(selected.vitest, full.vitest, limit, table), e2e: fewest(selected.e2e, e2e, limit, table) }
+    : { vitest: full.vitest, e2e };
+};
 
 /** The matrix's legs, as check.yaml writes them: `e2e-1` to `e2e-N`, then "1" to "M". */
 export const shards = (legs: Legs): string[] => [
@@ -173,16 +193,19 @@ if (import.meta.main) {
     event: process.env["EVENT"] ?? "",
     scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
     base: process.env["BASE"] ?? "",
+    visual: process.env["VISUAL"] === "true",
   };
   const changed = `--changed=${run.base}`;
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
-  const picked = sized ? list(root, ["next/", changed]) : [];
-  const readerFiles = sized ? list(root, readers) : [];
+  // The merge line's vitest legs run the `next` project alone, and a pull request's end-to-end legs
+  // the `next-visual` one, only when it asked (0536).
+  const picked = sized ? list(root, ["--project", "next", "next/", changed]) : [];
+  const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
   const selected: Selected = sized
     ? {
         vitest: withReaders(picked, readerFiles),
-        e2e: list(root, ["--config", "vitest.e2e.config.ts", changed]),
+        e2e: visual(run) ? list(root, ["--project", "next-visual", changed]) : [],
       }
     : { vitest: [], e2e: [] };
   const legs = size(run, selected, full, budget(nextMinutes(workflow)));

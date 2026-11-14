@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
+import { projects } from "../../vitest.config.ts";
 import { ignored, jobs } from "./changes.mjs";
 import { isFieldPath } from "./field-check.ts";
 import { cacheFiles, lintCaches, lintWorkflow as lint } from "./workflow-lint.ts";
@@ -86,15 +87,17 @@ const testEnv = {
 // 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
 const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
-const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
+// 0536: the tooling tests are the `tooling` project; next/ and today's trees are projects of their
+// own, and a project ignores `--exclude`.
+const toolingProject = "--project tooling";
 const toolingReport = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
 
 // 0533: the test job's one test step, the tooling tests, on two machines and no flag.
 const tooling = [
   'if [ -n "$BASE" ]; then',
-  `  pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${toolingReport}`,
+  `  pnpm exec vitest run ${toolingProject} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingReport}`,
   "else",
-  `  pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes} ${toolingReport}`,
+  `  pnpm exec vitest run ${toolingProject} --shard "$SHARD" --passWithNoTests ${toolingReport}`,
   "fi",
   "",
 ].join("\n");
@@ -126,7 +129,17 @@ const name = fc.string({ maxLength: 20 });
 // N is E4's, in vitest.shards.test.ts, so the generated workflows below vary it.
 const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
-const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+
+// 0536: the vitest step tests the `next` project alone, on every event.
+const vitestCommand =
+  'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+
+// 0536: a pull request that asked for its visual tests.
+const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
+
+// Chromium is fetched only once a visual file exists.
+const visualFiles = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 
 // 0534: the end-to-end legs narrow from changes' `base`, the commit the size step sized them from, on
 // every run it sized: a pull request, a merge queue group and a push to main alike.
@@ -151,13 +164,14 @@ const nextLegs = (count: number) => [
   "5",
 ];
 
-// S1: the matrix is changes' `shards`, else this fallback, the full matrix (legs.ts).
-const sizedLegs = (legs: readonly unknown[]) =>
-  `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(legs)}') }}`;
+// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
+// with the `visual` label, the vitest legs alone everywhere else (0536, E10).
+const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
+  `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
 /** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
 const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
-  JSON.parse(/'(.*)'/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
+  JSON.parse(/&& '(.*?)' \|\|/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
 
 const setLegs = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]) => {
   w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
@@ -195,14 +209,14 @@ const valid = (label: string, extra: string) => ({
   on: {
     push: { branches: ["main"] },
     pull_request: {
-      types: ["opened", "synchronize", "reopened", "ready_for_review"],
+      types: ["opened", "synchronize", "reopened", "ready_for_review", "labeled"],
       "paths-ignore": [...ignored] as string[] | undefined,
     },
     merge_group: { types: ["checks_requested"] },
   },
   concurrency: {
     group: `check-\${{ github.event.pull_request.number || github.sha }}`,
-    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`,
+    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'labeled' && github.event.label.name == 'visual')) }}`,
   },
   jobs: {
     changes: {
@@ -272,6 +286,7 @@ const valid = (label: string, extra: string) => ({
             EVENT: `\${{ github.event_name }}`,
             FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
             BASE: env.BASE,
+            VISUAL: `\${{ ${visualLabel} }}`,
           },
           run: "node .github/ci/legs.ts",
         },
@@ -320,13 +335,13 @@ const valid = (label: string, extra: string) => ({
       steps: nextSteps([
         {
           name: "vitest",
-          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: vitestCommand,
           if: `!${onE2e}`,
           env: { SHARD: vitestShard(), FILTER: vitestFilter },
         },
         {
           name: "chromium",
-          if: `${onE2e} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`,
+          if: `${onE2e} && ${visualFiles}`,
           run:
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
@@ -448,12 +463,15 @@ const plants: [string, (workflow: Workflow) => void][] = [
     (w) => ((step(w, "check", "field rows").env as Record<string, string>)["GITHUB_TOKEN"] = token),
   ],
   // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
-  ...["opened", "synchronize", "reopened", "ready_for_review"].map((type): [string, (w: Workflow) => void] => [
-    `pull requests lose the ${type} trigger`,
-    (w) => {
-      w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
-    },
-  ]),
+  // 0536: `labeled` is how the `visual` label starts the visual legs.
+  ...["opened", "synchronize", "reopened", "ready_for_review", "labeled"].map(
+    (type): [string, (w: Workflow) => void] => [
+      `pull requests lose the ${type} trigger`,
+      (w) => {
+        w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+      },
+    ],
+  ),
   // Ticket 988: a pull request ignores exactly changes.mjs's `ignored`, and no other trigger ignores
   // a path.
   [
@@ -605,13 +623,22 @@ const plants: [string, (workflow: Workflow) => void][] = [
       });
     },
   ],
-  ...["apps", "packages", "programs", "next"].map((tree): [string, (w: Workflow) => void] => [
-    `T1: the tooling tests run ${tree}/'s tests`,
+  // 0536: today's tests and next/'s are projects of their own, so a second `--project`, or none at
+  // all, runs them in the tooling step.
+  ...["today", "next", "next-integration", "next-visual"].map((project): [string, (w: Workflow) => void] => [
+    `T1: the tooling tests run the ${project} project's tests`,
     (w) => {
       const found = step(w, "test", "tooling tests");
-      found.run = found.run.replace(` --exclude '${tree}/**'`, "");
+      found.run = found.run.replaceAll("--project tooling", `--project tooling --project ${project}`);
     },
   ]),
+  [
+    "T1: the tooling tests run every project",
+    (w) => {
+      const found = step(w, "test", "tooling tests");
+      found.run = found.run.replaceAll("--project tooling ", "");
+    },
+  ],
   [
     "T1: the tooling step runs today's tests after its own",
     (w) => {
@@ -769,10 +796,93 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ]),
   [
-    "review: Chromium path next/ apps",
+    "review: Chromium path next/ **",
     (w) => {
       const chromium = step(w, "next", "chromium");
-      chromium.if = chromium.if!.replace("next/apps", "next/ apps");
+      chromium.if = chromium.if!.replace("next/**", "next/ **");
+    },
+  ],
+  // 0536, E10 and E11. Each plant was run once on the real check.yaml too, and restored.
+  [
+    "E10: the full fallback alone, as before 0536, so the merge queue starts the visual legs",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(nextLegs(2))}') }}`;
+    },
+  ],
+  [
+    "E10: the full fallback runs on main too, as before the schedule",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        `(github.event_name == 'push' || ${visualLabel})`,
+      );
+    },
+  ],
+  [
+    "E10: the full fallback runs in the merge queue",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        `(github.event_name == 'merge_group' || ${visualLabel})`,
+      );
+    },
+  ],
+  [
+    "E10: the full fallback runs on any pull request",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        "github.event_name == 'pull_request'",
+      );
+    },
+  ],
+  [
+    "E10: the plain fallback holds a visual leg",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = sizedLegs(nextLegs(2), ["e2e-1", "1", "2", "3", "4", "5"]);
+    },
+  ],
+  [
+    "E11: the vitest step runs next-integration too",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "--project next --project next-integration ");
+    },
+  ],
+  [
+    "E11: the vitest step loses its project, so it runs every one",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "");
+    },
+  ],
+  [
+    "E11: main runs next-integration through an env, as the bridge before the schedule did",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      (found["env"] as Record<string, string>)["PROJECTS"] =
+        `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
+    },
+  ],
+  [
+    "the visual label's run no longer cancels the run it repeats",
+    (w) => {
+      w.concurrency["cancel-in-progress"] =
+        `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`;
+    },
+  ],
+  [
+    "every label's run cancels the run before it",
+    (w) => {
+      w.concurrency["cancel-in-progress"] =
+        `\${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || github.event.action == 'labeled') }}`;
+    },
+  ],
+  [
+    "changes' size step is not told the visual label",
+    (w) => {
+      Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, string>, "VISUAL");
     },
   ],
   [
@@ -2258,3 +2368,13 @@ for (const [name, plant, error] of [
     expect(lint(JSON.stringify(workflow))).toEqual([error]);
   });
 }
+
+it("T1 (0536): the tooling project, the test job's one project, holds no glob of today's trees or of next/", () => {
+  // A project ignores `--exclude`, so the project's own globs are what keeps today's tests and next/'s
+  // out of the test job. Plant, run once on vitest.config.ts and restored: add
+  // "apps/*/src/**/*.test.ts" to the tooling project (red).
+  const tooling = projects.find((project) => project.test.name === "tooling");
+  expect(tooling).toBeDefined();
+  expect(tooling!.test.include.length).toBeGreaterThan(0);
+  expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+});

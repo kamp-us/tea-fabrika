@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 import { configDefaults } from "vitest/config";
 import { BaseSequencer, createVitest } from "vitest/node";
 import { budget as legBudget } from "./.github/ci/legs.ts";
-import { e2eFiles, nextFiles } from "./.github/ci/shard-rows.ts";
+import { nextFiles, visualFiles } from "./.github/ci/shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
-import e2eDefault, { e2eConfig } from "./vitest.e2e.config.ts";
+import { projects } from "./vitest.config.ts";
 import { assign, inLaneStep, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
@@ -30,13 +30,13 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
   // the StartChild row (red here and in the all-rows vector); set chaos.laws to 1.0 (red in the
   // all-rows vector).
   for (const [path, samples] of [
-    ["next/packages/libfabrika/src/node/Watchers.test.ts", [488.0, 685.9, 492.4]],
+    ["next/packages/libfabrika/src/node/Watchers.integration.test.ts", [488.0, 685.9, 492.4]],
     ["next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts", [351.1, 379.3, 412.7]],
-    ["next/packages/libfabrika/src/node/StartChild.test.ts", [349.9, 341.0, 598.2]],
-    ["next/packages/libfabrika/src/node/RunnerAdmission.test.ts", [258.9]],
-    ["next/apps/fabrika/src/start-child.laws.test.ts", [175.9, 108.2, 190.2]],
-    ["next/apps/fabrika/src/door.test.ts", [177.7, 117.3, 174.9]],
-    ["next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts", [266.1, 169.1, 168.8]],
+    ["next/packages/libfabrika/src/node/StartChild.integration.test.ts", [349.9, 341.0, 598.2]],
+    ["next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", [258.9]],
+    ["next/apps/fabrika/src/start-child.laws.integration.test.ts", [175.9, 108.2, 190.2]],
+    ["next/apps/fabrika/src/door.integration.test.ts", [177.7, 117.3, 174.9]],
+    ["next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts", [266.1, 169.1, 168.8]],
   ] as const) {
     expect(nextSamples[path], path).toEqual(samples);
     expect.soft(measured[path], path).toBe(row(samples));
@@ -52,11 +52,11 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
   // Watchers row to 1.0, so it lands beside another of the five (red); add a leg "6" to the
   // workflow's next matrix, so the count no longer matches the five names (red).
   const heaviest = [
-    "next/packages/libfabrika/src/node/Watchers.test.ts",
+    "next/packages/libfabrika/src/node/Watchers.integration.test.ts",
     "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts",
-    "next/packages/libfabrika/src/node/StartChild.test.ts",
-    "next/packages/libfabrika/src/node/RunnerAdmission.test.ts",
-    "next/apps/fabrika/src/start-child.laws.test.ts",
+    "next/packages/libfabrika/src/node/StartChild.integration.test.ts",
+    "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts",
+    "next/apps/fabrika/src/start-child.laws.integration.test.ts",
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
@@ -82,23 +82,23 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 // This fixed snapshot copies the observations, never the measured table's computed weights.
 const nextSamples = {
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/apps/fabrika/src/brain-life.test.ts": [26.5, 25.5, 44.2],
+  "next/apps/fabrika/src/brain-life.integration.test.ts": [26.5, 25.5, 44.2],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/build-command.test.ts": [2.2, 1.3, 2.3],
+  "next/apps/fabrika/src/build-command.integration.test.ts": [2.2, 1.3, 2.3],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/build.test.ts": [38.9, 41.6, 162.5],
+  "next/apps/fabrika/src/build.integration.test.ts": [38.9, 41.6, 162.5],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/chaos.laws.test.ts": [69.0, 80.8, 79.9],
+  "next/apps/fabrika/src/chaos.laws.integration.test.ts": [69.0, 80.8, 79.9],
   // C job 132330501025.
-  "next/apps/fabrika/src/checklist-instance.laws.test.ts": [98.0],
+  "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts": [98.0],
   // A job 132292933169, B job 132315559486, C job 132330500993.
-  "next/apps/fabrika/src/checklist-runner.laws.test.ts": [20.7, 18.5, 22.7],
+  "next/apps/fabrika/src/checklist-runner.laws.integration.test.ts": [20.7, 18.5, 22.7],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/door-recovery.test.ts": [23.2, 14.8, 20.9],
+  "next/apps/fabrika/src/door-recovery.integration.test.ts": [23.2, 14.8, 20.9],
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/door-spans.test.ts": [2.8, 1.6, 10.0],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/door.test.ts": [177.7, 117.3, 174.9],
+  "next/apps/fabrika/src/door.integration.test.ts": [177.7, 117.3, 174.9],
   // A job 132292933326, B job 132315559534, C job 132330501014.
   "next/apps/fabrika/src/error-cause.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933221, B job 132315559497, C job 132330500983.
@@ -108,107 +108,107 @@ const nextSamples = {
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": [10.9, 10.9, 10.9],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/exam/bytes.test.ts": [6.0, 6.4, 7.0],
+  "next/apps/fabrika/src/exam/bytes.integration.test.ts": [6.0, 6.4, 7.0],
   // A job 132292933270, B job 132315559508, C job 132330501025.
-  "next/apps/fabrika/src/exam/client-manager-contract.test.ts": [13.9, 10.6, 15.9],
+  "next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts": [13.9, 10.6, 15.9],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/clock.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/clock.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/apps/fabrika/src/exam/commits-git-chain.test.ts": [77.1, 47.4, 61.7],
+  "next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts": [77.1, 47.4, 61.7],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/apps/fabrika/src/exam/commits-git-person.test.ts": [49.8, 41.9, 77.7],
+  "next/apps/fabrika/src/exam/commits-git-person.integration.test.ts": [49.8, 41.9, 77.7],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/apps/fabrika/src/exam/commits-git-signatures.test.ts": [70.1, 43.1, 63.8],
+  "next/apps/fabrika/src/exam/commits-git-signatures.integration.test.ts": [70.1, 43.1, 63.8],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/apps/fabrika/src/exam/commits-git-steps.test.ts": [73.4, 72.7, 101.1],
+  "next/apps/fabrika/src/exam/commits-git-steps.integration.test.ts": [73.4, 72.7, 101.1],
   // A job 132292933270, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/commits.test.ts": [1.0, 1.0, 1.4],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/compiler.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/apps/fabrika/src/exam/deps.test.ts": [6.5, 4.1, 4.1],
+  "next/apps/fabrika/src/exam/deps.integration.test.ts": [6.5, 4.1, 4.1],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/edge-comment.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/edge-comment.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/edges.test.ts": [2.8, 2.9, 4.2],
+  "next/apps/fabrika/src/exam/edges.integration.test.ts": [2.8, 2.9, 4.2],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/effect-functions.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/effect-functions.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/laws-scan.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/layers.test.ts": [3.6, 4.0, 5.7],
+  "next/apps/fabrika/src/exam/layers.integration.test.ts": [3.6, 4.0, 5.7],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/ledger-sql.test.ts": [6.4, 5.6, 7.7],
+  "next/apps/fabrika/src/exam/ledger-sql.integration.test.ts": [6.4, 5.6, 7.7],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-hand-tag.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-of.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/no-of.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-promises.test.ts": [31.2, 31.2, 44.2],
+  "next/apps/fabrika/src/exam/no-promises.integration.test.ts": [31.2, 31.2, 44.2],
   // A job 132292933169, B job 132315559486, C job 132330500993.
-  "next/apps/fabrika/src/exam/object-imports.test.ts": [1.3, 1.5, 2.0],
+  "next/apps/fabrika/src/exam/object-imports.integration.test.ts": [1.3, 1.5, 2.0],
   // A job 132292933270, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/one-store-hook.test.ts": [0.4, 0.3, 0.4],
+  "next/apps/fabrika/src/exam/one-store-hook.integration.test.ts": [0.4, 0.3, 0.4],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/react-rules.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/react-rules.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330501014.
   "next/apps/fabrika/src/exam/runner-contract.test.ts": [61.1, 56.4, 59.7],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/exam/secret-types.test.ts": [5.1, 5.3, 5.4],
+  "next/apps/fabrika/src/exam/secret-types.integration.test.ts": [5.1, 5.3, 5.4],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/exam/twin.test.ts": [24.0, 16.0, 20.9],
+  "next/apps/fabrika/src/exam/twin.integration.test.ts": [24.0, 16.0, 20.9],
   // A job 132292933169, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/file-services.laws.test.ts": [4.0, 4.4, 19.0],
+  "next/apps/fabrika/src/file-services.laws.integration.test.ts": [4.0, 4.4, 19.0],
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/apps/fabrika/src/grant-readers.laws.test.ts": [1.5, 0.8, 1.2],
   // A job 132292933221, B job 132315559497, C job 132330500983.
-  "next/apps/fabrika/src/inbox-runner.laws.test.ts": [7.3, 4.2, 9.2],
+  "next/apps/fabrika/src/inbox-runner.laws.integration.test.ts": [7.3, 4.2, 9.2],
   // C job 132330501001.
-  "next/apps/fabrika/src/input-recording.test.ts": [39.4],
+  "next/apps/fabrika/src/input-recording.integration.test.ts": [39.4],
   // A job 132292933192, B job 132315559467, C job 132330501025.
-  "next/apps/fabrika/src/instance-one-file.test.ts": [25.7, 20.9, 34.9],
+  "next/apps/fabrika/src/instance-one-file.integration.test.ts": [25.7, 20.9, 34.9],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/apps/fabrika/src/instance-records.test.ts": [53.7, 42.1, 63.9],
+  "next/apps/fabrika/src/instance-records.integration.test.ts": [53.7, 42.1, 63.9],
   // A job 132292933270, B job 132315559508, C job 132330500993.
   "next/apps/fabrika/src/instance-watch.laws.test.ts": [0.4, 0.4, 0.4],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/instance-wire.test.ts": [145.4, 151.9, 155.0],
+  "next/apps/fabrika/src/instance-wire.integration.test.ts": [145.4, 151.9, 155.0],
   // C job 132330501014.
-  "next/apps/fabrika/src/jobs-wire.test.ts": [3.7],
+  "next/apps/fabrika/src/jobs-wire.integration.test.ts": [3.7],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/apps/fabrika/src/local-instance.test.ts": [2.6, 1.3, 1.5],
+  "next/apps/fabrika/src/local-instance.integration.test.ts": [2.6, 1.3, 1.5],
   // A job 132292933169, B job 132315559486, C job 132330500983.
-  "next/apps/fabrika/src/port.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/port.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330501001.
-  "next/apps/fabrika/src/record.laws.test.ts": [2.9, 1.9, 2.8],
+  "next/apps/fabrika/src/record.laws.integration.test.ts": [2.9, 1.9, 2.8],
   // A job 132292933221, B job 132315559497, C job 132330501025.
-  "next/apps/fabrika/src/repository-open.test.ts": [19.3, 15.0, 27.2],
+  "next/apps/fabrika/src/repository-open.integration.test.ts": [19.3, 15.0, 27.2],
   // A job 132292933169, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/runtime-recovery.laws.test.ts": [91.5, 96.7, 137.9],
+  "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts": [91.5, 96.7, 137.9],
   // A job 132292933192, B job 132315559467, C job 132330500993.
   "next/apps/fabrika/src/runtime.decode.test.ts": [0.2, 0.1, 0.4],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/apps/fabrika/src/runtime.laws.test.ts": [38.2, 48.4, 87.3],
+  "next/apps/fabrika/src/runtime.laws.integration.test.ts": [38.2, 48.4, 87.3],
   // A job 132292933270, B job 132315559508, C job 132330501014.
-  "next/apps/fabrika/src/scheduled-job-alarm.test.ts": [6.7, 6.8, 5.2],
+  "next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts": [6.7, 6.8, 5.2],
   // A job 132292933169, B job 132315559486, C job 132330500983.
   "next/apps/fabrika/src/settings-generated.test.ts": [3.0, 2.8, 3.6],
   // A job 132292933326, B job 132315559534, C job 132330501001.
-  "next/apps/fabrika/src/settings-start.test.ts": [12.6, 11.4, 23.0],
+  "next/apps/fabrika/src/settings-start.integration.test.ts": [12.6, 11.4, 23.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/settings.test.ts": [0.0, 0.0, 0.1],
   // A job 132292933221, B job 132315559497, C job 132330501025.
-  "next/apps/fabrika/src/sibling.laws.test.ts": [11.3, 7.4, 13.0],
+  "next/apps/fabrika/src/sibling.laws.integration.test.ts": [11.3, 7.4, 13.0],
   // A job 132292933192, B job 132315559467, C job 132330500993.
-  "next/apps/fabrika/src/start-child.laws.test.ts": [175.9, 108.2, 190.2],
+  "next/apps/fabrika/src/start-child.laws.integration.test.ts": [175.9, 108.2, 190.2],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/apps/fabrika/src/worker-mail.test.ts": [30.6, 20.7, 42.8],
+  "next/apps/fabrika/src/worker-mail.integration.test.ts": [30.6, 20.7, 42.8],
   // A job 132292933270, B job 132315559508, C job 132330501014.
-  "next/apps/fabrika/src/worker-supervision.test.ts": [22.2, 19.8, 27.1],
+  "next/apps/fabrika/src/worker-supervision.integration.test.ts": [22.2, 19.8, 27.1],
   // A job 132292933169, B job 132315559486, C job 132330500983.
-  "next/apps/fabrika/src/worker-usage.test.ts": [1.1, 1.1, 1.8],
+  "next/apps/fabrika/src/worker-usage.integration.test.ts": [1.1, 1.1, 1.8],
   // A job 132292933326, B job 132315559534, C job 132330501001.
   "next/packages/libfabrika/src/Id.cause.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933270, B job 132315559508, C job 132330501001.
@@ -222,11 +222,11 @@ const nextSamples = {
   // A job 132292933221, B job 132315559497, C job 132330501025.
   "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts": [2.8, 1.8, 3.6],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/access/AccessSpans.test.ts": [3.4, 5.2, 3.8],
+  "next/packages/libfabrika/src/access/AccessSpans.integration.test.ts": [3.4, 5.2, 3.8],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/access/Authorization.test.ts": [16.0, 16.4, 30.9],
+  "next/packages/libfabrika/src/access/Authorization.integration.test.ts": [16.0, 16.4, 30.9],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/access/ClientManager.test.ts": [25.9, 16.8, 12.1],
+  "next/packages/libfabrika/src/access/ClientManager.integration.test.ts": [25.9, 16.8, 12.1],
   // A job 132292933192, B job 132315559467, C job 132330500993.
   "next/packages/libfabrika/src/access/ClientManager.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559497, C job 132330501014.
@@ -268,7 +268,7 @@ const nextSamples = {
   // A job 132292933169, B job 132315559486, C job 132330501025.
   "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts": [5.5, 5.4, 11.2],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/cloudflare/supervision.laws.test.ts": [29.3, 14.8, 27.0],
+  "next/packages/libfabrika/src/cloudflare/supervision.laws.integration.test.ts": [29.3, 14.8, 27.0],
   // A job 132292933192, B job 132315559467, C job 132330501025.
   "next/packages/libfabrika/src/cloudflare/tail.test.ts": [0.3, 0.2, 0.2],
   // A job 132292933270, B job 132315559508, C job 132330500993.
@@ -284,7 +284,7 @@ const nextSamples = {
   // C job 132330500993.
   "next/packages/libfabrika/src/desktop/Menu.types.test.ts": [0.0],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts": [10.3, 10.4, 10.2],
+  "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts": [10.3, 10.4, 10.2],
   // C job 132330501014.
   "next/packages/libfabrika/src/gateway/JobAccess.test.ts": [0.1],
   // A job 132292933169, B job 132315559467, C job 132330500983.
@@ -298,118 +298,118 @@ const nextSamples = {
   // A job 132292933192, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/jobs/internal/job.test.ts": [31.4, 27.4, 37.6],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/ledger/Ledger.test.ts": [3.2, 2.9, 4.6],
+  "next/packages/libfabrika/src/ledger/Ledger.integration.test.ts": [3.2, 2.9, 4.6],
   // A job 132292933270, B job 132315559497, C job 132330501014.
   "next/packages/libfabrika/src/ledger/Ledger.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559508, C job 132330501001.
   "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts": [0.5, 0.6, 0.6],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts": [2.4, 2.3, 1.3],
+  "next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts": [2.4, 2.3, 1.3],
   // C job 132330500983.
   "next/packages/libfabrika/src/ledger/LedgerStreams.types.test.ts": [0.0],
   // A job 132292933270, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts": [0.3, 0.3, 0.4],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/ledger/Log.test.ts": [1.5, 1.4, 1.8],
+  "next/packages/libfabrika/src/ledger/Log.integration.test.ts": [1.5, 1.4, 1.8],
   // A job 132292933270, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/ledger/Rings.test.ts": [0.3, 0.1, 0.1],
+  "next/packages/libfabrika/src/ledger/Rings.integration.test.ts": [0.3, 0.1, 0.1],
   // A job 132292933221, B job 132315559508, C job 132330501001.
   "next/packages/libfabrika/src/ledger/TraceId.test.ts": [0.9, 0.9, 0.7],
   // A job 132292933169, B job 132315559467, C job 132330501001.
   "next/packages/libfabrika/src/node/Chaos.laws.test.ts": [0.0, 0.0, 0.1],
   // A job 132292933326, B job 132315559508, C job 132330501025.
-  "next/packages/libfabrika/src/node/Children.test.ts": [81.9, 84.4, 111.2],
+  "next/packages/libfabrika/src/node/Children.integration.test.ts": [81.9, 84.4, 111.2],
   // A job 132292933221, B job 132315559486, C job 132330500993.
   "next/packages/libfabrika/src/node/ErrorCause.test.ts": [3.8, 1.9, 4.1],
   // A job 132292933192, B job 132315559534, C job 132330501014.
   "next/packages/libfabrika/src/node/ErrorCause.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933270, B job 132315559497, C job 132330500983.
-  "next/packages/libfabrika/src/node/ExitReason.test.ts": [37.4, 23.5, 41.9],
+  "next/packages/libfabrika/src/node/ExitReason.integration.test.ts": [37.4, 23.5, 41.9],
   // A job 132292933169, B job 132315559467, C job 132330501001.
-  "next/packages/libfabrika/src/node/IsolateUsage.test.ts": [54.5, 84.0, 62.4],
+  "next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts": [54.5, 84.0, 62.4],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": [7.6, 7.3, 10.9],
+  "next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts": [7.6, 7.3, 10.9],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/node/ProgramMail.test.ts": [31.7, 34.0, 37.8],
+  "next/packages/libfabrika/src/node/ProgramMail.integration.test.ts": [31.7, 34.0, 37.8],
   // A job 132292933219, B job 132315559488, C job 132330501023.
-  "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": [266.1, 169.1, 168.8],
+  "next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts": [266.1, 169.1, 168.8],
   // A job 132292933326, B job 132315559508, C job 132330501025.
-  "next/packages/libfabrika/src/node/RecordPart.test.ts": [0.8, 1.1, 1.2],
+  "next/packages/libfabrika/src/node/RecordPart.integration.test.ts": [0.8, 1.1, 1.2],
   // A job 132292933221, B job 132315559486, C job 132330500993.
-  "next/packages/libfabrika/src/node/RecordPartResources.test.ts": [1.6, 0.9, 1.0],
+  "next/packages/libfabrika/src/node/RecordPartResources.integration.test.ts": [1.6, 0.9, 1.0],
   // A job 132292933192, B job 132315559534, C job 132330501014.
-  "next/packages/libfabrika/src/node/RecoveryJournal.test.ts": [63.8, 52.6, 42.3],
+  "next/packages/libfabrika/src/node/RecoveryJournal.integration.test.ts": [63.8, 52.6, 42.3],
   // A job 132292933270, B job 132315559497, C job 132330500983.
-  "next/packages/libfabrika/src/node/Replies.test.ts": [84.4, 47.5, 70.8],
+  "next/packages/libfabrika/src/node/Replies.integration.test.ts": [84.4, 47.5, 70.8],
   // C job 132330501001.
-  "next/packages/libfabrika/src/node/RunnerAdmission.test.ts": [258.9],
+  "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts": [258.9],
   // A job 132292933169, B job 132315559467, C job 132330501025.
-  "next/packages/libfabrika/src/node/StartChild.test.ts": [349.9, 341.0, 598.2],
+  "next/packages/libfabrika/src/node/StartChild.integration.test.ts": [349.9, 341.0, 598.2],
   // A job 132292933326, B job 132315559508, C job 132330500993.
-  "next/packages/libfabrika/src/node/Watchers.test.ts": [488.0, 685.9, 492.4],
+  "next/packages/libfabrika/src/node/Watchers.integration.test.ts": [488.0, 685.9, 492.4],
   // A job 132292933192, B job 132315559467, C job 132330500983. Sampled at access/, before PR 1189
   // moved the file to node/access/.
-  "next/packages/libfabrika/src/node/access/SessionManager.test.ts": [8.0, 9.6, 14.7],
+  "next/packages/libfabrika/src/node/access/SessionManager.integration.test.ts": [8.0, 9.6, 14.7],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/node/build/build-assets.test.ts": [37.0, 34.1, 41.9],
+  "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts": [37.0, 34.1, 41.9],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/node/build/build-one-file.test.ts": [41.0, 44.8, 77.0],
+  "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts": [41.0, 44.8, 77.0],
   // A job 132292933221, B job 132315559486, C job 132330501014.
-  "next/packages/libfabrika/src/node/build/css.test.ts": [11.9, 13.3, 9.8],
+  "next/packages/libfabrika/src/node/build/css.integration.test.ts": [11.9, 13.3, 9.8],
   // A job 132292933192, B job 132315559534, C job 132330500983.
-  "next/packages/libfabrika/src/node/build/error-cause.test.ts": [0.4, 0.3, 0.3],
+  "next/packages/libfabrika/src/node/build/error-cause.integration.test.ts": [0.4, 0.3, 0.3],
   // A job 132292933270, B job 132315559497, C job 132330501001.
   "next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts": [0.1, 0.1, 0.2],
   // A job 132292933169, B job 132315559467, C job 132330501025.
-  "next/packages/libfabrika/src/node/dev/dev-control.laws.test.ts": [8.8, 10.4, 9.3],
+  "next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts": [8.8, 10.4, 9.3],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": [2.0, 0.9, 1.0],
+  "next/packages/libfabrika/src/node/dev/dev-errors.laws.integration.test.ts": [2.0, 0.9, 1.0],
   // A job 132292933169, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": [0.0, 0.1, 0.0],
+  "next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts": [0.0, 0.1, 0.0],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": [4.3, 2.4, 3.5],
+  "next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts": [4.3, 2.4, 3.5],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/node/dev/dev.laws.test.ts": [2.0, 2.1, 2.2],
+  "next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts": [2.0, 2.1, 2.2],
   // A job 132292933326, B job 132315559508, C job 132330500993.
   "next/packages/libfabrika/src/node/dev/error-cause.test.ts": [0.2, 0.2, 0.3],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/node/dev/local-dev.test.ts": [3.8, 2.2, 5.6],
+  "next/packages/libfabrika/src/node/dev/local-dev.integration.test.ts": [3.8, 2.2, 5.6],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts": [3.0, 3.2, 4.1],
+  "next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts": [3.0, 3.2, 4.1],
   // C job 132330501014.
-  "next/packages/libfabrika/src/node/gateway/Jobs.test.ts": [147.5],
+  "next/packages/libfabrika/src/node/gateway/Jobs.integration.test.ts": [147.5],
   // A job 132292933221, B job 132315559486, C job 132330500983.
-  "next/packages/libfabrika/src/node/gateway/RateLimit.test.ts": [5.8, 3.0, 6.2],
+  "next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts": [5.8, 3.0, 6.2],
   // A job 132292933192, B job 132315559534, C job 132330501001.
-  "next/packages/libfabrika/src/node/jobs/JobsLedger.test.ts": [39.2, 35.4, 99.9],
+  "next/packages/libfabrika/src/node/jobs/JobsLedger.integration.test.ts": [39.2, 35.4, 99.9],
   // B job 132315559497, C job 132330501025.
-  "next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.test.ts": [30.5, 35.6],
+  "next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts": [30.5, 35.6],
   // B job 132315559467, C job 132330500993.
   "next/packages/libfabrika/src/node/launchd/LaunchdStatus.laws.test.ts": [0.2, 0.3],
   // B job 132315559508, C job 132330501014.
   "next/packages/libfabrika/src/node/launchd/ProcessGroups.laws.test.ts": [0.0, 0.0],
   // C job 132330500983.
-  "next/packages/libfabrika/src/node/ledger/LedgerStreams.test.ts": [73.3],
+  "next/packages/libfabrika/src/node/ledger/LedgerStreams.integration.test.ts": [73.3],
   // A job 132292933270, B job 132315559486, C job 132330501001.
   "next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts": [106.3, 100.2, 138.1],
   // A job 132292933169, B job 132315559534, C job 132330501025.
   "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts": [351.1, 379.3, 412.7],
   // A job 132292933326, B job 132315559497, C job 132330500993.
-  "next/packages/libfabrika/src/node/repositories/RepositoryTrust.test.ts": [15.4, 11.1, 18.6],
+  "next/packages/libfabrika/src/node/repositories/RepositoryTrust.integration.test.ts": [15.4, 11.1, 18.6],
   // A job 132292933221, B job 132315559467, C job 132330501014.
   "next/packages/libfabrika/src/node/repositories/Sources.test.ts": [52.0, 69.3, 59.8],
   // A job 132292933192, B job 132315559508, C job 132330500983.
-  "next/packages/libfabrika/src/node/runtime/RunnerInit.test.ts": [4.5, 3.4, 3.6],
+  "next/packages/libfabrika/src/node/runtime/RunnerInit.integration.test.ts": [4.5, 3.4, 3.6],
   // A job 132292933270, B job 132315559486, C job 132330501001.
   "next/packages/libfabrika/src/node/settings/Command.test.ts": [0.6, 0.6, 0.8],
   // A job 132292933169, B job 132315559534, C job 132330501025.
-  "next/packages/libfabrika/src/node/settings/Load.test.ts": [0.8, 1.2, 1.8],
+  "next/packages/libfabrika/src/node/settings/Load.integration.test.ts": [0.8, 1.2, 1.8],
   // A job 132292933326, B job 132315559497, C job 132330500993.
   "next/packages/libfabrika/src/packs/ProgramName.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933221, B job 132315559467, C job 132330501014.
   "next/packages/libfabrika/src/packs/internal/open.test.ts": [12.0, 6.6, 9.4],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/presence/Connections.test.ts": [0.7, 0.7, 0.7],
+  "next/packages/libfabrika/src/presence/Connections.integration.test.ts": [0.7, 0.7, 0.7],
   // A job 132292933192, B job 132315559508, C job 132330500983.
   "next/packages/libfabrika/src/processes/ExitReason.test.ts": [0.5, 0.4, 0.3],
   // A job 132292933221, B job 132315559497, C job 132330501014.
@@ -419,19 +419,19 @@ const nextSamples = {
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts": [1.0, 1.0, 1.2],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/processes/ProcessLifecycle.test.ts": [5.7, 4.6, 5.3],
+  "next/packages/libfabrika/src/processes/ProcessLifecycle.integration.test.ts": [5.7, 4.6, 5.3],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/processes/ProcessManager.test.ts": [0.8, 0.7, 1.0],
+  "next/packages/libfabrika/src/processes/ProcessManager.integration.test.ts": [0.8, 0.7, 1.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/processes/ProcessMonitors.test.ts": [8.8, 7.6, 10.8],
+  "next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts": [8.8, 7.6, 10.8],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/processes/ProcessSpans.test.ts": [2.0, 1.3, 1.5],
+  "next/packages/libfabrika/src/processes/ProcessSpans.integration.test.ts": [2.0, 1.3, 1.5],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/packages/libfabrika/src/processes/ProcessStreams.test.ts": [2.9, 1.8, 2.4],
+  "next/packages/libfabrika/src/processes/ProcessStreams.integration.test.ts": [2.9, 1.8, 2.4],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": [2.3, 2.4, 4.3],
+  "next/packages/libfabrika/src/processes/ProcessTextCaps.integration.test.ts": [2.3, 2.4, 4.3],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": [0.6, 0.4, 0.5],
+  "next/packages/libfabrika/src/processes/ProcessWindow.integration.test.ts": [0.6, 0.4, 0.5],
   // A job 132292933270, B job 132315559486, C job 132330501001.
   "next/packages/libfabrika/src/processes/internal/processTable.laws.test.ts": [1.9, 1.5, 2.1],
   // A job 132292933169, B job 132315559534, C job 132330501025.
@@ -463,29 +463,29 @@ const nextSamples = {
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/packages/libfabrika/src/runtime/Patch.test.ts": [0.1, 0.1, 0.4],
   // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/packages/libfabrika/src/runtime/ProcessStore.test.ts": [2.4, 1.9, 2.3],
+  "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts": [2.4, 1.9, 2.3],
   // A job 132292933192, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/runtime/Program.test.ts": [1.7, 1.1, 1.8],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/runtime/Program.types.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933326, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts": [5.6, 4.9, 7.8],
+  "next/packages/libfabrika/src/runtime/RecoveryGaps.integration.test.ts": [5.6, 4.9, 7.8],
   // A job 132292933270, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": [0.3, 0.3, 0.3],
+  "next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts": [0.3, 0.3, 0.3],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/packages/libfabrika/src/runtime/Runner.test.ts": [123.8, 116.9, 151.9],
+  "next/packages/libfabrika/src/runtime/Runner.integration.test.ts": [123.8, 116.9, 151.9],
   // A job 132292933326, B job 132315559497, C job 132330500983.
-  "next/packages/libfabrika/src/runtime/RunnerOptions.test.ts": [0.0, 0.0, 0.0],
+  "next/packages/libfabrika/src/runtime/RunnerOptions.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559486, C job 132330501025.
   "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts": [2.7, 1.3, 2.2],
   // A job 132292933221, B job 132315559497, C job 132330501014.
-  "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts": [77.0, 45.9, 62.5],
+  "next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts": [77.0, 45.9, 62.5],
   // A job 132292933169, B job 132315559508, C job 132330501001.
   "next/packages/libfabrika/src/runtime/State.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933221, B job 132315559467, C job 132330501001.
   "next/packages/libfabrika/src/runtime/internal/exitReason.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/runtime/internal/recovery.test.ts": [1.1, 1.2, 1.9],
+  "next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts": [1.1, 1.2, 1.9],
   // A job 132292933192, B job 132315559508, C job 132330501025.
   "next/packages/libfabrika/src/runtime/internal/reply.test.ts": [0.3, 0.2, 0.2],
   // A job 132292933221, B job 132315559497, C job 132330501014.
@@ -529,13 +529,13 @@ const nextSamples = {
   // A job 132292933221, B job 132315559467, C job 132330500983.
   "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": [0.2, 0.2, 0.1],
   // A job 132292933270, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/telemetry/Records.test.ts": [5.2, 3.2, 6.1],
+  "next/packages/libfabrika/src/telemetry/Records.integration.test.ts": [5.2, 3.2, 6.1],
   // A job 132292933192, B job 132315559486, C job 132330500983.
-  "next/packages/libfabrika/src/telemetry/Sink.test.ts": [10.7, 13.1, 19.1],
+  "next/packages/libfabrika/src/telemetry/Sink.integration.test.ts": [10.7, 13.1, 19.1],
   // A job 132292933270, B job 132315559534, C job 132330501001.
   "next/packages/libfabrika/src/telemetry/Trace.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933169, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts": [10.5, 10.7, 6.3],
+  "next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts": [10.5, 10.7, 6.3],
   // A job 132292933169, B job 132315559497, C job 132330501025.
   "next/packages/libfabrika/src/telemetry/internal/sink.test.ts": [0.4, 0.3, 0.5],
   // A job 132292933326, B job 132315559467, C job 132330500993.
@@ -551,9 +551,9 @@ const nextSamples = {
   // C job 132330501001.
   "next/packages/libfabrika/src/transport/Link.laws.test.ts": [0.2],
   // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/transport/Sshsig.test.ts": [1.0, 0.5, 0.6],
+  "next/packages/libfabrika/src/transport/Sshsig.integration.test.ts": [1.0, 0.5, 0.6],
   // A job 132292933221, B job 132315559486, C job 132330501025.
-  "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": [0.6, 0.3, 0.6],
+  "next/packages/libfabrika/src/transport/SshsigWebauthn.integration.test.ts": [0.6, 0.3, 0.6],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933270, B job 132315559534, C job 132330501025.
@@ -573,7 +573,7 @@ const nextSamples = {
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/programs/counter/src/program.laws.test.ts": [0.3, 0.3, 0.2],
   // A job 132292933221, B job 132315559508, C job 132330501001.
-  "next/programs/counter/src/runner.laws.test.ts": [6.8, 5.1, 4.8],
+  "next/programs/counter/src/runner.laws.integration.test.ts": [6.8, 5.1, 4.8],
   // A job 132292933221, B job 132315559508, C job 132330501001.
   "next/programs/counter/src/window.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559486, C job 132330501025.
@@ -589,9 +589,9 @@ const nextSamples = {
   // A job 132292933192, B job 132315559486, C job 132330501025.
   "next/programs/pipeline/src/handlers.test.ts": [0.1, 0.1, 0.1],
   // A job 132292933270, B job 132315559534, C job 132330500993.
-  "next/programs/pipeline/src/node/queue.laws.test.ts": [148.4, 125.7, 119.0],
+  "next/programs/pipeline/src/node/queue.laws.integration.test.ts": [148.4, 125.7, 119.0],
   // A job 132292933169, B job 132315559497, C job 132330501014.
-  "next/programs/pipeline/src/node/runner.laws.test.ts": [22.7, 21.8, 10.8],
+  "next/programs/pipeline/src/node/runner.laws.integration.test.ts": [22.7, 21.8, 10.8],
 } as const;
 
 // T967, today's CI, next/'s end-to-end files. Each file's samples in run order A, B, C, attempt 1
@@ -605,19 +605,21 @@ const nextSamples = {
 // from before PR 1104 (runs 43597657318, 43594434801 and 43590628228) were 15 to 45% faster for
 // first-window and resources.laws, with e2e after vitest on leg 1; they are not used.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
+// 0536 renamed the files, the samples stay theirs: six are visual and run on the end-to-end legs;
+// chaos-revoke and stored drive no browser, so they are integration files on the vitest legs now.
 const E2E = "next/apps/fabrika/e2e";
 
 const e2eSamples = {
   jobs: { A: 132468657925, B: 132468687674, C: 132478645693 },
   files: {
-    [`${E2E}/chaos-revoke.test.ts`]: [46.5, 50.0, 46.7],
-    [`${E2E}/electron-launchd.test.ts`]: [1.5, 1.1, 1.5],
-    [`${E2E}/first-window.test.ts`]: [222.2, 206.3, 225.4],
-    [`${E2E}/instance.test.ts`]: [23.7, 22.4, 23.9],
-    [`${E2E}/one-file.test.ts`]: [14.3, 14.7, 14.6],
-    [`${E2E}/resources.laws.test.ts`]: [366.6, 348.9, 373.3],
-    [`${E2E}/stored.test.ts`]: [1.2, 1.1, 1.3],
-    "next/packages/tuval/src/browser/key.laws.test.ts": [7.1, 5.8, 7.5],
+    [`${E2E}/chaos-revoke.integration.test.ts`]: [46.5, 50.0, 46.7],
+    [`${E2E}/electron-launchd.visual.test.ts`]: [1.5, 1.1, 1.5],
+    [`${E2E}/first-window.visual.test.ts`]: [222.2, 206.3, 225.4],
+    [`${E2E}/instance.visual.test.ts`]: [23.7, 22.4, 23.9],
+    [`${E2E}/one-file.visual.test.ts`]: [14.3, 14.7, 14.6],
+    [`${E2E}/resources.laws.visual.test.ts`]: [366.6, 348.9, 373.3],
+    [`${E2E}/stored.integration.test.ts`]: [1.2, 1.1, 1.3],
+    "next/packages/tuval/src/browser/key.laws.visual.test.ts": [7.1, 5.8, 7.5],
   },
   // What a leg costs beside its files: the job's time minus the end-to-end step's, in A, B and C.
   overhead: [76.5, 69.8, 70.2],
@@ -720,10 +722,10 @@ it("vector: the four build files carry their refreshed main-run times", () => {
   // Attempt 1 of runs 43544589151, 43551626086 and 43556494864; each row is the median of its three.
   // Plant: drop these rows, so all four count the median row and the heavy build files can stack on one machine.
   for (const path of [
-    "next/apps/fabrika/src/build.test.ts",
-    "next/apps/fabrika/src/exam/bytes.test.ts",
-    "next/packages/libfabrika/src/node/build/build-assets.test.ts",
-    "next/packages/libfabrika/src/node/build/build-one-file.test.ts",
+    "next/apps/fabrika/src/build.integration.test.ts",
+    "next/apps/fabrika/src/exam/bytes.integration.test.ts",
+    "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts",
+    "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts",
   ] as const) {
     expect.soft(measured[path], path).toBe(row(nextSamples[path]));
   }
@@ -966,7 +968,7 @@ describe("assign, for a file with no row", () => {
     // machines tied at 0. The first new file counts the median and goes to shard 1/2, which leaves
     // shard 2/2 the least for the second.
     const paths = [
-      "next/apps/fabrika/src/exam/clock.test.ts",
+      "next/apps/fabrika/src/exam/clock.integration.test.ts",
       "next/apps/fabrika/src/exam/compiler.test.ts",
       "next/apps/toy/src/a.new.test.ts",
       "next/apps/toy/src/b.new.test.ts",
@@ -1019,7 +1021,13 @@ describe("Shards", () => {
     const seen: string[] = [];
 
     for (let index = 1; index <= legs; index++) {
-      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/${legs}` });
+      // The vitest legs' projects, as the schedule runs them; a pull request's `next` alone is a part.
+      const vitest = await createVitest("test", {
+        root: ROOT,
+        watch: false,
+        project: ["next", "next-integration"],
+        shard: `${index}/${legs}`,
+      });
 
       try {
         const specs = (await vitest.globTestSpecifications()).filter((spec) =>
@@ -1038,24 +1046,37 @@ describe("Shards", () => {
     expect(seen.toSorted()).toEqual((await nextFiles(ROOT)).toSorted());
   });
 
-  it("vector: L19 sort keeps vitest's groups and its failed-first, then the heaviest row, and equal rows keep vitest's order", async () => {
-    // vitest runs projects one after another by name, and a file that failed last time first; `sort`
-    // keeps both and orders only by seconds inside them. clock and compiler both have rows of 0.0 s,
+  it("vector: L19 sort keeps vitest's pools and its failed-first, then the heaviest row, and equal rows keep vitest's order", async () => {
+    // vitest 5's `groupSpecs` runs every project of one group order in one pool, a project of one
+    // isolated file at a time in a pool of its own, and a file that failed last time first; `sort`
+    // keeps the pools apart and orders only by seconds inside them. Projects a and c share group 0's
+    // pool, d runs one file at a time and b is group 1. clock and compiler both have rows of 0.0 s,
     // so vitest's own order of the two (larger file first) stands.
-    // Plants, each run once and restored: order by seconds alone (red: Watchers, in project b, comes
-    // first); drop the failed-first term (red: the failed light file comes after the heavier one);
-    // break equal seconds by path (red: clock comes before compiler).
-    const project = (name: string) => ({ name, config: { sequence: { groupOrder: 0 }, isolate: true } });
-    const spec = (path: string, name: string) => ({ moduleId: join(ROOT, path), project: project(name) });
-    const watchers = spec("next/packages/libfabrika/src/node/Watchers.test.ts", "b");
-    const admission = spec("next/packages/libfabrika/src/node/RunnerAdmission.test.ts", "a");
-    const runner = spec("next/packages/libfabrika/src/runtime/Runner.test.ts", "a");
-    const clock = spec("next/apps/fabrika/src/exam/clock.test.ts", "a");
+    // Plants, each run once and restored: order by seconds alone (red: Watchers, in group 1, comes
+    // first); key the pool by project too (red: admission, in project c, comes after runner); drop
+    // the one-at-a-time pool (red: StartChild comes before admission); drop the failed-first term
+    // (red: the failed light file comes after the heavier one); break equal seconds by path (red:
+    // clock comes before compiler).
+    const project = (name: string, groupOrder: number, maxWorkers: number) => ({
+      name,
+      config: { sequence: { groupOrder }, isolate: true, maxWorkers },
+    });
+    const spec = (path: string, name: string, groupOrder = 0, maxWorkers = 3) => ({
+      moduleId: join(ROOT, path),
+      project: project(name, groupOrder, maxWorkers),
+    });
+    const watchers = spec("next/packages/libfabrika/src/node/Watchers.integration.test.ts", "b", 1);
+    const admission = spec("next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", "c");
+    const startChild = spec("next/packages/libfabrika/src/node/StartChild.integration.test.ts", "d", 0, 1);
+    const runner = spec("next/packages/libfabrika/src/runtime/Runner.integration.test.ts", "a");
+    const clock = spec("next/apps/fabrika/src/exam/clock.integration.test.ts", "a");
     const compiler = spec("next/apps/fabrika/src/exam/compiler.test.ts", "a");
-    const failedLight = spec("next/packages/libfabrika/src/ledger/Ledger.test.ts", "a");
+    const failedLight = spec("next/packages/libfabrika/src/ledger/Ledger.integration.test.ts", "a");
     expect(
-      [watchers, admission, runner, clock, compiler, failedLight].map((s) => rowOf(relative(ROOT, s.moduleId))),
-    ).toEqual([492.4, 258.9, 123.8, 0, 0, 3.2]);
+      [watchers, admission, startChild, runner, clock, compiler, failedLight].map((s) =>
+        rowOf(relative(ROOT, s.moduleId)),
+      ),
+    ).toEqual([492.4, 258.9, 349.9, 123.8, 0, 0, 3.2]);
     const vitest = await createVitest("test", { root: ROOT, watch: false });
 
     try {
@@ -1066,13 +1087,14 @@ describe("Shards", () => {
       const order = await new vitest.config.sequence.sequencer(vitest).sort([
         clock,
         watchers,
+        startChild,
         compiler,
         runner,
         failedLight,
         admission,
       ] as never);
       const paths = (specs: readonly { readonly moduleId: string }[]) => specs.map((s) => relative(ROOT, s.moduleId));
-      expect(paths(order)).toEqual(paths([failedLight, admission, runner, ...ties, watchers]));
+      expect(paths(order)).toEqual(paths([failedLight, admission, runner, ...ties, startChild, watchers]));
       expect(paths(ties)).toEqual(paths([compiler, clock]));
     } finally {
       await vitest.close();
@@ -1194,10 +1216,10 @@ it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   }
 });
 
-// T967, today's CI, about next/'s end-to-end files: they run through `node next/apps/fabrika/e2e.ts`
-// with vitest.e2e.config.ts, split over the next job's legs `e2e-1` to `e2e-N` by `Shards`.
+// T967, today's CI, about next/'s end-to-end files: since 0536 they are the `next-visual` project's
+// `*.visual.test.ts` files, which the next job's legs `e2e-1` to `e2e-N` run with
+// `vitest run --project next-visual`, split by `Shards`.
 describe("the end-to-end legs", () => {
-  const E2E_CONFIG = join(ROOT, "vitest.e2e.config.ts");
   const workflow = readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8");
 
   /** The longest of `count` legs in seconds, as `assign` splits `files`; no row counts the median. */
@@ -1227,7 +1249,7 @@ describe("the end-to-end legs", () => {
     const budget = limit / 2 - median(e2eSamples.overhead);
     // legs.ts sizes a pull request's legs, vitest and e2e alike, on this same budget.
     expect(legBudget(nextMinutes(workflow))).toBe(budget);
-    const files = (await e2eFiles(ROOT)).map((path) => ({ path, seconds: rowOf(path) }));
+    const files = (await visualFiles(ROOT)).map((path) => ({ path, seconds: rowOf(path) }));
     expect(files.length).toBeGreaterThan(0);
     const heaviest = files.toSorted((x, y) => (y.seconds ?? noRow) - (x.seconds ?? noRow))[0]!;
     // No count of legs makes a leg shorter than its heaviest file: that file must be split.
@@ -1242,12 +1264,12 @@ describe("the end-to-end legs", () => {
   });
 
   it("scenario: E6 each e2e leg keeps exactly assign's files for it, and every end-to-end file runs once", async () => {
-    // The real end-to-end config, as `vitest run --config vitest.e2e.config.ts --shard k/N` reads it,
+    // The real config's visual project, as `vitest run --project next-visual --shard k/N` reads it,
     // with N the workflow's count of e2e legs; nothing runs. As the two-new-files Shards scenario.
-    // Plant, run once on vitest.e2e.config.ts and restored: drop `sequence.sequencer`, so Vitest's
-    // own split by count keeps other files on each leg (red, with the rows and without them).
+    // Plant (T967, then on vitest.e2e.config.ts): drop `sequence.sequencer`, so Vitest's own split by
+    // count keeps other files on each leg (red, with the rows and without them).
     const count = e2eLegs(workflow).length;
-    const files = await e2eFiles(ROOT);
+    const files = await visualFiles(ROOT);
     const placed = assign(
       files.map((path) => ({ path, seconds: rowOf(path) })),
       count,
@@ -1255,7 +1277,12 @@ describe("the end-to-end legs", () => {
     const kept: string[][] = [];
 
     for (let index = 1; index <= count; index++) {
-      const vitest = await createVitest("test", { config: E2E_CONFIG, watch: false, shard: `${index}/${count}` });
+      const vitest = await createVitest("test", {
+        root: ROOT,
+        watch: false,
+        project: "next-visual",
+        shard: `${index}/${count}`,
+      });
 
       try {
         const specs = await vitest.globTestSpecifications();
@@ -1271,34 +1298,40 @@ describe("the end-to-end legs", () => {
     expect(kept.flat().toSorted()).toEqual(files);
   });
 
-  it("scenario: E7 the end-to-end config, resolved through real Vitest, runs one file at a time from the repo root, with 120 s limits", async () => {
-    // vitest.e2e.config.ts's values, the plan's for ticket 967: the two globs, one worker, no file
-    // parallelism, the runner's old 120 s test and hook limits, `Shards`, no setup file and no
-    // `passWithNoTests`, so a leg with no file fails. Plants, each run once on the config and
-    // restored: `testTimeout` 60_000 (red); the include `next/apps/fabrika/e2e/**/*.test.ts` (red).
-    expect(e2eDefault).toBe(e2eConfig);
-    expect(e2eConfig.test).toEqual({
-      root: ROOT,
-      include: ["next/apps/fabrika/e2e/*.test.ts", "next/packages/tuval/src/browser/key.laws.test.ts"],
-      exclude: [...configDefaults.exclude],
-      maxWorkers: 1,
-      fileParallelism: false,
-      testTimeout: 120_000,
-      hookTimeout: 120_000,
-      sequence: { sequencer: Shards },
+  it("scenario: E7 the visual project, resolved through real Vitest, runs one file at a time from the repo root, with 120 s limits", async () => {
+    // The `next-visual` project's values, the end-to-end config's of ticket 967 carried over (0536):
+    // one glob, one worker, no file parallelism, the runner's old 120 s test and hook limits, no
+    // setup file and no `passWithNoTests`, so a leg with no file fails; `Shards` is the root's
+    // sequencer, which every project shares. Plants, each run once on vitest.config.ts and restored:
+    // the project's `testTimeout` 60_000 (red); its include `next/apps/fabrika/e2e/*.visual.test.ts`
+    // (red, here and in E8).
+    expect(projects.find((project) => project.test.name === "next-visual")).toEqual({
+      extends: false,
+      test: {
+        name: "next-visual",
+        root: ROOT,
+        include: ["next/**/*.visual.test.{ts,tsx}"],
+        exclude: [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"],
+        maxWorkers: 1,
+        fileParallelism: false,
+        testTimeout: 120_000,
+        hookTimeout: 120_000,
+      },
     });
-    // As Vitest resolves the file, so nothing it adds by default sets up or passes an empty leg.
-    const vitest = await createVitest("test", { config: E2E_CONFIG, watch: false });
+    const vitest = await createVitest("test", { root: ROOT, watch: false, project: "next-visual" });
 
     try {
-      expect(vitest.config.root).toBe(ROOT);
-      expect(vitest.config.include).toEqual(e2eConfig.test.include);
-      expect(vitest.config.setupFiles).toEqual([]);
+      const visual = vitest.projects.find((project) => project.name === "next-visual");
+      expect(visual, "vitest.config.ts has a next-visual project").toBeDefined();
+      const config = visual!.config;
+      expect(config.root).toBe(ROOT);
+      expect(config.include).toEqual(["next/**/*.visual.test.{ts,tsx}"]);
+      expect(config.setupFiles).toEqual([]);
       // Unset is Vitest's own default, which fails a run with no file.
       expect(vitest.config.passWithNoTests ?? false).toBe(false);
-      expect(vitest.config.fileParallelism).toBe(false);
-      expect(vitest.config.maxWorkers).toBe(1);
-      expect([vitest.config.testTimeout, vitest.config.hookTimeout]).toEqual([120_000, 120_000]);
+      expect(config.fileParallelism).toBe(false);
+      expect(config.maxWorkers).toBe(1);
+      expect([config.testTimeout, config.hookTimeout]).toEqual([120_000, 120_000]);
       expect(Object.getPrototypeOf(vitest.config.sequence.sequencer.prototype)).toBe(BaseSequencer.prototype);
       expect(vitest.config.sequence.sequencer.name).toBe(Shards.name);
     } finally {

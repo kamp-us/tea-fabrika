@@ -2,16 +2,21 @@ name: scheduled
 
 # The whole suite, on a schedule (0534). The merge line runs only the tests a change reaches: a pull
 # request, a merge queue group and a push to main each run the next/ tests their diff reaches, and
-# only a pull request runs the tooling tests (check.yaml). This runs all of next/, its end-to-end
-# files included, and every tooling test, on main's head, so a break no diff reached shows within
-# about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
+# only a pull request runs the tooling tests (check.yaml). This runs all of next/, every layer of it
+# (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`) and the visual ones
+# (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head, so a
+# break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
 # and a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
 #
 #   what            legs   how
-#   next/ vitest    5      check.yaml's next legs 1 to 5, every file, no `--changed`
-#   next/ e2e       2      check.yaml's legs e2e-1 and e2e-2, every end-to-end file
+#   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
+#                          projects, every file, no `--changed`
+#   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      check.yaml's tooling step, every file, no `--changed`
 #   report          1      after the others, on any result
+#
+# Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
+# here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
 #
 # 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
 # `max-parallel` on each matrix, which workflow-lint.ts adds up. The legs are check.yaml's full
@@ -40,9 +45,11 @@ permissions:
   contents: read
 
 jobs:
-  # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over next/, each a fifth
-  # of the files by measured seconds; `e2e-1` and `e2e-2` fetch chromium and run the end-to-end runner
-  # on their half of the end-to-end files. Nothing is narrowed: no `--changed`, no list.
+  # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
+  # `next-integration` projects, each a fifth of the files by measured seconds; `e2e-1` and `e2e-2`
+  # fetch chromium and run the `next-visual` project on their half of the visual files. A project,
+  # not a path, picks the files: `next/` as a path would start `next-visual` on legs with no
+  # Chromium. Nothing is narrowed: no `--changed`, no list.
   next:
     runs-on: ubuntu-latest
     # check.yaml's next limit, for the same legs with the same split.
@@ -64,20 +71,22 @@ jobs:
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/5
-        run: pnpm exec vitest run next/ --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, as in check.yaml.
       - name: chromium
-        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''
         run: |
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
-      # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
+      # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
       - name: end to end
         if: startsWith(matrix.shard, 'e2e-')
         env:
           SHARD: ${{ matrix.shard }}/2
-        run: node next/apps/fabrika/e2e.ts --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
       # so the leg that failed is the one whose report is kept.
       - name: results
@@ -100,7 +109,8 @@ jobs:
 
   # Every tooling test: the tests of neither version's product code (CI's own, the lint plugins, the
   # root scripts and the skill scripts), check.yaml's tooling step on its two machines, with no
-  # `--changed`. Today's tests run in no CI job (0533).
+  # `--changed`: the `tooling` project, since a project ignores `--exclude` (0536). Today's tests run
+  # in no CI job (0533).
   tooling:
     runs-on: ubuntu-latest
     # check.yaml's test limit.
@@ -121,7 +131,8 @@ jobs:
       - name: tooling tests
         env:
           SHARD: ${{ matrix.shard }}/2
-        run: pnpm exec vitest run --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
