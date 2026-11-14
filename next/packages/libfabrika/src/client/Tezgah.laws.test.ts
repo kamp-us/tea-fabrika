@@ -18,6 +18,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
+import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
@@ -249,7 +250,7 @@ const typeId = (prefix: string, n: number): string => {
 };
 
 /** tezgah's default rows as `next/programs/tezgah/src/commands.ts` ships them after S3. */
-const ROWS: ReadonlyArray<Keys.Binding> = [
+const ROWS: ReadonlyArray<Binding> = [
   { does: "tezgah.split_right", keys: ["<prefix>%", "<prefix>|"], word: "split right", label: "Split right" },
   { does: "tezgah.split_down", keys: ['<prefix>"', "<prefix>-"], word: "split down", label: "Split down" },
   { does: "tezgah.close", keys: ["<prefix>x"], word: "close", label: "Close tile" },

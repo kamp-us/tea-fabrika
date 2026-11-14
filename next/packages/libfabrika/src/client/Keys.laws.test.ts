@@ -23,6 +23,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Result } from "effect";
 import * as fc from "fast-check";
+import type { Binding } from "../runtime/Program.ts";
 import * as Keys from "./Keys.ts";
 import { Prefix } from "./Prefix.ts";
 
@@ -47,7 +48,7 @@ const WORDS = ["split_right", "split_down", "close", "zoom", "fold", "detach"] a
 /** Keys no backend refuses: after the prefix, or alone keys a tile would type. */
 const FREE = ["<prefix>%", '<prefix>"', "<prefix>x", "<prefix>|", "<prefix>-", "<prefix>z", "<prefix>g"] as const;
 
-const binding = (word: string, keys: ReadonlyArray<string>): Keys.Binding => ({
+const binding = (word: string, keys: ReadonlyArray<string>): Binding => ({
   does: `demo.${word}`,
   keys,
   word: word.replace("_", " "),

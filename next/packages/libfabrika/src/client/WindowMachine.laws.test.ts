@@ -48,6 +48,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
+import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
@@ -2334,7 +2335,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
 // state it folded: a focus key or a click, an answer to a call in flight or a Cmd waiting, a socket
 // drop while online, the link's timer, or a view tezgah sent. The fake tezgah takes a letter when its
 // send is answered, focuses its `to` and sends its whole view to the window while it is subscribed.
-const FOCUS_ROWS: ReadonlyArray<Keys.Binding> = [
+const FOCUS_ROWS: ReadonlyArray<Binding> = [
   { does: "tezgah.focus_next", keys: ["<prefix>o", "f6"], word: "focus next", label: "Focus next tile" },
   { does: "tezgah.focus_previous", keys: ["shift+f6"], word: "focus previous", label: "Focus previous tile" },
   { does: "tezgah.focus_last", keys: ["<prefix>;"], word: "focus last", label: "Focus last tile" },

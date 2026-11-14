@@ -4,7 +4,7 @@
 // Each command carries its shell word for `fabsh` and its label for the palette, so losing a key
 // never loses a command (0278). The keys are tmux's after the prefix, plus the keybindings note's
 // pipe key and `-`.
-import type * as Keys from "@kampus/libfabrika/client/Keys";
+import type { Binding } from "@kampus/libfabrika";
 
 /** tezgah's default rows, in the order the palette lists them. F6 and Shift-F6 move focus as in
  *  0503; a browser tab on Windows or Linux is shipped them without F6, which Chrome keeps. A click
@@ -25,4 +25,4 @@ export const commands = [
   },
   { does: "tezgah.focus_up", keys: ["<prefix>k", "<prefix>arrowup"], word: "focus up", label: "Focus tile up" },
   { does: "tezgah.focus_down", keys: ["<prefix>j", "<prefix>arrowdown"], word: "focus down", label: "Focus tile down" },
-] as const satisfies ReadonlyArray<Keys.Binding>;
+] as const satisfies ReadonlyArray<Binding>;

@@ -4,7 +4,7 @@
 //
 // The shape this law holds `commands.ts` to, from the plan's "The shape" and "Commands" (the build may
 // add more):
-// - `commands` is tezgah's one table of default rows, each a libfabrika `Keys.Binding`, `{does, keys,
+// - `commands` is tezgah's one table of default rows, each a libfabrika `Binding`, `{does, keys,
 //   word, label}` (0267's one `commands` field, which the window is handed as a value). Its row types
 //   keep their literal names, so a name is checked where it is written.
 // - Every command is named `tezgah.<word>` (0267: a name carries its program's name, 0491: the word is
@@ -12,6 +12,7 @@
 //   is a command tezgah's own `did` takes, so a key never sends what tezgah would refuse to decode.
 // - This slice ships split right, split down and close on tmux's keys after the prefix.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import type { Binding } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { Result } from "effect";
 import * as fc from "fast-check";
@@ -27,13 +28,13 @@ const OSES = ["macos", "windows", "linux", "android", "ios", "unknown"] as const
 describe("L19: every tezgah command is named tezgah.<word> and carries a word and a label", () => {
   // pinned: L19 is a type law; these checks fail CI's typecheck when a row loses its name, word or label.
   it("pinned: each row is a Binding named tezgah.<word> that tezgah's did takes, and a Binding needs its word and its label", () => {
-    expectTypeOf<Row>().toExtend<Keys.Binding>();
+    expectTypeOf<Row>().toExtend<Binding>();
     expectTypeOf<Row["does"]>().toExtend<`tezgah.${string}`>();
     expectTypeOf<Row["does"]>().toExtend<Did["does"]>();
     expectTypeOf<Row["word"]>().toExtend<string>();
     expectTypeOf<Row["label"]>().toExtend<string>();
     expectTypeOf<string>().not.toExtend<Row["does"]>();
-    const rows = (row: Keys.Binding) => row;
+    const rows = (row: Binding) => row;
     // @ts-expect-error a command with no word is not a binding
     rows({ does: "tezgah.zoom", keys: ["<prefix>z"], label: "Zoom" });
     // @ts-expect-error a command with no label is not a binding

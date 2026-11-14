@@ -224,13 +224,24 @@ const TRANSPORT = [
 
 // P18 L8: the one window client's front files, one subpath each (the exports map's `./client/*`).
 // Tuval's window reaches the parent and the start through these and nothing deeper.
-const CLIENT = ["WindowMachine", "WindowStart", "Headless"].map((front) => `${LIBRARY}/client/${front}`);
+// Desk S2b: the window's key table and prefix router (`Keys`, 0278: each window runs the prefix
+// itself) and its side of tezgah (`Tezgah`, 0167 and 0274: the window keeps tezgah's view and its own
+// focus moves) join them, two more fronts of the same module.
+const CLIENT = ["WindowMachine", "WindowStart", "Headless", "Keys", "Tezgah"].map(
+  (front) => `${LIBRARY}/client/${front}`,
+);
+
+// Desk S2a: tezgah's wire contract, one subpath each (the exports map's `./tezgah/*`): the shapes of
+// its view and the layout's geometry. A window folds the layout to its own size (0277), so it reads
+// them as it reads transport's contracts, a window being a client (the note's T3).
+const TEZGAH = ["Layout", "Workspace"].map((front) => `${LIBRARY}/tezgah/${front}`);
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   id: [],
   "id-test-support": ["id"],
-  "libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door"],
+  // Desk S2a: and tezgah, so a program reaches tezgah's shapes through `.`, as it reaches every name.
+  "libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door", "tezgah"],
   transport: ["id"],
   data: ["id"],
   coordination: ["data", "id"],
@@ -240,9 +251,14 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   workers: ["app", "coordination", "data", "transport", "id"],
   door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
   mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
-  client: ["app", "transport", "id"], // P18: the window client, the bridge's reach, beside the door
+  // P18: the window client, the bridge's reach, beside the door. Desk S2a: and tezgah's contract, since
+  // the window follows tezgah's view and folds its layout to its own size (0274, 0277).
+  client: ["app", "transport", "tezgah", "id"],
+  // Desk S2a: tezgah's view and layout, a module of shapes and pure functions. It names a tile's process
+  // with `processes/`'s `ProcessName`, one part down, and nothing above it imports it but the client.
+  tezgah: ["coordination", "id"],
   desktop: [LIBRARY], // the app layer's names, nothing lower
-  window: ["desktop", LIBRARY, ...TRANSPORT, ...CLIENT, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
+  window: ["desktop", LIBRARY, ...TRANSPORT, ...CLIENT, ...TEZGAH, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
   dom: ["desktop"],
   browser: ["dom", "desktop", ...TRANSPORT], // its key signs transport's helloText; P14: its layers meet transport's contracts
   electron: ["dom", "desktop", ...TRANSPORT, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
@@ -274,6 +290,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-jobs": "coordination",
   "next-packs": "coordination",
   "next-access": "coordination",
+  "next-tezgah": "tezgah", // Desk S2a: layer 4 beside access, its own part, so the client may reach it
   "next-runtime": "app",
   "next-mcp": "mcp",
   "next-client": "client",
@@ -546,6 +563,62 @@ describe("planted breaks", () => {
           ].sort(),
         );
       }),
+  );
+  // scenario: Desk S2a, fixed imports probe tezgah's row from each side: it takes processes and Id and
+  // nothing above them; the client, the entry and Tuval's window reach it, the window only by its two
+  // fronts; the runtime, the modules below it and every other part of Tuval and a program's box may not.
+  it.effect("Desk S2a: tezgah takes processes and Id; only the client, the entry and the window reach it", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      const tree = plant({
+        "packages/libfabrika/package.json": manifest(LIBRARY),
+        "packages/libfabrika/src/index.ts": lines('export {split} from "./tezgah/Layout.ts";'),
+        "packages/libfabrika/src/Id.ts": lines("export const Generator = 1;"),
+        "packages/libfabrika/src/tezgah/Workspace.ts": lines(
+          'import {ProcessName} from "../processes/Process.ts";',
+          'import {Generator} from "../Id.ts";',
+          'import {run} from "../runtime/Runner.ts";',
+          'import {start} from "../client/WindowStart.ts";',
+        ),
+        "packages/libfabrika/src/tezgah/Layout.ts": lines('import {Tile} from "./Workspace.ts";'),
+        "packages/libfabrika/src/client/WindowStart.ts": lines(
+          'import {Tile} from "../tezgah/Workspace.ts";',
+          'import {split} from "../tezgah/Layout.ts";',
+        ),
+        "packages/libfabrika/src/runtime/Runner.ts": lines('import {Tile} from "../tezgah/Workspace.ts";'),
+        "packages/libfabrika/src/processes/Process.ts": lines('import {Tile} from "../tezgah/Workspace.ts";'),
+        "packages/libfabrika/src/transport/Dial.ts": lines('import {split} from "../tezgah/Layout.ts";'),
+        "packages/tuval/package.json": manifest(TUVAL),
+        "packages/tuval/src/index.ts": lines("export const mount = 1;"),
+        "packages/tuval/src/window/Layout.tsx": lines(
+          'import {GAP} from "@kampus/libfabrika/tezgah/Layout";',
+          'import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";',
+          'import {optimisticState} from "@kampus/libfabrika/client/Tezgah";',
+          'import * as Keys from "@kampus/libfabrika/client/Keys";',
+          'import {tree} from "@kampus/libfabrika/tezgah/internal/tree";',
+        ),
+        "packages/tuval/src/desktop/fold.ts": lines('import {split} from "@kampus/libfabrika/tezgah/Layout";'),
+        "packages/tuval/src/browser/rows.ts": lines('import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";'),
+        "programs/desk/package.json": manifest("@kampus/desk"),
+        "programs/desk/src/index.ts": lines(
+          'import {split} from "@kampus/libfabrika";',
+          'import * as Layout from "@kampus/libfabrika/tezgah/Layout";',
+        ),
+      });
+      expect([...faults(tree)].sort()).toEqual(
+        [
+          'packages/libfabrika/src/tezgah/Workspace.ts imports "../runtime/Runner.ts": tezgah may not import app',
+          'packages/libfabrika/src/tezgah/Workspace.ts imports "../client/WindowStart.ts": tezgah may not import client',
+          'packages/libfabrika/src/runtime/Runner.ts imports "../tezgah/Workspace.ts": app may not import tezgah',
+          'packages/libfabrika/src/processes/Process.ts imports "../tezgah/Workspace.ts": coordination may not import tezgah',
+          'packages/libfabrika/src/transport/Dial.ts imports "../tezgah/Layout.ts": transport may not import tezgah',
+          'packages/tuval/src/window/Layout.tsx imports "@kampus/libfabrika/tezgah/internal/tree": window may not import it',
+          'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/tezgah/Layout": desktop may not import it',
+          'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika/tezgah/Workspace": browser may not import it',
+          'programs/desk/src/index.ts imports "@kampus/libfabrika/tezgah/Layout": program may not import it',
+        ].sort(),
+      );
+    }),
   );
   const lib = (extra: object = {}) =>
     manifest(LIBRARY, {
@@ -1263,7 +1336,9 @@ describe("layers", () => {
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
   // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
-  // must now fail, and no other pair changes.
+  // must now fail. Only access's pairs with the runtime and with `next-tezgah`, its neighbor on
+  // layer 4 (Desk S2a), change: tezgah's import of access, sideways before, is now upward, and
+  // access's import of tezgah now goes down and passes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
@@ -1274,8 +1349,13 @@ describe("layers", () => {
       expect(after.edges.filter((edge) => !before.includes(edge))).toEqual([
         "next-access -> next-runtime [sideways]",
         "next-runtime -> next-access [sideways]",
+        "next-tezgah -> next-access [upward]",
       ]);
-      expect(before.filter((edge) => !after.edges.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
+      expect(before.filter((edge) => !after.edges.includes(edge))).toEqual([
+        "next-access -> next-runtime [upward]",
+        "next-access -> next-tezgah [sideways]",
+        "next-tezgah -> next-access [sideways]",
+      ]);
     }),
   );
 
@@ -1292,6 +1372,7 @@ describe("layers", () => {
       "next-schedules": 6,
       "next-runtime": 5,
       "next-access": 4,
+      "next-tezgah": 4, // Desk S2a: above `processes/`, whose `ProcessName` it takes, and below the client
       "next-processes": 3,
       "next-presence": 3,
       "next-jobs": 3,

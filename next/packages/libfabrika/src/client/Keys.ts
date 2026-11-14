@@ -1,6 +1,7 @@
 /**
  * A window's key table and its router (0278, 0272). A program declares its commands as rows,
- * `{does, keys, word, label}`; a window is handed the rows as a value, ships them to its backend
+ * `{does, keys, word, label}`, each a `Binding` of the app layer, beside `Program`, which a caller
+ * imports from there; a window is handed the rows as a value, ships them to its backend
  * and loads them into one `Table`. The router then reads one press against the table and the
  * window's prefix, in 0272's order: the platform's own keys first, then the prefix, then the
  * focused tile's content. No program has a mode yet, so steps 3 to 5 are not here.
@@ -14,22 +15,9 @@
  * @stability unstable
  */
 import { Result, Schema } from "effect";
+import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
-
-/**
- * One command's row: its name, which carries its program's name (`tezgah.split_right`), its keys,
- * its shell word and its palette label.
- *
- * @stability unstable
- * @category models
- */
-export type Binding = {
-  readonly does: string;
-  readonly keys: ReadonlyArray<string>;
-  readonly word: string;
-  readonly label: string;
-};
 
 /**
  * The backend a window runs on, from the hello's own words: its command key, and the keys it can

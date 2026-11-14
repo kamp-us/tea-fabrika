@@ -3,21 +3,10 @@
 // starts and stops the processes its tiles show, as a supervisor starts and ends its children
 // (OTP's start_child and terminate_child). A pure tea machine: a split waits for its start, so a
 // tile enters a layout only once its process exists, and a window never draws a tile with nothing
-// behind it. Layout geometry is the library's (`tezgah/Layout.ts`), shared with every window.
+// behind it. Layout geometry and the view's shapes are the library's (its `Layout` and `Workspace`),
+// shared with every window; a program's box takes them from the library's root, as every name.
 import { Machine } from "@demlik/tea/effect";
-import { Program, type Refusal, StartChild, type Started } from "@kampus/libfabrika";
-import * as Layout from "@kampus/libfabrika/tezgah/Layout";
-import {
-  childName,
-  CursorKey,
-  Dir,
-  type TezgahView,
-  type Tile,
-  TileId,
-  Workspace,
-  WorkspaceId,
-  Tile as TileSchema,
-} from "@kampus/libfabrika/tezgah/Workspace";
+import { Layout, Program, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
 /** The program a new tile shows. A constant until programs read pack settings (P38 slice 5); then
@@ -45,18 +34,18 @@ const FOCUS = [
 
 /** The cursor a letter leaves on `from` (0165): the `data-cursor` key of the element that had DOM
  *  focus there, or null. A letter with no `cursor` key leaves `from`'s cursor as it was. */
-const Leaves = Schema.optionalKey(Schema.NullOr(CursorKey));
+const Leaves = Schema.optionalKey(Schema.NullOr(Workspace.CursorKey));
 
 const Msg = Schema.Union([
   /** A window's first look at workspace `workspace`: makes it, with `tile` first, when it is missing. */
-  Schema.Struct({ type: Schema.Literal("attach"), workspace: Schema.Int, tile: TileId }),
+  Schema.Struct({ type: Schema.Literal("attach"), workspace: Schema.Int, tile: Workspace.TileId }),
   /** A split, given in tile `from`; `tile` is the new tile's id, minted by the window. */
   Schema.Struct({
     type: Schema.Literal("did"),
     does: Schema.Literals(["tezgah.split_right", "tezgah.split_down"]),
-    from: TileId,
+    from: Workspace.TileId,
     via: Via,
-    tile: TileId,
+    tile: Workspace.TileId,
     cursor: Leaves,
   }),
   /** A focus move from tile `from` to tile `to`, which the window worked out on its own drawn
@@ -64,26 +53,37 @@ const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("did"),
     does: Schema.Literals(FOCUS),
-    from: TileId,
-    to: TileId,
+    from: Workspace.TileId,
+    to: Workspace.TileId,
     via: Via,
     cursor: Leaves,
   }),
   /** A close of tile `from`. */
-  Schema.Struct({ type: Schema.Literal("did"), does: Schema.Literal("tezgah.close"), from: TileId, via: Via }),
+  Schema.Struct({
+    type: Schema.Literal("did"),
+    does: Schema.Literal("tezgah.close"),
+    from: Workspace.TileId,
+    via: Via,
+  }),
 ]);
 type Msg = typeof Msg.Type;
 
 /** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. */
 const Starting = Schema.TaggedUnion({
-  attach: { workspace: Schema.Int, tile: TileId, name: Schema.String },
-  split: { workspace: WorkspaceId, at: TileId, dir: Dir, tile: TileId, name: Schema.String },
+  attach: { workspace: Schema.Int, tile: Workspace.TileId, name: Schema.String },
+  split: {
+    workspace: Workspace.WorkspaceId,
+    at: Workspace.TileId,
+    dir: Workspace.Dir,
+    tile: Workspace.TileId,
+    name: Schema.String,
+  },
 });
 type Starting = typeof Starting.Type;
 
 const Model = Schema.Struct({
-  workspaces: Schema.Array(Workspace),
-  tiles: Schema.Array(TileSchema),
+  workspaces: Schema.Array(Workspace.Workspace),
+  tiles: Schema.Array(Workspace.Tile),
   /** The next tile's number, printed `t<n>`. */
   next: Schema.Int,
   starting: Schema.Array(Starting),
@@ -97,21 +97,23 @@ type Step = readonly [
 
 const DIRS = { "tezgah.split_right": "row", "tezgah.split_down": "column" } as const;
 
-const holding = (m: Model, tile: string) => m.workspaces.find((w) => Layout.order(w.layout).includes(tile as TileId));
+const holding = (m: Model, tile: string) =>
+  m.workspaces.find((w) => Layout.order(w.layout).includes(tile as Workspace.TileId));
+
 const known = (m: Model, tile: string) => m.tiles.some((t) => t.id === tile) || m.starting.some((s) => s.tile === tile);
 
 const exists = (m: Model, n: number) =>
   m.workspaces.some((w) => w.n === n) || m.starting.some((s) => s._tag === "attach" && s.workspace === n);
 
 /** A workspace takes its first tile's id body: windows mint ids, and tezgah mints none. */
-const workspaceId = Schema.decodeSync(WorkspaceId);
+const workspaceId = Schema.decodeSync(Workspace.WorkspaceId);
 
 /** `from`'s tile keeps the cursor a letter leaves on it, when the letter carries one. */
-const leaving = (m: Model, from: TileId, cursor: string | null | undefined): Model =>
+const leaving = (m: Model, from: Workspace.TileId, cursor: string | null | undefined): Model =>
   cursor === undefined ? m : { ...m, tiles: m.tiles.map((t) => (t.id === from ? { ...t, cursor } : t)) };
 
 /** The tile a start's answer makes, numbered next. */
-const made = (m: Model, s: Starting, answer: Started): Tile => ({
+const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
   id: s.tile,
   n: m.next,
   shows: answer.name,
@@ -131,7 +133,7 @@ const placed = (m: Model, s: Starting, answer: Started): Model => {
       return rest;
     }
 
-    const space = Workspace.make({
+    const space = Workspace.Workspace.make({
       id: workspaceId(`workspace_${s.tile.slice(s.tile.lastIndexOf("_") + 1)}`),
       n: s.workspace,
       layout: s.tile,
@@ -167,7 +169,7 @@ export const tezgahMachine = Machine.make({
         return [m, []];
       }
 
-      const name = msg.workspace === 1 ? FIRST : childName(NEW_TILE, msg.tile);
+      const name = msg.workspace === 1 ? FIRST : Workspace.childName(NEW_TILE, msg.tile);
       return [
         {
           ...m,
@@ -201,7 +203,7 @@ export const tezgahMachine = Machine.make({
         return [{ ...moved, workspaces: moved.workspaces.map((x) => (x === w ? Layout.focus(w, msg.to) : x)) }, []];
       }
 
-      const name = childName(NEW_TILE, msg.tile);
+      const name = Workspace.childName(NEW_TILE, msg.tile);
       const split = Starting.cases.split.make({
         workspace: w.id,
         at: msg.from,
@@ -256,7 +258,7 @@ const refuse = (m: Model, msg: Msg): Refusal | null => {
   return known(m, msg.tile) ? { reason: "id_reused" } : null;
 };
 
-const view = (m: Model): TezgahView => ({ workspaces: m.workspaces, tiles: m.tiles });
+const view = (m: Model): Workspace.TezgahView => ({ workspaces: m.workspaces, tiles: m.tiles });
 
 export const tezgah = Program.make({
   name: "fabrika/tezgah",
