@@ -17,8 +17,32 @@ const isMap = (value: unknown): value is Record<string, unknown> =>
 
 const map = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
 
-const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
+/** Every step of a job, in order, the stop step included. */
+const allSteps = (job: Record<string, unknown>): Record<string, unknown>[] =>
   Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : [];
+
+// Fail fast (ticket 990): every job but ci-required ends with this step. Once an earlier step
+// failed, on a pull request or a merge queue group, it cancels the job's own run, so the jobs still
+// running free their runners and ci-required, which a normal cancel leaves running, answers at once.
+// A push to main runs to the end.
+const STOP = {
+  name: "stop the run",
+  if: "failure()&&github.event_name!='push'",
+  env: { GH_TOKEN: `\${{ github.token }}` },
+  run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
+};
+
+/** The stop step exactly as STOP writes it, its `if` spaced any way, with nothing else on it. */
+const isStop = (step: Record<string, unknown>) =>
+  step["name"] === STOP.name &&
+  compact(step["if"]) === STOP.if &&
+  JSON.stringify(step["env"]) === JSON.stringify(STOP.env) &&
+  step["run"] === STOP.run &&
+  Object.keys(step).length === Object.keys(STOP).length;
+
+/** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
+const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
+  allSteps(job).filter((step) => !isStop(step));
 
 const commands = (job: Record<string, unknown>) =>
   steps(job).flatMap((step) =>
@@ -221,6 +245,33 @@ export const lintWorkflow = (text: string): string[] => {
   for (const [name, job] of Object.entries(jobs)) {
     const limit = map(job)["timeout-minutes"];
     require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
+  }
+
+  // Fail fast (ticket 990). F3: the stop step's token may cancel the run, and reads no more than
+  // the checkout needs. ci-required never cancels, so its own map drops `actions`.
+  require(JSON.stringify(workflow["permissions"]) ===
+    JSON.stringify({
+      actions: "write",
+      contents: "read",
+    }), "F3: the workflow's token grants actions: write and contents: read, nothing more");
+  require(JSON.stringify(map(jobs["ci-required"])["permissions"]) ===
+    JSON.stringify({ contents: "read" }), "F3: ci-required's token reads contents alone");
+
+  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== "ci-required")) {
+    const list = allSteps(map(job));
+    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
+    // F1. Last, so `failure()` has seen every other step of the job. The one step that cancels, so
+    // no second one can stop a push to main.
+    require(list.length > 0 &&
+      isStop(list.at(-1) ?? {}) &&
+      cancels.length === 1, `F1: ${name} ends with the stop step, its one step that cancels the run`);
+    // F2. A job on `always()` survives the cancel and holds its runner to the end. Only ci-required,
+    // which gives the verdict, may.
+    require(!compact(map(job)["if"]).includes(
+      "always()",
+    ), `F2: ${name} stops with its run: only ci-required runs on always()`);
+    // F3. A job's own `permissions` replaces the workflow's whole map, and its stop step needs that one.
+    require(!("permissions" in map(job)), `F3: ${name} keeps the workflow's token, which its stop step needs`);
   }
 
   // The one required check: it waits on every other job, never skips, and judges them all.
