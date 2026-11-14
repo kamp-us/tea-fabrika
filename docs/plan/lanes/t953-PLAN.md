@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0526, 0170 and 0172 with the owner's answer to its one question; body 722cea274a21
+Approved by the lead agent, builds 0526, 0170 and 0172 with the owner's answer to its one question; body 5c8432c86ce8
 Plancheck-Version: 3
 
 # Ticket 953: one ReBAC core in `next/`, and a start checked against the member who caused it
@@ -52,8 +52,9 @@ One pull request, two slices. It builds what
   recorded member when it has one, else by today's `StartGrant` rule. That was the one open
   question, now answered below: the owner chose (c), and the lead ruled that such a start's `started`
   line records the member it was checked against, by AGENTS.md's data-shape rule (a fact that exists
-  only when the record is written goes in now). This records the fact. It does not decide whether
-  ownership carries down a chain, which 0172 leaves open.
+  only when the record is written goes in now). That record carries the member down the whole chain
+  of starts, which the owner then decided in
+  [0531](../../../.decisions/0531-a-start-carries-its-member-down.md).
 - **The runner does not change.** A start already carries its cause: the runner fills
   `From.parent` from the Cmd's letter (`runtime/Runner.ts:1517`, `from(job.parent, job.traceId)`),
   and that is the gateway's input id. The check moves to the brain's side, where the sender is
@@ -610,9 +611,9 @@ Estimate: 4 steps, $11
 
 - Whether a mail chain should carry its member. A start in program B caused by mail from program A,
   itself caused by a person's input to A, has no member's input delivered to B, so it is checked
-  against B's process's recorded member when it has one, else by today's `StartGrant` rule. Whether
-  A's member should carry down to B is what 0172 leaves open; the laws pin this slice's answer, not
-  the right one.
+  against B's process's recorded member when it has one, else by today's `StartGrant` rule. That A's
+  member carries down to B through starts, and never through mail, is
+  [0531](../../../.decisions/0531-a-start-carries-its-member-down.md); the laws pin it.
 - The gateway answers who sent an input before the look turn, in its own store. A key removed after
   that answer and before the write is not seen by that start, the same gotcha `SessionManager`'s
   `signer` documents today. The relation rows are rechecked in the write turn (L15); the key's
@@ -640,8 +641,9 @@ Estimate: 4 steps, $11
 2. What the `started` line of a start checked against the requester's recorded member records: the
    lead ruled on 2026-11-14 that it records that member, by AGENTS.md's data-shape rule (a fact that
    exists only when the record is written goes in now). "The answer first", slice 2, already said
-   "the `started` line records the member it was checked against". This records the fact; it does not decide whether
-   ownership carries down a chain, which 0172 leaves open.
+   "the `started` line records the member it was checked against". The review showed this carries
+   the member down the whole chain of starts, and the owner decided that on 2026-11-14, as Unix
+   passes a uid down a process tree: [0531](../../../.decisions/0531-a-start-carries-its-member-down.md).
 
 ## Open questions
 
