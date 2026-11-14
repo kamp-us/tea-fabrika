@@ -14,6 +14,7 @@ import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
 import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
+import { fold, SMALLEST } from "../tezgah/Fold.ts";
 import { GAP, neighbor, order, rects, type Side, split } from "../tezgah/Layout.ts";
 import { CursorKey, type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
@@ -591,9 +592,6 @@ const tezgahStep = (s: WindowModel, msg: TezgahMsg): Step => {
   return [{ ...s, tezgah: { ...s.tezgah, client } }, focusRows(cmds)];
 };
 
-/** The smallest a tile may be drawn: the readability floor from fold, not tabs (0277). */
-const SMALLEST = { width: 220, height: 120 } as const;
-
 const DIRS: Readonly<Record<(typeof Split.Type)["does"], Dir>> = {
   "tezgah.split_right": "row",
   "tezgah.split_down": "column",
@@ -604,6 +602,28 @@ const drawnSpace = (link: TezgahLink | null) => {
   const view = link === null ? null : optimisticState(link.client);
   const space = view?.workspaces.find((w) => w.n === link?.client.workspace);
   return view === null || space === undefined ? null : { view, space };
+};
+
+/** The tiles a window draws as strips now: `fold` of its drawn workspace at its last size, none
+ *  before the page has said one. Worked out on each step, never stored (0277). */
+const stripsNow = (s: WindowModel): ReadonlySet<TileId> => {
+  const drawn = drawnSpace(s.tezgah);
+  return s.size === null || drawn === null ? new Set() : fold(drawn.space, s.size);
+};
+
+/** A step, with one `fold` row when it changed which tiles the window draws as strips, by a size, a
+ *  view or a focus move: how many strips there are now and the size they folded at. */
+const folded = (was: WindowModel, [next, cmds]: Step): Step => {
+  const before = stripsNow(was);
+  const after = stripsNow(next);
+
+  if (before.size === after.size && [...before].every((t) => after.has(t))) {
+    return [next, cmds];
+  }
+
+  const size = next.size ?? { width: 0, height: 0 };
+  const row = ClientRecord.cases.fold.make({ strips: after.size, width: size.width, height: size.height });
+  return [next, [...cmds, record({ record: row })]];
 };
 
 /** A tile id no window mints (a UUIDv7 of time zero and no randomness): the new tile of a split the
@@ -1695,8 +1715,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
     ],
   });
+  // Every step, whatever its Msg, records a change of the window's strips (the plan's `fold` row).
+  const update = Object.fromEntries(
+    Object.entries(machine.update).map(([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
+      type,
+      (s: WindowModel, m: never): Step => folded(s, cell(s, m)),
+    ]),
+  ) as typeof machine.update;
   // The machine's `model` is `WindowModel` itself; its own type lets a caller save and load it.
-  return Object.assign(machine, { model: WindowModel });
+  return Object.assign(machine, { model: WindowModel, update });
 };
 
 /**

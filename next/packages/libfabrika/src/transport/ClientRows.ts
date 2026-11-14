@@ -69,6 +69,9 @@ export const ClientRecord = Schema.TaggedUnion({
    *  the move's tile, `overridden` when tezgah refused it or another move won, so the drawn focus
    *  jumped back. A jump back is recorded here and never announced. `ms` is how long its answer took. */
   focus: { letter: Schema.String, result: Schema.Literals(["kept", "overridden"]), ms: Ms },
+  /** The tiles a window draws as strips changed: how many it draws now, and the size it folded at.
+   *  Which tiles folded is not written: tezgah's view, the window's size and its focus rebuild it. */
+  fold: { strips: Count, width: Ms, height: Ms },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),

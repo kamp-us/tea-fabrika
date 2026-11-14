@@ -4,13 +4,17 @@
 // says the prefix, the close ask and a refused split in its two live regions, made at boot. Desk
 // focus follows DOM focus, and DOM focus follows desk focus (0503's lesson): a click or Tab into a
 // tile tells the window, and a move lands DOM focus on the tile's cursor (0165). A focus move says
-// nothing in either live region (the tile guidelines); `aria-current` shows it.
+// nothing in either live region (the tile guidelines); `aria-current` shows it. The page folds what
+// does not fit at its own size (0277): `fold` of the drawn workspace at the window's size, worked out
+// on each draw and never kept. Tab onto a strip moves no desk focus, since a strip is in no tile;
+// Enter or a click on one focuses its tile, so it opens.
 import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
 import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
+import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
@@ -39,6 +43,7 @@ const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
 const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
 const pickPrefix = (m: WindowModel) => m.prefix;
 const pickPolite = (m: WindowModel) => m.polite;
+const pickSize = (m: WindowModel) => m.size;
 
 const refusalFor = (registration: TileWindow | null, refusal: WindowModel["tiles"][number]["refusal"]) => {
   if (refusal === null) {
@@ -275,6 +280,7 @@ const Desk = (props: PageProps) => {
   const [prefix] = useRuntime(props.run, pickPrefix);
   const [polite] = useRuntime(props.run, pickPolite);
   const [none] = useRuntime(props.run, pickNoTezgah);
+  const [size] = useRuntime(props.run, pickSize);
   const view = none || client === null ? null : optimisticState(client);
   const space = view?.workspaces.find((w) => w.n === client?.workspace);
   const area = useSize(send);
@@ -321,6 +327,8 @@ const Desk = (props: PageProps) => {
               )
             }
             asking={asked?.id ?? null}
+            strips={size === null ? new Set() : fold(space, size)}
+            open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}
           >
             {(tile) => <TileBody run={props.run} tile={tile} windowFor={props.windowFor} />}
           </Layout>

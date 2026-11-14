@@ -209,7 +209,7 @@ In build order. "Decide first" lists only what no decision answers yet.
   [0276](../../.decisions/0276-a-tile-shows-one-process.md), 0278, 0272,
   [0267](../../.decisions/0267-commands-and-one-mode-field.md), 0279 as 0159 amends it, and P42's row.
 - In code now ([PR 1231](https://github.com/kamp-us/tea-fabrika/pull/1231), the desk lane, slices
-  S1 to S3; its plan is [`lanes/desk-PLAN.md`](./lanes/desk-PLAN.md)):
+  S1 to S4; its plan is [`lanes/desk-PLAN.md`](./lanes/desk-PLAN.md)):
   - **The start check (S1).** A start a member's letter caused is checked against that member
     (0170), as the done line above says. This is where the start check meets the one permission
     system ([0526](../../.decisions/0526-one-rebac-permission-system.md)): ticket 953 moves the
@@ -234,10 +234,12 @@ In build order. "Decide first" lists only what no decision answers yet.
     the window ([0167](../../.decisions/0167-focus-moves-in-the-window-first.md)). tezgah confirms
     each move, and a second tab follows. A return to a tile lands on its cursor
     ([0165](../../.decisions/0165-a-tile-keeps-its-cursor.md)).
+  - **The fold (S4), built 2026-11-14 in PR 1231.** A window folds each tile but the focused one
+    that it would draw under 220x120 at its own size into a strip, a button named
+    `open <program>, t<n>` that Tab reaches and Enter or a click opens; the fold is never stored or
+    sent ([0277](../../.decisions/0277-size-belongs-to-the-viewer.md)).
 - Not built:
   - P42 past slice 1.
-  - The fold (the desk lane's S4): a smaller second window folds tiles under 220x120 into strips
-    ([0277](../../.decisions/0277-size-belongs-to-the-viewer.md)).
   - The Electron app (S5): the same suite and shots in Electron, after P19 slice 3. The row counts
     as done only after S5 (0159's third amendment).
   - A start with no member's letter behind it acting as the member its requester was checked

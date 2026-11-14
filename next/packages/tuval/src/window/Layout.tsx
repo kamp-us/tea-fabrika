@@ -7,8 +7,15 @@
 // never the only cue (WCAG 1.4.1). Nothing on a tile moves. Each region carries its tile's id for
 // the page's focus reading, and takes focus itself only as the last place DOM focus can land in it:
 // a click on its title bar, or a tile with nothing to focus yet. It is never a Tab stop.
+//
+// A window folds what does not fit at its own size (0277): each tile in `strips` draws as a strip
+// where it sits, a real button named `open <program>, t<n>` that Tab reaches and Enter or a click
+// opens. A strip is no region and holds no body, since programs know nothing about folds (0506). It
+// is drawn 22px across in a row and 20px tall in a column (the fold note), and the open parts of its
+// container share the space it leaves, so an open tile is only ever larger than the fold measured
+// (plan amendment 12). A container whose tiles all fold keeps one strip per tile, each reachable.
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
-import type { Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import type { ReactElement } from "react";
 
 /**
@@ -31,9 +38,22 @@ type Props = {
   readonly state?: (tile: Tile) => State;
   /** The tile whose close waits on y or n, which its state slot asks. */
   readonly asking?: TileId | null;
+  /** The tiles this window draws as strips: `fold` of the workspace at the window's size. */
+  readonly strips?: ReadonlySet<TileId>;
+  /** A strip was pressed, by Enter, Space or a click: the window focuses its tile, so it opens. */
+  readonly open?: (tile: Tile) => void;
 };
 
 const LIVE: State = { word: "", live: true };
+
+const NONE: ReadonlySet<TileId> = new Set();
+
+/** How far a strip reaches across its container, in CSS pixels: 22px upright in a row, 20px lying
+ *  down in a column (the fold note). */
+const ACROSS = { row: 22, column: 20 } as const;
+
+/** A strip's accessible name: `open ` and then `tileName`'s words, so its program is always said. */
+const stripName = (tile: Pick<Tile, "program" | "n">): string => `open ${tileName(tile)}`;
 
 /** A box's classes: its own, and the direction it lays its parts in when it holds a container. */
 const flow = (own: string, inner: Tree): string => (typeof inner === "string" ? own : `${own} flow-${inner.dir}`);
@@ -80,15 +100,44 @@ const TileRegion = ({
   </section>
 );
 
+/** A folded tile, drawn where it sits: a button whose words are its tile's name, upright in a row. */
+const Strip = ({
+  tile,
+  dir,
+  open,
+}: {
+  readonly tile: Tile;
+  readonly dir: Dir;
+  readonly open: ((tile: Tile) => void) | undefined;
+}) => (
+  <button
+    type="button"
+    className={`strip strip-${dir}`}
+    aria-label={stripName(tile)}
+    data-strip={tile.id}
+    onClick={() => open?.(tile)}
+  >
+    <span className="strip-name">{tileName(tile)}</span>
+  </button>
+);
+
 /**
  * Draws one workspace of tezgah's view: the window's `main`, and inside it each container and
- * tile where tezgah's percents put it.
+ * tile where tezgah's percents put it, each tile in `strips` as a strip.
  */
-export const Layout = ({ workspace, tiles, children, state, asking = null }: Props) => {
+export const Layout = ({ workspace, tiles, children, state, asking = null, strips = NONE, open }: Props) => {
   const byId = new Map(tiles.map((t) => [t.id, t]));
-  const draw = (node: Tree): ReactElement | ReadonlyArray<ReactElement> | null => {
+  /** Whether a part draws as strips only: a folded tile, or a container whose tiles all fold. */
+  const shut = (node: Tree): boolean =>
+    typeof node === "string" ? strips.has(node) && node !== workspace.focus : node.parts.every((p) => shut(p.inner));
+  const draw = (node: Tree, dir: Dir): ReactElement | ReadonlyArray<ReactElement> | null => {
     if (typeof node === "string") {
       const tile = byId.get(node);
+
+      if (tile !== undefined && shut(node)) {
+        return <Strip key={tile.id} tile={tile} dir={dir} open={open} />;
+      }
+
       return tile === undefined ? null : (
         <TileRegion
           key={tile.id}
@@ -106,15 +155,21 @@ export const Layout = ({ workspace, tiles, children, state, asking = null }: Pro
       ...(i === 0
         ? []
         : [<div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />]),
-      <div key={`part-${i}`} className={flow("part", part.inner)} style={{ flexGrow: part.percent }}>
-        {draw(part.inner)}
+      <div
+        key={`part-${i}`}
+        className={flow("part", part.inner)}
+        style={
+          shut(part.inner) ? { flexGrow: 0, flexShrink: 0, flexBasis: ACROSS[node.dir] } : { flexGrow: part.percent }
+        }
+      >
+        {draw(part.inner, node.dir)}
       </div>,
     ]);
   };
   // The padding and the dividers are libfabrika's one gap, the number the room check measures with.
   return (
     <main className={flow("desk", workspace.layout)} style={{ padding: GAP }}>
-      {draw(workspace.layout)}
+      {draw(workspace.layout, "row")}
     </main>
   );
 };

@@ -177,6 +177,51 @@ input {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+/*
+ * A strip: a tile this window folds at its size (0277), drawn where it sits, its part as thin as
+ * Layout.tsx sets it. The tile's edge and wash, its name upright in a row, cut with an ellipsis.
+ * Its ring is the focused tile's edge at 2px (the tile guidelines). Nothing on it moves.
+ */
+.strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-lg);
+  outline: 1px solid var(--tile-edge);
+  outline-offset: -1px;
+  background: var(--tile-wash);
+  color: var(--tile-text);
+  font: 400 var(--fs-small) / var(--s-5) var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.strip:hover {
+  outline-color: var(--tile-edge-hover);
+  color: var(--tile-text-on);
+}
+.strip:focus-visible {
+  outline: 2px solid var(--tile-edge-on);
+  outline-offset: -2px;
+  color: var(--tile-text-on);
+}
+.strip-name {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip-row .strip-name {
+  writing-mode: vertical-rl;
+}
 .tile-body {
   flex: 1;
   min-width: 0;
@@ -254,22 +299,27 @@ input {
   border: 0;
 }
 @media (prefers-contrast: more) {
-  .tile {
+  .tile,
+  .strip {
     outline-color: var(--wire);
   }
-  .tile.focused {
+  .tile.focused,
+  .strip:focus-visible {
     outline: 2px solid var(--tile-edge-loud);
     outline-offset: -2px;
   }
-  .titlebar {
+  .titlebar,
+  .strip {
     color: var(--text-primary);
   }
 }
 @media (forced-colors: active) {
-  .tile {
+  .tile,
+  .strip {
     outline-color: CanvasText;
   }
-  .tile.focused {
+  .tile.focused,
+  .strip:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
