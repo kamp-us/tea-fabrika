@@ -957,12 +957,16 @@ describe("Desk S3: focus moves at the program", () => {
 
         for (const c of picks) {
           const model = JSON.stringify(w.model);
+          // The focus move keeps its own type: TypeScript folds `Event | (Event & {to, cursor, far})`
+          // into `Event`, so `"to" in e` could not narrow a union of the three.
+          const focus = c.kind === "focus" || c.kind === "focus_far" ? focusMove(p, w, does, c) : null;
           const e =
-            c.kind === "focus" || c.kind === "focus_far"
-              ? focusMove(p, w, does, c)
+            focus ??
+            (c.kind === "focus" || c.kind === "focus_far"
+              ? null
               : c.kind === "split_cursor"
                 ? splitMove(p, w, c)
-                : move(p, w, c.kind as Kind, c.pick);
+                : move(p, w, c.kind as Kind, c.pick));
 
           if (e !== null && "split" in e) {
             expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
@@ -971,7 +975,8 @@ describe("Desk S3: focus moves at the program", () => {
             seen.split += e.split === null ? 0 : 1;
           }
 
-          if (e !== null && "to" in e) {
+          if (focus !== null) {
+            const e = focus;
             const before = spaceWith(e.before, e.from!)!;
 
             if (e.far) {
