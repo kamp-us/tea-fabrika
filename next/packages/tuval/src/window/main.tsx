@@ -8,6 +8,7 @@ import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
 import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
+import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import type { Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
@@ -168,7 +169,8 @@ const useKeys = (run: LiveWindow, table: Keys.Table, send: (msg: WindowMsg) => v
     return () => document.removeEventListener("keydown", listener, true);
   }, [run, table, send]);
 
-/** Tells the window the size of the area its tiles are drawn in, whenever it changes. */
+/** Tells the window the size of the area its tiles are laid out in, inside the desk's padding,
+ *  whenever it changes. */
 const useSize = (send: (msg: WindowMsg) => void) => {
   const area = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -180,7 +182,9 @@ const useSize = (send: (msg: WindowMsg) => void) => {
 
     const observer = new ResizeObserver(([entry]) => {
       if (entry !== undefined) {
-        send({ type: "size", width: entry.contentRect.width, height: entry.contentRect.height });
+        // The tiles are laid out inside the desk's padding, one gap on each side.
+        const { width, height } = entry.contentRect;
+        send({ type: "size", width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) });
       }
     });
     observer.observe(element);

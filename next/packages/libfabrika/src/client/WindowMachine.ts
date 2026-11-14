@@ -14,7 +14,7 @@ import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
 import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
-import { order, rects } from "../tezgah/Layout.ts";
+import { GAP, order, rects, split } from "../tezgah/Layout.ts";
 import { type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
@@ -76,7 +76,7 @@ type TezgahLink = typeof TezgahLink.Type;
  *  under the 220x120 floor at the window's size. The words are the page's. */
 const Polite = Schema.TaggedUnion({ no_room: { tile: TileId } });
 
-/** The size of the area a window draws its tiles in, in CSS pixels. */
+/** The size of the area a window lays its tiles out in, inside the frame's padding, in CSS pixels. */
 const Size = Schema.Struct({ width: Ms, height: Ms });
 
 /**
@@ -90,7 +90,7 @@ const Size = Schema.Struct({ width: Ms, height: Ms });
  * `tezgah` is null for a window given fixed tiles; a window started on tezgah takes its tiles
  * from its person's tezgah, whose view its tezgah child holds. `prefix` is the window's own prefix
  * key (`Prefix`), `polite` what the window says on its own in the polite region, and `size` the
- * area its tiles are drawn in, once the page has said it.
+ * area its tiles are laid out in, inside the frame's padding, once the page has said it.
  *
  * @stability unstable
  * @category models
@@ -162,7 +162,7 @@ const Own = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("press"), tile: Schema.String, m: Schema.Json, via: Schema.optionalKey(Via) }),
   Schema.Struct({ type: Schema.Literal("tile"), id: Schema.String, msg: Schema.Unknown }),
-  // One press, spelled as `Keys` spells it, and the size of the area the tiles are drawn in.
+  // One press, spelled as `Keys` spells it, and the size of the area the tiles are laid out in, inside the frame's padding.
   Schema.Struct({ type: Schema.Literal("key"), key: Schema.String, at: Ms }),
   Schema.Struct({ type: Schema.Literal("size"), width: Ms, height: Ms }),
   Schema.Struct({ type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown }),
@@ -562,15 +562,18 @@ const drawnSpace = (link: TezgahLink | null) => {
   return view === null || space === undefined ? null : { view, space };
 };
 
-/** Whether a split of `at` in `dir` keeps both halves at least 220x120 in a window of `size`: each
- *  half takes half of `at`'s share (`Layout.split`). */
+/** A tile id no window mints (a UUIDv7 of time zero and no randomness): the new tile of a split the
+ *  window only measures. */
+const PROBE = Schema.decodeSync(TileId)("tile_0000000000e008000000000000");
+
+/** Whether a split of `at` in `dir` keeps both of its tiles at least 220x120 as the frame draws them
+ *  in an area of `size`, with its gap between each two parts (plan amendment 7). */
 const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type): boolean => {
-  const r = rects(space.layout, size).get(at);
-  return (
-    r !== undefined &&
-    (dir === "row" ? r.width / 2 : r.width) >= SMALLEST.width &&
-    (dir === "column" ? r.height / 2 : r.height) >= SMALLEST.height
-  );
+  const drawn = rects(split(space, at, dir, PROBE).layout, size, { gap: GAP });
+  return [at, PROBE].every((t) => {
+    const r = drawn.get(t);
+    return r !== undefined && r.width >= SMALLEST.width && r.height >= SMALLEST.height;
+  });
 };
 
 /** One letter to the window's tezgah on the press path, named by its command for the press row. */

@@ -1,9 +1,11 @@
 // next/: one workspace of tezgah's view, drawn as the window's one `main` with one region per open
 // tile, in reading order (0503's lesson, read for next/ per 0217). Each container runs in its own
-// direction and gives each part its percent; a 4px divider sits between two parts (0492). A tile
-// is the tile guidelines' look: one 1px edge, a 20px mono title bar on its wash, and the slate
-// focus edge on the focused tile with its name at weight 500, so color is never the only cue
-// (WCAG 1.4.1). Nothing on a tile moves.
+// direction and gives each part its percent. libfabrika's one `GAP` (0492's 4px divider) sits
+// between two parts and around the workspace, so what is drawn is what the room check measures
+// (plan amendment 7). A tile is the tile guidelines' look: one 1px edge, a 20px mono title bar on
+// its wash, and the slate focus edge on the focused tile with its name at weight 500, so color is
+// never the only cue (WCAG 1.4.1). Nothing on a tile moves.
+import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import type { Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
 import type { ReactElement } from "react";
 
@@ -97,11 +99,18 @@ export const Layout = ({ workspace, tiles, children, state, asking = null }: Pro
     }
 
     return node.parts.flatMap((part, i) => [
-      ...(i === 0 ? [] : [<div key={`divider-${i}`} className="divider" aria-hidden="true" />]),
+      ...(i === 0
+        ? []
+        : [<div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />]),
       <div key={`part-${i}`} className={flow("part", part.inner)} style={{ flexGrow: part.percent }}>
         {draw(part.inner)}
       </div>,
     ]);
   };
-  return <main className={flow("desk", workspace.layout)}>{draw(workspace.layout)}</main>;
+  // The padding and the dividers are libfabrika's one gap, the number the room check measures with.
+  return (
+    <main className={flow("desk", workspace.layout)} style={{ padding: GAP }}>
+      {draw(workspace.layout)}
+    </main>
+  );
 };

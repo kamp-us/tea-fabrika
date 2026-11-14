@@ -192,8 +192,19 @@ export const remove = (w: Workspace, tile: TileId): Workspace => {
 };
 
 /**
- * Returns each tile's rectangle in a window of `size`: a row splits its width by percent, a column
- * its height.
+ * The gap a frame draws between two parts of a container, and around a workspace, in CSS pixels:
+ * 0492's 4px divider. A window's room check and its drawing both read this one number.
+ *
+ * @stability unstable
+ * @category constants
+ */
+export const GAP = 4;
+
+/**
+ * Returns each tile's rectangle in an area of `size`: a row splits its width, a column its height.
+ * Each container first leaves `gap` between each two of its parts, then gives each part its percent
+ * of what is left, so a nested container loses its own gaps too (plan amendment 7). Without a gap
+ * the parts share the whole area.
  *
  * @stability unstable
  * @category getters
@@ -201,6 +212,7 @@ export const remove = (w: Workspace, tile: TileId): Workspace => {
 export const rects = (
   layout: Layout,
   size: { readonly width: number; readonly height: number },
+  options: { readonly gap: number } = { gap: 0 },
 ): ReadonlyMap<TileId, Rect> => {
   const out = new Map<TileId, Rect>();
   const walk = (node: Layout, r: Rect): void => {
@@ -209,17 +221,17 @@ export const rects = (
       return;
     }
 
-    let at = 0;
+    const row = node.dir === "row";
+    const left = (row ? r.width : r.height) - (node.parts.length - 1) * options.gap;
+    let at = row ? r.x : r.y;
 
     for (const p of node.parts) {
-      const share = p.percent / 100;
+      const share = (left * p.percent) / 100;
       walk(
         p.inner,
-        node.dir === "row"
-          ? { x: r.x + r.width * at, y: r.y, width: r.width * share, height: r.height }
-          : { x: r.x, y: r.y + r.height * at, width: r.width, height: r.height * share },
+        row ? { x: at, y: r.y, width: share, height: r.height } : { x: r.x, y: at, width: r.width, height: share },
       );
-      at += share;
+      at += share + options.gap;
     }
   };
   walk(layout, { x: 0, y: 0, width: size.width, height: size.height });
