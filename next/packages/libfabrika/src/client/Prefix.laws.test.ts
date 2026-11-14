@@ -20,8 +20,9 @@
 // - A close of a tile tezgah started (`child`) asks first: the prefix goes to `asking {tile}`; `y`
 //   sends one close; `n`, Escape or any other key sends nothing and ends the ask. A close of a tile
 //   tezgah did not start goes out at once (the plan's lean on the close).
-// - A split that would leave its tile or the new one under 220x120 at the window's last size, by
-//   `Layout.split` and `Layout.rects`, is refused in the window: nothing is minted or sent, the prefix
+// - A split that would draw its tile or the new one under 220x120 at the window's last size (the
+//   area inside the frame's padding; plan amendment 7: each container leaves 4px between its parts),
+//   is refused in the window: nothing is minted or sent, the prefix
 //   goes back to `idle`, and `WindowModel.polite` is `{_tag: "no_room", tile}` for the polite region
 //   (null until then). The words are the page's.
 //
@@ -346,12 +347,43 @@ const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknow
 const focused = (w: World) => w.view.workspaces[0]!.focus;
 const dids = (sent: World["sent"]) => sent.map((x) => x.m as Did);
 
-/** Whether a split of `at` in `dir` keeps both halves at least 220x120 in a window of `size`. */
-const fits = (view: TezgahView, at: TileId, dir: Dir, size: { readonly width: number; readonly height: number }) => {
-  const fresh = typeId("tile", 9_999) as TileId;
-  const after = Layout.rects(Layout.split(view.workspaces[0]!, at, dir, fresh).layout, size);
-  return [at, fresh].every((t) => after.get(t)!.width >= SMALLEST.width && after.get(t)!.height >= SMALLEST.height);
+/** The gap the frame draws between two parts, and its padding: 0492's 4px divider (plan amendment 7). */
+const GAP = 4;
+
+type Size = { readonly width: number; readonly height: number };
+
+/** Each tile's drawn size in the area `size` the window lays its parts out in, by the plan's seventh
+ *  amendment, written here from the rule and never from the product's `rects`: a container leaves
+ *  `parts - 1` gaps between its parts, and each part takes its percent of what is left. */
+const drawn = (layout: Workspace["layout"], size: Size): ReadonlyMap<string, Size> => {
+  const out = new Map<string, Size>();
+  const walk = (node: Workspace["layout"], box: Size): void => {
+    if (typeof node === "string") {
+      out.set(node, box);
+      return;
+    }
+
+    const left = (node.dir === "row" ? box.width : box.height) - (node.parts.length - 1) * GAP;
+
+    for (const p of node.parts) {
+      const share = (left * p.percent) / 100;
+      walk(p.inner, node.dir === "row" ? { width: share, height: box.height } : { width: box.width, height: share });
+    }
+  };
+  walk(layout, size);
+  return out;
 };
+
+/** The split of `at` in `dir`, drawn: the size of `at` and of the new tile. */
+const halves = (view: TezgahView, at: TileId, dir: Dir, size: Size): ReadonlyArray<Size> => {
+  const fresh = typeId("tile", 9_999) as TileId;
+  const after = drawn(Layout.split(view.workspaces[0]!, at, dir, fresh).layout, size);
+  return [after.get(at)!, after.get(fresh)!];
+};
+
+/** Whether a split of `at` in `dir` draws both halves at least 220x120 in the area `size`. */
+const fits = (view: TezgahView, at: TileId, dir: Dir, size: Size) =>
+  halves(view, at, dir, size).every((h) => h.width >= SMALLEST.width && h.height >= SMALLEST.height);
 
 const KEYS = [PREFIX, "%", '"', "|", "-", "x", "y", "n", "escape", "a", "enter", "o"] as const;
 
@@ -543,19 +575,15 @@ describe("L18: a split with no room is refused in the window", () => {
         ({ width, height, cuts, focus, key }) => {
           const size = { width, height };
           const view = desk(cuts, focus);
-          const before = Layout.rects(view.workspaces[0]!.layout, size);
+          const before = drawn(view.workspaces[0]!.layout, size);
           // Every tile fits before the split, and no half sits within half a pixel of the floor, so
           // the two readings of "a tile under the floor" and float rounding cannot disagree.
           fc.pre([...before.values()].every((r) => r.width >= SMALLEST.width && r.height >= SMALLEST.height));
           const at = view.workspaces[0]!.focus;
           const split = SPLITS[key]!;
-          const fresh = typeId("tile", 9_999) as TileId;
-          const halves = Layout.rects(Layout.split(view.workspaces[0]!, at, split.dir, fresh).layout, size);
           fc.pre(
-            [at, fresh].every(
-              (t) =>
-                Math.abs(halves.get(t)!.width - SMALLEST.width) > 0.5 &&
-                Math.abs(halves.get(t)!.height - SMALLEST.height) > 0.5,
+            halves(view, at, split.dir, size).every(
+              (h) => Math.abs(h.width - SMALLEST.width) > 0.5 && Math.abs(h.height - SMALLEST.height) > 0.5,
             ),
           );
           const w = world(view, 1, size);
@@ -587,5 +615,36 @@ describe("L18: a split with no room is refused in the window", () => {
     );
     expect(seen.refused, "L18: the walks refuse splits").toBeGreaterThan(0);
     expect(seen.sent, "L18: the walks send splits").toBeGreaterThan(0);
+  });
+
+  // pinned: the first review of S2b (bug: the room check measured bare percent shares, ignoring the
+  // frame's 4px padding and its 4px divider). A 444x600 area drawn with its padding is a size Msg of
+  // 436x592; C-b % there drew two tiles about 216px wide. The cases sit on both sides of the floor,
+  // the middle one where bare shares say 220 and drawn tiles are 218.
+  it('pinned: one tile in a 436x592, 440x592 area refuses C-b % and in 444x592 takes it; 592x236, 592x240 refuse C-b " and 592x244 takes it', () => {
+    const cases = [
+      { width: 436, height: 592, key: "%", taken: false },
+      { width: 440, height: 592, key: "%", taken: false },
+      { width: 444, height: 592, key: "%", taken: true },
+      { width: 592, height: 236, key: '"', taken: false },
+      { width: 592, height: 240, key: '"', taken: false },
+      { width: 592, height: 244, key: '"', taken: true },
+    ] as const;
+
+    for (const c of cases) {
+      const view = desk([], 0);
+      const at = view.workspaces[0]!.focus;
+      expect(fits(view, at, SPLITS[c.key]!.dir, c), `the drawn rule at ${c.width}x${c.height}`).toBe(c.taken);
+      const w = world(view, 1, { width: c.width, height: c.height });
+      press(w, 0, PREFIX);
+      const { sent } = press(w, 0, c.key);
+      expect(
+        dids(sent).length,
+        `L18: ${c.key} in a ${c.width}x${c.height} area is ${c.taken ? "taken" : "refused"}`,
+      ).toBe(c.taken ? 1 : 0);
+      expect(polite(w.wins[0]!.s), `L18: ${c.width}x${c.height} says the refusal, or nothing`).toEqual(
+        c.taken ? null : { _tag: "no_room", tile: at },
+      );
+    }
   });
 });

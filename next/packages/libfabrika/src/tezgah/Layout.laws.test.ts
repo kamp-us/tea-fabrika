@@ -254,3 +254,127 @@ describe("Desk S2a L5: the layout stays tidy", () => {
     );
   });
 });
+
+// Desk S2b, the plan's seventh amendment (after S2b's first review): `Layout.rects(layout, size,
+// {gap})` measures drawn tiles. Each container leaves exactly `parts - 1` gaps between its parts and
+// gives each part its percent of what is left; a nested container loses its own gaps from its own
+// share. The law reads every container's extent back from its tiles' rectangles, so it checks the
+// drawing, not the arithmetic the product used.
+type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
+/** The smallest box around every tile under `node`, from the tiles' rectangles. */
+const extent = (node: Node, at: ReadonlyMap<string, Box>): Box => {
+  const boxes = order(node).map((t) => at.get(t)!);
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  return {
+    x,
+    y,
+    width: Math.max(...boxes.map((b) => b.x + b.width)) - x,
+    height: Math.max(...boxes.map((b) => b.y + b.height)) - y,
+  };
+};
+
+/** Every way the tiles' rectangles break the gap rule, empty when they keep it. */
+const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: number): ReadonlyArray<string> => {
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+  const out: Array<string> = [];
+  const whole = extent(layout, at);
+
+  if (
+    ![whole.x - size.x, whole.y - size.y, whole.width - size.width, whole.height - size.height].every((d) => near(d, 0))
+  ) {
+    out.push(`the tiles fill ${JSON.stringify(whole)}, the window ${JSON.stringify(size)}`);
+  }
+
+  const walk = (node: Node): void => {
+    if (typeof node === "string") {
+      return;
+    }
+
+    const box = extent(node, at);
+    const row = node.dir === "row";
+    const start = (b: Box) => (row ? b.x : b.y);
+    const long = (b: Box) => (row ? b.width : b.height);
+    const parts = node.parts.map((p) => extent(p.inner, at));
+    const left = long(box) - (node.parts.length - 1) * gap;
+    let edge = start(box);
+
+    for (const [i, p] of parts.entries()) {
+      if (!near(start(p), edge)) {
+        out.push(`${node.dir} part ${i} starts at ${start(p)}, after ${i} gaps it is ${edge}`);
+      }
+
+      if (!near(long(p), (left * node.parts[i]!.percent) / 100)) {
+        out.push(`${node.dir} part ${i} is ${long(p)} long, ${node.parts[i]!.percent}% of ${left} left after the gaps`);
+      }
+
+      if (
+        !near(row ? p.y : p.x, row ? box.y : box.x) ||
+        !near(row ? p.height : p.width, row ? box.height : box.width)
+      ) {
+        out.push(`${node.dir} part ${i} does not span its container across`);
+      }
+
+      edge = start(p) + long(p) + gap;
+    }
+
+    if (!near(edge - gap, start(box) + long(box))) {
+      out.push(
+        `${node.dir}'s parts and ${node.parts.length - 1} gaps end at ${edge - gap}, the container at ${start(box) + long(box)}`,
+      );
+    }
+
+    for (const p of node.parts) {
+      walk(p.inner);
+    }
+  };
+  walk(layout);
+  return out;
+};
+
+/** The shortest side any tile gets under the amendment's rule, written here: what is left after a
+ *  container's gaps, shared by percent. A walk whose tiles would get none is too small to read. */
+const shortest = (node: Node, width: number, height: number, gap: number): number => {
+  if (typeof node === "string") {
+    return Math.min(width, height);
+  }
+
+  const left = (node.dir === "row" ? width : height) - (node.parts.length - 1) * gap;
+  return Math.min(
+    ...node.parts.map((p) =>
+      node.dir === "row"
+        ? shortest(p.inner, (left * p.percent) / 100, height, gap)
+        : shortest(p.inner, width, (left * p.percent) / 100, gap),
+    ),
+  );
+};
+
+describe("Desk S2b: rects measure drawn tiles, with the frame's gap between parts", () => {
+  it("S2b amendment 7: after any splits and closes, rects(layout, size, {gap}) leaves exactly parts - 1 gaps per container, each part its percent of what is left, and the parts and gaps fill each container", () => {
+    let nested = 0;
+    fc.assert(
+      fc.property(
+        commands,
+        fc.integer({ min: 200, max: 2_600 }),
+        fc.integer({ min: 150, max: 1_700 }),
+        fc.integer({ min: 0, max: 12 }),
+        (cmds, width, height, gap) => {
+          const t1 = typeId("tile", 1);
+          const real = { w: first() };
+          fc.modelRun(() => ({ model: { live: [t1], next: 2 }, real }), cmds);
+          const layout = encode(real.w).layout;
+          fc.pre(shortest(layout, width, height, gap) > 1);
+          const at = Layout.rects(real.w.layout, { width, height }, { gap }) as ReadonlyMap<string, Box>;
+          nested += typeof layout !== "string" && layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
+          expect([...at.keys()].sort(), "every tile has its rectangle").toEqual([...order(layout)].sort());
+          expect(gapBreaks(layout, at, { x: 0, y: 0, width, height }, gap), `gap ${gap} in ${width}x${height}`).toEqual(
+            [],
+          );
+        },
+      ),
+      { seed: SEED, numRuns: 300 },
+    );
+    expect(nested, "the walks reach nested containers").toBeGreaterThan(0);
+  });
+});

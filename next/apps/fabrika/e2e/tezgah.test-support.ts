@@ -16,9 +16,46 @@ type Reader = Effect.Success<ReturnType<typeof reader>>;
 /** The workspace the tab shows: the browser entry starts its window on workspace 1. */
 export const WORKSPACE = 1;
 
-/** How far a drawn tile's edge may sit from where tezgah's percents put it, in CSS pixels: the 4px
- *  divider between two tiles, the slate focus edge, and rounding to whole pixels. */
-const EDGE = 12;
+/** How far a drawn tile's edge may sit from where the drawn rule puts it, in CSS pixels: the
+ *  browser's rounding of flex shares to layout units, never a divider or a padding. */
+const EDGE = 1;
+
+/** The frame's padding inside the main and the gap between two parts: 0492's 4px divider, one
+ *  number for both (plan amendment 7). */
+const GAP = 4;
+
+/** A rectangle in CSS pixels. */
+type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
+/** Where each tile is drawn inside `area` by the plan's seventh amendment, written here from the rule
+ *  and never from the product's `rects`: a container leaves `parts - 1` gaps between its parts, and
+ *  each part takes its percent of what is left. */
+const drawnRule = (layout: TezgahView["workspaces"][number]["layout"], area: Box): ReadonlyMap<string, Box> => {
+  const out = new Map<string, Box>();
+  const walk = (node: typeof layout, box: Box): void => {
+    if (typeof node === "string") {
+      out.set(node, box);
+      return;
+    }
+
+    const row = node.dir === "row";
+    const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
+    let at = row ? box.x : box.y;
+
+    for (const p of node.parts) {
+      const share = (left * p.percent) / 100;
+      walk(
+        p.inner,
+        row
+          ? { x: at, y: box.y, width: share, height: box.height }
+          : { x: box.x, y: at, width: box.width, height: share },
+      );
+      at += share + GAP;
+    }
+  };
+  walk(layout, area);
+  return out;
+};
 
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -73,9 +110,6 @@ export const tell = (r: Reader, pid: string, m: unknown, letter: string) =>
   Effect.flatMap(r.call("process.send", { pid, letter, m, sentAt: new Date().toISOString(), seen: 0 }), (frame) =>
     frame.error === undefined ? Effect.void : Effect.die(new Error(`the door refused ${JSON.stringify(frame.error)}`)),
   );
-
-/** A rectangle in CSS pixels. */
-type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 
 /** What the tab draws: how many mains, each region in document order with its name and box, the
  *  main's box, the names of every element marked `aria-current`, and the polite region's words. */
@@ -173,7 +207,13 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
   }
 
   if (d.main !== null && out.length === 0) {
-    const rects = Layout.rects(space.layout, { width: d.main.width, height: d.main.height });
+    // The parts are laid out inside the main's padding.
+    const rects = drawnRule(space.layout, {
+      x: d.main.x + GAP,
+      y: d.main.y + GAP,
+      width: d.main.width - 2 * GAP,
+      height: d.main.height - 2 * GAP,
+    });
 
     for (const id of Layout.order(space.layout)) {
       const name = named(id);
@@ -186,10 +226,10 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
       }
 
       const off = [
-        box.x - d.main.x - r.x,
-        box.y - d.main.y - r.y,
-        box.x + box.width - (d.main.x + r.x + r.width),
-        box.y + box.height - (d.main.y + r.y + r.height),
+        box.x - r.x,
+        box.y - r.y,
+        box.x + box.width - (r.x + r.width),
+        box.y + box.height - (r.y + r.height),
       ];
 
       if (off.some((o) => Math.abs(o) > EDGE)) {
