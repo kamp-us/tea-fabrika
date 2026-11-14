@@ -70,3 +70,9 @@ test that needs a real resource runs only on the 3-hour schedule.**
   label is the common way.
 - Not decided here: the case where a real resource is the only way to prove a security property.
   The classification names any such test, and each one comes to the owner.
+
+## Amendments
+
+- 2026-11-14: the owner ruled on the first security case the classification named. The law that
+  the commit check refuses a forged step signature (`exam/commits-git-signatures.test.ts`, real git
+  and ssh-keygen) moves to the schedule like the rest. A broken check is found within about 3 hours.
