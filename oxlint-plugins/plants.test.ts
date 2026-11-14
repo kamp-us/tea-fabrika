@@ -409,6 +409,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
+      // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
+      "package-imports",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

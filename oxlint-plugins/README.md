@@ -854,3 +854,37 @@ fixes all 10.
 `no-cause-squash.test.ts` holds the laws. Law 2 is a property through oxlint's `RuleTester`: an
 import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
 run over one planted file per path kind, with the repo's config.
+
+## Which of our packages each part imports, ticket 987
+
+p32 and p65, strict layers (`docs/plan/tier-1-detail.md`, "Strict layers"). `fabrika/package-imports`
+holds the names of our own packages (`@kampus/*`) each part of `next/` may import, as written. It
+and `pnpm lint:layers` together replace the exam's `layers.test.ts` scan, which kept a second import
+reader (a check on the shape of code is a lint rule, never a test). `pnpm lint:layers` judges the
+file an import reaches, by `layer-rules.json`'s rows, `imports` lists and `roots`; this rule judges
+the name, which code-graph cannot do in three cases: two front files of one module
+(`transport/Link` passes in a window, `transport/Connection` does not), a stylesheet
+(`@kampus/fabrika-design/tokens.css`, which code-graph reads as unresolved), and the library naming
+itself (`@kampus/libfabrika/processes/Process` inside the library reaches an allowed row).
+
+The table is in `.oxlintrc.json`, in its own override for `next/packages/**` and `next/programs/**`,
+so the `next/**` block stays the `.agents/` block's twin: a `scope` (`@kampus/`) and `parts`, each a name, globs and `may`, the exact
+names its files may import. A file's part is the first whose glob matches. The library may import
+none; desktop, the library's root; a window, the root, transport's eight front files and its bare
+name, the window client's three, and the design package's root and `tokens.css`; dom and headless,
+none; browser, transport's; electron, transport's and `coordination`; a program's `.tsx` files, the
+library's root and tuval's; the rest of a program, the library's root. Tests and `next/apps` are not
+judged. A program's window is its `.tsx` files, as `fabrika/program-package-layout` reads a window;
+the old scan read the box as what `.` reaches, and `pnpm lint:layers` keeps that wall: a box file
+that imports a window file breaks upward.
+
+oxlint's own `eslint/no-restricted-imports` was looked at first (0040). It can say an allow list
+(`["@kampus/**", "!@kampus/libfabrika"]` works in oxlint 1.90.0), but an override replaces a rule's
+options, and libfabrika's folders already have ten overrides of it, each the base list repeated;
+each would take the new group, and its tests would lose their own folder's patterns to a tests
+override.
+
+First-day count, 2026-11-14, on main at `59c063bce`, one oxlint run over `next`: **0 fires**, as
+the old scan found 0 faults on the same tree. Zero measures no false-alarm rate beyond that both
+agree. `package-imports.test.ts` plants one file per part at its real path with the repo's config,
+allowed and refused names side by side.

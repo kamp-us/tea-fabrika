@@ -46,6 +46,8 @@ libfabrika
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
 | A module's files, names and `internal/` | `fabrika/modules`, `eslint/no-restricted-imports` |
 | A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
+| A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
+| A part imports only the names of our packages its table allows | `fabrika/package-imports` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at
