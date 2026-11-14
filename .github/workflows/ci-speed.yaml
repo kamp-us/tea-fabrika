@@ -1,0 +1,60 @@
+name: ci-speed
+
+# The daily measure of CI against the owner's speed goal (experiment 292). ci-speed.ts writes the
+# three goal stages over the last 24 hours (median and worst 10%) and the runners' use to this job's
+# summary. With --issue, a stage over its goal opens the one `ci-scheduled` issue titled "CI speed",
+# or adds the day's numbers to the open one, and a day with every stage within its goal closes it:
+# 0534 lets automation open issues here with that label alone. A person may start it by hand. It
+# reads GitHub and writes that one issue; it changes nothing in the repo. workflow-lint.ts holds
+# this file's shape (lintCiSpeed).
+on:
+  schedule:
+    # 16:00 UTC is 8 or 9 in the morning in California, so the day's numbers are there at its start.
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+
+# The token grants nothing here; the one job asks for what it uses.
+permissions: {}
+
+# One measure at a time; a second start waits for the first.
+concurrency:
+  group: ci-speed
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    # Main's copy of the workflow and of the script, never a branch's.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # From a laptop on 2026-11-14 the measure took 2 min 40 s for about 780 runs' jobs; about 3 times that.
+    timeout-minutes: 10
+    # actions: the runs and jobs it reads. contents: the checkout. pull-requests: the merged pull
+    # requests and their merge queue entries. issues: the one issue it opens, adds to and closes.
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # pnpm and Node, with no store cache (.github/actions/pnpm says why).
+      - uses: ./.github/actions/pnpm
+
+      # For the script itself: Effect and its Node platform.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # `shell: bash` runs with pipefail, so a failed measure fails the step through tee.
+      - name: measure
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .agents/skills/lead/scripts/ci-speed.ts --issue --repo "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: stop the run
+        if: failure() && github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"

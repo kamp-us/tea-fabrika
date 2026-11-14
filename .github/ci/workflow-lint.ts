@@ -650,6 +650,78 @@ export const lintWorkflow = (text: string): string[] => {
   return errors;
 };
 
+/** The token ci-speed.yaml's one job gets: what its measure reads, and the one issue it writes. */
+export const CI_SPEED_TOKEN = { actions: "read", contents: "read", issues: "write", "pull-requests": "read" };
+
+/** The command of ci-speed.yaml's measure step: the script, its issue, and the job summary. */
+export const CI_SPEED_RUN =
+  'node .agents/skills/lead/scripts/ci-speed.ts --issue --repo "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"';
+
+/**
+ * ci-speed.yaml, the daily measure (experiment 292). K1: it starts once a day and by hand, nothing
+ * else. K2: one job, main's copy alone, with a time limit. K3: the workflow's token grants nothing
+ * and the job's grants CI_SPEED_TOKEN, so the issue write lives on that job only. K4: its checkout
+ * keeps no token. K5: the measure step runs CI_SPEED_RUN with the job's token, under pipefail. K6:
+ * it ends with the stop step, as every check.yaml job does.
+ */
+export const lintCiSpeed = (text: string): string[] => {
+  const errors: string[] = [];
+  const require = (holds: boolean, reason: string) => {
+    if (!holds) {
+      errors.push(`ci-speed.yaml: ${reason}`);
+    }
+  };
+  let workflow: Record<string, unknown>;
+
+  try {
+    workflow = map(parse(text));
+  } catch {
+    return ["ci-speed.yaml: not valid YAML"];
+  }
+
+  const on = map(workflow["on"]);
+  const crons = Array.isArray(on["schedule"]) ? on["schedule"].filter(isMap) : [];
+  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+    crons.length === 1 &&
+    /^\d+ \d+ \* \* \*$/.test(
+      String(crons[0]?.["cron"]),
+    ), "K1: it runs on one daily schedule and by hand, nothing else");
+
+  const jobs = Object.values(map(workflow["jobs"]));
+  const job = map(jobs[0]);
+  require(jobs.length === 1, "K2: it has one job");
+  require(compact(job["if"]) === "github.ref=='refs/heads/main'", "K2: the job runs main's copy only");
+  const limit = job["timeout-minutes"];
+  require(typeof limit === "number" && limit > 0 && limit <= 30, "K2: the job sets timeout-minutes, at most 30");
+
+  require(JSON.stringify(workflow["permissions"]) === "{}", "K3: the workflow's token grants nothing");
+  require(JSON.stringify(job["permissions"]) ===
+    JSON.stringify(
+      CI_SPEED_TOKEN,
+    ), "K3: the job's token reads actions, contents and pull requests and writes issues, nothing more");
+
+  const list = allSteps(job);
+  const checkouts = list.filter((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  require(checkouts.length > 0 &&
+    checkouts.every(
+      (s) => map(s["with"])["persist-credentials"] === false,
+    ), "K4: its checkout sets persist-credentials: false");
+
+  const measure = list.find((s) => s["name"] === "measure");
+  require(measure?.["run"] === CI_SPEED_RUN &&
+    measure["shell"] === "bash" &&
+    JSON.stringify(measure["env"]) ===
+      JSON.stringify({
+        GH_TOKEN: `\${{ github.token }}`,
+      }), "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash");
+
+  const cancels = list.filter((s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
+  require(list.length > 0 &&
+    isStop(list.at(-1) ?? {}) &&
+    cancels.length === 1, "K6: the job ends with the stop step, its one step that cancels the run");
+  return errors;
+};
+
 /** The files the cache lint reads, each as its text. */
 export interface CacheFiles {
   /** Each workflow by its path, check.yaml among them. */
@@ -807,7 +879,11 @@ export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    const errors = [...lintWorkflow(read(".github/workflows/check.yaml")), ...lintCaches(cacheFiles(read))];
+    const errors = [
+      ...lintWorkflow(read(".github/workflows/check.yaml")),
+      ...lintCaches(cacheFiles(read)),
+      ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+    ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
