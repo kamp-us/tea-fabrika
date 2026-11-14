@@ -7,12 +7,14 @@
  * newest one. A patch must start at the shown revision and end one past it; anything else keeps
  * the shown view and asks for a whole one, as a program client does (`runtime/Client.ts`).
  *
- * Each pending move is undated (`letter` null) until the window gives its press slot a letter id,
- * then sent, then answered (`answer` set) once tezgah accepted it at an inbox position. It is
- * dropped when it is answered and a view at or past that position is shown, in either order, or at
- * once when tezgah refused it, as Replicache drops a mutation the server has confirmed. Each drop
- * asks the window to record it: `kept` when the server's focus is the move's tile, else
- * `overridden`, which the window records and never announces.
+ * Each pending move is `waiting {n}` for its press slot `n` to be given a letter id, then
+ * `sent {letter}`, then `answered {letter, pos, ms}` once tezgah accepted it at inbox position
+ * `pos`. Only a waiting move is dated, and only an answered move is dropped on a view: once a view
+ * at or past `pos` is shown, in either order. A refused move is dropped at once, whatever its state,
+ * as Replicache drops a mutation the server has confirmed. Each drop asks the window to record it:
+ * `overridden` when tezgah refused it or when dropping it moves the drawn focus, a jump back the
+ * window records and never announces; `kept` otherwise, so an earlier move its own next move
+ * superseded is kept. Moves dropped together are taken one at a time, oldest first.
  *
  * @stability unstable
  */
@@ -25,21 +27,30 @@ import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 /**
- * Schema for one focus move this window made and the server has not answered: its press slot `n`,
- * its letter once dated, the tile it left and the tile it moved to, the cursor it left behind on
- * `from`, and tezgah's answer once it came: the inbox position it was taken at, and how long the
- * answer took.
+ * Schema for how far a pending move has gone: waiting for press slot `n` to be given its letter id,
+ * sent as `letter`, or answered by tezgah at inbox position `pos`, `ms` after it was written.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const MoveState = Schema.TaggedUnion({
+  waiting: { n: Schema.Int },
+  sent: { letter: Schema.String },
+  answered: { letter: Schema.String, pos: Schema.Int, ms: Ms },
+});
+
+/**
+ * Schema for one focus move this window made and the server has not answered: the tile it left and
+ * the tile it moved to, the cursor it left behind on `from`, and how far it has gone.
  *
  * @stability unstable
  * @category schemas
  */
 export const PendingMutation = Schema.Struct({
-  n: Schema.Int,
-  letter: Schema.NullOr(Schema.String),
   from: TileId,
   to: TileId,
   cursor: Schema.NullOr(CursorKey),
-  answer: Schema.NullOr(Schema.Struct({ pos: Schema.Int, ms: Ms })),
+  state: MoveState,
 });
 
 /**
@@ -117,32 +128,34 @@ type Step = readonly [TezgahClient, ReadonlyArray<TezgahCmd>];
 
 type Mutation = typeof PendingMutation.Type;
 
-/** The server's focus on the client's workspace, or null before its first view. */
-const serverFocus = (s: TezgahClient): string | null =>
-  s.serverState?.workspaces.find((w) => w.n === s.workspace)?.focus ?? null;
+const S = MoveState.cases;
 
-/** Drops each move that is answered and shown: its answer came and the shown view is at or past it. */
+/** The letter a move went out as, or null while it waits for one. */
+const sentAs = (p: Mutation): string | null => (p.state._tag === "waiting" ? null : p.state.letter);
+
+/** The focus the window draws on its workspace with `pending` over the server state. */
+const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null =>
+  optimisticState({ ...s, pendingMutations: pending })?.workspaces.find((w) => w.n === s.workspace)?.focus ?? null;
+
+/** Drops each answered move the shown view is at or past, one at a time, oldest first: each is
+ *  `overridden` when dropping it moves the drawn focus, else `kept`. */
 const confirmed = (s: TezgahClient): Step => {
-  const done = s.pendingMutations.filter((p) => p.answer !== null && p.answer.pos <= s.rev);
-  return done.length === 0
-    ? [s, []]
-    : [
-        { ...s, pendingMutations: s.pendingMutations.filter((p) => !done.includes(p)) },
-        done.map((p) =>
-          settled({
-            letter: p.letter ?? "",
-            result: serverFocus(s) === p.to ? "kept" : "overridden",
-            ms: p.answer?.ms ?? 0,
-          }),
-        ),
-      ];
-};
+  let pending = s.pendingMutations;
+  const rows: Array<TezgahCmd> = [];
 
-/** The moves with `letter`'s one changed by `change`. */
-const changed = (s: TezgahClient, letter: string, change: (p: Mutation) => Mutation): TezgahClient => ({
-  ...s,
-  pendingMutations: s.pendingMutations.map((p) => (p.letter === letter ? change(p) : p)),
-});
+  for (const p of s.pendingMutations) {
+    if (p.state._tag !== "answered" || p.state.pos > s.rev) {
+      continue;
+    }
+
+    const was = drawnFocus(s, pending);
+    pending = pending.filter((x) => x !== p);
+    const result = drawnFocus(s, pending) === was ? "kept" : "overridden";
+    rows.push(settled({ letter: p.state.letter, result, ms: p.state.ms }));
+  }
+
+  return rows.length === 0 ? [s, []] : [{ ...s, pendingMutations: pending }, rows];
+};
 
 const decodeView = Schema.decodeUnknownResult(TezgahView);
 const encodeView = Schema.encodeUnknownResult(TezgahView);
@@ -191,7 +204,12 @@ export const tezgahMachine = Machine.make({
         ...s,
         pendingMutations: [
           ...s.pendingMutations,
-          PendingMutation.make({ n: m.n, letter: null, from: m.from, to: m.to, cursor: m.cursor, answer: null }),
+          PendingMutation.make({
+            from: m.from,
+            to: m.to,
+            cursor: m.cursor,
+            state: S.waiting.make({ n: m.n }),
+          }),
         ],
       },
       [],
@@ -200,17 +218,26 @@ export const tezgahMachine = Machine.make({
       {
         ...s,
         pendingMutations: s.pendingMutations.map((p) =>
-          p.n === m.n && p.letter === null ? { ...p, letter: m.letter } : p,
+          p.state._tag === "waiting" && p.state.n === m.n ? { ...p, state: S.sent.make({ letter: m.letter }) } : p,
         ),
       },
       [],
     ],
-    accepted: (s, m): Step => confirmed(changed(s, m.letter, (p) => ({ ...p, answer: { pos: m.pos, ms: m.ms } }))),
+    // Only a sent move is answered; an answer to anything else changes nothing.
+    accepted: (s, m): Step =>
+      confirmed({
+        ...s,
+        pendingMutations: s.pendingMutations.map((p) =>
+          p.state._tag === "sent" && p.state.letter === m.letter
+            ? { ...p, state: S.answered.make({ letter: m.letter, pos: m.pos, ms: m.ms }) }
+            : p,
+        ),
+      }),
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
-      const gone = s.pendingMutations.filter((p) => p.letter === m.letter);
+      const gone = s.pendingMutations.filter((p) => sentAs(p) === m.letter);
       return [
-        { ...s, pendingMutations: s.pendingMutations.filter((p) => p.letter !== m.letter) },
+        { ...s, pendingMutations: s.pendingMutations.filter((p) => sentAs(p) !== m.letter) },
         gone.map(() => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
       ];
     },

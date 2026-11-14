@@ -38,12 +38,13 @@ export const WorkspaceId = Id.make("workspace");
 
 /**
  * Schema for the stable key a view gives the element that had focus in a tile, so a return to the
- * tile lands there (0165).
+ * tile lands there (0165). At most 256 characters, so any key a view gives fits, as the checklist's
+ * `item:<name>` of up to 85 does (plan amendment 10); tezgah and every window read this one schema.
  *
  * @stability unstable
  * @category schemas
  */
-export const CursorKey = Schema.String.check(Schema.isMaxLength(80));
+export const CursorKey = Schema.String.check(Schema.isMaxLength(256));
 
 /**
  * Schema for the two directions a container runs in: `row` lays its parts left to right, `column`
