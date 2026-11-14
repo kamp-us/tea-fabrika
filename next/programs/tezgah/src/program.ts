@@ -9,6 +9,7 @@ import { Program, type Refusal, StartChild, type Started } from "@kampus/libfabr
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import {
   childName,
+  CursorKey,
   Dir,
   type TezgahView,
   type Tile,
@@ -30,6 +31,22 @@ const FIRST = "checklist:1";
 /** The keybindings note's Via: how a person gave the command. */
 const Via = Schema.TaggedUnion({ key: { keys: Schema.String }, click: {}, word: {}, palette: {} });
 
+/** The commands that move focus: the key rows' moves, and `tezgah.focus` for a click or Tab. */
+const FOCUS = [
+  "tezgah.focus",
+  "tezgah.focus_next",
+  "tezgah.focus_previous",
+  "tezgah.focus_last",
+  "tezgah.focus_left",
+  "tezgah.focus_right",
+  "tezgah.focus_up",
+  "tezgah.focus_down",
+] as const;
+
+/** The cursor a letter leaves on `from` (0165): the `data-cursor` key of the element that had DOM
+ *  focus there, or null. A letter with no `cursor` key leaves `from`'s cursor as it was. */
+const Leaves = Schema.optionalKey(Schema.NullOr(CursorKey));
+
 const Msg = Schema.Union([
   /** A window's first look at workspace `workspace`: makes it, with `tile` first, when it is missing. */
   Schema.Struct({ type: Schema.Literal("attach"), workspace: Schema.Int, tile: TileId }),
@@ -40,6 +57,17 @@ const Msg = Schema.Union([
     from: TileId,
     via: Via,
     tile: TileId,
+    cursor: Leaves,
+  }),
+  /** A focus move from tile `from` to tile `to`, which the window worked out on its own drawn
+   *  layout and sends absolute (0278); tezgah takes moves in arrival order, never by `sentAt`. */
+  Schema.Struct({
+    type: Schema.Literal("did"),
+    does: Schema.Literals(FOCUS),
+    from: TileId,
+    to: TileId,
+    via: Via,
+    cursor: Leaves,
   }),
   /** A close of tile `from`. */
   Schema.Struct({ type: Schema.Literal("did"), does: Schema.Literal("tezgah.close"), from: TileId, via: Via }),
@@ -77,6 +105,10 @@ const exists = (m: Model, n: number) =>
 
 /** A workspace takes its first tile's id body: windows mint ids, and tezgah mints none. */
 const workspaceId = Schema.decodeSync(WorkspaceId);
+
+/** `from`'s tile keeps the cursor a letter leaves on it, when the letter carries one. */
+const leaving = (m: Model, from: TileId, cursor: string | null | undefined): Model =>
+  cursor === undefined ? m : { ...m, tiles: m.tiles.map((t) => (t.id === from ? { ...t, cursor } : t)) };
 
 /** The tile a start's answer makes, numbered next. */
 const made = (m: Model, s: Starting, answer: Started): Tile => ({
@@ -163,6 +195,12 @@ export const tezgahMachine = Machine.make({
         ];
       }
 
+      // A focus move: the only letter that names a `to`.
+      if ("to" in msg) {
+        const moved = leaving(m, msg.from, msg.cursor);
+        return [{ ...moved, workspaces: moved.workspaces.map((x) => (x === w ? Layout.focus(w, msg.to) : x)) }, []];
+      }
+
       const name = childName(NEW_TILE, msg.tile);
       const split = Starting.cases.split.make({
         workspace: w.id,
@@ -171,7 +209,10 @@ export const tezgahMachine = Machine.make({
         tile: msg.tile,
         name,
       });
-      return [{ ...m, starting: [...m.starting, split] }, [StartChild.startChild({ program: NEW_TILE, name })]];
+      return [
+        { ...leaving(m, msg.from, msg.cursor), starting: [...m.starting, split] },
+        [StartChild.startChild({ program: NEW_TILE, name })],
+      ];
     },
     start_child_ok: (m, msg): Step => {
       const s = m.starting.find((x) => x.name === msg.cmd.name);
@@ -185,7 +226,8 @@ export const tezgahMachine = Machine.make({
   },
 });
 
-/** `no_workspace` before any workspace exists; `missing` for a `from` no workspace holds;
+/** `no_workspace` before any workspace exists; `missing` for a `from` no workspace holds, or a
+ *  focus move's `to` that `from`'s workspace does not hold;
  *  `last_tile` for a close of a workspace's only tile; `id_reused` for a new tile's id that is
  *  already a tile's or a waiting start's. */
 const refuse = (m: Model, msg: Msg): Refusal | null => {
@@ -207,6 +249,10 @@ const refuse = (m: Model, msg: Msg): Refusal | null => {
     return Layout.order(w.layout).length === 1 ? { reason: "last_tile" } : null;
   }
 
+  if ("to" in msg) {
+    return Layout.order(w.layout).includes(msg.to) ? null : { reason: "missing" };
+  }
+
   return known(m, msg.tile) ? { reason: "id_reused" } : null;
 };
 
@@ -220,7 +266,7 @@ export const tezgah = Program.make({
   refuse,
   inputs: {
     attach: "A window's first look at workspace `workspace`: makes it, with tile `tile` first, when it is missing",
-    did: "A command given in tile `from`: `tezgah.split_right` or `tezgah.split_down` with the new `tile`, or `tezgah.close`",
+    did: "A command given in tile `from`: `tezgah.split_right` or `tezgah.split_down` with the new `tile`, `tezgah.close`, or a focus move to tile `to`; a split or a move leaves its `cursor` on `from`",
   },
   outputs: {},
   writes: {},

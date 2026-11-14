@@ -115,6 +115,16 @@ export const split = (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspa
     ? w
     : { ...w, layout: placed(w.layout, at, dir, tile), focus: tile, recent: focused(w.recent, tile) };
 
+/**
+ * Focuses `tile`: it comes first in `recent`, the rest keep their order, and the layout stays. A
+ * workspace without `tile` is returned as it was.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const focus = (w: Workspace, tile: TileId): Workspace =>
+  order(w.layout).includes(tile) ? { ...w, focus: tile, recent: focused(w.recent, tile) } : w;
+
 /** A container settled: no part, nothing; one part, that part; a part of its own direction merged
  *  in by its share; the last part takes what float rounding left of 100. */
 const settled = (dir: Dir, parts: ReadonlyArray<Part>): Layout | null => {
@@ -236,6 +246,57 @@ export const rects = (
   };
   walk(layout, { x: 0, y: 0, width: size.width, height: size.height });
   return out;
+};
+
+/**
+ * A side of a tile, for a focus move: tmux's `select-pane -L -R -U -D`.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Side = "left" | "right" | "up" | "down";
+
+/** How close two edges or two overlaps must be to count as the same, after float rounding. */
+const NEAR = 1e-9;
+
+/** How much of `from`'s `side` edge `other` shares, or 0 when it does not touch that edge. */
+const shared = (from: Rect, other: Rect, side: Side): number => {
+  const edge = {
+    left: other.x + other.width - from.x,
+    right: from.x + from.width - other.x,
+    up: other.y + other.height - from.y,
+    down: from.y + from.height - other.y,
+  }[side];
+  const across =
+    side === "left" || side === "right"
+      ? Math.min(from.y + from.height, other.y + other.height) - Math.max(from.y, other.y)
+      : Math.min(from.x + from.width, other.x + other.width) - Math.max(from.x, other.x);
+  return Math.abs(edge) < NEAR && across > NEAR ? across : 0;
+};
+
+/**
+ * Returns the tile on `side` of `from` that shares the most of that edge, from the percents alone;
+ * a tie goes to the tile first in reading order. Null when `from` sits on the workspace's edge
+ * there, or is not in the layout: a move with no neighbor does nothing, as in tmux.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | null => {
+  const boxes = rects(layout, { width: 1, height: 1 });
+  const box = boxes.get(from);
+
+  if (box === undefined) {
+    return null;
+  }
+
+  const shares = [...boxes].flatMap(([t, other]) => {
+    const share = t === from ? 0 : shared(box, other, side);
+    return share > 0 ? [{ t, share }] : [];
+  });
+  const most = Math.max(0, ...shares.map((x) => x.share));
+  // Float rounding may split a tie by a hair: anything this close to the most is the most.
+  return shares.find((x) => x.share > most - 1e-6)?.t ?? null;
 };
 
 /** Every way one container and the containers in it are untidy. */
