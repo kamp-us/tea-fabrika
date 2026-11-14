@@ -407,10 +407,8 @@ const written = Effect.gen(function* () {
 // or a job record always says which code made it. The saved home predates the code store, so its
 // descriptors name builds whose code it never kept. This build opens it on its own code for each
 // program, so every record a process writes from then on names that code. The move is one
-// `code.loaded {was: <saved build>, hash: <this build's>, from: "boot"}` on `gateway/code`, appended
-// at open before any step can run. `from` stays one of 0293's four values: the move is told apart
-// from an ordinary boot accept by `was` being set on the home's first code fact for the program,
-// where an ordinary boot accept has `was: null`.
+// `code.loaded {was: <saved build>, hash: <this build's>, from: "open"}` on `gateway/code`, appended
+// at open before any step can run (0529).
 //
 // The law builds with `counterAt(1)` in place of the app's counter, so counter:1's saved build is
 // code this build does not have, as after any change to a program's code. The records read: each
@@ -659,10 +657,10 @@ const reopenedOnItsCode = Effect.gen(function* () {
     expect
       .soft(
         moves.map((line) => line.body),
-        `${descriptor.name}: one code.loaded from "boot", with was set, records its move to this build's code`,
+        `${descriptor.name}: one code.loaded from "open", with was set, records its move to this build's code`,
       )
       .toEqual(
-        hash === descriptor.build ? [] : [{ program: descriptor.program, hash, was: descriptor.build, from: "boot" }],
+        hash === descriptor.build ? [] : [{ program: descriptor.program, hash, was: descriptor.build, from: "open" }],
       );
     const records = yield* writtenBy(home, descriptor, after, since);
 
@@ -744,14 +742,28 @@ const upgradedOnItsCode = Effect.gen(function* () {
       }),
     { "fabrika/counter": counterAt(2) },
   );
-  const lines = (yield* rowsUnder(
+  const added = (yield* rowsUnder(
     home,
     "entries",
     `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
     Lines,
-  ))
-    .flatMap((found) => found.rows)
-    .filter((line) => line.stream === counter.id);
+  )).flatMap((found) => found.rows);
+  // The open moved counter:1 off its saved build first, as one code.loaded from "open" (0529).
+  expect
+    .soft(
+      added
+        .filter(
+          (line) =>
+            line.stream === "gateway/code" &&
+            line._tag === "code.loaded" &&
+            line.body["program"] === "fabrika/counter" &&
+            line.body["was"] === counter.build,
+        )
+        .map((line) => line.body),
+      'one code.loaded from "open", with was set, records the move to this build\'s counter',
+    )
+    .toEqual([{ program: "fabrika/counter", hash, was: counter.build, from: "open" }]);
+  const lines = added.filter((line) => line.stream === counter.id);
   const upgraded = lines.filter((line) => line._tag === "state.upgraded");
   expect(
     upgraded.map((line) => [line.build, line.body]),
@@ -778,7 +790,7 @@ describe("T502 law 5, a saved home opens under this build, next/", () => {
   // vector: one home saved by a build before the code store, since only such a build can write a
   // home whose descriptors name code it never kept (T833, the fix round's law 1; 0093's label).
   it.live.skipIf(process.env.T502_PORT_HOME === "write")(
-    "vector: a home saved before the code store opens each process on this build's code, with one code.loaded from boot with was set, and every record it writes names that code",
+    "vector: a home saved before the code store opens each process on this build's code, with one code.loaded from open with was set, and every record it writes names that code",
     () => reopenedOnItsCode.pipe(Effect.provide(services)),
     { timeout: 240_000 },
   );

@@ -314,7 +314,11 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             delete: unexpected,
             setAlarm: unexpected,
             deleteAlarm: unexpected,
-            sql: { exec: unexpected },
+            // The one query a build makes: whether the object holds a checkpoint yet (none here).
+            sql: {
+              exec: (query: string) =>
+                query === "SELECT name FROM sqlite_master WHERE name='process_state'" ? [] : unexpected(),
+            },
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
@@ -351,6 +355,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,
+                    swap: unexpected,
                   }),
                 ),
               ),

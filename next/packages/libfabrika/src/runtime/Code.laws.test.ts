@@ -51,7 +51,7 @@ type Loaded = {
   readonly from: From;
 };
 
-type From = "watch" | "deploy" | "boot" | "restart";
+type From = "watch" | "deploy" | "boot" | "restart" | "open";
 type Selection = { readonly hash: string; readonly load: string };
 expectTypeOf<Omit<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"], "_tag">>().toEqualTypeOf<Loaded>();
 expectTypeOf<typeof Code.From.Type>().toEqualTypeOf<From>();
@@ -79,7 +79,7 @@ const roundTrip = (model: Model): Model => Schema.decodeUnknownSync(Stored)(Sche
 
 const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((b) => Buffer.from(b).toString("hex"));
 const names = fc.stringMatching(/^[a-z_][a-z0-9-]{0,7}\/[a-z_][a-z0-9-]{0,7}$/);
-const froms = fc.constantFrom<From>("watch", "deploy", "boot", "restart");
+const froms = fc.constantFrom<From>("watch", "deploy", "boot", "restart", "open");
 
 const Cell = fc.record({
   move: fc.noBias(fc.nat()),

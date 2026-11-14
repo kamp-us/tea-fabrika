@@ -116,7 +116,7 @@ type InstallShape = {
   readonly program: string;
   readonly hash: string;
   readonly source: string;
-  readonly from: "watch" | "deploy" | "boot" | "restart";
+  readonly from: "watch" | "deploy" | "boot" | "restart" | "open";
 };
 
 expectTypeOf<Install>().toEqualTypeOf<InstallShape>();
