@@ -9,8 +9,18 @@ on:
       - main
   # A draft runs only the fast jobs; marking it ready (`ready_for_review`) starts the full set on
   # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11).
+  # A pull request that changes only plan files and field rows starts no run (ticket 988): CI runs
+  # nothing on them but the row check, which `pnpm lint` runs on the writer's laptop. GitHub
+  # compares the whole pull request with its base, so a later push of any other path starts the
+  # run. The list is changes.mjs's `ignored`; workflow-lint.ts holds this copy to it.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - docs/plan/*.md
+      - docs/plan/lanes/*.md
+      - field/findings/*.json
+      - field/notes/*.json
+      - field/runs/*.json
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths

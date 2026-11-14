@@ -57,6 +57,23 @@ const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.start
 const quiet = (path) => safe(path) || prose(path);
 
 /**
+ * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
+ * run at all (ticket 988). Plan files and row files, a few of the quiet paths above. Each `*`
+ * stands for any name without a `/`, as in GitHub's filters, and no other wildcard is used, so a
+ * folder named `brief` under docs/plan/ is never matched. Skill prose stays out: the changes job's
+ * skills check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds
+ * every path the list matches to no heavy job here. `pnpm lint` checks the rows instead, with
+ * field-check.ts's `--local`.
+ */
+export const ignored = [
+  "docs/plan/*.md",
+  "docs/plan/lanes/*.md",
+  "field/findings/*.json",
+  "field/notes/*.json",
+  "field/runs/*.json",
+];
+
+/**
  * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script
  * and no prose, the lead's gc.plist, is read by the lead's tooling tests, so it still starts test.
  * @param {string} path
