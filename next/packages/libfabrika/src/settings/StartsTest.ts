@@ -11,23 +11,6 @@ import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
-/**
- * The first step of each property run: once the law's `signal` has aborted, it ends the whole
- * fast-check run, shrinking included, before anything opens.
- *
- * **Details**
- *
- * A law's abort (its timeout) fails the run in flight, and fast-check would then shrink: run the
- * property again on smaller values. Effect starts a run up to its first wait even with an aborted
- * signal, so each of those runs would still open what it needs. Past the abort this step fails
- * synchronously with fast-check's own interruption, `PreconditionFailure(true)`, which ends the
- * run there. A run that starts before the abort passes through unchanged.
- *
- * @category testing
- */
-export const stopOnAbort = (signal: AbortSignal) =>
-  Effect.suspend(() => (signal.aborted ? Effect.fail(new fc.PreconditionFailure(true)) : Effect.void));
-
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
 export const law = <A>(
   name: string,

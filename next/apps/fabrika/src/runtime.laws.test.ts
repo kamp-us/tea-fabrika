@@ -13,6 +13,7 @@ import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { stopOnAbort } from "@kampus/libfabrika/Testing.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
@@ -111,7 +112,7 @@ type Open = (trace?: string, build?: string, options?: WorldOptions) => ReturnTy
  */
 const owned = (body: (open: Open) => Promise<void>, signal: AbortSignal) =>
   Effect.runPromise(
-    StartsTest.stopOnAbort(signal).pipe(
+    stopOnAbort(signal).pipe(
       Effect.andThen(
         Effect.scoped(
           Effect.flatMap(Effect.scope, (scope) =>
@@ -545,7 +546,7 @@ describe("P40 the core counter's identity in the brain", () => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
         Effect.runPromise(
-          StartsTest.stopOnAbort(signal).pipe(
+          stopOnAbort(signal).pipe(
             Effect.andThen(
               Effect.scoped(
                 Effect.gen(function* () {
