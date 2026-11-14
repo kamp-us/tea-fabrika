@@ -233,8 +233,9 @@ const CLIENT = ["WindowMachine", "WindowStart", "Headless", "Keys", "Tezgah"].ma
 
 // Desk S2a: tezgah's wire contract, one subpath each (the exports map's `./tezgah/*`): the shapes of
 // its view and the layout's geometry. A window folds the layout to its own size (0277), so it reads
-// them as it reads transport's contracts, a window being a client (the note's T3).
-const TEZGAH = ["Layout", "Workspace"].map((front) => `${LIBRARY}/tezgah/${front}`);
+// them as it reads transport's contracts, a window being a client (the note's T3). Desk S4: and `Fold`,
+// the one drawn geometry every client folds and draws with (plan amendment 13).
+const TEZGAH = ["Layout", "Workspace", "Fold"].map((front) => `${LIBRARY}/tezgah/${front}`);
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -565,8 +566,8 @@ describe("planted breaks", () => {
       }),
   );
   // scenario: Desk S2a, fixed imports probe tezgah's row from each side: it takes processes and Id and
-  // nothing above them; the client, the entry and Tuval's window reach it, the window only by its two
-  // fronts; the runtime, the modules below it and every other part of Tuval and a program's box may not.
+  // nothing above them; the client, the entry and Tuval's window reach it, the window only by its three
+  // fronts (Desk S4 adds `Fold`); the runtime, the modules below it and every other part of Tuval and a program's box may not.
   it.effect("Desk S2a: tezgah takes processes and Id; only the client, the entry and the window reach it", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
@@ -593,12 +594,16 @@ describe("planted breaks", () => {
         "packages/tuval/src/window/Layout.tsx": lines(
           'import {GAP} from "@kampus/libfabrika/tezgah/Layout";',
           'import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";',
+          'import {drawn, fold} from "@kampus/libfabrika/tezgah/Fold";',
           'import {optimisticState} from "@kampus/libfabrika/client/Tezgah";',
           'import * as Keys from "@kampus/libfabrika/client/Keys";',
           'import {tree} from "@kampus/libfabrika/tezgah/internal/tree";',
         ),
         "packages/tuval/src/desktop/fold.ts": lines('import {split} from "@kampus/libfabrika/tezgah/Layout";'),
-        "packages/tuval/src/browser/rows.ts": lines('import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";'),
+        "packages/tuval/src/browser/rows.ts": lines(
+          'import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";',
+          'import {fold} from "@kampus/libfabrika/tezgah/Fold";',
+        ),
         "programs/desk/package.json": manifest("@kampus/desk"),
         "programs/desk/src/index.ts": lines(
           'import {split} from "@kampus/libfabrika";',
@@ -615,6 +620,7 @@ describe("planted breaks", () => {
           'packages/tuval/src/window/Layout.tsx imports "@kampus/libfabrika/tezgah/internal/tree": window may not import it',
           'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/tezgah/Layout": desktop may not import it',
           'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika/tezgah/Workspace": browser may not import it',
+          'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika/tezgah/Fold": browser may not import it',
           'programs/desk/src/index.ts imports "@kampus/libfabrika/tezgah/Layout": program may not import it',
         ].sort(),
       );
