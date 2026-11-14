@@ -125,6 +125,16 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           yield* promised(() => list.box("eggs").waitFor({ timeout: 30_000 }));
           yield* shoot(page, `focus-t${t1.n}`, "one-tile");
 
+          // Plan amendment 9, point 3: a split leaves t1 too, so it carries t1's cursor. DOM focus
+          // goes to the eggs row first; the split's letter carries `item:eggs`, and tezgah keeps it.
+          yield* promised(() =>
+            page
+              .getByRole("region", { name: regionName(t1), exact: true })
+              .getByRole("checkbox", { name: "eggs", exact: true })
+              .focus(),
+          );
+          yield* domSettles(page, (f) => f.region === regionName(t1) && f.cursor === "item:eggs", "on the eggs row");
+
           // Side by side: C-b % focuses the new tile, at its top (never focused); C-b h and C-b l move.
           yield* keys(page, "Control+b", "%");
           const side = yield* at(page, null, (n) => n === 2, "two side by side");
@@ -136,7 +146,16 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             "L28: a tile never focused lands at its top",
           ).toBe(true);
           yield* shoot(page, `focus-t${t2.n}`, "side-by-side");
+          expect(
+            side.tiles.find((t) => t.id === t1.id)?.cursor,
+            "L28: tezgah keeps the cursor the split left t1 on",
+          ).toBe("item:eggs");
           yield* move(page, ["Control+b", "h"], t1.id, "left to t1");
+          yield* domSettles(
+            page,
+            (f) => f.region === regionName(t1) && f.cursor === "item:eggs",
+            "L28: back on t1 after C-b %, DOM focus is on the row the split left it on",
+          );
           yield* shoot(page, `focus-t${t1.n}`, "side-by-side");
           yield* move(page, ["Control+b", "ArrowRight"], t2.id, "right to t2");
           yield* move(page, ["Control+b", ";"], t1.id, "back to the last tile, t1");

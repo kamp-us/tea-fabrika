@@ -794,6 +794,10 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
 // - A move is taken in arrival order: the workspace holding `to` focuses `to`, `recent` becomes `to`
 //   then the rest in their order, and `from`'s tile keeps `cursor` as its cursor, which every later
 //   view shows until a move leaves that tile again. Nothing else changes and no Cmd is asked.
+// - Plan amendment 9, point 3: every letter that moves focus off a tile carries that tile's cursor,
+//   a split included. A split's `did {does, from, via, tile, cursor}` is taken as before, and tezgah
+//   stores `cursor` on `from` at once, so a return to `from` never resets it to the top (0165). A
+//   close carries none: its tile is gone. A letter with no `cursor` key leaves the cursor as it was.
 // - `refuse`: `missing` for a `to` that is not on `from`'s workspace (an unknown tile, or another
 //   workspace's), as for an unknown `from`. A refusal changes nothing.
 // - L27: tezgah never reads `sentAt`. A letter's body may carry one, as a window's clock wrote it;
@@ -819,6 +823,8 @@ const FocusPick = fc.record({
     "focus",
     "focus",
     "focus_far",
+    "split_cursor",
+    "split_cursor",
   ),
   pick: fc.nat(),
   cursor: fc.constantFrom(...CURSORS),
@@ -868,6 +874,29 @@ const focusMove = (
   return { move: `${name} ${from} -> ${to}`, ...take(p, w, msg, false), from, to, cursor: c.cursor, far };
 };
 
+/** A split that carries the cursor it leaves on `from` (plan amendment 9, point 3), picked in `w`. */
+const splitMove = (p: Stepper, w: World, c: FocusPick) => {
+  const tiles = live(w.view);
+  const from = tiles[c.pick % Math.max(tiles.length, 1)];
+
+  if (from === undefined) {
+    return null;
+  }
+
+  const dir: Dir = c.pick % 2 === 0 ? "right" : "down";
+  const tile = typeId("tile", w.next++);
+  const space = spaceWith(w.view, from)?.id ?? "";
+  w.at++;
+  const e = take(p, w, { type: "did", does: DOES[dir], from, via, tile, cursor: c.cursor }, false);
+  const cmd = starts(e.cmds)[0];
+
+  if (cmd !== undefined) {
+    w.waiting.push({ _tag: "split", from, tile, dir, cmd, space });
+  }
+
+  return { move: `split ${dir} ${from} -> ${tile} leaving ${String(c.cursor)}`, ...e, from, split: c.cursor };
+};
+
 /** tezgah's focus commands, from its one commands table, and the click's move. */
 const focusCommands = async () => {
   const { commands } = await loadCommands();
@@ -914,10 +943,10 @@ describe("Desk S3: focus moves at the program", () => {
     }
   });
 
-  it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, which every later view shows until a move leaves that tile again", async () => {
+  it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again", async () => {
     const p = await loaded();
     const does = await focusCommands();
-    const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0 };
+    const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0, split: 0 };
     fc.assert(
       fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), (picks) => {
         const w = begin(p);
@@ -931,7 +960,16 @@ describe("Desk S3: focus moves at the program", () => {
           const e =
             c.kind === "focus" || c.kind === "focus_far"
               ? focusMove(p, w, does, c)
-              : move(p, w, c.kind as Kind, c.pick);
+              : c.kind === "split_cursor"
+                ? splitMove(p, w, c)
+                : move(p, w, c.kind as Kind, c.pick);
+
+          if (e !== null && "split" in e) {
+            expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
+            expect(starts(e.cmds), `S3: ${e.move} asks for its start as before`).toHaveLength(1);
+            cursors.set(e.from, e.split);
+            seen.split += e.split === null ? 0 : 1;
+          }
 
           if (e !== null && "to" in e) {
             const before = spaceWith(e.before, e.from!)!;

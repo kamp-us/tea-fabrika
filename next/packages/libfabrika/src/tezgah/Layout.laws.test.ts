@@ -384,8 +384,8 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
 // - `neighbor(layout, from, "left" | "right" | "up" | "down")` answers the tile on that side of
 //   `from` with the most overlap along that side, or null when `from` sits on the workspace's edge
 //   there, or is not in the layout. It is pure geometry of the percents: a tile on that side touches
-//   `from`'s edge, and its overlap is how much of that edge they share. Two tiles that share the same
-//   most overlap may answer either; the plan settles no tie.
+//   `from`'s edge, and its overlap is how much of that edge they share. A tie for the most overlap
+//   goes to the tile first in reading order (plan amendment 9, point 4).
 // The walk is L5's own fc.commands of splits and closes, so the layouts are every tidy tree a desk
 // reaches, nested and uneven. The law's oracle reads each tile's box in the unit square from the
 // percents, written here and never from the product's `rects`.
@@ -436,8 +436,8 @@ const overlap = (from: Box, other: Box, side: Side): number => {
 };
 
 describe("Desk S3 L26: neighbor picks the tile with the most overlap on that side", () => {
-  it("L26: on any walked layout, neighbor answers a tile touching that side with the most overlap, and null only when no tile touches it", () => {
-    const seen = { found: 0, edge: 0, uneven: 0 };
+  it("L26: on any walked layout, neighbor answers a tile touching that side with the most overlap, the first in reading order on a tie, and null only when no tile touches it", () => {
+    const seen = { found: 0, edge: 0, uneven: 0, tie: 0 };
     fc.assert(
       fc.property(commands, fc.nat(), (cmds, pick) => {
         const t1 = typeId("tile", 1);
@@ -474,6 +474,13 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
               picked!.share,
               `L26: ${side} of ${from} has the most overlap of ${JSON.stringify(shares)} in ${JSON.stringify(layout)}`,
             ).toBeGreaterThan(most - 1e-6);
+            // The tie rule: of the tiles sharing the most overlap, the first in reading order.
+            const tied = shares.filter((x) => x.share > most - 1e-6);
+            seen.tie += tied.length > 1 ? 1 : 0;
+            expect(
+              got,
+              `L26: a tie on the ${side} of ${from} among ${JSON.stringify(tied)} goes to the first in reading order`,
+            ).toBe(tied[0]!.t);
           }
         }
 
@@ -486,5 +493,6 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
     expect(seen.found, "L26: the walks find neighbors").toBeGreaterThan(0);
     expect(seen.edge, "L26: the walks reach the workspace's edges").toBeGreaterThan(0);
     expect(seen.uneven, "L26: the walks reach a side shared unevenly by two or more tiles").toBeGreaterThan(0);
+    expect(seen.tie, "L26: the walks reach a tie for the most overlap").toBeGreaterThan(0);
   });
 });

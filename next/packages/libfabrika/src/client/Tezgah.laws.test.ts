@@ -216,6 +216,10 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
 // - Each drop writes one client row `record {focus {letter, result, ms}}`: `kept` when the server's
 //   focus is the move's `to`, `overridden` when the drawn focus jumped back on that drop (the lead's
 //   lean: a jump back is recorded, never announced).
+// - Plan amendment 9, point 5: a refused move is dropped when its refusal arrives, since tezgah's
+//   state did not change, and writes `focus {letter, result: "overridden"}`.
+// - Plan amendment 9, point 3: a split's letter also carries the cursor the page last said for the
+//   tile it leaves, as `cursor` beside `from`.
 //
 // The walk: two windows of one person, each online through the real hello exchange with tezgah's
 // view and every tile open, then each step picks one move possible in the state the walk folded: a
@@ -320,6 +324,8 @@ type Win = {
   /** The highest view revision it took, and each letter's reply position once the reply reached it. */
   seen: number;
   got: Map<string, number>;
+  /** Letters whose refusal reached it. */
+  refused: Set<string>;
   /** Every move it drew, in order, with its letter once written. */
   moves: Array<Move>;
   /** The cursor the page last said for each tile. */
@@ -422,7 +428,12 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
       const did = call["m"] as Did;
       const letter = String(call["letter"]);
 
-      if (did?.type === "did" && !w.outbox.some((o) => o.letter === letter) && !w.got.has(letter)) {
+      if (
+        did?.type === "did" &&
+        did.does.startsWith("tezgah.focus") &&
+        !w.outbox.some((o) => o.letter === letter) &&
+        !w.got.has(letter)
+      ) {
         const move = w.moves.find((x) => x.letter === null);
 
         if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
@@ -496,6 +507,17 @@ const arrive = (world: World, i: number) => {
   }
 };
 
+/** tezgah refuses the next letter window `i` wrote, as it refuses a move whose tile another window
+ *  closed: its state does not change, and only the refusal goes back. */
+const reject = (world: World, i: number) => {
+  const w = world.wins[i]!;
+  const letter = w.outbox.shift();
+
+  if (letter !== undefined) {
+    w.replies.push({ id: letter.id, dial: letter.dial, pos: -1 });
+  }
+};
+
 /** Window `i` takes the next reply tezgah sent it. */
 const reply = (world: World, i: number, each: (e: Event) => void) => {
   const w = world.wins[i]!;
@@ -510,6 +532,10 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
 
   if (letter !== null && r.pos >= 0) {
     w.got.set(letter, r.pos);
+  }
+
+  if (letter !== null && r.pos < 0) {
+    w.refused.add(letter);
   }
 
   stepWin(
@@ -696,6 +722,7 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
       notices: [],
       seen: 0,
       got: new Map(),
+      refused: new Set(),
       moves: [],
       cursors: new Map(),
     });
@@ -714,10 +741,11 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
   return world;
 };
 
-/** Whether move `m` of window `w` is answered: its reply came and a view at or past its position. */
+/** Whether move `m` of window `w` is answered: its refusal came, or its reply came and a view at or
+ *  past its position. */
 const answered = (w: Win, m: Move): boolean => {
   const pos = m.letter === null ? undefined : w.got.get(m.letter);
-  return pos !== undefined && w.seen >= pos;
+  return (m.letter !== null && w.refused.has(m.letter)) || (pos !== undefined && w.seen >= pos);
 };
 
 const Pick = fc.record({
@@ -747,7 +775,7 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
     () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", CURSORS[c.pick % 3]!, each),
     () => focusIn(world, i, drawnFocus(w.s) ?? "", CURSORS[(c.pick >> 2) % 3]!, each),
     ...(w.waiting.some((x) => x.type === "now") ? [() => date(world, i, each)] : []),
-    ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i)] : []),
+    ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i), () => reject(world, i)] : []),
     ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
     ...(w.notices.length > 0 ? [() => notice(world, i, each)] : []),
   ];
@@ -766,10 +794,11 @@ const settle = (world: World, each: (e: Event) => void) => {
       return;
     }
 
+    // Views before replies, so a reply can find the server already past its move: a jump back.
     date(world, busy, each);
     arrive(world, busy);
-    reply(world, busy, each);
     notice(world, busy, each);
+    reply(world, busy, each);
   }
 
   throw new Error("the world never went quiet");
@@ -836,8 +865,8 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
 });
 
 describe("Desk S3 L24: two windows' moves and the server's answers, in any order", () => {
-  it("L24: each window's drawn focus is the server's once its mutations are answered, a pending mutation goes only once its reply and a view at or past its position came, and a window whose move lost follows the server", () => {
-    const seen = { lost: 0, both: 0, early: 0, moves: 0 };
+  it("L24: each window's drawn focus is the server's once its mutations are answered, a pending mutation goes only once its reply and a view at or past its position came, or its refusal, and a window whose move lost follows the server", () => {
+    const seen = { lost: 0, both: 0, early: 0, moves: 0, refused: 0 };
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, next, world: at }) => {
@@ -871,6 +900,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
 
         for (const [i, w] of world.wins.entries()) {
           seen.moves += w.moves.length;
+          seen.refused += w.moves.filter((x) => x.letter !== null && w.refused.has(x.letter)).length;
           const dids = w.moves.map((x) => x.letter);
           expect(
             dids.every((l) => l !== null),
@@ -889,6 +919,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
     expect(seen.moves, "L24: the walks move focus").toBeGreaterThan(0);
     expect(seen.both, "L24: both windows move in one walk").toBeGreaterThan(0);
     expect(seen.lost, "L24: a window's last move loses to the other's").toBeGreaterThan(0);
+    expect(seen.refused, "L24: the walks refuse moves, which leave as their refusal arrives").toBeGreaterThan(0);
   });
 
   it("L24: every letter a window sends for a move names the drawn focus it left, the tile it drew and its command, with the cursor the page last said there", () => {
@@ -1004,8 +1035,8 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
 });
 
 describe("Desk S3 L29: a move the server overrode is recorded", () => {
-  it("L29: each answered move writes one focus row with its letter on the step it is dropped: kept when the server's focus is its to, overridden when the drawn focus jumped back", () => {
-    const seen = { kept: 0, overridden: 0 };
+  it("L29: each answered move writes one focus row with its letter on the step it is dropped: kept when the server's focus is its to, overridden when the drawn focus jumped back or tezgah refused it", () => {
+    const seen = { kept: 0, overridden: 0, refused: 0 };
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const rows = [new Map<string, number>(), new Map<string, number>()];
@@ -1029,6 +1060,12 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
             const move = dropped.find((x) => x.letter === r["letter"])!;
             expect(["kept", "overridden"], "L29: a focus row's result").toContain(r["result"]);
 
+            if (w.refused.has(move.letter!)) {
+              seen.refused++;
+              expect(r["result"], `L29: the refused move to ${move.to} was overridden`).toBe("overridden");
+              continue;
+            }
+
             if (serverFocus(next) === move.to) {
               seen.kept++;
               expect(r["result"], `L29: the server kept ${move.to}`).toBe("kept");
@@ -1051,5 +1088,87 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
     );
     expect(seen.kept, "L29: the walks keep moves").toBeGreaterThan(0);
     expect(seen.overridden, "L29: the walks override moves").toBeGreaterThan(0);
+    expect(seen.refused, "L29: the walks refuse moves").toBeGreaterThan(0);
+  });
+});
+
+describe("Desk S3: a split's letter carries the cursor it leaves", () => {
+  it("S3 cursor (the window's half): each split letter names the drawn focus it leaves and the cursor the page last said there", () => {
+    const seen = { splits: 0, cursor: 0 };
+    fc.assert(
+      fc.property(
+        Desk,
+        fc.array(fc.record({ move: fc.nat(), pick: fc.nat() }), { minLength: 4, maxLength: 30 }),
+        (d, picks) => {
+          /** The splits the window minted, in order: the tile each leaves and its cursor then. */
+          const due: Array<{ readonly from: string; readonly cursor: string | null }> = [];
+          const each = ({ cmds }: Event) => {
+            for (const c of cmds) {
+              const call = c["call"] as Call | undefined;
+              const did = call?.["m"] as (Did & { readonly cursor?: string | null }) | undefined;
+
+              if (c.type !== "write" || call?._tag !== "send" || !did?.does.startsWith("tezgah.split_")) {
+                continue;
+              }
+
+              const want = due.shift();
+              expect(want, "S3: a split letter the window minted").toBeDefined();
+              seen.splits++;
+              seen.cursor += want!.cursor === null ? 0 : 1;
+              expect(did.from, "S3: the split leaves the drawn focus").toBe(want!.from);
+              expect(did.cursor ?? null, `S3: the split carries the cursor the page last said in ${want!.from}`).toBe(
+                want!.cursor,
+              );
+            }
+          };
+          const world = makeWorld(makeDesk(d.cuts.slice(0, 2), d.focus), 1, () => {});
+          const w = world.wins[0]!;
+
+          for (const c of picks) {
+            const space = drawnSpace(w.s)!;
+            const tiles = Layout.order(space.layout);
+            const options: Array<() => void> = [
+              () => focusIn(world, 0, space.focus, CURSORS[c.pick % 3]!, each),
+              () => focusIn(world, 0, tiles[c.pick % tiles.length]!, CURSORS[(c.pick >> 2) % 3]!, each),
+              () => pressFocus(world, 0, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
+              () => {
+                const from = drawnFocus(w.s)!;
+                const cursor = w.cursors.get(from) ?? null;
+
+                for (const key of ["ctrl+b", c.pick % 2 === 0 ? "%" : '"']) {
+                  stepWin(world, 0, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
+                  housekeep(world, 0, each);
+                }
+
+                const mint = w.waiting.find((x) => x.type === "mint");
+
+                if (mint !== undefined) {
+                  due.push({ from, cursor });
+                  stepWin(
+                    world,
+                    0,
+                    {
+                      type: "mint_ok",
+                      cmd: mint,
+                      value: { tile: typeId("tile", 6_000 + world.letters++) },
+                    } as WindowMsg,
+                    each,
+                  );
+                  housekeep(world, 0, each);
+                }
+              },
+              () => date(world, 0, each),
+            ];
+            options[c.move % options.length]!();
+          }
+
+          settle(world, each);
+          expect(due, "S3: every split the window minted went out as a letter").toEqual([]);
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.splits, "S3: the walks split").toBeGreaterThan(0);
+    expect(seen.cursor, "S3: the walks split a tile left on a cursor").toBeGreaterThan(0);
   });
 });
