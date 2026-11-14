@@ -6,12 +6,13 @@ import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import type * as Module from "./Replies.ts";
 import { Replies } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 
 const SEED = 119120;
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 
 /** A real SQLite database: each run of the inner Effect is a new connection to the same file,
  *  closed with its scope. Each run of the outer Effect is a new, empty database. */

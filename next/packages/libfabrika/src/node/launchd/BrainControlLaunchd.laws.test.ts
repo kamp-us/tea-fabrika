@@ -14,6 +14,7 @@ import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { SinkError, SpanRow } from "../../telemetry/Trace.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as ServiceLaunchd from "./BrainServiceLaunchd.ts";
 import * as LaunchdTest from "./Launchd.test-support.ts";
 
@@ -383,7 +384,7 @@ it.effect.prop(
         expect(output).not.toContain(encodeURIComponent(secret));
       }
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it.effect.prop(

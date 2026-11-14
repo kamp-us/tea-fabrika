@@ -7,11 +7,12 @@ import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
-const runs = { seed: 119120, numRuns: 200 };
-const identityRuns = { ...runs, numRuns: 300 };
+const runs = { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) };
+const identityRuns = { ...runs, numRuns: runsFor({ fast: 30, full: 300 }) };
 // CI exhausted 60 s for L5 and both L2 properties. Allow 10 ms per real Git command,
 // including scoped setup/cleanup, and count the longest generated tape of four moves.
 // A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,
@@ -503,7 +504,7 @@ describe("T878 pinned repository reads", () => {
           }).pipe(Effect.scoped, Effect.provide(services)),
         );
       }),
-      { seed: 119120, numRuns: 100 },
+      { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
     );
   });
 });
@@ -685,5 +686,5 @@ it.effect.prop(
         );
       }),
     ).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );

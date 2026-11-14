@@ -16,6 +16,7 @@ import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -28,7 +29,7 @@ import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const check = { seed: SEED, numRuns: 100 };
+const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
 const DEFAULT = 18787;
 const PERSON = "~/.fabrika/fabrika.toml";
 const REPO = ".fabrika/fabrika.toml";
@@ -83,7 +84,7 @@ it.effect.prop(
         }
       }
     }).pipe(Effect.provide(services)),
-  { arbitrary: { seed: SEED, runs: 50 } },
+  { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 it.effect.prop(
@@ -102,7 +103,7 @@ it.effect.prop(
       );
       expect(Exit.isFailure(result)).toBe(true);
     }).pipe(Effect.provide(services)),
-  { arbitrary: { seed: SEED, runs: 50 } },
+  { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 const action = fc.oneof(

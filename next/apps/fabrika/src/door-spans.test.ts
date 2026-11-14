@@ -18,6 +18,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -25,7 +26,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
 
-const CHECK = { seed: 119120, numRuns: 40, endOnFailure: true };
+const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
 const URL = "https://fabrika.test/entry/project-socket";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";

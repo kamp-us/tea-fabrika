@@ -24,6 +24,7 @@ import { Job, State, type Request, Request as RequestSchema, Result as JobResult
 import { Jobs } from "../jobs/Jobs.ts";
 import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { connection } from "../transport/Connection.ts";
 import type { Answer } from "../transport/Wire.ts";
 import { Attached } from "../transport/Wire.ts";
@@ -1025,7 +1026,18 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                 Effect.as(true),
                 Effect.catchCause((cause) => Effect.fail(cause)),
               ),
-            { seed: 119120, runs: focus === "A12" ? 40 : focus === "A8" || focus === "A10" ? 60 : 100, concurrency: 1 },
+            {
+              seed: 119120,
+              // A8 at 15 walks never races a read or a finish at this seed, so A8 and A10 run 30.
+              runs: runsFor(
+                focus === "A12"
+                  ? { fast: 10, full: 40 }
+                  : focus === "A8" || focus === "A10"
+                    ? { fast: 30, full: 60 }
+                    : { fast: 25, full: 100 },
+              ),
+              concurrency: 1,
+            },
           );
           expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
           expect([...done]).toEqual(expect.arrayContaining([...required[focus]]));

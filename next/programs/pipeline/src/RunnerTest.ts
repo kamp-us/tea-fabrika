@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
@@ -344,6 +345,6 @@ export const suite = (driver: Driver) =>
       "S1: [secrets] generated service failures stay out of every durable record, span and log",
       [secret, Arbitrary.array(Arbitrary.schema(Cell), { maxLength: 24 })],
       ([value, commands]) => Effect.scoped(once(value, commands)),
-      { arbitrary: { seed: 119120, runs: 40, size: 24 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }), size: 24 } },
     );
   });

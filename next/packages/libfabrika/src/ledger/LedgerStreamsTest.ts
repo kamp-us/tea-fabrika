@@ -3,6 +3,7 @@
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerStreams, LedgerStreamsError, Storage } from "./LedgerStreams.ts";
@@ -93,7 +94,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               Effect.as(true),
               Effect.catchCause((cause) => Effect.fail(cause)),
             ),
-          { seed: 119120, runs: 60, concurrency: 1 },
+          // 15 walks never reach a `%` job name at this seed.
+          { seed: 119120, runs: runsFor({ fast: 30, full: 60 }), concurrency: 1 },
         );
         expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
 
@@ -133,6 +135,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           expect(result.failure.reason.cause).toBe(failure);
         }
       }),
-    { arbitrary: { seed: 119120, runs: 60 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 6, full: 60 }) } },
   );
 };

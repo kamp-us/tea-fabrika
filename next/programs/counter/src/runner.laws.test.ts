@@ -14,6 +14,7 @@ import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
@@ -505,7 +506,7 @@ describe("P40 the counter under its qualified identity", () => {
           ),
         );
       }),
-      { seed: SEED, numRuns: 20 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("L8: a registered name stays a process name, whatever the program identity", async () => {
@@ -568,7 +569,7 @@ describe("P40 the counter under its qualified identity", () => {
           ),
         );
       }),
-      { seed: SEED, numRuns: 50 },
+      { seed: SEED, numRuns: runsFor({ fast: 5, full: 50 }) },
     );
   });
 });

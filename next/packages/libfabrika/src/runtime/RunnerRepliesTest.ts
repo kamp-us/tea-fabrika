@@ -14,6 +14,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
@@ -22,7 +23,7 @@ import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTe
 import { ProgramRunner, Sent } from "./Runner.ts";
 
 const SEED = 119120;
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 const NAME = "drafts:1";
 const PROGRAM = "drafts";
 const CAPACITY = 1024 ** 3;

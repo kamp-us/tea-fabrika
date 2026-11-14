@@ -20,6 +20,7 @@ import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Children } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
@@ -543,7 +544,12 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
+        const checks = {
+          seed: SEED,
+          numRuns: runsFor({ fast: 10, full: 40 }),
+          includeErrorInReport: true,
+          endOnFailure: true,
+        };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -957,7 +963,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-          const checks = { seed: SEED, numRuns: 200, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            // Every relation the law names must be mailed across: 60 walks miss some at this seed.
+            numRuns: runsFor({ fast: 120, full: 200 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           // An empty walk cannot pass: every move ran, and every relation the law names was mailed across.

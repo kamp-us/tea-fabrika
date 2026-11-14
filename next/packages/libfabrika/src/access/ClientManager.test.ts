@@ -30,6 +30,7 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import type { MemberEvent, Access } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
@@ -118,7 +119,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: SEED,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },
@@ -804,7 +805,8 @@ describe("p96, write tells the truth over any history", () => {
           }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
         ),
       ),
-      { seed: SEED, numRuns: 60 },
+      // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
+      { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
     );
     expect(applied).toBeGreaterThan(60);
     expect(refused).toBeGreaterThan(60);

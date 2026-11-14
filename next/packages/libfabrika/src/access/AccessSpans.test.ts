@@ -25,6 +25,7 @@ import { A, brain, first as firstStart, ids } from "../processes/Process.test-su
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
@@ -55,7 +56,7 @@ const keyArb = MemberEvent.cases.denied.fields.key.check(Schema.isPattern(/^key-
 
 // Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
 // Bare ids, programs and hashes retain 1..31 characters too.
-const options = { arbitrary: { seed: 119120, runs: 20, size: 40 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 40 } };
 
 // The installed runner uses runs/seed; old examples stay in these callbacks.
 const examples =
@@ -727,7 +728,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         });
         expect(yield* clients.members).toEqual(before);
       }).pipe(Effect.provide(all())),
-    { arbitrary: { seed: 119120, runs: 20 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }) } },
   );
   it.prop(
     "founding twice with different person ids preserves the first membership",

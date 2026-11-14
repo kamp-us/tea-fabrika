@@ -19,6 +19,7 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import {
   commitReply,
   configureProcess,
@@ -1489,7 +1490,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   return { w, current, restarts, live, route };
 };
 
-const flowOptions = { timeout: 600_000, arbitrary: { seed: 119120, runs: 12 } };
+const flowOptions = { timeout: 600_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } };
 
 describe("ticket 402: P34 recovery on the Worker runtime", () => {
   // Effect Arbitrary: RecoveryFlow. Plant: key storage by the current process ID; clear receipts on
@@ -1674,7 +1675,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
           );
         }
       }),
-      { seed: 119120, numRuns: 40, endOnFailure: true },
+      { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true },
     );
     expect([...done]).toEqual(expect.arrayContaining(["start", "throw", "exit", "bad", "retry", "reopen"]));
   }, 600_000);

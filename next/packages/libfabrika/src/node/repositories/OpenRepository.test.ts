@@ -37,6 +37,7 @@ import {
 import * as Declarations from "../../settings/Declarations.ts";
 import * as SettingsSnapshot from "../../settings/Snapshot.ts";
 import { Toml } from "../../settings/Toml.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
@@ -185,7 +186,7 @@ describe("T878 composed repository opening", () => {
           ).pipe(Effect.provide(services)),
         );
       }),
-      { seed: 119120, numRuns: 200 },
+      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
     );
   });
 
@@ -226,7 +227,7 @@ describe("T878 composed repository opening", () => {
           ),
         );
       }),
-      { seed: 119120, numRuns: 200 },
+      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
     );
   });
 });
@@ -330,7 +331,7 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
         ).pipe(Effect.provide(services)),
       );
     }),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
 }, 900_000);
 
@@ -405,7 +406,7 @@ it.effect.prop(
         }
       }),
     ).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
@@ -639,6 +640,6 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         }
       },
     ),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
 });

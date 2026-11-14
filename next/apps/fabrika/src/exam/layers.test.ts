@@ -26,6 +26,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
@@ -101,6 +102,12 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
       });
 
 const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
+
+// Decision 0535: a shared suite (`*Test.ts`) reads its laws' case counts from the test depth, as a
+// test does, whatever part it sits in. Product files still may not import it.
+const DEPTH = "@kampus/libfabrika/TestDepth.test-support";
+
+const isSuite = (file: string): boolean => /Test\.tsx?$/.test(file);
 
 const IMPORTS = [
   /^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
@@ -466,7 +473,11 @@ const faults = (
         if (there !== part && !may.includes(there)) {
           found.push(`${location} imports "${spec}": ${part} may not import ${there}`);
         }
-      } else if (packageAt(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
+      } else if (
+        packageAt(spec).name.startsWith("@kampus/") &&
+        !may.includes(spec) &&
+        !(spec === DEPTH && isSuite(file))
+      ) {
         found.push(`${location} imports "${spec}": ${part} may not import it`);
       }
     }
@@ -619,6 +630,9 @@ describe("planted breaks", () => {
           'import {useModel} from "@kampus/tuval";',
         ),
         "programs/notes/src/tile.ts": lines('import {wire} from "@kampus/libfabrika/transport";'),
+        // 0535: a program's shared suite reads the test depth; its window file may not.
+        "programs/notes/src/RunnerTest.ts": lines(`import {runsFor} from "${DEPTH}";`),
+        "programs/notes/src/counts.ts": lines(`import {runsFor} from "${DEPTH}";`),
         "programs/counter/package.json": manifest("@kampus/counter"),
         "programs/counter/src/index.ts": lines('import {defineProgram} from "@kampus/libfabrika";'),
         "apps/fabrika/package.json": manifest("@kampus/fabrika"),
@@ -652,6 +666,7 @@ describe("planted breaks", () => {
           'packages/tuval/src/browser/rows.ts imports "@kampus/fabrika-design": browser may not import it',
           'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
           'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
+          'programs/notes/src/counts.ts imports "@kampus/libfabrika/TestDepth.test-support": program-window may not import it',
         ].sort(),
       );
     }),
@@ -659,7 +674,7 @@ describe("planted breaks", () => {
 });
 
 // Ticket 477, PR 0: the laws of the row reader. Fixed seed, as the lead scripts' laws use.
-const options = { seed: 119120, numRuns: 500 };
+const options = { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) };
 
 describe("the rule file's rows give a file its part", () => {
   // The tool's rule, written a second way, by segments and with no regex over the whole path, so
@@ -755,7 +770,7 @@ describe("the rule file's rows give a file its part", () => {
       }),
       {
         ...options,
-        numRuns: 3000,
+        numRuns: runsFor({ fast: 100, full: 3000 }),
         examples: [
           // pinned: the plan's own case (ticket 477, PR 5). The longer pattern is in the later row.
           [
@@ -833,7 +848,7 @@ describe("the rule file's rows give a file its part", () => {
       }),
       {
         ...options,
-        numRuns: 3000,
+        numRuns: runsFor({ fast: 100, full: 3000 }),
         examples: [
           // pinned: the plan's case (ticket 477). The runtime row claims the folder and a longer file
           // pattern in a later row claims the store, which stays coordination.
@@ -937,7 +952,7 @@ describe("every library file has exactly one row", () => {
         ),
         {
           ...options,
-          numRuns: 60,
+          numRuns: runsFor({ fast: 6, full: 60 }),
           // pinned: the plan's plant (ticket 477), a new folder with no row, and a new top file.
           examples: [["ledger", "", "Merge", "sync", "Loose"]],
         },
@@ -1339,7 +1354,7 @@ describe("layers", () => {
         // Moving a module does not touch the order of the rows, so no other module's place changed either.
         expect(moved.map((row) => row.name)).toEqual(rows.map((row) => row.name));
       }),
-      { ...options, numRuns: 1000 },
+      { ...options, numRuns: runsFor({ fast: 100, full: 1000 }) },
     );
   });
 });

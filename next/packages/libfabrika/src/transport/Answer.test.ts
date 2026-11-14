@@ -3,6 +3,7 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";
 import * as Wire from "./Wire.ts";
@@ -254,7 +255,7 @@ describe("P10 JSON-RPC", () => {
             }),
           ),
       ),
-      { seed: SEED, endOnFailure: true, numRuns: 300 },
+      { seed: SEED, endOnFailure: true, numRuns: runsFor({ fast: 30, full: 300 }) },
     );
   });
   // d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it

@@ -16,6 +16,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
 
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
@@ -134,7 +135,7 @@ const checkpointArb = Arbitrary.all({
   Arbitrary.map((value): typeof CheckpointSchema.Type => JSON.parse(JSON.stringify(value))),
 );
 
-const options = { arbitrary: { seed: 119120, runs: 20, size: 12 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 12 } };
 
 // Effect 4.1.1 has no examples option; run the old input beside each generated input.
 const examples =

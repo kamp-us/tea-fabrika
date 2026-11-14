@@ -24,6 +24,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -310,7 +311,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
           }).pipe(Effect.provide(onSql(fresh()))),
         ),
       ),
-      { seed: SEED, numRuns: 60 },
+      { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
 
@@ -441,7 +442,7 @@ describe("p93, seen is bounded by the log's head", () => {
           }).pipe(Effect.provide(onSql(fresh()))),
         ),
       ),
-      { seed: SEED, numRuns: 60 },
+      { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
 });
@@ -630,7 +631,7 @@ describe("p20, failures are typed, and pass", () => {
           ),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const [label, original] of [
@@ -731,7 +732,7 @@ describe("p20, failures are typed, and pass", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", () => {

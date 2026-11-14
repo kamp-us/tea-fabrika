@@ -18,9 +18,10 @@ import * as RuntimeCauseTest from "../runtime/RuntimeCauseTest.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 const PROCESS = "process_0000000000e008000000000000";
 
 const opened: Array<DatabaseSync> = [];

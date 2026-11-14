@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Result as R, Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Executor, Recorded, Request, Result } from "./Job.ts";
 import {
   BAD_EXECUTOR,
@@ -19,7 +20,7 @@ import {
   fcResult,
 } from "./JobsTest.ts";
 
-const RUNS = { seed: 119120, numRuns: 100 };
+const RUNS = { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) };
 
 /** Encode, write as JSON text, read it back and decode, as a value crosses a store or a wire. */
 const through = <S extends Schema.Codec<unknown, unknown>>(schema: S, value: S["Type"]) =>

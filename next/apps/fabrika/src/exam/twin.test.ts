@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -27,7 +28,7 @@ const law = (name: string, check: (input: ReturnType<typeof generated.generate>[
   it(name, () =>
     fc.assert(fc.property(generated, check), {
       seed: 119120,
-      numRuns: 20,
+      numRuns: runsFor({ fast: 5, full: 20 }),
       examples: [
         [{ alias: "Zone", name: "test.invalid" }],
         [{ alias: "CF", name: "x" }],

@@ -5,13 +5,14 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { syncTest } from "../Testing.ts";
 import * as Outside from "./BrainControl.test-support.ts";
 import * as BrainLife from "./BrainLife.ts";
 import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
-const options = { seed: 119120, numRuns: 150 };
+const options = { seed: 119120, numRuns: runsFor({ fast: 15, full: 150 }) };
 const ctx = stubCtxThrowingProxy<unknown>();
 const Failure = Schema.TaggedUnion({ Operation: {} });
 const oldId = Schema.decodeUnknownSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
@@ -272,7 +273,7 @@ describe("P19 lifecycle", () => {
 
           return true;
         },
-        { ...options, numRuns: 200 },
+        { ...options, numRuns: runsFor({ fast: 20, full: 200 }) },
       );
       expect(removals).toBeGreaterThan(0);
     }),

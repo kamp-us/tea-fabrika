@@ -26,6 +26,7 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -643,7 +644,7 @@ describe("P34 door recovery", () => {
                 ),
               ),
             ),
-            { seed: 119120, numRuns: 12 },
+            { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
           );
         });
       }
@@ -731,7 +732,7 @@ describe("P34 door recovery", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 review 4: the client's queued letter first reaches the door after replacement.
         examples: [["00000000-0000-4000-8000-000000000271"]],
       },
@@ -799,7 +800,7 @@ describe("P34 door recovery", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 re-review: the door crashes between delivered and retryable, before acceptance.
         examples: [["00000000-0000-4000-8000-000000000271"]],
       },
@@ -890,7 +891,7 @@ describe("P34 door recovery", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -941,6 +942,6 @@ describe("P34 door recovery", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });

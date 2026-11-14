@@ -13,6 +13,7 @@ import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { property } from "../Testing.test-support.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
@@ -21,7 +22,7 @@ import { type Grants, ProgramMail, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
-const RUNS = 25;
+const RUNS = runsFor({ fast: 3, full: 25 });
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
 const BRAIN = "SHA256:brain";

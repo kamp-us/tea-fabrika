@@ -6,6 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { devRecording } from "./dev-recording.ts";
 
 for (const failed of [false, true]) {
@@ -66,7 +67,7 @@ for (const failed of [false, true]) {
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 }

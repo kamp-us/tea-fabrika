@@ -17,6 +17,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Exit, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
@@ -205,7 +206,7 @@ describe("P16 real browser from a copied one-file build", () => {
           }
         },
       ),
-      { seed: 119120, numRuns: 2 },
+      { seed: 119120, numRuns: runsFor({ fast: 2, full: 2 }) },
     );
   });
 });
@@ -475,7 +476,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                 }
               }),
               // Each step is a real click and render round trip in Chromium: 20 walks of up to 10 steps.
-              { seed: 119120, numRuns: 20 },
+              { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
             );
           });
         }),

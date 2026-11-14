@@ -19,6 +19,7 @@ import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
@@ -29,7 +30,7 @@ beforeEach(async () => {
   ({ appendAdmitted } = await vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"));
 });
 
-const checks = { seed: 119120, numRuns: 35 };
+const checks = { seed: 119120, numRuns: runsFor({ fast: 4, full: 35 }) };
 
 // Every world is a node:sqlite file in its own temp folder. The scope of one property run closes
 // the connection, then removes the folder (0061).
@@ -317,7 +318,7 @@ describe("P17a, appendAdmitted", () => {
             }).pipe(Effect.scoped),
           ),
       ),
-      { ...checks, numRuns: 20 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", async () => {
@@ -395,7 +396,7 @@ describe("P17a, appendAdmitted", () => {
           }).pipe(Effect.scoped),
         ),
       ),
-      { ...checks, numRuns: 20 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", async () => {
@@ -449,7 +450,7 @@ describe("P17a, appendAdmitted", () => {
             }).pipe(Effect.scoped),
           ),
       ),
-      { ...checks, numRuns: 24 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 24 }) },
     );
   });
 });

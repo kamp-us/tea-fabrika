@@ -22,6 +22,7 @@ import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } fro
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -247,7 +248,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         },
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect("lag counts the stream's entries past after, not the log's revs", () => {
@@ -338,7 +339,7 @@ describe("p95, every call is one span, names and numbers only", () => {
     };
     await fc.assert(fc.asyncProperty(names, run), {
       seed: SEED,
-      numRuns: 30,
+      numRuns: runsFor({ fast: 3, full: 30 }),
       // The case this test held before it took generated names.
       examples: [[{ stream: "a", id: "w-1", kind: "saved", by: "SHA256:writer-a", reader: READER }]],
     });
@@ -427,7 +428,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader })), Effect.withTracer(callTracer));
       return Effect.runPromise(Effect.andThen(referee, remote));
     };
-    await fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: 30 });
+    await fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) });
   });
 
   it.effect.prop(
@@ -576,7 +577,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   /** A doorbell whose ring to `dies` dies with a defect, as a thin class that throws would. */

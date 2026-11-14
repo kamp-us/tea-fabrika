@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the isolated instance's SQLite persistence cuts
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { localState } from "alchemy/State/LocalState";
 import { Effect, FileSystem, Path, Schema } from "effect";
@@ -360,7 +361,7 @@ it("A13: built boxes and the real instance record selected metadata across refus
     // Each run builds and starts a real instance, about 5 s on a busy CI machine. Shrinking a failure
     // runs hundreds more of them, so one failed run became a 600 s timeout that hid its failing check
     // (merge-group run 43571022082: 171 instance starts). The first failing tape is reported as found.
-    { seed: 119120, numRuns: 6, endOnFailure: true },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }), endOnFailure: true },
   );
   expect([...reached]).toEqual(
     expect.arrayContaining([

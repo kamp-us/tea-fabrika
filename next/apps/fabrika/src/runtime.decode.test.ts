@@ -4,6 +4,7 @@
 // change is the oracle: the same name, and the same reads of `type` in the same order.
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
@@ -194,7 +195,7 @@ describe("T737 D7 the app's message-name callback equals its old guard, next/", 
         expect(answer(name, r)).toEqual(old);
         seen.add(`${r.container}:${old.name === undefined ? "none" : old.name === "thrown" ? "thrown" : "named"}`);
       }),
-      { seed: 119120, numRuns: 1_000 },
+      { seed: 119120, numRuns: runsFor({ fast: 100, full: 1_000 }) },
     );
 
     for (const side of [

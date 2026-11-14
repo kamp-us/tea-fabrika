@@ -854,3 +854,38 @@ fixes all 10.
 `no-cause-squash.test.ts` holds the laws. Law 2 is a property through oxlint's `RuleTester`: an
 import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
 run over one planted file per path kind, with the repo's config.
+
+## A heavy law reads the test depth, decision 0535
+
+`runs-from-depth` refuses a case count written as a number in a `next/` test file (`*.test.ts`,
+`*.test-support.ts`, a shared suite `*Test.ts`) when the law reaches real IO, or when the number is
+over fast-check's default of 100. The count reads
+`runsFor({ fast, full })` from `@kampus/libfabrika/TestDepth.test-support` instead: `fast` on a pull
+request and in the merge queue, `full` when the 3-hour schedule sets `FABRIKA_TEST_DEPTH=full`. The
+rule's header says what real IO is, how a law reaches it, and what the rule cannot see.
+
+```ts
+fc.assert(property, { seed, numRuns: 40 }); // refused: the law opens SQLite
+fc.assert(pure, { seed, numRuns: 300 }); // refused: over 100, wherever it runs
+fc.assert(pure, { seed, numRuns: 100 }); // passes: in memory, at the default
+fc.assert(property, { seed, numRuns: runsFor({ fast: 4, full: 40 }) }); // passes
+```
+
+False alarms, counted on 2026-11-14 on `next/` at `8a912131b` with one oxlint run and the repo's
+config. The over-100 part fired 97 times in 43 files, every one a real case count. The real-IO part,
+first written per file, fired 370 times. Reading them found five kinds of false alarm, each fixed in
+the rule and planted in its test: a law that only asks `existsSync` whether a module is built; a
+`numRuns` handed to `fc.sample` or `fc.statistics`, which draws values; an Effect `fs.exists` read
+through the Node services; a spread whose count a later key replaces (`{ ...options, numRuns: 60 }`);
+and a parameter or local that shares an IO helper's name (a fake `sql`, a pure map in
+`edges.test.ts`). The rule then fired 285 times. Each hit was checked against the IO name it reached,
+and the files where that was in doubt were opened and read: **0 false alarms found**. The pull request
+that adds the rule moves every one of those counts to `runsFor`, so it joins as an error with 0 hits
+and no ledger entry.
+
+`runs-from-depth.test.ts` holds the laws, each a property at seed 119120 through oxlint's
+`RuleTester` and then one real oxlint run over the planted files with the repo's config. Law 1 plants
+every count form at counts 1 to 5,000 (100, 101 and 300 pinned) in each test-file name, in `next/`
+and in `packages/`, which the rule does not hold. Law 2 plants five IO imports (SQLite, a child
+process, a `node:fs` write, miniflare and the SQLite layer) at counts 1 to 100 beside the five false
+alarm kinds above, which must pass.

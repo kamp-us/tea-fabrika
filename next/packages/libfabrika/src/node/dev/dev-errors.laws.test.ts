@@ -11,6 +11,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
@@ -77,7 +78,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 }
@@ -117,7 +118,7 @@ it("instance reports start_timeout when deployment never opens the control liste
         rmSync(home, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 5 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
   );
 });
 
@@ -206,7 +207,7 @@ for (const mode of ["exit", "spawn"] as const) {
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 5 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
     );
   });
 }

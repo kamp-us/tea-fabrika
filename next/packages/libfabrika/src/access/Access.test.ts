@@ -22,11 +22,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 300;
+// The recovery law needs more than 10 histories with a live sheet: 30 runs give 6 at this seed.
+const RUNS = runsFor({ fast: 100, full: 300 });
 
 // The ids are in the open id study's TypeID shape; the prefixes are made up (the plan's "Ids").
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";

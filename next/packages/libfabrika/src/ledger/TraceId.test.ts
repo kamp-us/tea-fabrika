@@ -8,6 +8,7 @@ import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import { fromHere, lineFor, TraceId } from "./Log.ts";
@@ -125,7 +126,7 @@ describe("T246, fromHere", () => {
         expect(entry?.traceId).toBe(append[0]?.traceId);
       }).pipe(Effect.provide(world));
     },
-    { arbitrary: { seed: 119120, runs: 40 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 
   // Plant: fromHere falls back to a random id, or starts its own root span.

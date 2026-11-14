@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import { runsFor } from "../TestDepth.test-support.ts";
 
 type Api = { readonly ProgramName: Schema.Codec<string> };
 
@@ -142,7 +143,7 @@ describe("P40 qualified program names", () => {
           }
         }
       }),
-      { seed: 119120, numRuns: 200 },
+      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
     );
   });
   it("L1: values that are not text are refused", async () => {

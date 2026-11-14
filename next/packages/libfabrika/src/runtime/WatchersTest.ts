@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
 import type { Database } from "./RepliesTest.ts";
@@ -14,7 +15,7 @@ const failStore = (): never => {
 };
 
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)));
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),

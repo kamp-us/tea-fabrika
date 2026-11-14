@@ -11,6 +11,7 @@ import { Effect, type FileSystem, type Path, Tracer } from "effect";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { runsFor } from "../../TestDepth.test-support.ts";
 
 type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
 
@@ -49,7 +50,7 @@ const build: Build["build"] = (options) =>
   // oxlint-disable-next-line fabrika/no-effect-promise -- a missing product module dies with its "not built" message instead of passing as a typed refusal
   Effect.promise(() => product<Build>("./build.ts", "libfabrika/build")).pipe(Effect.flatMap((m) => m.build(options)));
 
-const runs = { seed: 119120, numRuns: 30 };
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 30 }) };
 const ids = fc.integer({ min: 0, max: 10000 });
 const homes: string[] = [];
 
@@ -324,7 +325,7 @@ describe("P16 CSS tokens", () => {
         }),
         {
           seed: runs.seed,
-          numRuns: 8,
+          numRuns: runsFor({ fast: 3, full: 8 }),
           examples: [[{ id: 0, order: [0, 2, 1, 3], before: kind === "before", between: false, named: false }]],
           // Pinned round-4 bugs: parent layer priority and a later remote import overtaking a local.
           endOnFailure: true,

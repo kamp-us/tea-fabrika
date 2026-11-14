@@ -21,10 +21,11 @@ import { SettingsError } from "../../settings/Files.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const check = { seed: SEED, numRuns: 100 };
+const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
 const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
 const DEFAULT = 18787;
@@ -424,5 +425,5 @@ it.effect.prop(
         }
       }
     }).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, runs: 100 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

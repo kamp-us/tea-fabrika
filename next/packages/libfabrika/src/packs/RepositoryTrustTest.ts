@@ -12,6 +12,7 @@ import * as Declarations from "../settings/Declarations.ts";
 import * as LoadSnapshot from "../settings/Snapshot.ts";
 import * as Sources from "../settings/Sources.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import * as Open from "./Open.ts";
 import { Event, RepositoryTrust, TrustDecision } from "./RepositoryTrust.ts";
 import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
@@ -186,7 +187,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           },
         );
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
-        const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
+        const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
         yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
       }),
@@ -302,7 +303,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             },
           );
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
-          const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
+          const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
           // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
           yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
         }),
@@ -408,7 +409,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           },
         );
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
-        const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
+        const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
         yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
       }),

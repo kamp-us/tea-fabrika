@@ -17,6 +17,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -43,7 +44,7 @@ export type Rig = {
 const NAME = "counter:1";
 const BUILD = "build-a";
 const SEED = 119120;
-const RUNS = 40;
+const RUNS = runsFor({ fast: 10, full: 40 });
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 

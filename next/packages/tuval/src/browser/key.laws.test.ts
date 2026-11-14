@@ -15,6 +15,7 @@
 // a stale Ask again that names a key no longer stored, a read while the store fails, and a persistence
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect } from "effect";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
@@ -289,7 +290,7 @@ describe("L3: the browser key store", () => {
                     ),
                   ),
               ),
-              { seed: SEED, numRuns: 25 },
+              { seed: SEED, numRuns: runsFor({ fast: 3, full: 25 }) },
             ),
           );
           expect(seen.failed).toBeGreaterThan(0);

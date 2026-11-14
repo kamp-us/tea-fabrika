@@ -20,6 +20,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
 const SEED = 119120;
@@ -120,7 +121,7 @@ const fold = (list: ReadonlyArray<Choice>, each: (prev: Walk, m: LinkMsg, next: 
   return w;
 };
 
-const opts = { seed: SEED, numRuns: 300 };
+const opts = { seed: SEED, numRuns: runsFor({ fast: 30, full: 300 }) };
 
 describe("L1: the link machine", () => {
   // pinned: L1's fresh init has one fixed state and no outside input to generate.

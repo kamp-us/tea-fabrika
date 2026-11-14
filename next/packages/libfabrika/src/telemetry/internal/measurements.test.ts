@@ -30,6 +30,7 @@ import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { Archive, type BucketCalls } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SinkError, SpanSink } from "../Sink.ts";
@@ -238,7 +239,7 @@ describe("p101, measurements in two levels", () => {
           }).pipe(Effect.scoped),
         );
       }),
-      { seed: SEED, numRuns: 30 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) },
     );
   });
 
@@ -490,7 +491,7 @@ describe("p101, no raw row is ever lost", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it("local rows plus every archived file's rows are every measurements row ever written, at every point", async () => {
@@ -580,7 +581,7 @@ describe("p101, no raw row is ever lost", () => {
           }).pipe(Effect.scoped),
         );
       }),
-      { seed: SEED, numRuns: 25 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 25 }) },
     );
   });
 });
@@ -645,7 +646,7 @@ describe("p101, an archive that fails is never silent", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 
@@ -792,7 +793,7 @@ describe("p101, a sink.archive row's time, duration and span", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 

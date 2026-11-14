@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import type { CheckRun } from "./Ci.ts";
 import { Checks, Ci, CiError, RateLimited, Status, Unavailable } from "./Ci.ts";
 
@@ -303,7 +304,7 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
             ),
           );
         }),
-        { seed: 119120, numRuns: 200 },
+        { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
       );
     });
   });

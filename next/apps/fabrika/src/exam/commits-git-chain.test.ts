@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -288,7 +289,7 @@ describe("chain after the merge (p86 and p89)", () => {
         expect(out.answers).toEqual([]);
         expect(out.err).toContain(`field/runs.jsonl line ${at + 1}: a link that does not read`);
       }),
-      { seed: 119120, endOnFailure: true, numRuns: 8 },
+      { seed: 119120, endOnFailure: true, numRuns: runsFor({ fast: 3, full: 8 }) },
     );
   });
 

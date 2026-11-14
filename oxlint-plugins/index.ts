@@ -42,6 +42,7 @@ import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
+import { runsFromDepth } from "./runs-from-depth.ts";
 import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
@@ -91,6 +92,7 @@ const plugin: Plugin = {
     "outside-input-constructor": outsideInputConstructor,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
+    "runs-from-depth": runsFromDepth,
     "service-id": serviceId,
     "service-contract": serviceContract,
     "use-import-extensions": useImportExtensions,

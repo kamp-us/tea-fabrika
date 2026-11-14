@@ -11,6 +11,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
+import { type Runs, runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { defaultPolicy, supervisor, Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -33,7 +34,8 @@ const Save = Schema.Struct({
   body: Schema.String,
 });
 
-const parameters = { seed: 119120, numRuns: 40 };
+const COUNTS: Runs = { fast: 10, full: 40 };
+const parameters = { seed: 119120, numRuns: runsFor(COUNTS) };
 
 // The tape carries entropy only. Each choice is rebuilt from the state reached by its prefix.
 const Tape = fc.array(fc.record({ move: fc.noBias(fc.nat()), pick: fc.noBias(fc.nat()) }), {
@@ -922,7 +924,7 @@ const walk = Effect.fnUntraced(function* (
 
 export const suite = (harness: Harness, register: Register) =>
   describe("P13 runner admission", () => {
-    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, numRuns = 40) => {
+    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, runs = COUNTS) => {
       const reached = new Set<string>();
       register(
         name,
@@ -931,7 +933,7 @@ export const suite = (harness: Harness, register: Register) =>
           const monitor = capture();
           return walk(harness, tape, moves, reached, monitor).pipe(Effect.withTracer(monitor.tracer));
         },
-        { ...parameters, numRuns },
+        { ...parameters, numRuns: runsFor(runs) },
         reached,
         required,
       );
@@ -994,7 +996,7 @@ export const suite = (harness: Harness, register: Register) =>
         "update_abandon_save:reopened",
         "resume_without_charge",
       ],
-      100,
+      { fast: 25, full: 100 },
     );
     const cuts = new Set<string>();
     register(

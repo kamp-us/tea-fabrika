@@ -5,6 +5,7 @@ import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Archive } from "./Archive.ts";
 import { recordPart, RecordManager } from "./Records.ts";
 import { SpanSink } from "./Sink.ts";
@@ -93,7 +94,7 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
           db.close();
         }
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 }
@@ -132,7 +133,7 @@ for (const reader of ["chain", "row", "part"] as const) {
           db.close();
         }
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 }

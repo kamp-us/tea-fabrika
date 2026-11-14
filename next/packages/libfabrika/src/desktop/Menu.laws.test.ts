@@ -5,6 +5,7 @@ import { ConfigProvider, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import * as Test from "./Menu.test-support.ts";
 import * as Menu from "./Menu.ts";
 import { PersonCheck } from "./PersonCheck.ts";
@@ -414,7 +415,7 @@ it.effect.prop(
         { seed: Test.seed + draw, numRuns: 1 },
       );
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  { arbitrary: { seed: Test.seed, runs: 200 } },
+  { arbitrary: { seed: Test.seed, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 // After build: read a clock in view, drop empty, duplicate keys, or rely on color for state.
@@ -610,7 +611,7 @@ describe("browser link start switch", () => {
       const trace = foldEvents(machine, Test.ctx, null, msgs);
       expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);
     },
-    { arbitrary: { seed: Test.seed, runs: 200 } },
+    { arbitrary: { seed: Test.seed, runs: runsFor({ fast: 20, full: 200 }) } },
   );
 });
 

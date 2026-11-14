@@ -11,6 +11,7 @@ import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/i
 import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Process.test-support.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
@@ -173,7 +174,7 @@ export const suite = (
               }).pipe(Effect.scoped),
             ),
         ),
-        { seed: SEED, numRuns: 150 },
+        { seed: SEED, numRuns: runsFor({ fast: 15, full: 150 }) },
       );
     });
 

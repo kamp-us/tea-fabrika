@@ -4,6 +4,7 @@ import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/
 import { Result, Schema } from "effect";
 import fc from "fast-check";
 import { expect, it } from "vitest";
+import { runsFor } from "../TestDepth.test-support.ts";
 import * as ScheduledJob from "./ScheduledJob.ts";
 
 const write = Cmd.make("write", {
@@ -53,7 +54,7 @@ const walks = period.chain((ms) => {
   ).map((messages) => ({ ms, messages }));
 });
 
-const options = { seed: 119120, numRuns: 150 };
+const options = { seed: 119120, numRuns: runsFor({ fast: 15, full: 150 }) };
 
 it("L1: only a due idle scheduled job emits work; answers while idle do nothing", () => {
   fc.assert(

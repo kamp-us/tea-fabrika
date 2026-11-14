@@ -2,6 +2,7 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as Status from "./LaunchdStatus.ts";
 
 const target = "gui/501/test.p19.brain";
@@ -101,7 +102,7 @@ it.effect.prop(
         pid,
       });
     }),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it.effect.prop(
@@ -126,7 +127,7 @@ it.effect.prop(
         expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { cause: expect.anything() } });
       }
     }),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it.effect.each([
@@ -211,6 +212,6 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
         });
       },
     ),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
 });

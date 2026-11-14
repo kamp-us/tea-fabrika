@@ -23,11 +23,12 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
-const CHECK = { seed: 119120, numRuns: 40 };
+const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) };
 
 const text = fc.string({
   unit: fc.constantFrom("a", "b", "7", ":", "_"),

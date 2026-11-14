@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -119,7 +120,7 @@ const cell = fc.record({
 
 type Cell = typeof cell extends fc.Arbitrary<infer A> ? A : never;
 
-const q5Runs = 200;
+const q5Runs = runsFor({ fast: 20, full: 200 });
 const s2Runs = 40;
 
 // Effect Arbitrary has no command-list generator. A generated seed draws fast-check's tape.
@@ -272,7 +273,7 @@ export const suite = (driver: Driver) =>
           expect(replies(s, change)[0]).toHaveProperty("ref", ref);
           allNormal(s);
         }).pipe(Effect.scoped),
-      { arbitrary: { seed: 119120, runs: 30 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 30 }) } },
     );
     it.effect("scenario: QR1 three real children land in arrival order and end normally", () =>
       Effect.gen(function* () {

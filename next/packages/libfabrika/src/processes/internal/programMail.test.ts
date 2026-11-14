@@ -9,6 +9,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { PIDS } from "../Process.test-support.ts";
 import { brainOnly, inRunnerSpace, inSignalSpace } from "../Process.ts";
 import { type Grants, MailRefusal, ProgramMailError } from "../ProgramMail.ts";
@@ -52,7 +53,7 @@ describe("P41 slice 1: program mail rules", () => {
         expect(inSignalSpace(id), "never a monitor signal").toBe(false);
         expect(brainOnly({ stream: `${to}/inbox`, id, tag: "send" }), "an ordinary inbox letter").toBe(false);
       }),
-      { seed: SEED, numRuns: 200 },
+      { seed: SEED, numRuns: runsFor({ fast: 20, full: 200 }) },
     );
   });
 
@@ -68,7 +69,7 @@ describe("P41 slice 1: program mail rules", () => {
       }),
       {
         seed: SEED,
-        numRuns: 200,
+        numRuns: runsFor({ fast: 20, full: 200 }),
         examples: [
           // pinned: a plain object's prototype keys are never a grant.
           [{ "a:1": ["b:1"] }, "__proto__", "b:1"],

@@ -7,6 +7,7 @@ import { InputId } from "../Id.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
@@ -249,12 +250,12 @@ export const suite = (harness: Harness) =>
       "W2: all Layers and SQL connections can be discarded without losing live watchers",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, false)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
     it.live.prop(
       "W6: unrelated ledger writes never become patch positions",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, true)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
   });

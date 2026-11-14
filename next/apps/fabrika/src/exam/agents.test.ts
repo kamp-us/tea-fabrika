@@ -4,11 +4,17 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { senderTest } from "@kampus/libfabrika/testing";
 import { Arbitrary, Effect, FileSystem, Schema } from "effect";
 
 const SEED = 119120;
-const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
+
+const options = {
+  arbitrary: { seed: SEED, runs: runsFor({ fast: 30, full: 300 }), size: 4096, concurrency: 1 },
+  timeout: 60_000,
+};
+
 const text = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 const int = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
 

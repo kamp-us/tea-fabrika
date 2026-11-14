@@ -23,6 +23,7 @@ import * as Id from "../Id.ts";
 import * as RevFront from "../Rev.ts";
 import { ParentText } from "../Rev.ts";
 import type { Sql } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import * as LedgerFront from "./Ledger.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -353,7 +354,7 @@ describe("p68, an entry keeps its parent", () => {
         expect(answers).toEqual([{ _tag: "placed", rev: 1, pos: 1 }]);
         expect(entries.map((entry) => entry.parent)).toEqual([parent]);
       }).pipe(Effect.provide(onReferee(fresh()))),
-    { arbitrary: { seed: SEED, runs: 40 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 
   it.effect("a parent, or null for an own write, is read back the same", () =>
@@ -396,7 +397,7 @@ describe("p68, an entry keeps its parent", () => {
           }).pipe(Effect.provide(onReferee(fresh()))),
         ),
       ),
-      { seed: SEED, numRuns: 40 },
+      { seed: SEED, numRuns: runsFor({ fast: 4, full: 40 }) },
     );
   });
 });

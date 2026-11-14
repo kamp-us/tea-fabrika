@@ -24,6 +24,7 @@ import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { Attached } from "../../transport/Wire.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
@@ -501,7 +502,7 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
     }),
     {
       seed: 119120,
-      numRuns: 15,
+      numRuns: runsFor({ fast: 3, full: 15 }),
       examples: [
         [
           {
@@ -525,6 +526,6 @@ it("[secrets] the Worker control edge accepts the generated Redacted bearer with
       expect(await response.json()).toEqual({ value: [] });
       clean(outputs, words);
     }),
-    { seed: 119120, numRuns: 10 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
   );
 });

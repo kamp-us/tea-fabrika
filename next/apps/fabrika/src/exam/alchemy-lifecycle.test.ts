@@ -6,6 +6,7 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -217,7 +218,7 @@ describe("P12 Alchemy lifecycle patch", () => {
           os.restore();
         }
       }),
-      { seed: 119120, numRuns: 3, examples: [["p12-lifecycle"]] },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [["p12-lifecycle"]] },
     );
   });
 });

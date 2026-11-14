@@ -37,13 +37,18 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, Layer, Result, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 
-const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
+const opts = {
+  arbitrary: { seed: 119120, runs: runsFor({ fast: 30, full: 300 }), size: 4096, concurrency: 1 },
+  timeout: 60_000,
+};
+
 const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
 const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
 
@@ -866,7 +871,7 @@ it.effect.prop(
         expect(() => terminalAnswer(bad)).toThrow();
       }
     }),
-  { arbitrary: { seed: 119120, runs: 20, size: 4096, concurrency: 1 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 4096, concurrency: 1 } },
 );
 
 it.effect.prop(

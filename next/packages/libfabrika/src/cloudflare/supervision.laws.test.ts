@@ -13,6 +13,7 @@ import { Declaration, workerExecution } from "../runtime/Execution.ts";
 import { Program, ProgramDown } from "../runtime/Program.ts";
 import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
 import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
@@ -407,7 +408,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
       };
       await fc.asyncModelRun(() => ({ model: { policy: undefined, valid: true, checked: false }, real }), moves);
     }),
-    { seed: 119120, numRuns: 100 },
+    { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
   );
 });
 
@@ -597,7 +598,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
           }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         ),
     ),
-    { seed: 119120, numRuns: 100 },
+    { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
   );
 });
 
@@ -678,7 +679,7 @@ for (const source of ["rpc", "decode"] as const) {
       ),
       {
         seed: 119120,
-        numRuns: 25,
+        numRuns: runsFor({ fast: 5, full: 25 }),
         // Review 6: one rejected or malformed RPC must not exhaust the allowed limit of one.
         examples: [
           [{ limit: 1, moves: ["rpc"], n: 1, letter: "rpc-limit-one" }],
@@ -710,7 +711,7 @@ it("Node records the actual class for generated Error and non-Error throws", asy
     ),
     {
       seed: 119120,
-      numRuns: 25,
+      numRuns: runsFor({ fast: 5, full: 25 }),
       examples: [
         [undefined, "undefined-throw"],
         [null, "null-throw"],
@@ -753,7 +754,7 @@ it("the real Worker box records the same thrown class as Node under supervision"
     ),
     {
       seed: 119120,
-      numRuns: 25,
+      numRuns: runsFor({ fast: 3, full: 25 }),
       // Review 6: the box used to record ProgramDown in place of this TypeError.
       examples: [[new TypeError("private program text"), "worker-class"]],
     },

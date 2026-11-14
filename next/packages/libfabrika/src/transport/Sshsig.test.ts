@@ -18,6 +18,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 const SPACE = "fabrika-client";
@@ -884,7 +885,7 @@ describe("properties", () => {
           }),
         );
       }),
-      { ...runs, numRuns: 150 },
+      { ...runs, numRuns: runsFor({ fast: 15, full: 150 }) },
     );
   });
 
@@ -920,15 +921,15 @@ describe("properties", () => {
       );
     await fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
       ...runs,
-      numRuns: 150,
+      numRuns: runsFor({ fast: 15, full: 150 }),
     });
     await fc.assert(
       fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 150 },
+      { ...runs, numRuns: runsFor({ fast: 15, full: 150 }) },
     );
     await fc.assert(
       fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 300 },
+      { ...runs, numRuns: runsFor({ fast: 30, full: 300 }) },
     );
   });
 });

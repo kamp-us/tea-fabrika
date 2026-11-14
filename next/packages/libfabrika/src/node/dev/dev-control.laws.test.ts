@@ -10,6 +10,7 @@ import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
@@ -516,7 +517,7 @@ describe("T708 dev control laws", () => {
           }
         }
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.effect.prop(
@@ -532,7 +533,7 @@ describe("T708 dev control laws", () => {
           expect(count).toBeGreaterThanOrEqual(2);
         }
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.effect.prop(
@@ -585,6 +586,6 @@ describe("T708 dev control laws", () => {
           restarts.filter(({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
         ).toHaveLength(world.failed);
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

@@ -10,6 +10,7 @@ import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
 class WireFault extends Error {
@@ -68,7 +69,7 @@ it.effect.prop(
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
     }),
-  { arbitrary: { runs: 200, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
 );
 
 // Ticket 502 slice S2, next/. ProcessClient calls the object through Alchemy's typed stub inside
@@ -101,7 +102,7 @@ it.effect.prop(
       expect(error).toMatchObject({ reason, message: text });
       expect(Reflect.get(Object(error), "cause")).toBeUndefined();
     }),
-  { arbitrary: { runs: 200, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
 );
 
 it.effect.prop(
@@ -122,7 +123,7 @@ it.effect.prop(
       expect(cause).toMatchObject({ method });
       expect(Reflect.get(Object(cause), "cause")).toBe(fault);
     }),
-  { arbitrary: { runs: 200, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
 );
 
 // T502 S1, next/. The Connection object is called through Alchemy's typed stub and `reach`
@@ -335,7 +336,7 @@ it.effect.prop(
       RepliesTest.unleaked(captured.text(), [secret]);
     }),
   // 100 runs walked the three Connection calls; 500 keep that reach over all fifteen.
-  { arbitrary: { runs: 500, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 50, full: 500 }), seed: 119120 } },
 );
 
 // `rejected` turns that message back into the thrown class for a failed span. Plants: rebuild every
@@ -354,7 +355,7 @@ it.effect.prop(
       expect(Reflect.get(Object(thrown), "name")).toBe(name);
       expect(Reflect.get(Object(thrown), "message")).toBe(text);
     }),
-  { arbitrary: { runs: 200, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
 );
 
 it.effect.prop(
@@ -377,5 +378,5 @@ it.effect.prop(
         expect(rejected(error)).toBe(error);
       }
     }),
-  { arbitrary: { runs: 200, seed: 119120 } },
+  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
 );

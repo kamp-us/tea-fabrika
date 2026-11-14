@@ -1,4 +1,5 @@
 import { it, expect } from "@effect/vitest";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Schema } from "effect";
 import { rolldown } from "rolldown";
 
@@ -51,5 +52,5 @@ it.effect.prop(
 
       yield* inspect(["ClientManager", ...new Set(names)]);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, arbitrary: { seed: 119120, runs: 100 } },
+  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

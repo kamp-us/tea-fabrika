@@ -7,6 +7,7 @@ import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema, type Scope } from
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
 const SEED = 119120;
@@ -160,7 +161,7 @@ describe("P12 durable brain outbox", () => {
             });
           },
         ),
-        { seed: SEED, numRuns: 20, examples: [[null], [{}], [17]] },
+        { seed: SEED, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
       );
     });
   }
@@ -279,7 +280,7 @@ describe("P12 durable brain outbox", () => {
       ),
       {
         seed: SEED,
-        numRuns: 20,
+        numRuns: runsFor({ fast: 4, full: 20 }),
         examples: [
           // Empty-after-ack and last-start writes must both keep the durability order.
           [[firstStart]],
@@ -309,7 +310,7 @@ describe("P12 durable brain outbox", () => {
           }),
         ),
       ),
-      { seed: SEED, numRuns: 20 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("an outbox id accepts an exact retry once and rejects changed content", async () => {

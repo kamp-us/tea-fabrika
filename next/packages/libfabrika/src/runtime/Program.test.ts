@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { Declaration } from "./Execution.ts";
 import { Input, Program, Refusal, stepper } from "./Program.ts";
@@ -1181,7 +1182,9 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         seen.add(`init:${recipe.init}:${oldCode(callables[recipe.init]())}`);
         seen.add(`cmds:${recipe.cmds}:${ok}`);
       }),
-      { seed: SEED, numRuns: 1_000 },
+      // Every side listed below must be seen: 600 runs miss true:plain:table at this seed, and all
+      // 1,000 take under a second, so a pull request runs them all.
+      { seed: SEED, numRuns: runsFor({ fast: 1_000, full: 1_000 }) },
     );
 
     for (const side of [
@@ -1298,7 +1301,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       }),
       {
         ...parameters,
-        numRuns: 1_000,
+        numRuns: runsFor({ fast: 100, full: 1_000 }),
         examples: [
           // pinned: review of T737 round 3. The first rewrite read update once, so an update that reads
           // as a table and then null passed where the old guard refused it.
@@ -1562,7 +1565,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           seen.add(`${expected}:error:${a.type === "save_err" ? a.error : "-"}`);
         }
       }),
-      { seed: SEED, numRuns: 300 },
+      { seed: SEED, numRuns: runsFor({ fast: 30, full: 300 }) },
     );
 
     for (const side of [

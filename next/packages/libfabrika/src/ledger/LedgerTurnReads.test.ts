@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
@@ -137,7 +138,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               }
             }).pipe(Effect.provide(store.layer));
           });
-        yield* property(Log, law, { numRuns: 50 });
+        yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }) });
         // An empty walk cannot pass: appends landed, and reused ids were refused.
         expect([...outcomes].sort()).toEqual(["appended", "refused"]);
       }),

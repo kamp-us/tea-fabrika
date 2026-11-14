@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Checks } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import picomatch from "picomatch/posix.js";
@@ -109,7 +110,7 @@ describe("L5: the verdict", () => {
           expect(normalize(one._tag === "pending" ? one.checks : one.runs)).toEqual(normalize(wanted.values));
         }
       }),
-      { seed: 119120, numRuns: 500 },
+      { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) },
     );
   });
 });
@@ -174,7 +175,7 @@ describe("L6: kind is the heaviest", () => {
           );
         },
       ),
-      { seed: 119120, numRuns: 500 },
+      { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) },
     );
   });
 });

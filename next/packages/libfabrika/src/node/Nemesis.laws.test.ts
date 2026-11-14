@@ -20,6 +20,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain, PROCESS } from "../telemetry/Trace.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 
 const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -178,7 +179,7 @@ it.effect.prop(
         expect(batchedHeads).toEqual({ boundary: 2 * count, processBoundary: 2 * count + 2 });
       }),
     ),
-  { arbitrary: { seed: 119120, runs: 25 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 25 }) } },
 );
 
 type ServiceOptions = NonNullable<Parameters<NemesisTest.Driver["service"]>[2]>;

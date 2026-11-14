@@ -2,6 +2,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import * as fc from "fast-check";
 import * as ts from "typescript/unstable/ast";
 import type { Project } from "typescript/unstable/sync";
@@ -199,6 +200,6 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
         rmSync(folder, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 5 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
   );
 });

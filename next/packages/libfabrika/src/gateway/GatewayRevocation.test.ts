@@ -34,6 +34,7 @@ import { Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Answer } from "../transport/Wire.ts";
 import type { GatewayError } from "./GatewayError.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
@@ -46,7 +47,7 @@ beforeEach(async () => {
   Id = await vi.importActual<typeof Id>("../Id.ts");
 });
 
-const checks = { seed: 119120, numRuns: 25 };
+const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
 // Each world keeps its ledger file in its own temp folder. The law's scope closes every connection
 // the world opened, then removes the folder (0061).

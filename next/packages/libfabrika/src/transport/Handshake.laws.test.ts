@@ -23,6 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -155,7 +156,7 @@ const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
   }
 };
 
-const runs = { arbitrary: { seed: SEED, runs: 300, size: 120 } };
+const runs = { arbitrary: { seed: SEED, runs: runsFor({ fast: 30, full: 300 }), size: 120 } };
 
 describe("P18 L2: the handshake answers only its own request", () => {
   it.prop(

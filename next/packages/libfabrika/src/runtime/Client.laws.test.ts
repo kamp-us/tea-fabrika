@@ -26,12 +26,14 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
+import { runsFor } from "../TestDepth.test-support.ts";
 import type { Client, ClientMsg, Pending } from "./Client.ts";
 import { clientMachineFor, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
-const opts = { seed: SEED, numRuns: 300 };
+// L4 and L5 count the cases their walks reached: 30 walks reach no array removal at this seed.
+const opts = { seed: SEED, numRuns: runsFor({ fast: 100, full: 300 }) };
 
 // The exam's own statement of the shapes it walks, each pinned to the schema's type (0135).
 type Dating = {

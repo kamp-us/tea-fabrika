@@ -8,6 +8,7 @@ import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
@@ -699,7 +700,8 @@ const storageSecrets = Effect.fnUntraced(function* () {
   yield* Effect.promise(() =>
     fc.assert(
       fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
-      { seed: 119120, numRuns: 100, endOnFailure: true },
+      // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
+      { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
     ),
   );
   expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
@@ -726,7 +728,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
               fc.asyncProperty(Secret, ProjectTape, (secret, tape) =>
                 Effect.runPromise(Effect.scoped(projectSecrets(path, output, secret, tape))),
               ),
-              { seed: 119120, numRuns: 100, endOnFailure: true },
+              { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }), endOnFailure: true },
             ),
           ),
       );

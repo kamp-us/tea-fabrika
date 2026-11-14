@@ -15,6 +15,7 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { workerExecution } from "./Execution.ts";
 import { Supervision } from "./internal/supervisor.ts";
@@ -232,7 +233,7 @@ describe("P12 saved mail recovery", () => {
             }),
           ),
         ),
-        { seed: 119120, numRuns: 25, examples: [[1, "saved-letter"]] },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }), examples: [[1, "saved-letter"]] },
       );
     });
   }
@@ -437,7 +438,7 @@ describe("P34 id reuse at the runner", () => {
               }),
             ),
         ),
-        { seed: 119120, numRuns: 25 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
       );
     });
   }

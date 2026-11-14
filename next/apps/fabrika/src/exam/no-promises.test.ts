@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { NodePath } from "@effect/platform-node";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Effect, Path } from "effect";
 import * as fc from "fast-check";
 import { API } from "typescript/unstable/sync";
@@ -263,7 +264,8 @@ describe("no-promises", async () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        // Its examples are all twelve runs, so a pull request runs them all too.
+        numRuns: runsFor({ fast: 12, full: 12 }),
         // P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
         // P12 review 8: renamed imports and computed access hid the same RPC call.
         // P12 review 9: wrappers and local aliases bypassed bridge recognition.
@@ -301,7 +303,7 @@ describe("no-promises", async () => {
         const source = [`declare function fail${suffix}(): never;`, `fail${suffix}();`].join("\n");
         expect(typed({ [file]: source })).toEqual([]);
       }),
-      { seed: 119120, numRuns: 12 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
     );
   });
   it("leaves any, unknown, generic and unresolved calls outside Promise bridges alone", () => {
@@ -322,7 +324,7 @@ describe("no-promises", async () => {
           }),
         ).toEqual([]);
       }),
-      { seed: 119120, numRuns: 12 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
     );
   });
   it("recognizes Effect's bridge declarations rather than another module with the same names", () => {
@@ -350,7 +352,7 @@ describe("no-promises", async () => {
           ).toEqual([]);
         },
       ),
-      { seed: 119120, numRuns: 12 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
     );
   });
   it("The edge comment covers the next line and only that line", () => {
@@ -366,7 +368,7 @@ describe("no-promises", async () => {
       }),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // P12 wrapped-edge bug: a statement-wide marker hid later Promise calls.
         examples: [[["tryPromise", "fabrika/no-promises", "\t"], 0]],
       },
@@ -384,7 +386,7 @@ describe("no-promises", async () => {
           { file, line },
         ]);
       }),
-      { seed: 119120, numRuns: 12 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
     );
   });
   it("pinned: the P12 storage-method gap refuses unmarked returned Promises", () => {
@@ -439,7 +441,7 @@ describe("no-promises", async () => {
         expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([3, 4, 5, 6, 7, 8, 9, 12, 15]);
         expect(findings.filter((f) => f.file !== file)).toEqual([]);
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   const all = await plant({

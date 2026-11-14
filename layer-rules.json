@@ -149,7 +149,8 @@
         "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts",
-        "next/packages/libfabrika/src/Testing.test-support.ts"
+        "next/packages/libfabrika/src/Testing.test-support.ts",
+        "next/packages/libfabrika/src/TestDepth.test-support.ts"
       ]
     },
     {

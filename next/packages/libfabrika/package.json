@@ -68,6 +68,7 @@
     "./ci/*": "./src/ci/*.ts",
     "./ci/internal/*": null,
     "./node/Chaos.test-support": "./src/node/Chaos.test-support.ts",
+    "./TestDepth.test-support": "./src/TestDepth.test-support.ts",
     "./desktop/*": "./src/desktop/*.ts",
     "./desktop/internal/*": null,
     "./node/launchd/*": "./src/node/launchd/*.ts",

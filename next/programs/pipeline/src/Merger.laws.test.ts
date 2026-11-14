@@ -6,6 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
@@ -624,7 +625,7 @@ describe("the merger, next/", () => {
             reached++;
           }
         }),
-        { seed: 119120, numRuns: 200 },
+        { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
       );
       expect(reached, `${law} reached its deciding event`).toBeGreaterThan(0);
     });
@@ -778,7 +779,7 @@ describe("the merger, next/", () => {
           );
         },
       ),
-      { seed: 119120, numRuns: 200 },
+      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
     );
   });
 });
@@ -900,7 +901,7 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
         }
       },
     ),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
   expect(bounded, "walks reach the budget").toBeGreaterThan(0);
 });
@@ -968,5 +969,5 @@ it.prop(
       expect(model.round).toBe(0);
     }
   },
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );

@@ -8,6 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 import * as Sources from "./Sources.ts";
@@ -335,7 +336,7 @@ it.effect.prop(
         }
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 const string = (value: unknown) => {
@@ -343,7 +344,7 @@ const string = (value: unknown) => {
   return read === null ? null : new TextDecoder().decode(read.bytes);
 };
 
-const realGitRuns = 20;
+const realGitRuns = runsFor({ fast: 3, full: 20 });
 const realGitRunBudget = 30_000;
 
 // Loaded host checks took 695 s for 200 runs, then 138 s for 20 runs (6.9 s/run).

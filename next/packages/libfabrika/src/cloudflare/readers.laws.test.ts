@@ -16,6 +16,7 @@ import { Start } from "../processes/Process.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Attached } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
@@ -406,7 +407,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
     );
   });
 }
@@ -435,7 +436,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}]] },
+      { seed: 119120, numRuns: runsFor({ fast: 4, full: 20 }), examples: [[null], [{}]] },
     );
   });
 }
@@ -489,7 +490,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
+    { seed: 119120, numRuns: runsFor({ fast: 6, full: 20 }), examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
   );
 });
 
@@ -535,7 +536,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [["byte"]]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [["byte"]]] },
   );
 });
 
@@ -594,7 +595,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[{ toString: 0 }], [null], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[{ toString: 0 }], [null], [17]] },
     );
   });
 }
@@ -620,7 +621,11 @@ for (const service of ["process", "record"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], ["{"], ['["project"]'], ['["project",17]']] },
+      {
+        seed: 119120,
+        numRuns: runsFor({ fast: 6, full: 20 }),
+        examples: [[null], ["{"], ['["project"]'], ['["project",17]']],
+      },
     );
   });
 }
@@ -645,7 +650,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -664,7 +669,7 @@ it("Connection close checks saved tags again after startup", async () => {
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -698,7 +703,7 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
   );
 });
 

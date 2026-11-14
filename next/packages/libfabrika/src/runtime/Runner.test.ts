@@ -43,6 +43,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type SpanRow } from "../telemetry/Trace.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -978,7 +979,7 @@ describe("ticket 884, next/ brain mail", () => {
           }).pipe(Effect.provide(w.layer())),
         );
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.live.prop(
@@ -1220,7 +1221,7 @@ describe("P11 activity durability, experiment 231", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 
@@ -1333,7 +1334,7 @@ describe("p22 refusal and p25 thrown steps", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -1368,7 +1369,7 @@ describe("p22 refusal and p25 thrown steps", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, skip a bad saved letter: recovery preserves all letters and accepts no later input",
@@ -1426,7 +1427,7 @@ describe("p22 refusal and p25 thrown steps", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 
@@ -1500,7 +1501,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -1579,7 +1580,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -1610,7 +1611,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -1692,7 +1693,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(new Set(ids).size).toBe(2);
         }).pipe(Effect.provide(w.layer()));
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
   it.effect.prop(
     "A-Timer: a due repeated after a failed step keeps one letter and its first arrival",
@@ -1731,7 +1732,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect((yield* r.open("repeated")).view).toMatchObject({ count: 1, wake: asked + 10 });
         }).pipe(Effect.provide(w.layer()));
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
   // The drain retries only a storage failure: LedgerError or RecoveryStoreError. Each fault lands
   // on a woken runner before it holds a live state, so the program's own wake cannot hide the
@@ -1792,7 +1793,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: SEED, runs: 25 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 3, full: 25 }) } },
   );
   it.effect.prop(
     "A-Timer: a due writes no timer when the program asks for no wake or a later wake",
@@ -1830,7 +1831,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(w.workCalls()).toBe(0);
         }).pipe(Effect.provide(w.layer()));
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
   it.live("plant, mint a new timer id: a repeated due time saves and fires exactly once", () =>
     onDisks(async (world) => {
@@ -1933,7 +1934,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const as of ["person", "agent"] as const) {
@@ -2043,7 +2044,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "p69 plant, omit the door stamp: a parent-free input gives the program its own envelope id",
@@ -2101,7 +2102,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, pair Cmd with latest Msg: a person's completion releases an agent's queued write",
@@ -2139,7 +2140,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, read expected writers from returned parents: generated inputs keep an independent sender table",
@@ -2184,7 +2185,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const [scenario, reason, as, inputName, parentProcess] of [
@@ -2229,7 +2230,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -2268,7 +2269,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, own bypasses personOnly: even a person-owned process needs a qualifying parent",
@@ -2293,7 +2294,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const lost of ["sign", "commit"] as const) {
@@ -2333,7 +2334,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -2394,7 +2395,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, reuse old authority after replacement: old parent cannot sign for a new process id",
@@ -2423,7 +2424,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 
@@ -2464,7 +2465,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -2557,7 +2558,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const id of [`${PROCESS}/1/0/answer`, `${PROCESS}/due/42/0`]) {
@@ -2592,7 +2593,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
     it.live(`plant, authorize ${id}: a caused write cannot spend a parent under a runner-owned id`, () =>
       onDisks(async (world) => {
@@ -2688,7 +2689,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
               }),
             { concurrency: 1, discard: true },
           ),
-        { arbitrary: { seed: 119120, runs: 12 } },
+        { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
       );
     }
   }
@@ -2733,7 +2734,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -2929,7 +2930,7 @@ describe("P11 recovery gaps and durable installation", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.live("p35 plant, drop replayed follow-ups: an answer folded on wake saves its new Cmd without running it", () =>
     onDisks(async (world) => {
@@ -3026,7 +3027,7 @@ describe("P11 recovery gaps and durable installation", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const cut of ["before append", "after append", "after stepped", "before checkpoint"] as const) {
@@ -3181,7 +3182,7 @@ describe("P11 recovery gaps and durable installation", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const tag of ["granted", "started", "stepped", "state.upgraded"]) {
@@ -3223,7 +3224,7 @@ describe("P11 recovery gaps and durable installation", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -3269,7 +3270,7 @@ describe("P11 recovery gaps and durable installation", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, let unknown Cmd disappear: it produces a saved bad_cmd answer",
@@ -3291,7 +3292,7 @@ describe("P11 recovery gaps and durable installation", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });
 
@@ -3357,7 +3358,7 @@ describe("P11 monitoring, content and storage failures", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, tag bodies or error messages: failures keep class, with content deletable separately",
@@ -3415,7 +3416,7 @@ describe("P11 monitoring, content and storage failures", () => {
           }),
         { discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.live("plant, flush success only: a thrown fresh step reaches JobRecord before returning failure", () =>
     onDisks(async (world) => {
@@ -3480,7 +3481,7 @@ describe("P11 monitoring, content and storage failures", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 });

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-repositories-git-l1-fails-on-a-laptop",
+  "date": "2026-11-14",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts",
+    "line": 78
+  },
+  "says": "In next/, the law `L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves` fails on its first generated case on a developer laptop, on main as well as with the test-depth change, with `Selected repository: default branch failed` (`DefaultUnknown`); the cause, likely something in the machine's own Git setup that the law does not pin, was not found.",
+  "proof": "On a worktree at 4120e0500 (main, no change), `vitest run next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts -t \"L1: every prefix\" --maxWorkers=1` with Node 26.13.0 printed `Property failed after 1 tests`, `{ seed: 119120, path: \"0:1:1:1\", endOnFailure: true }`, `Counterexample: [\"sha256\",\"trunk-a\",[0]]`, `Caused by: RepositoriesError: Selected repository: default branch failed.` The same failure, same counterexample, came twice on the test-depth branch. The same file's two L2 laws also time out on that laptop at main (`Test timed out in 144000ms`), since their limit allows 10 ms per Git command.",
+  "cost": "A person cannot run the repository laws on their own machine and trust a red result, so a real break in RepositoriesGit can hide behind this one until CI runs it.",
+  "head": "4120e0500de6927c86ab0a521c865a26af9f5e96",
+  "ticket": null,
+  "pr": null
+}

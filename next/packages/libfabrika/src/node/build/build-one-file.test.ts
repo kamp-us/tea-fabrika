@@ -31,6 +31,7 @@ import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../../settings/StartsTest.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];
@@ -46,7 +47,7 @@ const text = fc
   .map((xs) => xs.join(""));
 
 const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1, max: 3 }) });
-const runs = { seed: 119120, numRuns: 3 };
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
 
 it("A13: an actual built box exposes separate fresh, update and body-free audit calls", async () => {
   await fc.assert(
@@ -119,7 +120,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
         ).pipe(Effect.provide(NodeServices.layer)),
       ),
     ),
-    { seed: 119120, numRuns: 6 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) },
   );
 }, 120_000);
 
@@ -473,7 +474,7 @@ describe("P16 p33 one-file build", () => {
           });
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
         }),
-        { ...runs, numRuns: 30 },
+        { ...runs, numRuns: runsFor({ fast: 3, full: 30 }) },
       );
     },
   );
@@ -512,7 +513,7 @@ describe("P16 p33 one-file build", () => {
 
           expect(() => embedded(source, [source])).toThrow("compiled text changed");
         }),
-        { ...runs, numRuns: 8 },
+        { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
       );
     },
   );
@@ -523,7 +524,7 @@ describe("P16 p33 one-file build", () => {
 // faults the files hold) and picks a move that state allows; the build runs for real each time.
 // Build walks are slow (a tab build bundles Effect and React's JSX runtime), so each runs a small
 // fixed count: 4 walks of up to 4 builds, about a minute on a laptop.
-const walks = { seed: 119120, numRuns: 4 };
+const walks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 4 }) };
 const walkTimeout = buildTimeout(walks.numRuns * 5);
 const HTML = "text/html; charset=utf-8";
 const JS = "text/javascript; charset=utf-8";
@@ -792,8 +793,9 @@ const NAMING: ReadonlyArray<(specifier: string) => string> = [
 
 /** Local references a stylesheet can make to a file next to it. */
 const LOCAL_URL = ['"./img.png"', "img.png", "'../tab/img.png'"] as const;
-// Each boundary walk builds 3 to 6 times; 8 walks reach every case above from seed 119120.
-const boundaryWalks = { seed: 119120, numRuns: 8 };
+// Each boundary walk builds 3 to 6 times; 8 walks reach every case above from seed 119120, so a
+// pull request runs all 8 too.
+const boundaryWalks = { seed: 119120, numRuns: runsFor({ fast: 8, full: 8 }) };
 
 describe("P14 slice 1: the tab's page and script ride in the one build", () => {
   it(
@@ -1187,7 +1189,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 // last published brain byte for byte. Fixtures live in scoped temp folders.
 type Pick = { readonly name: string; readonly module: string };
 
-const p40Runs = { seed: 119120, numRuns: 6 };
+const p40Runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) };
 
 const nameBreaks: ReadonlyArray<(name: string) => string> = [
   (name) => name.split("/")[1]!,

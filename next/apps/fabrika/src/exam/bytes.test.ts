@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
@@ -121,7 +122,7 @@ vi.mock("rolldown", async (original) => {
   };
 });
 
-const options = { arbitrary: { seed: 119120, runs: 20, size: 128, concurrency: 1 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 128, concurrency: 1 } };
 
 const names = (graph: Observed) => [
   ...graph.modules.flatMap((m) => [m.id, ...m.imports, ...m.dynamic]),
@@ -393,7 +394,7 @@ it.effect.prop(
       expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
       expect(tab.observed.filter(isWindow)).toHaveLength(1);
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { ...options.arbitrary, runs: 3 } },
+  { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) } },
 );
 
 const int = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));

@@ -7,6 +7,7 @@ import type { Schema } from "effect";
 import { Arbitrary, Effect } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
+import { runsFor } from "../../TestDepth.test-support.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 
@@ -162,7 +163,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         { seed: 119120, numRuns: 1 },
       );
     }),
-    { seed: 119120, numRuns: 300 },
+    { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) },
   );
 });
 
@@ -351,6 +352,6 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         { seed: 119120, numRuns: 1 },
       );
     }),
-    { seed: 119120, numRuns: 1000 },
+    { seed: 119120, numRuns: runsFor({ fast: 100, full: 1000 }) },
   );
 });

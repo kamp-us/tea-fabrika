@@ -16,6 +16,7 @@ import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
@@ -533,7 +534,7 @@ describe("P40 the core counter's identity in the brain", () => {
           ),
         ),
       ),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 });
@@ -765,7 +766,7 @@ describe("P12 Project saved and wire readers", () => {
           }
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["{}"], ["null"]] },
     );
   });
 
@@ -804,7 +805,7 @@ describe("P12 Project saved and wire readers", () => {
             }
           }
         }),
-        { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+        { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
       );
     });
   }
@@ -858,7 +859,7 @@ describe("P12 WebCrypto failures", () => {
             }
           }
         }),
-        { seed: 119120, numRuns: 20 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
       );
     });
   }
@@ -1019,7 +1020,7 @@ describe("P12 Connection recording", () => {
           expect(sent.join("")).not.toContain(text);
         },
       ),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 
@@ -1035,7 +1036,7 @@ describe("P12 Connection recording", () => {
           Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
         ).toEqual([]);
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 });

@@ -8,6 +8,7 @@ import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { runsFor } from "../TestDepth.test-support.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
 
 // Each world's own scope closes its database (0061).
@@ -49,7 +50,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: 119120,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },

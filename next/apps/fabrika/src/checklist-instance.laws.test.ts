@@ -25,6 +25,7 @@ import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import {
   configureProcess,
   processDescriptor,
@@ -496,7 +497,7 @@ describe("L21: the boot list", () => {
             ),
           ),
       ),
-      { seed: SEED, numRuns: 50 },
+      { seed: SEED, numRuns: runsFor({ fast: 5, full: 50 }) },
     );
     expect(seen.reopen).toBeGreaterThan(0);
     expect(seen.exit).toBeGreaterThan(0);
@@ -585,7 +586,7 @@ describe("L13: notices name their process", () => {
       ),
       {
         seed: SEED,
-        numRuns: 100,
+        numRuns: runsFor({ fast: 10, full: 100 }),
         // pinned: the host's first add succeeded, then every send and late view.open was unreachable.
         examples: [[["milk", "bread"]]],
       },
@@ -678,7 +679,7 @@ describe("L13: notices name their process", () => {
             ),
           ),
       ),
-      { seed: SEED, numRuns: 100 },
+      { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) },
     );
     expect(seen.patch).toBeGreaterThan(0);
     expect(seen.arrays, "array ops reached the client").toBeGreaterThan(0);
