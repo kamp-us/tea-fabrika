@@ -662,7 +662,8 @@ export const CI_SPEED_RUN =
  * else. K2: one job, main's copy alone, with a time limit. K3: the workflow's token grants nothing
  * and the job's grants CI_SPEED_TOKEN, so the issue write lives on that job only. K4: its checkout
  * keeps no token. K5: the measure step runs CI_SPEED_RUN with the job's token, under pipefail. K6:
- * it ends with the stop step, as every check.yaml job does.
+ * no step cancels the run: check.yaml's stop step frees the other jobs' runners, and one job has
+ * none to free, so its token keeps actions: read.
  */
 export const lintCiSpeed = (text: string): string[] => {
   const errors: string[] = [];
@@ -716,9 +717,7 @@ export const lintCiSpeed = (text: string): string[] => {
       }), "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash");
 
   const cancels = list.filter((s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
-  require(list.length > 0 &&
-    isStop(list.at(-1) ?? {}) &&
-    cancels.length === 1, "K6: the job ends with the stop step, its one step that cancels the run");
+  require(cancels.length === 0, "K6: no step cancels the run: one job has nothing to cancel");
   return errors;
 };
 

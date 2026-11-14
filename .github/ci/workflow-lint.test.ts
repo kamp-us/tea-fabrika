@@ -2079,9 +2079,15 @@ for (const [name, plant, error] of [
     "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash",
   ],
   [
-    "K6: no stop step",
-    (w: SpeedFile) => void speedJob(w).steps.pop(),
-    "K6: the job ends with the stop step, its one step that cancels the run",
+    "K6: check.yaml's stop step added",
+    (w: SpeedFile) =>
+      void speedJob(w).steps.push({
+        name: "stop the run",
+        if: "failure() && github.event_name != 'push'",
+        env: { GH_TOKEN: `\${{ github.token }}` },
+        run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
+      }),
+    "K6: no step cancels the run: one job has nothing to cancel",
   ],
 ] as const) {
   it(`ci-speed.yaml ${name} is named by its one error`, () => {

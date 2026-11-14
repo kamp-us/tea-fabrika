@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 10
     # actions: the runs and jobs it reads. contents: the checkout. pull-requests: the merged pull
     # requests and their merge queue entries. issues: the one issue it opens, adds to and closes.
+    # No stop step, unlike check.yaml: one job has nothing to cancel, so actions stays read.
     permissions:
       actions: read
       contents: read
@@ -52,9 +53,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .agents/skills/lead/scripts/ci-speed.ts --issue --repo "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: stop the run
-        if: failure() && github.event_name != 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
