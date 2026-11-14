@@ -850,7 +850,9 @@ exit 0
           },
         });
         const install = "pnpm install --offline --frozen-lockfile\n";
-        const run = "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n";
+        const run =
+          "pnpm exec effect-tsgo patch --typescript\n" +
+          "pnpm -r typecheck --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo\n";
         const shapeNow = !existsSync(modules) ? "missing" : lstatSync(modules).isDirectory() ? "folder" : "other";
 
         expect({
