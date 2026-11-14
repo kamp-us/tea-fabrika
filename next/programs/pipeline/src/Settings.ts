@@ -1,6 +1,6 @@
 import { Setting } from "@kampus/libfabrika";
 import { Schema } from "effect";
-import { Kinds, Plan, type Kind } from "./Change.ts";
+import { Kinds, Plan } from "./Change.ts";
 
 const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 
@@ -64,5 +64,3 @@ export const all = Setting.group({
 });
 
 export type Values = typeof all extends Setting.Group<infer A> ? A : never;
-
-export const key = (kind: typeof Kind.Type) => `queue.checks.${kind}`;
