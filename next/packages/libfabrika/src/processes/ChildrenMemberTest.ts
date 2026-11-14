@@ -10,7 +10,8 @@
 //     is checked when it has one (L20, the owner's answer (c)), else today's `StartGrant` rule. The
 //     write turn rechecks the proof's rows, and a recheck that says no writes nothing.
 //   processes/internal/processTable.ts: the `started` line gains `member`, the sender it was checked
-//     against, encoded as `Sender` with both its key and its person.
+//     against, encoded as `Sender` with both its key and its person. A start checked against the
+//     requester's recorded member (L20) records that member.
 //   Senders.ts: `Senders.sender(parent, process)` answers `Option<Sender>` or fails `SendersError` with
 //     reason `removed`, `ended` or `storage`.
 // The test plays the gateway: its `Senders` answers from the inputs the test delivered, as the
@@ -351,7 +352,10 @@ const NoSenderCase = fc.record({
 });
 type NoSenderCase = typeof NoSenderCase extends fc.Arbitrary<infer A> ? A : never;
 
-/** L11 and L14 on one case: a start with no member's input delivered to its requester. */
+/**
+ * L11 and L14 on one case: a start with no member's input delivered to its requester, and no recorded
+ * member, since every requester here is a boot process.
+ */
 const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   Effect.fnUntraced(function* (c: NoSenderCase) {
     const w = yield* world(open, c.grants, startingRows(c.roles));
@@ -371,7 +375,10 @@ const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     if (granted(c.grants, requester.program, c.program)) {
       startedFresh(answer, label);
       const line = yield* w.startedLine(child.name, child.id);
-      expect(line?.body ?? {}, `L14: ${label}: a start with no sender has no member`).not.toHaveProperty("member");
+      expect(
+        line?.body ?? {},
+        `L14: ${label}: a start with no sender and no recorded member has no member`,
+      ).not.toHaveProperty("member");
     } else {
       refused(w, answer, before, label);
     }
@@ -434,18 +441,26 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const w = yield* world(open, c.grants, [OWNER, otherRow("member")]);
     const boots = [...w.boot.values()];
     const boot = pick(boots, c.requester);
-    // The requester: a boot process with no member, or a process a member's input started.
+    // The requester: a boot process with no member, or a process a member's input started. `recorded`
+    // is the member the requester's own `started` line names, read from the store's rows.
     const requester =
       c.member === "none"
-        ? boot
+        ? { ...boot, recorded: undefined }
         : yield* Effect.gen(function* () {
-            const parent = w.deliver(boot.process, senderFrom(c.member === "founder" ? "founder" : "other", "person"));
+            const sender = senderFrom(c.member === "founder" ? "founder" : "other", "person");
+            const parent = w.deliver(boot.process, sender);
             const middle = w.fresh(c.middle, boot.process, false);
             const placed = yield* w.start(middle, from(parent));
             startedFresh(placed, "L20: a member's input starts the requester");
+            const recorded = encodeSender(sender);
+            const line = yield* w.startedLine(middle.name, middle.id);
+            expect(line?.body, "L20: the requester's started line records its member").toMatchObject({
+              member: recorded,
+            });
             return {
               process: Exit.isSuccess(placed) ? placed.value.process : expect.fail("started"),
               program: c.middle,
+              recorded,
             };
           });
 
@@ -472,6 +487,18 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     if (allowed) {
       startedFresh(answer, label);
+      const line = yield* w.startedLine(child.name, child.id);
+
+      if (requester.recorded === undefined) {
+        expect(
+          line?.body ?? {},
+          `${label}: with no recorded member, the started line has no member`,
+        ).not.toHaveProperty("member");
+      } else {
+        expect(line?.body, `${label}: the started line records the member it was checked against`).toMatchObject({
+          member: requester.recorded,
+        });
+      }
     } else {
       refused(w, answer, before, label);
     }
@@ -566,14 +593,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     );
     // Plant: write the requester's process as `member` (ChildrenLedger.ts or ProcessManager.ts).
     prop(
-      "L14: a sender's start names that sender as member, and a start with no sender has none",
+      "L14: a sender's start names that sender as member, and a start with no sender and no recorded member has none",
       fc.tuple(SenderCase, NoSenderCase),
       ([withSender, without]) => Effect.andThen(senderLaw(open)(withSender), noSenderLaw(open)(without)),
       100,
     );
-    // Plant: the no-sender rule ignores the recorded owner (ChildrenLedger.ts).
+    // Plant: the no-sender rule ignores the recorded owner (ChildrenLedger.ts). Plant: the start
+    // checked against the recorded member writes no `member` on its `started` line.
     prop(
-      "L20: with no member's input, a recorded member is checked as that member, else StartGrant decides",
+      "L20: with no member's input, a recorded member is checked as that member and written on the started line, else StartGrant decides",
       OwnerCase,
       ownerLaw(open),
       100,
