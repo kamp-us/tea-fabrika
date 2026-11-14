@@ -3,7 +3,7 @@ import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { ignored } from "./changes.mjs";
-import { gated, sized } from "./required.mjs";
+import { gated, gates } from "./required.mjs";
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -92,23 +92,25 @@ const CANCEL =
 // false in the merge queue and on main.
 const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, 'visual')";
 const BUILD = "needs.changes.outputs.build!='false'";
-// What changes exposes from its first pass, and nothing more: no output starts today's tests or its
-// app end to end, which run on no event (0525, 0533).
-const OUTPUTS = ["check", "typecheck", "test", "field", "build"];
-// The test job's two machines, for the tooling tests alone (check.yaml gives the seconds).
-const TOOLING_LEGS = [1, 2];
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
-// Today's version is frozen (0525, 0533), so every vitest call in the test job runs the `tooling`
-// project alone: next/ and the three trees of today's tests are projects of their own, and a project
-// ignores `--exclude` (vitest.config.ts; workflow-lint.test.ts holds the tooling project's globs).
+// The token changes' classify step reads.
+const TOKEN = `\${{ github.token }}`;
+// The test job's two machines, for the tooling tests alone (check.yaml gives the seconds).
+const TOOLING_LEGS = [1, 2];
+// Today's version is frozen (0525, 0533), so every vitest call of the tooling tests, in the test job
+// and on the schedule, runs the `tooling` project alone: next/ and the three trees of today's tests
+// are projects of their own, and a project ignores `--exclude` (vitest.config.ts;
+// workflow-lint.test.ts holds the tooling project's globs).
 const TOOLING_PROJECT = "--project tooling";
+// next/ and the three trees of today's tests, which the schedule's tooling job leaves out.
+const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
 
 // The test job's one test step, whole: the tests that reach the change with a base, all of them
-// without one, each on its machine's share.
+// without one, each on its machine's share. It runs on a pull request alone (0534).
 const TOOLING = [
   'if [ -n "$BASE" ]; then',
   `pnpm exec vitest run ${TOOLING_PROJECT} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
@@ -130,16 +132,15 @@ const chromium =
 
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
-// vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is the legs job's `shards`,
-// else its fallback: the full matrix on main and on a pull request with the `visual` label, and the
-// vitest legs alone everywhere else, the merge queue among them (0536, legs.ts).
+// vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is changes' size step's
+// `shards`, else its fallback: the full matrix on a pull request with the `visual` label, and the
+// vitest legs alone everywhere else, the merge queue and main among them (0536, legs.ts).
 const E2E_PREFIX = "e2e-";
 const VITEST_LEGS = ["1", "2", "3", "4", "5"];
 const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
 // Chromium is fetched only once a visual file exists.
 const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
-const FULL_ON = `(github.event_name=='push'||${VISUAL_LABEL})`;
-const FALLBACKS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
+const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
   try {
@@ -151,7 +152,7 @@ const parsed = (text: string | undefined): unknown[] => {
 };
 
 /**
- * next's matrix, `fromJSON(needs.legs.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
+ * next's matrix, `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
  * when the full fallback runs, the full legs, and the other legs, numbers and strings kept apart.
  */
 const fallbacks = (job: Record<string, unknown>) => {
@@ -159,7 +160,7 @@ const fallbacks = (job: Record<string, unknown>) => {
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 
-/** The full fallback's legs: what main and a pull request with the `visual` label run unsized. */
+/** The full fallback's legs: what a pull request with the `visual` label runs unsized. */
 const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).full;
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
@@ -170,26 +171,52 @@ const numbered = (all: readonly unknown[]): string[] =>
 const ends = (all: readonly unknown[]): string[] =>
   all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
 
-// When the legs job sizes next: a pull request that tests all of next/, whose changes passed.
+// When changes' size step sizes next: any run that tests all of next/, as the parser's pass left
+// next and filter, a pull request, a merge queue group and a push to main alike (0534); legs.ts
+// itself prints the full matrix for a run with no base commit. The setup also runs for the parser's
+// pass, and reads the first pass alone.
 const SIZED =
-  "needs.changes.result=='success'&&needs.changes.outputs.next!='false'&&github.event_name=='pull_request'&&(needs.changes.outputs.filter||'next/')=='next/'";
+  "(steps.same.outputs.next||steps.diff.outputs.next)!='false'&&(steps.same.outputs.filter||steps.diff.outputs.filter)=='next/'";
 
-// `files` is a sized run's vitest list, the reader tests included (legs.ts).
-const LEGS_OUTPUTS = ["shards", "files", "vitest", "e2e", "next"];
+const PROBE = "steps.diff.outputs.probe=='true'";
+const SETUP = `${PROBE}||(steps.diff.outputs.next!='false'&&steps.diff.outputs.filter=='next/')`;
 
+// changes' outputs from its size step, each beside the name legs.ts prints it under. `next` joins
+// changes' own; `files` is a sized run's vitest list, the reader tests included, and `base` the
+// commit its end-to-end legs narrow from (legs.ts).
+const LEGS_OUTPUTS = [
+  ["shards", "shards"],
+  ["files", "files"],
+  ["vitest-legs", "vitest"],
+  ["e2e-legs", "e2e"],
+  ["base", "base"],
+] as const;
+
+// The size step's base is the run's own: the pull request's, the merge queue group's, or what main
+// held before the push (0534), the classify step's BASE.
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
-  FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-  BASE: `\${{ github.event.pull_request.base.sha }}`,
+  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+  BASE: env.BASE,
   VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };
 
-// A leg's `--shard`: `${{ matrix.shard }}/${{ needs.legs.outputs.<kind> || <full count> }}`, so a sized
+// The check job's flags (ticket 985): lint on check, field rows on field, the CI package's install
+// when only rows changed.
+const CHECK = "needs.changes.outputs.check!='false'";
+// changes' flags from its first pass, each a job's or a step's.
+// No flag starts today's tests or its app end to end, which run on no event (0525, 0533).
+const FLAGS = ["check", "typecheck", "test", "field", "build"];
+const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
+const ROWS_ALONE = "needs.changes.outputs.check=='false'";
+const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
+
+// A leg's `--shard`: `${{ matrix.shard }}/${{ needs.changes.outputs.<kind>-legs || <full count> }}`, so a sized
 // run divides by its own count of that kind, and every other run by the full matrix's.
 const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
 
 const denominator = (kind: "vitest" | "e2e", full: number) =>
-  String.raw`\$\{\{\s*needs\.legs\.outputs\.${kind}\s*\|\|\s*${full}\s*\}\}`;
+  String.raw`\$\{\{\s*needs\.changes\.outputs\.${kind}-legs\s*\|\|\s*${full}\s*\}\}`;
 
 const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 
@@ -259,12 +286,36 @@ export const lintWorkflow = (text: string): string[] => {
   }
 
   // A draft's check is lint alone: the build skips on changes' build flag.
+  // F1. check also holds the field row check (ticket 985): its setup runs on any flag, its full
+  // install and lint on the check flag, the CI package's install when only rows changed, and the
+  // row check last, after any failure, on the field flag, so a red lint never hides red rows.
   const checkSteps = steps(map(jobs["check"]));
+  const rows = checkSteps.filter((s) => s["run"] === "node .github/ci/field-check.ts");
+  const rowInstall = checkSteps.filter((s) => s["run"] === ROW_INSTALL);
 
   for (const step of checkSteps) {
     const slow = step["run"] === "pnpm build";
-    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only the build skips, on the build flag");
+    const setup = typeof step["uses"] === "string";
+    const expected = slow ? BUILD : rows.includes(step) ? ROWS : rowInstall.includes(step) ? ROWS_ALONE : CHECK;
+    require(setup
+      ? !("if" in step)
+      : compact(step["if"]) ===
+          expected, "F1: check's lint steps run on the check flag, the build on build, the rows on field, its setup on every run");
   }
+
+  require(rows.length === 1 &&
+    rows[0] === checkSteps.at(-1) &&
+    rows[0]?.["continue-on-error"] === undefined &&
+    JSON.stringify(rows[0]?.["env"]) ===
+      JSON.stringify(
+        env,
+      ), "F1: check runs the row check once, last, with the run's base, head and event, and its failure blocks");
+  require(rowInstall.length === 1 &&
+    checkSteps.some(
+      (s) => s["run"] === "pnpm install --frozen-lockfile",
+    ), "F1: check installs everything for lint, and only the CI package for rows alone");
+  const checkout = checkSteps.find((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the row check diffs");
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
   // pass with a grown list; a first push's zeros map to no base, as for the test steps.
@@ -274,25 +325,26 @@ export const lintWorkflow = (text: string): string[] => {
   require(ratchets.length === 1 &&
     ratchets[0]?.["run"] === RATCHET &&
     compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&
-    !("if" in (ratchets[0] ?? {})) &&
+    compact(ratchets[0]?.["if"]) === CHECK &&
     ratchets[0]?.["continue-on-error"] ===
       undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
 
-  // A sized job (next) also needs its sizer, and skips on that one's false flag too (required.mjs).
+  // Each gated job needs changes alone, and runs unless every flag it runs on is false
+  // (required.mjs's `gates`): check on check or field rows, next on next, which already holds the
+  // sizing.
   for (const name of gated) {
     const job = map(jobs[name]);
-    const needs = job["needs"];
-    const sizer = Object.hasOwn(sized, name) ? sized[name] : undefined;
-    const expected = sizer === undefined ? ["changes"] : ["changes", sizer];
-    require((sizer === undefined && needs === "changes") ||
-      JSON.stringify(needs) === JSON.stringify(expected), `${name} needs ${expected.join(" and ")}`);
+    const flags = gates[name].map((flag) => `needs.changes.outputs.${flag} != 'false'`).join(" || ");
+    require(job["needs"] === "changes", `${name} needs changes`);
     require(compact(job["if"]) ===
       compact(
-        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')${
-          sizer === undefined ? "" : ` && needs.${sizer}.outputs.${name} != 'false'`
-        }`,
-      ), `${name} must run after classifier failure and skip only its false flag`);
+        `!cancelled() && (needs.changes.result != 'success' || ${flags})`,
+      ), `${name} must run after classifier failure and skip only when its flags are false`);
   }
+
+  // F3. legs and field are steps of changes and check now, so no job of either name comes back.
+  require(!("legs" in jobs) &&
+    !("field" in jobs), "F3: no legs or field job: changes sizes next, and check checks the rows");
 
   // A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
   for (const [name, job] of Object.entries(jobs)) {
@@ -358,23 +410,27 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of OUTPUTS) {
+  for (const name of FLAGS) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
-
-  // T1 (0533): an output nobody listed, such as the `today` or `e2e` flag before, could start
-  // today's tests again.
-  const listed = [...OUTPUTS, "next", "filter"];
-  require(Object.keys(outputs).every((name) => listed.includes(name)), `changes exposes only ${listed.join(", ")}`);
 
   // The plan for CI paths, slice 2: the parser's pass (`--same`) prints `next` and `filter` again
   // when it proved a next/ file is the same program, and the first pass's stand when it printed
   // nothing. Its install and its run may fail without failing changes, which would run everything
   // and turn ci-required red.
-  for (const name of ["next", "filter"]) {
-    require(compact(outputs[name]) ===
-      `steps.same.outputs.${name}||steps.diff.outputs.${name}`, `changes exposes ${name} from the parser's pass, else the first`);
+  require(compact(outputs["filter"]) ===
+    "steps.same.outputs.filter||steps.diff.outputs.filter", "changes exposes filter from the parser's pass, else the first");
+  // S1. The size step's `next` first: false when it picked no next/ test file, so next skips.
+  require(compact(outputs["next"]) ===
+    "steps.size.outputs.next||steps.same.outputs.next||steps.diff.outputs.next", "S1: changes exposes next from the size step, else the parser's pass, else the first");
+
+  for (const [name, from] of LEGS_OUTPUTS) {
+    require(compact(outputs[name]) === `steps.size.outputs.${from}`, `S1: changes exposes ${name} from the size step`);
   }
+
+  const exposed = [...FLAGS, "next", "filter", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
+  require(JSON.stringify(Object.keys(outputs).toSorted()) ===
+    JSON.stringify(exposed), "S1: changes exposes its flags, filter and the size step's outputs, and nothing else");
 
   const changeSteps = steps(changes);
   const same = changeSteps.find((s) => s["id"] === "same");
@@ -385,20 +441,61 @@ export const lintWorkflow = (text: string): string[] => {
     require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
   }
 
+  const sizing = changeSteps.find((s) => s["id"] === "size");
+
   for (const step of changeSteps.filter(
     (s) =>
       (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
       (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
   )) {
+    const forSizing = step["run"] === "pnpm install --frozen-lockfile --ignore-scripts";
+    const before = forSizing ? sizing : same;
     require(step["continue-on-error"] === true &&
-      same !== undefined &&
+      before !== undefined &&
       changeSteps.indexOf(step) <
-        changeSteps.indexOf(same), "the parser's setup comes before its pass, and its failure fails nothing");
+        changeSteps.indexOf(
+          before,
+        ), "the parser's setup comes before its pass, sizing's install before its size step, and their failure fails nothing");
+    require(compact(step["if"]) ===
+      (forSizing
+        ? SIZED
+        : compact(
+            String(step["run"] ?? "").includes("--filter") ? PROBE : SETUP,
+          )), "S1: changes' setup runs for the parser or for sizing, each install on its own guard");
   }
 
+  // S1. The size step (legs.ts) runs after the parser's pass, on every run that tests all of next/:
+  // a pull request, a merge queue group and a push to main (0534), so none of them runs the whole
+  // suite. Under the reader filter it does not run, and next runs the reader tests. Its install and
+  // its sizing may fail without failing changes, so a failure there is the full matrix, never a
+  // skipped next.
+  require(sizing !== undefined &&
+    same !== undefined &&
+    changeSteps.indexOf(same) < changeSteps.indexOf(sizing) &&
+    sizing["run"] === "node .github/ci/legs.ts" &&
+    sizing["continue-on-error"] === true &&
+    compact(sizing["if"]) ===
+      SIZED, "S1: changes sizes next with legs.ts after the parser's pass, on every run that tests all of next/, and fails open");
+
+  for (const [key, expected] of Object.entries(SIZE_ENV)) {
+    require(map(sizing?.["env"])[key] === expected, `S1: the size step gets ${key} through env`);
+  }
+
+  // The parser's own install: sizing's full install comes after the parser's pass, so it cannot
+  // stand in for it.
   require(changeSteps.some(
-    (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
+    (s) => s["run"] === ROW_INSTALL && compact(s["if"]) === PROBE,
   ), "changes installs the parser for its pass");
+
+  // M1. A push that a merge queue run already tested skips next (changes.mjs's
+  // `tested`). The classify step asks GitHub with the job's own token, the workflow's (F3 holds
+  // that map to actions and contents, and changes' stop step needs it whole), and it is the one step
+  // in the workflow but the stop steps that gets the token.
+  const classify = changeSteps.find((s) => s["id"] === "diff");
+  require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
+  require(Object.entries(jobs).every(([, job]) =>
+    steps(map(job)).every((s) => s === classify || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s))),
+  ), "M1: only changes' classify step gets the token");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -416,62 +513,24 @@ export const lintWorkflow = (text: string): string[] => {
     ), "small scans still run after classifier failure");
   }
 
-  const field = map(jobs["field"]);
-  require(!("needs" in field) && !("if" in field), "field starts independently on every event");
-  require(field["continue-on-error"] !== true, "field failures block");
-
-  for (const [name, job] of [
-    ["changes", changes],
-    ["field", field],
-  ] as const) {
-    const list = steps(job);
-    require(list.some(
-      (s) =>
-        typeof s["uses"] === "string" &&
-        s["uses"].startsWith("actions/checkout@") &&
-        map(s["with"])["fetch-depth"] === 0 &&
-        !("if" in s),
-    ), `${name} checks out history`);
-    const diff = list.find((s) => s["id"] === "diff");
-    require(diff?.["run"] === "node .github/ci/changes.mjs" && !("if" in (diff ?? {})), `${name} calls the classifier`);
-
-    for (const [key, expected] of Object.entries(classifier)) {
-      require(map(diff?.["env"])[key] === expected, `${name} passes event ${key} through env`);
-    }
-  }
-
-  const fieldSteps = steps(field),
-    flag = compact("steps.diff.outputs.field == 'true'");
-  const install = fieldSteps.find((s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install "));
-  require(typeof install?.["run"] === "string" &&
-    install["run"].includes("--frozen-lockfile") &&
-    install["run"].includes("--filter @tea-fabrika/ci") &&
-    !install["run"].includes("--ignore-workspace"), "field installs the workspace package with its frozen lockfile");
-  const check = fieldSteps.find((s) => s["run"] === "node .github/ci/field-check.ts");
-  require(check !== undefined, "field runs the row checker");
-  require(check?.["continue-on-error"] !== true, "row checker failures block");
-
-  for (const action of ["pnpm/action-setup@", "actions/setup-node@"]) {
-    require(fieldSteps.some(
-      (s) => typeof s["uses"] === "string" && s["uses"].startsWith(action),
-    ), `field includes ${action} setup`);
-  }
-
-  for (const [key, expected] of Object.entries(env)) {
-    require(map(check?.["env"])[key] === expected, `field check passes ${key} through env`);
-  }
-
-  for (const step of fieldSteps.filter(
+  const list = steps(changes);
+  require(list.some(
     (s) =>
-      s === install ||
-      s === check ||
-      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])),
-  )) {
-    require(compact(step["if"]) === flag, "field setup, install and validation skip without changed JSONL");
+      typeof s["uses"] === "string" &&
+      s["uses"].startsWith("actions/checkout@") &&
+      map(s["with"])["fetch-depth"] === 0 &&
+      !("if" in s),
+  ), "changes checks out history");
+  require(classify?.["run"] === "node .github/ci/changes.mjs" &&
+    !("if" in (classify ?? {})), "changes calls the classifier");
+
+  for (const [key, expected] of Object.entries(classifier)) {
+    require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
 
-  // The test job runs the tooling tests alone, on two machines. Today's version is frozen (0525, 0533),
-  // so its tests run on no event: T1, with the outputs law above and the app law below.
+  // The test job runs the tooling tests alone, on two machines, on a pull request alone (0534).
+  // Today's version is frozen (0525, 0533), so its tests run on no event: T1, with the outputs law
+  // above and the app law below.
   const test = map(jobs["test"]),
     testSteps = steps(test);
   require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) ===
@@ -518,8 +577,9 @@ export const lintWorkflow = (text: string): string[] => {
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
   require(!("name" in nextJob), "next keeps the default matrix check names");
-  // E1. The matrix is `fromJSON(needs.legs.outputs.shards || '<full>')`: on a pull request that tests
-  // all of next/ the legs job's sized legs, else the full matrix. The full one is the end-to-end legs
+  // E1. The matrix is `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest>'))`:
+  // on a run that tests all of next/ from a base, changes' sized legs, else a fallback (E10). The
+  // full one is the end-to-end legs
   // `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all strings. The count N is E4's,
   // in vitest.shards.test.ts; here only its shape and its `/N`. The sized legs are legs.ts's
   // `shards`, the same shape cut shorter (legs.test.ts).
@@ -535,34 +595,35 @@ export const lintWorkflow = (text: string): string[] => {
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  // E10 (0536). The visual tests never start unasked: the full fallback runs on main and on a pull
-  // request with the `visual` label, and every other unsized run, the merge queue among them, gets
-  // the vitest legs alone. Plants, each run once on check.yaml and restored: the full fallback alone,
-  // as before (red); `merge_group` in place of `push` (red); the vitest fallback with e2e-1 (red).
+  // E10 (0536). The visual tests never start unasked: the full fallback runs only on a pull request
+  // with the `visual` label, and every other unsized run, the merge queue and main among them, gets
+  // the vitest legs alone; the schedule runs the visual tests. Plants, each run once on check.yaml
+  // and restored: the full fallback alone, as before (red); `github.event_name == 'push' ||` beside
+  // the label (red); the vitest fallback with e2e-1 (red).
   const { when, plain } = fallbacks(nextJob);
-  require(compact(when) === compact(FULL_ON) &&
+  require(compact(when) === compact(VISUAL_LABEL) &&
     JSON.stringify(plain) ===
       JSON.stringify(
         VITEST_LEGS,
-      ), "E10: next's full fallback runs only on main or with the visual label, else the vitest legs 1 to 5 alone");
+      ), "E10: next's full fallback runs only with the visual label, else the vitest legs 1 to 5 alone");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
-  // The vitest step's paths, unquoted so each path is its own argument. On a sized pull request the
-  // legs job's `files`: what `--changed` picked and every reader test, each once (legs.ts), so the
-  // step takes no `--changed` of its own, which would drop the readers again. Else the plan for CI
-  // paths, slice 2: `filter` from changes, the reader tests or `next/`, and a missing filter runs all
-  // of next/, as the merge queue and main do, the whole suite as the backstop.
+  // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
+  // request, a merge queue group or a push to main, 0534) changes' `files`: what `--changed` picked
+  // and every reader test, each once (legs.ts), so the step takes no `--changed` of its own, which
+  // would drop the readers again. Else the plan for CI paths, slice 2: `filter` from changes, the
+  // reader tests or `next/`, and a missing filter runs all of next/.
   const nextCommand =
-    'pnpm exec vitest run $PROJECTS $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
-  // E11 (0536). The layers the vitest step tests: `next` alone on a pull request and in the merge
-  // queue, `next-integration` beside it on main until the schedule carries it. Plants, each run once
-  // on check.yaml and restored: `--project next --project next-integration` on every event (red);
-  // PROJECTS dropped from the env (red).
-  const projects = "github.event_name=='push'&&'--project next --project next-integration'||'--project next'";
+    'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  // E11 (0536). The vitest step tests the `next` project alone, on every event: the merge line runs
+  // the in-memory layer, and the schedule runs the real-resource one. A path filter alone finds a
+  // file in any project, so the flag is what keeps `next-integration` out. Plants, each run once on
+  // check.yaml and restored: `--project next` dropped (red); `--project next-integration` beside it
+  // (red).
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the visual files, the
   // `next-visual` project. It takes no filter, so under the reader filter the e2e legs still run every
-  // visual file a pull request's change reaches, and every one on main.
+  // visual file the change reaches.
   const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
-  const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+  const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -579,7 +640,8 @@ export const lintWorkflow = (text: string): string[] => {
       (command) => nextRuns.filter((run) => run === command).length === 1,
     ), "next runs exactly its install and five approved commands once each");
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
-  require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
+  require(testStep !==
+    undefined, "E11: next's vitest step runs the next project alone, with --shard and no exclusions");
   const shard = map(testStep?.["env"])["SHARD"];
   // E3. The one `if` the vitest step may carry. Without it an e2e leg asks vitest for `e2e-1/5`.
   require(compact(testStep?.["if"]) ===
@@ -589,15 +651,13 @@ export const lintWorkflow = (text: string): string[] => {
     new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
-  // The legs job's list first, so a sized run runs the files it was sized with; changes' filter
+  // The size step's list first, so a sized run runs the files it was sized with; changes' filter
   // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.legs.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes legs's files, else filter, with the fallback next/");
-  require(compact(map(testStep?.["env"])["PROJECTS"]) ===
-    projects, "E11: next's vitest step tests --project next, and next-integration too only on a push to main");
+    "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
   require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
-    JSON.stringify(["FILTER", "PROJECTS", "SHARD"]), "next's vitest step's env is SHARD, FILTER and PROJECTS alone");
+    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
@@ -606,11 +666,11 @@ export const lintWorkflow = (text: string): string[] => {
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
 
-  // The end-to-end step narrows to the changed files on a pull request only. Any other value could
-  // narrow the merge queue or main, where the whole suite is the backstop for what the import graph
-  // misses.
+  // The end-to-end step narrows to the changed files from changes' `base`, the commit the size step
+  // sized these legs from, and from nothing else: a run the size step did not size has no `base` and
+  // runs every end-to-end file, so a failed sizing never narrows. The schedule runs them all.
   require(map(e2eStep?.["env"])["CHANGED"] ===
-    changedOnPullRequests, "next's end-to-end step narrows with --changed on pull requests only");
+    changedFromBase, "next's end-to-end step narrows with --changed from changes' base alone");
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
@@ -638,42 +698,245 @@ export const lintWorkflow = (text: string): string[] => {
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
   }
 
-  // S1. The legs job (legs.ts) runs after changes on every run that is not canceled, so next always
-  // has its answer. Each of its steps runs only on a pull request that tests all of next/ and whose
-  // changes passed. Everywhere else it prints nothing, so next runs the full matrix: the merge queue
-  // and main always do. Its setup and its sizing may fail without failing it, so a failure there is
-  // the full matrix too, never a skipped next.
-  const sizer = map(jobs["legs"]),
-    sizeSteps = steps(sizer),
-    sizeOutputs = map(sizer["outputs"]);
-  require(sizer["needs"] === "changes" &&
-    compact(sizer["if"]) === "!cancelled()" &&
-    sizer["continue-on-error"] === undefined, "legs runs after changes on every run that is not canceled");
-  require(Object.keys(sizeOutputs).length === LEGS_OUTPUTS.length &&
-    LEGS_OUTPUTS.every(
-      (name) => compact(sizeOutputs[name]) === `steps.size.outputs.${name}`,
-    ), `legs exposes ${LEGS_OUTPUTS.join(", ")} from its size step, and nothing else`);
-  require(sizeSteps.length > 0 &&
-    sizeSteps.every(
-      (s) => compact(s["if"]) === SIZED,
-    ), "every legs step runs only on a pull request that tests all of next/");
-  const sizeRuns = sizeSteps.filter((s) => "run" in s);
-  const size = sizeRuns[1];
-  require(sizeRuns.length === 2 &&
-    sizeRuns[0]?.["run"] === "pnpm install --frozen-lockfile --ignore-scripts" &&
-    size?.["id"] === "size" &&
-    size["run"] === "node .github/ci/legs.ts", "legs installs, then runs legs.ts as its size step");
-  require(sizeSteps.every(
-    (s) =>
-      (typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@")) || s["continue-on-error"] === true,
-  ), "a failed legs setup or sizing fails open to the full matrix");
+  return errors;
+};
 
-  for (const [key, expected] of Object.entries(SIZE_ENV)) {
-    require(map(size?.["env"])[key] === expected, `legs's size step gets ${key} through env`);
+// The schedule (0534): scheduled.yaml runs all of next/ and every tooling test on main, and a red run
+// opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
+// keep theirs.
+const RUNNERS = 10;
+const VERDICT = "report";
+const REPORT_IF = "always()&&github.ref=='refs/heads/main'";
+const REPORT = "node .github/ci/scheduled.mjs";
+
+const REPORT_ENV = {
+  NEEDS: `\${{ toJSON(needs) }}`,
+  RESULTS: `\${{ runner.temp }}/results`,
+  GITHUB_TOKEN: TOKEN,
+};
+
+const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
+const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+const WHOLE_NEXT = `pnpm exec vitest run next/ --shard "$SHARD" ${REPORTERS}`;
+const WHOLE_E2E = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" ${REPORTERS}`;
+const WHOLE_TOOLING = `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${TOOLING_EXCLUDES.map((glob) => `--exclude '${glob}'`).join(" ")} ${REPORTERS}`;
+
+/** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
+const listed = (job: Record<string, unknown>): unknown[] => {
+  const shard = map(map(job["strategy"])["matrix"])["shard"];
+  return Array.isArray(shard) ? shard : [];
+};
+
+/**
+ * scheduled.yaml's shape. `check` is check.yaml's text: the schedule runs next on its full matrix
+ * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
+ */
+export const lintScheduled = (text: string, check: string): string[] => {
+  let source: unknown;
+
+  try {
+    source = parse(text);
+  } catch {
+    return ["scheduled.yaml: invalid YAML"];
+  }
+
+  const workflow = map(source),
+    on = map(workflow["on"]),
+    jobs = map(workflow["jobs"]);
+  const errors: string[] = [];
+  const require = (holds: boolean, reason: string) => {
+    if (!holds) {
+      errors.push(`scheduled.yaml: ${reason}`);
+    }
+  };
+
+  // SC1. A schedule and a hand start, nothing else: no pull request, queue or push runs the whole
+  // suite (0534's binding constraint). The cron line is the interval, a setting.
+  const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
+  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+    crons.length === 1 &&
+    typeof map(crons[0])["cron"] === "string", "SC1: it runs on one schedule and by hand, on no other event");
+  // SC2. One run at a time, and a running one is never cut short.
+  const concurrency = map(workflow["concurrency"]);
+  require(typeof concurrency["group"] === "string" &&
+    !concurrency["group"].includes("${{") &&
+    concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
+
+  // SC3. The stop steps' token may cancel the run; only the report may write issues, and it may
+  // read runs to find the last green one.
+  require(JSON.stringify(workflow["permissions"]) ===
+    JSON.stringify({
+      actions: "write",
+      contents: "read",
+    }), "SC3: the workflow's token grants actions: write and contents: read, nothing more");
+  require(JSON.stringify(map(jobs[VERDICT])["permissions"]) ===
+    JSON.stringify({
+      actions: "read",
+      contents: "read",
+      issues: "write",
+    }), "SC3: the report job's token reads actions and contents and writes issues, nothing more");
+
+  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== VERDICT)) {
+    require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which its stop step needs`);
+  }
+
+  // SC4. The same fail-fast and token rules as check.yaml's F1, F2 and F4, with the report job as
+  // the verdict: every other job ends with the stop step and runs on no `always()`, every job has a
+  // time limit, and no checkout keeps the token in .git/config.
+  for (const [name, job] of Object.entries(jobs)) {
+    const limit = map(job)["timeout-minutes"];
+    require(typeof limit === "number" && limit > 0 && limit < 360, `SC4: ${name} sets timeout-minutes`);
+
+    for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+      require(map(step["with"])["persist-credentials"] ===
+        false, `SC4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);
+    }
+
+    if (name === VERDICT) {
+      continue;
+    }
+
+    const list = allSteps(map(job));
+    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
+    require(list.length > 0 &&
+      isStop(list.at(-1) ?? {}) &&
+      cancels.length === 1, `SC4: ${name} ends with the stop step, its one step that cancels the run`);
+    require(!compact(map(job)["if"]).includes(
+      "always()",
+    ), `SC4: ${name} stops with its run: only the report runs on always()`);
+  }
+
+  // SC5. The report judges every other job, after any result, on main alone, with scheduled.mjs.
+  // It is the one step but the stop steps that gets the token.
+  const report = map(jobs[VERDICT]),
+    others = Object.keys(jobs).filter((name) => name !== VERDICT);
+  const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
+  require(needed.length === others.length &&
+    others.every((name) => needed.includes(name)) &&
+    compact(report["if"]) ===
+      REPORT_IF, "SC5: the report needs every other job, and runs after any result, on main alone");
+  const judged = steps(report).filter((s) => "run" in s);
+  require(judged.length === 1 &&
+    judged[0]?.["run"] === REPORT &&
+    JSON.stringify(judged[0]?.["env"]) === JSON.stringify(REPORT_ENV) &&
+    !("if" in (judged[0] ?? {})) &&
+    judged[0]?.["continue-on-error"] ===
+      undefined, `SC5: the report runs ${REPORT} once, with the needs, the results and the token, and its failure shows`);
+  require(Object.values(jobs).every((job) =>
+    steps(map(job)).every((s) => s === judged[0] || !/github\.token|secrets\./.test(JSON.stringify(s))),
+  ), "SC5: only the report step and the stop steps get the token, and no step a secret");
+
+  // SC6. At most RUNNERS machines: a matrix job counts its `max-parallel`, any other job one. Each
+  // matrix sets it, lets every leg finish, and runs no more at once than it has legs.
+  let machines = 0;
+
+  for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
+    const strategy = map(job["strategy"]);
+    const most = strategy["max-parallel"];
+
+    if ("strategy" in job) {
+      require(typeof most === "number" &&
+        Number.isInteger(most) &&
+        most >= 1 &&
+        most <= listed(job).length &&
+        strategy["fail-fast"] ===
+          false, `SC6: ${name} sets max-parallel to at most its legs, and lets every leg finish`);
+    }
+
+    machines += "strategy" in job && typeof most === "number" ? most : 1;
+  }
+
+  require(machines <= RUNNERS, `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
+
+  // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
+  // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.
+  const next = map(jobs["next"]),
+    nextSteps = steps(next),
+    legsOfCheck = legs(nextJob(check)),
+    e2eCount = ends(legsOfCheck).length,
+    vitestCount = numbered(legsOfCheck).length;
+  require(legsOfCheck.length > 0 &&
+    JSON.stringify(listed(next)) ===
+      JSON.stringify(legsOfCheck), "SC7: next's legs are check.yaml's full matrix of next legs");
+  const vitest = nextSteps.filter((s) => s["run"] === WHOLE_NEXT);
+  const e2e = nextSteps.filter((s) => s["run"] === WHOLE_E2E);
+  require(vitest.length === 1 &&
+    compact(vitest[0]?.["if"]) === compact(`!${ON_E2E}`) &&
+    map(vitest[0]?.["env"])["SHARD"] ===
+      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest over all of next/ once, on the numbered legs, each its share of them");
+  require(e2e.length === 1 &&
+    compact(e2e[0]?.["if"]) === ON_E2E &&
+    map(e2e[0]?.["env"])["SHARD"] ===
+      `\${{ matrix.shard }}/${e2eCount}`, "SC7: next runs every end-to-end file once, on the e2e legs, each its share of them");
+  require(nextSteps.some(
+    (s) =>
+      s["run"] === chromium &&
+      compact(s["if"]) === compact(`${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`),
+  ), "SC7: next fetches chromium on the e2e legs");
+
+  // SC8. Every tooling test on the tooling job's legs, nothing narrowed.
+  const tooling = map(jobs["tooling"]),
+    toolingRuns = steps(tooling).filter((s) => s["run"] === WHOLE_TOOLING);
+  require(toolingRuns.length === 1 &&
+    map(toolingRuns[0]?.["env"])["SHARD"] === `\${{ matrix.shard }}/${listed(tooling).length}` &&
+    JSON.stringify(listed(tooling)) ===
+      JSON.stringify(
+        Array.from({ length: listed(tooling).length }, (_, i) => i + 1),
+      ), "SC8: tooling runs every tooling test once, its legs 1 to N, each its share of them");
+
+  // SC9. The commands are only these: no step runs another test command or narrows one.
+  const commandsOf = (job: Record<string, unknown>) =>
+    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+  require(JSON.stringify(commandsOf(next).toSorted()) ===
+    JSON.stringify(["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E].toSorted()) &&
+    JSON.stringify(commandsOf(tooling).toSorted()) ===
+      JSON.stringify(
+        ["pnpm install --frozen-lockfile", WHOLE_TOOLING].toSorted(),
+      ), "SC9: next and tooling run only their install and their whole-suite commands");
+
+  // SC10. Each test job keeps its Vitest report after a red step, before its stop step, so the
+  // report job can name the failing tests.
+  for (const name of ["next", "tooling"]) {
+    const list = steps(map(jobs[name]));
+    const kept = list.filter(
+      (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
+    );
+    const last = list.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
+    require(kept.length === 1 &&
+      compact(kept[0]?.["if"]) === "!cancelled()" &&
+      list.indexOf(kept[0] ?? {}) > last, `SC10: ${name} uploads its report after its tests, even after a red one`);
   }
 
   return errors;
 };
+
+/**
+ * 0534's binding constraint: the only issues automation opens here are the scheduled report's. No
+ * workflow but scheduled.yaml grants `issues` (or `write-all`), at the top or on a job; that one
+ * grants it on its report job alone, which lintScheduled holds.
+ */
+export const lintIssues = (workflows: Readonly<Record<string, string>>): string[] =>
+  Object.entries(workflows).flatMap(([path, text]) => {
+    if (path.endsWith("/scheduled.yaml")) {
+      return [];
+    }
+
+    let workflow: Record<string, unknown>;
+
+    try {
+      workflow = map(parse(text));
+    } catch {
+      return [`${path}: invalid YAML`];
+    }
+
+    const grants = [
+      workflow["permissions"],
+      ...Object.values(map(workflow["jobs"])).map((job) => map(job)["permissions"]),
+    ];
+    return grants.some((grant) => grant === "write-all" || (isMap(grant) && "issues" in grant))
+      ? [`${path}: only scheduled.yaml's report job may touch issues (0534)`]
+      : [];
+  });
 
 /** The files the cache lint reads, each as its text. */
 export interface CacheFiles {
@@ -824,7 +1087,14 @@ export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    const errors = [...lintWorkflow(read(".github/workflows/check.yaml")), ...lintCaches(cacheFiles(read))];
+    const check = read(".github/workflows/check.yaml");
+    const files = cacheFiles(read);
+    const errors = [
+      ...lintWorkflow(check),
+      ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
+      ...lintIssues(files.workflows),
+      ...lintCaches(files),
+    ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
