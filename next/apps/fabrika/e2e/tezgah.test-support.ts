@@ -401,11 +401,37 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
   });
 };
 
+/** A strip's own size across its container (plan amendment 12, after the fold-not-tabs note): 22px wide
+ *  in a row, 20px tall in a column. */
+const STRIP_ACROSS = { row: 22, column: 20 } as const;
+
+/** The direction of the container each tile sits in, by tile id; a lone tile has none. */
+const containers = (layout: TezgahView["workspaces"][number]["layout"]): ReadonlyMap<string, "row" | "column"> => {
+  const out = new Map<string, "row" | "column">();
+  const walk = (node: typeof layout): void => {
+    if (typeof node === "string") {
+      return;
+    }
+
+    for (const p of node.parts) {
+      if (typeof p.inner === "string") {
+        out.set(p.inner, node.dir);
+      } else {
+        walk(p.inner);
+      }
+    }
+  };
+  walk(layout);
+  return out;
+};
+
 /** Every way the tab's drawing differs from workspace 1 of tezgah's `view` folded at the tab's own
  *  size: the regions are the open tiles in reading order, each strip is a button named
  *  `open <program>, t<n>` in reading order, the focused tile is never a strip and alone has
- *  `aria-current`, every open tile but the focused one is drawn at least 220x120, and each strip is
- *  drawn inside the main. Empty when they agree. */
+ *  `aria-current`, every open tile but the focused one is drawn at least 220x120, each strip is drawn
+ *  inside the main, 22px across in a row or 20px tall in a column (within 1px), and every open tile is
+ *  drawn at least as large as the full-share geometry the fold measured, since the open tiles of a
+ *  strip's container share the space it leaves (plan amendment 12). Empty when they agree. */
 export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
@@ -450,9 +476,35 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
     }
   }
 
-  for (const s of d.strips) {
+  // The full-share geometry the fold measured, in the main's padded area.
+  const full = drawnRule(space.layout, {
+    x: d.main.x + GAP,
+    y: d.main.y + GAP,
+    width: d.main.width - 2 * GAP,
+    height: d.main.height - 2 * GAP,
+  });
+  const dirs = containers(space.layout);
+
+  for (const t of open) {
+    const box = d.regions.find((x) => x.name === regionName(t))?.box ?? null;
+    const r = full.get(t.id);
+
+    if (box !== null && r !== undefined && (box.width < r.width - EDGE || box.height < r.height - EDGE)) {
+      out.push(
+        `open ${regionName(t)} is drawn at ${JSON.stringify(box)}, smaller than its full share ${JSON.stringify(r)}`,
+      );
+    }
+  }
+
+  for (const [i, s] of d.strips.entries()) {
     const b = s.box;
     const m = d.main;
+    const tile = strips[i];
+    const dir = tile === undefined ? undefined : dirs.get(tile.id);
+
+    if (b !== null && dir !== undefined && Math.abs((dir === "row" ? b.width : b.height) - STRIP_ACROSS[dir]) > EDGE) {
+      out.push(`${s.name} is ${dir === "row" ? b.width : b.height}px across its ${dir}, not ${STRIP_ACROSS[dir]}`);
+    }
 
     if (
       b === null ||

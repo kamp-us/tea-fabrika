@@ -675,3 +675,78 @@ describe("L18: a split with no room is refused in the window", () => {
     expect(seen.taken, "L18: the walks take splits at the edge").toBeGreaterThan(0);
   });
 });
+
+// Desk S4, next/: law L32's "never sent" half on the split path (plan amendment 12, point 5). The window
+// machine's laws walk focus moves; here a person's keys walk splits and closes in a window whose size
+// folds some of its tiles. A fold is the viewer's (0277): the window works it out from its size and
+// never sends it, so every letter to tezgah carries only the keys of tezgah's `did` (the plan's "The
+// shape") and nothing that names a fold or a strip, whatever the window folds when it sends it.
+/** The keys of tezgah's `did`: what a letter from a window may carry. */
+const DID_KEYS = new Set(["type", "does", "from", "via", "tile", "to", "cursor"]);
+const FOLDED = /fold|strip/i;
+
+/** Every key in a value, at any depth. */
+const keysIn = (v: unknown): ReadonlyArray<string> =>
+  Array.isArray(v)
+    ? v.flatMap(keysIn)
+    : v !== null && typeof v === "object"
+      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      : [];
+
+/** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
+ *  but the focused one drawn under 220x120. */
+const stripCount = (view: TezgahView, size: Size) => {
+  const space = view.workspaces[0]!;
+  const boxes = drawn(space.layout, size);
+  return Layout.order(space.layout).filter((t) => {
+    const r = boxes.get(t)!;
+    return t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height);
+  }).length;
+};
+
+describe("Desk S4 L32: a split's letter never carries a fold", () => {
+  it("L32 (the split path): in a window whose size folds some of its tiles, every letter its keys send tezgah, a split or a close, carries only did's keys and nothing about folds or strips", () => {
+    const seen = { splits: 0, folded: 0 };
+    fc.assert(
+      fc.property(
+        fc.record({
+          width: fc.integer({ min: 480, max: 1_600 }),
+          height: fc.integer({ min: 300, max: 1_000 }),
+          cuts: fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 6 }),
+          focus: fc.nat(),
+          keys: fc.array(fc.constantFrom(PREFIX, PREFIX, "%", '"', "|", "-", "x", "y"), {
+            minLength: 2,
+            maxLength: 24,
+          }),
+        }),
+        ({ width, height, cuts, focus, keys }) => {
+          const size = { width, height };
+          const w = world(desk(cuts, focus), 1, size);
+
+          for (const key of keys) {
+            const strips = stripCount(w.view, size);
+            const { sent } = press(w, 0, key);
+
+            for (const m of sent.map((x) => x.m)) {
+              expect(
+                Object.keys(Object(m)).filter((k) => !DID_KEYS.has(k)),
+                "L32: a letter to tezgah carries only did's keys",
+              ).toEqual([]);
+              expect(
+                keysIn(m).filter((k) => FOLDED.test(k)),
+                "L32: a letter to tezgah names no fold",
+              ).toEqual([]);
+            }
+
+            const splits = dids(sent).filter((d) => d.does !== "tezgah.close").length;
+            seen.splits += splits;
+            seen.folded += strips > 0 ? splits : 0;
+          }
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.splits, "L32: the walks send splits").toBeGreaterThan(0);
+    expect(seen.folded, "L32: the walks send splits from a window that folds some of its tiles").toBeGreaterThan(0);
+  });
+});

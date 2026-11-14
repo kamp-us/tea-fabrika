@@ -9,6 +9,9 @@ import { Effect } from "effect";
 // - Size belongs to the viewer (0277): each tab folds tezgah's one layout to its own size. A tile the
 //   frame draws under 220x120 in a tab is a strip there, the focused tile never; the other tab draws it
 //   open when it fits there. A strip is a real button named `open <program>, t<n>`.
+// - Which tiles fold is decided on the full-share geometry; a strip is then drawn 22px across in a row
+//   and 20px tall in a column, and the open tiles of its container share the space it leaves, so every
+//   open tile is drawn at least as large as that geometry (plan amendment 12; `foldDifferences`).
 // - L33: Tab onto a strip shows its ring and moves no desk focus. Enter on it, or a click, focuses its
 //   tile, so it opens: tezgah's focus is that tile, the tab draws it as a region, and DOM focus is in
 //   it. The tile it left folds again where it does not fit.
