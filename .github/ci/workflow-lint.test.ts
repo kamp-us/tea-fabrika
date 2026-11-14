@@ -372,7 +372,8 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "pull requests lose the ignore list",
     (w) => {
-      delete w.on.pull_request["paths-ignore"];
+      // JSON.stringify leaves an undefined key out, as a deleted one.
+      w.on.pull_request["paths-ignore"] = undefined;
     },
   ],
   [
