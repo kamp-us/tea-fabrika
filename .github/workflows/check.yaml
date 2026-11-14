@@ -223,9 +223,11 @@ jobs:
       # whose text changed and every file that reaches one. On the laptop on 2026-11-14 the whole
       # typecheck took 12.9 s cold and 3.7 s warm, with a fresh mtime on every file. One path per
       # pnpm-workspace.yaml package glob (workflow-lint.ts holds that).
-      - id: tsc-key
+      - name: tsc key
+        id: tsc-key
         run: echo "hash=$(git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
-      - id: tsc
+      - name: restore the tsc cache
+        id: tsc
         uses: actions/cache/restore@v6
         with:
           path: &tsc |
@@ -241,9 +243,11 @@ jobs:
             next/apps/*/node_modules/.cache/tsc
           key: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-${{ github.sha }}
           restore-keys: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-
-      - run: pnpm typecheck
+      - name: typecheck
+        run: pnpm typecheck
       # Each push to main saves its own, so the next pull request starts from the newest.
-      - if: ${{ github.ref == 'refs/heads/main' }}
+      - name: save the tsc cache
+        if: ${{ github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v6
         with:
           path: *tsc
@@ -342,7 +346,8 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}
     steps:
-      - uses: actions/checkout@v7
+      - name: checkout
+        uses: actions/checkout@v7
         with:
           # `--changed` compares with the pull request's base commit, so the
           # history must hold it. Blobless, as in changes: `--changed` reads only names.

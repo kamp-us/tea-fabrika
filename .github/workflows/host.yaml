@@ -54,7 +54,8 @@ jobs:
 
       # Electron fetches its binary the first time it is asked for its path, into this folder.
       # Restored from main's, as the store is.
-      - uses: actions/cache/restore@v6
+      - name: restore electron
+        uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
