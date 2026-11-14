@@ -55,14 +55,17 @@ const snapshot = (sql: Sql) =>
   JSON.stringify(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .map(({ name }) => [
-        name,
-        sql
-          .exec(`SELECT * FROM "${String(name)}"`)
-          .map((row) => JSON.stringify(row))
-          .sort(),
-      ])
-      .filter(([, rows]) => rows !== undefined && rows.length > 0),
+      .map(
+        ({ name }) =>
+          [
+            name,
+            sql
+              .exec(`SELECT * FROM "${String(name)}"`)
+              .map((row) => JSON.stringify(row))
+              .sort(),
+          ] as const,
+      )
+      .filter(([, rows]) => rows.length > 0),
   );
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {

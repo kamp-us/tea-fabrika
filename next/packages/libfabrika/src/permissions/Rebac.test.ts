@@ -264,8 +264,17 @@ const tuplesIn = (relations: Relations["Service"], history: ReadonlyArray<Writte
 
 const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.on === thing.type);
 
-/** `within` of a right, on the object as `Ref` its type takes. */
-const check = (right: Right, tuples: Relation.Tuples, sender: typeof Sender.Type, thing: Thing) =>
+/**
+ * `within` of a right, on the object as `Ref` its type takes. Each right answers its own proof's
+ * type, which no other right's proof is; these laws read only whether a proof was given and the
+ * `Denied` when none was.
+ */
+const check = (
+  right: Right,
+  tuples: Relation.Tuples,
+  sender: typeof Sender.Type,
+  thing: Thing,
+): Result.Result<unknown, Rebac.Denied> =>
   right.on === "fabrika" && thing.type === "fabrika"
     ? right.right.within(tuples, sender, Test.ref("fabrika", thing.id))
     : right.on === "board" && thing.type === "board"

@@ -155,7 +155,9 @@ const view = (tuples: Relation.Tuples) =>
     FABRIKAS.flatMap((id) =>
       RIGHTS.map(({ relation, right }) => {
         const sender = Sender.cases.person.make({ key: `SHA256:window-${person}`, for: person });
-        const held = Result.isSuccess(right.within(tuples, sender, Mirror.ref("fabrika", id)));
+        // Each right answers its own proof's type; only whether one was given is read here.
+        const answer: Result.Result<unknown, Rebac.Denied> = right.within(tuples, sender, Mirror.ref("fabrika", id));
+        const held = Result.isSuccess(answer);
         return `${person}#${relation}@${id}=${held}`;
       }),
     ),

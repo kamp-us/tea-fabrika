@@ -212,7 +212,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
             Effect.promise(() => runtime.runPromise(work));
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
-          const saw = { label: "agent", location: "test", method: "command", check: "touch" };
+          const saw = { label: "agent", location: "test", method: "command", check: "touch" } as const;
           const signed = (text: string) => ({ text, armored: fixture.founder.proof(text) });
           // The founder lets the agent in.
           const granted = yield* call(
