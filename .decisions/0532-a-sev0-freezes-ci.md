@@ -1,90 +1,103 @@
 ---
 id: 0532
-title: A sev0 is the owner's call, and it freezes every CI run except the merge queue and the fix branches until the fixes merge
+title: A sev0 is the owner's call, and it empties the merge queue, cancels every CI run, and lands the fixes one at a time by admin merge
 status: accepted
 date: 2026-11-14
 tags: [ci, sev0, freeze, merge, queue, admin, lead, owner, tooling]
 ---
 
-# 0532: A sev0 is the owner's call, and it freezes every CI run except the merge queue and the fix branches until the fixes merge
+# 0532: A sev0 is the owner's call, and it empties the merge queue, cancels every CI run, and lands the fixes one at a time by admin merge
 
-**What this decides:** what happens to CI when the owner says CI itself is the emergency, and how
-it ends.
+**What this decides:** what happens to CI when the owner says CI itself is the emergency, how the
+fixes land, and how it ends.
 
 ```mermaid
 flowchart LR
-  owner["owner calls a sev0"] --> freeze["freeze: cancel every unfinished run"]
-  freeze --> keep{"merge queue run, or a fix branch?"}
-  keep -->|"yes"| runs["it runs"]
-  keep -->|"no"| canceled["canceled, logged"]
-  runs --> fixes["fixes land by admin merge"]
-  fixes --> unfreeze["unfreeze: rerun the canceled checks of open pull requests"]
+  owner["owner calls a sev0"] --> empty["owner empties the merge queue"]
+  empty --> freeze["freeze: cancel every unfinished run"]
+  freeze --> next["allow list: only the fix being landed now"]
+  next --> sync["lead merges main into it; only its checks run"]
+  sync --> green{"its required checks green?"}
+  green -->|"yes"| admin["admin merge"]
+  admin --> more{"another fix?"}
+  more -->|"yes"| next
+  more -->|"no"| unfreeze["unfreeze: rerun the canceled checks of open pull requests"]
+  green -->|"no"| stop["the line stops"]
 ```
 
 ```ts
 // What the freeze does with each unfinished run (.agents/skills/sev0/scripts/Freeze.ts).
-verdict({ event: "merge_group", branch: "gh-readonly-queue/main/pr-1240-…" }, allow); // keep: queue
 verdict({ event: "pull_request", branch: "fabrikalfa/ci-cache" }, ["fabrikalfa/ci-cache"]); // keep: allowed
+verdict({ event: "pull_request", branch: "fabrikalfa/ci-legs" }, ["fabrikalfa/ci-cache"]); // cancel: not its turn
 verdict({ event: "push", branch: "main" }, ["fabrikalfa/ci-cache"]); // cancel
 ```
 
 ## Context
 
 On 2026-11-14 CI was slow and cost too much, and the fixes for it waited behind the same runs. The
-owner called a sev0: stop every check until all the CI fixes are merged, take nothing out of the
-merge queue, let the queue drain, and stop new checks on their own as they start. The lead did it
-by hand that day, with a loop that canceled each unfinished run every 20 seconds unless it was a
-merge queue run or ran on one of the fix branches. No decision held the rule, and the loop lived
-only in that session.
+owner called a sev0. The first rule that day let the merge queue drain while every other run was
+canceled, except on the fix branches. It did not work: one red queue entry made every entry behind
+it run again, and the queue's full runs took 16 of the 20 runners while the fixes waited. After that
+first freeze the owner changed the rule to the one recorded here.
 
-Tracker ticket 991 moves it into the repo as the sev0 skill: a script for what code can do, and a
-short page for the judgment ([0408](0408-skills-keep-only-judgment.md)).
+The lead did it by hand that day, with a loop that canceled each unfinished run every 20 seconds.
+No decision held the rule, and the loop lived only in that session. Tracker ticket 991 moves it into
+the repo as the sev0 skill: a script for what code can do, and a short page for the judgment
+([0408](0408-skills-keep-only-judgment.md)).
 
 This amends [0179](0179-an-admin-merge-is-the-owners.md) in part: there, a yes for one pull request
-does not cover the next. A sev0 call covers every fix pull request on its allow list. The rest of
-0179 holds, and so does [0183](0183-the-lead-admin-merges-docs-only.md) for docs.
+does not cover the next. A sev0 call covers each fix pull request in turn. The rest of 0179 holds,
+and so does [0183](0183-the-lead-admin-merges-docs-only.md) for docs.
 
 ## Decision
 
-**A sev0 is the owner's call, and while it is on, every CI run is canceled except the merge
-queue's and the fix branches', until every fix has merged.**
+**A sev0 is the owner's call: the merge queue is emptied, every CI run is canceled, and the fixes
+land one at a time by admin merge, until every fix has merged.**
 
 - **Only the owner calls a sev0.** An agent never starts one, on its own word or another agent's. It
   ends when every fix has merged, or when the owner calls it off.
+- **The merge queue is emptied.** The owner takes the entries out; an agent does not, and the lead's
+  tooling refuses a dequeue.
 - **Every unfinished run is canceled,** pull request runs, push runs on main and dispatched runs
-  alike, except:
-  - a merge queue run (event `merge_group`), always;
-  - a run on a branch on the allow list.
-
-  A push run on main is canceled too: the queue already tested what merged.
-- **Nothing leaves the merge queue.** No pull request is taken out of it, and no queue run is
-  canceled. The queue drains on its own.
-- **The allow list holds only branches that fix the emergency.** The lead adds one while the freeze
-  runs when a new fix branch starts.
-- **The fixes land by admin merge.** The sev0 call names them for 0179. The lead merges each one
-  once its own checks are green on its head, it has read the whole diff, and the leak check is clean
-  on the change and its words.
+  alike, except the runs of the one fix being landed now. The script still keeps a `merge_group` run,
+  but with the queue empty there is none.
+- **The fixes go one at a time.** The allow list holds only the fix being landed now. For it, the
+  lead:
+  - merges main into its branch, so its checks run on what main is now;
+  - lets only its checks run;
+  - admin-merges it once its required checks are green on its head, it has read the whole diff, and
+    the leak check is clean on the change and its words;
+  - then sets the allow list to the next fix.
+- **A red fix stops the line.** No later fix starts until that one is green or the owner says what
+  happens next.
+- **A known red check does not block a fix.** A check that is not required, and is already known
+  red elsewhere (on 2026-11-14, `launchd`), does not hold that admin merge. It still gets its root
+  cause found and a tracker ticket.
 - **Unfreeze ends it.** It stops the freeze, then reruns the newest canceled pull request run of each
   workflow at each open pull request's head, so a pull request armed to merge gets its
   `ci-required` back.
 - **The lead tells the owner in one line** when the freeze starts and when it unfreezes.
 - **Code holds the canceling and the reruns:** `.agents/skills/sev0/scripts/sev0.ts`, with
-  `freeze`, `allow`, `stop` and `unfreeze`. Its log of every cancel and rerun is
+  `freeze`, `next`, `allow`, `stop` and `unfreeze`. Its log of every cancel and rerun is
   `runs/sev0/log.jsonl`, which git ignores. The skill's page holds only the judgment above.
 
 **Binding constraints:**
 
 - No sev0 starts without the owner's call.
-- No `merge_group` run is canceled, and no pull request is taken out of the queue, during a sev0.
-- No branch goes on the allow list unless it fixes the emergency.
-- Admin merges under a sev0 cover only the pull requests of allowed branches.
+- No agent takes an entry out of the merge queue; the owner does.
+- The allow list holds one fix at a time, and only a branch that fixes the emergency.
+- Admin merges under a sev0 cover only the fix on the allow list, once its required checks are
+  green.
+- A red required check on a fix stops the line.
 
 ## Consequences
 
-- During a sev0 every other pull request waits, with its runs canceled; unfreeze gives them back.
-  The reruns cost one run each, once.
-- A fix reaches main in minutes, without waiting behind the runs it is fixing.
+- During a sev0 every other pull request waits, out of the queue, with its runs canceled. Unfreeze
+  gives back their checks. The reruns cost one run each, once.
+- Each fix gets the runners to itself, so it lands in about one run's time. The fixes land in a row,
+  not side by side.
 - The beat, 20 seconds by default, is a setting (`SEV0_SECONDS`), not part of this decision
   ([0069](0069-choices-are-settings.md)).
-- Not decided here: a sev0 for anything other than CI, and whether a sev0 may ever start on its own
-  from a measure (a cost or a wait time).
+- Not decided here: a sev0 for anything other than CI, whether a sev0 may ever start on its own
+  from a measure (a cost or a wait time), the order the fixes go in, and how the pull requests taken
+  out of the queue go back into it.
