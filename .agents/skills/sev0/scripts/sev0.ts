@@ -2,6 +2,7 @@
 // laptop; it is not product. Freeze.ts says what each command does.
 //
 //   node sev0.ts freeze --allow <branch> [--allow <branch>]...   runs until a stop; start it in the background
+//   node sev0.ts next <branch>                                   that branch alone is allowed: the next fix
 //   node sev0.ts allow <branch>                                  one more fix branch, while it runs
 //   node sev0.ts stop                                            ends the loop, and waits until it has
 //   node sev0.ts unfreeze                                        stops it if on, then reruns the canceled checks
@@ -55,9 +56,19 @@ const freezeCommand = Command.make(
   }),
 ).pipe(Command.withDescription("Cancel every run but the merge queue's and the allowed branches', until a stop"));
 
+const branchArgument = Argument.String("branch").pipe(Argument.withSchema(Schema.NonEmptyString));
+
+const nextCommand = Command.make(
+  "next",
+  { branch: branchArgument },
+  Effect.fn(function* ({ branch }) {
+    yield* Freeze.next((yield* setup).home, branch);
+  }),
+).pipe(Command.withDescription("Make one fix branch the whole allow list: the next fix to land"));
+
 const allowCommand = Command.make(
   "allow",
-  { branch: Argument.String("branch").pipe(Argument.withSchema(Schema.NonEmptyString)) },
+  { branch: branchArgument },
   Effect.fn(function* ({ branch }) {
     yield* Freeze.allow((yield* setup).home, branch);
   }),
@@ -82,7 +93,7 @@ const unfreezeCommand = Command.make(
 ).pipe(Command.withDescription("Stop the freeze if it is on, then rerun the checks it canceled on open pull requests"));
 
 const sev0 = Command.make("sev0").pipe(
-  Command.withSubcommands([freezeCommand, allowCommand, stopCommand, unfreezeCommand]),
+  Command.withSubcommands([freezeCommand, nextCommand, allowCommand, stopCommand, unfreezeCommand]),
 );
 
 /** A refusal or a failed GitHub call ends the command with its reason and exit 1. */

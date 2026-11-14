@@ -196,6 +196,38 @@ describe("freeze, allow and stop", () => {
     ),
   );
 
+  it.effect("scenario: next makes one fix the whole allow list, so the fix before it is canceled from then on", () =>
+    law(
+      Effect.gen(function* () {
+        const dir = yield* home;
+        const LEGS = "fabrikalfa/ci-legs";
+        expect(yield* Effect.flip(Freeze.next(dir, LEGS))).toMatchObject({ reason: "no freeze is on" });
+
+        const github = WorkflowRunsTest.world([fixPr]);
+        const loop = yield* started(dir, github, { allow: [FIX, "fabrikalfa/ci-flake"] });
+        yield* TestClock.adjust(Duration.seconds(40));
+        yield* settle;
+        expect(github.calls).toEqual([]);
+
+        yield* Freeze.next(dir, LEGS);
+        const legsPr = made(21, { branch: LEGS });
+        github.runs.push(legsPr);
+        yield* until(Effect.sync(() => github.calls.length === 1));
+        yield* TestClock.adjust(Duration.seconds(40));
+        yield* settle;
+        expect(github.calls.map((c) => c.id)).toEqual([2]);
+        expect(Option.map(yield* Freeze.state(dir), (s) => (s._tag === "frozen" ? s.allow : []))).toEqual(
+          Option.some([LEGS]),
+        );
+
+        yield* stopped(dir);
+        yield* finished(loop);
+        expect(yield* tags(dir)).toEqual(["frozen", "next", "canceled", "stopped"]);
+        expect((yield* Freeze.log(dir))[1]).toMatchObject({ branch: LEGS, before: [FIX, "fabrikalfa/ci-flake"] });
+      }),
+    ),
+  );
+
   it.effect("scenario: a second freeze is refused while one is on, and allow is refused while none is", () =>
     law(
       Effect.gen(function* () {

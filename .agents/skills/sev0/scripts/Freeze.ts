@@ -2,7 +2,9 @@
 // laptop; it is not product. sev0.ts is its command line.
 //
 //   freeze     every beat, cancel each unfinished run that is not the merge queue's and not on a
-//              branch the allow list names; until the state says stop
+//              branch the allow list names; until the state says stop. In a sev0 the owner has
+//              emptied the queue, so its runs are none, and keeping them is harmless
+//   next       make one branch the whole allow list: the next fix, landed one at a time
 //   allow      add one branch to the list of a freeze that is on
 //   stop       ask the freeze loop to end, and wait until it has
 //   unfreeze   stop the freeze if it is on, then rerun the newest canceled pull request run of
@@ -11,7 +13,7 @@
 // The state and the log live in one folder, `runs/sev0/` in the checkout (git ignores `runs/`):
 //
 //   state.json   the freeze as it stands, rewritten whole each change; every command reads it
-//   log.jsonl    one line per thing done, never rewritten: each cancel, allow, stop and rerun
+//   log.jsonl    one line per thing done, never rewritten: each cancel, next, allow, stop and rerun
 //
 // The loop reads the state again before each cancel, so a stop or an allow counts at once, never a
 // beat late.
@@ -32,9 +34,9 @@ export const Verdict = Schema.TaggedUnion({
 export type Verdict = typeof Verdict.Type;
 
 /**
- * What the freeze does with one unfinished run. The merge queue's runs are never touched: canceling
- * one takes its pull request out of the queue. A push run on main is canceled too, since the queue
- * already tested what merged.
+ * What the freeze does with one unfinished run. A merge queue run is kept: in a sev0 the owner has
+ * emptied the queue first, so there is none, and canceling one would take its pull request out of
+ * the queue behind the owner's back. A push run on main is canceled too.
  */
 export const verdict = (run: Run, allow: ReadonlyArray<string>): Verdict =>
   run.event === "merge_group"
@@ -78,6 +80,8 @@ export type State = typeof State.Type;
 export const Entry = Schema.TaggedUnion({
   frozen: { at: Schema.String, allow: Allow, repo: Schema.String, pid: Schema.Number },
   allowed: { at: Schema.String, branch: Schema.String },
+  /** The allow list became `branch` alone; `before` is the list it replaced. */
+  next: { at: Schema.String, branch: Schema.String, before: Allow },
   canceled: { at: Schema.String, run: Run },
   /** A call to GitHub that failed; `id` is the run it was for, `null` for a list. */
   failed: {
@@ -257,6 +261,22 @@ export const allow = Effect.fn("Freeze.allow")(function* (home: string, branch: 
   yield* save(home, State.cases.frozen.make({ allow: [...s.value.allow, branch], at: s.value.at }));
   yield* note(home, Entry.cases.allowed.make({ at: yield* now, branch }));
   yield* Console.log(`sev0: allowed ${branch}`);
+});
+
+/**
+ * Makes `branch` the only allowed branch of the freeze that is on: the next fix in line. From the
+ * next cancel on, the fix before it is canceled like any other branch.
+ */
+export const next = Effect.fn("Freeze.next")(function* (home: string, branch: string) {
+  const s = yield* state(home);
+
+  if (Option.isNone(s) || s.value._tag !== "frozen") {
+    return yield* new Refused({ reason: "no freeze is on" });
+  }
+
+  yield* save(home, State.cases.frozen.make({ allow: [branch], at: s.value.at }));
+  yield* note(home, Entry.cases.next.make({ at: yield* now, branch, before: s.value.allow }));
+  yield* Console.log(`sev0: next is ${branch}; nothing else is allowed`);
 });
 
 /** How a stop ended: the loop saw it, no loop answered in time, or no freeze was on. */
