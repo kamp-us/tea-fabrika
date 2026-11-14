@@ -84,10 +84,13 @@ At the laptop, in the app or a tab, a person can:
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
   ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
   the member whose line caused it, never against `fabsh`'s program
-  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
-  The start still checks only program to program, `StartGrant` in
-  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
-  `StartGrant` is the owner's open question;*
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: built
+  (ticket 953), on the ReBAC core of [0526](../../.decisions/0526-one-rebac-permission-system.md):
+  the brain asks the gateway who sent the start's cause, checks `StartProgram` on this fabrika, and
+  the child's `started` line records that member. A start with no member's input behind it is
+  checked against the requester's recorded member when it has one. `StartGrant` still judges a
+  start with neither, such as a boot process's own; it moves onto relation rows in its own pull
+  request;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
