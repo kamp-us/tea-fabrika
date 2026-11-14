@@ -877,9 +877,9 @@ const projectLogic = Effect.fn("project.init")(function* (
   const select = (fact: (typeof CodeEvent.cases)["code.loaded"]["Type"], id: string) => {
     selected = applyCell(codeMachine, selected, { type: "loaded", id, program: fact.program, hash: fact.hash })[0];
 
-    // A boot fact names the code it replaced only for a move at an open; an ordinary boot accept
-    // is a program's first selection, with `was: null`.
-    if (fact.from === "boot" && fact.was !== null) {
+    // An open fact is the move of a home saved before the code store: its old build, and the code
+    // that took that build's place (0529).
+    if (fact.from === "open" && fact.was !== null) {
       moved.set(fact.was, fact.hash);
     }
   };
@@ -894,8 +894,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 
   // A home with no code fact at all was saved before the code store, so the builds its processes
   // recorded have no code here. Decided once, at this open: each such process moves to this build's
-  // code of its program, recorded as one `code.loaded` from `boot` with `was` set, before anything
-  // loads, so every record it writes from now on names that code (0293). In any other home every
+  // code of its program, recorded as one `code.loaded` from `open` with `was` set (0529), before
+  // anything loads, so every record it writes from now on names that code (0293). In any other home every
   // load stays strict, and a lost build is a `ProgramDown` with reason `no_program`.
   if (folded.length === 0) {
     sql.exec(
@@ -917,12 +917,12 @@ const projectLogic = Effect.fn("project.init")(function* (
           continue;
         }
 
-        const id = `code.boot:${process.program}:${target.hash}:${was}`;
+        const id = `code.open:${process.program}:${target.hash}:${was}`;
         const fact = CodeEvent.cases["code.loaded"].make({
           program: process.program,
           hash: target.hash,
           was,
-          from: "boot",
+          from: "open",
         });
         const placed = yield* ledger.append("gateway/code", id, lineFor(yield* from(), fact));
 

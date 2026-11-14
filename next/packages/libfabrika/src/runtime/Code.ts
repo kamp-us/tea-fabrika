@@ -12,12 +12,13 @@ import { Hash } from "./Built.ts";
 import { Swapped } from "./Runner.ts";
 
 /**
- * Schema for where an install came from: `watch`, `deploy`, `boot` or `restart`.
+ * Schema for where a load came from: `watch`, `deploy`, `boot` or `restart`, or `open` for the move of
+ * a home saved before the code store to this build's code when it opens (0529).
  *
  * @stability unstable
  * @category schemas
  */
-export const From = Schema.Literals(["watch", "deploy", "boot", "restart"]);
+export const From = Schema.Literals(["watch", "deploy", "boot", "restart", "open"]);
 
 /**
  * Schema for the two code facts: `code.loaded` names a program's new hash and the one it replaced
