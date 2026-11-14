@@ -74,6 +74,10 @@ const TEST_LEGS = `fromJSON(needs.changes.outputs.today=='false'&&'${legList(TOO
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
+// The token and the lockfile's hash changes' classify step reads, and where Electron keeps its binary.
+const TOKEN = `\${{ github.token }}`;
+const LOCK = `\${{ hashFiles('pnpm-lock.yaml') }}`;
+const ELECTRON = "~/Library/Caches/electron";
 const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
@@ -284,6 +288,25 @@ export const lintWorkflow = (text: string): string[] => {
   require(changeSteps.some(
     (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
   ), "changes installs the parser for its pass");
+
+  // M1. A push that a merge queue run already tested skips test, next and e2e (changes.mjs's
+  // `tested`). The classify step asks GitHub with the job's own token, which reads Actions runs and
+  // caches and nothing else, and it is the one step in the workflow that gets the token. LOCK is the
+  // lockfile's hash, the last part of the Electron cache's key, so it can see whether main holds one.
+  const classify = changeSteps.find((s) => s["id"] === "diff");
+  require(JSON.stringify(changes["permissions"]) ===
+    JSON.stringify({ actions: "read", contents: "read" }), "M1: changes reads Actions and contents, and nothing more");
+  require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN &&
+    map(classify?.["env"])["LOCK"] === LOCK, "M1: changes' classify step gets the token and the lockfile's hash");
+  require(Object.entries(jobs).every(([, job]) =>
+    steps(map(job)).every((s) => s === classify || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s))),
+  ), "M1: only changes' classify step gets the token");
+  const electron = steps(map(jobs["e2e"])).find(
+    (s) =>
+      typeof s["uses"] === "string" && s["uses"].startsWith("actions/cache") && map(s["with"])["path"] === ELECTRON,
+  );
+  require(map(electron?.["with"])["key"] ===
+    `electron-\${{ runner.os }}-\${{ runner.arch }}-${LOCK}`, "M1: e2e's Electron cache key is electron-<os>-<arch>-<LOCK>, as changes looks for it");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.

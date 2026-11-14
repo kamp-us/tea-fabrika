@@ -27,6 +27,11 @@ const diff = {
   run: "node .github/ci/changes.mjs",
 };
 
+// M1: only changes' classify step asks GitHub, with the job's token and the lockfile's hash.
+const token = `\${{ github.token }}`;
+const lock = `\${{ hashFiles('pnpm-lock.yaml') }}`;
+const classify = { ...diff, env: { ...diff.env, GITHUB_TOKEN: token, LOCK: lock } };
+
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 
 const LANES = "lane tests, one file at a time";
@@ -149,6 +154,7 @@ const valid = (label: string, extra: string) => ({
     changes: {
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
+      permissions: { actions: "read", contents: "read" } as Record<string, string>,
       outputs: {
         ...Object.fromEntries(
           ["check", "typecheck", "test", "e2e", "field", "build", "today"].map((key) => [
@@ -162,7 +168,7 @@ const valid = (label: string, extra: string) => ({
       } as Record<string, string>,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
-        diff,
+        classify,
         { name: "skills check", run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { name: "tracked files", run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
         { name: extra, run: "echo checked" },
@@ -337,7 +343,18 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("e2e"),
       "timeout-minutes": 25,
-      steps: [{ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
+      steps: [
+        {
+          name: "restore electron",
+          id: "electron",
+          uses: "actions/cache/restore@v6",
+          with: {
+            path: "~/Library/Caches/electron",
+            key: `electron-\${{ runner.os }}-\${{ runner.arch }}-${lock}`,
+          } as Record<string, string>,
+        },
+        { name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" },
+      ] as Record<string, unknown>[],
     },
     field: {
       "timeout-minutes": 5,
@@ -437,6 +454,45 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: [string, (workflow: Workflow) => void][] = [
+  // M1: a push the merge queue already tested asks GitHub from changes' classify step alone.
+  ["M1: changes may write Actions", (w) => (w.jobs.changes.permissions["actions"] = "write")],
+  ["M1: changes reads pull requests too", (w) => (w.jobs.changes.permissions["pull-requests"] = "read")],
+  [
+    "M1: changes has no permissions of its own",
+    (w) => delete (w.jobs.changes as Partial<typeof w.jobs.changes>).permissions,
+  ],
+  [
+    "M1: classify has no token",
+    (w) => delete (step(w, "changes", "classify").env as Record<string, string>)["GITHUB_TOKEN"],
+  ],
+  [
+    "M1: classify takes the token from secrets",
+    (w) =>
+      ((step(w, "changes", "classify").env as Record<string, string>)["GITHUB_TOKEN"] = `\${{ secrets.GITHUB_TOKEN }}`),
+  ],
+  [
+    "M1: classify has no lockfile hash",
+    (w) => delete (step(w, "changes", "classify").env as Record<string, string>)["LOCK"],
+  ],
+  [
+    "M1: classify hashes another file",
+    (w) =>
+      ((step(w, "changes", "classify").env as Record<string, string>)["LOCK"] = `\${{ hashFiles('package.json') }}`),
+  ],
+  [
+    "M1: the parser's pass gets the token too",
+    (w) => ((step(w, "changes", "parser pass").env as Record<string, string>)["GITHUB_TOKEN"] = token),
+  ],
+  [
+    "M1: field's classify gets the token too",
+    (w) => ((step(w, "field", "classify").env as Record<string, string>)["GITHUB_TOKEN"] = token),
+  ],
+  [
+    "M1: the Electron key leaves out the lockfile",
+    (w) =>
+      ((step(w, "e2e", "restore electron").with as Record<string, string>)["key"] =
+        `electron-\${{ runner.os }}-\${{ runner.arch }}`),
+  ],
   // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
   ...["opened", "synchronize", "reopened", "ready_for_review"].map((type): [string, (w: Workflow) => void] => [
     `pull requests lose the ${type} trigger`,

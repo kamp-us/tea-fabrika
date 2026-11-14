@@ -46,9 +46,21 @@ jobs:
   # comments; else all of next/. The parser's pass (`same`) proves the second case. It runs only when
   # every changed line looks like a comment (`probe`), and its install and run may fail without
   # failing changes: then the first pass's `next` and `filter` stand, which run all of next/.
+  # On a push to main, changes also asks GitHub whether a merge queue run already passed the same
+  # change: a run whose head has this push's tree and whose head's parent has the tree main held
+  # before. The queue moves main to the very commit it tested, so that run's jobs were this push's
+  # jobs on the same files, and test, next and e2e skip (changes.mjs's `tested`). Push run
+  # 43625168838 repeated queue run 43623078615 on tree 758c5cf5 that way: 61 machine-min of next
+  # and 26 of test. e2e still runs when main has no Electron cache for the lockfile, since only e2e
+  # on main saves one; check and typecheck run, and typecheck saves main's tsc cache. An admin
+  # merge, a direct push, a failed or canceled queue run, or any error asking runs every job.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The token reads this workflow's runs, main's caches and commits. No other job is given it.
+    permissions:
+      actions: read
+      contents: read
     outputs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
@@ -68,12 +80,15 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-      - id: diff
+      - name: classify
+        id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LOCK: ${{ hashFiles('pnpm-lock.yaml') }}
         run: node .github/ci/changes.mjs
       - run: sh .agents/skills/lead/scripts/skillscheck.sh
         if: ${{ !cancelled() }}
@@ -277,7 +292,8 @@ jobs:
       # Electron fetches its binary the first time it is asked for its path, into this folder. It is
       # saved on main only, 229 MiB a copy on 2026-11-14; its restore took 3 and 5 s (e2e in runs
       # 43620728687 and 43623635302).
-      - id: electron
+      - name: restore electron
+        id: electron
         uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/electron
