@@ -1,6 +1,7 @@
-// Today's CI, next/. How many of the next job's machines a pull request starts: check.yaml's `legs`
-// job prints them, and next's matrix reads them. A small pull request started all seven machines,
-// each spending about a minute on setup to run 0 or 1 files, and held runners a big one could use.
+// Today's CI, next/. How many of the next job's machines a pull request starts: the size step of
+// check.yaml's changes job prints them, and next's matrix reads them. A small pull request started
+// all seven machines, each spending about a minute on setup to run 0 or 1 files, and held runners a
+// big one could use.
 //
 //   event and path              legs
 //   pull request, all of next/  sized from the files Vitest's `--changed` picks, and every reader test
