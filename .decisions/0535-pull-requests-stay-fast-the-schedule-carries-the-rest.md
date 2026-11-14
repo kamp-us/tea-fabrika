@@ -1,7 +1,7 @@
 ---
 id: 0535
 title: A pull request and the merge queue run only fast checks, and everything slower moves to the 3-hour schedule, mutation and real git included, with git faked in memory on the merge line
-status: accepted
+status: amended-in-part by [0536](0536-real-resource-tests-run-only-on-the-schedule.md)
 date: 2026-11-14
 tags: [ci, schedule, tests, property, git, mutation, merge-queue]
 ---
