@@ -14,15 +14,15 @@ import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
 import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
-import { GAP, order, rects, split } from "../tezgah/Layout.ts";
-import { type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
+import { GAP, neighbor, order, rects, type Side, split } from "../tezgah/Layout.ts";
+import { CursorKey, type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
 import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
 import * as Keys from "./Keys.ts";
 import { Prefix, prefixMachine } from "./Prefix.ts";
-import { optimisticState, TezgahClient, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
+import { optimisticState, TezgahClient, type TezgahCmd, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
@@ -62,14 +62,25 @@ const CallError = Schema.TaggedUnion({
 
 const OnWrite = { id: Schema.Int, dial: Schema.Int };
 const Via = Schema.Literals(["button", "key"]);
+// How a letter's command was given, for its press row: a click is also Tab, DOM focus moved into
+// another tile by the page's own means.
+const By = Schema.Literals(["button", "key", "click"]);
 
 // A tezgah window's own attach to its workspace: nothing asked yet, a tile id being minted for it,
 // or its letter written.
 const Attach = Schema.Literals(["waiting", "minting", "sent"]);
 
 /** A tezgah window's tie to its person's tezgah: how far the window reached tezgah's process, the
- *  window's tezgah child, and its own attach. */
-const TezgahLink = Schema.Struct({ reach: Reach, client: TezgahClient, attach: Attach });
+ *  pid it last opened, so a focus move made offline still goes on the press path and leaves once
+ *  the link is back, the window's tezgah child, its own attach, and the `data-cursor` key the page
+ *  last said DOM focus was on in each tile (null for none), which a letter leaving the tile carries. */
+const TezgahLink = Schema.Struct({
+  reach: Reach,
+  last: Schema.NullOr(Schema.String),
+  client: TezgahClient,
+  attach: Attach,
+  cursors: Schema.Record(Schema.String, Schema.NullOr(CursorKey)),
+});
 type TezgahLink = typeof TezgahLink.Type;
 
 /** What the window says in its polite region on its own: a split refused because a tile would be
@@ -125,7 +136,7 @@ export const WindowModel = Schema.Struct({
   // A letter to tezgah also names its command, as the press row says it.
   from: Schema.Record(
     Schema.String,
-    Schema.Struct({ tile: Schema.String, via: Via, does: Schema.optionalKey(Schema.String) }),
+    Schema.Struct({ tile: Schema.String, via: By, does: Schema.optionalKey(Schema.String) }),
   ),
   redate: Schema.Array(Schema.Int),
   tezgah: Schema.NullOr(TezgahLink),
@@ -165,6 +176,9 @@ const Own = Schema.Union([
   // One press, spelled as `Keys` spells it, and the size of the area the tiles are laid out in, inside the frame's padding.
   Schema.Struct({ type: Schema.Literal("key"), key: Schema.String, at: Ms }),
   Schema.Struct({ type: Schema.Literal("size"), width: Ms, height: Ms }),
+  // DOM focus is now in tile `tile`, by a click or Tab, on an element whose `data-cursor` key is
+  // `cursor` (null for none).
+  Schema.Struct({ type: Schema.Literal("focus"), tile: Schema.String, cursor: Schema.NullOr(CursorKey) }),
   Schema.Struct({ type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown }),
   Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
   Schema.Struct({ type: Schema.Literal("resend"), dial: Schema.Int }),
@@ -205,8 +219,9 @@ const Split = Schema.Struct({
   keys: Schema.String,
 });
 
-/** How a person gave a command to tezgah, in tezgah's own Via: here always by keys. */
+/** How a person gave a command to tezgah, in tezgah's own Via: by keys, or by a click or Tab. */
 const ByKeys = Schema.TaggedStruct("key", { keys: Schema.String });
+const ByClick = Schema.TaggedStruct("click", {});
 
 const mint = Cmd.make("mint", {
   input: Schema.Struct({ split: Schema.optionalKey(Split) }),
@@ -529,11 +544,21 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
   }
 
   const link = s.tezgah;
-  const [client, asks] = applyCell(tezgahMachine, link.client, msg);
+  const [client, cmds] = applyCell<TezgahClient, TezgahMsg, TezgahCmd>(tezgahMachine, link.client, msg);
+  const asks = cmds.filter((c) => c.type === "ask");
   const view = client.serverState;
   const due = link.attach === "waiting" && view !== null && !view.workspaces.some((w) => w.n === client.workspace);
   const [after, reads] = followed(
-    { ...s, tezgah: { reach: Reach.cases.open.make({ pid }), client, attach: due ? "minting" : link.attach } },
+    {
+      ...s,
+      tezgah: {
+        ...link,
+        reach: Reach.cases.open.make({ pid }),
+        last: pid,
+        client,
+        attach: due ? "minting" : link.attach,
+      },
+    },
     fresh,
   );
   const reopen =
@@ -544,7 +569,26 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
     reopen && after.link._tag === "online"
       ? wrote(after, after.link.dial, [Call.cases.open.make({ pid })])
       : ([after, []] as const);
-  return [written, [...reads, ...writes, ...(due ? [mint({})] : [])]];
+  return [written, [...focusRows(cmds), ...reads, ...writes, ...(due ? [mint({})] : [])]];
+};
+
+/** The `focus` row of each move the window's tezgah child dropped. */
+const focusRows = (cmds: ReadonlyArray<TezgahCmd>) =>
+  cmds.flatMap((c) =>
+    c.type === "settled"
+      ? [record({ record: ClientRecord.cases.focus.make({ letter: c.letter, result: c.result, ms: c.ms }) })]
+      : [],
+  );
+
+/** Steps the window's tezgah child by hand with one Msg about its pending moves, and records what
+ *  it dropped. */
+const tezgahStep = (s: WindowModel, msg: TezgahMsg): Step => {
+  if (s.tezgah === null) {
+    return [s, []];
+  }
+
+  const [client, cmds] = applyCell<TezgahClient, TezgahMsg, TezgahCmd>(tezgahMachine, s.tezgah.client, msg);
+  return [{ ...s, tezgah: { ...s.tezgah, client } }, focusRows(cmds)];
 };
 
 /** The smallest a tile may be drawn: the readability floor from fold, not tabs (0277). */
@@ -599,6 +643,93 @@ const closing = (s: WindowModel, step: ClientStep, tile: TileId, keys: string): 
     tile,
   );
 
+/** Where each focus command a key row gives goes from the drawn focus. */
+type Aim = "next" | "previous" | "last" | Side;
+
+const AIMS: Readonly<Record<string, Aim>> = {
+  "tezgah.focus_next": "next",
+  "tezgah.focus_previous": "previous",
+  "tezgah.focus_last": "last",
+  "tezgah.focus_left": "left",
+  "tezgah.focus_right": "right",
+  "tezgah.focus_up": "up",
+  "tezgah.focus_down": "down",
+};
+
+/** The tile a focus command goes to on the drawn workspace: next and previous follow reading order
+ *  and wrap, as tmux's do; last is the drawn `recent[1]`; a side is the drawn layout's neighbor
+ *  there. Null when it finds no other tile: the key does nothing (0278: the window resolves a
+ *  direction on its own drawn layout and sends an absolute tile). */
+const aimed = (space: Workspace, aim: Aim): TileId | null => {
+  const tiles = order(space.layout);
+  const at = tiles.indexOf(space.focus);
+  const found =
+    aim === "next"
+      ? tiles[(at + 1) % tiles.length]
+      : aim === "previous"
+        ? tiles[(at - 1 + tiles.length) % tiles.length]
+        : aim === "last"
+          ? space.recent[1]
+          : neighbor(space.layout, space.focus, aim);
+  return found === undefined || found === null || found === space.focus ? null : found;
+};
+
+/**
+ * A focus move from the drawn focus `from` to `to`, optimistic as 0167 says: the window's tezgah
+ * child takes it as a pending move on this step, so it is drawn before any frame from the brain,
+ * and it goes to tezgah as one letter on the press path, carrying the cursor the page last said in
+ * `from`. Offline it goes on the press path all the same, to the tezgah pid the window last opened,
+ * and leaves once the link is back.
+ */
+const moved = (
+  s: WindowModel,
+  step: ClientStep,
+  does: string,
+  from: TileId,
+  to: TileId,
+  via: typeof ByKeys.Type | typeof ByClick.Type,
+): Step => {
+  const link = s.tezgah;
+  const pid = link === null ? null : link.reach._tag === "open" ? link.reach.pid : link.last;
+
+  if (link === null || pid === null) {
+    return [s, []];
+  }
+
+  const cursor = link.cursors[from] ?? null;
+  const n = s.client.written;
+  const [client] = step(s.client, { type: "press", pid, m: { type: "did", does, from, to, via, cursor } });
+  const [moving] = applyCell(tezgahMachine, link.client, { type: "move", n, from, to, cursor });
+  return [
+    {
+      ...s,
+      client,
+      polite: null,
+      tezgah: { ...link, client: moving },
+      from: { ...s.from, [n]: { tile: from, via: via._tag === "click" ? "click" : "key", does } },
+    },
+    [now({ n })],
+  ];
+};
+
+/** DOM focus moved into tile `tile` of the drawn workspace, on an element whose cursor key is
+ *  `cursor`: noted for the tile, and a move there when it is not the drawn focus (desk focus
+ *  follows DOM focus). */
+const focusedIn = (s: WindowModel, step: ClientStep, tile: string, cursor: string | null): Step => {
+  const link = s.tezgah;
+  const drawn = drawnSpace(link);
+  const at = drawn === null ? undefined : order(drawn.space.layout).find((t) => t === tile);
+
+  if (link === null || drawn === null || at === undefined) {
+    return [s, []];
+  }
+
+  const noted: WindowModel = { ...s, tezgah: { ...link, cursors: { ...link.cursors, [at]: cursor } } };
+  return at === drawn.space.focus
+    ? [noted, []]
+    : moved(noted, step, "tezgah.focus", drawn.space.focus, at, ByClick.make({}));
+};
+
 const idle = Prefix.cases.idle.make({});
 
 /**
@@ -644,6 +775,18 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
   }
 
   const from = drawn.space.focus;
+  const aim = AIMS[does];
+
+  if (aim !== undefined) {
+    const to = aimed(drawn.space, aim);
+
+    if (to === null) {
+      return [done, [row]];
+    }
+
+    const [sent, cmds] = moved(done, step, does, from, to, ByKeys.make({ keys }));
+    return [sent, [row, ...cmds]];
+  }
 
   if (does === "tezgah.close") {
     const tile = drawn.view.tiles.find((t) => t.id === from);
@@ -714,7 +857,16 @@ const dated = (
           }),
         ]
       : [];
-  const [next, cmds] = flush({ ...s, client, redate: s.redate.filter((r) => r !== n) });
+  // A focus move's pending entry takes its letter, so tezgah's answer finds it.
+  const [noted] = tezgahStep(
+    { ...s, client, redate: s.redate.filter((r) => r !== n) },
+    {
+      type: "dated",
+      n,
+      letter: stamp.letter,
+    },
+  );
+  const [next, cmds] = flush(noted);
   return [next, [...rows, ...cmds]];
 };
 
@@ -1112,8 +1264,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
               ? null
               : {
                   reach: Reach.cases.unresolved.make({}),
+                  last: null,
                   client: tezgahMachine.init(null, { workspace: ctx.tezgah.workspace })[0],
                   attach: "waiting",
+                  cursors: {},
                 },
           prefix: idle,
           polite: null,
@@ -1126,6 +1280,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       press: (s, m): Step => pressed(s, step, m.tile, m.m, m.via ?? "button"),
       key: (s, m): Step => (checks.keys === undefined ? [s, []] : pressedKey(s, step, checks.keys, m.key, m.at)),
       size: (s, m): Step => [{ ...s, size: { width: m.width, height: m.height } }, []],
+      focus: (s, m): Step => focusedIn(s, step, m.tile, m.cursor),
       tile: (s, m): Step => {
         const t = s.tiles.find((t) => t.id === m.id);
         const child = t && checks.tile?.(t.name);
@@ -1344,9 +1499,16 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const owner = slot && s.from[slot.n]?.tile;
+        // A focus move is dropped on its refusal, or once its position is shown (0167).
+        const [moves, rows] = tezgahStep(
+          s,
+          m.value._tag === "accepted"
+            ? { type: "accepted", letter, pos: m.value.pos, ms: m.ms }
+            : { type: "refused", letter, ms: m.ms },
+        );
         return [
           {
-            ...s,
+            ...moves,
             client,
             flight: found.rest,
             sent: s.sent.filter((l) => l !== letter),
@@ -1373,6 +1535,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                   : {}),
               }),
             }),
+            ...rows,
           ],
         ];
       },
@@ -1483,12 +1646,14 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             return [s, []];
           }
 
+          // A split moves focus off its tile, so it carries that tile's cursor (0165).
           const did = {
             type: "did",
             does: split.does,
             from: split.from,
             tile: m.value.tile,
             via: ByKeys.make({ keys: split.keys }),
+            cursor: link?.cursors[split.from] ?? null,
           };
           return toTezgah(s, step, did, split.does, split.from);
         }

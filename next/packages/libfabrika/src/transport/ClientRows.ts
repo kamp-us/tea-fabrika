@@ -40,7 +40,7 @@ export const ClientRecord = Schema.TaggedUnion({
   },
   press: {
     command: Schema.String,
-    via: Schema.Literals(["button", "key"]),
+    via: Schema.Literals(["button", "key", "click"]),
     pid: Schema.String,
     viewRev: Count,
     seen: Count,
@@ -65,6 +65,10 @@ export const ClientRecord = Schema.TaggedUnion({
   },
   /** A command reached through the prefix key: which, and how long after the prefix it came. */
   prefix: { does: Schema.String, ms: Ms },
+  /** A focus move the window drew, dropped once tezgah answered it: `kept` when tezgah's focus is
+   *  the move's tile, `overridden` when tezgah refused it or another move won, so the drawn focus
+   *  jumped back. A jump back is recorded here and never announced. `ms` is how long its answer took. */
+  focus: { letter: Schema.String, result: Schema.Literals(["kept", "overridden"]), ms: Ms },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),
