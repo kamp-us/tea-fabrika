@@ -48,8 +48,12 @@ One pull request, two slices. It builds what
   checked against that input's sender, through the model, and no longer through `StartGrant`. The
   brain asks the gateway's one signing service who sent the cause (0262), checks `StartProgram` on
   this fabrika, and the start's write needs the proof. The `started` line records the member it was
-  checked against. A start with no member's input behind it keeps today's `StartGrant` rule, which
-  is the one open question below.
+  checked against. A start with no member's input behind it is checked against the requester's
+  recorded member when it has one, else by today's `StartGrant` rule. That was the one open
+  question, now answered below: the owner chose (c), and the lead ruled that such a start's `started`
+  line records the member it was checked against, by AGENTS.md's data-shape rule (a fact that exists
+  only when the record is written goes in now). This records the fact. It does not decide whether
+  ownership carries down a chain, which 0172 leaves open.
 - **The runner does not change.** A start already carries its cause: the runner fills
   `From.parent` from the Cmd's letter (`runtime/Runner.ts:1517`, `from(job.parent, job.traceId)`),
   and that is the gateway's input id. The check moves to the brain's side, where the sender is
@@ -184,8 +188,7 @@ next/packages/libfabrika/src/permissions/
 | Row | Before | After |
 |---|---|---|
 | `next-permissions` (new) | none | 3 |
-| `next-processes` | 3 | 4 |
-| `next-presence`, `next-jobs`, `next-packs` | 3 | 3 |
+| `next-processes`, `next-presence`, `next-jobs`, `next-packs` | 3 | 4 |
 | `next-access` | 4 | 5 |
 | `next-runtime` | 5 | 6 |
 | `next-door`, `next-desktop-core`, `next-schedules` | 6 | 7 |
@@ -457,7 +460,7 @@ product's fold or walk.
 | L11 | A start with no member's input behind it (`parent` null, or an input delivered to another process) answers exactly what main answers, by `StartGrant` | test, 100 runs | fc.record: grants (0 to 4), parent null or another process's input, child program | treat no sender as allowed | no: it pins today's rule |
 | L12 | A sender whose key was removed is refused `forbidden` even when a grant would let the program through, and a retry of a saved start id still answers its `started` after the removal | test, 50 runs | fc.record: grants, which key is removed, and whether the start was saved before | judge the sender before the saved-id check | no: new path |
 | L13 | A refusal keeps its shape: every refused start in L10 to L12 is `ChildrenError` with reason `forbidden` and no cause, writes nothing, and its span says reason `forbidden`; through `start_child` the Cmd answers `err: "forbidden"`, the same as a `StartGrant` refusal | test, 100 runs, seed 119120 | fc.record: the L10 to L12 cases that refuse | map `Denied` to a new reason `denied` | no: pins 0170's constraint |
-| L14 | The `started` line of a sender's start names that sender as `member`, both ids kept, and a start with no sender has no `member` | test, 100 runs | fc.record: sender kinds as in L10, and no-sender starts | write the requester's process as `member` | yes: main has no `member` |
+| L14 | The `started` line of a sender's start names that sender as `member`, both ids kept, and a start with no sender and no recorded member has no `member` | test, 100 runs | fc.record: sender kinds as in L10, and no-sender starts by a requester with no recorded member | write the requester's process as `member` | yes: main has no `member` |
 | L15 | A relation removed between the look turn and the write turn refuses the start `forbidden`, and nothing is written | test | scenario: a gate holds the start after its look turn; the memory store writes `unrelated` for the owner; the gate opens | drop the guard from `place` | no: new path |
 | L16 | The write step of a sender's start does not compile without its proof | type | type | delete `.pipe(Rebac.provide(...))` in `ChildrenLedger.ts`: tsgo reports `StartProgram` missing from the context | no: new path |
 | L17 | On a real local instance with no start grants, a person's input makes `p42/starter` start `p42/child`; the child's `started` line names the person as `member`; after two boots `permissions/relations` holds one owner row by the brain | test | scenario: `start-child.test-support.ts`'s instance with `starts: []`, booted twice | the boot writes the owner row with `sentAt` in its body, so the second boot is refused `id_reused` | yes: main answers `forbidden` |
@@ -528,7 +531,8 @@ in CI; they touch no launchd, no Electron and no owner's Mac.
 | `next/packages/libfabrika/src/permissions/Rebac.types.test.ts` | tests | 1 | tests | new: L5 to L7 |
 | `next/packages/libfabrika/src/permissions/RelationsTest.ts` | tests | 1 | tests | new: L8 as `suite(open)` |
 | `next/packages/libfabrika/src/node/Relations.test.ts` | tests | 1 | tests | new: runs L8 on node:sqlite (0062) |
-| `next/packages/libfabrika/src/access/SessionSender.test.ts` | tests | 2 | tests | new: L9 on node:sqlite, as `SessionManager.test.ts` opens it |
+| `next/packages/libfabrika/src/access/SessionSenderTest.ts` | tests | 2 | tests | new: L9 as `suite(open)` |
+| `next/packages/libfabrika/src/node/access/SessionSender.test.ts` | tests | 2 | tests | new: runs L9 on node:sqlite, as `node/access/SessionManager.test.ts` opens it |
 | `next/packages/libfabrika/src/processes/ChildrenMemberTest.ts` | tests | 2 | tests | new: L10 to L15 as `suite(open)` |
 | `next/packages/libfabrika/src/node/ChildrenMember.test.ts` | tests | 2 | tests | new: runs that suite |
 | `next/packages/libfabrika/src/processes/Children.types.test.ts` | tests | 2 | tests | new: L16 |
@@ -536,7 +540,7 @@ in CI; they touch no launchd, no Electron and no owner's Mac.
 | `next/apps/fabrika/src/start-child.test-support.ts` | tests | 2 | tests | a second boot and a key removal, if the support lacks them |
 | `next/packages/libfabrika/src/processes/ChildrenTest.ts` `next/packages/libfabrika/src/processes/ProgramMailTest.ts` `next/packages/libfabrika/src/node/StartChild.test.ts` | tests | 2 | tests | the new layer requirements only; no assertion changes |
 | `next/packages/libfabrika/src/node/IsolateUsage.test.ts` `next/packages/libfabrika/src/node/RunnerAdmission.test.ts` `next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts` | tests | 2 | tests | the fake doors add `sender` |
-| `next/apps/fabrika/src/start-child.laws.test.ts` `next/packages/libfabrika/src/runtime/StartChildTest.ts` `next/packages/libfabrika/src/access/SessionManager.test.ts` `next/packages/libfabrika/src/node/Children.test.ts` `next/packages/libfabrika/src/node/ProgramMail.test.ts` | tests | 2 | tests | not edited: existing laws, run to show they stay green |
+| `next/apps/fabrika/src/start-child.laws.test.ts` `next/packages/libfabrika/src/runtime/StartChildTest.ts` `next/packages/libfabrika/src/node/access/SessionManager.test.ts` `next/packages/libfabrika/src/node/Children.test.ts` `next/packages/libfabrika/src/node/ProgramMail.test.ts` | tests | 2 | tests | not edited: existing laws, run to show they stay green |
 
 Placement by `next/AGENTS.md`'s libfabrika test: any client of libfabrika that runs a brain needs
 the model, the check and the start rule, so nothing goes in `next/apps/fabrika`. The rights a
@@ -550,8 +554,8 @@ The tests and build steps run only the named files, under `nice -n 19` with `--m
 nice -n 19 pnpm exec vitest run --maxWorkers=1 \
   next/packages/libfabrika/src/permissions/Rebac.test.ts \
   next/packages/libfabrika/src/node/Relations.test.ts \
-  next/packages/libfabrika/src/access/SessionSender.test.ts \
-  next/packages/libfabrika/src/access/SessionManager.test.ts \
+  next/packages/libfabrika/src/node/access/SessionSender.test.ts \
+  next/packages/libfabrika/src/node/access/SessionManager.test.ts \
   next/packages/libfabrika/src/node/ChildrenMember.test.ts \
   next/packages/libfabrika/src/node/Children.test.ts \
   next/packages/libfabrika/src/node/StartChild.test.ts \
@@ -605,8 +609,10 @@ Estimate: 4 steps, $11
 ## What this cannot tell us
 
 - Whether a mail chain should carry its member. A start in program B caused by mail from program A,
-  itself caused by a person's input to A, has no member's input delivered to B, so it keeps today's
-  `StartGrant` rule. That is the open question; the laws pin today's answer, not the right one.
+  itself caused by a person's input to A, has no member's input delivered to B, so it is checked
+  against B's process's recorded member when it has one, else by today's `StartGrant` rule. Whether
+  A's member should carry down to B is what 0172 leaves open; the laws pin this slice's answer, not
+  the right one.
 - The gateway answers who sent an input before the look turn, in its own store. A key removed after
   that answer and before the write is not seen by that start, the same gotcha `SessionManager`'s
   `signer` documents today. The relation rows are rechecked in the write turn (L15); the key's
@@ -627,9 +633,15 @@ Estimate: 4 steps, $11
    chose (c) on 2026-11-14. The requester's process owner, its recorded `member`, is checked when one
    is recorded, else today's `StartGrant` program rule. This slice builds (c) in its one function in
    `ChildrenLedger.ts`, with one more law, L20: for any generated no-member start, a recorded owner
-   is checked as that member (a removed relation refuses, `forbidden`), and with no recorded owner the
-   program rule decides as before. Its plant: the function ignores the recorded owner, and L20 goes
-   red.
+   is checked as that member (a removed relation refuses, `forbidden`) and is written on the child's
+   `started` line as `member`, and with no recorded owner the program rule decides as before and the
+   line has no `member`. Its plants: the function ignores the recorded owner, and L20 goes red; the
+   start checked against the recorded owner writes no `member`, and L20 goes red.
+2. What the `started` line of a start checked against the requester's recorded member records: the
+   lead ruled on 2026-11-14 that it records that member, by AGENTS.md's data-shape rule (a fact that
+   exists only when the record is written goes in now). "The answer first", slice 2, already said
+   "the `started` line records the member it was checked against". This records the fact; it does not decide whether
+   ownership carries down a chain, which 0172 leaves open.
 
 ## Open questions
 
