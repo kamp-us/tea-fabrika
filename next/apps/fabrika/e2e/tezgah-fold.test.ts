@@ -43,6 +43,7 @@ import {
   tell,
   tezgahPid,
   typeId,
+  whole,
 } from "./tezgah.test-support.ts";
 
 /** The law's own limit in ms: a brain, two tabs and about sixty waits of at most 30 s each. */
@@ -228,7 +229,8 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           yield* shoot(small, "fold-strip-opened", "small-1024x700");
           yield* shoot(big, "fold-strip-opened", "grid-2x2");
 
-          // L33: a click on f's strip focuses f, so it opens; d, left, folds again where it does not fit.
+          // L33: a click on f's strip focuses f, so it opens. f is held at the floor (amendment 13), so at
+          // 1024x700 d, left, folds again, and b, which gives f its room, folds too.
           yield* promised(() =>
             small
               .getByRole("main")
@@ -239,8 +241,18 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           const clicked = yield* both(f, "L33: a click on f's strip focuses f");
           expect(
             stripped(clicked.narrow.view, clicked.narrow.d).map((t) => t.id),
-            "L33: at 1024x700 d folds again once focus leaves it",
-          ).toEqual([d]);
+            "L33: at 1024x700 b and d fold while f holds the floor",
+          ).toEqual([bb, d]);
+          const fBox = clicked.narrow.d.regions.find((x) => x.name === regionName(named(clicked.narrow.view, f)))?.box;
+          expect(
+            fBox?.width ?? 0,
+            "L33: f, opened from a 1/16 share, is drawn at least 220 wide",
+          ).toBeGreaterThanOrEqual(219);
+          const fTitle = yield* whole(
+            small,
+            `section[aria-label="${regionName(named(clicked.narrow.view, f))}"] header`,
+          );
+          expect(fTitle, "L33: f's title bar is drawn whole, its name and id never cut").toEqual({ found: 1, cut: [] });
           expect(
             stripped(clicked.wide.view, clicked.wide.d).map((t) => t.id),
             "L33: at 1440x900 nothing folds with f focused",
@@ -251,6 +263,45 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             "L33: DOM focus is in f once it opens",
           );
           yield* shoot(small, "fold-strip-clicked", "small-1024x700");
+
+          // Amendment 13, point 3: a container whose tiles all fold is one band. In a 420x700 tab with t1
+          // focused, c folds beside t1 and the whole lower row folds: one band 20px tall across the
+          // tab, its four strips lying along it, each named and each drawn whole.
+          yield* clickTile(big, clicked.wide.view, t1);
+          yield* promised(() => small.setViewportSize({ width: 420, height: 700 }));
+          const banded = yield* at(
+            small,
+            t1,
+            (view, x) => (stripped(view, x).length === 5 ? [] : ["not yet the lower row folded whole"]),
+            "a 420x700 tab folds the lower row whole",
+          );
+          expect(
+            stripped(banded.view, banded.d).map((t) => t.id),
+            "c and the whole lower row fold at 420x700",
+          ).toEqual([c, a, bb, d, f]);
+          const band = [a, bb, d, f].map(
+            (id) => banded.d.strips.find((x) => x.name === stripName(named(banded.view, id)))?.box,
+          );
+          expect(
+            band.every(
+              (x) => x !== undefined && x !== null && Math.abs(x.height - 20) <= 1 && Math.abs(x.y - band[0]!.y) <= 1,
+            ),
+            `the lower row is one 20px band, its strips side by side: ${JSON.stringify(band)}`,
+          ).toBe(true);
+
+          for (const id of [a, bb, d, f]) {
+            const name = stripName(named(banded.view, id));
+            expect(
+              yield* whole(small, `main button[aria-label="${name}"]`),
+              `${name} is drawn whole in its band`,
+            ).toEqual({
+              found: 1,
+              cut: [],
+            });
+          }
+
+          yield* shoot(small, "fold-band", "grid-2x2");
+          yield* promised(() => small.setViewportSize({ width: 1024, height: 700 }));
 
           // Side by side with a strip: back to t1 alone, then t1 keeps 15/16 and j the last 1/16, by letters.
           for (const gone of [c, a, bb, d, f]) {

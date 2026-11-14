@@ -353,10 +353,20 @@ const GAP = 4;
 
 type Size = { readonly width: number; readonly height: number };
 
-/** Each tile's drawn size in the area `size` the window lays its parts out in, by the plan's seventh
- *  amendment, written here from the rule and never from the product's `rects`: a container leaves
- *  `parts - 1` gaps between its parts, and each part takes its percent of what is left. */
-const drawn = (layout: Workspace["layout"], size: Size): ReadonlyMap<string, Size> => {
+// Desk S4: the room check measures with the fold's one drawn geometry (plan amendment 13, point 4),
+// written here from its words and never read from the product: a strip takes 22px along a row or 20px
+// along a column, a container whose tiles all fold takes one strip's size, the open parts share what
+// is left by percent, and the part on the focused tile's path is held at `min(220 or 120, what the
+// container has)`. A window's strips are the fixpoint: from none, every open tile but the focused one
+// drawn under 220x120, again until nothing changes. A split is taken exactly when it folds no tile at
+// once: every tile the window draws as a strip after it (focus on the new tile) was a strip before.
+const ACROSS = { row: 22, column: 20 } as const;
+
+const tilesIn = (node: Workspace["layout"]): ReadonlyArray<string> =>
+  typeof node === "string" ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+
+/** Each open tile's drawn size under amendment 13 when `strips` are strips. */
+const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): ReadonlyMap<string, Size> => {
   const out = new Map<string, Size>();
   const walk = (node: Workspace["layout"], box: Size): void => {
     if (typeof node === "string") {
@@ -364,27 +374,67 @@ const drawn = (layout: Workspace["layout"], size: Size): ReadonlyMap<string, Siz
       return;
     }
 
-    const left = (node.dir === "row" ? box.width : box.height) - (node.parts.length - 1) * GAP;
+    const row = node.dir === "row";
+    const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
+    const fixed = node.parts.map((p) => tilesIn(p.inner).every((t) => strips.has(t)));
+    const has = left - fixed.filter((f) => f).length * ACROSS[node.dir];
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const lead = node.parts.findIndex((p) => tilesIn(p.inner).includes(w.focus));
+    let shares = node.parts.map((p, i) => (fixed[i] ? ACROSS[node.dir] : (has * p.percent) / total));
+    const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
-    for (const p of node.parts) {
-      const share = (left * p.percent) / 100;
-      walk(p.inner, node.dir === "row" ? { width: share, height: box.height } : { width: box.width, height: share });
+    if (lead >= 0 && shares[lead]! < least) {
+      const rest = total - node.parts[lead]!.percent;
+      shares = node.parts.map((p, i) =>
+        i === lead ? least : fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+      );
+    }
+
+    for (const [i, p] of node.parts.entries()) {
+      if (!fixed[i] || typeof p.inner === "string") {
+        walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
+      }
     }
   };
-  walk(layout, size);
+  walk(w.layout, size);
   return out;
 };
 
-/** The split of `at` in `dir`, drawn: the size of `at` and of the new tile. */
-const halves = (view: TezgahView, at: TileId, dir: Dir, size: Size): ReadonlyArray<Size> => {
-  const fresh = typeId("tile", 9_999) as TileId;
-  const after = drawn(Layout.split(view.workspaces[0]!, at, dir, fresh).layout, size);
-  return [after.get(at)!, after.get(fresh)!];
+/** A window's strips at `size`, the fixpoint, and whether any round drew a tile within half a pixel
+ *  of the floor. */
+const foldedAt = (w: Workspace, size: Size) => {
+  let strips = new Set<string>();
+  let close = false;
+
+  for (;;) {
+    const boxes = drawnWith(w, size, strips);
+    const open = [...boxes].filter(([t]) => !strips.has(t) && t !== w.focus);
+    close ||= open.some(
+      ([, r]) => Math.abs(r.width - SMALLEST.width) <= 0.5 || Math.abs(r.height - SMALLEST.height) <= 0.5,
+    );
+    const due = open.filter(([, r]) => r.width < SMALLEST.width || r.height < SMALLEST.height).map(([t]) => t);
+
+    if (due.length === 0) {
+      return { strips, close };
+    }
+
+    strips = new Set([...strips, ...due]);
+  }
 };
 
-/** Whether a split of `at` in `dir` draws both halves at least 220x120 in the area `size`. */
-const fits = (view: TezgahView, at: TileId, dir: Dir, size: Size) =>
-  halves(view, at, dir, size).every((h) => h.width >= SMALLEST.width && h.height >= SMALLEST.height);
+const FRESH = typeId("tile", 9_999) as TileId;
+
+/** Whether a split of `at` in `dir` folds no tile at once in the area `size`, and whether that
+ *  answer sits within half a pixel of the floor. */
+const splitRoom = (view: TezgahView, at: TileId, dir: Dir, size: Size) => {
+  const space = Layout.focus(view.workspaces[0]!, at);
+  const before = foldedAt(space, size);
+  const after = foldedAt(Layout.split(space, at, dir, FRESH), size);
+  return { fits: [...after.strips].every((t) => before.strips.has(t)), close: before.close || after.close };
+};
+
+/** Whether a split of `at` in `dir` folds no tile at once in the area `size`. */
+const fits = (view: TezgahView, at: TileId, dir: Dir, size: Size) => splitRoom(view, at, dir, size).fits;
 
 const KEYS = [PREFIX, "%", '"', "|", "-", "x", "y", "n", "escape", "a", "enter", "o"] as const;
 
@@ -562,8 +612,8 @@ describe("L17: a close of a tezgah child asks y/n", () => {
 });
 
 describe("L18: a split with no room is refused in the window", () => {
-  it("L18: a split that would leave a tile under 220x120 at this window's size sends nothing and is said politely; one with room is sent", () => {
-    const seen = { refused: 0, sent: 0 };
+  it("L18: a split that would fold a tile at once at this window's size, measured with the fold's one drawn geometry (amendment 13), sends nothing and is said politely; one with room is sent", () => {
+    const seen = { refused: 0, sent: 0, folded: 0 };
     fc.assert(
       fc.property(
         fc.record({
@@ -576,17 +626,12 @@ describe("L18: a split with no room is refused in the window", () => {
         ({ width, height, cuts, focus, key }) => {
           const size = { width, height };
           const view = desk(cuts, focus);
-          const before = drawn(view.workspaces[0]!.layout, size);
-          // Every tile fits before the split, and no half sits within half a pixel of the floor, so
-          // the two readings of "a tile under the floor" and float rounding cannot disagree.
-          fc.pre([...before.values()].every((r) => r.width >= SMALLEST.width && r.height >= SMALLEST.height));
+          // The window may already fold some tiles (Desk S4); no round of the fold sits within half a
+          // pixel of the floor, so float rounding cannot decide the law.
+          const folded = foldedAt(view.workspaces[0]!, size).strips.size > 0;
           const at = view.workspaces[0]!.focus;
           const split = SPLITS[key]!;
-          fc.pre(
-            halves(view, at, split.dir, size).every(
-              (h) => Math.abs(h.width - SMALLEST.width) > 0.5 && Math.abs(h.height - SMALLEST.height) > 0.5,
-            ),
-          );
+          fc.pre(!splitRoom(view, at, split.dir, size).close);
           const w = world(view, 1, size);
           press(w, 0, PREFIX);
           const { cmds, sent } = press(w, 0, key);
@@ -594,6 +639,7 @@ describe("L18: a split with no room is refused in the window", () => {
 
           if (fits(view, at, split.dir, size)) {
             seen.sent++;
+            seen.folded += folded ? 1 : 0;
             expect(dids(sent), `L18: a split with room at ${width}x${height} is sent`).toMatchObject([
               { type: "did", does: split.does, from: at },
             ]);
@@ -616,6 +662,7 @@ describe("L18: a split with no room is refused in the window", () => {
     );
     expect(seen.refused, "L18: the walks refuse splits").toBeGreaterThan(0);
     expect(seen.sent, "L18: the walks send splits").toBeGreaterThan(0);
+    expect(seen.folded, "L18: the walks send splits from a window that already folds a tile").toBeGreaterThan(0);
   });
 
   it("L18: at the floor's edge, one tile's split is taken exactly when its drawn halves, one gap between them, reach 220x120", () => {
@@ -696,12 +743,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
  *  but the focused one drawn under 220x120. */
 const stripCount = (view: TezgahView, size: Size) => {
-  const space = view.workspaces[0]!;
-  const boxes = drawn(space.layout, size);
-  return Layout.order(space.layout).filter((t) => {
-    const r = boxes.get(t)!;
-    return t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height);
-  }).length;
+  return foldedAt(view.workspaces[0]!, size).strips.size;
 };
 
 describe("Desk S4 L32: a split's letter never carries a fold", () => {

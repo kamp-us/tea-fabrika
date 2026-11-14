@@ -319,12 +319,14 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
 //   app's `e2e/tezgah-fold.test.ts` (L33).
 //
 // The walk draws a window size from 320x240 to 2560x1600 and a layout walked from one tile with the
-// library's real `Layout.split` and `Layout.remove`. The strips are worked out here, from the plan's
-// rule, never from the product's `fold`: each tile but the focused one that the frame draws under
-// 220x120 at that size (`Layout.rects` with the frame's `GAP`, plan amendment 7).
+// library's real `Layout.split` and `Layout.remove`. The markup law holds for any set of strips
+// without the focused tile, so the set is worked out here and never from the product's `fold`: each
+// tile but the focused one drawn under 220x120 at its full share (`Layout.rects` with `GAP`), which
+// folds whole containers often. Where each strip and band is drawn (plan amendment 13) is the fold
+// laws' and the app's end-to-end law's: static markup carries no drawn size.
 const SMALLEST = { width: 220, height: 120 } as const;
 
-/** The plan's fold, written here: every tile but the focused one drawn under 220x120 in `size`. */
+/** A set of strips for the walk: every tile but the focused one drawn under 220x120 at its full share. */
 const stripsAt = (w: Workspace, size: { readonly width: number; readonly height: number }): ReadonlySet<TileId> => {
   const drawn = Layout.rects(w.layout, size, { gap: Layout.GAP });
   return new Set(

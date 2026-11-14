@@ -45,6 +45,7 @@ import { applyCell } from "@demlik/tea";
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import type { SchemaAST } from "effect";
 import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
@@ -2826,7 +2827,53 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
 // check, so float rounding cannot decide it.
 const FOLD_SMALLEST = { width: 220, height: 120 } as const;
 
-/** The tiles a window draws as strips now, by the plan's rule, in reading order. */
+const FOLD_ACROSS = { row: 22, column: 20 } as const;
+
+const foldTiles = (node: Workspace["layout"]): ReadonlyArray<string> =>
+  typeof node === "string" ? [node] : node.parts.flatMap((p) => foldTiles(p.inner));
+
+type Extent = { readonly width: number; readonly height: number };
+
+/** Each open tile's drawn size by plan amendment 13, written here from its words: a strip takes 22px
+ *  along a row or 20px along a column, a container whose tiles all fold one strip's size, the open
+ *  parts share what is left by percent, and the part on the focused path is held at
+ *  `min(220 or 120, what the container has)`. */
+const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): ReadonlyMap<string, Extent> => {
+  const out = new Map<string, Extent>();
+  const walk = (node: Workspace["layout"], box: Extent): void => {
+    if (typeof node === "string") {
+      out.set(node, box);
+      return;
+    }
+
+    const row = node.dir === "row";
+    const left = (row ? box.width : box.height) - (node.parts.length - 1) * Layout.GAP;
+    const fixed = node.parts.map((p) => foldTiles(p.inner).every((t) => strips.has(t)));
+    const has = left - fixed.filter((f) => f).length * FOLD_ACROSS[node.dir];
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const lead = node.parts.findIndex((p) => foldTiles(p.inner).includes(w.focus));
+    let shares = node.parts.map((p, i) => (fixed[i] ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
+    const least = Math.min(row ? FOLD_SMALLEST.width : FOLD_SMALLEST.height, has);
+
+    if (lead >= 0 && shares[lead]! < least) {
+      const rest = total - node.parts[lead]!.percent;
+      shares = node.parts.map((p, i) =>
+        i === lead ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+      );
+    }
+
+    for (const [i, p] of node.parts.entries()) {
+      if (!fixed[i] || typeof p.inner === "string") {
+        walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
+      }
+    }
+  };
+  walk(w.layout, size);
+  return out;
+};
+
+/** The tiles a window draws as strips now, the fixpoint of plan amendment 13 on its drawn workspace
+ *  at its size, in reading order; null when a round draws a tile within half a pixel of the floor. */
 const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
   const space = drawnHere(s);
 
@@ -2834,21 +2881,42 @@ const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
     return [];
   }
 
-  const drawn = Layout.rects(space.layout, s.size, { gap: Layout.GAP });
-  const boxes = Layout.order(space.layout).map((t) => [t, drawn.get(t)!] as const);
+  let strips = new Set<string>();
 
-  if (
-    boxes.some(
-      ([, r]) => Math.abs(r.width - FOLD_SMALLEST.width) <= 0.5 || Math.abs(r.height - FOLD_SMALLEST.height) <= 0.5,
-    )
-  ) {
-    return null;
+  for (;;) {
+    const open = [...foldDrawn(space, s.size, strips)].filter(([t]) => !strips.has(t) && t !== space.focus);
+
+    if (
+      open.some(
+        ([, r]) => Math.abs(r.width - FOLD_SMALLEST.width) <= 0.5 || Math.abs(r.height - FOLD_SMALLEST.height) <= 0.5,
+      )
+    ) {
+      return null;
+    }
+
+    const due = open.filter(([, r]) => r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height);
+
+    if (due.length === 0) {
+      return Layout.order(space.layout).filter((t) => strips.has(t));
+    }
+
+    strips = new Set([...strips, ...due.map(([t]) => t)]);
   }
-
-  return boxes.flatMap(([t, r]) =>
-    t !== space.focus && (r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height) ? [t] : [],
-  );
 };
+
+/** The record and Msg fields a law reads by their schema: every object case of a union. */
+const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
+  ast._tag === "Union" ? ast.types.flatMap(objectsIn) : ast._tag === "Objects" ? [ast] : [];
+
+const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
+  o?.propertySignatures.find((p) => p.name === name)?.type;
+
+/** The window Msg whose `type` is `t`, as the machine's own Msg schema says it. */
+const msgCase = (t: string) =>
+  objectsIn(focusWindow.msg.ast).find((o) => {
+    const ty = fieldIn(o, "type");
+    return ty?._tag === "Literal" && ty.literal === t;
+  });
 
 /** Every key in a value, at any depth. */
 const keysIn = (v: unknown): ReadonlyArray<string> =>
@@ -2945,7 +3013,24 @@ const foldWalk = (
 const FoldCuts = fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 6 });
 
 describe("Desk S4: a window folds at its own size, records each change of its folds, and keeps no fold", () => {
-  it("fold row: on each step that changes which tiles the window draws as strips, by a size, a view or a focus move, one record fold {strips, width, height}, its count and the size it folded at; a step that changes none writes no fold row", () => {
+  it("fold row: on each step that changes which tiles the window draws as strips, by a size, a view or a focus move, one record fold {strips, width, height}, its count and the size it folded at; a step that changes none writes no fold row; and a pixel size is typed by its own schema, never the duration's", () => {
+    // Plan amendment 13, point 7 (0212: one meaning, one way): the fold row's and the size Msg's width
+    // and height are pixels, never `Ms`. A law can say only that they are not the very schema a
+    // duration field uses; that they are pixels by name is typecheck's and review's to read.
+    const fold = ClientRecord.cases.fold.fields;
+    expect(fold.width.ast, "the fold row's width is not the duration schema").not.toBe(
+      ClientRecord.cases.reply.fields.ms.ast,
+    );
+    expect(fold.height.ast, "the fold row's height is not the duration schema").not.toBe(
+      ClientRecord.cases.reply.fields.ms.ast,
+    );
+    expect(msgCase("size"), "the window takes a size Msg").toBeDefined();
+    expect(fieldIn(msgCase("size"), "width"), "the size Msg's width is not the duration schema").not.toBe(
+      fieldIn(msgCase("socket_opened"), "at"),
+    );
+    expect(fieldIn(msgCase("size"), "height"), "the size Msg's height is not the duration schema").not.toBe(
+      fieldIn(msgCase("socket_opened"), "at"),
+    );
     const seen = { rows: 0, bySize: 0, byOther: 0, quiet: 0 };
     fc.assert(
       fc.property(

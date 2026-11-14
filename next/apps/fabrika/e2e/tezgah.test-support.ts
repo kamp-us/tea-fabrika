@@ -379,9 +379,78 @@ export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
     return { ...d, strips };
   });
 
-/** The tiles of workspace 1 this tab must draw as strips, by the plan's rule written here from its
- *  words: every tile but the focused one that the frame draws under 220x120 in the tab's own main,
- *  inside its padding (plan amendment 7). Never read from the product's `fold`. */
+/** A strip's size along its container (plan amendment 13, after the fold-not-tabs note): 22px wide in
+ *  a row, 20px tall in a column. */
+const STRIP_ACROSS = { row: 22, column: 20 } as const;
+
+type Space = TezgahView["workspaces"][number];
+
+const tilesIn = (node: Space["layout"]): ReadonlyArray<string> =>
+  typeof node === "string" ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+
+/** What amendment 13's rule draws in `area` when `strips` are strips: each tile's box outside a band,
+ *  and each band (a container whose tiles all fold) with its tiles. Written here from the
+ *  amendment's words, never from the product's `drawn`: a container leaves `GAP` between each two
+ *  parts; a part all of whose tiles are strips takes `STRIP_ACROSS[dir]`; the open parts share what is
+ *  left by percent; and the part on the focused tile's path is held at `min(220 in a row or 120 in a
+ *  column, what the container has)`, the other open parts sharing the rest by percent. */
+const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
+  const boxes = new Map<string, Box>();
+  const bands: Array<{ readonly box: Box; readonly tiles: ReadonlyArray<string> }> = [];
+  const walk = (node: Space["layout"], box: Box): void => {
+    if (typeof node === "string") {
+      boxes.set(node, box);
+      return;
+    }
+
+    const row = node.dir === "row";
+    const left = (row ? box.width : box.height) - (node.parts.length - 1) * GAP;
+    const fixed = node.parts.map((p) => tilesIn(p.inner).every((t) => strips.has(t)));
+    const has = left - fixed.filter((f) => f).length * STRIP_ACROSS[node.dir];
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const lead = node.parts.findIndex((p) => tilesIn(p.inner).includes(space.focus));
+    let shares = node.parts.map((p, i) => (fixed[i] ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
+    const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
+
+    if (lead >= 0 && (shares[lead] ?? 0) < least) {
+      const rest = total - (node.parts[lead]?.percent ?? 0);
+      shares = node.parts.map((p, i) =>
+        i === lead ? least : fixed[i] ? STRIP_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+      );
+    }
+
+    let at = row ? box.x : box.y;
+
+    for (const [i, p] of node.parts.entries()) {
+      const b = row
+        ? { x: at, y: box.y, width: shares[i] ?? 0, height: box.height }
+        : { x: box.x, y: at, width: box.width, height: shares[i] ?? 0 };
+
+      if (fixed[i] && typeof p.inner !== "string") {
+        bands.push({ box: b, tiles: tilesIn(p.inner) });
+      } else {
+        walk(p.inner, b);
+      }
+
+      at += (shares[i] ?? 0) + GAP;
+    }
+  };
+  walk(space.layout, area);
+  return { boxes, bands };
+};
+
+/** The main's area the parts are laid out in, inside its padding. */
+const padded = (main: Box): Box => ({
+  x: main.x + GAP,
+  y: main.y + GAP,
+  width: main.width - 2 * GAP,
+  height: main.height - 2 * GAP,
+});
+
+/** The tiles of workspace 1 this tab must draw as strips, in reading order: amendment 13's fixpoint,
+ *  written here from its words. From no strips, every open tile but the focused one that the rule
+ *  draws under 220x120 in the tab's own main folds, again, until nothing changes. Never read from the
+ *  product's `fold`. */
 export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
@@ -389,49 +458,31 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
     return [];
   }
 
-  const rects = drawnRule(space.layout, {
-    x: main.x + GAP,
-    y: main.y + GAP,
-    width: main.width - 2 * GAP,
-    height: main.height - 2 * GAP,
-  });
-  return shown(view).filter((t) => {
-    const r = rects.get(t.id);
-    return t.id !== space.focus && r !== undefined && (r.width < SMALLEST.width || r.height < SMALLEST.height);
-  });
-};
+  let strips = new Set<string>();
 
-/** A strip's own size across its container (plan amendment 12, after the fold-not-tabs note): 22px wide
- *  in a row, 20px tall in a column. */
-const STRIP_ACROSS = { row: 22, column: 20 } as const;
+  for (;;) {
+    const { boxes } = foldRule(space, padded(main), strips);
+    const due = [...boxes].filter(
+      ([t, r]) => !strips.has(t) && t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height),
+    );
 
-/** The direction of the container each tile sits in, by tile id; a lone tile has none. */
-const containers = (layout: TezgahView["workspaces"][number]["layout"]): ReadonlyMap<string, "row" | "column"> => {
-  const out = new Map<string, "row" | "column">();
-  const walk = (node: typeof layout): void => {
-    if (typeof node === "string") {
-      return;
+    if (due.length === 0) {
+      return shown(view).filter((t) => strips.has(t.id));
     }
 
-    for (const p of node.parts) {
-      if (typeof p.inner === "string") {
-        out.set(p.inner, node.dir);
-      } else {
-        walk(p.inner);
-      }
-    }
-  };
-  walk(layout);
-  return out;
+    strips = new Set([...strips, ...due.map(([t]) => t)]);
+  }
 };
+
+const off = (a: Box, b: Box) =>
+  Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.width - b.width), Math.abs(a.height - b.height));
 
 /** Every way the tab's drawing differs from workspace 1 of tezgah's `view` folded at the tab's own
- *  size: the regions are the open tiles in reading order, each strip is a button named
+ *  size by amendment 13: the regions are the open tiles in reading order, each strip is a button named
  *  `open <program>, t<n>` in reading order, the focused tile is never a strip and alone has
- *  `aria-current`, every open tile but the focused one is drawn at least 220x120, each strip is drawn
- *  inside the main, 22px across in a row or 20px tall in a column (within 1px), and every open tile is
- *  drawn at least as large as the full-share geometry the fold measured, since the open tiles of a
- *  strip's container share the space it leaves (plan amendment 12). Empty when they agree. */
+ *  `aria-current`, every open tile but the focused one is drawn at least 220x120, every region and
+ *  every strip outside a band is drawn where the rule puts it, within 1px, and the strips of a band lie
+ *  inside it, apart. Empty when they agree. */
 export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<string> => {
   const space = view.workspaces.find((w) => w.n === WORKSPACE);
 
@@ -459,7 +510,7 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
   const wantStrips = strips.map(stripName);
 
   if (JSON.stringify(drawnStrips) !== JSON.stringify(wantStrips)) {
-    out.push(`strips ${JSON.stringify(drawnStrips)}, tiles under 220x120 here ${JSON.stringify(wantStrips)}`);
+    out.push(`strips ${JSON.stringify(drawnStrips)}, the fold's strips here ${JSON.stringify(wantStrips)}`);
   }
 
   if (focus !== undefined && drawnStrips.includes(stripName(focus))) {
@@ -476,49 +527,82 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
     }
   }
 
-  // The full-share geometry the fold measured, in the main's padded area.
-  const full = drawnRule(space.layout, {
-    x: d.main.x + GAP,
-    y: d.main.y + GAP,
-    width: d.main.width - 2 * GAP,
-    height: d.main.height - 2 * GAP,
-  });
-  const dirs = containers(space.layout);
+  if (out.length > 0) {
+    return out;
+  }
 
-  for (const t of open) {
-    const box = d.regions.find((x) => x.name === regionName(t))?.box ?? null;
-    const r = full.get(t.id);
+  const rule = foldRule(space, padded(d.main), new Set(strips.map((t) => t.id)));
+  const banded = new Set(rule.bands.flatMap((b) => b.tiles));
+  const boxFor = (t: Tile) =>
+    (strips.includes(t)
+      ? d.strips.find((s) => s.name === stripName(t))
+      : d.regions.find((r) => r.name === regionName(t))
+    )?.box ?? null;
 
-    if (box !== null && r !== undefined && (box.width < r.width - EDGE || box.height < r.height - EDGE)) {
+  for (const t of shown(view).filter((t) => !banded.has(t.id))) {
+    const box = boxFor(t);
+    const r = rule.boxes.get(t.id);
+
+    if (box === null || r === undefined || off(box, r) > EDGE) {
       out.push(
-        `open ${regionName(t)} is drawn at ${JSON.stringify(box)}, smaller than its full share ${JSON.stringify(r)}`,
+        `${strips.includes(t) ? stripName(t) : regionName(t)} drawn at ${JSON.stringify(box)}, the rule's ${JSON.stringify(r)}`,
       );
     }
   }
 
-  for (const [i, s] of d.strips.entries()) {
-    const b = s.box;
-    const m = d.main;
-    const tile = strips[i];
-    const dir = tile === undefined ? undefined : dirs.get(tile.id);
+  for (const band of rule.bands) {
+    const inBand = shown(view).filter((t) => band.tiles.includes(t.id));
+    const boxes = inBand.map(boxFor);
 
-    if (b !== null && dir !== undefined && Math.abs((dir === "row" ? b.width : b.height) - STRIP_ACROSS[dir]) > EDGE) {
-      out.push(`${s.name} is ${dir === "row" ? b.width : b.height}px across its ${dir}, not ${STRIP_ACROSS[dir]}`);
-    }
+    for (const [i, b] of boxes.entries()) {
+      const tile = inBand[i];
+      const name = tile === undefined ? "a strip" : stripName(tile);
 
-    if (
-      b === null ||
-      b.x < m.x - EDGE ||
-      b.y < m.y - EDGE ||
-      b.x + b.width > m.x + m.width + EDGE ||
-      b.y + b.height > m.y + m.height + EDGE
-    ) {
-      out.push(`${s.name} is drawn at ${JSON.stringify(b)}, outside the main ${JSON.stringify(m)}`);
+      if (
+        b === null ||
+        b.x < band.box.x - EDGE ||
+        b.y < band.box.y - EDGE ||
+        b.x + b.width > band.box.x + band.box.width + EDGE ||
+        b.y + b.height > band.box.y + band.box.height + EDGE
+      ) {
+        out.push(`${name} drawn at ${JSON.stringify(b)}, outside its band ${JSON.stringify(band.box)}`);
+      }
+
+      for (const c of boxes.slice(i + 1)) {
+        if (
+          b !== null &&
+          c !== null &&
+          Math.min(b.x + b.width, c.x + c.width) - Math.max(b.x, c.x) > EDGE &&
+          Math.min(b.y + b.height, c.y + c.height) - Math.max(b.y, c.y) > EDGE
+        ) {
+          out.push(`${name} overlaps another strip of its band`);
+        }
+      }
     }
   }
 
   return out;
 };
+
+/** Whether each named element's text is drawn whole in tab `on`: no element in it cut by its own box
+ *  (its scroll size within its client size, either way it is written), as a person reads it. */
+export const whole = (on: Page, selector: string) =>
+  promised(() =>
+    on.evaluate((css) => {
+      const found = [...document.querySelectorAll(css)];
+      return {
+        found: found.length,
+        cut: found
+          .flatMap((el) => [el, ...el.querySelectorAll("*")])
+          .filter(
+            (el) =>
+              el instanceof HTMLElement &&
+              (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1),
+          )
+          .map((el) => el.textContent ?? ""),
+      };
+    }, selector),
+  );
 
 /** Polls until `check` holds of the tab, strips included, and tezgah's view, or fails with the last
  *  of both after 30 s. */
