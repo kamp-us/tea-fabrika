@@ -704,6 +704,94 @@
       }
     },
     {
+      // Desk S2b L22 (the plan's fifth amendment): Tuval never imports libfabrika's brain side. The
+      // brain's side is what layer-rules.json puts there: `cloudflare/` (next-workers, layer 8) and
+      // `node/` (next-node, layer 9), the platforms, and `gateway/` (next-door), the brain's door.
+      // After next/**, since an override replaces options: this repeats that block's import bans.
+      "files": ["next/packages/tuval/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@kampus/libfabrika/cloudflare",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@kampus/libfabrika/node",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@kampus/libfabrika/gateway",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "@kampus/libfabrika/cloudflare/**",
+                  "@kampus/libfabrika/node/**",
+                  "@kampus/libfabrika/gateway/**",
+                  "**/libfabrika/src/cloudflare/**",
+                  "**/libfabrika/src/node/**",
+                  "**/libfabrika/src/gateway/**"
+                ],
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
       // habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
       // shrinks. This rule block is the `next/**` block above, repeated: change both together.
