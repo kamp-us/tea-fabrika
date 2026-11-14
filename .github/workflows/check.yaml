@@ -450,12 +450,14 @@ jobs:
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
 
   # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
-  # it lists the files Vitest's `--changed` picks, as each leg will, and sizes the legs from their
-  # measured seconds: none when nothing is picked, then next skips; one when they fit one leg; else
-  # the fewest that fit, up to the full matrix. A small pull request then holds no runner it does not
-  # need, so a big one can claim it. Everywhere else every step skips and it prints nothing, so next
-  # runs its full matrix, the fallback in its `matrix`: the merge queue, main, the reader tests, and a
-  # failed changes. A failed install or list prints nothing too, so it fails open to the full matrix.
+  # it lists the files Vitest's `--changed` picks and every reader test, which read files as text so
+  # `--changed` misses them, and sizes the legs from their measured seconds: none when nothing is
+  # picked, then next skips; one when they fit one leg; else the fewest that fit, up to the full
+  # matrix. `files` is that vitest list, each file once, and every vitest leg runs exactly it. A small
+  # pull request then holds no runner it does not need, so a big one can claim it. Everywhere else
+  # every step skips and it prints nothing, so next runs its full matrix, the fallback in its
+  # `matrix`, on changes' filter: the merge queue, main, the reader tests, and a failed changes. A
+  # failed install or list prints nothing too, so it fails open to the full matrix and every file.
   legs:
     needs: changes
     if: ${{ !cancelled() }}
@@ -463,6 +465,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       shards: ${{ steps.size.outputs.shards }}
+      files: ${{ steps.size.outputs.files }}
       vitest: ${{ steps.size.outputs.vitest }}
       e2e: ${{ steps.size.outputs.e2e }}
       next: ${{ steps.size.outputs.next }}
@@ -540,20 +543,20 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # FILTER is the path: the reader tests, or all of next/ (the plan for CI paths, slice 2). A
-      # missing filter runs all of next/. On a pull request whose filter is all of next/, only the
-      # tests whose imports reach a changed file run: Vitest's own `--changed`, which runs everything
-      # when a file in vitest.config.ts's forceRerunTriggers changed (configs, the lockfile, fixtures,
-      # .github). When the filter names the reader tests, CHANGED is empty: they read files as text,
-      # so the import graph would drop them, and the filter alone decides. The merge queue and main
-      # run the whole suite, so a test the import graph misses still runs before main moves. FILTER
-      # and CHANGED stay unquoted so each reader path and each flag is its own argument.
-      - run: pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # FILTER is the paths. On a pull request whose filter is all of next/, the legs job's `files`:
+      # the tests whose imports reach a changed file (Vitest's own `--changed`, which picks everything
+      # when a file in vitest.config.ts's forceRerunTriggers changed: configs, the lockfile, fixtures,
+      # .github), and every reader test. Those read files as text, so the import graph misses them.
+      # Each file is listed once, so each runs once, on the leg `Shards` gives it, and the legs were
+      # sized with them. Else changes' filter: the reader tests, or all of next/ (the plan for CI
+      # paths, slice 2), as on the merge queue and main, which run the whole suite before main moves,
+      # and on a pull request whose legs job printed nothing, which then runs every file. A missing
+      # filter runs all of next/. FILTER stays unquoted so each path is its own argument.
+      - run: pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.vitest || 5 }}
-          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
-          CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
+          FILTER: ${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
@@ -562,7 +565,8 @@ jobs:
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
-      # The same narrowing on a pull request as the vitest step above.
+      # On a pull request only the end-to-end files whose imports reach a changed file run, the ones
+      # the legs job sized these legs with.
       - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:

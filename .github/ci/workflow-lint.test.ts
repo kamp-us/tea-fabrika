@@ -96,8 +96,11 @@ const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e
 // On a pull request only: the merge queue and main run the whole suite.
 const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
-// The vitest step's: also empty when changes' filter names the reader tests, which read files as
-// text, so the import graph would drop them (the plan for CI paths, slice 2).
+// The vitest step's paths: the legs job's list on a sized run, reader tests included, else changes'
+// filter (the plan for CI paths, slice 2), else all of next/.
+const vitestFilter = `\${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
+
+// What 1230 gave the vitest step: `--changed` on a pull request whose filter is all of next/.
 const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 const nextLegs = (count: number) => [
@@ -257,7 +260,7 @@ const valid = (label: string, extra: string) => ({
       if: `\${{ !cancelled() }}`,
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["shards", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
+        ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
       ) as Record<string, string>,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", if: sized, with: { "fetch-depth": 0 } },
@@ -303,13 +306,9 @@ const valid = (label: string, extra: string) => ({
       steps: nextSteps([
         {
           name: "vitest",
-          run: 'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
           if: `!${onE2e}`,
-          env: {
-            SHARD: vitestShard(),
-            FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-            CHANGED: changedUnlessReaders,
-          },
+          env: { SHARD: vitestShard(), FILTER: vitestFilter },
         },
         {
           name: "chromium",
@@ -1192,6 +1191,51 @@ const plants: [string, (workflow: Workflow) => void][] = [
     (w) => {
       (step(w, "next", "vitest").env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
+  ],
+  // PR 1235: a sized run's vitest legs run the legs job's `files`, which hold every reader test, and
+  // nothing narrows that list again. 1230's own `--changed` back on the step drops the readers; the
+  // legs list ignored or read after filter runs the import graph's files alone or the whole suite;
+  // 1235's first shape, a readers step on leg 1, runs a reader twice and loads leg 1 alone.
+  [
+    "next's vitest step ignores legs's files",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step reads legs's files after filter",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter || needs.legs.outputs.files || 'next/' }}`;
+    },
+  ],
+  [
+    "next's vitest step narrows legs's files with 1230's --changed",
+    (w) => {
+      const step = w.jobs.next.steps[0]!;
+      step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
+    },
+  ],
+  [
+    "next's vitest step takes another env key",
+    (w) => {
+      (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
+    },
+  ],
+  [
+    "next runs the reader tests again in a step of their own on leg 1",
+    (w) => {
+      w.jobs.next.steps.splice(1, 0, {
+        name: "readers",
+        if: "!cancelled() && matrix.shard == '1'",
+        run: 'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+      });
+    },
+  ],
+  ["legs hides its files", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "files")],
+  [
+    "legs takes its files from another step",
+    (w) => (w.jobs.legs.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
   ],
   ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
     [

@@ -3,8 +3,12 @@
 // each spending about a minute on setup to run 0 or 1 files, and held runners a big one could use.
 //
 //   event and path              legs
-//   pull request, all of next/  sized from the files Vitest's `--changed` picks, as each leg will
+//   pull request, all of next/  sized from the files Vitest's `--changed` picks, and every reader test
 //   anything else               the full matrix: the merge queue, main, the reader tests
+//
+// The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
+// imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
+// as `files`; every vitest leg runs exactly it, so a reader `--changed` already picked runs once.
 //
 // A leg's files may take half the next job's limit, less its setup: vitest.shards.test.ts's E4
 // budget, the one the count of e2e legs is pinned with. Seconds come from vitest.shards.ts's table,
@@ -16,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assign, measured, median } from "../../vitest.shards.ts";
+import { readers } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
@@ -70,9 +75,12 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
   return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
 };
 
+/** A run legs.ts sizes: a pull request that tests all of next/. Every other run is the full matrix. */
+const sizes = (run: Run) => run.event === "pull_request" && run.scope === "all";
+
 /** The legs a run starts: sized on a pull request that tests all of next/, else `full`. */
 export const size = (run: Run, selected: Selected, full: Legs, limit: number, table = measured): Legs =>
-  run.event === "pull_request" && run.scope === "all"
+  sizes(run)
     ? { vitest: fewest(selected.vitest, full.vitest, limit, table), e2e: fewest(selected.e2e, full.e2e, limit, table) }
     : full;
 
@@ -82,13 +90,45 @@ export const shards = (legs: Legs): string[] => [
   ...Array.from({ length: legs.vitest }, (_, i) => `${i + 1}`),
 ];
 
-/** The test files `vitest list` picks with `args`, as the leg's own run would, from the repo root. */
-const list = (root: string, base: string, args: readonly string[]): string[] => {
+/**
+ * A sized run's vitest files: what `--changed` picked, and every reader test, which it cannot
+ * reach. Each once, in path order, so a reader `--changed` picked too runs once.
+ */
+export const withReaders = (changed: readonly string[], readerFiles: readonly string[]): string[] =>
+  [...new Set([...changed, ...readerFiles])].toSorted();
+
+/**
+ * What the size step prints. On a sized run with a vitest leg, `files` is the vitest legs' one
+ * list: each leg runs exactly it, and `Shards` keeps the leg's share of the split sized here. The
+ * step passes it unquoted, one path per word, so a path with a space would split; then this
+ * throws, the step prints nothing, and next runs its full matrix on every file. No other run
+ * prints `files`, so its legs keep changes' filter. With no leg, no `shards` line: if GitHub ever
+ * expanded the matrix before next's `if`, it would expand the fallback, never an empty matrix.
+ */
+export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
+  const some = legs.vitest + legs.e2e > 0;
+  const listed = sizes(run) && legs.vitest > 0;
+
+  if (listed && selected.vitest.some((path) => /\s/.test(path))) {
+    throw new Error("legs: a vitest file's path holds a space, so it cannot be one word of `files`");
+  }
+
+  return [
+    ...(some ? [`shards=${JSON.stringify(shards(legs))}`] : []),
+    ...(listed ? [`files=${selected.vitest.join(" ")}`] : []),
+    `vitest=${legs.vitest}`,
+    `e2e=${legs.e2e}`,
+    `next=${some}`,
+  ];
+};
+
+/** The test files `vitest list` picks with `args`, as a run with them would, from the repo root. */
+const list = (root: string, args: readonly string[]): string[] => {
   const out = join(mkdtempSync(join(tmpdir(), "legs-")), "list.json");
   // CI=true, as on a runner: the config's local guard refuses a broad list without it.
   const done = spawnSync(
     "pnpm",
-    ["exec", "vitest", "list", ...args, `--changed=${base}`, "--passWithNoTests", "--filesOnly", `--json=${out}`],
+    ["exec", "vitest", "list", ...args, "--passWithNoTests", "--filesOnly", `--json=${out}`],
     { cwd: root, env: { ...process.env, CI: "true" }, stdio: ["ignore", "inherit", "inherit"] },
   );
 
@@ -115,26 +155,22 @@ if (import.meta.main) {
     event: process.env["EVENT"] ?? "",
     scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
   };
-  const base = process.env["BASE"] ?? "";
-  const sized = run.event === "pull_request" && run.scope === "all";
+  const changed = `--changed=${process.env["BASE"] ?? ""}`;
+  const sized = sizes(run);
+  // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
+  const picked = sized ? list(root, ["next/", changed]) : [];
+  const readerFiles = sized ? list(root, readers) : [];
   const selected: Selected = sized
     ? {
-        vitest: list(root, base, ["next/"]),
-        e2e: list(root, base, ["--config", "vitest.e2e.config.ts"]),
+        vitest: withReaders(picked, readerFiles),
+        e2e: list(root, ["--config", "vitest.e2e.config.ts", changed]),
       }
     : { vitest: [], e2e: [] };
   const legs = size(run, selected, full, budget(nextMinutes(workflow)));
-  const some = legs.vitest + legs.e2e > 0;
-  // With no leg, next skips on `next=false`. No `shards` line then, so if GitHub ever expanded the
-  // matrix before the job's `if`, it would expand the fallback, never an empty matrix, which fails.
-  const lines = [
-    ...(some ? [`shards=${JSON.stringify(shards(legs))}`] : []),
-    `vitest=${legs.vitest}`,
-    `e2e=${legs.e2e}`,
-    `next=${some}`,
-  ];
+  const lines = outputs(run, legs, selected);
+  const missed = selected.vitest.length - picked.length;
   const note = sized
-    ? `legs: ${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s) on ${legs.vitest} legs, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
+    ? `legs: ${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s, ${missed} of them reader tests \`--changed\` missed) on ${legs.vitest} legs, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
     : `legs: the full matrix, on ${run.event || "an unknown event"} with ${run.scope === "all" ? "all of next/" : "the reader tests"}`;
   console.log(note);
   console.log(lines.join("\n"));

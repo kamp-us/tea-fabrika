@@ -115,7 +115,8 @@ const ends = (all: readonly unknown[]): string[] =>
 const SIZED =
   "needs.changes.result=='success'&&needs.changes.outputs.next!='false'&&github.event_name=='pull_request'&&(needs.changes.outputs.filter||'next/')=='next/'";
 
-const LEGS_OUTPUTS = ["shards", "vitest", "e2e", "next"];
+// `files` is a sized run's vitest list, the reader tests included (legs.ts).
+const LEGS_OUTPUTS = ["shards", "files", "vitest", "e2e", "next"];
 
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
@@ -464,20 +465,18 @@ export const lintWorkflow = (text: string): string[] => {
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
-  // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
-  // unquoted so each reader path is its own argument. A missing filter runs all of next/.
-  // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
-  // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
+  // The vitest step's paths, unquoted so each path is its own argument. On a sized pull request the
+  // legs job's `files`: what `--changed` picked and every reader test, each once (legs.ts), so the
+  // step takes no `--changed` of its own, which would drop the readers again. Else the plan for CI
+  // paths, slice 2: `filter` from changes, the reader tests or `next/`, and a missing filter runs all
+  // of next/, as the merge queue and main do, the whole suite as the backstop.
   const nextCommand =
-    'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
   // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
   // pull request's change reaches, and every one in the queue and on main.
   const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
-  // The vitest step's own: empty when the filter names the reader tests too. They read files as
-  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
-  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -504,8 +503,13 @@ export const lintWorkflow = (text: string): string[] => {
     new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
+  // The legs job's list first, so a sized run runs the files it was sized with; changes' filter
+  // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
+  // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.changes.outputs.filter||'next/'", "next takes its path from filter, with the fallback next/");
+    "needs.legs.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes legs's files, else filter, with the fallback next/");
+  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
@@ -514,16 +518,11 @@ export const lintWorkflow = (text: string): string[] => {
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
 
-  // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
-  // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
-  // The vitest step also leaves it empty when the filter names the reader tests.
-  for (const [step, name, expected] of [
-    [testStep, "vitest", changedUnlessReaders],
-    [e2eStep, "end-to-end", changedOnPullRequests],
-  ] as const) {
-    require(map(step?.["env"])["CHANGED"] ===
-      expected, `next's ${name} step narrows with --changed on pull requests only`);
-  }
+  // The end-to-end step narrows to the changed files on a pull request only. Any other value could
+  // narrow the merge queue or main, where the whole suite is the backstop for what the import graph
+  // misses.
+  require(map(e2eStep?.["env"])["CHANGED"] ===
+    changedOnPullRequests, "next's end-to-end step narrows with --changed on pull requests only");
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
