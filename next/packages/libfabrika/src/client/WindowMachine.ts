@@ -14,11 +14,11 @@ import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
 import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
-import { fold, SMALLEST } from "../tezgah/Fold.ts";
-import { GAP, neighbor, order, rects, type Side, split } from "../tezgah/Layout.ts";
+import { fold } from "../tezgah/Fold.ts";
+import { focus as focusOn, neighbor, order, type Side, split } from "../tezgah/Layout.ts";
 import { CursorKey, type Dir, tezgahName, TileId, type Workspace } from "../tezgah/Workspace.ts";
 import { ClientKeyError } from "../transport/ClientKey.ts";
-import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
+import { ClientRecord, ClientRowsError, ErrorClass, Pixels } from "../transport/ClientRows.ts";
 import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
 import * as Keys from "./Keys.ts";
@@ -89,7 +89,7 @@ type TezgahLink = typeof TezgahLink.Type;
 const Polite = Schema.TaggedUnion({ no_room: { tile: TileId } });
 
 /** The size of the area a window lays its tiles out in, inside the frame's padding, in CSS pixels. */
-const Size = Schema.Struct({ width: Ms, height: Ms });
+const Size = Schema.Struct({ width: Pixels, height: Pixels });
 
 /**
  * Schema for a window's whole state, which a client may save and load again.
@@ -176,7 +176,7 @@ const Own = Schema.Union([
   Schema.Struct({ type: Schema.Literal("tile"), id: Schema.String, msg: Schema.Unknown }),
   // One press, spelled as `Keys` spells it, and the size of the area the tiles are laid out in, inside the frame's padding.
   Schema.Struct({ type: Schema.Literal("key"), key: Schema.String, at: Ms }),
-  Schema.Struct({ type: Schema.Literal("size"), width: Ms, height: Ms }),
+  Schema.Struct({ type: Schema.Literal("size"), width: Pixels, height: Pixels }),
   // DOM focus is now in tile `tile`, by a click or Tab, on an element whose `data-cursor` key is
   // `cursor` (null for none).
   Schema.Struct({ type: Schema.Literal("focus"), tile: Schema.String, cursor: Schema.NullOr(CursorKey) }),
@@ -630,14 +630,13 @@ const folded = (was: WindowModel, [next, cmds]: Step): Step => {
  *  window only measures. */
 const PROBE = Schema.decodeSync(TileId)("tile_0000000000e008000000000000");
 
-/** Whether a split of `at` in `dir` keeps both of its tiles at least 220x120 as the frame draws them
- *  in an area of `size`, with its gap between each two parts (plan amendment 7). */
+/** Whether a split of `at` in `dir` folds no tile at once in an area of `size`: measured with the
+ *  fold's one drawn geometry (plan amendment 13, point 4), every tile the window would draw as a strip
+ *  after it, focus on the new tile, is one it draws as a strip before. */
 const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type): boolean => {
-  const drawn = rects(split(space, at, dir, PROBE).layout, size, { gap: GAP });
-  return [at, PROBE].every((t) => {
-    const r = drawn.get(t);
-    return r !== undefined && r.width >= SMALLEST.width && r.height >= SMALLEST.height;
-  });
+  const here = focusOn(space, at);
+  const before = fold(here, size);
+  return [...fold(split(here, at, dir, PROBE), size)].every((t) => before.has(t));
 };
 
 /** One letter to the window's tezgah on the press path, named by its command for the press row. */

@@ -327,6 +327,7 @@ const Desk = (props: PageProps) => {
               )
             }
             asking={asked?.id ?? null}
+            size={size}
             strips={size === null ? new Set() : fold(space, size)}
             open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}
           >

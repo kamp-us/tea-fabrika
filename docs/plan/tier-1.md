@@ -236,8 +236,9 @@ In build order. "Decide first" lists only what no decision answers yet.
     ([0165](../../.decisions/0165-a-tile-keeps-its-cursor.md)).
   - **The fold (S4), built 2026-11-14 in PR 1231.** A window folds each tile but the focused one
     that it would draw under 220x120 at its own size into a strip, a button named
-    `open <program>, t<n>` that Tab reaches and Enter or a click opens; the fold is never stored or
-    sent ([0277](../../.decisions/0277-size-belongs-to-the-viewer.md)).
+    `open <program>, t<n>` that Tab reaches and Enter or a click opens, and holds the focused tile at
+    the floor. The fold, the split room check and the drawing read one drawn geometry, and the fold
+    is never stored or sent ([0277](../../.decisions/0277-size-belongs-to-the-viewer.md)).
 - Not built:
   - P42 past slice 1.
   - The Electron app (S5): the same suite and shots in Electron, after P19 slice 3. The row counts
