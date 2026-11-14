@@ -6,9 +6,11 @@ import { appendFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean, today: boolean}} Flags */
+// Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
+// is no such flag, on any event. The test job runs the tooling tests alone.
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, field: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true, today: true };
+const all = { check: true, typecheck: true, test: true, next: true, field: true, build: true };
 const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
@@ -89,8 +91,9 @@ const experiment = (path) => path.startsWith("experiments/") && !read.some((fold
 
 /**
  * A file of today's version: its trees, the design package today's app imports, and the toy
- * projects its tests read. Only these start today's own checks (0175): its tests, e2e and build.
- * A file that reruns every test, such as the lockfile or a root config, is not one.
+ * projects its tests read. Only these start today's build (0175), `pnpm build`. Its tests, its
+ * promise checks and its e2e run on no event (0525, 0533). A file that reruns every test, such as
+ * the lockfile or a root config, is not one.
  * @param {string} path
  */
 const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
@@ -182,9 +185,9 @@ export const scope = (paths, event, proven = []) => {
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
- * `today` and `e2e` are true only when a path is one of today's version's files.
- * `test` starts the test job, which runs today's tests when `today` is true and only the tooling
- * tests when it is false. History that cannot be read, no path at all, or an event that is not
+ * `build` is true only when a path is one of today's version's files: it gates check's
+ * `pnpm build`, the slow half of check. `test` starts the test job, which runs only the
+ * tooling tests (0525, 0533). History that cannot be read, no path at all, or an event that is not
  * scoped runs everything.
  * `proven` is taken so a caller can pass what it has, and never changes a flag: a proof only narrows
  * which next/ tests run (`scope`), never whether next runs.
@@ -201,7 +204,7 @@ export const classify = (paths, event, _proven = []) => {
   const touched = paths.some(todays);
 
   if (paths.some(reads)) {
-    return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
+    return { ...all, field: paths.some(rows), build: touched };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
@@ -213,34 +216,26 @@ export const classify = (paths, event, _proven = []) => {
       (path) => quiet(path) || experiment(path) || (path.startsWith("next/") && path !== helper && path !== commits),
     ),
     next: scope(paths, event) !== "none",
-    e2e: touched,
     field: paths.some(rows),
-    today: touched,
+    build: touched,
   };
 };
 
-/** @typedef {Flags & {build: boolean}} Jobs */
-
 /**
- * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
- * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
- * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
- * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
- * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
+ * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes,
+ * field, typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
+ * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
+ * request can be a draft; on any other event, a merge queue's group and a push included, the flag
+ * is ignored.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
  * @param {readonly string[]} [_proven] never changes a job, as in classify
- * @returns {Jobs}
+ * @returns {Flags}
  */
 export const jobs = (paths, event, draft, _proven = []) => {
   const flags = classify(paths, event);
-
-  if (event === "pull_request" && draft) {
-    return { ...flags, test: false, next: false, e2e: false, build: false };
-  }
-
-  return { ...flags, build: flags.today };
+  return event === "pull_request" && draft ? { ...flags, test: false, next: false, build: false } : flags;
 };
 
 /** @param {string} sha */
@@ -321,7 +316,7 @@ const commentLike = (line) => /^\s*(?:\/\/|\/\*|\*|$)/.test(line);
  * or is blank, from `git diff -U0`. It decides no skip; only the parser's pass can.
  * @param {readonly string[]} paths
  * @param {string} event
- * @param {Jobs} flags
+ * @param {Flags} flags
  * @param {string} from
  * @param {string} head
  * @param {Runner} run

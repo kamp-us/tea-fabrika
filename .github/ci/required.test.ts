@@ -168,20 +168,19 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", typecheck: "false", test: "true", next: "true", e2e: "true" },
+      outputs: { check: "false", typecheck: "false", test: "true", next: "true" },
     },
     field: { result: "success", outputs: {} },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
     test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
-    e2e: { result: "success", outputs: {} },
   });
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(8);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(7);
   expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
@@ -232,7 +231,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips today's e2e when no file of today's version changed.
+// 0175: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -248,7 +247,7 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: next/ alone, where e2e skips on main.
+    // pinned: next/ alone, where test skips on main.
     { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
   );
 });
@@ -270,5 +269,49 @@ it("property: a draft passes with its heavy jobs skipped; a ready PR fails when 
       },
     ),
     options,
+  );
+});
+
+// Ticket 990, fail fast: on a pull request or a merge queue group, the first red job cancels its
+// run. Its own result is `failure` (or `cancelled`, when the cancel reaches it before it ends); a job
+// still running ends `cancelled` or, as a matrix, folds a canceled leg into its result; a job not yet
+// started skips, since its `!cancelled()` is now false, while its flag still said it runs. Whatever
+// the others ended as, such a run never passes: a leg canceled because a sibling failed is no pass.
+it("property: a run stopped at its first red job never passes", () => {
+  const succeeded = (needs: Record<string, Job>) =>
+    Object.keys(needs).filter((name) => needs[name]!.result === "success");
+  fc.assert(
+    fc.property(
+      paths,
+      fc.constantFrom("pull_request", "merge_group"),
+      fc.nat(),
+      fc.constantFrom("failure", "cancelled"),
+      fc.array(fc.constantFrom("success", "cancelled", "skipped"), { minLength: 7, maxLength: 7 }),
+      (p, event, pick, own, ends) => {
+        const needs = ran(jobs(p, event, false));
+        const started = succeeded(needs);
+        const red = started[pick % started.length]!;
+
+        for (const [i, name] of started.filter((name) => name !== red).entries()) {
+          needs[name]!.result = ends[i % ends.length];
+        }
+
+        needs[red]!.result = own;
+        expect(judge(needs).pass).toBe(false);
+      },
+    ),
+    // pinned: run 43633120187's shape, check (lint) red, typecheck, next and e2e stopped mid-run, test not yet started.
+    {
+      ...options,
+      examples: [
+        [
+          ["next/packages/libfabrika/src/a.ts", "apps/fabrika/src/a.ts"],
+          "merge_group",
+          2,
+          "failure",
+          ["success", "success", "cancelled", "skipped", "cancelled", "cancelled", "cancelled"],
+        ],
+      ],
+    },
   );
 });
