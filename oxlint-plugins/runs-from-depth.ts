@@ -71,7 +71,10 @@ const parentOf = (node: Node): Node | null => (node as Parented).parent ?? null;
 const numberIn = (node: Node | null | undefined): number | null =>
   node?.type === "Literal" && typeof node.value === "number" ? node.value : null;
 
-const keyName = (property: ESTree.ObjectProperty): string | null =>
+/** A key and its value as the parser hands it: in an object literal, a pattern or an assignment target. */
+type Pair = Extract<Node, { readonly type: "Property" }>;
+
+const keyName = (property: Pair): string | null =>
   property.computed
     ? null
     : property.key.type === "Identifier"
