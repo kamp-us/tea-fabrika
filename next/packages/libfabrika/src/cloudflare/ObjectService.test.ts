@@ -40,6 +40,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import type { ProcessShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
+import { ProcessClient } from "./platform.ts";
 import * as ProcessObject from "./ProcessObject.ts";
 import { recordedLayer, settings, type Env } from "./runtime.ts";
 
@@ -148,13 +149,18 @@ const descriptor = {
   owner: Writer.cases.person.make({ key: "test-key", for: "test-person" }),
 };
 
-/** Every call of the Process contract that reaches its service. `descriptor` and `savedAlarm` read
- *  storage alone, and `abort` resets the instance, so none of the three builds anything. */
+/** The Process calls that build nothing: `descriptor` and `savedAlarm` read storage alone, and
+ *  `abort` resets the instance. */
+const buildsNothing = ["descriptor", "savedAlarm", "abort"];
+
+/** Every call of the Process contract that reaches its service. Law 3 checks that this table and
+ *  `buildsNothing` together are the contract's own calls, as ProcessClient and the shell list them. */
 const processCalls = {
   usage: (process: ProcessShape) => process.usage([]),
   configure: (process: ProcessShape) => process.configure(descriptor, false),
   msg: (process: ProcessShape) => process.msg({}),
   open: (process: ProcessShape) => process.open("law-3"),
+  draft: (process: ProcessShape) => process.draft({}),
   mailed: (process: ProcessShape) => process.mailed(),
   due: (process: ProcessShape) => process.due(1),
   restart: (process: ProcessShape) => process.restart({ id: descriptor.id, build: descriptor.build }),
@@ -334,6 +340,14 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         );
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);
+
+        // The walk draws from every call: a call the contract gains and the table lacks fails here.
+        const listed = new Set([...processCallNames, ...buildsNothing]);
+        const client = ProcessClient.make(fake(new Proxy({}, { get: () => unexpected })));
+        expect(listed, "the table lists every call ProcessClient makes").toStrictEqual(new Set(Object.keys(client)));
+        expect(listed, "the table lists every call the shell answers").toStrictEqual(
+          new Set(Object.keys(object).filter((key) => key !== "alarm")),
+        );
 
         for (const [index, name] of calls.entries()) {
           // `flip` lets a defect through and fails on an answer, so a die or a fallback fails here.

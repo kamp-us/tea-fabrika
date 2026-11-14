@@ -8,6 +8,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
+import { fabsh } from "@kampus/fabsh";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
@@ -502,13 +503,25 @@ const world = (
   } as unknown as DurableObjectState;
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
-    /** Each process object the platform stand-in made, by the name it was asked for, in order. */
-    madeObjects: Array<string> = [],
     attempts: Descriptor[] = [],
     deliveries: Array<Promise<"configured" | "failed">> = [],
     received: Incoming[] = [],
     entered = gate(),
-    interrupted = gate();
+    interrupted = gate(),
+    /** Who waits for a number of deliveries: the configure stand-in wakes them on each one. */
+    waiting: Array<() => void> = [];
+  /** Resolves once `count` starts have reached their objects' configure. */
+  const reached = (count: number) =>
+    new Promise<void>((resolve) => {
+      const check = () => {
+        if (deliveries.length >= count) {
+          resolve();
+        } else {
+          waiting.push(check);
+        }
+      };
+      check();
+    });
   let project: ProjectObject;
   let settingsRefused = false;
   let beforeCommit = async () => {};
@@ -663,7 +676,6 @@ const world = (
           };
           entry = created;
           processes.set(storageKey, created);
-          madeObjects.push(storageKey);
           return created;
         };
         const current: Entry = processes.get(storageKey) ?? made();
@@ -697,6 +709,11 @@ const world = (
                       () => "failed" as const,
                     ),
                   );
+
+                  for (const wake of waiting.splice(0)) {
+                    wake();
+                  }
+
                   return delivery;
                 };
               }
@@ -766,6 +783,12 @@ const world = (
 
           if (id.startsWith("checklist-")) {
             const Box = programBox(checklist, "checklist-a");
+            return Reflect.construct(Box, []);
+          }
+
+          // fabsh:1 runs fabsh's own box, as the app's table builds it, never the counter's.
+          if (id.startsWith("fabsh-")) {
+            const Box = programBox(fabsh, "fabsh-a");
             return Reflect.construct(Box, []);
           }
 
@@ -875,15 +898,13 @@ const world = (
     attempts,
     received,
     entered: entered.promise,
-    /** How each start the Project delivered ended at its object, once the first one has ended. */
-    delivered: async () => {
-      await entered.promise;
+    /** How each start the Project delivered ended at its object, once `count` of them reached it. */
+    delivered: async (count: number) => {
+      await reached(count);
       return Promise.all(deliveries);
     },
     /** How many times a program's init ran: each is one process's first turn after a load. */
     inits: () => inits,
-    /** Every process object made so far, by name: a new one is cold and pays its own configure. */
-    made: () => [...madeObjects],
     process: processFor,
     /** Every process store's rows for one letter's delivery receipt. */
     receipts: (letter: string) =>
@@ -1052,20 +1073,27 @@ StartsTest.law(
       // builds the process's services, gate first, before it runs the first turn. So the refusal is
       // planted before the Project's first build, and the walk below starts from how that configure ended.
       w.refuseSettings(refusedStart);
-      const [first] = yield* Effect.promise(() => w.project.info());
-      const delivered = yield* Effect.promise(() => w.delivered());
+      const boot = yield* Effect.promise(() => w.project.info());
+      const [first] = boot;
+      // The build never waits on its deliveries: it sends each boot entry's start one at a time, after
+      // it answers (counter:1, then checklist:1 and fabsh:1). So the law waits until every entry's
+      // configure has ended before it counts, and the walk below meets no configure still in flight.
+      // The refusal stays planted until then: the gate is the instance's, so it refuses every entry.
+      const delivered = yield* Effect.promise(() => w.delivered(boot.length));
       w.refuseSettings(false);
-      expect(delivered).toEqual([refusedStart ? "failed" : "configured"]);
+      expect(delivered).toEqual(boot.map(() => (refusedStart ? "failed" : "configured")));
       expect(costs).toEqual({
-        // The Project's own gate is local SQL and makes no call. The 1 is configure's settingsStart (SettingsStartsRemote.record).
-        calls: 1,
+        // The Project's own gate is local SQL and makes no call. Each boot entry's configure makes its
+        // own 1 settingsStart (SettingsStartsRemote.record): no object shares another's build.
+        calls: boot.length,
         // 2 are the Project's own record: one finds no start, one reads back its receipt (SettingsStartsLedger.record).
-        // A passed configure adds 1, the lookup that finds that start. A refused call never reaches the Project.
-        reads: 2 + (refusedStart ? 0 : 1),
+        // Each passed configure adds 1, the lookup that finds that start. A refused call never reaches the Project.
+        reads: 2 + (refusedStart ? 0 : boot.length),
         // The Project's own record is the only append: a process's call finds the start and writes nothing.
         appends: 1,
       });
       // No first turn before the gate: a refused configure never runs the program's init, a passed one runs it once.
+      // Only the walked counter's init counts here: checklist:1 and fabsh:1 run their own boxes.
       expect(w.inits()).toBe(refusedStart ? 0 : 1);
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
@@ -1090,15 +1118,6 @@ StartsTest.law(
         }
 
         const before = { ...costs };
-        // A boot entry the Project delivers later (fabsh:1, after counter:1 and checklist:1) makes its
-        // own object meanwhile. That object is cold: its configure is its own 1 settingsStart and 1 read.
-        // The law counts it by name, so the walked object calling again still shows.
-        const madeBefore = w.made().length;
-        const cold = () =>
-          w
-            .made()
-            .slice(madeBefore)
-            .filter((name) => name !== first!.name).length;
 
         if (move === "refuse") {
           const turns = w.inits();
@@ -1118,20 +1137,14 @@ StartsTest.law(
         expect(costs).toEqual({
           // 1 for the refused entry above, and 1 settingsStart for a cold object's entry. A built object
           // keeps its services (SettingsRuntime's cache holds a success for good), so it calls nothing.
-          calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1) + cold(),
+          calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1),
           // A cold entry's call is 1 read at the Project, the lookup that finds the saved start.
-          reads: before.reads + (built ? 0 : 1) + cold(),
+          reads: before.reads + (built ? 0 : 1),
           // The start was recorded by the Project's own build, so no entry appends.
           appends: before.appends,
         });
         built = true;
         const warm = { ...costs };
-        const madeWarm = w.made().length;
-        const coldSince = () =>
-          w
-            .made()
-            .slice(madeWarm)
-            .filter((name) => name !== first!.name).length;
 
         if (move === "step") {
           const answer = yield* Effect.promise(() =>
@@ -1161,13 +1174,8 @@ StartsTest.law(
           yield* Effect.promise(() => owner.object.alarm());
         }
 
-        // A step, an alarm, a successor and a second open all run on the built object: 0 calls, reads and
-        // appends. Only another boot entry's object, made cold meanwhile, adds its own configure's 1 and 1.
-        expect(costs).toEqual({
-          calls: warm.calls + coldSince(),
-          reads: warm.reads + coldSince(),
-          appends: warm.appends,
-        });
+        // A step, an alarm, a successor and a second open all run on the built object: 0 calls, reads and appends.
+        expect(costs).toEqual(warm);
       }
     }),
 );
