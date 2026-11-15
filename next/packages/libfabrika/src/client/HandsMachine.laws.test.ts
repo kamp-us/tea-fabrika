@@ -4,9 +4,10 @@
 // - It exports `handsMachine`, one tea machine (0046) made with `Machine.make`, whose `init(null, {})`
 //   boots a fresh client. Its model holds `link` (`transport/Link.ts`), `handshake`
 //   (`transport/Handshake.ts`) and `work`, the plan's work state, tagged `offline`, `listing`,
-//   `watching`, `taking`, `recalling`, `saving`, `starting`, `executing`, `reporting` or `holding`;
-//   a work state about a job names it `id`, with its `execution`, and `reporting` and `holding`
-//   keep the `result`; a state with a call out keeps its JSON-RPC id as `call`.
+//   `watching`, `taking`, `recalling`, `saving`, `starting`, `executing` or `reporting`; a work
+//   state about a job names it `id`, with its `execution`, and `reporting` keeps the `result`; a
+//   state with a call out keeps its JSON-RPC id as `call`. A finish refused for good is saved as a
+//   `held` journal entry with the brain's `reason`, and the client goes back to listing.
 // - It takes the socket Msgs of the dial Sub the window shares (`socket_opened {dial, at}`,
 //   `frame {dial, text, at}`, `socket_closed {dial, code, at}`), its own timers' Msgs, and tea's
 //   `<cmd>_ok` and `<cmd>_err` for its Cmds. Its `subs` hold a `socket` Sub whose deps carry the
@@ -93,7 +94,7 @@ const subs = (s: Model, type: string): ReadonlyArray<unknown> =>
 type Call = { readonly dial: number; readonly id: string; readonly method: string; readonly params: unknown };
 
 /** How the door may answer the live take, besides the brain's own answer (H4). */
-type Forge = "other" | "idle" | "refused" | "not_allowed";
+type Forge = "other" | "idle" | "refused" | "not_allowed" | "lacks_capability";
 
 type World = {
   s: Model;
@@ -115,10 +116,17 @@ type World = {
   readonly results: Map<string, Set<string>>;
   /** Jobs whose finish the machine heard answered ok, in any process. */
   readonly acked: Set<string>;
-  /** Jobs this process holds after a refusal for good. */
+  /** Jobs this process holds after a refusal for good: its journal keeps why, so never again. */
   held: Set<string>;
+  /** The dial each job was held on: work after it on the same dial shows the hold blocks nothing. */
+  heldOn: Map<string, number>;
   /** H4: processes that asked this key twice, whose jobs no take can get. */
   readonly twins: Set<string>;
+  /** H4: jobs whose take was refused for a reason that cannot change by itself, by the list rev
+   *  then, on this link: none is taken again on it until a list answers another rev. */
+  refused: Map<string, number>;
+  /** The rev of the last list the machine heard answered on this link, or null before its first. */
+  listRev: number | null;
   at: number;
   n: number;
 };
@@ -140,7 +148,8 @@ type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 type Moves = {
   readonly forge: boolean;
   readonly finish: ReadonlyArray<FinishMode | "lost">;
-  readonly restart: boolean;
+  /** `held`: a restart only once the journal holds a `held` entry, so the walk still reaches its finishes. */
+  readonly restart: boolean | "held";
 };
 
 /** One possible move: its label for coverage, how often to offer it, and the Msg it sends (or a world change). */
@@ -164,7 +173,10 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     results: new Map(),
     acked: new Set(),
     held: new Set(),
+    heldOn: new Map(),
     twins: new Set(),
+    refused: new Map(),
+    listRev: null,
     at: 1_000,
     n: 0,
   };
@@ -199,13 +211,48 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
       if (c.type === "write" && record(c).get("method") === "jobs.take") {
         const process = text(record(record(c).get("params")).get("process"));
+        const { id } = about(next);
         expect(w.twins.has(process), "H4: no take names a process with two open jobs: it cannot succeed").toBe(false);
+        expect(w.held.has(id ?? ""), "H3: a held job is never taken again").toBe(false);
+
+        // A hold refused one job for good: the client lists and takes other work on the same link.
+        if ([...w.heldOn.values()].includes(socketDial() ?? -1)) {
+          done.add("take_after_held");
+        }
+
+        expect(
+          w.refused.has(id ?? "") && w.refused.get(id ?? "") === w.listRev,
+          `H4: ${id}, refused for good on this link, is not taken again until the list's rev moves`,
+        ).toBe(false);
+      }
+
+      if (c.type === "journal_write") {
+        // The data shape: when the command started, on the client's own clock, outlives the entry
+        // that first held it. A result keeps the start its `executing` entry saved, and every entry
+        // after the result keeps the result's.
+        const job = text(record(c).get("job"));
+        const entry = record(record(c).get("entry"));
+        const before = record(w.journal.get(job));
+        const same = before.get("execution") === entry.get("execution");
+        const tag = text(entry.get("_tag"));
+
+        if (same && tag === "result" && before.get("_tag") === "executing") {
+          expect(entry.get("startedAt"), "a result keeps when its command started").toBe(before.get("at"));
+          done.add("result:startedAt");
+        }
+
+        if (same && (tag === "acknowledged" || tag === "held") && before.get("_tag") === "result") {
+          expect(entry.get("startedAt"), `${tag} keeps when its command started`).toBe(before.get("startedAt"));
+        }
       }
 
       if (c.type === "write" && record(c).get("method") === "jobs.finish") {
         const params = record(record(c).get("params"));
         const job = text(params.get("job"));
         expect(w.held.has(job), "H3: a held result sends nothing more").toBe(false);
+        expect(tagIn(w.journal.get(job)), "H3: a result the journal holds is never sent, by any process").not.toBe(
+          "held",
+        );
         const sent = w.results.get(job) ?? new Set<string>();
         sent.add(JSON.stringify(params.get("result")));
         w.results.set(job, sent);
@@ -224,10 +271,12 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const [next, cmds] = step(prev, m);
     check(next, cmds);
 
-    // A held result is held for the link it was refused on, as the `close` move says: a link that
-    // left online, by a close or by its own stall timer, starts a new link.
+    // A refusal for good is kept for the link it came on: a link that left online, by a close or by
+    // its own stall timer, starts a new link, which may try the job again. A held result is held
+    // for good, on every link: its journal entry says why.
     if (prev.link._tag === "online" && (next.link._tag !== "online" || next.link.dial !== prev.link.dial)) {
-      w.held = new Set();
+      w.refused = new Map();
+      w.listRev = null;
     }
 
     w.s = next;
@@ -264,7 +313,17 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     }
 
     if (c.type === "journal_read") {
-      const entry = w.journal.get(text(r.get("job"))) ?? null;
+      const job = text(r.get("job"));
+
+      // H4: a saved value that reads as no entry cannot change by itself: the job is not taken
+      // again on this link until the list's rev moves.
+      if (moves.forge && cell.variant % 5 === 0 && w.s.work._tag === "recalling" && about(w.s).id === job) {
+        w.refused.set(job, w.listRev ?? -1);
+        done.add("recall:bad_entry");
+        return { type: "journal_read_err", cmd: c, error: { _tag: "JournalError", reason: "bad_entry" }, at: w.at };
+      }
+
+      const entry = w.journal.get(job) ?? null;
       done.add(`recall:${entry === null ? "nothing" : tagIn(entry)}`);
       return { type: "journal_read_ok", cmd: c, value: entry, at: w.at };
     }
@@ -308,7 +367,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
             ? rpc({ id: call.id, result: TakeReply.cases.idle.make({}) })
             : forge === "refused"
               ? rpc({ id: call.id, result: TakeReply.cases.refused.make({ reason: "ambiguous" }) })
-              : rpc({ id: call.id, error: { code: -32000, message: "no", data: { reason: "not_allowed" } } });
+              : rpc({ id: call.id, error: { code: -32000, message: "no", data: { reason: forge } } });
       return frame(call.dial, forged);
     }
 
@@ -399,7 +458,9 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (moves.forge && take !== undefined) {
       // Another key's assignment is offered only once the brain holds a job for that key.
       const theirs = w.door.all().some((j) => j.request.target === OTHER);
-      const forges = theirs ? (["other", "idle", "refused", "not_allowed"] as const) : (["idle", "refused"] as const);
+      const forges = theirs
+        ? (["other", "idle", "refused", "not_allowed", "lacks_capability"] as const)
+        : (["idle", "refused", "lacks_capability"] as const);
       const forge = forges[cell.variant % forges.length] ?? "idle";
       out.push({ label: `forge:${forge}`, weight: 4, run: () => answer(take, cell, forge) });
     }
@@ -437,11 +498,14 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const open = w.door.all().filter((j) => j.phase !== "finished");
     const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
     const process = free[cell.pick % Math.max(1, free.length)];
+    // A held job stays open at the brain and is no work for the client: new work is asked as often
+    // as when nothing is open, so the walk sees whether a hold blocks it.
+    const live = open.filter((j) => !w.held.has(j.request.id));
 
     if (process !== undefined) {
       out.push({
-        label: open.length === 0 ? "request" : "request_more",
-        weight: open.length === 0 ? 4 : 1,
+        label: open.length === 0 ? "request" : live.length === 0 ? "request_after_held" : "request_more",
+        weight: live.length === 0 ? 4 : 1,
         run: () => {
           const target = moves.forge && cell.variant % 3 === 0 ? OTHER : KEY;
           w.door.request(target, process, ++w.n);
@@ -479,18 +543,25 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           w.stale.push(...w.wire);
           w.wire = [];
           w.parked = [];
-          // A held result is held for the link it was refused on: after a new hello the recovery
-          // table reads the journal again (the plan leaves this case open; see the run row).
-          w.held = new Set();
+          // A refusal for good is kept for its link; a held result stays held on the next one.
+          w.refused = new Map();
+          w.listRev = null;
           return { type: "socket_closed", dial, code: 1006, at: w.at };
         },
       });
     }
 
-    if (moves.restart) {
+    const heldSaved = [...w.journal.values()].some((entry) => tagIn(entry) === "held");
+
+    if (moves.restart === true || (moves.restart === "held" && heldSaved)) {
       out.push({
-        label: `restart@${w.s.work._tag}`,
-        weight: ["executing", "saving", "starting", "reporting"].includes(w.s.work._tag) ? 3 : 1,
+        label: moves.restart === "held" ? "restart@held" : `restart@${w.s.work._tag}`,
+        weight:
+          moves.restart === "held"
+            ? 1
+            : ["executing", "saving", "starting", "reporting"].includes(w.s.work._tag)
+              ? 3
+              : 1,
         run: () => {
           // A cut after a journal write: the entry landed, and the process died before it heard.
           if (cell.variant % 2 === 0) {
@@ -507,7 +578,12 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           w.parked = [];
           w.opened = new Set();
           w.challenged = new Set();
+          // A new process knows only what its journal says: it may take a held job once more, to
+          // read why, and never sends its result.
           w.held = new Set();
+          w.heldOn = new Map();
+          w.refused = new Map();
+          w.listRev = null;
           return null;
         },
       });
@@ -545,6 +621,16 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       w.acked.add(live.id ?? "");
     }
 
+    // The list the machine hears on its live call sets the rev a refusal for good is kept against,
+    // before the machine acts on it.
+    const listing = chosen.label === "door:jobs.list" && live.tag === "listing" && reply.get("id") === live.call;
+    const answered = record(reply.get("result"));
+    const rev = typeof answered.get("rev") === "number" ? Number(answered.get("rev")) : null;
+
+    if (listing) {
+      w.listRev = rev;
+    }
+
     const { prev, next, cmds } = apply(m);
 
     if (onLive) {
@@ -558,8 +644,23 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         );
         done.add("finish:unavailable");
       } else if (reason !== "") {
-        expect(next.work._tag, `H3: a finish refused ${reason} is held`).toBe("holding");
+        // Why it was refused for good is saved before anything else: a `held` entry in the journal,
+        // with the same execution and result, so no process sends it again.
+        const writes = cmds.filter((c) => c.type === "journal_write");
+        const entry = record(record(writes[0]).get("entry"));
+        expect(next.work._tag, `H3: a finish refused ${reason} saves why first`).toBe("saving");
+        expect(
+          writes.map((c) => record(c).get("job")),
+          "H3: one write, for this job",
+        ).toEqual([job]);
+        expect(entry.get("_tag"), "H3: the entry saved is held").toBe("held");
+        expect(entry.get("reason"), "H3: it keeps the brain's reason").toBe(reason);
+        expect(entry.get("execution"), "H3: for this execution").toBe(live.execution);
+        expect(entry.get("result"), "H3: with the result it held").toEqual(
+          "result" in prev.work ? prev.work.result : undefined,
+        );
         w.held.add(job);
+        w.heldOn.set(job, live.dial ?? -1);
         done.add("finish:held");
       } else {
         expect(about(next).id === job && next.work._tag === "reporting", "H3: an ok ends the report").toBe(false);
@@ -567,24 +668,37 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       }
     }
 
-    // H4: a list whose open jobs all belong to a process with two of them takes none and waits for
-    // new work, with a `jobs.wait` after the list's rev, never a take that cannot succeed.
-    const listed = record(reply.get("result")).get("jobs");
-    const pointers = Array.isArray(listed) ? listed.map((p) => text(record(p).get("process"))) : [];
+    // H4: a list whose open jobs are each one no take can get takes none and waits for new work,
+    // with a `jobs.wait` after the list's rev, never a take that cannot succeed and never a poll:
+    // a process with two open jobs, a job refused for good on this link at this rev, a held job.
+    const listed = answered.get("jobs");
+    const pointers = Array.isArray(listed)
+      ? listed.map((p) => ({ id: text(record(p).get("id")), process: text(record(p).get("process")) }))
+      : [];
 
-    if (
-      chosen.label === "door:jobs.list" &&
-      live.tag === "listing" &&
-      reply.get("id") === live.call &&
-      pointers.length > 0 &&
-      pointers.every((p) => w.twins.has(p))
-    ) {
-      expect(next.work._tag, "H4: two open jobs of one process: take neither, wait for new work").toBe("watching");
+    const blocked = (p: { readonly id: string; readonly process: string }) =>
+      w.twins.has(p.process) || w.held.has(p.id) || (w.refused.has(p.id) && w.refused.get(p.id) === rev);
+
+    if (listing && pointers.length > 0 && pointers.every(blocked)) {
+      expect(next.work._tag, "H4: nothing a take can get: take none, wait for new work").toBe("watching");
       expect(
         cmds.filter((c) => c.type === "write").map((c) => record(c).get("method")),
         "H4: the one call is a wait",
       ).toEqual(["jobs.wait"]);
-      done.add("twin:watching");
+      done.add(pointers.some((p) => w.twins.has(p.process)) ? "twin:watching" : "blocked:watching");
+    }
+
+    // H4: a take refused for a reason that cannot change by itself, kept against the list's rev:
+    // an idle (the list was behind), `ambiguous`, `not_allowed`, `lacks_capability`, or another
+    // key's assignment.
+    const forgedLive = chosen.label.startsWith("forge:") && take !== undefined && take.id === live.call;
+    const takeReply = chosen.label === "door:jobs.take" && reply.get("id") === live.call;
+    const forGood =
+      ["idle", "refused"].includes(tagIn(answered)) ||
+      ["ambiguous", "not_allowed", "lacks_capability", "bad_input"].includes(reason);
+
+    if ((forgedLive || (takeReply && forGood)) && live.tag === "taking" && live.id !== null) {
+      w.refused.set(live.id, w.listRev ?? -1);
     }
 
     // H4: a forged answer to the live take, or any answer to a stale id, starts nothing to execute.
@@ -619,19 +733,37 @@ const law = (name: string, moves: Moves, required: ReadonlyArray<string>, runs: 
 
 describe("P39 slice 4a: the hands machine", () => {
   law(
-    "H1: the client calls execute only in executing, only after jobs.started answered ok and executing was saved, and at most once per job across every restart",
+    "H1: the client calls execute only in executing, only after jobs.started answered ok and executing was saved, and at most once per job across every restart; a result keeps when its command started",
     { forge: false, finish: ["ok"], restart: true },
-    ["execute", "restart@executing", "recall:executing", "recall:nothing", "finish_sent", "close", "timer"],
+    [
+      "execute",
+      "restart@executing",
+      "recall:executing",
+      "recall:nothing",
+      "finish_sent",
+      "close",
+      "timer",
+      "result:startedAt",
+    ],
     100,
   );
   law(
-    "H3: a finish refused unavailable is sent again with the same result until ok; any other refusal holds the result and sends nothing more; a second, different result is never sent for one job",
-    { forge: false, finish: ["ok", "lost", "unavailable", "not_allowed", "conflict"], restart: false },
-    ["finish_sent", "finish:ok", "finish:unavailable", "finish:held", "finish:lost"],
+    "H3: a finish refused unavailable is sent again with the same result until ok; any other refusal saves a held entry with the brain's reason, and that job is never sent or taken again while other work goes on; a second, different result is never sent for one job",
+    { forge: false, finish: ["ok", "lost", "unavailable", "not_allowed", "conflict"], restart: "held" },
+    [
+      "finish_sent",
+      "finish:ok",
+      "finish:unavailable",
+      "finish:held",
+      "finish:lost",
+      "take_after_held",
+      "restart@held",
+      "recall:held",
+    ],
     60,
   );
   law(
-    "H4: the client runs only work assigned to its own key: an idle, a refusal, another key's assignment or an answer to a stale call id changes nothing it would execute; two open jobs of one process are taken by no take and the client waits for new work",
+    "H4: the client runs only work assigned to its own key: an idle, a refusal, another key's assignment or an answer to a stale call id changes nothing it would execute; a job whose take was refused for a reason that cannot change by itself is not taken again on that link until the list's rev moves, and with nothing a take can get the client waits for new work",
     { forge: true, finish: ["ok"], restart: false },
     [
       "execute",
@@ -639,9 +771,12 @@ describe("P39 slice 4a: the hands machine", () => {
       "forge:other@live",
       "forge:idle@live",
       "forge:refused@live",
+      "forge:lacks_capability@live",
+      "recall:bad_entry",
       "stale",
       "twin",
       "twin:watching",
+      "blocked:watching",
     ],
     100,
   );

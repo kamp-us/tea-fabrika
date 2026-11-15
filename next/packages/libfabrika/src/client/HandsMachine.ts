@@ -33,6 +33,8 @@ const Pointer = { id: Schema.NonEmptyString, process: ProcessId };
 const Assigned = Schema.Struct({ ...Pointer, execution: Schema.NonEmptyString, command: Command });
 type Assigned = typeof Assigned.Type;
 const Exec = Assigned.fields;
+/** When the command started, on the client's own clock, once an `executing` entry said so. */
+const Started = { startedAt: Schema.optionalKey(Schema.String) };
 
 /**
  * What the client is doing about work, one job at a time.
@@ -40,7 +42,8 @@ const Exec = Assigned.fields;
  * A state with `call` has that JSON-RPC call out. `listing` and `reporting` without one wait
  * `backoff(tries)` before they call again, and `saving` that is `due` waits `backoff(tries)` before
  * it writes again: `tries` counts the failures in a row, so the wait grows. `executing` and `saving`
- * are local work: a link that drops lets them finish.
+ * are local work: a link that drops lets them finish. A finish the brain refuses for good is saved
+ * as a `held` entry, and the client goes back to listing: nothing waits on it.
  */
 const Work = Schema.TaggedUnion({
   /** The link is not online, and no local work is running. */
@@ -57,19 +60,24 @@ const Work = Schema.TaggedUnion({
   saving: { ...Exec, entry: Entry, tries: Count, due: Schema.Boolean },
   /** `prepared` is saved; `jobs.started` is out. */
   starting: { ...Exec, call: CallId },
-  /** `executing` is saved; the command is out. The one place it runs. */
-  executing: Exec,
+  /** `executing` is saved, at `startedAt`; the command is out. The one place it runs. */
+  executing: { ...Exec, startedAt: Schema.String },
   /** `result` is saved; `jobs.finish` with it is out, or waits to go out again. */
-  reporting: { ...Exec, result: Result, call: Schema.optionalKey(CallId), tries: Count },
-  /** The brain refused the finish for good: the result stays in the journal, and this link sends nothing more. */
-  holding: { ...Exec, result: Result, reason: Schema.String },
+  reporting: { ...Exec, result: Result, ...Started, call: Schema.optionalKey(CallId), tries: Count },
 });
 type Work = typeof Work.Type;
 
 /**
+ * The jobs not to take again on this link while the list stays at `rev`: each take of them was
+ * refused for a reason that cannot change by itself. A list at another rev starts it empty.
+ */
+const Skip = Schema.Struct({ rev: Rev, jobs: Schema.Array(Schema.String) });
+
+/**
  * The hands client's whole state: its link, its hello exchange, its work, how many calls it named,
- * the failed dials the live dial follows (its socket's jitter), the key the door admitted, and the
- * newest rev it heard.
+ * the failed dials the live dial follows (its socket's jitter), the key the door admitted, the
+ * newest rev it heard, the jobs whose finish was refused for good (`held`, never sent or taken
+ * again by this process), and the jobs this link skips.
  */
 const HandsModel = Schema.Struct({
   link: Link,
@@ -79,6 +87,8 @@ const HandsModel = Schema.Struct({
   tries: Count,
   key: Schema.NullOr(Schema.String),
   seen: Rev,
+  held: Schema.Array(Schema.String),
+  skip: Skip,
 });
 type HandsModel = typeof HandsModel.Type;
 
@@ -148,6 +158,12 @@ const assigned = (w: Assigned): Assigned => ({
 /** A Msg's time as the journal keeps it: the client's own clock, in ISO text. */
 const iso = (at: number): string => new Date(at).toISOString();
 
+/** The start time to keep on an entry, when one is known. */
+const since = (startedAt: string | undefined) => (startedAt === undefined ? {} : { startedAt });
+
+/** A skip list for no job yet. */
+const noSkip = Skip.make({ rev: 0, jobs: [] });
+
 const Woke = Schema.Struct({ rev: Rev });
 const Listed = Schema.Struct({ jobs: Schema.Array(Schema.Struct(Pointer)), rev: Rev });
 const TakeReply = Schema.TaggedUnion({ idle: {}, assigned: { job: Job }, refused: { reason: Schema.String } });
@@ -193,15 +209,21 @@ const relist = (s: HandsModel, tries: number): Step =>
   s.link._tag === "online" ? [{ ...s, work: Work.cases.listing.make({ tries: tries + 1 }) }, []] : offline(s);
 
 /** Sends the finish for `job` with `result`. Offline, the result waits in the journal for the next link. */
-const report = (s: HandsModel, job: Assigned, result: Result, tries: number): Step => {
+const report = (s: HandsModel, job: Assigned, result: Result, tries: number, startedAt?: string): Step => {
   if (s.link._tag !== "online") {
     return offline(s);
   }
 
   const params = { process: job.process, job: job.id, execution: job.execution, result, seen: s.seen };
   const asked = calling(s, "jobs.finish", params);
-  return [{ ...asked.s, work: Work.cases.reporting.make({ ...job, result, call: asked.call, tries }) }, asked.out];
+  return [
+    { ...asked.s, work: Work.cases.reporting.make({ ...job, result, ...since(startedAt), call: asked.call, tries }) },
+    asked.out,
+  ];
 };
+
+/** Holds `job` for good in this process, and lists again: a held job is never sent or taken again. */
+const hold = (s: HandsModel, job: Assigned): Step => list({ ...s, held: [...s.held, job.id] });
 
 /** Saves `entry` for `job` before the step that follows it. */
 const save = (s: HandsModel, job: Assigned, entry: Entry, tries = 0): Step => [
@@ -214,13 +236,14 @@ const save = (s: HandsModel, job: Assigned, entry: Entry, tries = 0): Step => [
  * client does next. An entry of another execution is no entry for this one. `at` stamps the entry
  * the next step saves.
  *
- * | Brain     | Journal (this execution) | Next                                    |
- * |-----------|--------------------------|-----------------------------------------|
- * | assigned  | nothing or `prepared`    | save `prepared`, then `jobs.started`    |
- * | started   | `prepared`               | save `executing`, then execute          |
- * | any       | `executing`              | save `unknown interrupted`, then finish |
- * | any       | `result`, `acknowledged` | finish with the saved result            |
- * | started   | nothing                  | save `unknown interrupted`, then finish |
+ * | Brain     | Journal (this execution) | Next                                       |
+ * |-----------|--------------------------|--------------------------------------------|
+ * | assigned  | nothing or `prepared`    | save `prepared`, then `jobs.started`       |
+ * | started   | `prepared`               | save `executing`, then execute             |
+ * | any       | `executing`              | save `unknown interrupted`, then finish    |
+ * | any       | `result`, `acknowledged` | finish with the saved result               |
+ * | any       | `held`                   | send nothing: hold it, and list again      |
+ * | started   | nothing                  | save `unknown interrupted`, then finish    |
  */
 const recover = (
   s: HandsModel,
@@ -231,12 +254,21 @@ const recover = (
 ): Step => {
   const mine = entry !== null && entry.execution === job.execution ? entry : null;
 
+  if (mine?._tag === "held") {
+    return hold(s, job);
+  }
+
   if (mine?._tag === "result" || mine?._tag === "acknowledged") {
-    return report(s, job, mine.result, 0);
+    return report(s, job, mine.result, 0, mine.startedAt);
   }
 
   if (mine?._tag === "executing" || (state === "started" && mine === null)) {
-    return save(s, job, Entry.cases.result.make({ execution: job.execution, result: interrupted, at }));
+    const startedAt = mine?._tag === "executing" ? mine.at : undefined;
+    return save(
+      s,
+      job,
+      Entry.cases.result.make({ execution: job.execution, result: interrupted, ...since(startedAt), at }),
+    );
   }
 
   return state === "assigned"
@@ -257,24 +289,65 @@ const saved = (s: HandsModel, job: Assigned, entry: Entry): Step => {
       return [{ ...asked.s, work: Work.cases.starting.make({ ...job, call: asked.call }) }, asked.out];
     }
     case "executing":
-      return [{ ...s, work: Work.cases.executing.make(job) }, [execute({ command: job.command })]];
+      return [
+        { ...s, work: Work.cases.executing.make({ ...job, startedAt: entry.at }) },
+        [execute({ command: job.command })],
+      ];
     case "result":
-      return report(s, job, entry.result, 0);
+      return report(s, job, entry.result, 0, entry.startedAt);
     case "acknowledged":
       return list(s);
+    case "held":
+      return hold(s, job);
   }
 };
 
 /**
  * The listed job to take next, or none. A take names a process, so a process with two open jobs
  * for this key answers `ambiguous` every time: only a job whose process is listed once can be
- * taken. Each failed take in a row tries the next one, so one job that cannot be taken does not
- * hold back the others.
+ * taken. A held job and a job this link skips are never taken. Each failed take in a row tries the
+ * next one, so one job whose take fails for a passing reason does not hold back the others.
  */
-const takeable = (jobs: ReadonlyArray<(typeof Listed.Type.jobs)[number]>, tries: number) => {
-  const once = jobs.filter((p) => jobs.filter((q) => q.process === p.process).length === 1);
+const takeable = (s: HandsModel, jobs: ReadonlyArray<(typeof Listed.Type.jobs)[number]>, tries: number) => {
+  const once = jobs.filter(
+    (p) =>
+      jobs.filter((q) => q.process === p.process).length === 1 && !s.held.includes(p.id) && !s.skip.jobs.includes(p.id),
+  );
   return once[tries % Math.max(1, once.length)];
 };
+
+/**
+ * Take refusals that cannot change by themselves while the list stays at one rev, so the job is
+ * skipped on this link until the list's rev moves (`gateway/Jobs.ts`'s `jobs.take`):
+ *
+ * - `idle`: no open job for the process, so the list was behind; only a new request moves it.
+ * - `ambiguous`: the process has two open jobs for this key (`JobAccess.select`); only a new
+ *   request or an outside finish changes that.
+ * - `not_allowed`: the job is not this key's to take, as is an assignment that names another key
+ *   or a job no longer open; a job's target never changes.
+ * - `lacks_capability`: the job needs what this link's hello did not offer; `has` is fixed for the
+ *   link.
+ * - `bad_input`: the client's own params, which it would send the same again.
+ *
+ * Every other refusal (`rate_limited`, `unreachable`, `unavailable`, a storage failure, or an
+ * answer that does not decode) can pass by itself, so the list and take are tried again after a
+ * backoff. A journal entry that reads as no entry (`bad_entry`) also cannot change by itself.
+ */
+const STUCK: ReadonlySet<string> = new Set(["idle", "ambiguous", "not_allowed", "lacks_capability", "bad_input"]);
+
+/** Why a take that assigned nothing to this client was refused, or null when its answer does not decode. */
+const refusal = (reason: string | null, result: unknown): string | null =>
+  reason ??
+  Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
+    onNone: () => null,
+    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+  });
+
+/** Skips `job` on this link while the list stays at its rev, and lists again at once. */
+const skip = (s: HandsModel, job: string): Step => list({ ...s, skip: { ...s.skip, jobs: [...s.skip.jobs, job] } });
+
+/** A journal error that says the saved value is no entry, which reading again cannot change. */
+const BadEntry = Schema.Struct({ reason: Schema.Literal("bad_entry") });
 
 /** The assignment in a take's answer, when it is this client's own for an open job. */
 const assignment = (s: HandsModel, result: unknown) =>
@@ -309,8 +382,13 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
         return relist(s, w.tries);
       }
 
-      const next = { ...s, seen: Math.max(s.seen, listed.rev) };
-      const pick = takeable(listed.jobs, w.tries);
+      // A list at another rev means new work came: every job this link skipped may be tried again.
+      const next = {
+        ...s,
+        seen: Math.max(s.seen, listed.rev),
+        skip: listed.rev === s.skip.rev ? s.skip : Skip.make({ rev: listed.rev, jobs: [] }),
+      };
+      const pick = takeable(next, listed.jobs, w.tries);
 
       if (pick === undefined) {
         const asked = calling(next, "jobs.wait", { after: listed.rev });
@@ -323,10 +401,12 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
     case "watching":
       return woke === null ? relist(s, 0) : list(heard);
     case "taking": {
-      // An idle, a refusal, or a job assigned to another key: nothing here runs, and the list is asked again.
+      // An idle, a refusal, or a job assigned to another key: nothing here runs, and the list is
+      // asked again. A refusal that cannot change by itself skips the job on this link.
       const mine = reason === null ? assignment(s, result) : Option.none();
+      const why = refusal(reason, result);
       return Option.match(mine, {
-        onNone: () => relist(s, w.tries),
+        onNone: () => (why !== null && STUCK.has(why) ? skip(s, w.id) : relist(s, w.tries)),
         onSome: ({ job, state }) => [
           { ...s, work: Work.cases.recalling.make({ ...job, state }) },
           [journalRead({ job: job.id })],
@@ -340,17 +420,34 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
     case "reporting": {
       const job = assigned(w);
 
+      const started = since(w.startedAt);
+
       if (reason === "unavailable") {
         // The result is saved at the brain and its requester's wake failed: send the same one again.
-        return [{ ...s, work: Work.cases.reporting.make({ ...job, result: w.result, tries: w.tries + 1 }) }, []];
+        return [
+          { ...s, work: Work.cases.reporting.make({ ...job, result: w.result, ...started, tries: w.tries + 1 }) },
+          [],
+        ];
       }
 
+      // Refused for good: why is saved first, so no process sends this result again, then the
+      // client lists again and the rest of the work goes on.
       return reason !== null || woke === null
-        ? [{ ...s, work: Work.cases.holding.make({ ...job, result: w.result, reason: reason ?? "other" }) }, []]
+        ? save(
+            s,
+            job,
+            Entry.cases.held.make({
+              execution: w.execution,
+              result: w.result,
+              reason: reason ?? "other",
+              ...started,
+              at,
+            }),
+          )
         : save(
             heard,
             job,
-            Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, at }),
+            Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, ...started, at }),
           );
     }
     default:
@@ -376,9 +473,15 @@ const writing = (w: Work, cmd: { readonly job: string; readonly entry: Entry }) 
 
 // --- The link and the hello exchange ------------------------------------------------------------
 
-/** What a change of the link means for the work: list once online, stop all but local work once not. */
-const moved = (was: HandsModel, [s, out]: Step): Step => {
-  if (was.link._tag !== "online" && s.link._tag === "online" && s.work._tag === "offline") {
+/**
+ * What a change of the link means for the work: list once online, stop all but local work once
+ * not. A new link skips nothing yet: a refusal for good is kept for the link it came on.
+ */
+const moved = (was: HandsModel, [stepped, out]: Step): Step => {
+  const fresh = was.link._tag !== "online" && stepped.link._tag === "online";
+  const s = fresh ? { ...stepped, skip: noSkip } : stepped;
+
+  if (fresh && s.work._tag === "offline") {
     const [listed, calls] = list(s);
     return [listed, [...out, ...calls]];
   }
@@ -533,6 +636,8 @@ export const handsMachine = Machine.make({
         tries: 0,
         key: null,
         seen: 0,
+        held: [],
+        skip: noSkip,
       }),
     [],
   ],
@@ -568,7 +673,7 @@ export const handsMachine = Machine.make({
       }
 
       if (w._tag === "reporting" && w.call === undefined) {
-        return report(s, assigned(w), w.result, w.tries);
+        return report(s, assigned(w), w.result, w.tries, w.startedAt);
       }
 
       return w._tag === "saving" && w.due ? save(s, assigned(w), w.entry, w.tries) : stay(s);
@@ -588,8 +693,14 @@ export const handsMachine = Machine.make({
         ? recover(s, assigned(w), w.state, m.value, iso(m.at))
         : stay(s);
     },
-    // An entry that cannot be read proves nothing: list, take and read it again after a backoff.
-    journal_read_err: (s, m): Step => (s.work._tag === "recalling" && s.work.id === m.cmd.job ? relist(s, 0) : stay(s)),
+    // An entry that cannot be read proves nothing: list, take and read it again after a backoff. A
+    // saved value that is no entry reads the same every time: the job is skipped on this link.
+    journal_read_err: (s, m): Step =>
+      s.work._tag !== "recalling" || s.work.id !== m.cmd.job
+        ? stay(s)
+        : Option.isSome(Schema.decodeUnknownOption(BadEntry)(m.error))
+          ? skip(s, s.work.id)
+          : relist(s, 0),
     journal_write_ok: (s, m): Step => {
       const w = writing(s.work, m.cmd);
       return w === null ? stay(s) : saved(s, assigned(w), w.entry);
@@ -602,14 +713,27 @@ export const handsMachine = Machine.make({
     execute_ok: (s, m): Step => {
       const w = s.work;
       return w._tag === "executing"
-        ? save(s, assigned(w), Entry.cases.result.make({ execution: w.execution, result: m.value, at: iso(m.at) }))
+        ? save(
+            s,
+            assigned(w),
+            Entry.cases.result.make({ execution: w.execution, result: m.value, startedAt: w.startedAt, at: iso(m.at) }),
+          )
         : stay(s);
     },
     // A command whose answer came back malformed may have run: its result is not known.
     execute_err: (s, m): Step => {
       const w = s.work;
       return w._tag === "executing"
-        ? save(s, assigned(w), Entry.cases.result.make({ execution: w.execution, result: interrupted, at: iso(m.at) }))
+        ? save(
+            s,
+            assigned(w),
+            Entry.cases.result.make({
+              execution: w.execution,
+              result: interrupted,
+              startedAt: w.startedAt,
+              at: iso(m.at),
+            }),
+          )
         : stay(s);
     },
   },

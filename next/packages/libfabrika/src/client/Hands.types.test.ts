@@ -24,8 +24,14 @@ it("type: T1 Journal and Commands speak their own errors and shared names only, 
   expectTypeOf<Extract<JournalError, PlatformError.PlatformError>>().toEqualTypeOf<never>();
   expectTypeOf<Extract<JournalError, KeyValueStore.KeyValueStoreError>>().toEqualTypeOf<never>();
   expectTypeOf<JournalError["reason"]>().toEqualTypeOf<"storage" | "bad_entry">();
-  // The four steps a job's entry may stand at, each keeping its execution and the client's own clock.
-  expectTypeOf<(typeof Entry.Type)["_tag"]>().toEqualTypeOf<"prepared" | "executing" | "result" | "acknowledged">();
+  // The five steps a job's entry may stand at, each keeping its execution and the client's own clock.
+  expectTypeOf<(typeof Entry.Type)["_tag"]>().toEqualTypeOf<
+    "prepared" | "executing" | "result" | "acknowledged" | "held"
+  >();
+  // A finish refused for good keeps the brain's reason, and every entry after `executing` keeps
+  // when the command started.
+  expectTypeOf<Extract<typeof Entry.Type, { _tag: "held" }>["reason"]>().toEqualTypeOf<string>();
+  expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["startedAt"]>().toEqualTypeOf<string | undefined>();
   expectTypeOf<(typeof Entry.Type)["execution"]>().toEqualTypeOf<string>();
   expectTypeOf<(typeof Entry.Type)["at"]>().toEqualTypeOf<string>();
   expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["result"]>().toEqualTypeOf<Result>();

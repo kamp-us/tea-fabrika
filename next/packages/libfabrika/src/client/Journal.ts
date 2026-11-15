@@ -11,6 +11,10 @@ import { Result } from "../jobs/Job.ts";
 import { Rev } from "../Rev.ts";
 
 const Execution = Schema.NonEmptyString;
+/** When the command started, on the client's own clock: the `executing` entry's `at`, kept by each
+ *  entry after it, since each entry replaces the one before. Absent when no `executing` entry was
+ *  read, as after a journal that was lost. */
+const Started = { startedAt: Schema.optionalKey(Schema.String) };
 
 /**
  * Schema for where one job stands on the machine that runs it. Each entry keeps the execution the
@@ -21,6 +25,7 @@ const Execution = Schema.NonEmptyString;
  * `prepared`: taken, and nothing ran. `executing`: saved just before the command starts; found on a
  * reopen with no result after it, the job's result is `unknown interrupted`. `result`: the command's
  * result, saved before it is sent. `acknowledged`: the brain answered ok to the finish, at `rev`.
+ * `held`: the brain refused the finish for good, for `reason`; the result is never sent again.
  *
  * @stability unstable
  * @category models
@@ -28,8 +33,9 @@ const Execution = Schema.NonEmptyString;
 export const Entry = Schema.TaggedUnion({
   prepared: { execution: Execution, at: Schema.String },
   executing: { execution: Execution, at: Schema.String },
-  result: { execution: Execution, result: Result, at: Schema.String },
-  acknowledged: { execution: Execution, result: Result, rev: Rev, at: Schema.String },
+  result: { execution: Execution, result: Result, ...Started, at: Schema.String },
+  acknowledged: { execution: Execution, result: Result, rev: Rev, ...Started, at: Schema.String },
+  held: { execution: Execution, result: Result, reason: Schema.String, ...Started, at: Schema.String },
 });
 
 /**
