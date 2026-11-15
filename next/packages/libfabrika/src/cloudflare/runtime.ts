@@ -344,8 +344,12 @@ export interface ProjectDoorOptions {
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
-  /** Whether the program behind `process` has room for this input, asked before it is saved (0147). */
-  readonly admit: (process: string, input: Incoming) => Effect.Effect<boolean, LedgerError>;
+  /**
+   * Whether the program behind `process` has room for this input, asked before it is saved (0147).
+   * `before` counts the entries the door writes ahead of the message, so the trial measures the
+   * message at the place it will land.
+   */
+  readonly admit: (process: string, input: Incoming, before: number) => Effect.Effect<boolean, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
   /** Watches `pid` for one window session, `to`, in the Project's turn. */
   readonly monitor: (
