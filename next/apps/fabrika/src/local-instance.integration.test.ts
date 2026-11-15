@@ -12,10 +12,13 @@ import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+import { rssStandIn } from "./rss.fixture.ts";
 
 // P12, next/. Exercise startDev twice with one real home. Deployment and HTTP are fake.
 // The link law skips only the flush-to-disk waits. The outbox's own law in
 // next/packages/libfabrika/src/node/dev/local-dev.test.ts pins the sync calls and their order.
+// The deployment reports a made-up pid, 27001, so nothing here may sample or signal it for real:
+// the memory sample answers 0 KiB for every pid, and `process.kill` is a spy each law checks.
 vi.mock("../alchemy.run.ts", () => ({
   stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
 }));
@@ -82,6 +85,17 @@ const spyOnFetch = (impl: typeof fetch) =>
     () => Effect.sync(() => vi.restoreAllMocks()),
   );
 
+// No real signal leaves these laws: every `process.kill` reaches this spy, and each law checks that
+// none came.
+const spyOnKill = Effect.acquireRelease(
+  Effect.sync(() => vi.spyOn(process, "kill").mockReturnValue(true)),
+  (spy) => Effect.sync(() => spy.mockRestore()),
+);
+
+// The brain's memory sample answers 0 KiB for every pid, so it never reads the made-up pid with a
+// real `ps` and never replaces it. Every other command runs for real.
+const quietMemory = rssStandIn(() => 0).pipe(Layer.provide(NodeServices.layer));
+
 // The entry's own client, whose `fetch` is the global one at the moment of each request: a real
 // process reads the global once, and a law stubs it anew on every run.
 const fetchClient = FetchHttpClient.layer.pipe(
@@ -119,6 +133,7 @@ it.live.prop(
 
             return Response.json({ value: call.method === "info" ? [] : null });
           });
+          const kill = yield* spyOnKill;
           const config = {
             home: folder,
             name: "life-contract",
@@ -135,10 +150,12 @@ it.live.prop(
               Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
+              Effect.provide(quietMemory),
               Effect.provide(filesWithoutSync),
             );
           }
 
+          expect(kill).not.toHaveBeenCalled();
           const starts = events.filter((event) => event._tag === "started");
           expect(starts).toHaveLength(2);
           expect(starts[1]).toMatchObject({ after: starts[0]!.start, build: builds[1] });
@@ -172,6 +189,7 @@ it.live.prop(
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
+      const kill = yield* spyOnKill;
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       yield* Effect.gen(function* () {
         const starting = yield* Effect.forkChild(
@@ -199,8 +217,10 @@ it.live.prop(
         Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide(quietMemory),
         Effect.provide(NodeServices.layer),
       );
+      expect(kill).not.toHaveBeenCalled();
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
 );

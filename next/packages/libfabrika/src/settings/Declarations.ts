@@ -1,7 +1,7 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
- * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the two mail settings `mail.unread` and
- * `mail.chunk`, `hands.target`, and `all`, the group of the twelve.
+ * six local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the two mail settings `mail.unread` and
+ * `mail.chunk`, `hands.target`, and `all`, the group of the fourteen.
  *
  * **Details**
  *
@@ -172,6 +172,56 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+// A limit of zero would replace every runtime at its first sample, so the floor is one byte.
+const Memory = Schema.ByteSize.check(Schema.makeFilter((size: ByteSize.ByteSize) => !ByteSize.isZero(size))).annotate({
+  title: "a memory limit",
+  description: 'A memory limit is a byte size above zero, written with its unit, as "500 MB".',
+});
+
+/**
+ * Setting for the memory the local runtime may hold before the brain replaces it.
+ *
+ * **Details**
+ *
+ * The value is a byte size above zero, written with its unit, as `"500 MB"` or `"1 GiB"`. The
+ * default is 500 MB. Once a sample of the runtime's memory reaches it, the brain ends the runtime
+ * with SIGTERM, then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same
+ * ports.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainMemory = Setting.make("desktop.brain-memory", {
+  schema: Memory,
+  format: "text",
+  default: ByteSize.bytes(500_000_000),
+  doc: 'The memory the local runtime may hold before the brain replaces it, a byte size such as "500 MB".',
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the milliseconds the brain waits after a SIGTERM to the local runtime before it
+ * sends SIGKILL.
+ *
+ * **Details**
+ *
+ * The default is 5000, an OTP worker's shutdown default. Control calls wait through a replace, so
+ * this is also about how long one replace keeps the control connection closed.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainGrace = Setting.make("desktop.brain-grace", {
+  schema: Positive,
+  default: 5000,
+  doc: "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 const KIB = 1_024;
 const MIB = 1_024 * KIB;
 
@@ -239,11 +289,11 @@ const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{
 
 /**
  * Setting for the hands key a program's hands command targets: the fingerprint of the hands that
- * run its jobs.
+ * run its tasks.
  *
  * **Details**
  *
- * The default is none: a program's hands command is then refused with `no_hands`, and no job is
+ * The default is none: a program's hands command is then refused with `no_hands`, and no task is
  * made. TOML has no null, so a person sets it by writing the key and unsets it by leaving it out.
  *
  * @stability unstable
@@ -263,9 +313,9 @@ export const handsTarget = Setting.make("hands.target", {
  *
  * **Details**
  *
- * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl`,
- * the two mail settings, `mailUnread` and `mailChunk`, and `handsTarget`.
+ * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the six local brain settings
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout`, `brainStopTimeout`, `brainMemory` and
+ * `brainGrace`), `desktopLinkTtl`, the two mail settings, `mailUnread` and `mailChunk`, and `handsTarget`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -280,6 +330,8 @@ export const all = Setting.group({
   brainPoll,
   brainStartTimeout,
   brainStopTimeout,
+  brainMemory,
+  brainGrace,
   desktopLinkTtl,
   mailUnread,
   mailChunk,

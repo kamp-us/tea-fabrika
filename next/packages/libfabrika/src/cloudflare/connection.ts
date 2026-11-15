@@ -3,6 +3,7 @@ import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
+import { targetStream } from "../tasks/Tasks.ts";
 import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
@@ -73,10 +74,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       close: (code) => ws.close(code, "reconnect"),
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
-        const state = yield* attached(ws);
-        const answer = yield* rpc(
-          routed(p.route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader)),
-        );
+        const client = (yield* attached(ws)).client as ConnectionId;
+        // A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
+        // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring
+        // goes to `reader`, this object, where the socket is.
+        const asked = stream.startsWith(targetStream(""))
+          ? p.route(client, "tasks.wait", { after }, reader)
+          : p.route(client, "ledger.wait", { stream, after }, reader);
+        const answer = yield* rpc(routed(asked));
 
         if (answer._tag === "parked") {
           return Waited.cases.parked.make({});
@@ -160,7 +165,9 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             return result;
           }
 
-          return yield* rpc(routed(p.route(client, method, params)));
+          // A call the door parks, such as a hands key's first `tasks.wait`, is rung at this object,
+          // the one the socket lives on, never at an object named by the connection id.
+          return yield* rpc(routed(p.route(client, method, params, gateway)));
         },
         // A failed or defective call still answers its request without exposing error details. It is
         // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and

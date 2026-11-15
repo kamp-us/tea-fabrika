@@ -159,7 +159,7 @@ model in memory.
 | a program's window view | swaps in the window (below) | the window's model, if it decodes | 1 |
 | the core, libfabrika | restarts workerd, Erlang's `restart_new_emulator` | everything; 56 ms in 183, about 200 ms in experiment 93 | 1 |
 | Electron's main process | restarts it; the brain does not stop | everything | 1 |
-| hands | restart, with terminals in a pty process of their own, as VS Code | terminals and jobs | 4 |
+| hands | restart, with terminals in a pty process of their own, as VS Code | terminals and tasks | 4 |
 
 - **Memory.** Each save keeps about 4 MB in local workerd, and none came back in 20 s (60 saves:
   171 MB to 421 MB). Cloudflare gives no eviction rule for Worker Loader. So local workerd restarts
@@ -282,7 +282,7 @@ with fixed seeds, as fast-check properties:
 - **[An old host is named, then restarted](./an-old-host-is-named-then-restarted.md)** has "decided
   for later: the host restarts itself onto the new build when no job runs". That is today's
   version. In `next/`, a program change restarts nothing, and a core change restarts workerd while
-  jobs keep running in their hands. Its state check per job becomes a state check per process.
+  tasks keep running in their hands. Its state check per job becomes a state check per process.
 - **[Experiment 173](../../experiments/173-worker-loader.md)'s lean** is one isolate per version by
   content hash. This keeps it, and adds that memory per save is real, so local workerd restarts on
   its mark.

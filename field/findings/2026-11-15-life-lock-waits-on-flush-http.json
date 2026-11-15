@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-life-lock-waits-on-flush-http",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/local-dev.ts",
+    "line": 73
+  },
+  "says": "In next/, a lifeCell step holds the life lock while its fact write waits for the outbox lock, and the outbox flush holds that lock across a control HTTP call with no timeout, so a flush that dialed a hung workerd just before a replace delays the SIGTERM and every fold, the stop included, until the HTTP call ends.",
+  "proof": "local-dev.ts:73 runs then (record, then outbox.add under the outbox's turn.withPermit at :319) inside the life lock; local-dev.ts:350 calls send(row) inside the outbox's turn.withPermit; dev.ts:221 executes the control request with no timeout.",
+  "cost": "Rarely, quitting the app or ending an over-limit runtime waits up to Node fetch's default timeout, about 5 minutes.",
+  "head": "fdda8ce97402a5d0b48f6a7905bae0828bf08318",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

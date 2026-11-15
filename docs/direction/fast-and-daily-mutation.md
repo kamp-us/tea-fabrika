@@ -179,7 +179,7 @@ type Queue = {waiting: Entry[]; running: {batch: Entry[]; hands: string} | null}
   waiting, or was run on the same code, is dropped. Leftovers from a pull request go before
   the sweep.
 - **Hands run Stryker, never the brain.** Running mutants is machine work. The queue hands a
-  batch to hands, as any job ([brain, hands, window, agent](./brain-hands-window-agent.md)),
+  batch to hands, as any task ([brain, hands, window, agent](./brain-hands-window-agent.md)),
   and waits for the answers. A batch that crashes is split and its entries run again alone.
 - **It files tickets from survivors,** at most 3 a day, as below.
 - **It runs on a Durable Object alarm,** as

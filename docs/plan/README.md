@@ -101,6 +101,11 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
+[PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the
+hands list their open tasks, wait for new ones, and run each once with a journal. Slice 4b (the real
+command and how the hands start on a Mac) is left. This finishes no Tier 1 row.
+
 *2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
 ([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
 store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.

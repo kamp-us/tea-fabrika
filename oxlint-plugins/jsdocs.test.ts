@@ -474,7 +474,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
     // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
-    `${SRC}/jobs/Planted.ts`,
+    `${SRC}/tasks/Planted.ts`,
     ...warn.map(({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];

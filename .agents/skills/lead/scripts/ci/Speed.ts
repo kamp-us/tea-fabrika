@@ -8,7 +8,8 @@
 //   merge   the first run at the merged head         merged (the push that head came from)
 //
 // A stage's numbers are over the pull requests merged in the window. A PR merged without the queue
-// (an admin merge) has no queue number, and still counts in the other two.
+// (an admin merge) has no queue number, and still counts in the other two. So has a PR the queue let
+// go after its last entry (cleared, failed checks) that a person merged later.
 import { Option, Schema } from "effect";
 
 /** One stage's goal, in minutes: the median, and the worst 10% (the 90th percentile). */
@@ -50,12 +51,22 @@ export const Job = Schema.Struct({
 });
 export type Job = typeof Job.Type;
 
-/** One merged pull request: its branch, when it merged, and each time it entered the merge queue. */
+/**
+ * One time a pull request entered the merge queue or left it. `reason` is GitHub's word for why it
+ * left: `merged` when the queue merged it, else `queue_cleared`, `failed_checks`, `manual` and the like.
+ */
+export const QueueEvent = Schema.TaggedUnion({
+  added: { at: Schema.String },
+  removed: { at: Schema.String, reason: Schema.NullOr(Schema.String) },
+});
+export type QueueEvent = typeof QueueEvent.Type;
+
+/** One merged pull request: its branch, when it merged, and each time it entered or left the merge queue. */
 export const Pull = Schema.Struct({
   number: Schema.Number,
   branch: Schema.String,
   merged: Schema.String,
-  queued: Schema.Array(Schema.String),
+  queue: Schema.Array(QueueEvent),
 });
 export type Pull = typeof Pull.Type;
 
@@ -99,12 +110,29 @@ const endedAt = (run: Run, jobs: ReadonlyArray<Job>): number => {
 /** One merged PR's three numbers, each none when GitHub kept no fact for it. */
 type Times = { readonly [K in StageName]: Option.Option<number> };
 
-/** A PR's last push: the runs at the head it merged with, oldest first, and its last queue entry. */
+/** The last time the PR entered the queue before it merged; none when it never did. */
+const lastEntry = (pull: Pull, merged: number): Option.Option<number> => {
+  const entered = pull.queue.flatMap((e) => (e._tag === "added" ? [at(e.at)] : [])).filter((t) => t <= merged);
+  return entered.length === 0 ? Option.none() : Option.some(Math.max(...entered));
+};
+
+/**
+ * Whether the queue let the PR go after `entry` and before it merged, for any reason but its own
+ * merge: then a person merged it by hand later, and the wait is not the queue's. GitHub stamps the
+ * queue's own `merged` removal up to a second before the merge, so the reason decides, not the time.
+ */
+const droppedAfter = (pull: Pull, entry: number, merged: number): boolean =>
+  pull.queue.some((e) => e._tag === "removed" && e.reason !== "merged" && at(e.at) >= entry && at(e.at) <= merged);
+
+/**
+ * A PR's last push: the runs at the head it merged with, oldest first, and its queue number's start,
+ * which is its last queue entry when the queue itself merged it.
+ */
 const lastPush = (pull: Pull, runs: ReadonlyArray<Run>) => {
   const merged = at(pull.merged);
-  const entered = pull.queued.map(at).filter((t) => t <= merged);
-  const queued = entered.length === 0 ? Option.none<number>() : Option.some(Math.max(...entered));
-  const cutoff = Option.getOrElse(queued, () => merged);
+  const entry = lastEntry(pull, merged);
+  const queued = Option.filter(entry, (t) => !droppedAfter(pull, t, merged));
+  const cutoff = Option.getOrElse(entry, () => merged);
   // A run after the PR entered the queue cannot be of the head that merged.
   const before = runs
     .filter((run) => run.event === "pull_request" && run.branch === pull.branch && at(run.created) <= cutoff)
@@ -203,7 +231,8 @@ const LABEL: Record<StageName, string> = {
   merge: "Last push to merged",
 };
 
-const shown = (value: Option.Option<number>) => Option.match(value, { onNone: () => "-", onSome: (v) => v.toFixed(1) });
+/** Two decimals, so a number just past its goal (3.03 over 3) never shows as the goal itself. */
+const shown = (value: Option.Option<number>) => Option.match(value, { onNone: () => "-", onSome: (v) => v.toFixed(2) });
 
 /** The report as Markdown, for a terminal and for a job summary: one table, then the runners' use. */
 export const markdown = (r: Report): string => {

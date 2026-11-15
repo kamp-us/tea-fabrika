@@ -203,17 +203,17 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/gateway/Gateway.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/gateway/JobAccess.test.ts": [0.1, 0.1, 0.1],
+  "next/packages/libfabrika/src/gateway/TaskAccess.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/gateway/internal/rateLimit.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": [2.9, 2.3, 2.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/Job.test.ts": [9.2, 7.2, 9.4],
+  "next/packages/libfabrika/src/tasks/Task.test.ts": [9.2, 7.2, 9.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/Jobs.types.test.ts": [0.0, 0.0, 0.0],
+  "next/packages/libfabrika/src/tasks/Tasks.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/internal/job.test.ts": [31.6, 23.7, 37.2],
+  "next/packages/libfabrika/src/tasks/internal/task.test.ts": [31.6, 23.7, 37.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/ledger/Ledger.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -490,7 +490,7 @@ const integrationSamples = {
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/apps/fabrika/src/instance-wire.integration.test.ts": [145.4, 151.9, 155.0],
   // C job 132330501014.
-  "next/apps/fabrika/src/jobs-wire.integration.test.ts": [3.7],
+  "next/apps/fabrika/src/tasks-wire.integration.test.ts": [3.7],
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/local-instance.integration.test.ts": [2.6, 1.3, 1.5],
   // A job 132292933169, B job 132315559486, C job 132330500983.
@@ -591,13 +591,13 @@ const integrationSamples = {
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts": [3.0, 3.2, 4.1],
   // C job 132330501014.
-  "next/packages/libfabrika/src/node/gateway/Jobs.integration.test.ts": [147.5],
+  "next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts": [147.5],
   // A job 132292933221, B job 132315559486, C job 132330500983.
   "next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts": [5.8, 3.0, 6.2],
   // Run 43728081584 attempt 1, job 132854293834: the file PR 1252 split off JobsLedger.
-  "next/packages/libfabrika/src/node/jobs/JobsDiscovery.integration.test.ts": [30.8],
+  "next/packages/libfabrika/src/node/tasks/TasksDiscovery.integration.test.ts": [30.8],
   // A job 132292933192, B job 132315559534, C job 132330501001.
-  "next/packages/libfabrika/src/node/jobs/JobsLedger.integration.test.ts": [39.2, 35.4, 99.9],
+  "next/packages/libfabrika/src/node/tasks/TasksLedger.integration.test.ts": [39.2, 35.4, 99.9],
   // B job 132315559497, C job 132330501025.
   "next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts": [30.5, 35.6],
   // C job 132330500983.

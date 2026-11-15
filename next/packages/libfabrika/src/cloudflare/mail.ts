@@ -52,12 +52,13 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
 
 /**
  * Layer that wakes a registered name: its Process object saves the alarm that reads its inbox. Mail
- * and the gateway's wake after a job finish both use it.
+ * and the gateway's wake after a task finish both use it.
  *
  * **Details**
  *
  * The wake carries the caller's current span as its trace, and no trace when the caller has none:
- * `wake(name)` asks nothing of its caller, and the gateway wakes outside any span.
+ * `wake(name)` asks nothing of its caller. The gateway wakes a finished task's requester inside its
+ * `gateway.route` span, so the wake joins the finish's trace.
  *
  * @stability unstable
  * @category layers

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-hands-finish-unavailable-then-crash-strands-the-wake",
+  "date": "2026-11-15",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/HandsMachine.ts",
+    "line": 343
+  },
+  "says": "In next/, when the brain answers a hands client's jobs.finish refused unavailable and the client then crashes before it sends the same finish again, the requester's wake is never retried: the job is already finished, so it is no longer listed, and the client never sends that finish again.",
+  "proof": "gateway/Gateway.ts:1198 answers unavailable only after jobs.finish saved the result (slice 3's W1), so the job is finished at the brain. client/HandsMachine.ts:343 keeps the result in memory and sends the same finish again after a backoff, which is the only retry of the wake. After a crash the client starts from the journal, whose last entry for the job is result, not acknowledged, and finds its work only through jobs.list, which answers open jobs only (jobs/JobsLedger.ts:89, requested, assigned or started), so the finished job never comes back and nothing sends the finish again.",
+  "cost": "The program that asked the hands waits for a result that is saved but whose wake never lands, until something else wakes it; no error is shown.",
+  "head": "e9c8dd01b559c6d25ed56fb62989e2c6e9d5f5ca",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}
