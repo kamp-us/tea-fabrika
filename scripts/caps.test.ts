@@ -149,7 +149,45 @@ describe("T325 K9 machine caps, today's tooling", () => {
     );
   });
 
-  // R4 findings 4 and 7. Process order and temp roots have no domain Schema.
+  // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.
+  // A stand-in python3 prints the lock it was given, so no law here waits on the person's real lock.
+  // Plant: default the lock to a file under TMPDIR.
+  it("R4 gives every shell one fixed lock file, whatever its TMPDIR", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
+        const dir = mkdtempSync(join(tmpdir(), "tc-r4-"));
+
+        try {
+          const bin = join(dir, "bin"),
+            temp = join(dir, suffix);
+          mkdirSync(bin);
+          mkdirSync(temp);
+          writeFileSync(join(bin, "python3"), `#!/bin/sh\nprintf '%s' "$FABRIKA_TYPECHECK_LOCK"\n`, { mode: 0o755 });
+          const ran = spawnSync("sh", [join(root, "scripts/typecheck.sh")], {
+            cwd: root,
+            encoding: "utf8",
+            timeout: 10_000,
+            env: {
+              ...process.env,
+              PATH: `${bin}:${process.env.PATH}`,
+              TMPDIR: temp,
+              FABRIKA_TYPECHECK_LOCK: undefined,
+              TYPESAFE_API_KEY: undefined,
+            },
+          });
+          expect(ran.status, ran.stderr).toBe(0);
+          expect(ran.stdout).toBe("/tmp/fabrika-typecheck.lock");
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }),
+      { ...options, seed: 119120, numRuns: 2 },
+    );
+  });
+
+  // R4 findings 4 and 7. Process order and temp roots have no domain Schema. Each law names a lock
+  // file of its own: on the machine's real one, a real typecheck that arrives mid-law takes the lock
+  // when compiler a lets go, and b waits out the whole compile (ticket 1008).
   // Plants: put the lock under TMPDIR; never recover a lock after its owner is killed.
   for (const [ended, title] of [
     ["alive", "shares the typecheck lock across temp roots"],
@@ -194,6 +232,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
                   ...process.env,
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: temp,
+                  FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
                   TEST_EVENTS: events,
                   TEST_ID: id,
                   TEST_RELEASE: join(dir, `release-${id}`),
@@ -847,6 +886,7 @@ exit 0
           env: {
             ...process.env,
             PATH: `${bin}:${process.env.PATH}`,
+            FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
             TYPESAFE_API_KEY: undefined,
             INSTALL_FAILS: outcome === "install failed" ? "1" : undefined,
           },
@@ -931,6 +971,7 @@ exit 0
                   ...process.env,
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: dir,
+                  FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
                   TEST_ID: id,
                   TEST_EXIT: String(code),
                   TEST_EVENTS: events,
