@@ -1,6 +1,6 @@
 // History and Issues: what ci-speed.ts asks GitHub. This file is the contract only (0095):
 // `HistoryGh.layer` asks GitHub through `gh api`, `HistoryTest.layer` answers from lists in memory.
-// History only reads. Issues writes the one `ci-scheduled` issue this measure keeps (0534).
+// History only reads. Issues writes the one `ci-scheduled` issue this measure keeps (0541).
 // Today's lead tooling; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

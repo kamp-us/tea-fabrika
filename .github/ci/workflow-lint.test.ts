@@ -2699,6 +2699,21 @@ for (const [name, plant, error] of [
       }),
     "K6: no step cancels the run: one job has nothing to cancel",
   ],
+  [
+    "K7: a test step added",
+    (w: SpeedFile) => void speedJob(w).steps.splice(-1, 0, { run: "pnpm exec vitest run --project tooling" }),
+    "K7: its steps are the checkout, the pnpm setup, its install and the measure, nothing else",
+  ],
+  [
+    "K7: another action added",
+    (w: SpeedFile) => void speedJob(w).steps.splice(1, 0, { uses: "actions/setup-python@v6" }),
+    "K7: its steps are the checkout, the pnpm setup, its install and the measure, nothing else",
+  ],
+  [
+    "K7: the install runs its scripts",
+    (w: SpeedFile) => void (speedJob(w).steps[2]!["run"] = "pnpm install --frozen-lockfile"),
+    "K7: its steps are the checkout, the pnpm setup, its install and the measure, nothing else",
+  ],
 ] as const) {
   it(`ci-speed.yaml ${name} is named by its one error`, () => {
     const workflow = speedFile();
