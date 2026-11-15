@@ -14,7 +14,7 @@
 // it happened. Read through its module: `Queue.add(...)`.
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
-import { type Detail, PullRequests } from "./PullRequests.ts";
+import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
@@ -204,16 +204,18 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
   return lines;
 });
 
-/**
- * Reads pull request `pr` once. Merged into main: closes the tickets it names and starts one box
- * cleanup sweep. Anything else: says how it stands and does nothing. It never waits and never
- * fails on a ticket or a sweep; only a pull request that cannot be read fails it. Running it again
- * closes nothing twice: a closed ticket is no longer open.
- */
-export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: string; readonly pr: number }) {
+/** A pull request read once: merged into main at a commit, or why it is not. */
+const Standing = Schema.TaggedUnion({
+  unmerged: { found: Detail, lines: Schema.Array(Schema.String) },
+  merged: { found: Detail, commit: Schema.String },
+});
+type Standing = typeof Standing.Type;
+
+const standing = Effect.fn("Queue.standing")(function* (
+  pr: number,
+): Effect.fn.Return<Standing, PullRequestsError, PullRequests> {
   const prs = yield* PullRequests;
-  const sweeps = yield* Sweeps;
-  const found = yield* prs.view(a.pr);
+  const found = yield* prs.view(pr);
   const said = (text: string) => `pr ${found.number}: ${text}`;
 
   if (found.state !== "MERGED" || found.mergeCommit === null) {
@@ -225,22 +227,60 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
         : found.state === "CLOSED"
           ? "closed, not merged"
           : "not confirmed merged";
-    return Settled.cases.unmerged.make({ pr: found.number, lines: [said(`${stands}; closed no tickets`)] });
+    return Standing.cases.unmerged.make({ found, lines: [said(`${stands}; closed no tickets`)] });
   }
 
   if (found.base !== "main") {
-    const text = said(`merged into ${found.base}, not main; closed no tickets`);
-    return Settled.cases.unmerged.make({ pr: found.number, lines: [text] });
+    return Standing.cases.unmerged.make({
+      found,
+      lines: [said(`merged into ${found.base}, not main; closed no tickets`)],
+    });
   }
 
-  const closed = yield* closeNamed(a.repo, found, found.mergeCommit);
+  return Standing.cases.merged.make({ found, commit: found.mergeCommit });
+});
+
+/**
+ * Reads pull request `pr` once. Merged into main: closes the tickets it names and nothing else, no
+ * sweep. For a pull request that merged long ago, which `settle` would sweep for no reason.
+ */
+export const closeOnly = Effect.fn("Queue.closeOnly")(function* (a: { readonly repo: string; readonly pr: number }) {
+  const at = yield* standing(a.pr);
+
+  if (at._tag === "unmerged") {
+    return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
+  }
+
+  const closed = yield* closeNamed(a.repo, at.found, at.commit);
+  return Settled.cases.merged.make({
+    pr: at.found.number,
+    commit: at.commit,
+    lines: [`pr ${at.found.number}: merged at ${at.commit}`, ...closed],
+  });
+});
+
+/**
+ * Reads pull request `pr` once. Merged into main: closes the tickets it names and starts one box
+ * cleanup sweep. Anything else: says how it stands and does nothing. It never waits and never
+ * fails on a ticket or a sweep; only a pull request that cannot be read fails it. Running it again
+ * closes nothing twice: a closed ticket is no longer open.
+ */
+export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: string; readonly pr: number }) {
+  const sweeps = yield* Sweeps;
+  const at = yield* standing(a.pr);
+
+  if (at._tag === "unmerged") {
+    return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
+  }
+
+  const closed = yield* closeNamed(a.repo, at.found, at.commit);
   const swept = yield* Effect.match(sweeps.kick, {
-    onFailure: (e) => [said(`box cleanup not started: ${e.reason}`)],
+    onFailure: (e) => [`pr ${at.found.number}: box cleanup not started: ${e.reason}`],
     onSuccess: () => [],
   });
   return Settled.cases.merged.make({
-    pr: found.number,
-    commit: found.mergeCommit,
-    lines: [said(`merged at ${found.mergeCommit}`), ...closed, ...swept],
+    pr: at.found.number,
+    commit: at.commit,
+    lines: [`pr ${at.found.number}: merged at ${at.commit}`, ...closed, ...swept],
   });
 });
