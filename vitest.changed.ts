@@ -8,8 +8,8 @@
 //   changed file                  reaches
 //   pnpm-lock.yaml                the packages whose entry or resolved packages changed
 //   a package's tsconfig*.json    that package
-//   a package's package.json      that package
-//   the root package.json         a changed script's tests; other keys reach all
+//   a package's package.json      that package; a changed install-time or pre/post script, all
+//   the root package.json         a changed script's tests; other keys and those scripts, all
 //
 // A package reached also reaches every package that depends on it and every package inside its
 // folder, and a test that names the changed file by its path reads it as text. Unknown means all, never none: when a
@@ -320,10 +320,51 @@ const parseJson = (text: string | undefined): Json | undefined => {
 };
 
 /**
+ * The scripts pnpm runs with no one naming them: those `pnpm install` runs in every workspace
+ * project (pnpm 12's docs, "Lifecycle scripts": `preinstall`, `install`, `postinstall`,
+ * `preprepare`, `prepare`, `postprepare`), `pnpm:devPreinstall`, the pack and publish ones, and
+ * every `pre`/`post` hook, which `enablePrePostScripts`, true by default and not set here, runs
+ * around its script. A test that runs `pnpm lint` never names `prelint`.
+ */
+const UNNAMED = new Set([
+  "preinstall",
+  "install",
+  "postinstall",
+  "prepare",
+  "pnpm:devPreinstall",
+  "prepublish",
+  "prepublishOnly",
+  "publish",
+  "prepack",
+  "pack",
+  "postpack",
+]);
+
+const unnamed = (name: string) => UNNAMED.has(name) || name.startsWith("pre") || name.startsWith("post");
+
+/** The names of the scripts that differ between two manifests. */
+const changedScripts = (
+  before: Json,
+  now: Json,
+): { readonly names: Set<string>; readonly bodies: [string, unknown][] } => {
+  const earlier = isRecord(before["scripts"]) ? before["scripts"] : {};
+  const later = isRecord(now["scripts"]) ? now["scripts"] : {};
+  return {
+    names: new Set(
+      [...new Set([...Object.keys(earlier), ...Object.keys(later)])].filter(
+        (name) => !same(earlier[name], later[name]),
+      ),
+    ),
+    bodies: [...Object.entries(earlier), ...Object.entries(later)],
+  };
+};
+
+/**
  * What the root `package.json` reaches. A change to its scripts reaches the tests that name a
  * changed script, or a script that runs one: a test reads a script by its name, or runs it. A change to its
  * dependencies is the lockfile's to decide, so it narrows only beside a lockfile change. A change
- * to any other key (`engines`, `type`, `packageManager`, `volta`) reaches all.
+ * to any other key (`engines`, `type`, `packageManager`, `volta`) reaches all, and so does a
+ * change to a script pnpm runs unnamed (`UNNAMED`).
  */
 const rootReach = (changed: readonly string[], repo: Repository): Reach => {
   const before = parseJson(repo.before("package.json"));
@@ -344,12 +385,11 @@ const rootReach = (changed: readonly string[], repo: Repository): Reach => {
     return ALL;
   }
 
-  const earlier = isRecord(before["scripts"]) ? before["scripts"] : {};
-  const later = isRecord(now["scripts"]) ? now["scripts"] : {};
-  const bodies = [...Object.entries(earlier), ...Object.entries(later)];
-  const scripts = new Set(
-    [...new Set([...Object.keys(earlier), ...Object.keys(later)])].filter((name) => !same(earlier[name], later[name])),
-  );
+  const { names: scripts, bodies } = changedScripts(before, now);
+
+  if ([...scripts].some(unnamed)) {
+    return ALL;
+  }
 
   for (let grew = true; grew;) {
     grew = false;
@@ -365,7 +405,11 @@ const rootReach = (changed: readonly string[], repo: Repository): Reach => {
   return { _tag: "some", packages: [], readers: [...scripts].map(script) };
 };
 
-/** What a package's own `package.json` reaches: that package. One outside every package reaches all. */
+/**
+ * What a package's own `package.json` reaches: that package. One outside every package reaches all,
+ * and so does a change to a script pnpm runs unnamed, since `pnpm install` runs those in every
+ * workspace project.
+ */
 const manifestReach = (path: string, changed: readonly string[], workspace: Workspace, repo: Repository): Reach => {
   if (path === "package.json") {
     return rootReach(changed, repo);
@@ -374,7 +418,11 @@ const manifestReach = (path: string, changed: readonly string[], workspace: Work
   const dir = posix.dirname(path);
 
   if (workspace.now.has(dir)) {
-    return { _tag: "some", packages: [dir], readers: [names(path)] };
+    const before = parseJson(repo.before(path)) ?? {};
+    const now = parseJson(repo.now(path));
+    return now === undefined || [...changedScripts(before, now).names].some(unnamed)
+      ? ALL
+      : { _tag: "some", packages: [dir], readers: [names(path)] };
   }
 
   return workspace.before.has(dir) ? NONE : ALL;
@@ -478,9 +526,27 @@ const paths = (top: string, args: readonly string[]): string[] => {
  * provider lists: the commits since the merge base with `changedSince`, the staged files, and the
  * files changed or new in the tree; then narrows them. `before` reads the merge base, or `HEAD`
  * when no commit is given.
+ *
+ * Vitest calls it only for `--changed`, with `{ root, changedSince }`: `changedSince` is the
+ * commit given, or `true` for none (Vitest 5.0.5's `filterTestsBySource`). `vcsProvider` is
+ * experimental, so a later Vitest may call it otherwise; a call of any other shape throws, so the
+ * run goes red, and never reads as "nothing changed" on a clean checkout, which would run no test.
  */
 export const changedFiles: VCSProvider = {
-  findChangedFiles: async ({ root, changedSince }) => {
+  findChangedFiles: async (options) => {
+    const { root, changedSince } = options;
+    const known = new Set(["root", "changedSince"]);
+
+    if (
+      typeof root !== "string" ||
+      !(changedSince === true || (typeof changedSince === "string" && changedSince !== "")) ||
+      Object.keys(options).some((key) => !known.has(key))
+    ) {
+      throw new Error(
+        `vitest.changed: Vitest called the --changed provider with ${JSON.stringify(options)}, a shape this provider does not know; read the new Vitest's provider call and update vitest.changed.ts`,
+      );
+    }
+
     const top = git(root, ["rev-parse", "--show-toplevel"])?.trim();
 
     if (top === undefined || top === "") {

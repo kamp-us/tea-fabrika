@@ -1,10 +1,13 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { createVitest } from "vitest/node";
 import { parseAllDocuments, stringify } from "yaml";
-import { narrow, type Repository } from "./vitest.changed.ts";
+import { changedFiles, narrow, type Repository } from "./vitest.changed.ts";
 
 // Today's CI and the laptop, both versions. Covers vitest.changed.ts, which hands Vitest's
 // `--changed` git's changed files with each lockfile, tsconfig and package.json it can tie to
@@ -502,4 +505,164 @@ it("scenario: L7 pull request 1275's file list selects only the readers of the f
   expect(out.toSorted()).toEqual(
     [...changed.filter((path) => !triggers.includes(path)), ...Object.keys(readers)].toSorted(),
   );
+});
+
+it("L8 a change to a script pnpm runs unnamed selects all, in the root's manifest or a package's", () => {
+  // `pnpm install` runs each workspace project's install-time scripts, and pnpm 12's
+  // `enablePrePostScripts`, true by default, runs `pre<name>` and `post<name>` around a script, so
+  // no test names them. Plants, each run once: drop the unnamed check from the root's manifest
+  // (red); from a package's own (red); `unnamed` knows only the listed names, not pre/post hooks
+  // (red on a generated hook).
+  const hook = fc
+    .tuple(fc.constantFrom("pre", "post"), fc.stringMatching(/^[a-z][a-z:-]{0,8}$/))
+    .map(([prefix, rest]) => `${prefix}${rest}`);
+  const name = fc.oneof(
+    fc.constantFrom(
+      "preinstall",
+      "install",
+      "postinstall",
+      "prepare",
+      "pnpm:devPreinstall",
+      "prepublishOnly",
+      "prepack",
+    ),
+    hook,
+  );
+  fc.assert(
+    fc.property(
+      shapes,
+      fc.nat(),
+      name,
+      fc.constantFrom("add", "edit", "drop"),
+      fc.boolean(),
+      (shape, pick, script, change, root) => {
+        const i = pick % shape.links.length;
+        const path = root ? "package.json" : `${dirOf(i)}/package.json`;
+        const scripts = (body: string | undefined) => ({
+          scripts: { lint: "oxlint", ...(body === undefined ? {} : { [script]: body }) },
+        });
+        const [start, end] =
+          change === "add"
+            ? [undefined, "node a.ts"]
+            : change === "edit"
+              ? ["effect-tsgo patch --typescript", "node b.ts"]
+              : ["node a.ts", undefined];
+        const repo = repoOf(
+          { "pnpm-lock.yaml": textOf(lockOf(shape)), [path]: JSON.stringify(scripts(start)) },
+          { [path]: JSON.stringify(scripts(end)) },
+          filesOf(shape),
+        );
+        expect(narrow([path], repo)).toEqual([path]);
+      },
+    ),
+    options,
+  );
+});
+
+it("L9 the --changed provider throws on a call shape it does not know, before it reads git", async () => {
+  // Vitest 5.0.5 calls it as `{ root, changedSince }`, `changedSince` a commit or `true`. A renamed or
+  // added field, or an empty or false `changedSince`, must fail the run: read as "no commit", a
+  // clean checkout lists no file and Vitest runs no test. Plants, each run once: drop the shape
+  // check (red: the call resolves); accept `changedSince: false` (red).
+  const field = fc.stringMatching(/^[a-zA-Z]{1,12}$/).filter((key) => key !== "root" && key !== "changedSince");
+  const shape = fc.oneof(
+    fc.record({ root: fc.constant(ROOT), changedSince: fc.constantFrom<unknown>(undefined, false, "", 0, null) }),
+    fc
+      .tuple(field, fc.oneof(fc.string({ minLength: 1 }), fc.constant(true)))
+      .map(([key, value]) => ({ root: ROOT, [key]: value })),
+    fc
+      .tuple(field, fc.string({ minLength: 1 }))
+      .map(([key, value]) => ({ root: ROOT, changedSince: "HEAD", [key]: value })),
+    fc.record({ root: fc.constantFrom<unknown>(undefined, 1, null), changedSince: fc.constant("HEAD") }),
+  );
+  await fc.assert(
+    fc.asyncProperty(shape, async (call) => {
+      await expect(changedFiles.findChangedFiles(call as never)).rejects.toThrow(/a shape this provider does not know/);
+    }),
+    options,
+  );
+});
+
+/** A git repository with `files`, committed; its commit. */
+const commit = (dir: string, files: Record<string, string>, message: string): string => {
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(join(dir, dirname(path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+
+  const git = (...args: string[]) => {
+    const done = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@invalid", ...args], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(done.status, done.stderr).toBe(0);
+    return done.stdout.trim();
+  };
+
+  git("add", "-A");
+  git("commit", "-q", "--no-verify", "-m", message);
+  return git("rev-parse", "HEAD");
+};
+
+it("scenario: L10 real Vitest's --changed, given this provider, selects the lockfile's package and a changed source's test, never none", async () => {
+  // A temp repository with three packages and a lockfile, through `createVitest` with `changed`, as
+  // CI's legs and next steps run it. The second commit moves package a's dependency in the
+  // lockfile and edits package c's source; b is untouched. The tree is clean, so the files come
+  // from the commit given alone: a provider that lost `changedSince` would list none. Plants, each
+  // run once: the provider reads `since` for `changedSince` (red: it throws); the same with the
+  // shape check dropped (red: no test selected).
+  // The real path: on macOS the temp folder is a link, and Vitest names files by their real path.
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "vitest-changed-")));
+
+  try {
+    spawnSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+    const lock = (version: string) =>
+      `---\n${stringify({
+        lockfileVersion: "9.0",
+        importers: {
+          ".": {},
+          "packages/a": { dependencies: { e: { specifier: version, version } } },
+          "packages/b": { dependencies: { f: { specifier: "1.0.0", version: "1.0.0" } } },
+          "packages/c": {},
+        },
+        packages: {
+          [`e@${version}`]: { resolution: { integrity: `sha512-e${version}` } },
+          "f@1.0.0": { resolution: { integrity: "sha512-f" } },
+        },
+        snapshots: { [`e@${version}`]: {}, "f@1.0.0": {} },
+      })}`;
+    const sources = Object.fromEntries(
+      ["a", "b", "c"].flatMap((name) => [
+        [`packages/${name}/package.json`, JSON.stringify({ name })],
+        [`packages/${name}/src/${name}.ts`, `export const ${name} = 1;\n`],
+        [`packages/${name}/src/${name}.test.ts`, `import { ${name} } from "./${name}.ts";\nvoid ${name};\n`],
+      ]),
+    );
+    const base = commit(
+      dir,
+      { "package.json": JSON.stringify({ name: "t", private: true }), "pnpm-lock.yaml": lock("1.0.0"), ...sources },
+      "base",
+    );
+    commit(dir, { "pnpm-lock.yaml": lock("1.0.1"), "packages/c/src/c.ts": "export const c = 2;\n" }, "change");
+    const vitest = await createVitest("test", {
+      root: dir,
+      config: false,
+      watch: false,
+      changed: base,
+      include: ["packages/*/src/*.test.ts"],
+      forceRerunTriggers: ["**/pnpm-lock.yaml", "**/package.json"],
+      experimental: { vcsProvider: changedFiles },
+    });
+
+    try {
+      const picked = (await vitest.specifications.getRelevantTestSpecifications()).map((spec) =>
+        relative(dir, spec.moduleId),
+      );
+      expect(picked.toSorted()).toEqual(["packages/a/src/a.test.ts", "packages/c/src/c.test.ts"]);
+    } finally {
+      await vitest.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
