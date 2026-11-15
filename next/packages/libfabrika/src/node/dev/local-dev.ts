@@ -1,11 +1,83 @@
 /**
- * The local brain driver's helpers on Node: the memory check that replaces a brain that grew too
- * big, the bounded stop that ends it, and the durable outbox for its lifecycle events.
+ * The local brain driver's helpers on Node: the local runtime's life state and the one way to
+ * change it, the memory check that replaces a brain that grew too big, the bounded stop that ends
+ * it, the signal it sends, and the durable outbox for its lifecycle events.
  *
  * @stability unstable
  */
-import { type Duration, Effect, FileSystem, Option, Path, Result, Schema, Semaphore } from "effect";
+import { applyCell } from "@demlik/tea";
+import {
+  type Duration,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { devLife, type DevState } from "./DevLife.ts";
+
+type Life = typeof devLife.model.Type;
+type LifeMsg = typeof devLife.msg.Type;
+type Replacing = typeof DevState.cases.replacing.Type;
+type Signal = Replacing["signal"];
+
+/**
+ * Creates the local runtime's life: its state, which a waiter can follow, and the two ways to
+ * change it.
+ *
+ * **Details**
+ *
+ * `state` starts as the machine's `init` with `last`, the newest start an earlier run saved. `send`
+ * folds one Msg and answers the state before and after it. `step` folds one Msg and, only when the
+ * fold moved the state as `moved` says, runs `then` on the two states before any other Msg is
+ * folded; it answers whether `then` ran. A signal sent inside `then` therefore goes to a pid the
+ * state still vouches for: no exit, stop or start is folded between the check and the signal.
+ *
+ * **Gotchas**
+ *
+ * Every fold waits for a `then` in flight, so `then` does only what must not be overtaken: the
+ * fact a signal follows, and the signal.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
+  const state = yield* SubscriptionRef.make(devLife.init(null, { last })[0]);
+  const turn = yield* Semaphore.make(1);
+  const fold = (msg: LifeMsg) =>
+    SubscriptionRef.modify(state, (prev) => {
+      const [next] = applyCell(devLife, prev, msg);
+      return [[prev, next] as const, next];
+    });
+  return {
+    state,
+    send: (msg: LifeMsg) => turn.withPermit(fold(msg)),
+    step: <S extends Life, E, R>(
+      msg: LifeMsg,
+      moved: (prev: Life, next: Life) => next is S,
+      then: (prev: Life, next: S) => Effect.Effect<void, E, R>,
+    ) =>
+      turn.withPermit(
+        Effect.gen(function* () {
+          const [prev, next] = yield* fold(msg);
+
+          if (!moved(prev, next)) {
+            return false;
+          }
+
+          yield* then(prev, next);
+          return true;
+        }),
+      ),
+  };
+});
+
+type LifeCell = Effect.Success<ReturnType<typeof lifeCell>>;
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
@@ -43,11 +115,38 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
   }
 });
 
-// How a bounded stop ended: the process ended `itself` within its grace, or it was `killed`.
-const Ended = Schema.TaggedUnion({ itself: {}, killed: {} });
-
 // What `process.kill` throws for a pid that no longer exists.
 const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
+
+/**
+ * Sends one signal to one OS process.
+ *
+ * **Details**
+ *
+ * A pid with no process (ESRCH) means the process has already gone, so that is success. Any other
+ * refusal, such as EPERM, is a defect.
+ *
+ * **Gotchas**
+ *
+ * It checks nothing about the pid: send it only from a `lifeCell` step whose state holds that pid.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
+  Effect.try({
+    try: () => {
+      process.kill(pid, name);
+    },
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.catchIf(isMissing, () => Effect.void),
+    Effect.orDie,
+  );
+
+// How a bounded stop ended: `refused` when the state no longer held the sampled process and no
+// signal went out, `itself` when the process went before a SIGKILL, and `killed` after one.
+const Ended = Schema.TaggedUnion({ refused: {}, itself: {}, killed: {} });
 
 /**
  * Ends one process in bounded time, as an OTP supervisor ends a child: SIGTERM once, then SIGKILL
@@ -55,37 +154,65 @@ const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
  *
  * **Details**
  *
- * `signal` sends a signal to a pid. `gone` ends when the process is known to have ended. `killing`
- * runs just before the SIGKILL, so whatever it records comes before the signal. The answer is
- * `itself` when `gone` ended within the grace, and `killed` otherwise.
+ * `sample` is what the memory sampler read: the pid, its bytes, when, and the replacement token.
+ * Each signal goes out in one `life` step: the `replacing` fold for the SIGTERM, and the `killed`
+ * fold for the SIGKILL. Only when that fold moved the state does `record` write the fact, given the
+ * state before and after it, and then `signal` send the signal, before any other fold. The process
+ * has gone once the state no longer says this pid is being replaced: its exit, the stop, or a new
+ * start. The answer is `refused` when the first fold did not move, `killed` when the SIGKILL went
+ * out, and `itself` otherwise.
  *
  * **Gotchas**
  *
- * A SIGKILL that finds no process (ESRCH, thrown inside `signal`) means the process ended in the
- * gap between the grace and the kill: it counts as gone, and the answer is still `killed`.
+ * No signal follows a folded exit. A process that Node has reaped but whose exit is not folded yet
+ * can still get one: only a signal through Node's own child handle would close that gap.
  *
  * @stability unstable
  * @category combinators
  */
 export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: {
-  readonly pid: number;
+  readonly life: LifeCell;
+  readonly sample: {
+    readonly pid: number;
+    readonly bytes: number;
+    readonly at: number;
+    readonly replacement: string;
+  };
   readonly grace: Duration.Input;
-  readonly signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, E, R>;
-  readonly gone: Effect.Effect<void>;
-  readonly killing: Effect.Effect<void, E, R>;
+  readonly signal: (pid: number, signal: Signal) => Effect.Effect<void, E, R>;
+  readonly record: (prev: Life, next: Replacing) => Effect.Effect<void, E, R>;
 }) {
-  yield* options.signal(options.pid, "SIGTERM");
-  const ended = yield* options.gone.pipe(Effect.timeoutOption(options.grace));
+  const { life, sample, record } = options;
+  const { pid } = sample;
+  const send = (prev: Life, next: Replacing) =>
+    record(prev, next).pipe(Effect.andThen(options.signal(pid, next.signal)));
+  const terming = yield* life.step(
+    { type: "replacing", ...sample },
+    (prev, next): next is Replacing => prev._tag !== "replacing" && next._tag === "replacing",
+    send,
+  );
+
+  if (!terming) {
+    return Ended.cases.refused.make({});
+  }
+
+  const gone = SubscriptionRef.changes(life.state).pipe(
+    Stream.filter((s) => s._tag !== "replacing" || s.pid !== pid),
+    Stream.runHead,
+  );
+  const ended = yield* gone.pipe(Effect.timeoutOption(options.grace));
 
   if (Option.isSome(ended)) {
     return Ended.cases.itself.make({});
   }
 
-  yield* options.killing;
-  yield* options
-    .signal(options.pid, "SIGKILL")
-    .pipe(Effect.catchDefect((defect) => (isMissing(defect) ? Effect.void : Effect.die(defect))));
-  return Ended.cases.killed.make({});
+  const killing = yield* life.step(
+    { type: "killed", pid },
+    (prev, next): next is Replacing =>
+      prev._tag === "replacing" && prev.signal === "SIGTERM" && next._tag === "replacing" && next.signal === "SIGKILL",
+    send,
+  );
+  return killing ? Ended.cases.killed.make({}) : Ended.cases.itself.make({});
 });
 
 /**

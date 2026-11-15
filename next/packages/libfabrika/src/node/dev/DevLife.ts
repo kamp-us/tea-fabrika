@@ -33,6 +33,22 @@ const Session = Schema.Struct({
 const Signal = Schema.Literals(["SIGTERM", "SIGKILL"]);
 
 /**
+ * Schema for an OS process id: a whole number above zero.
+ *
+ * **Details**
+ *
+ * Zero and a negative number are not one process: `kill` sends to a whole process group for them.
+ * The state holds only this, and a start that reports anything else is refused, so no signal can
+ * reach a group.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Pid = Schema.Int.check(Schema.isGreaterThan(0));
+
+const isPid = Schema.is(Pid);
+
+/**
  * Schema for where the local runtime stands: `starting` and `listening` before its first start,
  * `spawned` and `online` while a process runs, `replacing` while a process that grew too big is
  * ended, `exited` and `waiting` between an exit and its replacement, `braked` when restarting gave
@@ -51,11 +67,11 @@ const Signal = Schema.Literals(["SIGTERM", "SIGKILL"]);
 export const DevState = Schema.TaggedUnion({
   starting: { last: Schema.NullOr(Schema.String) },
   listening: { last: Schema.NullOr(Schema.String), port: Port },
-  spawned: { session: Session, pid: Schema.Number, replacement: Replacement },
-  online: { session: Session, pid: Schema.Number, port: Port, replacement: Replacement },
+  spawned: { session: Session, pid: Pid, replacement: Replacement },
+  online: { session: Session, pid: Pid, port: Port, replacement: Replacement },
   replacing: {
     session: Session,
-    pid: Schema.Number,
+    pid: Pid,
     listener: Listener,
     replacement: Replacement.cases.pending,
     bytes: Schema.Int,
@@ -81,7 +97,7 @@ const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("started"),
     start: Schema.String,
-    pid: Schema.Number,
+    pid: Pid,
     build: Schema.String,
     at: Schema.Number,
   }),
@@ -96,11 +112,13 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("stopped") }),
   Schema.Struct({
     type: Schema.Literal("replacing"),
+    // The pid the memory sampler read, so a sample of an older process replaces nothing.
+    pid: Pid,
     replacement: Schema.String,
     bytes: Schema.Int,
     at: Schema.Number,
   }),
-  Schema.Struct({ type: Schema.Literal("killed") }),
+  Schema.Struct({ type: Schema.Literal("killed"), pid: Pid }),
 ]);
 
 type Ctx = { readonly last: string | null };
@@ -227,9 +245,10 @@ const active = (s: DevState) => {
  *
  * It starts in `starting` with the last start an earlier run saved, so this run's first start can
  * name the one it follows. A start is ignored once the machine is `braked`, `stopping` or
- * `stopped`. A replacement counts as up when its listener is heard, not when its process starts.
- * `replacing` comes only from a running process, and `killed` only marks a replace's SIGKILL; the
- * replaced process leaves `replacing` by its exit, like any other.
+ * `stopped`, and a start whose pid is not a whole number above zero is refused. A replacement counts
+ * as up when its listener is heard, not when its process starts. `replacing` comes only from a
+ * running process whose pid is the one its Msg names, and `killed` only moves a replace of that pid
+ * from SIGTERM to SIGKILL; the replaced process leaves `replacing` by its exit, like any other.
  *
  * @stability unstable
  * @category machines
@@ -277,7 +296,7 @@ export const devLife = Machine.make({
       return [s, []];
     },
     started: (s, m) => {
-      if (!active(s)) {
+      if (!active(s) || !isPid(m.pid)) {
         return [s, []];
       }
 
@@ -359,8 +378,9 @@ export const devLife = Machine.make({
       return [DevState.cases.stopped.make({ listener: s.listener }), []];
     },
     replacing: (s, m) => {
-      // Only a running process is replaced, and only once per start: `target` is null from here on.
-      if (s._tag !== "spawned" && s._tag !== "online") {
+      // Only the running process the sample read is replaced, and only once per start: `target` is
+      // null from here on.
+      if ((s._tag !== "spawned" && s._tag !== "online") || s.pid !== m.pid) {
         return [s, []];
       }
 
@@ -377,8 +397,9 @@ export const devLife = Machine.make({
         [],
       ];
     },
-    killed: (s) => {
-      if (s._tag !== "replacing") {
+    killed: (s, m) => {
+      // Only a SIGTERM of this very pid moves on to its SIGKILL.
+      if (s._tag !== "replacing" || s.pid !== m.pid || s.signal !== "SIGTERM") {
         return [s, []];
       }
 

@@ -28,6 +28,9 @@ expectTypeOf<Case<"replacing">["signal"]>().toEqualTypeOf<"SIGTERM" | "SIGKILL">
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("bytes");
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("at");
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("replacement");
+// A replace and its kill each name the pid they are about, so a fold can refuse another process's.
+expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("pid");
+expectTypeOf<Extract<Msg, { readonly type: "killed" }>>().toHaveProperty("pid");
 expectTypeOf(reachable).returns.toEqualTypeOf<number | null>();
 
 // Type law, checked by tsc: only a running process holds a pid, and a replacement token lives only
@@ -72,6 +75,22 @@ const Choice = fc.record({
   bytes: fc.integer({ min: 50_000_000, max: 4_000_000_000 }),
   // L2: how many `replacing` Msgs arrive in a row once a replace has begun.
   burst: fc.integer({ min: 1, max: 5 }),
+  // One replace or kill in four names a pid other than the one the state holds: the sampler read an
+  // older process, and the fold must refuse it.
+  stale: fc.integer({ min: 0, max: 3 }),
+  // One start in ten reports a pid that is no process: zero, below zero, or not whole. `kill` sends
+  // to a whole process group for zero and below, so the fold refuses each.
+  refused: fc.oneof(
+    { arbitrary: fc.constant(null), weight: 9 },
+    {
+      arbitrary: fc.oneof(
+        fc.constant(0),
+        fc.integer({ min: -99_999, max: -1 }),
+        fc.integer(PIDS).map((pid) => pid + 0.5),
+      ),
+      weight: 1,
+    },
+  ),
 });
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
@@ -163,13 +182,19 @@ const legal: Record<Phase, ReadonlyArray<readonly [Kind, number]>> = {
   stopped: [],
 };
 
-const message = (kind: Kind, c: Choice, index: number): Msg => {
+// The pid a state holds, or null where it holds none.
+const held = (s: State): number | null => (Predicate.hasProperty(s, "pid") && Predicate.isNumber(s.pid) ? s.pid : null);
+
+const message = (kind: Kind, c: Choice, index: number, s: State): Msg => {
+  // A sample reads the running process, or now and then one that has already gone.
+  const sampled = c.stale === 0 ? c.pid : (held(s) ?? c.pid);
+
   if (kind === "listened") {
     return { type: "listened", port: c.port };
   }
 
   if (kind === "started") {
-    return { type: "started", start: `start-${index}`, pid: c.pid, build: c.build, at: c.at };
+    return { type: "started", start: `start-${index}`, pid: c.refused ?? c.pid, build: c.build, at: c.at };
   }
 
   if (kind === "exited") {
@@ -185,21 +210,21 @@ const message = (kind: Kind, c: Choice, index: number): Msg => {
   }
 
   if (kind === "replacing") {
-    return { type: "replacing", replacement: `replace-${index}`, bytes: c.bytes, at: c.at };
+    return { type: "replacing", pid: sampled, replacement: `replace-${index}`, bytes: c.bytes, at: c.at };
   }
 
   if (kind === "killed") {
-    return { type: "killed" };
+    return { type: "killed", pid: sampled };
   }
 
   return { type: kind };
 };
 
-const choose = (phase: Phase, c: Choice, index: number): Msg => {
-  const moves = legal[phase];
+const choose = (s: State, c: Choice, index: number): Msg => {
+  const moves = legal[s._tag];
 
   if (c.late === 0 || moves.length === 0) {
-    return message(kinds[c.pick % kinds.length]!, c, index);
+    return message(kinds[c.pick % kinds.length]!, c, index, s);
   }
 
   const total = moves.reduce((sum, [, weight]) => sum + weight, 0);
@@ -207,13 +232,13 @@ const choose = (phase: Phase, c: Choice, index: number): Msg => {
 
   for (const [kind, weight] of moves) {
     if (left < weight) {
-      return message(kind, c, index);
+      return message(kind, c, index, s);
     }
 
     left -= weight;
   }
 
-  return message(moves[0]![0], c, index);
+  return message(moves[0]![0], c, index, s);
 };
 
 // The reference: what each state means, written from the plan's table and main's behavior.
@@ -240,14 +265,22 @@ const known = (port: number) => (port === 0 ? null : port);
 const reference = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
   const { phase } = ref;
 
+  // A sample or a kill of a pid the state does not hold is about another process: refused.
   if (msg.type === "replacing") {
-    return phase === "spawned" || phase === "online"
+    return (phase === "spawned" || phase === "online") && ref.pid === msg.pid
       ? [{ ...ref, phase: "replacing", token: msg.replacement, signal: "SIGTERM" }, null]
       : [ref, null];
   }
 
   if (msg.type === "killed") {
-    return phase === "replacing" ? [{ ...ref, signal: "SIGKILL" }, null] : [ref, null];
+    return phase === "replacing" && ref.pid === msg.pid && ref.signal === "SIGTERM"
+      ? [{ ...ref, signal: "SIGKILL" }, null]
+      : [ref, null];
+  }
+
+  // A start whose pid is not a whole number above zero names no one process.
+  if (msg.type === "started" && !(Number.isInteger(msg.pid) && msg.pid > 0)) {
+    return [ref, null];
   }
 
   if (msg.type === "listened" && phase === "replacing") {
@@ -357,7 +390,7 @@ const walk = (w: Walk, visit: (step: Step) => void) => {
   };
 
   for (const [index, choice] of w.choices.entries()) {
-    const msg = choose(s._tag, choice, index);
+    const msg = choose(s, choice, index);
     const [next, out] = applyCell(devLife, s, msg);
     expect(out).toEqual([]);
     const [after, settled] = reference(ref, msg);
@@ -376,6 +409,10 @@ const coverage = () => ({
   replacing: 0,
   killed: 0,
   replaced: 0,
+  // A sample or kill of another pid, and a start with no process's pid, each reached a state they
+  // could have moved.
+  stale: 0,
+  refused: 0,
 });
 
 const covered = (seen: ReturnType<typeof coverage>) => {
@@ -416,11 +453,23 @@ const count = (seen: ReturnType<typeof coverage>, step: Step) => {
   if (step.before.phase === "replacing" && step.ref.phase === "exited") {
     seen.replaced++;
   }
+
+  const running = step.before.phase === "spawned" || step.before.phase === "online";
+  const sampled = step.msg.type === "replacing" || step.msg.type === "killed" ? step.msg.pid : null;
+
+  if (sampled !== null && sampled !== step.before.pid && (running || step.before.phase === "replacing")) {
+    seen.stale++;
+  }
+
+  if (step.msg.type === "started" && step.choice.refused !== null && active(step.before.phase)) {
+    seen.refused++;
+  }
 };
 
 describe("T708 dev life laws", () => {
-  // L1. Plant: let `replacing` from `spawned` be ignored, or let `listened` end a `replacing`: the
-  // walk and the reference differ.
+  // L1. Plant: let `replacing` from `spawned` be ignored, or let `listened` end a `replacing`, or let
+  // `replacing` or `killed` move a state whose pid differs from the Msg's, or let `started` take a pid
+  // of zero: the walk and the reference differ.
   it("L1 every transition, replacing and killed included, preserves the state-specific fields and sampling eligibility", () => {
     const seen = coverage();
     fc.assert(
@@ -538,8 +587,10 @@ describe("T708 dev life laws", () => {
           }
 
           both++;
-          const started = message("started", choice, index);
-          const listened = message("listened", choice, index);
+          // A start with no process's pid is refused, as L1 holds; this law is about real starts.
+          const real = { ...choice, refused: null };
+          const started = message("started", real, index, prev);
+          const listened = message("listened", real, index, prev);
           const [first] = applyCell(devLife, applyCell(devLife, prev, started)[0], listened);
           const [second] = applyCell(devLife, applyCell(devLife, prev, listened)[0], started);
           const usable = (s: State) => ({ _tag: s._tag, address: address(s), target: target(s), pending: pending(s) });

@@ -7,7 +7,6 @@
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
-import { applyCell } from "@demlik/tea";
 import {
   Clock,
   Context,
@@ -33,8 +32,8 @@ import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
-import { devLife, latest, pending, reachable, recovering, target } from "./DevLife.ts";
-import { brainOutbox, checkMemory, terminate } from "./local-dev.ts";
+import { type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
+import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-dev.ts";
 
 /**
  * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
@@ -52,6 +51,8 @@ export class ControlError extends Schema.TaggedError<ControlError>()("ControlErr
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 type Life = typeof devLife.model.Type;
+
+const isPid = Schema.is(Pid);
 
 type Cause = {
   readonly reason: (typeof BrainEvent.cases.started.Type)["reason"];
@@ -117,9 +118,12 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  * so an event outlives a crash on either side. Once a second it samples the runtime's memory, and
  * at `memory` bytes or more it replaces the process once: it records `replacing`, sends SIGTERM,
  * and if the process has not ended after `grace` milliseconds it records `killed` and sends
- * SIGKILL. Alchemy then starts a new process on the same ports, and its exit and start are
- * recorded with the reason `memory`. Closing the caller's scope stops the runtime and records
- * `stopped`.
+ * SIGKILL. Each signal goes out in the same step that moves the life state, only while that state
+ * still says the sampled pid is being replaced, so none follows a folded exit, the stop or a newer
+ * start. Alchemy then starts a new process on the same ports, and its exit and start are
+ * recorded with the reason `memory`. A start whose pid is not a whole number above zero is
+ * refused, and a first start that brings one fails as `bad_pid`. Closing the caller's scope stops
+ * the runtime and records `stopped`.
  *
  * **Gotchas**
  *
@@ -160,14 +164,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const token = Redacted.make(
     Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
   );
-  // A SubscriptionRef, so a call can wait for the state a replacement brings.
-  const life = yield* SubscriptionRef.make(devLife.init(null, { last: yield* outbox.last })[0]);
-  // Each move folds one Msg atomically, and hands back the state before and after it.
-  const send = (msg: typeof devLife.msg.Type) =>
-    SubscriptionRef.modify(life, (prev) => {
-      const [next] = applyCell(devLife, prev, msg);
-      return [[prev, next] as const, next];
-    });
+  // The life state, which a call can follow to the state a replacement brings. Each move folds one
+  // Msg atomically and hands back the state before and after it.
+  const cell = yield* lifeCell(yield* outbox.last);
+  const life = cell.state;
+  const send = cell.send;
   // The handles behind the machine's replacement tokens.
   const replacements = new Map<string, Deferred.Deferred<void, ControlError>>();
   // What the callback saw last, kept for the next event's row.
@@ -175,7 +176,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   // The first state with no replacement that may still come up, or null once the wait runs out.
   const settled = Effect.fnUntraced(function* () {
     // The runtime's callback only queues what it reports, and the event fiber it wakes folds it.
-    // Yielding once lets that fiber run first, so a call never meets an exit not yet folded.
+    // Yielding once lets that fiber fold an exit already in the queue first. It covers no more: an
+    // exit Alchemy has not reported yet, or one the event fiber has taken but not folded, is not
+    // seen, so a call in that crash window may still dial the ended process and answer
+    // `unreachable`.
     yield* Effect.yieldNow;
     const now = yield* SubscriptionRef.get(life);
 
@@ -385,9 +389,18 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }
 
       if (event.type === "start") {
+        const { pid } = event;
+
+        // A pid that names no one process is refused before it reaches the state: a signal to zero
+        // or below reaches a whole process group. A first start that brings one fails the start.
+        if (!isPid(pid)) {
+          yield* Effect.logError("The local runtime reported a start with no process id", { pid });
+          yield* Deferred.fail(started, new ControlError({ reason: "bad_pid" }));
+          return;
+        }
+
         const next = yield* ids.next;
         const at = yield* Clock.currentTimeMillis;
-        const { pid } = event;
         const [, up] = yield* send({ type: "started", start: next, pid, build: config.build, at });
 
         // Braked and stopping refuse a start.
@@ -461,66 +474,51 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     yield* flush;
   });
   yield* recorded(startRuntime());
-  const signal = (pid: number, signal: "SIGTERM" | "SIGKILL") =>
-    Effect.sync(() => {
-      process.kill(pid, signal);
-    });
-  // The kill is recorded before it is sent, so the outbox reads in the order things happened.
-  const killing = Effect.fnUntraced(function* () {
-    const at = yield* Clock.currentTimeMillis;
-    const [prev, next] = yield* send({ type: "killed" });
-
-    if (prev._tag !== "replacing" || prev.signal !== "SIGTERM" || next._tag !== "replacing") {
-      return;
-    }
-
+  // A replace's facts, each written in the step that moved the state and before its signal, so the
+  // outbox reads in the order things happened. A full disk must not keep a runtime alive that is
+  // past its limit, so a failed write is logged.
+  const record = Effect.fnUntraced(function* (prev: Life, next: typeof DevState.cases.replacing.Type) {
     const start = next.session.start;
-    // A full disk must not keep a runtime alive that is past its limit, so a failed write is logged.
-    yield* outbox
-      .add(BrainEvent.cases.killed.make({ id: `${start}/killed`, start, at, pid: next.pid }))
-      .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a kill" }));
-  });
-  // One replace per start: the fold moves only a running process to `replacing`, and `target` is
-  // null from then on, so the sampler cannot ask again until a new process starts.
-  const replace = Effect.fnUntraced(function* (value: { readonly pid: number; readonly bytes: number }) {
-    const at = yield* Clock.currentTimeMillis;
-    const token = latest(yield* SubscriptionRef.get(life)) ?? "";
-    const [prev, next] = yield* send({ type: "replacing", replacement: token, bytes: value.bytes, at });
 
-    if (prev._tag === "replacing" || next._tag !== "replacing") {
+    if (next.signal === "SIGKILL") {
+      const at = yield* Clock.currentTimeMillis;
+      yield* outbox
+        .add(BrainEvent.cases.killed.make({ id: `${start}/killed`, start, at, pid: next.pid }))
+        .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a kill" }));
       return;
     }
 
     const old = pending(prev);
 
     // A replace of a process whose own replacement never listened takes that wait's place.
-    if (old !== null && old !== token) {
+    if (old !== null && old !== next.replacement.id) {
       replacements.delete(old);
     }
 
-    cause = { reason: "memory", bytes: value.bytes };
-    const start = next.session.start;
+    cause = { reason: "memory", bytes: next.bytes };
     yield* outbox
       .add(
         BrainEvent.cases.replacing.make({
           id: `${start}/replacing`,
           start,
-          at,
+          at: next.at,
           reason: "memory",
           pid: next.pid,
-          bytes: value.bytes,
+          bytes: next.bytes,
           limit: options.memory,
           grace: options.grace,
         }),
       )
       .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a replace" }));
-    // The process has gone once the state leaves `replacing` for its pid: its exit, or the stop.
-    const gone = SubscriptionRef.changes(life).pipe(
-      Stream.filter((s) => s._tag !== "replacing" || s.pid !== next.pid),
-      Stream.runHead,
-      Effect.asVoid,
-    );
-    yield* Effect.forkIn(terminate({ pid: next.pid, grace: options.grace, signal, gone, killing: killing() }), scope);
+  });
+  // One replace per start: the fold moves only the running process the sample read to
+  // `replacing`, and `target` is null from then on, so the sampler cannot ask again until a new
+  // process starts. The bounded stop runs in the brain's scope.
+  const replace = Effect.fnUntraced(function* (value: { readonly pid: number; readonly bytes: number }) {
+    const at = yield* Clock.currentTimeMillis;
+    const replacement = latest(yield* SubscriptionRef.get(life)) ?? "";
+    const sample = { pid: value.pid, bytes: value.bytes, at, replacement };
+    yield* Effect.forkIn(terminate({ life: cell, sample, grace: options.grace, signal, record }), scope);
   });
   yield* Effect.forkScoped(
     Effect.forever(
