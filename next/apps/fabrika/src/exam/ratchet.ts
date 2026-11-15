@@ -3,7 +3,9 @@
 //
 // For each list it reads the file at the base and at the committed `HEAD`, never the working tree,
 // keys each row the way that list's own reader matches it, and counts: a row the head holds beyond
-// the base is added. Shrinking, pruning, reordering, a new `reason` and deleting the file pass.
+// the base is added. Shrinking, pruning, reordering, a new `reason` and deleting the file pass. A
+// lint row whose file git renamed between the base and the head is the same row under its new name:
+// the file holds the same break, so the list did not grow (0536 renamed 130 test files).
 //
 //   next-ledger.json, agents-ledger.json   file, rule and code (oxlint-plugins/ledger.ts), counted
 //   unreachable-ledger.json                scope, kind and id (code-graph's findingKey)
@@ -30,12 +32,18 @@ const DeadRows = Schema.fromJsonString(
   }),
 );
 
-const lintKeys = (text: string) =>
+/** Each renamed file's new path, by its old one: `git diff -M`'s renames from the base to the head. */
+type Renames = ReadonlyMap<string, string>;
+
+const lintKeys = (text: string, renames: Renames = new Map()) =>
   Schema.decodeUnknownEffect(LintRows)(text).pipe(
-    Effect.map(({ entries }) => entries.map((row) => JSON.stringify([row.file, row.rule, row.code]))),
+    Effect.map(({ entries }) =>
+      entries.map((row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
+    ),
   );
 
-const deadKeys = (text: string) =>
+// code-graph's ids name a file too, but no rename reaches them here: they are matched as written.
+const deadKeys = (text: string, _renames?: Renames) =>
   Schema.decodeUnknownEffect(DeadRows)(text).pipe(
     Effect.map(({ entries }) => entries.map((row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
@@ -80,14 +88,24 @@ type Answer = typeof Answer.Type;
 
 class BaseUnreadable extends Schema.TaggedError<BaseUnreadable>()("BaseUnreadable", { file: Schema.String }) {}
 
-/** One list's answer from its text at the base and at the head; `null` means the file is absent. */
-export const judge = Effect.fnUntraced(function* (list: List, base: string | null, head: string | null) {
+/**
+ * One list's answer from its text at the base and at the head; `null` means the file is absent. The
+ * base's rows are read under `renames`, so a renamed file's rows are not counted as added.
+ */
+export const judge = Effect.fnUntraced(function* (
+  list: List,
+  base: string | null,
+  head: string | null,
+  renames: Renames = new Map(),
+) {
   if (head === null) {
     return Answer.cases.done.make({ file: list.file });
   }
 
   const before =
-    base === null ? [] : yield* list.keys(base).pipe(Effect.mapError(() => new BaseUnreadable({ file: list.file })));
+    base === null
+      ? []
+      : yield* list.keys(base, renames).pipe(Effect.mapError(() => new BaseUnreadable({ file: list.file })));
   const after = yield* list.keys(head).pipe(Effect.option);
 
   if (Option.isNone(after)) {
@@ -185,10 +203,27 @@ const main = Effect.gen(function* () {
 
     return yield* must(at(["show", `${rev}:${file}`]));
   });
+  // Each rename from the base to the head, as git finds it: `R<score>\0old\0new\0`. With `-B`, a file
+  // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
+  // part that kept its text (0536 split five files this way): its rows are read under that name too.
+  // A row left at the old path as well is still counted as added, so a copy cannot hide a new row.
+  const moved = (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])))
+    .split("\0")
+    .filter((part) => part !== "");
+  const renames = new Map<string, string>();
+
+  for (let i = 0; i + 2 < moved.length; i += 3) {
+    const [from, to] = moved.slice(i + 1, i + 3);
+
+    if (from !== undefined && to !== undefined) {
+      renames.set(from, to);
+    }
+  }
+
   let grew = false;
 
   for (const list of LISTS) {
-    const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file));
+    const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file), renames);
     grew = grew || answer._tag === "stuck";
     yield* Console.log(JSON.stringify(answer));
 

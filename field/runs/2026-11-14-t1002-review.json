@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t1002-review",
+  "ticket": "1002",
+  "pr": "kamp-us/tea-fabrika#1274",
+  "started": "2026-11-15T03:58:00+00:00",
+  "ended": "2026-11-15T04:22:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "review of the whole diff at 39bef5d3b, sent back: changes 2, findings 0. One: the depth rule's over-100 part and hand edits cut in-memory laws that run on every pull request, beyond 0535's real-IO laws (owner call). Two: the package-imports table lets production files of the library and programs import @kampus/vitest, wider than the shared suites need. Every full count matches main's count. Ran Rebac.test.ts and rows.test.ts at both depths, and package-imports.test.ts.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": null,
+  "step": "review"
+}

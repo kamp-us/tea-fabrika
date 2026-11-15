@@ -14,7 +14,7 @@ import * as Headless from "@kampus/libfabrika/client/Headless";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema, Scope } from "effect";
 import { SuiteError } from "./client-protocol.test-support.ts";
 import { type Dev, grant, type Home, reader, type Waiting } from "./p14.test-support.ts";
 
@@ -162,6 +162,8 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         ),
         Effect.flatMap((booting) => booting.ready),
       );
+    // A reload starts the client again in this backend's own scope, as the first start does.
+    const scope = yield* Effect.scope;
     let run = yield* start();
     // A headless client has no socket of its own to hold; it reads the moment before any frame is
     // handled, which `dispatch` gives: the tile's update runs before the next frame.
@@ -220,7 +222,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         return yield* text;
       }),
       reload: Effect.gen(function* () {
-        run = yield* start();
+        run = yield* start().pipe(Scope.provide(scope), Effect.orDie);
       }),
     };
     return backend;

@@ -1,7 +1,8 @@
+import { expect, it } from "@effect/vitest";
 // fabsh in a tile, slice 1, next/: the door's draft laws L10, L11 and the door's half of L6 of the
 // approved plan (docs/plan/lanes/fabsh-PLAN.md, "Laws"). The plan names one file,
 // `gateway/GatewayDraft.laws.test.ts`; a gateway test may not open a driver, so the laws live here and
-// `node/gateway/GatewayDraft.laws.test.ts` runs them on SQLite (0062), as `JobsTest` is run. They walk
+// `node/gateway/GatewayDraft.laws.integration.test.ts` runs them on SQLite (0062), as `JobsTest` is run. They walk
 // the real authenticated gateway: real keys, a real grant and a signed hello. Written before
 // `process.draft`; until the build adds it, every draft answers `unknown_method` and spends the
 // sender's main budget, so these laws fail for that reason.
@@ -20,7 +21,7 @@
 //   `{limit, window}` as `rateLimit` is. `policy(process)` also says `draft: boolean`, whether the
 //   program declares a draft. These option names are what these laws add to the plan's sketch.
 // - Draft frames spend `draftLimit` per key and never `rateLimit`.
-import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Layer, Redacted, Result as R, Schema, type Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { grantText, revokeText } from "../access/Text.ts";
@@ -369,7 +370,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
         expect(w.delivered, "a draft is never delivered as a letter").toEqual([]);
       }).pipe(Effect.scoped),
-    { arbitrary: { seed: SEED, runs: 200 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 20, full: 200 }) } },
   );
 
   it.effect.prop(
@@ -395,7 +396,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
         expect(dump(w.store.sql).includes(MARK), "the door's database holds draft text").toBe(false);
       }).pipe(Effect.scoped),
-    { arbitrary: { seed: SEED, runs: 200 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 20, full: 200 }) } },
   );
 
   const budget = (b: typeof Budget.Type) =>
@@ -439,7 +440,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     "L11: drafts spend gateway.draft-limit and never gateway.limit: a press passes while its own budget has room, and a draft past its budget answers rate_limited",
     { b: Budget },
     ({ b }) => budget(b),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   // pinned: the plan's reason for a budget of its own: typing spends more than a press budget holds.

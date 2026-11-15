@@ -15,10 +15,11 @@
 //
 // Desk S1, next/: L1 to L3 on the same real runners. The contract they pin, from the approved
 // desk plan's shape:
-//   0170: a start caused by a letter is checked against that letter's sender, read through
-//     `SessionManager.signer` (or the CheckedWriter's `sign`, which the real door backs with it),
-//     with `mayStart(member, program)`, which is always true. The program that asked holds no
-//     grant for it. A start with no letter behind it keeps the `starts` pair list.
+//   0170: a start caused by a letter is checked against that letter's sender, which `Senders`
+//     reads from the door's `SessionManager` (`access/SessionSenders.ts`), with `StartProgram` on
+//     `FABRIKA`, whose `start` every member holds (ticket 953, 0526). The program that asked holds no
+//     grant for it. A start with no letter behind it keeps the `starts` pair list. Only L1 and L2
+//     give letters a member; the P42 laws pin `StartGrant`, so theirs have none.
 //   StartChild.ts: `stopChild`, `Cmd.make("stop_child", { input: {name}, ok: null, err:
 //     ["not_child", "noproc"] })`, OTP's terminate_child: it ends the requester's own child with
 //     `shutdown`, and its watchers get one DOWN.
@@ -27,6 +28,7 @@
 import type { Tagged } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import type { Tracer } from "effect";
 import {
   Arbitrary,
@@ -45,8 +47,14 @@ import {
   Scope,
 } from "effect";
 import * as fc from "fast-check";
+import * as SessionSenders from "../access/SessionSenders.ts";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
+import { Model as Permissions } from "../permissions/Model.ts";
+import * as Relation from "../permissions/Relation.ts";
+import { Relations } from "../permissions/Relations.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import { Children, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -68,6 +76,7 @@ export type Store = {
   readonly shared: (
     sql: Sql,
     next: Effect.Effect<string>,
+    permissions: Layer.Layer<Relations | Senders>,
   ) => Layer.Layer<
     | Children
     | ProgramMail
@@ -132,6 +141,9 @@ const PROGRAMS: Record<string, unknown> = {
   [BOUNDARY_PROGRAM]: childStarter({ name: BOUNDARY_PROGRAM, declare: true }),
 };
 
+/** This fabrika in the permission model: a member's start is checked with `start` on it (0170, 0526). */
+export const FABRIKA = Permissions.ref("fabrika", "p42");
+
 /** Start grants, by program. `plain` is granted, but never declared the Cmds. */
 export const STARTS = [
   { source: "starter", to: "merger" },
@@ -161,6 +173,12 @@ const outsider = Writer.cases.person.make({ key: OUTSIDER_KEY, for: OUTSIDER_PER
 
 /** Desk S1, L1: a member's own writer, keyed by the person. */
 const memberWriter = (member: string) => Writer.cases.person.make({ key: `SHA256:${member}`, for: member });
+
+/** Desk S1, L1: the relation row that makes `person` a member of this fabrika, as the brain writes it. */
+const memberRow = (person: string): Relation.Change => ({
+  id: `member-${person}`,
+  row: Relation.Row.cases.related.make({ subject: `person:${person}`, relation: "member", object: FABRIKA }),
+});
 
 /** Programs a member's letter may start; no grant names `starter` or `plain` as a start's target. */
 const ANY_PROGRAM = ["starter", "plain", "merger"] as const;
@@ -369,6 +387,12 @@ type World = {
   >;
   /** Each child's first requester's name. */
   readonly parents: Map<string, string>;
+  /**
+   * Desk S1, L1 and L2: the people who are members of this fabrika, when the walk checks a start
+   * against the member whose letter caused it, as the real door does (0170). Left out, no letter has
+   * a member behind it, and the host's grants decide every start (T953).
+   */
+  readonly members?: Set<string>;
   /** Live watches: who watches whom, under which ref. */
   readonly watches: Array<{ readonly watcher: string; readonly target: string; readonly ref: string }>;
   readonly fault: {
@@ -390,9 +414,6 @@ type World = {
  * piece, and one runner per process that a runner steps, built when first asked for.
  */
 const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effect.Effect<string>, scope: Scope.Scope) {
-  const shared = store.shared(faulting(store.sql("ledger"), world.fault), next);
-  const context = yield* Layer.buildWithScope(shared, scope);
-  const children = Context.get(context, Children);
   // Desk S1: the door's SessionManager, on its own store. Every key is a member but the outsider's.
   const sessions = Context.get(
     yield* Layer.buildWithScope(
@@ -405,6 +426,24 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     ),
     SessionManager,
   );
+  // Desk S1, L1 and L2: the door says who sent a start's cause, and the members hold `member` on
+  // this fabrika. Without members, no letter has a member behind it (T953).
+  const members = world.members;
+  const permissions = yield* Layer.buildWithScope(
+    members === undefined
+      ? Layer.merge(RelationsMemory.layer([]), Layer.succeed(Senders, { sender: () => Effect.succeedNone }))
+      : Layer.merge(
+          RelationsMemory.layer([...members].map(memberRow)),
+          Layer.succeed(
+            Senders,
+            SessionSenders.make((parent, process) => sessions.sender(parent, process)),
+          ),
+        ),
+    scope,
+  );
+  const shared = store.shared(faulting(store.sql("ledger"), world.fault), next, Layer.succeedContext(permissions));
+  const context = yield* Layer.buildWithScope(shared, scope);
+  const children = Context.get(context, Children);
   const hold = Effect.gen(function* () {
     const held = world.hold;
 
@@ -511,7 +550,26 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     runners.set(held.pid, made);
     return made;
   });
-  return { context, runner };
+  /** Desk S1, L1: `person` becomes a member of this fabrika, kept for the next life's rows too. */
+  const admit = (person: string) =>
+    members === undefined || members.has(person)
+      ? Effect.void
+      : Effect.sync(() => members.add(person)).pipe(
+          Effect.andThen(
+            // The brain writes membership; the memory layer keeps no line, so only the shape matters.
+            Context.get(permissions, Relations).write([memberRow(person)], {
+              by: "SHA256:brain",
+              for: PERSON,
+              sentAt: "2026-11-11T01:00:00Z",
+              seen: 0,
+              parent: null,
+              traceId: TRACE,
+              build: "p42-test",
+            }),
+          ),
+          Effect.orDie,
+        );
+  return { context, runner, admit };
 });
 
 /** A process's saved model, read from its checkpoint without asking the runner. */
@@ -612,6 +670,7 @@ const walk = (
   moves: ReadonlyArray<Move>,
   done: Set<Move>,
   seen: Set<string>,
+  members: boolean,
 ) =>
   Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
@@ -620,6 +679,8 @@ const walk = (
       names: new Map(),
       starts: new Map(),
       parents: new Map(),
+      // Desk S1: the person every default letter is from is a member, as the founder is.
+      ...(members ? { members: new Set([PERSON]) } : {}),
       watches: [],
       fault: { exited: false, message: "SQLITE_FULL planted at the exit" },
       n: 0,
@@ -1321,6 +1382,7 @@ const walk = (
           const program = choose(ANY_PROGRAM, cell.alt);
           const target = fresh(program);
           const before = (yield* answers(name)).length;
+          yield* life.admit(cell.member);
           yield* door(name, { type: "start", ask: { program, name: target } }, memberWriter(cell.member));
           const told = yield* lastAnswer(name, before);
           expect(told, `L1: ${cell.member}'s letter may start ${program}`).toMatchObject({ type: "start_child_ok" });
@@ -1485,7 +1547,8 @@ const prop = (
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
   answers: ReadonlyArray<string>,
-  numRuns: number,
+  runs: Runs,
+  members = false,
 ) =>
   it.effect(
     name,
@@ -1493,10 +1556,10 @@ const prop = (
       Effect.gen(function* () {
         const done = new Set<Move>();
         const seen = new Set<string>();
-        const law = walk(open, moves, done, seen);
+        const law = walk(open, moves, done, seen, members);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
+        const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
@@ -1765,7 +1828,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "mail_start", "forged", "exit", "retry_saved"],
       ["door_start", "mail_start", "forged"],
       ["started", "mailed_start", "forged"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "Desk S1 L1: a start caused by any member's letter is allowed for any program, with no grant, and answers in Started's shape",
@@ -1773,7 +1836,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["member_start", "door_start", "mail_start"],
       ["member_start"],
       ANY_PROGRAM.map((program) => `member_${program}`),
-      200,
+      { fast: 20, full: 200 },
+      true,
     );
     prop(
       "Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked",
@@ -1781,7 +1845,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["member_start", "outsider_start"],
       ["member_start", "outsider_start"],
       [...ANY_PROGRAM.map((program) => `member_${program}`), ...ANY_PROGRAM.map((program) => `outsider_${program}`)],
-      200,
+      { fast: 20, full: 200 },
+      true,
     );
     prop(
       "Desk S1 L3: stop_child ends only the requester's own child, with shutdown and one DOWN per watcher; another's is not_child, an ended one noproc",
@@ -1789,7 +1854,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["stopper_start", "stop_own", "stop_other", "stop_ended", "watch"],
       ["stopper_start", "stop_own", "stop_other", "stop_ended", "watch"],
       ["stopper_started", "stopped_own", "down_shutdown", "not_child", "noproc"],
-      100,
+      { fast: 20, full: 100 },
     );
     prop(
       "L6: bad_cmd, then no_program, then bad_name, then bad_input, each writing nothing; an undeclared Cmd writes nothing",
@@ -1797,7 +1862,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "bad", "undeclared"],
       ["bad", "undeclared"],
       ["missing", "typed", "no_program", "bad_name", "bad_input", "undeclared"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L7: exit ends only its own life with normal, after the Cmds before it and none after; watchers get one DOWN; children outlive it",
@@ -1805,7 +1870,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "exit", "cut_exit", "after_exit", "watch", "start_ended", "retry_saved"],
       ["door_start", "exit", "cut_exit", "after_exit", "watch", "start_ended", "retry_saved"],
       ["exit", "exit_between_cmds", "down", "children_outlive", "already_present", "after_exit", "retried", "cut_exit"],
-      100,
+      { fast: 10, full: 100 },
     );
 
     for (const move of ["queued_exit", "interleaved_exit", "worker_before_exit", "worker_after_exit"] as const) {
@@ -1815,7 +1880,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         [move],
         [move],
         move === "interleaved_exit" ? [move, "interleaved_alarm", "interleaved_letter"] : [move],
-        100,
+        { fast: 10, full: 100 },
       );
     }
 
@@ -1825,7 +1890,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["boundary_start"],
       ["boundary_start"],
       ["boundary_start"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     prop(
@@ -1834,7 +1899,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["checkpoint_starts"],
       ["checkpoint_starts"],
       ["checkpoint_starts"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     prop(
@@ -1843,7 +1908,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["forged", "exit_extra", "undeclared", "undeclared_exit", "door_start"],
       ["forged", "exit_extra", "undeclared", "undeclared_exit"],
       ["forged", "exit_extra", "undeclared", "undeclared_exit"],
-      100,
+      { fast: 10, full: 100 },
     );
 
     it.effect(
@@ -1854,7 +1919,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            numRuns: runsFor({ fast: 10, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);

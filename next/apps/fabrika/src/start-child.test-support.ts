@@ -13,9 +13,12 @@ import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransacti
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -111,13 +114,15 @@ const env = (key: string, value: string) =>
   );
 
 /**
- * One real local instance with both test programs built in and `starts` as its start grants. Its
- * home, port, environment and instance are acquired in the caller's scope and given back with it.
- * With `starts` undefined, the instance gets no start grants at all, as the app starts it. `extra`
+ * One home with both test programs built in and `starts` as its start grants, and a way to boot it.
+ * The home and environment are acquired in the caller's scope. `boot` acquires a port and a real
+ * local instance in the scope it runs in, so a test may boot the same home twice, one boot after
+ * the other's scope closed, and the second finds the first one's storage (T953, L17). With
+ * `starts` undefined, the instance gets no start grants at all, as the app starts it. `extra`
  * adds programs by name, each a module source that exports `program`; one named like an app
  * program takes its place, as the app's `build` does.
  */
-export const childInstance = Effect.fnUntraced(
+export const childHome = Effect.fnUntraced(
   function* (
     starts: ReadonlyArray<{ readonly source: string; readonly to: string }> | undefined,
     extra: Readonly<Record<string, string>> = {},
@@ -150,21 +155,24 @@ export const childInstance = Effect.fnUntraced(
       starter: built.programs["p42/starter"]?.hash ?? "",
       child: built.programs["p42/child"]?.hash ?? "",
     };
-    // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
-    const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     const key = identity();
-    const instance = yield* localInstance(
-      built,
-      RecordWireTest.startupFixture({
-        home,
-        name: PROJECT,
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: port.port,
-        ...(starts === undefined ? {} : { starts }),
-      }),
-    );
+    const boot = Effect.gen(function* () {
+      // Held until the scope closes, after the instance that binds it (finalizers run in reverse). Each
+      // boot takes its own port: the runtime keeps a closed instance's port marked taken for a while.
+      const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+      return yield* localInstance(
+        built,
+        RecordWireTest.startupFixture({
+          home,
+          name: PROJECT,
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: port.port,
+          ...(starts === undefined ? {} : { starts }),
+        }),
+      );
+    }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer));
     const from: From = {
       by: key.fingerprint,
       for: PERSON,
@@ -174,11 +182,25 @@ export const childInstance = Effect.fnUntraced(
       traceId: TRACE,
       build: built.build,
     };
-    return { instance, key, hashes, from };
+    return { boot, key, hashes, from };
   },
   Effect.provide(SecureRandom.layerWebCrypto),
   Effect.provide(NodeServices.layer),
 );
+
+/**
+ * One real local instance with both test programs built in and `starts` as its start grants. Its
+ * home, port, environment and instance are acquired in the caller's scope and given back with it.
+ * With `starts` undefined, the instance gets no start grants at all; `extra` is `childHome`'s.
+ */
+export const childInstance = Effect.fnUntraced(function* (
+  starts: ReadonlyArray<{ readonly source: string; readonly to: string }> | undefined,
+  extra: Readonly<Record<string, string>> = {},
+) {
+  const { boot, key, hashes, from } = yield* childHome(starts, extra);
+  const instance = yield* boot;
+  return { instance, key, hashes, from };
+});
 
 /** A letter for the door's `process.send`. */
 export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
@@ -208,6 +230,7 @@ export const childProject = Effect.fnUntraced(function* () {
   );
   const sql = nodeSql(db);
   const key = identity();
+  const delivered: Array<unknown> = [];
   const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
   const descriptors = new Map<string, Descriptor>();
   const recorded: Array<unknown> = [];
@@ -333,6 +356,15 @@ export const childProject = Effect.fnUntraced(function* () {
                 return descriptors.get(registered);
               }),
             ),
+          // T953, L18: the door's delivery lands here. The test plays the runner, so the letter is kept.
+          msg: (incoming: unknown) =>
+            remote(
+              Effect.sync(() => {
+                observe("process.msg");
+                delivered.push(incoming);
+                return Sent.cases.accepted.make({ rev: delivered.length, pos: delivered.length });
+              }),
+            ),
         };
       },
     },
@@ -362,13 +394,16 @@ export const childProject = Effect.fnUntraced(function* () {
           describe: () =>
             remote(
               Effect.sync(() => ({
-                name: id.startsWith("child-") ? "p42/child" : "fabrika/counter",
+                // The loader keys an isolate by `<hash>/<process>`, so the hash says which program it holds.
+                name: id.startsWith(`${programs["p42/child"]?.hash}/`) ? "p42/child" : "fabrika/counter",
                 v: 1,
                 writes: {},
                 inputs: { inc: { write: true, personOnly: false } },
                 cmds: [],
               })),
             ),
+          // T953, L18: the door audits a letter before it delivers it; these programs select nothing.
+          audit: () => remote(Effect.succeed(Audit.Answer.cases.ok.make({ value: null }))),
         }),
       }),
     },
@@ -392,9 +427,17 @@ export const childProject = Effect.fnUntraced(function* () {
   return {
     acquire,
     from,
+    /** The founding key: it signs the project's grants and revokes (T953, L18). */
+    founder: key,
+    /** A second key, for an agent the founder lets in and later removes (T953, L18). */
+    agent: identity(),
+    /** Every letter the door delivered to a process, as the process received it. */
+    delivered,
     configured,
     recorded,
     legacyDescriptors: () => sql.exec("ALTER TABLE dev_descriptors DROP COLUMN pending"),
+    /** How many starts the Project has saved and not yet delivered to their objects. */
+    undelivered: () => sql.exec("SELECT process FROM dev_descriptors WHERE pending>0").length,
     monitor: (watcher: string, target: string, ref: string) =>
       ProcessManager.use((manager) => manager.monitor(ref, target, from)).pipe(
         Effect.provide(

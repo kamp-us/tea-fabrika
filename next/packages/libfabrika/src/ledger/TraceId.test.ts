@@ -2,6 +2,7 @@
 // record by traceId, including an own write. With no span, the helper fails instead of making one.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import { inputParents } from "../Id.test-support.ts";
@@ -125,7 +126,7 @@ describe("T246, fromHere", () => {
         expect(entry?.traceId).toBe(append[0]?.traceId);
       }).pipe(Effect.provide(world));
     },
-    { arbitrary: { seed: 119120, runs: 40 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 
   // Plant: fromHere falls back to a random id, or starts its own root span.

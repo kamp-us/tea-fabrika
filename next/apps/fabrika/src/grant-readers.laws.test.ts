@@ -1,5 +1,6 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -82,7 +83,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
         fetch.mockRestore();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["http://["]] },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }), examples: [["http://["]] },
   );
 });
 
@@ -116,7 +117,7 @@ it("grant usage guard names the error for each missing argument or flag", async 
         fetch.mockRestore();
       }
     }),
-    { seed: 119120, numRuns: 25 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
   );
 });
 
@@ -321,7 +322,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           log.mockRestore();
         }
       }),
-      { seed: 119120, numRuns: 12 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
     );
   });
 }
@@ -343,6 +344,6 @@ it("grant reports bad_args when the CLI refuses unknown flags", async () => {
         fetch.mockRestore();
       }
     }),
-    { seed: 119120, numRuns: 10 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
   );
 });

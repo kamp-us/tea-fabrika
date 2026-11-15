@@ -14,11 +14,15 @@
 // with no host grant, the right read from the requester on the child's first `started` line. The
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { Children } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
@@ -543,7 +547,12 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
+        const checks = {
+          seed: SEED,
+          numRuns: runsFor({ fast: 10, full: 40 }),
+          includeErrorInReport: true,
+          endOnFailure: true,
+        };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -694,7 +703,13 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       n: 0,
     };
     const stack = ProgramMailLedger.layer({ grants: HOST }).pipe(
-      Layer.provideMerge(ChildrenLedger.layer({ grants: STARTS })),
+      Layer.provideMerge(
+        ChildrenLedger.layer({ grants: STARTS, fabrika: Model.ref("fabrika", "p41") }).pipe(
+          // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
+          Layer.provide(RelationsMemory.layer([])),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+        ),
+      ),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
           Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
@@ -957,7 +972,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-          const checks = { seed: SEED, numRuns: 200, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            // Every relation the law names must be mailed across: 60 walks miss some at this seed.
+            numRuns: runsFor({ fast: 120, full: 200 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           // An empty walk cannot pass: every move ran, and every relation the law names was mailed across.

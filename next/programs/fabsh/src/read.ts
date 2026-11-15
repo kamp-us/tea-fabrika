@@ -5,7 +5,7 @@
 //   line      blank | builtin | start
 //   builtin   'help' [word] | 'clear' | 'history' | 'programs'
 //   start     program ['as' name]      program: one known program, by its last part or whole name
-import { ProcessName } from "@kampus/libfabrika/processes/Process";
+import { ProcessName } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
 /** A span's role, S1's names: the subset this grammar needs. */

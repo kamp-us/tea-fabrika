@@ -105,7 +105,18 @@ export * as Send from "./runtime/Send.ts";
  * @stability unstable
  */
 export * as StartChild from "./runtime/StartChild.ts";
+/**
+ * @stability unstable
+ */
+export * as Programs from "./runtime/Programs.ts";
 export { Started } from "./processes/Children.ts";
+/**
+ * Schema for a registered process name, the whereis key a start registers its child under.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export { ProcessName } from "./processes/Process.ts";
 /**
  * @stability unstable
  */

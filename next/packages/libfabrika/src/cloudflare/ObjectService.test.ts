@@ -164,6 +164,8 @@ const processCalls = {
   mailed: (process: ProcessShape) => process.mailed(),
   due: (process: ProcessShape) => process.due(1),
   restart: (process: ProcessShape) => process.restart({ id: descriptor.id, build: descriptor.build }),
+  swap: (process: ProcessShape) =>
+    process.swap({ load: descriptor.id, program: descriptor.program, hash: descriptor.build }),
   activity: (process: ProcessShape) => process.activity(Activity.cases.idle.make({ process: descriptor.id })),
   recover: (process: ProcessShape) => process.recover(),
 };
@@ -258,6 +260,8 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         };
         let text = damaged(good, recipe);
         let reads = 0;
+        // The one query a build makes: whether the object holds a checkpoint yet (none here).
+        let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
         const storage = {
           get: (key: string) => Promise.resolve(values.get(key)),
@@ -268,7 +272,16 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           delete: unexpected,
           setAlarm: unexpected,
           deleteAlarm: unexpected,
-          sql: { exec: unexpected },
+          sql: {
+            exec: (query: string) => {
+              if (query !== "SELECT name FROM sqlite_master WHERE name='process_state'") {
+                return unexpected();
+              }
+
+              lookups++;
+              return [];
+            },
+          },
           transactionSync: unexpected,
         };
         yield* Effect.acquireRelease(
@@ -297,6 +310,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
                   due: unexpected,
                   mailed: Effect.void,
                   restart: unexpected,
+                  swap: unexpected,
                 }),
               ),
             ),
@@ -340,6 +354,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         );
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);
+        expect(lookups, "no storage is read before the first call").toBe(0);
 
         // The walk draws from every call: a call the contract gains and the table lacks fails here.
         const listed = new Set([...processCallNames, ...buildsNothing]);

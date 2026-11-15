@@ -1,6 +1,9 @@
+import { applyCell } from "@demlik/tea";
+import { Machine } from "@demlik/tea/effect";
+import { describe, expect, it } from "@effect/vitest";
 // fabsh in a tile, slice 1, next/: the runner's draft laws L6, L7 and L8 of the approved plan
 // (docs/plan/lanes/fabsh-PLAN.md, "Laws"), a suite the module owning a real SQLite driver runs (0062):
-// `RunnerDraftTest.suite(harness)`, from `node/runtime/RunnerDraft.laws.test.ts`. The plan names one
+// `RunnerDraftTest.suite(harness)`, from `node/runtime/RunnerDraft.laws.integration.test.ts`. The plan names one
 // file, `runtime/RunnerDraft.laws.test.ts`; a runtime test may not open a driver, so the laws live
 // here and the driver runs them, as `RunnerWatchersTest` does. Written before the runner's draft
 // call; until the build adds it, every law fails on `draft` missing from the runner.
@@ -14,9 +17,7 @@
 //   declares none). No ledger append, no letter, no checkpoint, no watcher publish, no span.
 // - A submitted letter goes through `msg` as every letter does, and the step takes its line from
 //   the letter, never from the draft.
-import { applyCell } from "@demlik/tea";
-import { Machine } from "@demlik/tea/effect";
-import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { Archive, RecordManager, SpanSink } from "../coordination/index.ts";
@@ -273,7 +274,7 @@ export const suite = (harness: Harness) =>
             expect(JSON.stringify(w.published).includes(MARK), "a published view holds draft text").toBe(false);
           }),
         ),
-      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: 200 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 20, full: 200 }) } },
     );
 
     it.live.prop(
@@ -303,7 +304,7 @@ export const suite = (harness: Harness) =>
             expect((yield* w.runner().open("woken")).view, "a wake replays the same view").toEqual(live);
           }),
         ),
-      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: 300 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 30, full: 300 }) } },
     );
 
     it.live.prop(
@@ -345,7 +346,7 @@ export const suite = (harness: Harness) =>
             expect((yield* w.runner().open("after")).view).toEqual({ lines: [] });
           }),
         ),
-      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: 200 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 20, full: 200 }) } },
     );
 
     it.live("scenario: L10 at the runner: a program that declares no draft answers no_draft and changes nothing", () =>

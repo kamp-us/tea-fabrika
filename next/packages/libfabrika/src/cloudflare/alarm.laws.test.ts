@@ -105,7 +105,12 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               armed = null;
               eligible = null;
             },
-            sql: { exec: unexpected },
+            sql: {
+              exec: (query: string) => {
+                expect(query).toBe("SELECT name FROM sqlite_master WHERE name='process_state'");
+                return [];
+              },
+            },
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
@@ -136,6 +141,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                       due: () => Effect.void,
                       mailed: Effect.void,
                       restart: () => Effect.void,
+                      swap: () => Effect.sync(unexpected),
                     });
                   }),
                 ),
@@ -308,7 +314,11 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             delete: unexpected,
             setAlarm: unexpected,
             deleteAlarm: unexpected,
-            sql: { exec: unexpected },
+            // The one query a build makes: whether the object holds a checkpoint yet (none here).
+            sql: {
+              exec: (query: string) =>
+                query === "SELECT name FROM sqlite_master WHERE name='process_state'" ? [] : unexpected(),
+            },
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
@@ -345,6 +355,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,
+                    swap: unexpected,
                   }),
                 ),
               ),

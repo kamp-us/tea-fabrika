@@ -38,6 +38,7 @@
     "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
     "@kampus/fabsh": "workspace:*",
+    "@kampus/vitest": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",

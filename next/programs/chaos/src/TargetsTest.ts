@@ -3,6 +3,7 @@
 // wrap the original error class, repeat a dead write, recompute a saved refusal, drop a note.
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
@@ -44,7 +45,7 @@ export type Open = Effect.Effect<
 
 const NAME = "checklist:1";
 const PROGRAM = "fabrika/checklist";
-const options = { arbitrary: { seed: 119120, runs: 25 }, timeout: 120_000 };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 25 }) }, timeout: 120_000 };
 const integer = (maximum: number) => Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum })));
 
 const walk = Arbitrary.array(Arbitrary.all({ pick: integer(1000), retry: Arbitrary.schema(Schema.Boolean) }), {

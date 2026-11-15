@@ -1872,6 +1872,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         .signer(parent, process, kind)
         .pipe(Effect.provideService(SignRequest, { id }));
     }),
+    // Who sent an input is the same for every policy: no event kind is asked, so none is loaded.
+    sender: Effect.fn("gateway.sender")(function* (process: string, parent: string) {
+      return yield* sessions.sender(parent, process);
+    }),
     retire: sessions.end,
     checkDelivery: Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
       const binding = yield* savedBinding(input.envelope.id);
@@ -1922,7 +1926,9 @@ type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => E
  * does not decode. `checkDelivery` refuses with `not_delivered` when an input does not match its
  * saved binding. `sign`, `signer` and `append` serve a process answering an input it was delivered.
  * They refuse with `SigningRefused`: `not_delivered` when the process is not live or no delivery is
- * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases.
+ * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases. `sender` answers who
+ * sent an input delivered to a process, refused as `sign` is, and writes nothing: the brain asks it
+ * before a start (0170).
  *
  * @stability unstable
  * @category services
@@ -2000,6 +2006,11 @@ export class Gateway extends Context.Service<
       parent: string,
       kind: string,
     ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError>;
+    /** Who sent `parent`, an input delivered to `process`, as `sign` would sign it, writing nothing. */
+    readonly sender: (
+      process: string,
+      parent: string,
+    ) => Effect.Effect<Writer, SigningRefused | NotGranted | SessionManagerError>;
     readonly retire: (process: string) => Effect.Effect<void, SessionManagerError>;
     readonly checkDelivery: (
       process: string,

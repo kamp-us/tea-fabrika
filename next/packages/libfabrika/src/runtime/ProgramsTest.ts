@@ -1,6 +1,8 @@
+import { Machine } from "@demlik/tea/effect";
+import { describe, expect, it } from "@effect/vitest";
 // fabsh slice 2a, next/: the runner's `programs` law L24 of the approved plan
 // (docs/plan/lanes/fabsh-PLAN.md, "Laws", and amendment A6), a suite the module owning a real SQLite
-// driver runs (0062): `ProgramsTest.suite(harness)`, from `node/runtime/Programs.test.ts`. The plan
+// driver runs (0062): `ProgramsTest.suite(harness)`, from `node/runtime/Programs.integration.test.ts`. The plan
 // names one file, `runtime/Programs.test.ts`; a runtime test may not open a driver, so the law lives
 // here and the driver runs it, as slice 1's `RunnerDraftTest` does. Written before `Programs.ts`;
 // until the build adds it, this file fails on that missing module.
@@ -13,8 +15,7 @@
 //   is every name its `ProgramLoader` can load, sorted (JavaScript's default string order), read
 //   when the Cmd runs, never a list kept from an earlier answer or another runner.
 // - `ProgramLoader` is the one source: the build may add a call to it that lists its table.
-import { Machine } from "@demlik/tea/effect";
-import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { Archive, RecordManager, SpanSink } from "../coordination/index.ts";
@@ -173,6 +174,6 @@ export const suite = (harness: Harness) =>
             expect(yield* w.told(), "asked again, it answers the same table").toEqual([expected, expected]);
           }),
         ),
-      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: 100 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
     );
   });

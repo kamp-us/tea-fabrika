@@ -86,13 +86,14 @@ export const layer = (options: {
           ),
         usage: (rows) => use((process) => process.usage(rows)),
         configure: (descriptor, drain) => called(configureProcess(raw, descriptor, context, drain)),
-        descriptor: () => called(processDescriptor(raw)),
+        descriptor: (process) => called(processDescriptor(raw, process)),
         msg: (input) => use((process) => process.msg(input)),
         open: (client) => use((process) => process.open(client)),
         draft: (m) =>
           use((process) =>
             process.draft === undefined ? Effect.succeed(DraftAnswer.make({ err: "no_draft" })) : process.draft(m),
           ),
+        swap: (request) => use((process) => process.swap(request)),
         mailed: (trace) => use((process) => process.mailed(trace)),
         due: (at) => use((process) => process.due(at)),
         restart: (request) => use((process) => process.restart(request)),

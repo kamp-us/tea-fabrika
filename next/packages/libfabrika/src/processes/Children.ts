@@ -49,12 +49,6 @@ export const Child = Schema.Struct({
   requester: Recipient.cases.process,
   /** The child's first letter, written in the start's own turn. */
   input: Schema.optionalKey(Schema.Json),
-  /**
-   * The verdict of 0170's check on the member whose letter caused the start, which the host binds,
-   * never the program. Left out when no member's letter is behind the start: the host's grants
-   * decide then.
-   */
-  permitted: Schema.optionalKey(Schema.Boolean),
 });
 /**
  * One request to start a child, as `Child` decodes it.
@@ -105,9 +99,12 @@ export type ChildStop = {
  *
  * Every reason but `storage` is a refusal, and a refusal writes nothing:
  *
- * - `forbidden`: the member whose letter caused the start may not start the child's program, or,
- *   with no member's letter behind it, the host gave the requester's program no right to.
- * - `stale_sender`: the requester is no longer a live process.
+ * - `forbidden`: the member checked holds no `start` on this fabrika, or the key of the member
+ *   whose input caused the start was removed (0170). A start with no member behind it, neither a
+ *   member's input to the requester nor the requester's recorded member, is refused when the host
+ *   gave the requester's program no right to start the child's program.
+ * - `stale_sender`: the requester is no longer a live process, or the process the cause was
+ *   delivered to has ended.
  * - `bad_name`: the child's name is not a process name.
  * - `bad_input`: the request did not decode, or its first letter is over `INPUT_BYTES`.
  * - `id_reused`: the start id was first used with another name, program, requester or input.

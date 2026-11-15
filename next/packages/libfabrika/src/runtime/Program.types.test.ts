@@ -81,7 +81,7 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
   );
 });
 
-it("tea exposes the original schemas with readonly fields and a plain Msg, excluding Cmd replies", () => {
+it("type: tea exposes the original schemas with readonly fields and a plain Msg, excluding Cmd replies", () => {
   expectTypeOf(machine.model).toEqualTypeOf<Schema.Schema<typeof Model.Type>>();
   expectTypeOf(machine.msg).toEqualTypeOf<Schema.Schema<typeof Msg.Type>>();
 });

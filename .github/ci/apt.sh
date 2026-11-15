@@ -24,6 +24,15 @@
 # three, then those three: six mirrors, six tries. Packages stay checked against apt's own
 # keyring, so a mirror only has to answer.
 #
+# An `apt-get update` that exits 0 can still have fetched no Ubuntu list at all. On scheduled run
+# 43676389337 the runner's image, ubuntu-26.04 build 20261111.82.6, had no Ubuntu source, only
+# packages.microsoft.com: `update` fetched that one source and passed, and Playwright's install then
+# found none of its font packages. Two jobs on build 20261111.196.1 an hour earlier listed the
+# image's mirrors as usual. So a try passes only once the lists hold a Release file of Ubuntu's
+# archive for this release (the `Origin` and `Suite` fields of Debian's repository format), and when
+# no source names the archive at all, the fallback writes the stock deb822 file for the release
+# named in /etc/os-release, read through the mirror list.
+#
 # Edge cases, each a test in apt.test.ts:
 # - Mirror fine: the first try passes and no file changes.
 # - Azure dead on update: try 1 fails, Azure leaves the list, the outside mirrors join its end,
@@ -35,7 +44,9 @@
 # - No mirror list, sources in deb822 (`ubuntu.sources`) or the old one-line format
 #   (`sources.list`): the fallback writes the list from the chain and points each Canonical line
 #   at it, security's included.
-# - No mirror list and no sources file: a warning, and the tries go on unchanged.
+# - No Ubuntu source, update passes on another source's lists: try 1 fails, the fallback writes
+#   `ubuntu.sources` for the release and a mirror list from the image's chain, try 2 passes.
+# - No Ubuntu source and no release in os-release: a warning, and the tries go on unchanged.
 # - Fallback many times: each drops one mirror from the top, the outside mirrors join only while
 #   a Canonical one is listed, so a dropped one never comes back; a used-up list stays empty with
 #   a warning; nothing ever marks a source trusted.
@@ -43,7 +54,10 @@ set -eu
 
 etc=${APT_ETC:-/etc/apt}
 list=$etc/apt-mirrors.txt
+lists=${APT_LISTS:-/var/lib/apt/lists}
 tries=6
+# This release's code name, such as resolute, or empty when os-release names none.
+codename=$(sed -nE 's/^VERSION_CODENAME="?([a-z]+)"?$/\1/p' "${OS_RELEASE:-/etc/os-release}" 2>/dev/null || true)
 
 # The image's chain, for a runner with no list of its own.
 image='http://azure.archive.ubuntu.com/ubuntu/ https://archive.ubuntu.com/ubuntu/'
@@ -70,9 +84,34 @@ append() {
   done
 }
 
+sources=$etc/sources.list.d/ubuntu.sources
+
+# No source names Ubuntu's archive, directly or through a mirror list: write the stock deb822 file
+# for this release, read through the list, which starts as the image's chain. No mirror failed, so
+# none leaves the list.
+write_sources() {
+  cat >"$sources" <<EOF
+Types: deb
+URIs: mirror+file:$list
+Suites: $codename $codename-updates $codename-backports $codename-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+  if [ ! -f "$list" ]; then
+    : >"$list"
+    # shellcheck disable=SC2086 # a list of words on purpose
+    append $image
+  fi
+  echo "::warning::no apt source names Ubuntu's archive, wrote $sources for $codename"
+}
+
 fallback() {
+  if [ -n "$codename" ] && ! grep -qsE "$canonical|mirror\+file:" "$sources" "$etc/sources.list"; then
+    write_sources
+    return
+  fi
   found=
-  for file in "$etc/sources.list.d/ubuntu.sources" "$etc/sources.list"; do
+  for file in "$sources" "$etc/sources.list"; do
     if [ -f "$file" ]; then
       edit "$file" "s#$canonical#mirror+file:$list#g"
       found=1
@@ -101,9 +140,23 @@ fallback() {
   edit "$list" 1d
 }
 
-# One try: refresh the lists, then install what was named.
+# The lists hold a Release file of Ubuntu's archive for this release. With no release name there
+# is nothing to look for, and the try stands on apt's exit alone.
+fetched() {
+  [ -n "$codename" ] || return 0
+  for file in "$lists"/*Release; do
+    if [ -f "$file" ] && grep -qx 'Origin: Ubuntu' "$file" && grep -qx "Suite: $codename" "$file"; then
+      return 0
+    fi
+  done
+  echo "::warning::apt-get update fetched no list of Ubuntu's $codename archive"
+  return 1
+}
+
+# One try: refresh the lists, check they hold Ubuntu's archive, then install what was named.
 fetch() {
   timeout --kill-after=10 60 apt-get update || return 1
+  fetched || return 1
   if [ "$#" -gt 0 ]; then
     timeout --kill-after=10 300 apt-get install -y --no-install-recommends "$@"
   fi

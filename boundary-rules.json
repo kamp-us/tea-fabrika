@@ -3,11 +3,12 @@
     "design": { "imports": [], "pure": false },
     "library": { "imports": ["design"], "pure": false },
     "app": { "imports": ["library", "design"], "pure": false },
-    "next-library": { "imports": ["design"], "pure": false },
-    "next-tuval": { "imports": ["next-library", "design"], "pure": false },
-    "next-program": { "imports": ["next-library", "next-tuval", "design"], "pure": false },
+    "next-vitest": { "imports": [], "pure": false },
+    "next-library": { "imports": ["design", "next-vitest"], "pure": false },
+    "next-tuval": { "imports": ["next-library", "design", "next-vitest"], "pure": false },
+    "next-program": { "imports": ["next-library", "next-tuval", "design", "next-vitest"], "pure": false },
     "next-app": {
-      "imports": ["next-library", "next-tuval", "next-program", "design"],
+      "imports": ["next-library", "next-tuval", "next-program", "design", "next-vitest"],
       "pure": false
     }
   },
@@ -18,6 +19,7 @@
     "next/apps/fabrika": "next-app",
     "next/packages/libfabrika": "next-library",
     "next/packages/tuval": "next-tuval",
+    "next/packages/vitest": "next-vitest",
     "next/programs/checklist": "next-program",
     "next/programs/inbox": "next-program",
     "next/programs/chaos": "next-program",

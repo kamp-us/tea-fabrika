@@ -2,8 +2,7 @@
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVitest } from "vitest/node";
-import { testConfig } from "../../vitest.config.ts";
-import { e2eConfig } from "../../vitest.e2e.config.ts";
+import { projects } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
 
 /**
@@ -18,11 +17,18 @@ export const stale = (table: Readonly<Record<string, number>>, files: readonly s
 };
 
 /**
- * Test files under `root` as Vitest itself selects them from `include` and `exclude`, in path order.
- * A glob of our own drifted from Vitest's twice (`dist`, then dot folders), so Vitest does the
- * selecting.
+ * Test files under `root` as Vitest itself selects them from one project's `include` and
+ * `exclude`, read on each call, in path order. A glob of our own drifted from Vitest's twice
+ * (`dist`, then dot folders), so Vitest does the selecting.
  */
-const selected = async (root: string, include: string[], exclude: string[]): Promise<string[]> => {
+const selected = async (root: string, name: string): Promise<string[]> => {
+  const project = projects.find((each) => each.test.name === name);
+
+  if (project === undefined) {
+    throw new Error(`shard-rows: vitest.config.ts has no project ${name}`);
+  }
+
+  const { include, exclude } = project.test;
   const vitest = await createVitest("test", { root, config: false, watch: false, include, exclude });
 
   try {
@@ -34,21 +40,20 @@ const selected = async (root: string, include: string[], exclude: string[]): Pro
   }
 };
 
-/** next/'s vitest files: the repo config's next/ includes and every exclude, read on each call. */
-export const nextFiles = (root: string) =>
-  selected(
-    root,
-    testConfig.test.include.filter((glob) => glob.startsWith("next/")),
-    [...testConfig.test.exclude],
-  );
+/**
+ * next/'s vitest-leg files: the `next` project, which pull requests and the merge queue run, and
+ * `next-integration`, which the schedule runs beside it (0536).
+ */
+export const nextFiles = async (root: string) =>
+  [...(await selected(root, "next")), ...(await selected(root, "next-integration"))].toSorted();
 
-/** next/'s end-to-end files: the end-to-end config's includes and excludes, read on each call. */
-export const e2eFiles = (root: string) => selected(root, e2eConfig.test.include, e2eConfig.test.exclude);
+/** next/'s visual files, the `next-visual` project: the end-to-end legs run them. */
+export const visualFiles = (root: string) => selected(root, "next-visual");
 
 /** Write the lint diagnostic for each stale row and return its exit code. */
 export const main = (rows: readonly string[], write: (line: string) => void): number => {
   for (const path of rows) {
-    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts`);
+    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`);
   }
 
   return rows.length === 0 ? 0 : 1;
@@ -65,6 +70,6 @@ export const main = (rows: readonly string[], write: (line: string) => void): nu
 // stale line, exit 1). Restored, it printed nothing and exited 0.
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
-  const files = [...(await nextFiles(root)), ...(await e2eFiles(root))];
+  const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
   process.exitCode = main(stale(measured, files), (line) => console.error(line));
 }

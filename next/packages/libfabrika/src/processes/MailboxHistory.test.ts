@@ -1,6 +1,7 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -49,7 +50,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: 119120,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },

@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
@@ -187,7 +188,7 @@ class Repo {
 
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
 const DONE = { _tag: "done" };
-const runs = { seed: 119120, numRuns: 5 };
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) };
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 

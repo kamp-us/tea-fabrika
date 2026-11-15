@@ -5,9 +5,7 @@
 // A line that names a program starts it in that line's own step, so the start's cause is the
 // member's letter and it is checked against that member (0170): fabsh holds no start grant.
 import { Machine } from "@demlik/tea/effect";
-import { Program, type Refusal } from "@kampus/libfabrika";
-import { programs } from "@kampus/libfabrika/runtime/Programs";
-import { startChild } from "@kampus/libfabrika/runtime/StartChild";
+import { Program, Programs, type Refusal, StartChild } from "@kampus/libfabrika";
 import { Schema } from "effect";
 import { builtins, type Known, read, toStart } from "./read.ts";
 
@@ -136,7 +134,7 @@ const settle = (
 export const fabshMachine = Machine.make({
   model: Model,
   msg: Msg,
-  cmds: [startChild, programs],
+  cmds: [StartChild.startChild, Programs.programs],
   init: (loaded) => [loaded ?? { history: [], scroll: [], programs: [], ask: "due" }, []],
   update: {
     // The process decides: it reads the letter's line again, never the tile's prediction.
@@ -184,10 +182,10 @@ export const fabshMachine = Machine.make({
         return [push(m, line, entry), []];
       }
 
-      return [push(m, line, Entry.cases.starting.make({ line, ...start })), [startChild(start)]];
+      return [push(m, line, Entry.cases.starting.make({ line, ...start })), [StartChild.startChild(start)]];
     },
     // The runner's timer at the wake `due` asks for: the one ask of what can be started.
-    timer: (m) => (m.ask === "due" ? [{ ...m, ask: "sent" }, [programs({})]] : [m, []]),
+    timer: (m) => (m.ask === "due" ? [{ ...m, ask: "sent" }, [Programs.programs({})]] : [m, []]),
     programs_ok: (m, msg) => [{ ...m, programs: [...msg.value] }, []],
     programs_err: (m) => [m, []],
     // The runner answers its Cmds in the order they went, and an ok echoes the start it answers.
