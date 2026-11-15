@@ -1771,16 +1771,18 @@ const projectLogic = Effect.fn("project.init")(function* (
     mail: (delivery: Delivery, trace?: { traceId: string; spanId: string }) => {
       const work: Effect.Effect<MailReply, ProgramMailError> = write(mail.deliver(delivery)).pipe(
         Effect.map((receipt): MailReply => MailReplies.cases.ok.make({ receipt })),
-        Effect.catchTag("ProgramMailError", (error) =>
-          error.reason === "storage"
-            ? Effect.fail(error)
-            : error.reason === "full"
-              ? Effect.succeed(
-                  // A full inbox holds at least its cap unread.
-                  MailReplies.cases.full.make({ unread: error.unread ?? cap, cap }),
-                )
-              : Effect.succeed(MailReplies.cases.refused.make({ reason: error.reason })),
-        ),
+        Effect.catchTag("ProgramMailError", (error): Effect.Effect<MailReply, ProgramMailError> => {
+          if (error.reason === "storage") {
+            return Effect.fail(error);
+          }
+
+          // A full inbox holds at least its cap unread.
+          return Effect.succeed(
+            error.reason === "full"
+              ? MailReplies.cases.full.make({ unread: error.unread ?? cap, cap })
+              : MailReplies.cases.refused.make({ reason: error.reason }),
+          );
+        }),
       );
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
