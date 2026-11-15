@@ -1,9 +1,9 @@
 ---
 state: "decided 2026-11-11; four unclear cases are the lead's leans, not ruled on"
-summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The lane: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the lane. The picture: a thin lane, one merge queue fabrika provides (0107), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner (0101) and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next (0105), with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes (0106). From experiment 260; [0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)."
+summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The quest: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the quest. The picture: a thin quest, one merge queue fabrika provides (0107), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner (0101) and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next (0105), with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes (0106). From experiment 260; [0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)."
 ---
 
-# Lane, queue or scheduled job: where each piece of work in a change lives
+# Quest, queue or scheduled job: where each piece of work in a change lives
 
 **Decided 2026-11-11.** The owner decided the rule, the tie-breaker and the picture after a walk of
 [experiment 260](../../experiments/260-lane-queue-or-scheduled-job.md), and corrected two of its
@@ -13,7 +13,7 @@ is the repo's existing word:
 [a program on the host that listens to the clock](./scheduled-jobs-on-the-host.md).
 The unclear cases in [The families of work](#the-families-of-work) marked "the lead's lean, not
 ruled on" were heard without objection and stay leans. Both versions: the rule holds for today's lead tooling now
-and for `next/`'s pipeline when it runs lanes. Each piece is built in the owner's standing order:
+and for `next/`'s pipeline when it runs quests. Each piece is built in the owner's standing order:
 first it works, then better, then secure.
 
 ```ts
@@ -25,9 +25,9 @@ type Work = {
   ourEventMovesIt: boolean; // shared state that only our own event changes: main moves on our merge
 };
 
-const home = (work: Work): "lane" | "queue" | "scheduled job" => {
-  if (work.stopsLastingHarm) return "lane"; // the tie-breaker: it never leaves the lane
-  if (work.judges === "this change" && work.neededNext) return "lane";
+const home = (work: Work): "quest" | "queue" | "scheduled job" => {
+  if (work.stopsLastingHarm) return "quest"; // the tie-breaker: it never leaves the quest
+  if (work.judges === "this change" && work.neededNext) return "quest";
   // compares "should be" with "is"
   if (work.judges === "shared" && !work.ourEventMovesIt) return "scheduled job";
   return "queue"; // one piece of work per event, done once, can wait its turn
@@ -43,9 +43,9 @@ home({ judges: "shared", neededNext: false, stopsLastingHarm: false, ourEventMov
 
 ```mermaid
 flowchart LR
-  lane["lane: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0107)"]
-  lane --> desk["lead's hand work, a queue the lane waits on"]
-  desk --> lane
+  quest["quest: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0107)"]
+  quest --> desk["lead's hand work, a queue the quest waits on"]
+  desk --> quest
   mq --> merged["merge event"]
   merged --> checkout["bring the tool checkout up to date, once per burst"]
   merged --> close["close the merge's tickets"]
@@ -56,7 +56,7 @@ flowchart LR
   watcher --> lastRan
 ```
 
-- **A thin lane.** Plan, tests, build, host, one review, typecheck, open, loosening, then into the
+- **A thin quest.** Plan, tests, build, host, one review, typecheck, open, loosening, then into the
   merge queue. Every piece of work in it judges this change and is needed by the next step.
 - **One merge queue.** fabrika provides it as its own primitive, in its official pipeline pack
   ([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)). What it runs before a merge
@@ -77,7 +77,7 @@ Ask two questions of a piece of work:
 
 | The answers | Home | What the home is |
 |---|---|---|
-| Judges this change, and the next step needs it | the lane | a step, or part of one, in every lane |
+| Judges this change, and the next step needs it | the quest | a step, or part of one, in every quest |
 | One piece of work per event, done once, can wait its turn | a queue | a worker takes each item in order |
 | About shared state, safe to run twice | a scheduled job, on a timer | compares "should be" with "is" and fixes the gap |
 
@@ -97,10 +97,10 @@ from any pod start ([GC](https://kubernetes.io/docs/concepts/architecture/garbag
 
 ## The tie-breaker
 
-**A check that stops lasting harm never leaves the lane,** whatever it costs. Lasting means it
+**A check that stops lasting harm never leaves the quest,** whatever it costs. Lasting means it
 cannot be undone by a revert: a secret on a public repo, work thrown away, a builder that changed
 its own exam. So the leak grep, `loosening.sh`, the plan approval's hash and the merge's pin to its
-head stay in every lane. This matches the never-moves list in
+head stay in every quest. This matches the never-moves list in
 [the fast check note](./fast-and-daily-mutation.md#which-checks-fall-where): if one of them outgrows
 the budget, the check gets faster.
 
@@ -109,7 +109,7 @@ the budget, the check gets faster.
 - **A scheduled job writes one "last ran" fact each run:** when it started, when it ended, what it
   found or fixed, and whether it failed. A reader can always answer "when did it last run?".
 - **A scheduled job is shown late once its last run is older than two periods.** One that died
-  quietly then looks like a stuck lane, not like silence. 0101 set this for the cleaner; here it
+  quietly then looks like a stuck quest, not like silence. 0101 set this for the cleaner; here it
   holds for every scheduled job.
 - **Two runs never overlap.** A run that finds one going ends at once (0101), as OTP warns that
   `apply_interval` starts a new run "irrespective of whether a previously spawned process has
@@ -138,24 +138,24 @@ const late = (last: LastRan, period: number, now: number) => now - last.startedA
 Lead tooling today. Where a home is a lean, it says so.
 
 - **Plan.** The plan check, the approval line and an "already merged?" check judge this change and
-  are needed first: the lane. The plan writer is one per ticket and can wait its turn: a queue with
+  are needed first: the quest. The plan writer is one per ticket and can wait its turn: a queue with
   more than one worker, once the `redact.sh` lock is fixed (the research's lean, not ruled on).
 - **Steps.** The free-disk check, box setup, the agent steps, the host step, the judgment on an ask
-  or a stuck, the budget, and the field run row each step writes: the lane. A field row is written
+  or a stuck, the budget, and the field run row each step writes: the quest. A field row is written
   once, by the step; a scheduled job cannot rebuild a lost fact.
-- **Checks on this change.** The leak grep, `loosening.sh`, push, PR CI and `commits`: the lane.
+- **Checks on this change.** The leak grep, `loosening.sh`, push, PR CI and `commits`: the quest.
   **Tests stay on the pull request, and its checks finish in five minutes at most**
   ([0106](../../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md)).
-- **Typecheck twice.** The lane typechecks the head merged with main, and CI typechecks again. Both
+- **Typecheck twice.** The quest typechecks the head merged with main, and CI typechecks again. Both
   stay: cheap insurance against a 40-minute CI round (the lead's lean, not ruled on).
 - **The lead's hand work.** The hand check of loosening hits, signing a refused commit, amending a
-  plan, restarting a stopped lane. They are needed before the lane goes on, but the lead is one
-  shared worker, so they are a queue the lane waits on (the lead's lean, not ruled on).
-- **A stopped lane wakes the lead at once,** on its ask, its stuck or its budget stop, in place of
-  the 20-minute check (the lead's lean, not ruled on). Last night that check cost 6 lane-hours over
+  plan, restarting a stopped quest. They are needed before the quest goes on, but the lead is one
+  shared worker, so they are a queue the quest waits on (the lead's lean, not ruled on).
+- **A stopped quest wakes the lead at once,** on its ask, its stuck or its budget stop, in place of
+  the 20-minute check (the lead's lean, not ruled on). Last night that check cost 6 quest-hours over
   33 parks.
 - **Merging.** Lint on the true merge, the squash, a retry after an outside fault, a conflict sent
-  back to the lane: the merge queue (0107).
+  back to the quest: the merge queue (0107).
 - **On the merge event.** Bring the tool checkout up to date, once for a burst of merges, at a
   moment when no step is starting (decided). Close the tickets the merge finished, with a scheduled
   job as the backstop for a close the event missed (the lead's lean, not ruled on). A cleanup run

@@ -1,4 +1,4 @@
-// T953 slice 2, next/: laws L17 and L18 of the approved plan (docs/plan/lanes/t953-PLAN.md). L17 runs
+// T953 slice 2, next/: laws L17 and L18 of the approved plan (docs/plan/quests/t953-PLAN.md). L17 runs
 // a real local instance with no start grants, as start-child.laws.integration.test.ts does: real
 // workerd, sockets and object storage, booted twice on one home. L18 runs the public Project service on scoped SQLite,
 // where the test plays the runner, so the agent's key is removed after its input was delivered and

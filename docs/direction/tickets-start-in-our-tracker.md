@@ -60,7 +60,7 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
     The person says which it is, so nothing guesses.
     ```ts
     {fact: "commented", ticket: "demlik-1", by: "owner", body: "Skip part 2.", asks: "changes"}
-    // the approval before it no longer covers the lane; build waits for a new plan or a new approval
+    // the approval before it no longer covers the quest; build waits for a new plan or a new approval
     ```
   - Only a person in the window can answer a box. No agent writes an answer,
     as [AGENTS.md](../../AGENTS.md) already says.
@@ -152,7 +152,7 @@ run. What would settle it: building the form and seeing how small it is.
 - **demlik asks each pull request to close a GitHub issue.** Its `CLAUDE.md`
   says to write `Closes #N`. Decided 2026-10-24: **no copy of a ticket goes to
   GitHub.** demlik's rule changes instead, since demlik is the test bed.
-  - Stages read the ticket from the lane's own fact, never from a pull
+  - Stages read the ticket from the quest's own fact, never from a pull
     request's body. Today `ticketIn` and review's `no_ticket` check read
     `Closes #N` from the body, so they change.
   - [Experiment 138](../../experiments/138-tracker-on-demlik.md) found no

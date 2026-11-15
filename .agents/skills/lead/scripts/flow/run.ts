@@ -11,7 +11,7 @@
 // that changed since. `--lead` says the lead session started this process: only then does a `lead`
 // step run. The steps' runners are the landing table and the host step (./host.ts).
 //
-// Exit codes, as the lane chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
+// Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";

@@ -32,7 +32,7 @@ const CODES: ReadonlyMap<string, string> = new Map([
 /**
  * The frozen version's paths (0525), where the config's one frozen override keeps the two top-level
  * rules at "warn". That override is not a dirty-folder line: no fill brings it to zero, so these
- * globs are never read as warn lines. It and this set go when the freeze lane takes the paths out
+ * globs are never read as warn lines. It and this set go when the freeze quest takes the paths out
  * of lint.
  */
 const FROZEN: ReadonlySet<string> = new Set(["apps/**", "programs/**", "packages/**", "bin/**"]);

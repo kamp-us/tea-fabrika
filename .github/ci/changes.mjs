@@ -64,10 +64,13 @@ const quiet = (path) => safe(path) || prose(path);
  * folder named `brief` under docs/plan/ is never matched. Skill prose stays out: the changes job's
  * skills check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds
  * every path the list matches to no heavy job here. `pnpm lint` checks the rows instead, with
- * field-check.ts's `--local`.
+ * field-check.ts's `--local`. A quest's plans live in docs/plan/quests/; the folder was
+ * docs/plan/lanes/ before the rename (0546), and that path stays on the list, so a pull request
+ * still open with plan files there is treated the same.
  */
 export const ignored = [
   "docs/plan/*.md",
+  "docs/plan/quests/*.md",
   "docs/plan/lanes/*.md",
   "field/findings/*.json",
   "field/notes/*.json",

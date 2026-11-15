@@ -46,7 +46,7 @@ no approval and how to write for a reader who saw none of the work.
   ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). A fixture
   that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
-- End the Size section with `Estimate: <n> steps, $<d>`, the lane's budget: chain.ts stops a lane
+- End the Size section with `Estimate: <n> steps, $<d>`, the quest's budget: chain.ts stops a quest
   at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps
   you expect: tests, build, review, plus one per likely send-back. `d` is their list-price dollars,
   priced from similar steps in `field/runs/`, and the older rows in `field/runs.jsonl`.

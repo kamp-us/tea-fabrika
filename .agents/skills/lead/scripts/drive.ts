@@ -2,7 +2,7 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
+//   node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
@@ -25,10 +25,10 @@
 // The step is a tea machine on the Effect engine:
 //
 //   (before)           a refusal when the data volume has under 20 GB free, or when a worktree
-//                      of the main checkout holds the lane's branch. No start runs or waits for
+//                      of the main checkout holds the quest's branch. No start runs or waits for
 //                      box.sh gc: its own timer and each merge do (gcloop.ts, 0101). Each start
-//                      phase's time goes on the step's entry in state/<lane>.json as `phases`
-//   starting   Act     box.sh new, at the lane's head
+//                      phase's time goes on the step's entry in state/<quest>.json as `phases`
+//   starting   Act     box.sh new, at the quest's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
 //   reading    Gather  collect the tree and sign it, then the commits, the commits check's held
 //                      rules, exam paths, leaks and the report
@@ -39,7 +39,7 @@
 //                      the step committed, then the branch itself, with a draft pull request
 //                      when it has none (pr/Publish.ts, 0134); a refused push or draft is stuck
 //   recording  Act     the field row (with the plants the typed answer named, 0093),
-//                      state/<lane>.json and .md, and the box removed unless stuck
+//                      state/<quest>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
 //   over               the outcome
@@ -47,10 +47,10 @@
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
-// any agent ran: `refused:<check>`, one of lane_running (another live process drives this lane:
-// a chain, or a step run alone; state/<lane>.lock holds its pid), agent_cap (12 agents running,
+// any agent ran: `refused:<check>`, one of quest_running (another live process drives this quest:
+// a chain, or a step run alone; state/<quest>.lock holds its pid), agent_cap (12 agents running,
 // 0012: the ACP harnesses drive started), low_disk (under 20 GB free, with gcloop.ts's status
-// line), branch_checked_out (the lane's
+// line), branch_checked_out (the quest's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
@@ -61,7 +61,7 @@
 // the turn's list-price dollars, which the chain's backstop counts.
 //
 // Where a step starts: at --from; else at the newest pushed tip of the branch or of its -wip
-// backup, unless the lane's saved head (state/<lane>.json) has moved past it (lane.ts
+// backup, unless the quest's saved head (state/<quest>.json) has moved past it (quest.ts
 // `startHead`); else origin/main. So a lead commit pushed to -wip (a merge of main, a lockfile) is
 // where the next step starts. A plan reads the main checkout and takes no --from. A step in a box
 // gets the approved plan's text, whole, in its prompt, since its box reads nothing outside itself.
@@ -123,23 +123,24 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
+import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
 import {
   boxTree,
   boxTrees,
   boxView,
   checkHolds,
   heldRules,
-  laneRoot,
   lockfileBehind,
+  questKeyed,
+  questRoot,
   startHead,
   stepOf,
   wipOf,
   workspaceGlobs,
-} from "./lane.ts";
-import { pgrepAnswer, skipLine } from "./pgrep.ts";
-import * as Publish from "./pr/Publish.ts";
-import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
-import * as PushesProcess from "./pr/PushesProcess.ts";
+} from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -279,12 +280,12 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
 
 /**
  * The start checks, before any agent runs: box.sh new's, then drive's own (the agent cap, free disk,
- * the lane's branch held by a worktree). A no from one is not a step's answer, so it is its own end,
+ * the quest's branch held by a worktree). A no from one is not a step's answer, so it is its own end,
  * `refused:<check>` with exit 3, and never counts as a stuck step (ticket 428).
  */
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
-const CHECKS = [...BOX_CHECKS, "lane_running", "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
+const CHECKS = [...BOX_CHECKS, "quest_running", "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = { readonly kind: "refused"; readonly check: Check };
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
@@ -317,7 +318,7 @@ export const rowOf = (outcome: string): string =>
 // ---------------------------------------------------------------- the moves
 
 const Ask = Schema.Struct({
-  lane: Schema.String,
+  quest: Schema.String,
   step: Schema.Literals(STEPS),
   agent: Schema.Literals(AGENTS),
   /** The model as the harness names it, and its effort where the harness offers one. */
@@ -328,7 +329,7 @@ const Ask = Schema.Struct({
   plan: Schema.String,
   branch: Schema.String,
   base: Schema.String,
-  /** Where the lane left main. The commits check reads the whole lane from here, so the earlier
+  /** Where the quest left main. The commits check reads the whole quest from here, so the earlier
    * steps' links are in its chain and the newest of each is not stale. */
   root: Schema.String,
   box: Schema.String,
@@ -927,7 +928,7 @@ const leaksIn = (diff: string, repo: string): string[] => {
   return hits;
 };
 
-/** The steps signed on the lane's own commits, from where it left main. */
+/** The steps signed on the quest's own commits, from where it left main. */
 const stepsIn = (env: Env, root: string, head: string): Set<string> =>
   new Set(
     sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`])
@@ -1178,9 +1179,9 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
 /** Why the commits check held the step: each rule and commit, else its exit and last lines. */
 export const commitsSaid = (
   check: { code: number; out: string; err: string },
-  laneSteps: ReadonlySet<string>,
+  questSteps: ReadonlySet<string>,
 ): string => {
-  const rules = heldRules(check.out, laneSteps);
+  const rules = heldRules(check.out, questSteps);
   return rules.length > 0
     ? `commits check: ${rules.slice(0, 5).join("; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
@@ -1188,8 +1189,8 @@ export const commitsSaid = (
 
 /** What the commits check holds the step on: nothing, or one line that names each rule it held.
  * Exit 1 holds unless every stuck answer it gave was waived. */
-export const heldBy = (check: { code: number; out: string; err: string }, laneSteps: ReadonlySet<string>): string[] =>
-  checkHolds(check.code, check.out, laneSteps) ? [commitsSaid(check, laneSteps)] : [];
+export const heldBy = (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string[] =>
+  checkHolds(check.code, check.out, questSteps) ? [commitsSaid(check, questSteps)] : [];
 
 /**
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
@@ -1235,8 +1236,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           cmd.plan,
           "--root",
           cmd.root,
-          "--lane",
-          cmd.lane,
+          "--quest",
+          cmd.quest,
         );
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
         phases = [...phases, ...phasesIn(r.err)];
@@ -1362,7 +1363,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         // The repo's own commit check. A commit with no signature never holds a step (0161); the
-        // rules it still gives for signed commits do (`laneStuck`).
+        // rules it still gives for signed commits do (`questStuck`).
         const check =
           commits === 0
             ? { code: 0, out: "", err: "" }
@@ -1390,8 +1391,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           problem: null,
         };
       }),
-    // The step's commit came out of the box: the backup first, then the lane's own branch and its
-    // draft pull request, opened at the lane's first commit (0134). A box cannot push: no key, no
+    // The step's commit came out of the box: the backup first, then the quest's own branch and its
+    // draft pull request, opened at the quest's first commit (0134). A box cannot push: no key, no
     // network (0045), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
       Effect.gen(function* () {
@@ -1402,7 +1403,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const { ask } = cmd;
-        const text = { title: `T${ask.ticket} ${ask.lane}: the lane's steps are running`, body: Publish.DRAFT_BODY };
+        const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
         const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
         return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
           Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
@@ -1428,7 +1429,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           }
 
           appendFileSync(
-            join(env.BOXES, `${ask.lane}-rows.jsonl`),
+            join(env.BOXES, `${ask.quest}-rows.jsonl`),
             stepRow({
               run: ask.run,
               ticket: ask.ticket,
@@ -1450,13 +1451,11 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const ok = notes.length === 0;
         const outcome = ok ? e.outcome : "stuck:record_failed";
         const keep = e.keep || !ok;
-        // A stuck step, or a build sent back for exam paths, does not move the lane's head.
+        // A stuck step, or a build sent back for exam paths, does not move the quest's head.
         const accepted =
           !outcome.startsWith("stuck") && !outcome.startsWith("refused") && outcome !== "send:tests:exam_paths";
-        const state = join(env.BOXES, "state", `${ask.lane}.json`);
-        const saved = existsSync(state)
-          ? (JSON.parse(readFileSync(state, "utf8")) as Lane)
-          : { lane: ask.lane, steps: [] };
+        const state = join(env.BOXES, "state", `${ask.quest}.json`);
+        const saved = savedQuest(state) ?? { quest: ask.quest, steps: [] };
         // From the box made to the agent's first event: the harness and the model starting.
         const first = existsSync(ask.events) ? firstEventAt(readFileSync(ask.events, "utf8")) : null;
         const entry = {
@@ -1476,7 +1475,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           ended,
           phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],
         };
-        const lane: Lane = {
+        const quest: Quest = {
           ...saved,
           ticket: ask.ticket,
           plan: ask.plan,
@@ -1485,10 +1484,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           head: accepted ? e.head : (saved.head ?? ask.base),
           steps: [...saved.steps, entry],
         };
-        writeFileSync(`${state}.tmp`, `${JSON.stringify(lane, null, "\t")}\n`);
+        writeFileSync(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
         renameSync(`${state}.tmp`, state);
         appendFileSync(
-          join(env.BOXES, "state", `${ask.lane}.md`),
+          join(env.BOXES, "state", `${ask.quest}.md`),
           `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
         );
 
@@ -1560,7 +1559,7 @@ const planOwners = (env: Env, plan: string) => {
  * refuses any other path at collect, after the whole turn: on 2026-11-09, 10 of 72 stuck steps were
  * that `not_owner` (ticket 430). Told first, a step that needs another path asks instead. A
  * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
- * (it changes no file) or a lane with no plan drive can read.
+ * (it changes no file) or a quest with no plan drive can read.
  */
 export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
   if (step === "plan" || step === "review" || owners === null) {
@@ -1581,12 +1580,12 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
 };
 
 /**
- * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
+ * The quest's newest mutation report, whole, for a review: the review reads it (the review skill,
  * "anything the brief names"), and its box reads nothing outside itself. Briefs named
- * `../<lane>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
+ * `../<quest>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
  * review said done without it (p34w-review1 and 2, layout-review2, 2026-11-10; ticket 569).
  */
-export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: string) => string | null): string => {
+export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path: string) => string | null): string => {
   if (step !== "review") {
     return "";
   }
@@ -1594,8 +1593,8 @@ export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: 
   const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
   const text = last?.report ? read(last.report) : null;
   return text === null || !last?.report
-    ? "\n\n---\nThis lane has no mutation report drive can read. Since decision 0066 a lane runs no mutation step, so review without one, and do not look for one outside your box.\n"
-    : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+    ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
+    : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
 
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
@@ -1628,7 +1627,7 @@ const turnDraft: DraftRun = (env, agents, ask) => turn(env, agents, ask, readFil
 //   MUTATION_AGENT   who the chain starts it as, and the only agent `prepare` takes for it.
 //   mutationDraft    how its draft runs: first the Stryker sample, in a container with its own
 //                    network (mutbox.ts, decision 0045), on the step's start head with the tests
-//                    the brief's `RELATED=` line names and the lane's root as arm a. Then one
+//                    the brief's `RELATED=` line names and the quest's root as arm a. Then one
 //                    agent turn that reads the report. A run that ended stuck (Docker down, a
 //                    second Docker box, a failed baseline) is a stuck step with no agent started.
 //
@@ -1663,7 +1662,7 @@ export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuc
 export const mutboxTail = (report: string, skip: boolean) =>
   `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
 
-/** mutbox.ts's command line for one step: the build is the step's start head, arm a the lane's root. */
+/** mutbox.ts's command line for one step: the build is the step's start head, arm a the quest's root. */
 export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string> => [
   "run",
   "--checkout",
@@ -1766,8 +1765,8 @@ export const agentsDraft =
       ),
     );
 
-type Lane = {
-  readonly lane: string;
+type Quest = {
+  readonly quest: string;
   readonly ticket?: string;
   readonly plan?: string;
   readonly branch?: string;
@@ -1775,6 +1774,14 @@ type Lane = {
   readonly head?: string;
   readonly steps: readonly { readonly step: string; readonly box?: string; readonly report?: string | null }[];
 };
+
+/**
+ * The quest's state file (`state/<quest>.json`), or `null` when there is none. One written before
+ * decision 0546 names the quest `lane` and reads as `quest` (`questKeyed`), so its next write says
+ * `quest`.
+ */
+const savedQuest = (path: string): Quest | null =>
+  existsSync(path) ? (questKeyed(JSON.parse(readFileSync(path, "utf8"))) as Quest) : null;
 
 // ---------------------------------------------------------------- the command
 
@@ -1799,7 +1806,7 @@ export const AGENT_CAP = 12;
 /** A step's start is refused once the agents running reach the cap. */
 export const agentCapFull = (agents: number): boolean => agents >= AGENT_CAP;
 
-/** One timed part of a step's start, in ms, kept on the step's entry in state/<lane>.json, so the
+/** One timed part of a step's start, in ms, kept on the step's entry in state/<quest>.json, so the
  * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
 const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Number });
 type Phase = typeof Phase.Type;
@@ -1871,7 +1878,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1924,21 +1931,21 @@ const takeElectron = (env: Env) =>
     process.on("exit", () => rmSync(lock, { force: true }));
   });
 
-/** The lock one live process holds while it drives a lane: a chain, or a step drive.ts runs alone. */
-const laneLock = (boxes: string, lane: string) => join(boxes, "state", `${lane}.lock`);
+/** The lock one live process holds while it drives a quest: a chain, or a step drive.ts runs alone. */
+const questLock = (boxes: string, quest: string) => join(boxes, "state", `${quest}.lock`);
 
 /**
- * Take the lane for this process: `null` once it holds it, else the pid of the live process that
- * drives the lane now. Two launches of one lane once both took `p39s1-tests2` (2026-11-11).
+ * Take the quest for this process: `null` once it holds it, else the pid of the live process that
+ * drives the quest now. Two launches of one quest once both took `p39s1-tests2` (2026-11-11).
  */
-export const holdLane = (boxes: string, lane: string): number | null => {
+export const holdQuest = (boxes: string, quest: string): number | null => {
   mkdirSync(join(boxes, "state"), { recursive: true });
-  return holdLock(laneLock(boxes, lane));
+  return holdLock(questLock(boxes, quest));
 };
 
-/** Give the lane back, only when this process holds it. */
-export const freeLane = (boxes: string, lane: string): void => {
-  const lock = laneLock(boxes, lane);
+/** Give the quest back, only when this process holds it. */
+export const freeQuest = (boxes: string, quest: string): void => {
+  const lock = questLock(boxes, quest);
 
   if (existsSync(lock) && Number(readFileSync(lock, "utf8").trim()) === process.pid) {
     rmSync(lock, { force: true });
@@ -1946,15 +1953,15 @@ export const freeLane = (boxes: string, lane: string): void => {
 };
 
 /**
- * The names a lane's next run id must pass, for `RunId.next`: every file in the boxes folder and
- * every box the lane's state file records. A run id names its box and every file the run leaves,
+ * The names a quest's next run id must pass, for `RunId.next`: every file in the boxes folder and
+ * every box the quest's state file records. A run id names its box and every file the run leaves,
  * so an older run's file is never read as a new run's: a refused run once returned an older run's
  * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383). A box's tree and its view sit
  * in `boxTrees`, every other file of the run beside the boxes, so both folders are read.
  */
-export const runNames = (boxes: string, lane: string): string[] => {
-  const state = join(boxes, "state", `${lane}.json`);
-  const saved: Lane | null = existsSync(state) ? (JSON.parse(readFileSync(state, "utf8")) as Lane) : null;
+export const runNames = (boxes: string, quest: string): string[] => {
+  const state = join(boxes, "state", `${quest}.json`);
+  const saved = savedQuest(state);
   const trees = boxTrees(boxes);
   return [
     ...readdirSync(boxes),
@@ -1963,13 +1970,13 @@ export const runNames = (boxes: string, lane: string): string[] => {
   ];
 };
 
-/** What a second launch of a lane is told. */
-export const laneRunning = (lane: string, pid: number): string =>
-  `lane ${lane} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`;
+/** What a second launch of a quest is told. */
+export const questRunning = (quest: string, pid: number): string =>
+  `quest ${quest} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`;
 
 /** What one step is asked for, as the command line or the chain gives it. */
 export interface StepArgs {
-  readonly lane: string;
+  readonly quest: string;
   readonly step: StepName;
   readonly brief: string;
   readonly agent: AgentName;
@@ -1998,16 +2005,16 @@ const refusal = Start.cases.refused.make;
 const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reason, exit: 2 });
 
 /**
- * Everything before the agent: the usage checks, the lane taken for this process, the base and the
- * lane's root, a fresh run id, the agent cap, the disk, the lane's branch not held by a worktree,
- * and the prompt file. Reads of the main checkout and the laptop, beside the lane's lock, which
- * the process that took it gives back (`freeLane`).
+ * Everything before the agent: the usage checks, the quest taken for this process, the base and the
+ * quest's root, a fresh run id, the agent cap, the disk, the quest's branch not held by a worktree,
+ * and the prompt file. Reads of the main checkout and the laptop, beside the quest's lock, which
+ * the process that took it gives back (`freeQuest`).
  */
 export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
-  const { lane, step, agent, electron } = p;
+  const { quest, step, agent, electron } = p;
 
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(p.brief)) {
-    return usageError("a lane name and a brief file are required");
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(quest) || !existsSync(p.brief)) {
+    return usageError("a quest name and a brief file are required");
   }
 
   if (step === "mutation" && agent !== MUTATION_AGENT) {
@@ -2028,27 +2035,27 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
-  // A chain holds its lane already; a step run alone takes it here, before any box is made.
-  const running = holdLane(env.BOXES, lane);
+  // A chain holds its quest already; a step run alone takes it here, before any box is made.
+  const running = holdQuest(env.BOXES, quest);
 
   if (running !== null) {
     return refusal({
-      outcome: endName({ kind: "refused", check: "lane_running" }),
-      reason: laneRunning(lane, running),
+      outcome: endName({ kind: "refused", check: "quest_running" }),
+      reason: questRunning(quest, running),
       exit: 3,
     });
   }
 
-  const statePath = join(env.BOXES, "state", `${lane}.json`);
-  const saved: Lane | null = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, "utf8")) as Lane) : null;
+  const statePath = join(env.BOXES, "state", `${quest}.json`);
+  const saved = savedQuest(statePath);
   const ticket = p.ticket ?? saved?.ticket;
 
   if (!ticket) {
-    return usageError(`no ticket for lane ${lane} yet; pass --ticket`);
+    return usageError(`no ticket for quest ${quest} yet; pass --ticket`);
   }
 
-  const branch = p.branch ?? saved?.branch ?? `fabrikalfa/${lane}`;
-  const plan = p.plan ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
+  const branch = p.branch ?? saved?.branch ?? `fabrikalfa/${quest}`;
+  const plan = p.plan ?? saved?.plan ?? join(env.BOXES, `${quest}-PLAN.md`);
 
   if (!branch.startsWith("fabrikalfa/")) {
     return usageError("the branch is fabrikalfa/<name>");
@@ -2063,7 +2070,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("a plan reads the main checkout; it takes no --from");
   }
 
-  // With no --from, a lane whose branch or -wip backup is on origin continues from the newest
+  // With no --from, a quest whose branch or -wip backup is on origin continues from the newest
   // tip, unless the saved head has moved past it (`startHead`). A box started at main on a
   // branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
   const pushed = [branch, wipOf(branch)]
@@ -2081,8 +2088,8 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${from} is not a commit in the main checkout`);
   }
 
-  // The lane's root: where its base left main, moved up past a caught-up main (lane.ts).
-  const root = laneRoot(
+  // The quest's root: where its base left main, moved up past a caught-up main (quest.ts).
+  const root = questRoot(
     saved?.root,
     sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim(),
     base,
@@ -2093,11 +2100,11 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
-  const box = RunId.next(lane, step, runNames(env.BOXES, lane));
+  const box = RunId.next(quest, step, runNames(env.BOXES, quest));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
   const claude = agent === "claude";
   const ask: Ask = {
-    lane,
+    quest,
     step,
     agent,
     model: claude ? (p.model ?? "sonnet") : env.CODEX_MODEL,
@@ -2153,7 +2160,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   // A plan reads the main checkout and a review changes nothing; every other step moves the
-  // lane's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
+  // quest's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
   if (step !== "plan" && step !== "review") {
     const list = sh("git", ["-C", env.MAIN, "worktree", "list", "--porcelain"]);
     const holder = list.code === 0 ? holderOf(list.out, branch) : "";
@@ -2208,7 +2215,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 /** drive's one line: how the step ended, as the chain and a reader of the log take it. */
 export interface DriveLine {
   readonly outcome: string;
-  readonly lane: string;
+  readonly quest: string;
   readonly step: StepName;
   readonly agent: AgentName;
   readonly box: string;
@@ -2286,7 +2293,7 @@ export const driveStep = (
     const outcome = endName(end.outcome);
     return {
       outcome,
-      lane: ask.lane,
+      quest: ask.quest,
       step: ask.step,
       agent: ask.agent,
       box: ask.box,
@@ -2314,7 +2321,7 @@ export const driveStep = (
     Effect.catchCause((cause) =>
       Effect.succeed({
         outcome: "stuck:crash",
-        lane: ask.lane,
+        quest: ask.quest,
         step: ask.step,
         agent: ask.agent,
         box: ask.box,
@@ -2334,7 +2341,7 @@ export const driveStep = (
 
 const main = () => {
   const args = process.argv.slice(2);
-  const [lane = "", step = "", brief = ""] = args;
+  const [quest = "", step = "", brief = ""] = args;
   const agent = flag(args, "--agent") ?? "codex";
 
   if (
@@ -2346,10 +2353,10 @@ const main = () => {
   }
 
   const env = loadEnv();
-  // prepare takes the lane for this process; it is given back however the process ends.
-  process.on("exit", () => freeLane(env.BOXES, lane));
+  // prepare takes the quest for this process; it is given back however the process ends.
+  process.on("exit", () => freeQuest(env.BOXES, quest));
   const prepared = prepare(env, {
-    lane,
+    quest,
     step: step as StepName,
     brief,
     agent: agent as AgentName,
@@ -2400,7 +2407,7 @@ const main = () => {
         console.log(
           JSON.stringify({
             outcome: "stuck:crash",
-            lane,
+            quest,
             step,
             box: prepared.ask.box,
             reason: Cause.pretty(cause),

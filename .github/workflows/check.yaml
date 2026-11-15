@@ -19,6 +19,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths-ignore:
       - docs/plan/*.md
+      - docs/plan/quests/*.md
       - docs/plan/lanes/*.md
       - field/findings/*.json
       - field/notes/*.json
@@ -333,7 +334,7 @@ jobs:
       - *stop
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
-  # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
+  # lint's answer, and a quest reads this one job's conclusion for its head the moment it ends
   # (chain.ts's `typechecking` phase). It runs where check runs, less a change only to
   # experiments/, which the root tsconfig leaves out.
   typecheck:

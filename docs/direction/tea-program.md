@@ -295,7 +295,7 @@ Three layers, each with one job.
   asker's own saved state, the asker says `forget {id}`, and the answerer says
   `forgot {id}` when the drop is kept. Ship is the first: `ask {id, pr}`,
   `answer {id, pr, outcome, name}`, `forget {id}`, `forgot {id}`. `operate`
-  waits for `forgot` before it writes the answer on the lane, so a lane that
+  waits for `forgot` before it writes the answer on the quest, so a quest that
   has ended has left nothing in ship's storage. It stays plain inputs and
   outputs for now, the way request ids work over a socket. Count each program
   that needs the pattern; when there are enough, it gets a helper with good
@@ -479,7 +479,7 @@ defaults.
   write in half (the record as the run opens, as an ask is indexed, as an
   answer is forgotten, and the state as the pull request enters the queue).
   18 of 18 kept cells ended right, each pull request queued once, and nothing
-  left in storage once the lane was done.
+  left in storage once the quest was done.
 - Fencing has no process id because a folder can move between machines and a
   process id can be reused; an open count and a random name are in the folder
   itself.

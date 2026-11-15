@@ -294,7 +294,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
   }, 120_000);
 
   // scenario: the repo's own config fails closed. A folder nobody listed blocks, the frozen version
-  // still advises until the freeze lane takes it out of lint, and fabrika-design stays live (0456).
+  // still advises until the freeze quest takes it out of lint, and fabrika-design stays live (0456).
   it("scenario: under the real config an Effect.promise blocks in a new folder and in fabrika-design, and advises under apps/", () => {
     const { text } = PLANTS["fabrika(no-effect-promise)"];
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");

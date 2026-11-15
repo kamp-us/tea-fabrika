@@ -63,7 +63,7 @@ jobs:
 
       # The tests beside the changed files (0066): for each changed product file, its own
       # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Of the lead tooling,
-      # only lane code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
+      # only quest code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
       # out.
       - id: range

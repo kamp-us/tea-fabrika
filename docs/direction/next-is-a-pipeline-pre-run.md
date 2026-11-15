@@ -89,7 +89,7 @@ review.*
 - *Changed 2026-11-01:* ticket 115 is no longer the first full try. Its plan was replaced by
   [Tier 1](../plan/tier-1.md), which waits for the pipeline.
 - *Changed 2026-11-05 (owner):* Tier 1 no longer waits for the pipeline. Ticket 117 ran
-  eight lanes in five days ($35.37) and stopped at the test writer twice; four steps after it
+  eight quests in five days ($35.37) and stopped at the test writer twice; four steps after it
   have never met real code. The pipeline does not follow the program guidelines the rest of
   the app now does, and it is hard to watch even with tracing. Its pieces were built one at a
   time, each with that day's context. So it pauses, and the steps go by hand for `next/`.
@@ -108,7 +108,7 @@ review.*
 ## What it costs
 
 - Time: a small change takes several agents.
-- **A step done by hand has no lane machine holding the order.** Only the session's own
+- **A step done by hand has no quest machine holding the order.** Only the session's own
   discipline does, and that has already failed once. This is the weak spot.
 - **Some changes do not fit yet.** A docs change cannot go through the pipeline today, so it
   goes by hand.
