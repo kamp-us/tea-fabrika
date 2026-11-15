@@ -2,9 +2,10 @@
 // module owns the driver, so it acquires the folder and every database in a scope, and the scope
 // gives each file and handle back (0061). `probe.open` counts the handles still open, for L13.
 // Edge: Effect has no node:sqlite driver.
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Option, Path, Stream, Tracer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Context, Effect, FileSystem, Layer, Option, Path, Scope, ScopedRef, Stream, Tracer } from "effect";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -32,31 +33,21 @@ const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ pr
 const databases = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
-  const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
-  const connect = (part: string) => {
-    const db = new DatabaseSync(paths.join(path, `${part}.db`));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-    return { db, sql: nodeSql(db) };
-  };
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const { db } of held.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-    }),
-  );
+  // A part is opened from a plain call, so its handle is acquired into this scope, which closes it.
+  const scope = yield* Effect.scope;
+  const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
+  const connect = (part: string) =>
+    TestDatabase.make(paths.join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
   const handle = (part: string) => {
     const found = held.get(part);
 
     if (found !== undefined) {
-      return found;
+      return ScopedRef.getUnsafe(found);
     }
 
-    const made = connect(part);
+    const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
-    return made;
+    return ScopedRef.getUnsafe(made);
   };
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
@@ -91,13 +82,11 @@ const databases = Effect.gen(function* () {
     sqls.set(part, made);
     return made;
   };
-  const reopen = Effect.sync(() => {
-    for (const [part, { db }] of held) {
-      db.close();
-      held.set(part, connect(part));
-    }
+  const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
+    discard: true,
+    concurrency: 1,
   });
-  const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+  const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
   const data = (sql: Sql) =>
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),

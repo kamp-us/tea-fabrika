@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect } from "effect";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as RecoveryStoreReadsTest from "../runtime/RecoveryStoreReadsTest.ts";
@@ -13,15 +13,8 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t936-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
-  const db = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const opened = new DatabaseSync(join(folder, "store.db"));
-      // A test process never loses power, so it skips the sync (ticket 585, decision 0052).
-      opened.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      return opened;
-    }),
-    (opened) => Effect.sync(() => opened.isOpen && opened.close()),
-  );
+  // A test process never loses power, so `TestDatabase.make` skips the sync (ticket 585, decision 0052).
+  const db = yield* TestDatabase.make(join(folder, "store.db"));
   return nodeSql(db);
 });
 

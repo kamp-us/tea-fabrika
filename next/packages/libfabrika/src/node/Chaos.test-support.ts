@@ -1,7 +1,7 @@
 // P17b slice 2, next/. Real runner storage. Each session opens new scoped connections.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
@@ -67,17 +67,10 @@ const from = {
   build,
 };
 
+// A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+// journal in memory. Every byte a law reads stays in the file and survives reopen.
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(file);
-      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
-      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
-      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      return db;
-    }),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
+  TestDatabase.make(file).pipe(Effect.map(nodeSql));
 
 const ledgerLayer = (sql: Sql) => LedgerSql.layer(sql, { reader: "chaos-laws" }).pipe(Layer.provide(quiet));
 

@@ -1,5 +1,3 @@
-// edge: Effect has no node:sqlite driver for Sql.
-import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
@@ -34,6 +32,7 @@ import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import type { Redacted } from "effect";
 import {
   Clock,
@@ -100,11 +99,7 @@ const stores = Effect.gen(function* () {
       return;
     }
 
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${encodeURIComponent(part)}.db`))),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Scope.provide(scope));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+    const db = yield* TestDatabase.make(path.join(folder, `${encodeURIComponent(part)}.db`)).pipe(Scope.provide(scope));
     held.set(part, nodeSql(db));
   });
   const adapters = new Map<string, Sql>();

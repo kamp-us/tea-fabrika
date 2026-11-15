@@ -1,5 +1,3 @@
-// edge: Effect has no node:sqlite driver for the Sql contract
-import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { expect } from "@effect/vitest";
 import type { Ci } from "@kampus/libfabrika/ci/Ci";
@@ -37,6 +35,7 @@ import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { FileSystem, Path } from "effect";
 import type { Redacted } from "effect";
 import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
@@ -293,11 +292,7 @@ const open = Effect.gen(function* () {
   let scope = yield* Scope.fork(parent, "sequential");
   const opened = new Map<string, Sql>();
   const connect = Effect.fnUntraced(function* (part: string) {
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${part}.db`))),
-      (handle) => Effect.sync(() => handle.close()),
-    ).pipe(Scope.provide(scope));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+    const db = yield* TestDatabase.make(path.join(folder, `${part}.db`)).pipe(Scope.provide(scope));
     opened.set(part, nodeSql(db));
   });
   const parts = ["ledger", "process", "recovery", "alarms"];

@@ -3,8 +3,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { Effect, Layer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Effect, Layer, ScopedRef } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as ClientManagerLedger from "../../access/ClientManagerLedger.ts";
 import { Gateway } from "../../gateway/Gateway.ts";
@@ -28,29 +28,18 @@ const open = Effect.gen(function* () {
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
   const path = join(folder, "ledger.db");
-  const handle = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(path);
-      // Keep a durable file across reopens without creating a rollback journal on every write.
-      // No disk sync per commit, as next/'s other test stores: no law cuts the power, a close keeps
-      // every commit, and the gateway's limiter and span sink commit on each call.
-      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-      return { db, sql: nodeSql(db) };
-    }),
-    (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
-  );
+  // A durable file across reopens, with the journal in memory and no disk sync per commit, as every
+  // next/ test store (`TestDatabase.make`): no law cuts the power, a close keeps every commit, and
+  // the gateway's limiter and span sink commit on each call.
+  const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
+  const held = yield* ScopedRef.fromAcquire(connect);
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
-    exec: (query, ...params) => handle.sql.exec(query, ...params),
-    transaction: (step) => handle.sql.transaction(step),
-    size: () => handle.sql.size(),
+    exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
+    transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
+    size: () => ScopedRef.getUnsafe(held).size(),
   };
-  const reopen = Effect.sync(() => {
-    handle.db.close();
-    handle.db = new DatabaseSync(path);
-    handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-    handle.sql = nodeSql(handle.db);
-  });
+  const reopen = ScopedRef.set(held, connect);
   const gateway: TestSuite.Store["gateway"] = (options) => {
     const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
     const data = Layer.mergeAll(

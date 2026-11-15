@@ -9,9 +9,9 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -55,23 +55,6 @@ const folder = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-revoke-"))),
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
-
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(path);
-      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
-      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
-      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      return db;
-    }),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
 
 const url = "https://fabrika.test/entry/p17",
   sentAt = "2026-11-08T04:00:00.000Z";
@@ -175,7 +158,9 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
       Effect.void,
   };
-  const storage = () => openDb(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen.
+  const storage = () => TestDatabase.make(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
   const first = yield* storage();
   const layers = (saved = first, beforeWrite: Effect.Effect<void> = Effect.void) => {
     const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
