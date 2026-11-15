@@ -7,6 +7,9 @@ This is `next/`. The owner ruled on 2026-11-15 that the 97 faulty `unknown` para
 the 156 right ones stay. This plan cuts the work into nine pull requests by wire value, and plans
 the first one in full: what a client's socket is told, and the view update inside it.
 
+This quest is one of the fixes of the sev0 the owner called on 2026-11-15, so it ends with the 97
+at zero.
+
 ```ts
 // The whole idea, a sketch. One value, named once, and every hop takes it.
 
@@ -203,13 +206,15 @@ export const News = Schema.TaggedUnion({
   view: { update: Published },
 });
 export type News = typeof News.Type;
-
-/** The JSON-RPC notification a socket is sent for news that is not a close. */
-export const notification = (news: Exclude<News, { readonly _tag: "close" }>) =>
-  news._tag === "granted"
-    ? { method: "client.granted" as const, params: { nonce: news.nonce } }
-    : { method: news.update.type === "whole" ? ("view.whole" as const) : ("view.patch" as const), params: news.update };
 ```
+
+No `_tag` is written by hand anywhere in this slice (decision 0562 on main,
+`.decisions/0562-nothing-teaches-the-wrong-shape.md`, and the rule `fabrika/no-hand-tag`). A value
+is made with its case's maker, `News.cases.granted.make(...)`. The one place that tells the cases apart
+is the Connection's door, with `News.match`, which `Schema.TaggedUnion` ships in the installed
+4.1.2 beside `guards`, `isAnyOf` and `matchOrElse` (`node_modules/effect/src/Schema.ts:6528` to
+`:6592`). No type names a case by its tag: no function here takes "news that is not a close", so
+none is needed.
 
 The hops, each with the type it takes after the build:
 
@@ -240,17 +245,33 @@ publish: RemoteCall<(client: string, update: Published) => Effect.Effect<typeof 
 notify: (client: string, news: News) => Effect.Effect<void>;             // ConnectionBinding
 readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>; // ConnectionShape
 
-// cloudflare/connection.ts: the door decodes, then one plain conditional on `_tag`
+// cloudflare/connection.ts: the door decodes, then one `News.match`
+const METHOD = { whole: "view.whole", patch: "view.patch" } as const;
+const frame = (method: string, params: Schema.Json) => JSON.stringify({ jsonrpc: "2.0", method, params });
+
 const told = yield* Schema.decodeUnknownEffect(News)(news).pipe(
   Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
 );
-yield* Effect.annotateCurrentSpan("fab.gateway.news", told._tag);
-if (told._tag === "close") { ws.close(told.code, "permission changed"); }
-else { ws.send(JSON.stringify({ jsonrpc: "2.0", ...notification(told) })); }
+yield* Effect.annotateCurrentSpan("fab.gateway.news", told._tag); // a read, see below
+News.match(told, {
+  close: ({ code }) => ws.close(code, "permission changed"),
+  granted: ({ nonce }) => ws.send(frame("client.granted", { nonce })),
+  view: ({ update }) => ws.send(frame(METHOD[update.type], update)),
+});
 
 // next/apps/fabrika/src/brain.ts
-publish(client: string, update: Parameters<ContextProject["publish"]>[1]) { /* the one-line handoff of today */ }
+import type { Published } from "@kampus/libfabrika/runtime/News";
+publish(client: string, update: Published) { /* the one-line handoff of today */ }
 ```
+
+- **The span attribute reads the case's name as a value.** `told._tag` handed to a call is a read,
+  and the rule lets a read pass. Its own header says "A read passes: `x._tag === "a"`,
+  `const {_tag} = x`, `switch (x._tag)`" (`no-hand-tag.ts` in the lint plugins folder, lines 5 and
+  6), and it visits only an object key, a class field and a type member (lines 42 to 54).
+- **The update's method is a lookup, not a conditional.** `METHOD` is keyed by the update's own
+  `type`, so a third kind of update fails the typecheck there.
+- **The app may name `Published`.** The library's export map offers `./runtime/*`, and the app's
+  files already import `@kampus/libfabrika/runtime/Program` and three more from that folder.
 
 Three small edits make the view update JSON, since `Published` cannot be built from an `unknown`
 view:
@@ -265,8 +286,8 @@ view:
 ## One value traced: a key is granted
 
 1. The owner lets a waiting key in. `Gateway.grant` makes a nonce `"n1"` for the waiting client
-   `c7` and builds `News.cases.granted.make({ nonce: "n1" })`, which is
-   `{ _tag: "granted", nonce: "n1" }`.
+   `c7` and builds `News.cases.granted.make({ nonce: "n1" })`, a `granted` news holding
+   that nonce.
 2. `gateway.notify("c7", news)` calls `options.notify`, the Project's `notify` from `Publish.make`.
 3. `deliver` reads `c7`'s route row and finds its Connection object. With no row it answers `gone`
    and stops.
@@ -274,12 +295,12 @@ view:
 5. `ConnectionService.notify` decodes the value as `News`. A value that is not `News` fails with
    `LedgerError` `bad_row`, and nothing is sent.
 6. The span gets `fab.gateway.news = "granted"`.
-7. Each of `c7`'s sockets is sent
+7. `News.match` takes the `granted` arm. Each of `c7`'s sockets is sent
    `{"jsonrpc":"2.0","method":"client.granted","params":{"nonce":"n1"}}`, the same JSON as today.
 
 A view update goes the same way from step 3 on. The Process object calls
 `publish("c7", { type: "patch", base: 4, rev: 5, patch: [], pid: "process_a1" })`. The Project
-decodes it as `Published`, wraps it as `{ _tag: "view", update }`, and the socket is sent
+decodes it as `Published`, wraps it with `News.cases.view.make({ update })`, and the socket is sent
 `{"jsonrpc":"2.0","method":"view.patch","params":{...}}`.
 
 ## Laws
@@ -290,13 +311,13 @@ which the lead and CI run.
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L1, `News`, `Published` and `Update` each decode what they encode, and the decoded value equals the first. Fast, 100 runs | test | Effect Arbitrary: News | drop the `pid` from the `view` case's update: L1 red | next/packages/libfabrika/src/runtime/News.test.ts |
-| L2, `notification` gives today's wire JSON: `granted` is method `client.granted` with params holding only the nonce; a whole view is `view.whole` and a patch is `view.patch`, each with params equal to the update, pid included. Fast, 100 runs | test | Effect Arbitrary: News | send a patch as `view.whole`: L2 red | next/packages/libfabrika/src/runtime/News.test.ts |
+| L2, the frame a socket is sent is today's wire JSON, checked where the frame is built, at the Connection's door: `granted` is method `client.granted` with params holding only the nonce; a whole view is `view.whole` and a patch is `view.patch`, each with params equal to the update, pid included. Fast, 100 runs | test | Effect Arbitrary: News | send a patch as `view.whole`: L2 red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
 | L3, the view is JSON: `View`, the `view` of `Opened`, both parameters of `diff` and a patch's `value` are `Schema.Json`, and `Update` is the Schema's type | type | type | put `unknown` back on `diff`'s `before`: the typecheck fails | next/packages/libfabrika/src/runtime/News.types.test.ts |
 | L4, in the cloud files every hop's `news` parameter is `News` and every hop's `update` parameter is `Published`: `ConnectionShape`, `ConnectionBinding`, the `ConnectionService` and `GatewayClient` services, `ProjectDoorOptions`, the send function `Publish.make` takes and both fronts it returns, `ProjectBinding` and the `ProjectService` service | type | type | put `unknown` back on any one of them: the typecheck fails | next/packages/libfabrika/src/cloudflare/News.types.test.ts |
 | L5, the gateway's `notify` option takes `News` | type | type | put `unknown` back on `Options.notify`: the typecheck fails | next/packages/libfabrika/src/gateway/Gateway.types.test.ts |
-| L6, the Project class's `publish` takes what `ProjectService.publish` takes, and it is not `unknown` | type | type | put `unknown` back on the class's `update`: the typecheck fails | next/apps/fabrika/src/brain.types.test.ts |
+| L6, the Project class's `publish` takes `Published` | type | type | put `unknown` back on the class's `update`: the typecheck fails | next/apps/fabrika/src/brain.types.test.ts |
 | L7, `Publish.make`: with a route, `publish` sends exactly one `view` news holding the update and answers `sent`, and `notify` sends its news unchanged; with no route both send nothing and `publish` answers `gone`. This replaces the old law that any object passes through `publish` unchanged. Fast, 100 runs | test | Effect Arbitrary: News | route a `granted` news through `publish`'s front: L7 red | next/packages/libfabrika/src/cloudflare/Watchers.test.ts |
-| L8, the Connection object's `notify`: a `close` closes the client's sockets with its code and sends nothing; any other news sends one text frame whose JSON is `jsonrpc` 2.0 plus `notification`'s answer; another client's socket gets nothing; the span carries `fab.gateway.news` with the case. Fast, 50 runs | test | Effect Arbitrary: News | send a frame for a `close` too: L8 red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
+| L8, the Connection object's `notify`: a `close` closes the client's sockets with its code and sends nothing; any other news sends exactly one text frame, the one L2 checks; another client's socket gets nothing; the span carries `fab.gateway.news` with the case. Fast, 50 runs | test | Effect Arbitrary: News | send a frame for a `close` too: L8 red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
 | L9, a value that is not `News` fails the Connection's `notify` with `LedgerError` `bad_row`, and a value that is not `Published` fails the Project's `publish` the same way; neither sends or closes anything. Fast, 50 runs | test | fc.oneof: fc.jsonValue, and a generated News with one field removed or retyped | forward the raw value when the decode fails: L9 red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
 
 Laws that already hold the wire, changed only where they build or read news: the door's laws that a
@@ -311,7 +332,7 @@ is a real-resource test.
 
 | File | Owner | Product lines expected | What |
 |---|---|---|---|
-| next/packages/libfabrika/src/runtime/News.ts | build | 75 | new: `Update`, `Published`, `News`, `notification`, each with its doc block |
+| next/packages/libfabrika/src/runtime/News.ts | build | 65 | new: `Update`, `Published`, `News`, each with its doc block |
 | next/packages/libfabrika/src/runtime/Patch.ts | build | 15 | `Patch` is the exported Schema and its type; `same`, `walk` and `diff` take `Schema.Json` |
 | next/packages/libfabrika/src/runtime/Entry.ts | build | 8 | `View` is `Schema.Json`; `View` and `Update` re-exported from `News.ts` |
 | next/packages/libfabrika/src/runtime/Runner.ts | build | 2 | the `view` field of `Live` |
@@ -320,19 +341,19 @@ is a real-resource test.
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 14 | `ProjectDoorOptions.notify`, the wiring of both fronts, `ProjectService.publish` typed and decoded |
 | next/packages/libfabrika/src/cloudflare/bindings.ts | build | 4 | `publish` on `ProjectBinding`, `notify` on `ConnectionBinding` |
 | next/packages/libfabrika/src/cloudflare/objects.ts | build | 2 | `notify` on `ConnectionShape` |
-| next/packages/libfabrika/src/cloudflare/connection.ts | build | 22 | the door's decode, the span attribute, the conditional on `_tag`; both `notify` types |
-| next/apps/fabrika/src/brain.ts | build | 2 | `publish`'s `update` |
+| next/packages/libfabrika/src/cloudflare/connection.ts | build | 32 | the door's decode, the span attribute, `METHOD`, `frame` and the one `News.match`; both `notify` types |
+| next/apps/fabrika/src/brain.ts | build | 2 | `publish`'s `update` is `Published`, imported by name |
 | .glossary/TERMS.md | build | docs | a row for `news` |
-| next/packages/libfabrika/src/runtime/News.test.ts | tests | tests | new: L1, L2 |
+| next/packages/libfabrika/src/runtime/News.test.ts | tests | tests | new: L1 |
 | next/packages/libfabrika/src/runtime/News.types.test.ts | tests | tests | new: L3 |
 | next/packages/libfabrika/src/cloudflare/News.types.test.ts | tests | tests | new: L4 |
 | next/packages/libfabrika/src/gateway/Gateway.types.test.ts | tests | tests | one more block: L5 |
 | next/apps/fabrika/src/brain.types.test.ts | tests | tests | new: L6 |
 | next/packages/libfabrika/src/cloudflare/Watchers.test.ts | tests | tests | L7, in place of the pass-through law; its fake send takes `News` |
-| next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | L8, L9 |
+| next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | L2, L8, L9 |
 | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts next/packages/libfabrika/src/cloudflare/platform.test.ts | tests | tests | each hands `notify` one real `News` value where it hands `{}` or a loose object today |
 | next/packages/libfabrika/src/gateway/TasksTest.ts next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | the kept notices are `News` |
-| next/apps/fabrika/src/door.integration.test.ts next/apps/fabrika/src/checklist-instance.laws.integration.test.ts next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | tests | read a notice by its `_tag` and fields, never by searching its JSON text; build `News` with `make` |
+| next/apps/fabrika/src/door.integration.test.ts next/apps/fabrika/src/checklist-instance.laws.integration.test.ts next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | tests | read a notice with `News.guards` or `News.match` and its fields, never by searching its JSON text; build `News` with `make` |
 | next/packages/libfabrika/src/runtime/Patch.test.ts next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/client/Tezgah.laws.test.ts next/packages/libfabrika/src/client/WindowMachine.laws.test.ts next/programs/checklist/src/client.laws.test.ts | tests | tests | only if the typecheck asks: a value handed to `diff` is typed as JSON |
 
 `cloudflare/platform.ts` and `cloudflare/ConnectionObject.ts` need no edit: their `news` takes its
@@ -390,14 +411,16 @@ type from the binding and the shape.
 - **The hands pull request** (https://github.com/kamp-us/tea-fabrika/pull/1331) edits
   `client/HandsStart.ts`. Only slice 9's one line there waits. Slice 3, the gateway slice, does not
   wait on it today; read its file list again when slice 3 starts.
-- **Quotas slice 4** (ticket 404) is off main and will land again. Slice 7 waits on it.
+- **Quotas slice 4** (ticket 404, branch `fabrikalfa/p34c-s4`) is off main and will land again. It
+  edits `gateway/Gateway.ts` and `cloudflare/runtime.ts` too: whichever of it and slice 1 lands
+  second merges main. Slice 7 waits on it.
 
 ## Validation
 
 The tests step runs its own new files with
 `nice -n 15 pnpm exec vitest run --maxWorkers=3 <path>`. The build runs `pnpm format`, `pnpm lint`
 and the same narrow paths. The lead runs the one type check and the changed tests at the end, since
-six of the nine laws are read only there.
+four of the nine laws are read only there.
 
 ## Size
 
@@ -433,7 +456,7 @@ Estimate: 5 steps, $19
   is still recorded under `project.publish`, as today.
 - **A refused value is recorded as today's errors are:** `LedgerError` `bad_row` with its cause.
 - **One call between objects changes shape.** `notify` between the Project and a Connection object
-  carries `{ _tag, ... }` in place of `{ method, params }` or `{ close }`. Both objects ship in one
+  carries a `News` case in place of `{ method, params }` or `{ close }`. Both objects ship in one
   deploy. A call that crosses a deploy is refused as `bad_row`, and the watcher's next update or the
   client's reconnect repairs it.
 
@@ -445,6 +468,15 @@ Estimate: 5 steps, $19
 - **Patch.ts replaced by `effect/JsonPatch`,** as E1 decides, in its own pull request.
 - **One `Call` union for every route method,** which is the gateway's dispatch (experiment 174).
 - **The 544 `unknown` parameters in tests and tooling,** which nobody has read.
+- **A program's own model slot typed `Schema.Json`.** Not in this quest: the lead answered that the
+  slots stay `unknown`, as the owner ruled, and carries the question to the owner. The reading, for
+  that talk: it is about 57 of the 70 slots (`Execution` and `ExecutionCalls` in
+  `runtime/Execution.ts`, the box in `cloudflare/box.ts`, the `Stepper` type). It can be done for
+  the model, since every model the runner holds comes from `Step.stepped.model`
+  (`runtime/Program.ts:492`) or a saved row (`runtime/State.ts:15`), both `Schema.Json`. It cannot
+  yet for a Msg: `Incoming.envelope.input` is `Schema.Unknown` (`runtime/Entry.ts:70`), and making
+  it JSON moves one refusal earlier. The box's own methods would stay `unknown`, since they are
+  doors. One typecheck of `Execution.ts` settles the doubt.
 
 ## What this cannot tell us
 
@@ -458,20 +490,7 @@ Estimate: 5 steps, $19
 
 ## Open questions
 
-1. Should a program's own model slot be typed `Schema.Json` in place of `unknown`? This is about
-   57 of the 70 slots the owner ruled stay: `Execution` and `ExecutionCalls` in
-   `runtime/Execution.ts`, the box in `cloudflare/box.ts`, the `Stepper` type. Reading says it can
-   for the model: every model the runner holds comes from `Step.stepped.model`
-   (`runtime/Program.ts:492`) or a saved row (`runtime/State.ts:15`), and both are `Schema.Json`.
-   The stepper decodes it with the program's own schema either way. It cannot yet for a Msg:
-   `Incoming.envelope.input` is `Schema.Unknown` (`runtime/Entry.ts:70`), though the Project already
-   refuses an input that is not JSON when it writes the inbox. Option A, leave the slots:
-   `step: (model: unknown, msg: unknown)`, which is the ruling as given and costs nothing. Option B,
-   name them: `step: (model: Schema.Json, msg: Schema.Json)` on the caller's side, with the box's
-   own methods left `unknown` because they are doors; it needs `Incoming`'s input to be
-   `Schema.Json` first, which moves one refusal earlier. Lean: B, as its own pull request after
-   slice 6, since none of the 97 fixes needs it. 70%: the doubt is the Msg, and one typecheck of
-   `Execution.ts` settles it.
+None.
 
 ## Findings
 
