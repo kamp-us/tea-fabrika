@@ -94,7 +94,6 @@ it("scenario: the gates are the jobs check.yaml gates, with check on its own fla
   expect(gates).toEqual({
     check: ["check", "field"],
     typecheck: ["typecheck"],
-    test: ["test"],
     next: ["next"],
   });
 });
@@ -175,19 +174,18 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", field: "false", typecheck: "false", test: "true", next: "true" },
+      outputs: { check: "false", field: "false", typecheck: "false", next: "true" },
     },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
-    test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
   });
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(6);
-  expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
+  expect(ok.stdout.trim().split("\n")).toHaveLength(5);
+  expect(run(good.replace('"next":{"result":"success"', '"next":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
 });
@@ -254,18 +252,17 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: next/ alone, where test skips on main.
+    // pinned: next/ alone, where check runs on main.
     { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
   );
 });
 
-// 0534: the merge queue's group and a push to main never start the test job, and next runs the
-// tests their change reaches, so it skips when the size step picked none (changes' `next`, which
-// the size step prints first). Both skips pass, as changes said; the same skip on a pull request
-// whose change reaches a tooling test does not.
-it("property: on the merge line past the pull request a skipped test job always passes, and a skipped next passes only when changes said so", () => {
-  // Plants: drop `test` from `gates` (red: the skip fails as ungated); let a skip pass on any flag
-  // but "true" (red: next skipped with the size step's output empty passed).
+// 0534: on the merge queue's group and a push to main, next runs the tests their change reaches, so
+// it skips when the size step picked none (changes' `next`, which the size step prints first). That
+// skip passes, as changes said. No run has a test job to skip since 0539.
+it("property: on the merge line past the pull request a skipped next passes only when changes said so", () => {
+  // Plant: let a skip pass on any flag but "true" (red: next skipped with the size step's output
+  // empty passed).
   const line = fc.option(
     fc.array(
       fc.constantFrom(
@@ -287,10 +284,7 @@ it("property: on the merge line past the pull request a skipped test job always 
       fc.constantFrom("true", "false", ""),
       (p, event, said) => {
         const flags = jobs(p, event, false);
-        const needs = ran(flags);
-        expect(flags.test).toBe(false);
-        expect(needs["test"]!.result).toBe("skipped");
-        expect(judge(needs).pass).toBe(true);
+        expect(judge(ran(flags)).pass).toBe(true);
         // The size step's `next`: "false" when it picked no next/ test file; "true" or empty otherwise.
         fc.pre(flags.next);
         const sized = ran(flags);
@@ -305,11 +299,6 @@ it("property: on the merge line past the pull request a skipped test job always 
       examples: [[[".github/workflows/check.yaml"], "merge_group", "false"]],
     },
   );
-  // The same skipped test job on a ready pull request that reaches a tooling test fails.
-  const pr = ran(jobs([".github/ci/legs.ts"], "pull_request", false));
-  expect(pr["test"]!.result).toBe("success");
-  pr["test"] = { result: "skipped" };
-  expect(judge(pr).pass).toBe(false);
 });
 
 it("property: a draft passes with its heavy jobs skipped; a ready PR fails when a job it needs skips", () => {
@@ -360,7 +349,7 @@ it("property: a run stopped at its first red job never passes", () => {
         expect(judge(needs).pass).toBe(false);
       },
     ),
-    // pinned: run 43633120187's shape, check (lint) red, typecheck and next stopped mid-run, test not yet started.
+    // pinned: run 43633120187's shape, check (lint) red, typecheck and next stopped mid-run.
     {
       ...options,
       examples: [

@@ -7,13 +7,12 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 // Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
-// is no such flag, on any event. The test job runs the tooling tests alone.
-/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, field: boolean, build: boolean}} Flags */
+// is no such flag, on any event. No flag starts the tooling tests either: the merge line runs none of
+// them, and the schedule (scheduled.yaml) runs them all (0539).
+/** @typedef {{check: boolean, typecheck: boolean, next: boolean, field: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, test: true, next: true, field: true, build: true };
+const all = { check: true, typecheck: true, next: true, field: true, build: true };
 const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
-const helper = "next/apps/fabrika/src/exam/plant.ts";
-const commits = "next/apps/fabrika/src/exam/commits.ts";
 /**
  * Field rows: a direct `.jsonl` file, or anything in a log's folder, where each new row is its own
  * file (decision 0090). field-check.ts names and checks them; a misnamed file fails there.
@@ -75,7 +74,7 @@ export const ignored = [
 
 /**
  * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script
- * and no prose, the lead's gc.plist, is read by the lead's tooling tests, so it still starts test.
+ * and no prose, the lead's gc.plist, is read by the lead's tooling tests, which the schedule runs.
  * @param {string} path
  */
 const skill = (path) => path.startsWith(".agents/skills/");
@@ -134,7 +133,8 @@ const provable = (path) => path.startsWith("next/") && /\.tsx?$/.test(path);
  * CI's own files: the workflows, the shared setup, and CI's scripts with their tests. No next/ test
  * reads one (0534; `rg '\.github' next --glob '*.test.ts'` finds only commits.test.ts, which names
  * the glob as a string), so a change here needs none of next/. The tooling tests that read them as
- * text reach them through vitest.config.ts's `githubReads`, and the schedule runs all of next/.
+ * text reach them through vitest.config.ts's `githubReads` in a local `--changed` run, and the
+ * schedule runs them and all of next/.
  * @param {string} path
  */
 const ci = (path) => path.startsWith(".github/");
@@ -196,9 +196,8 @@ export const scope = (paths, event, proven = []) => {
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
  * `build` is true only when a path is one of today's version's files: it gates check's
- * `pnpm build`, the slow half of check. `test` starts the test job, which runs only the
- * tooling tests (0525, 0533). History that cannot be read, no path at all, or an event that is not
- * scoped runs everything.
+ * `pnpm build`, the slow half of check. No flag starts a tooling test: the merge line runs none
+ * (0539). History that cannot be read, no path at all, or an event that is not scoped runs everything.
  * `proven` is taken so a caller can pass what it has, and never changes a flag: a proof only narrows
  * which next/ tests run (`scope`), never whether next runs.
  * @param {readonly string[] | null} paths
@@ -222,9 +221,6 @@ export const classify = (paths, event, _proven = []) => {
   return {
     check: !paths.every(quiet),
     typecheck: !paths.every((path) => quiet(path) || experiment(path)),
-    test: !paths.every(
-      (path) => quiet(path) || experiment(path) || (path.startsWith("next/") && path !== helper && path !== commits),
-    ),
     next: scope(paths, event) !== "none",
     field: paths.some(rows),
     build: touched,
@@ -232,20 +228,12 @@ export const classify = (paths, event, _proven = []) => {
 };
 
 /**
- * An event on the merge line past the pull request: a merge queue's group or a push to main. Each
- * runs only what the change reaches in next/, never the tooling tests (0534).
- * @param {string} event
- */
-const merged = (event) => event === "merge_group" || event === "push";
-
-/**
  * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes,
  * field, typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
  * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
  * request can be a draft; on any other event, a merge queue's group and a push included, the flag
- * is ignored. The test job runs on a pull request alone (0534): a merge queue's group and a push
- * to main never start it, whatever their paths or history say, and the schedule (scheduled.yaml)
- * runs the tooling tests.
+ * is ignored. No event starts a tooling test (0539): their author runs the narrow ones on the
+ * laptop, and the schedule (scheduled.yaml) runs them all every 3 hours.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
@@ -256,10 +244,10 @@ export const jobs = (paths, event, draft, _proven = []) => {
   const flags = classify(paths, event);
 
   if (event === "pull_request" && draft) {
-    return { ...flags, test: false, next: false, build: false };
+    return { ...flags, next: false, build: false };
   }
 
-  return { ...flags, test: flags.test && !merged(event) };
+  return flags;
 };
 
 /** @param {string} sha */
@@ -443,12 +431,12 @@ const tested = async (before, head, run, api) => {
 
 /**
  * A push whose tree and base tree a passed queue run already tested skips the jobs that would
- * repeat it: next, and test, which a push never starts anyway (0534). check and typecheck run: they
+ * repeat it: next. check and typecheck run: they
  * are light, and typecheck saves main's tsc cache. A skip only turns a flag off.
  * @param {Flags} flags
  * @returns {Flags}
  */
-const skipTested = (flags) => ({ ...flags, test: false, next: false });
+const skipTested = (flags) => ({ ...flags, next: false });
 
 /** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
 const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
@@ -530,7 +518,7 @@ const parserVersion = () => {
  * program.ts cannot load, it prints what the first pass printed, so a failed install runs every
  * next/ test. `note` hears one line per candidate file and the parser's version.
  * On a push, the first pass also asks `api` whether a merge queue run already passed the same
- * change (`tested`), and then prints test and next off and that run's id as `tested`. With no
+ * change (`tested`), and then prints next off and that run's id as `tested`. With no
  * `api`, as when the run gave no token, it asks nothing. Since next is then off, `probe` is false
  * and the parser's pass does not run.
  * @param {{same: boolean, env: Record<string, string | undefined>, run?: Runner, load?: () => Promise<{samePaths: (base: string, head: string, paths: readonly string[], run: Runner, note?: (path: string, verdict: string) => void) => string[]}>, note?: (line: string) => void, api?: Api | null}} options
@@ -559,7 +547,7 @@ export const outputs = async ({
     const flags = queued === null ? changed : skipTested(changed);
 
     if (queued !== null) {
-      note(`merge queue run ${queued} passed this tree from the same base tree, so test and next skip`);
+      note(`merge queue run ${queued} passed this tree from the same base tree, so next skips`);
     }
 
     const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);

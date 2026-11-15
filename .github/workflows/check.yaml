@@ -26,8 +26,9 @@ on:
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
-  # (see BASE below). Neither runs the tooling tests or the whole of next/ (0534): next/ runs the
-  # tests the change reaches, and the schedule (scheduled.yaml) runs everything every 3 hours.
+  # (see BASE below). Neither runs the whole of next/ (0534): next/ runs the tests the change
+  # reaches, and the schedule (scheduled.yaml) runs everything every 3 hours. No event here runs a
+  # tooling test (0539): their author runs the narrow ones, and the schedule runs them all.
   merge_group:
     types: [checks_requested]
 
@@ -85,7 +86,6 @@ jobs:
     outputs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
-      test: ${{ steps.diff.outputs.test }}
       # The size step's `next` is false when legs.ts picked no next/ test file, so next skips.
       next: ${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}
       filter: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
@@ -334,71 +334,9 @@ jobs:
           key: ${{ steps.tsc.outputs.cache-primary-key }}
       - *stop
 
-  # The tooling tests, the ones that belong to neither version's product code: CI's own
-  # (.github/ci), the lint plugins, the root scripts and the skill scripts. Today's version is
-  # frozen (0525, 0533), so its own tests run here on no event: every vitest call below leaves its trees
-  # out, and workflow-lint.ts holds that. Its app end to end, the e2e job until 0533, runs in no
-  # job.
-  # Split by file over two machines (vitest's `--shard`, each given about the same seconds by
-  # vitest.shards.ts). On main run 43615844695 they took 68, 111, 125, 230, 274 and 363 s on six
-  # (19.5 machine-min): four files of 124 to 362 s each sat alone on a machine, and boxrm.test.ts
-  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.ts's table and run three
-  # files at a time, those 97 files' seconds give two machines of 353 and 362 s (11.9 machine-min),
-  # the same longest wait.
-  # It runs on a pull request alone (0534): a merge queue group and a push to main never start it
-  # (changes.mjs's `jobs`), and the schedule (scheduled.yaml) runs every tooling test.
-  test:
-    needs: changes
-    if: >-
-      ${{ !cancelled() &&
-          (needs.changes.result != 'success' ||
-           needs.changes.outputs.test != 'false') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-        with:
-          # `--changed` compares with the pull request's base commit, so the
-          # history must hold it. Blobless, as in changes: `--changed` reads only names.
-          fetch-depth: 0
-          filter: blob:none
-          persist-credentials: false
-
-      - uses: ./.github/actions/pnpm
-
-      - run: pnpm install --frozen-lockfile
-      # The `tooling` project of vitest.config.ts: every test it includes, less next/ and the three
-      # trees of today's tests, which are projects of their own (`next`, `next-integration`,
-      # `next-visual` and `today`); a project ignores `--exclude`, so `--project` keeps them out. BASE
-      # is the commit the run's change starts from: a pull request's base, a merge queue group's
-      # base, or what main held before a push. With a BASE the tests that reach the change run
-      # (vitest's `--changed`, its config's `forceRerunTriggers` for files tests read without
-      # importing, and `githubReads` for tests that read CI's files as text); with none (a run
-      # started by hand), all of them.
-      - name: tooling tests
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          # The matrix's two machines.
-          SHARD: ${{ matrix.shard }}/2
-        run: |
-          if [ -n "$BASE" ]; then
-            pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
-          else
-            pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
-          fi
-      - name: shard times
-        if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"
-      - *stop
-
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
-  # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
+  # tests read files and the later ones start a brain, so vitest's `--changed`, which follows
   # imports, would not pick them up. The e2e legs run the `next-visual` project, which takes no
   # filter, so they run every visual file a change reaches, and which fails on a leg with no file.
   # Chromium is fetched only once a visual file exists, by
@@ -461,7 +399,7 @@ jobs:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.vitest-legs || 5 }}
           FILTER: ${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
-      # that answers, the same way as the test job's apt step.
+      # that answers.
       - name: chromium
         if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''
         run: |
@@ -505,7 +443,7 @@ jobs:
   # running: a normal cancel leaves an `always()` job be. It needs no `actions: write`, so it drops it.
   ci-required:
     name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
-    needs: [changes, check, typecheck, test, next]
+    needs: [changes, check, typecheck, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

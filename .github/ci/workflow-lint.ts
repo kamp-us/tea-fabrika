@@ -98,26 +98,14 @@ const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 // The token changes' classify step reads.
 const TOKEN = `\${{ github.token }}`;
-// The test job's two machines, for the tooling tests alone (check.yaml gives the seconds).
-const TOOLING_LEGS = [1, 2];
-// Today's version is frozen (0525, 0533), so every vitest call of the tooling tests, in the test job
-// and on the schedule, runs the `tooling` project alone: next/ and the three trees of today's tests
-// are projects of their own, and a project ignores `--exclude` (vitest.config.ts;
-// workflow-lint.test.ts holds the tooling project's globs).
+// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
+// a project ignores `--exclude` (vitest.config.ts; workflow-lint.test.ts holds the tooling project's
+// globs). No call in check.yaml runs it (0539).
 const TOOLING_PROJECT = "--project tooling";
-const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
-
-// The test job's one test step, whole: the tests that reach the change with a base, all of them
-// without one, each on its machine's share. It runs on a pull request alone (0534).
-const TOOLING = [
-  'if [ -n "$BASE" ]; then',
-  `pnpm exec vitest run ${TOOLING_PROJECT} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
-  "else",
-  `pnpm exec vitest run ${TOOLING_PROJECT} --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
-  "fi",
-];
-
-const TEST_TIMES = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
+// A command that starts vitest: the binary itself (not a file named `vitest.*`), or the root
+// `test` script, which is `vitest run`.
+const VITEST_CALL = /\bvitest\b(?!\.)|\bpnpm\s+(?:-\S+\s+|run\s+)*test\b/;
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
 // Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
@@ -203,8 +191,9 @@ const SIZE_ENV = {
 // when only rows changed.
 const CHECK = "needs.changes.outputs.check!='false'";
 // changes' flags from its first pass, each a job's or a step's.
-// No flag starts today's tests or its app end to end, which run on no event (0525, 0533).
-const FLAGS = ["check", "typecheck", "test", "field", "build"];
+// No flag starts today's tests or its app end to end, which run on no event (0525, 0533), and none
+// starts the tooling tests, which only the schedule runs (0539).
+const FLAGS = ["check", "typecheck", "field", "build"];
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
@@ -526,36 +515,18 @@ export const lintWorkflow = (text: string): string[] => {
     require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
 
-  // The test job runs the tooling tests alone, on two machines, on a pull request alone (0534).
-  // Today's version is frozen (0525, 0533), so its tests run on no event: T1, with the outputs law
-  // above and the app law below.
-  const test = map(jobs["test"]),
-    testSteps = steps(test);
-  require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) ===
-    JSON.stringify(TOOLING_LEGS), `T5: the test job runs on ${TOOLING_LEGS.length} machines, a plain list`);
-  const tooling = testSteps.find((s) => s["name"] === "tooling tests");
-  const times = testSteps.find((s) => s["name"] === "shard times");
-  // T1. Only these whole scripts, each once: no step, flag or spelling adds today's tests.
-  // Each script as its trimmed lines, so the shell's indenting is no part of it.
-  const testAllowed = ["pnpm install --frozen-lockfile", TOOLING.join("\n"), TEST_TIMES];
-  const testRuns = testSteps.filter((s) => "run" in s).map((s) => lines(s["run"]).join("\n"));
-  require(testRuns.length === testAllowed.length &&
-    testAllowed.every(
-      (command) => testRuns.filter((run) => run === command).length === 1,
-    ), "T1: the test job runs exactly its install, the tooling tests and shard times, once each");
-  require(tooling !== undefined &&
-    !("if" in tooling) &&
-    map(tooling["env"])["SHARD"] === `\${{ matrix.shard }}/${TOOLING_LEGS.length}` &&
-    compact(map(tooling["env"])["BASE"]) ===
-      compact(
-        TEST_BASE,
-      ), "T4: the tooling tests run on every test run, their shard of two, on the pull request's, the group's or the push's base");
-  require(times !== undefined &&
-    times["run"] === TEST_TIMES &&
-    compact(times["if"]) === "!cancelled()" &&
-    tooling !== undefined &&
-    testSteps.indexOf(tooling) <
-      testSteps.indexOf(times), "T3: shard times follow the tooling tests, even after a failure");
+  // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
+  // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
+  // (0525, 0533), so its tests run on no event either. So every vitest call names its projects,
+  // each one of next/'s: a call with no `--project` runs every project, the tooling one and today's
+  // among them.
+  for (const [name, job] of Object.entries(jobs)) {
+    for (const command of commands(map(job)).filter((line) => VITEST_CALL.test(line))) {
+      const projects = [...command.matchAll(/--project[=\s]+(\S+)/g)].map((found) => found[1] ?? "");
+      require(projects.length > 0 &&
+        projects.every((project) => /^next(?:-|$)/.test(project)), `T1: ${name} runs no tooling test (0539)`);
+    }
+  }
 
   // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
   // today's promise checks.

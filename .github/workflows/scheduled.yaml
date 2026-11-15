@@ -2,7 +2,7 @@ name: scheduled
 
 # The whole suite, on a schedule (0534). The merge line runs only the tests a change reaches: a pull
 # request, a merge queue group and a push to main each run the next/ tests their diff reaches, and
-# only a pull request runs the tooling tests (check.yaml). This runs all of next/, every layer of it
+# none of them runs a tooling test (0539, check.yaml). This runs all of next/, every layer of it
 # (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`) and the visual ones
 # (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head, so a
 # break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
@@ -12,7 +12,7 @@ name: scheduled
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
-#   tooling tests   2      check.yaml's tooling step, every file, no `--changed`
+#   tooling tests   2      the `tooling` project, every file, no `--changed`
 #   report          1      after the others, on any result
 #
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
@@ -108,12 +108,13 @@ jobs:
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # Every tooling test: the tests of neither version's product code (CI's own, the lint plugins, the
-  # root scripts and the skill scripts), check.yaml's tooling step on its two machines, with no
-  # `--changed`: the `tooling` project, since a project ignores `--exclude` (0536). Today's tests run
+  # root scripts and the skill scripts), on two machines, with no `--changed`: the `tooling` project,
+  # since a project ignores `--exclude` (0536). The only CI job that runs them: the merge line runs
+  # none, and a tooling change's author runs its narrow tests on the laptop (0539). Today's tests run
   # in no CI job (0533).
   tooling:
     runs-on: ubuntu-latest
-    # check.yaml's test limit.
+    # The limit check.yaml's tooling legs had, before 0539 took them off the merge line.
     timeout-minutes: 30
     strategy:
       fail-fast: false

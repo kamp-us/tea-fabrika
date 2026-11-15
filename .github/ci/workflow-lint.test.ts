@@ -36,10 +36,6 @@ const classify = { ...diff, env: { ...diff.env, GITHUB_TOKEN: token } };
 
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 
-// The test job's steps: a plant may give one an `if` or add one with no name.
-type TestStep = { name?: string; if?: string; env?: Record<string, string>; run: string };
-const testSteps = (list: TestStep[]) => list;
-
 // The next job's steps: a plant may add one with no name, such as a second Vitest call.
 type NextStep = {
   name?: string;
@@ -77,9 +73,6 @@ const step = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(
 const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) =>
   (w.jobs as Record<string, { steps: unknown[] }>)[job]!.steps.indexOf(step(w, job, name));
 
-// T5 before 0533: six machines for today's tests, two when only the tooling tests ran.
-const todayLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
-
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
@@ -87,25 +80,20 @@ const testEnv = {
 // 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
 const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
-// 0536: the tooling tests are the `tooling` project; next/ and today's trees are projects of their
-// own, and a project ignores `--exclude`.
-const toolingProject = "--project tooling";
-const toolingReport = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
-
-// 0533: the test job's one test step, the tooling tests, on two machines and no flag.
+// The test job's one test step before 0539, the tooling tests on two machines: the `tooling`
+// project, since next/ and today's trees are projects of their own and a project ignores `--exclude`.
 const tooling = [
   'if [ -n "$BASE" ]; then',
-  `  pnpm exec vitest run ${toolingProject} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingReport}`,
+  '  pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
   "else",
-  `  pnpm exec vitest run ${toolingProject} --shard "$SHARD" --passWithNoTests ${toolingReport}`,
+  '  pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
   "fi",
   "",
 ].join("\n");
 
-const testTimes = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
-
-// What changes exposed before 0533: the flags that started today's tests and its app end to end.
-const todayFlags = ["today", "e2e"] as const;
+// What changes exposed before 0533 and 0539: the flags that started today's tests, its app end to
+// end, and the tooling tests.
+const goneFlags = ["today", "e2e", "test"] as const;
 
 // The e2e job as it was before 0533, with its own place in ci-required's needs and its stop step
 // last (F1), so T2 alone names it.
@@ -201,7 +189,7 @@ const stop = {
 };
 
 // Every job that carries the stop step: all of them but ci-required.
-const stopping = ["changes", "check", "typecheck", "test", "next"] as const;
+const stopping = ["changes", "check", "typecheck", "next"] as const;
 
 const valid = (label: string, extra: string) => ({
   name: label,
@@ -224,7 +212,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       outputs: {
         ...Object.fromEntries(
-          ["check", "typecheck", "test", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
+          ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
         // prints next once more.
@@ -316,17 +304,6 @@ const valid = (label: string, extra: string) => ({
         { name: "typecheck", run: "pnpm typecheck" },
       ],
     },
-    test: {
-      needs: "changes",
-      if: guard("test"),
-      "timeout-minutes": 30,
-      strategy: { "fail-fast": false, matrix: { shard: [1, 2] as unknown } },
-      steps: testSteps([
-        { name: "install", run: "pnpm install --frozen-lockfile" },
-        { name: "tooling tests", env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` }, run: tooling },
-        { name: "shard times", if: "!cancelled()", run: testTimes },
-      ]),
-    },
     next: {
       needs: "changes" as string | string[],
       if: guard("next"),
@@ -364,7 +341,7 @@ const valid = (label: string, extra: string) => ({
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "check", "typecheck", "test", "next"],
+      needs: ["changes", "check", "typecheck", "next"],
       if: "always()",
       "timeout-minutes": 5,
       permissions: { contents: "read" } as unknown,
@@ -550,7 +527,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   // 0533: the promises gate tests today's pipeline code, so no step runs it, under any spelling or
   // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
   // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
-  // test job's are also held by the build-flag law and T1.
+  // next job's are also held by the build-flag law and next's own command law.
   ...[
     { name: "promises", if: build, run: "pnpm promises gate" },
     { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
@@ -566,9 +543,9 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ]),
   [
-    "T6: the test job runs today's promise checks",
+    "T6: the next job runs today's promise checks",
     (w) => {
-      w.jobs.test.steps.splice(place(w, "test", "shard times"), 0, { name: "promises", run: "pnpm promises" });
+      w.jobs.next.steps.splice(place(w, "next", "shard times"), 0, { name: "promises", run: "pnpm promises" });
     },
   ],
   [
@@ -589,83 +566,76 @@ const plants: [string, (workflow: Workflow) => void][] = [
       Object.assign(step(w, "changes", "classify"), { env });
     },
   ],
-  // 0533: no event runs the tests of today's version or its app end to end. T1: no output
-  // of changes can start them, and the test job runs only its three whole scripts. T2: no job runs
-  // today's app. Each plant puts back one way today's tests ran before, or a new spelling of one.
-  // Source plants, each run once on workflow-lint.ts and restored: drop T1's outputs check (red:
-  // the today and e2e flags back), drop T2's loop (red: every e2e plant), let T1's allowlist take
-  // any step that holds an allowed script (red: today's tests in a step of their own, the lane
-  // tests, today's tests after the tooling tests in one step, and the tooling step twice).
-  ...todayFlags.map((flag): [string, (w: Workflow) => void] => [
+  // 0533: no event runs the tests of today's version or its app end to end, and 0539: none runs a
+  // tooling test. T1: no output of changes can start them, and every vitest call names only next/'s
+  // projects. T2: no job runs today's app. Each plant puts back one way those tests ran before, or a
+  // new spelling of one. Source plants, each run once on workflow-lint.ts and restored: drop T1's
+  // outputs check (red: the today, e2e and test flags back), drop T2's loop (red: every e2e plant),
+  // drop T1's vitest loop (red: the old test job and each typecheck plant below; next's step plants
+  // stay held by next's own command law).
+  ...goneFlags.map((flag): [string, (w: Workflow) => void] => [
     `T1: changes exposes the ${flag} flag again`,
     (w) => {
       w.jobs.changes.outputs[flag] = `\${{ steps.diff.outputs.${flag} }}`;
     },
   ]),
   [
-    "T1: today's tests are back in the test job, on the today flag",
+    "T1: the test job is back as it was before 0539, the tooling tests on two machines",
     (w) => {
-      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 0, {
-        name: "test",
-        if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
-        env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
-        run: "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
+      Object.assign(w.jobs, {
+        test: {
+          needs: "changes",
+          if: guard("next"),
+          "timeout-minutes": 30,
+          strategy: { "fail-fast": false, matrix: { shard: [1, 2] } },
+          steps: [
+            { name: "install", run: "pnpm install --frozen-lockfile" },
+            { name: "tooling tests", env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` }, run: tooling },
+            stop,
+          ],
+        },
       });
+      w.jobs["ci-required"].needs.push("test");
     },
   ],
-  [
-    "T1: the lane tests are back, one file at a time",
+  // In the typecheck job, before its stop step (F1): no other law lists its steps whole, so T1 alone
+  // rejects these. In check, its own command law would hold them too.
+  ...(
+    [
+      ["today's tests are back, on the today flag", "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'"],
+      [
+        "the lane tests are back, one file at a time",
+        "pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --maxWorkers=1 --exclude 'next/**'",
+      ],
+      ["the tooling project runs in typecheck", 'pnpm exec vitest run --project tooling --shard "$SHARD"'],
+      ["the tooling project runs in typecheck, spelled with =", "pnpm exec vitest run --project=tooling"],
+      ["the tooling project beside next's", "pnpm exec vitest run --project next --project tooling"],
+      ["CI's own tests run by path, every project", "pnpm exec vitest run .github/ci/"],
+      ["the root test script, every project", "pnpm test .github/ci/"],
+      ["the root test script, run", "pnpm run test"],
+      ["vitest through npx", "npx vitest run oxlint-plugins/"],
+      ["the today project", "pnpm exec vitest run --project today"],
+    ] as const
+  ).map(([label, run]): [string, (w: Workflow) => void] => [
+    `T1: ${label}`,
     (w) => {
-      w.jobs.test.steps.unshift({
-        name: "lane tests, one file at a time",
-        env: testEnv,
-        run: "pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --maxWorkers=1 --exclude 'next/**'",
-      });
+      w.jobs.typecheck.steps.splice(-1, 0, { name: "planted", run });
     },
-  ],
-  // 0536: today's tests and next/'s are projects of their own, so a second `--project`, or none at
-  // all, runs them in the tooling step.
-  ...["today", "next", "next-integration", "next-visual"].map((project): [string, (w: Workflow) => void] => [
-    `T1: the tooling tests run the ${project} project's tests`,
+  ]),
+  // 0536: today's tests and the tooling tests are projects of their own, so a second `--project`, or
+  // none at all, runs them in next's vitest step. next's own command law holds these too.
+  ...["today", "tooling"].map((project): [string, (w: Workflow) => void] => [
+    `T1: next's vitest step runs the ${project} project's tests too`,
     (w) => {
-      const found = step(w, "test", "tooling tests");
-      found.run = found.run.replaceAll("--project tooling", `--project tooling --project ${project}`);
+      const found = step(w, "next", "vitest");
+      found.run = found.run.replace("--project next ", `--project next --project ${project} `);
     },
   ]),
   [
-    "T1: the tooling tests run every project",
+    "T1: next's vitest step runs every project",
     (w) => {
-      const found = step(w, "test", "tooling tests");
-      found.run = found.run.replaceAll("--project tooling ", "");
-    },
-  ],
-  [
-    "T1: the tooling step runs today's tests after its own",
-    (w) => {
-      const found = step(w, "test", "tooling tests");
-      found.run += "pnpm exec vitest run packages/\n";
-    },
-  ],
-  [
-    "T1: the tooling step runs twice",
-    (w) => {
-      w.jobs.test.steps.splice(place(w, "test", "shard times"), 0, {
-        ...step(w, "test", "tooling tests"),
-        name: "again",
-      });
-    },
-  ],
-  [
-    "T1: the tooling tests are gone",
-    (w) => {
-      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 1);
-    },
-  ],
-  [
-    "T1: shard times read today's reports again",
-    (w) => {
-      step(w, "test", "shard times").run =
-        'node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/tooling.json"';
+      const found = step(w, "next", "vitest");
+      found.run = found.run.replace("--project next ", "");
     },
   ],
   ["T2: the e2e job is back", todaysE2e({ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" })],
@@ -681,49 +651,6 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.check.steps.splice(-1, 0, { run: "pnpm --filter @kampus/fabrika-app-old e2e -- --aria" });
     },
   ],
-  [
-    "T3: shard times skip after a failure",
-    (w) => {
-      step(w, "test", "shard times").if = "";
-    },
-  ],
-  [
-    "T3: shard times run before the tooling tests",
-    (w) => {
-      const [times] = w.jobs.test.steps.splice(place(w, "test", "shard times"), 1);
-      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 0, times!);
-    },
-  ],
-  [
-    "T4: the tooling tests run on the old today flag",
-    (w) => {
-      step(w, "test", "tooling tests").if = `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`;
-    },
-  ],
-  [
-    "T4: the tooling tests divide by six on two machines",
-    (w) => {
-      step(w, "test", "tooling tests").env!.SHARD = `\${{ matrix.shard }}/6`;
-    },
-  ],
-  [
-    "T4: the tooling tests read their base from a pull request alone",
-    (w) => {
-      step(w, "test", "tooling tests").env!.BASE = `\${{ github.event.pull_request.base.sha }}`;
-    },
-  ],
-  ...(
-    [
-      ["six machines on the old today flag", todayLegs],
-      ["six machines", [1, 2, 3, 4, 5, 6]],
-      ["two machines as strings", ["1", "2"]],
-    ] as const
-  ).map(([label, legs]): [string, (w: Workflow) => void] => [
-    `T5: ${label}`,
-    (w) => {
-      w.jobs.test.strategy.matrix.shard = legs;
-    },
-  ]),
   ...extraCommands.map((added): [string, (w: Workflow) => void] => [
     `review2 extra command: ${added.run}`,
     (w) => {
@@ -1474,12 +1401,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.if = "";
     },
   ],
-  [
-    "failure skips tests",
-    (w) => {
-      w.jobs.test.if = "needs.changes.outputs.test == 'true'";
-    },
-  ],
+
   [
     "classifier bypass",
     (w) => {
@@ -1655,7 +1577,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
-  ...(["changes", "check", "typecheck", "test", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+  ...(["changes", "check", "typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [
     `ci-required does not need ${job}`,
     (w) => {
       w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
@@ -1717,18 +1639,16 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "check", "typecheck", "test", "next", "ci-required"] as const).map(
-    (job): [string, (w: Workflow) => void] => [
-      `${job} without a time limit`,
-      (w) => {
-        Object.assign(w.jobs[job], { "timeout-minutes": undefined });
-      },
-    ],
-  ),
+  ...(["changes", "check", "typecheck", "next", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+    `${job} without a time limit`,
+    (w) => {
+      Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+    },
+  ]),
   [
     "a time limit past the default",
     (w) => {
-      w.jobs.test["timeout-minutes"] = 360;
+      w.jobs.next["timeout-minutes"] = 360;
     },
   ],
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
@@ -1800,14 +1720,14 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "F1: the stop step comes before the job's last step, so that step's failure stops nothing",
     (w) => {
-      const list = stepsOf(w, "test");
+      const list = stepsOf(w, "next");
       list.splice(-2, 2, list.at(-1)!, list.at(-2)!);
     },
   ],
   [
     "F1: a second cancel step, with no guard for main",
     (w) => {
-      stepsOf(w, "test").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
+      stepsOf(w, "next").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
     },
   ],
   // Every job here pins its own `if`, so F2 is for a job added later; this one is right in all else.
@@ -2246,9 +2166,10 @@ for (const [name, plant, error] of [
   [
     "C3: a full-history checkout with every blob",
     (f: Files) => {
-      delete step(checkYaml(f), "test", "checkout").with!["filter"];
+      const steps = checkYaml(f).jobs["next"]!.steps;
+      delete steps.find((s) => String(s["uses"]).startsWith("actions/checkout@"))!.with!["filter"];
     },
-    "check.yaml: test's full-history checkout is blobless (filter: blob:none)",
+    "check.yaml: next's full-history checkout is blobless (filter: blob:none)",
   ],
   [
     "C4: a restore prefix without the lockfile and tsconfig hash",
@@ -2297,10 +2218,8 @@ for (const [name, plant, error] of [
   });
 }
 
-// T1 to T5 on the checked-in check.yaml: each plant puts back one piece of how today's tests ran
-// before 0533, and gives its one error.
-const testError = "check.yaml: T1: the test job runs exactly its install, the tooling tests and shard times, once each";
-
+// T1, T2 and T6 on the checked-in check.yaml: each plant puts back one piece of how today's tests
+// ran before 0533, or the tooling tests before 0539, and gives its one error.
 for (const [name, plant, error] of [
   [
     "T1: the today flag back on changes",
@@ -2310,14 +2229,22 @@ for (const [name, plant, error] of [
     "check.yaml: S1: changes exposes its flags, filter and the size step's outputs, and nothing else",
   ],
   [
-    "T1: today's six-machine test step back beside the tooling tests",
+    "T1: the test flag back on changes",
     (w: Parsed) => {
-      w.jobs["test"]!.steps.splice(place(w, "test", "tooling tests"), 0, {
-        name: "test",
-        run: "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
+      w.jobs["changes"]!.outputs = { ...w.jobs["changes"]!.outputs, test: `\${{ steps.diff.outputs.test }}` };
+    },
+    "check.yaml: S1: changes exposes its flags, filter and the size step's outputs, and nothing else",
+  ],
+  [
+    "T1: the tooling tests back in the typecheck job, before its stop step",
+    (w: Parsed) => {
+      w.jobs["typecheck"]!.steps.splice(-1, 0, {
+        name: "tooling tests",
+        env: { SHARD: "1/1" },
+        run: 'pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests',
       });
     },
-    testError,
+    "check.yaml: T1: typecheck runs no tooling test (0539)",
   ],
   [
     "T2: the e2e job back, with its place in ci-required's needs",
@@ -2345,20 +2272,6 @@ for (const [name, plant, error] of [
     },
     "check.yaml: T6: check runs no promise check of today's version",
   ],
-  [
-    "T5: six machines",
-    (w: Parsed) => {
-      w.jobs["test"]!.strategy!.matrix["shard"] = [1, 2, 3, 4, 5, 6];
-    },
-    "check.yaml: T5: the test job runs on 2 machines, a plain list",
-  ],
-  [
-    "T4: the tooling step dividing by six on two machines",
-    (w: Parsed) => {
-      (step(w, "test", "tooling tests")["env"] as Record<string, string>)["SHARD"] = `\${{ matrix.shard }}/6`;
-    },
-    "check.yaml: T4: the tooling tests run on every test run, their shard of two, on the pull request's, the group's or the push's base",
-  ],
 ] as const) {
   it(`scenario: ${name} is named by its one error`, () => {
     // scenario: the real workflow with one of the old pieces planted back, so the lint's own words
@@ -2369,9 +2282,9 @@ for (const [name, plant, error] of [
   });
 }
 
-it("T1 (0536): the tooling project, the test job's one project, holds no glob of today's trees or of next/", () => {
+it("T1 (0536): the tooling project, the schedule's tooling job's one project, holds no glob of today's trees or of next/", () => {
   // A project ignores `--exclude`, so the project's own globs are what keeps today's tests and next/'s
-  // out of the test job. Plant, run once on vitest.config.ts and restored: add
+  // out of scheduled.yaml's tooling job (SC8). Plant, run once on vitest.config.ts and restored: add
   // "apps/*/src/**/*.test.ts" to the tooling project (red).
   const tooling = projects.find((project) => project.test.name === "tooling");
   expect(tooling).toBeDefined();
