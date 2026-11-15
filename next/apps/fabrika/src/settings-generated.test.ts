@@ -170,7 +170,7 @@ const caller = fc.oneof(
     .constantFrom(
       "next/apps/fabrika/dev.ts",
       "next/apps/fabrika/cli.ts",
-      "next/apps/fabrika/src/settings-start.test.ts",
+      "next/apps/fabrika/src/settings-start.integration.test.ts",
     )
     .map((file) => ({ file, adapter: true, parser: false })),
   // Every other app file, the generation entry and sibling tests included.
