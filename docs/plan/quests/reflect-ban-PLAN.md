@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body 85b32e4d5f35
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
