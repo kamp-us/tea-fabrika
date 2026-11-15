@@ -197,7 +197,9 @@ is linked; the others have no other home yet.
   means ask why before you call it a false alarm. Before you write Effect code, read
   `node_modules/effect/AGENTS.md` in full: it ships inside the installed package, so it always
   matches the lockfile. Where it and a decision here differ, the decision wins
-  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences).
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Read a
+  package's source in the repo its installed `package.json` names in `repository`: for Effect that is
+  `Effect-TS/effect`, never `effect-smol`, where v4 was only built as a beta.
 - **Judge a design by its properties, never its size.** Never pick between designs by how many lines
   or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails. Size
   a design once it is picked.
@@ -276,7 +278,7 @@ Typecheck, lint and test must all pass before a change is offered. None needs a 
 not wait on a local `pnpm typecheck`: CI runs it, and a pull request merges only when it is green
 ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). Run the narrowest check that
 still covers the change, as
-[Effect's own repo](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md) asks of its
+[Effect's own repo](https://github.com/Effect-TS/effect/blob/main/.agents/AGENTS.md) asks of its
 agents. This table adds no rule, and `pnpm format` comes first in every row.
 
 | What changed | What to run here |
