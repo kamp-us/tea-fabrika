@@ -409,6 +409,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
+      // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
+      "package-imports",
       // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
       // and a named file under next/ and runs oxlint over them with the real lint config.
       "integration-test-name",
