@@ -9,7 +9,10 @@
 //   parts  each a name, the files it holds as globs from the top of the repo, and `may`, the exact
 //          names under `scope` its files may import. A file's part is the first one whose glob
 //          matches it; a file in no part is not judged (next/apps is the wiring).
-// A test file (`*.test.ts`, `*.test.tsx`) is not judged: its layers are code-graph's, upward only.
+//   tests  optional, in a part: the packages under `scope` its test files (`*.test.ts`,
+//          `*.test.tsx`) may import, each with every subpath. A part without it leaves its tests to
+//          code-graph, upward only. The library has it, so none of its files, tests included and
+//          wherever they sit in the package, imports tuval, a program or the app by name.
 // With no options the rule says nothing.
 //
 // Read: `import`, `export ... from`, a side-effect `import "x"`, a dynamic `import("x")`, a type's
@@ -24,6 +27,8 @@ interface Part {
   readonly name: string;
   readonly files: ReadonlyArray<string>;
   readonly may: ReadonlySet<string>;
+  /** The packages its tests may import, or `null` when its tests are not judged here. */
+  readonly tests: ReadonlyArray<string> | null;
 }
 
 interface Table {
@@ -50,11 +55,16 @@ const tableIn = (options: ReadonlyArray<unknown>): Table | null => {
       name: typeof part.name === "string" ? part.name : "",
       files: strings(part.files),
       may: new Set(strings(part.may)),
+      tests: Array.isArray(part.tests) ? strings(part.tests) : null,
     })),
   };
 };
 
 const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
+
+/** The name is one of these packages, or a subpath of one. */
+const within = (packages: ReadonlyArray<string>, name: string): boolean =>
+  packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
 
 /** A plain string a module source holds: a literal, or a template with no `${}`. */
 const written = (source: Node | null | undefined): string | null => {
@@ -82,7 +92,7 @@ export const packageImports: CreateRule = {
             type: "array",
             items: {
               type: "object",
-              properties: { name: { type: "string" }, files: NAMES, may: NAMES },
+              properties: { name: { type: "string" }, files: NAMES, may: NAMES, tests: NAMES },
               required: ["name", "files", "may"],
               additionalProperties: false,
             },
@@ -97,31 +107,45 @@ export const packageImports: CreateRule = {
     const table = tableIn(context.options);
     const file = pathIn(context);
 
-    if (table === null || isTest(file)) {
+    if (table === null) {
       return {};
     }
 
     const part = table.parts.find((each) => each.files.some((glob) => matchesGlob(file, glob)));
+    const test = isTest(file);
 
-    if (part === undefined) {
+    if (part === undefined || (test && part.tests === null)) {
       return {};
     }
 
-    const allowed =
-      part.may.size === 0
-        ? `imports none of ${table.scope}*`
-        : `imports only ${[...part.may].map((name) => `"${name}"`).join(", ")}`;
+    // A test here is judged by its part's `tests`, every other file by its part's `may`.
+    const tests = test ? part.tests : null;
+
+    const listed = (names: Iterable<string>) => [...names].map((name) => `"${name}"`).join(", ");
+    const none = `imports none of ${table.scope}*`;
+    const { who, takes, allowed } =
+      tests !== null
+        ? {
+            who: `A test of the ${part.name} part`,
+            takes: (name: string) => within(tests, name),
+            allowed: tests.length === 0 ? none : `imports only ${listed(tests)}, each with its subpaths`,
+          }
+        : {
+            who: `The ${part.name} part`,
+            takes: (name: string) => part.may.has(name),
+            allowed: part.may.size === 0 ? none : `imports only ${listed(part.may)}`,
+          };
 
     const check = (source: Node | null | undefined) => {
       const name = written(source);
 
-      if (name === null || source == null || !name.startsWith(table.scope) || part.may.has(name)) {
+      if (name === null || source == null || !name.startsWith(table.scope) || takes(name)) {
         return;
       }
 
       context.report({
         node: source,
-        message: `The ${part.name} part may not import "${name}": it ${allowed} (docs/plan/tier-1-detail.md, "Strict layers"). Import through a name the table in .oxlintrc.json gives this part, or by a relative path inside the package.`,
+        message: `${who} may not import "${name}": it ${allowed} (docs/plan/tier-1-detail.md, "Strict layers"). Import through a name the table in .oxlintrc.json gives this part, or by a relative path inside the package.`,
       });
     };
 

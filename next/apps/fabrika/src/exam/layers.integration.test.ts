@@ -266,6 +266,8 @@ describe("the real rule file on planted trees", () => {
 
   // scenario: tuval's folders and a program's box and window, and the library under all of them,
   // since the parts above the library may import it and it imports none of them, tests included.
+  // This holds a file a row claims. A library file no row claims, a test or a file outside `src/`,
+  // is held by name in `fabrika/package-imports`, whose library part covers the whole package.
   // Plant: put the tuval and program rows below `next-node` again, as they were. The node test's
   // tuval import then reads as downward and passes.
   it.effect("scenario: tuval's folders, a program's box and window, and nothing above the library", () =>
@@ -471,6 +473,55 @@ describe("the real rule file on planted trees", () => {
       expect(before.filter((edge) => !after.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
     }),
   );
+
+  // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and the
+  // rank laws above read their expected edges from this same file: a changed `layer` that makes no
+  // break passes them, and only this says which module is on which layer.
+  // Plant: put `next-node` on layer 10. `pnpm lint:layers` and every other law here stay green, and
+  // this one goes red.
+  it("pinned: the modules are on the layers the plan gives them", () => {
+    expect(
+      Object.fromEntries(REAL.layers.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer]]))),
+    ).toEqual({
+      "next-node": 9,
+      "next-workers": 8,
+      "next-libfabrika-entry": 7,
+      "next-desktop-core": 6,
+      "next-schedules": 6,
+      "next-client": 6, // P18: the window client, beside the door
+      "next-door": 6,
+      "next-runtime": 5,
+      "next-access": 4,
+      "next-processes": 3,
+      "next-presence": 3,
+      "next-jobs": 3,
+      "next-packs": 3,
+      "next-ledger": 2,
+      "next-codehost": 2,
+      "next-ci": 2,
+      "next-transport": 2,
+      "next-repositories": 2,
+      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
+      "next-telemetry": 1,
+      "next-shared": 0,
+    });
+  });
+
+  // pinned: the review of PR 1251, since a row with no `imports` list lets its files import every
+  // lower row, and code-graph refuses no such row: the old exam refused a library row its table did
+  // not map. Every library row names what it may import. In next/, only the app, a program's window,
+  // a program's box and tuval's entry file have no list, on purpose.
+  // Plant: drop `next-mcp`'s `imports`. Its row then shows here.
+  it("pinned: every library row names the rows it may import", () => {
+    const open = REAL.layers.filter((row) => row.imports === undefined && row.paths.some((p) => p.startsWith("next/")));
+    expect(open.filter((row) => row.paths.some((p) => p.startsWith("next/packages/libfabrika")))).toEqual([]);
+    expect(open.map((row) => row.name)).toEqual([
+      "next-apps",
+      "next-program-windows",
+      "next-programs",
+      "next-tuval-entry",
+    ]);
+  });
 });
 
 describe("the patched code-graph", () => {

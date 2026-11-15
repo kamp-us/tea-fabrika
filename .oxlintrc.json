@@ -712,8 +712,8 @@
       // written. `pnpm lint:layers` (code-graph, `layer-rules.json`) holds which part's files may
       // reach which; this holds the names, so it tells two front files of one module apart and
       // sees a stylesheet code-graph cannot place. A file's part is the first whose glob matches
-      // it. Tests and next/apps are not judged. Its own override, so the `next/**` block above
-      // stays the `.agents/` block's twin.
+      // it. next/apps is not judged, and a test only where its part has `tests`. Its own override,
+      // so the `next/**` block above stays the `.agents/` block's twin.
       "files": ["next/packages/**", "next/programs/**"],
       "rules": {
         "fabrika/package-imports": [
@@ -721,7 +721,14 @@
           {
             "scope": "@kampus/",
             "parts": [
-              { "name": "library", "files": ["next/packages/libfabrika/src/**"], "may": [] },
+              {
+                // Every file of the library package, wherever it sits: none of our names. Its tests
+                // name only the library itself, so no file of it imports tuval, a program or the app.
+                "name": "library",
+                "files": ["next/packages/libfabrika/**"],
+                "may": [],
+                "tests": ["@kampus/libfabrika"]
+              },
               {
                 "name": "desktop",
                 "files": ["next/packages/tuval/src/desktop/**"],

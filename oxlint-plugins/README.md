@@ -915,12 +915,17 @@ itself (`@kampus/libfabrika/processes/Process` inside the library reaches an all
 
 The table is in `.oxlintrc.json`, in its own override for `next/packages/**` and `next/programs/**`,
 so the `next/**` block stays the `.agents/` block's twin: a `scope` (`@kampus/`) and `parts`, each a name, globs and `may`, the exact
-names its files may import. A file's part is the first whose glob matches. The library may import
-none; desktop, the library's root; a window, the root, transport's eight front files and its bare
+names its files may import. A file's part is the first whose glob matches. The library's part is
+the whole package, `next/packages/libfabrika/**`, so a file outside `src/` is judged too, and it may
+import none; desktop, the library's root; a window, the root, transport's eight front files and its bare
 name, the window client's three, and the design package's root and `tokens.css`; dom and headless,
 none; browser, transport's; electron, transport's and `coordination`; a program's `.tsx` files, the
-library's root and tuval's; the rest of a program, the library's root. Tests and `next/apps` are not
-judged. A program's window is its `.tsx` files, as `fabrika/program-package-layout` reads a window;
+library's root and tuval's; the rest of a program, the library's root. `next/apps` is not judged.
+A test is judged only where its part has `tests`, the packages its tests may import, each with
+every subpath: the library's tests may name only `@kampus/libfabrika`. That is the old scan's wall,
+"the library imports nothing above it, tests included", on every file of the package: code-graph
+judges a test only when a row claims it, and the four top-level tests and a test beside a one-file
+row (`coordination/`) have none. Other parts leave their tests to code-graph. A program's window is its `.tsx` files, as `fabrika/program-package-layout` reads a window;
 the old scan read the box as what `.` reaches, and `pnpm lint:layers` keeps that wall: a box file
 that imports a window file breaks upward.
 
@@ -932,5 +937,8 @@ override.
 
 First-day count, 2026-11-14, on main at `59c063bce`, one oxlint run over `next`: **0 fires**, as
 the old scan found 0 faults on the same tree. Zero measures no false-alarm rate beyond that both
-agree. `package-imports.test.ts` plants one file per part at its real path with the repo's config,
-allowed and refused names side by side.
+agree. The library's tests joined on 2026-11-14 (PR 1251's review): 0 fires on `next`, where 8
+imports name the library itself. `package-imports.test.ts` is one property: a file at a generated
+path in each part, or in no part, imports names from every part's list, names next to them and
+names no list holds, and the rule fires on exactly the refused ones, in process with the plan's
+table and in one oxlint run with the repo's config.
