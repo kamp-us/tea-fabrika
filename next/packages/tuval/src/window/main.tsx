@@ -13,7 +13,7 @@ import { useRuntime } from "@demlik/tea/react";
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
-import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
+import { lastCursor, type WindowModel, type WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
@@ -38,9 +38,9 @@ type PageProps = {
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
 const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
-const NO_CURSORS: Readonly<Record<string, string | null>> = {};
-/** Where the page last said DOM focus sat in each tile: the window's own note, newer than the view's. */
-const pickCursors = (m: WindowModel) => m.tezgah?.cursors ?? NO_CURSORS;
+/** The window's tie to its person's tezgah, whose notes of where DOM focus last sat in each tile
+ *  `lastCursor` reads. */
+const pickTie = (m: WindowModel) => m.tezgah;
 /** Whether the window's read of its person's tezgah found no process: the boot starts only the
  *  founder's tezgah, so any other person's window finds none until one is started for them. */
 const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
@@ -297,16 +297,18 @@ const Desk = (props: PageProps) => {
   const [polite] = useRuntime(props.run, pickPolite);
   const [none] = useRuntime(props.run, pickNoTezgah);
   const [size] = useRuntime(props.run, pickSize);
-  const [cursors] = useRuntime(props.run, pickCursors);
+  const [tie] = useRuntime(props.run, pickTie);
   const view = none || client === null ? null : optimisticState(client);
   const space = view?.workspaces.find((w) => w.n === client?.workspace);
   const area = useSize(send);
   const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
   const focused = view?.tiles.find((t) => t.id === space?.focus);
+  /** Where DOM focus last sat in a tile: the one answer both landings read (0165). */
+  const cursor = (t: TezgahTile) => lastCursor(tie, t);
   useFocusIn(send);
   useFollow(area, {
     focus: focused?.id ?? null,
-    cursor: focused?.cursor ?? null,
+    cursor: focused === undefined ? null : cursor(focused),
     live: tileState(
       link,
       rows.find((r) => r.id === focused?.id),
@@ -347,7 +349,7 @@ const Desk = (props: PageProps) => {
               )
             }
             asking={asked?.id ?? null}
-            cursor={(t) => cursors[t.id] ?? null}
+            cursor={cursor}
             size={size}
             strips={size === null ? new Set() : fold(space, size)}
             open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}

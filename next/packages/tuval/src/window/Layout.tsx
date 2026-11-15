@@ -43,8 +43,8 @@ type Props = {
   readonly state?: (tile: Tile) => State;
   /** The tile whose close waits on y or n, which its state slot asks. */
   readonly asking?: TileId | null;
-  /** Where DOM focus last sat in a tile, as the window noted it (0165); a tile it has no note for
-   *  keeps the cursor tezgah's view gives it. */
+  /** Where DOM focus last sat in a tile (0165), the window's `lastCursor`, whose null means at the
+   *  tile's top; without it, the cursor tezgah's view gives the tile. */
   readonly cursor?: (tile: Tile) => string | null;
   /** The area the parts are laid out in, inside the main's padding, in CSS pixels, once the page
    *  has said it. */
@@ -200,7 +200,7 @@ export const Layout = ({
           focused={tile.id === workspace.focus}
           state={state?.(tile) ?? LIVE}
           asking={tile.id === asking}
-          cursor={cursor?.(tile) ?? tile.cursor}
+          cursor={cursor === undefined ? tile.cursor : cursor(tile)}
         >
           {children(tile)}
         </TileRegion>

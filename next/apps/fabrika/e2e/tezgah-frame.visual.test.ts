@@ -76,7 +76,8 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           /** The prefix line armed, read, shot, then disarmed by Escape with nothing sent. The bar is
            *  one line at every size (the tile guidelines; modes M3): arming it moves, resizes or folds
            *  no tile, the bar keeps its idle height and covers no tile, `prefix` at the left and
-           *  `Esc cancel` at the right are drawn whole; the hints between them may run out. */
+           *  `Esc cancel` at the right are drawn whole, the way out's right edge at the bar's right inner
+           *  edge; the hints between them may run out. */
           const armedShot = (layout: Shot) =>
             Effect.gen(function* () {
               const before = yield* tezgahView(r, pid);
@@ -97,6 +98,12 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
                     { text: "prefix", whole: true },
                     { text: "Esc cancel", whole: true },
                   ]);
+                  // Modes M3: the way out is the line's right end, at the bar's right inner edge.
+                  const right = bar.right!;
+                  expect(
+                    Math.abs(right.gap),
+                    `Esc cancel's right edge is ${right.gap}px from the bar's right inner edge, within its ${right.padding}px padding (${layout})`,
+                  ).toBeLessThanOrEqual(right.padding);
                   break;
                 }
 

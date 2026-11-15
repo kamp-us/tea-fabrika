@@ -612,8 +612,10 @@ export const whole = (on: Page, selector: string) =>
   );
 
 /** The status bar as a person reads it: its words, its height, its two ends (the mode word and the way
- *  out) each with whether it is drawn whole inside the bar and the window, the box of each tile and
- *  strip on the desk, and the name of each tile or strip the bar is drawn over. */
+ *  out) each with whether it is drawn whole inside the bar and the window, how far the way out's right
+ *  edge sits from the bar's right inner edge beside the bar's right padding (modes M3: the way out at
+ *  the right), the box of each tile and strip on the desk, and the name of each tile or strip the bar
+ *  is drawn over. */
 export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
@@ -627,7 +629,7 @@ export const statusBar = (on: Page) =>
       );
 
       if (!(bar instanceof HTMLElement)) {
-        return { text: "", height: 0, ends: [], tiles, over: ["no status bar"] };
+        return { text: "", height: 0, ends: [], right: null, tiles, over: ["no status bar"] };
       }
 
       const edge = bar.getBoundingClientRect();
@@ -645,10 +647,13 @@ export const statusBar = (on: Page) =>
       const ends = [...bar.querySelectorAll("*")]
         .filter((el) => el.textContent === "prefix" || el.textContent === "Esc cancel")
         .map((el) => ({ text: el.textContent ?? "", whole: within(el) && uncut(el) }));
+      const out = [...bar.querySelectorAll("*")].find((el) => el.textContent === "Esc cancel");
+      const padding = Number.parseFloat(getComputedStyle(bar).paddingRight);
       return {
         text: bar.textContent ?? "",
         height: edge.height,
         ends,
+        right: out === undefined ? null : { gap: edge.right - padding - out.getBoundingClientRect().right, padding },
         tiles,
         over: [...document.querySelectorAll("main section[aria-label], main button[aria-label]")]
           .filter((el) => el.getBoundingClientRect().bottom > edge.top + 0.5)

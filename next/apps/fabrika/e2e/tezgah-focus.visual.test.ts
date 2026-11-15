@@ -49,6 +49,27 @@ const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
  *  is 85: past the 80 a cursor key once held (plan amendment 10: up to 256). */
 const LONG = "a row whose name is as long as the checklist field takes, eighty characters in all".slice(0, 80);
 
+/** Runs inside Chromium before the page script: every socket the page opens is kept, so the law
+ *  can lose the link as a network drop would, with the page's own redial bringing it back. */
+const keepSockets = () => {
+  const NativeSocket = WebSocket;
+  const opened: Array<WebSocket> = [];
+  Reflect.set(globalThis, "__deskSockets", opened);
+  globalThis.WebSocket = class extends NativeSocket {
+    constructor(url: string | URL, protocols?: string | Array<string>) {
+      super(url, protocols);
+      opened.push(this);
+    }
+  };
+};
+
+/** Closes every socket the page opened, in the page: the link is lost until the page dials again. */
+const loseLink = () => {
+  for (const socket of Reflect.get(globalThis, "__deskSockets") as Array<WebSocket>) {
+    socket.close(4000, "the law loses the link");
+  }
+};
+
 type View = Parameters<typeof differences>[0];
 type Page = Parameters<typeof drawn>[0];
 
@@ -62,7 +83,9 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           const h = yield* home;
           const dev = yield* devServer(h);
           const b = yield* browser;
-          const { page } = yield* tab(yield* profile(b), dev.url);
+          const own = yield* profile(b);
+          yield* promised(() => own.addInitScript(keepSockets));
+          const { page } = yield* tab(own, dev.url);
           yield* promised(() => page.setViewportSize({ width: 1440, height: 900 }));
           expect((yield* grant(h, yield* waiting(page))).ok, "the grant line as shown grants").toBe(true);
           const r = yield* reader(h, dev);
@@ -307,6 +330,42 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             (f) => f.region === regionName(t1) && f.cursor === "item:eggs",
             "L28: a click on t1's own title bar lands on the eggs row, where focus last sat",
           );
+
+          // L28, 0165: a lost link and back lands on the row focus last sat on, the eggs row, never
+          // the long row tezgah's view keeps. The lost link makes every tile inert, so DOM focus
+          // leaves t1, and the return lands it where the window's own note says. Fix round 4, from
+          // the recheck: the return read the view's cursor, which learns a row only when focus
+          // leaves the tile.
+          yield* promised(() => page.evaluate(loseLink));
+          yield* promised(() => list.region.and(page.locator("[inert]")).waitFor({ timeout: 30_000 }));
+          yield* list.live;
+          yield* domSettles(
+            page,
+            (f) => f.region === regionName(t1) && f.cursor === "item:eggs",
+            "L28: after a lost link and back, DOM focus is on the eggs row, where it last sat in t1",
+          );
+
+          // L28, 0165: focus on t1's add box sits on no row, and that is a note too: a click on t1's
+          // own title bar lands at its top, never on the long row tezgah's view keeps. Fix round 4,
+          // from the recheck: a note of no row fell back to the view's cursor.
+          yield* promised(() => list.field.focus());
+          yield* domSettles(page, (f) => f.region === regionName(t1) && f.cursor === null, "on t1's add box");
+          yield* promised(() =>
+            page
+              .getByRole("region", { name: regionName(t1), exact: true })
+              .locator("header")
+              .first()
+              .click(),
+          );
+          const onTop = yield* domSettles(
+            page,
+            (f) => f.region === regionName(t1),
+            "L28: a click on t1's title bar from its add box stays in t1",
+          );
+          expect(
+            onTop.cursor === null || onTop.cursor === onTop.first,
+            `L28: a click on t1's title bar from its add box lands at t1's top, not ${onTop.cursor}`,
+          ).toBe(true);
 
           // L30: a click on a tile focuses it, and tezgah agrees.
           yield* promised(() =>

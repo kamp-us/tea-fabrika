@@ -154,6 +154,28 @@ export const WindowModel = Schema.Struct({
  */
 export type WindowModel = typeof WindowModel.Type;
 
+/**
+ * Returns where DOM focus last sat in `tile`, for a window on tezgah (0165): the cursor key the page
+ * last said for that tile, when it said one, else the cursor tezgah's view gives the tile.
+ *
+ * **Details**
+ *
+ * The window's own note is newer than the view's, which learns a tile's cursor only when focus
+ * leaves it. A note of null is a note: focus sat on a control with no row key, such as the add
+ * box, so the tile lands at its top and never on the row the view still keeps. Every landing in a
+ * tile reads this one answer: focus coming back to it, and a click on its own title bar.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const lastCursor = (
+  tezgah: WindowModel["tezgah"],
+  tile: { readonly id: string; readonly cursor: string | null },
+): string | null => {
+  const notes = tezgah?.cursors ?? {};
+  return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
+};
+
 const Own = Schema.Union([
   // What one dial's socket saw, raw: it opened, the door sent a text frame, or it closed with a code.
   // `ms` on a frame is how long ago the call it answers was written, when it answers one.

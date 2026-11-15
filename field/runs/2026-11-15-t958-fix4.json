@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t958-fix4",
+  "ticket": "kamp-us/tea-fabrika#958",
+  "pr": "kamp-us/tea-fabrika#1231",
+  "started": "2026-11-15T00:30:00-08:00",
+  "ended": "2026-11-15T00:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "fix round after the third recheck, in next/: (1) where focus last sat in a tile now has one answer, lastCursor in libfabrika's WindowMachine.ts: the window's own note when it has one for the tile, a note of no row included, else tezgah's view cursor. The window page reads it both when focus comes back to the focused tile and on a click on a tile's own title bar, and Layout.tsx no longer falls back to the view when the note says no row. New fast law in Tezgah.laws.test.ts, red on each old rule (the view's cursor alone; a null note falling back to the view) and green on the new. Two new steps in the focus visual law, a lost link and back lands on the eggs row (red on the old window code: it landed on the long row tezgah's view keeps) and a click on the title bar from the add box lands at the top (red with the old Layout fallback). (2) The frame visual law checks at every armed size that Esc cancel's right edge sits at the status bar's right inner edge, within its padding (modes M3): red with margin-left auto dropped (240.8 px off at one tile), green with it restored. Ran the frame and focus visual files with shots, Layout.laws and Tezgah.laws, pnpm format, pnpm lint and one pnpm typecheck; all green.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": null,
+  "step": "fix"
+}

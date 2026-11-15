@@ -23,7 +23,7 @@ import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
 import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
-import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
+import { lastCursor, type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
 /** JSON text, the only form a view takes on the wire. */
@@ -1235,5 +1235,51 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
     );
     expect(seen.splits, "S3: the walks split").toBeGreaterThan(0);
     expect(seen.cursor, "S3: the walks split a tile left on a cursor").toBeGreaterThan(0);
+  });
+});
+
+describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
+  it("L28 (the window's half, 0165): after every step, lastCursor of each drawn tile is the cursor the page last said in it in that window, a null included, else the cursor tezgah's view gives the tile", () => {
+    const seen = { newer: 0, none: 0, view: 0 };
+    /** Each drawn tile of each window lands where the page last said focus sat in it. */
+    const check = (world: World) => {
+      for (const w of world.wins) {
+        const client = w.s.tezgah?.client;
+        const view = client === undefined ? null : optimisticState(client);
+        const space = drawnSpace(w.s);
+
+        for (const id of space === null ? [] : Layout.order(space.layout)) {
+          const tile = view!.tiles.find((t) => t.id === id)!;
+          const noted = w.cursors.has(id);
+          const want = noted ? w.cursors.get(id)! : tile.cursor;
+          seen.newer += noted && want !== null && want !== tile.cursor ? 1 : 0;
+          seen.none += noted && want === null && tile.cursor !== null ? 1 : 0;
+          seen.view += !noted && tile.cursor !== null ? 1 : 0;
+          expect(
+            lastCursor(w.s.tezgah, tile),
+            noted
+              ? `L28: ${id} lands where the page last said focus sat in it, ${String(want)}, over the view's ${String(tile.cursor)}`
+              : `L28: ${id}, with no note in this window, lands on the cursor tezgah's view gives it`,
+          ).toBe(want);
+        }
+      }
+    };
+    fc.assert(
+      fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
+        const world = makeWorld(makeDesk(d.cuts, d.focus), 2, () => {});
+
+        for (const c of picks) {
+          play(world, c, () => {});
+          check(world);
+        }
+
+        settle(world, () => {}, picks.length % 2 === 0);
+        check(world);
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.newer, "L28: the walks note a row newer than the view's cursor for the tile").toBeGreaterThan(0);
+    expect(seen.none, "L28: the walks note focus on no row while the view keeps a row").toBeGreaterThan(0);
+    expect(seen.view, "L28: the walks land a window with no note on the view's cursor").toBeGreaterThan(0);
   });
 });
