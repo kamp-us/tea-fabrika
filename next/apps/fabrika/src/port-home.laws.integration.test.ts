@@ -62,9 +62,10 @@ const STREAMS = ["processes/counter:1", "processes/checklist:1"];
 const Founding = Schema.Struct({ person: Schema.String, founder: Schema.String, window: Schema.String });
 
 /** The names this build's boot starts that the saved home's build did not, in table order: the
- *  founder's tezgah, which every instance boots since the workspace program landed (ticket 958,
- *  docs/plan/lanes/desk-PLAN.md). A program added to the boot list later is added here by name. */
-const booted = (founding: typeof Founding.Type) => [tezgahName(founding.person)];
+ *  shell's `fabsh:1` (fabsh slice 1, docs/plan/lanes/fabsh-PLAN.md) and the founder's tezgah, which
+ *  every instance boots since the workspace program landed (ticket 958, docs/plan/lanes/desk-PLAN.md).
+ *  A program added to the boot list later is added here by name. */
+const booted = (founding: typeof Founding.Type) => ["fabsh:1", tezgahName(founding.person)];
 
 const Row = Schema.Struct({ name: Schema.String, process: Schema.String });
 const Entries = Schema.Array(Schema.Unknown);
