@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-report-timeout-fix",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1319",
+  "started": "2026-11-15T08:33:00-08:00",
+  "ended": "2026-11-15T08:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "builder",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI tooling, serving both versions: the scheduled full run's report now reads a leg that ran into its time limit as red and names it as a time-out in the ci-scheduled issue. GitHub ends a timed-out leg cancelled, the same word as a leg another leg's stop step canceled, so the report read run 43723335863 as stopped and opened no issue. The report step now gets each test job's limit as a YAML alias of its timeout-minutes line, and a leg canceled at or past its limit is a time-out; a cancel before the limit with no failed leg still reads as a run a person or a sev0 freeze stopped. Fixtures are the five real runs of 2026-11-15. Fifteen plants each turned a law red.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Fast-tracked CI tooling, no plan step. Not proven by a real run: that waits for the next scheduled run in which a leg times out on main. The file that was running at a time-out cannot be named: a canceled leg writes no report.",
+  "step": "build"
+}
