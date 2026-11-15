@@ -611,37 +611,47 @@ export const whole = (on: Page, selector: string) =>
     }, selector),
   );
 
-/** The status bar as a person reads it: its words, any part of it cut by its own box (its scroll size
- *  past its client size), any part drawn past the window's edge, and the name of each tile or strip
- *  it is drawn over. */
+/** The status bar as a person reads it: its words, its height, its two ends (the mode word and the way
+ *  out) each with whether it is drawn whole inside the bar and the window, the box of each tile and
+ *  strip on the desk, and the name of each tile or strip the bar is drawn over. */
 export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
       const bar = document.querySelector(".statusbar");
+      const tiles = Object.fromEntries(
+        [...document.querySelectorAll("main [data-tile], main [data-strip]")].map((el) => {
+          const box = el.getBoundingClientRect();
+          const id = el.getAttribute("data-tile") ?? `strip ${el.getAttribute("data-strip")}`;
+          return [id, `${box.left},${box.top} ${box.width}x${box.height}`];
+        }),
+      );
 
       if (!(bar instanceof HTMLElement)) {
-        return { text: "", cut: ["no status bar"], past: [], over: [] };
+        return { text: "", height: 0, ends: [], tiles, over: ["no status bar"] };
       }
 
-      const top = bar.getBoundingClientRect().top;
-      const parts = [bar, ...bar.querySelectorAll("*")];
+      const edge = bar.getBoundingClientRect();
+      const within = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return (
+          r.left >= edge.left - 0.5 &&
+          r.right <= edge.right + 0.5 &&
+          r.top >= edge.top - 0.5 &&
+          r.bottom <= edge.bottom + 0.5 &&
+          r.right <= window.innerWidth + 0.5
+        );
+      };
+      const uncut = (el: Element) => el instanceof HTMLElement && el.scrollWidth <= el.clientWidth + 1;
+      const ends = [...bar.querySelectorAll("*")]
+        .filter((el) => el.textContent === "prefix" || el.textContent === "Esc cancel")
+        .map((el) => ({ text: el.textContent ?? "", whole: within(el) && uncut(el) }));
       return {
         text: bar.textContent ?? "",
-        cut: parts
-          .filter(
-            (el) =>
-              el instanceof HTMLElement &&
-              (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1),
-          )
-          .map((el) => el.textContent ?? ""),
-        past: parts
-          .filter((el) => {
-            const box = el.getBoundingClientRect();
-            return box.left < -1 || box.right > window.innerWidth + 1 || box.bottom > window.innerHeight + 1;
-          })
-          .map((el) => el.textContent ?? ""),
+        height: edge.height,
+        ends,
+        tiles,
         over: [...document.querySelectorAll("main section[aria-label], main button[aria-label]")]
-          .filter((el) => el.getBoundingClientRect().bottom > top + 0.5)
+          .filter((el) => el.getBoundingClientRect().bottom > edge.top + 0.5)
           .map((el) => el.getAttribute("aria-label") ?? ""),
       };
     }),

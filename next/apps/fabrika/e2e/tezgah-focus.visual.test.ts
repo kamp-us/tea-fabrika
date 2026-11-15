@@ -285,6 +285,29 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             "L28: back on t1, DOM focus is on the 80-character row it was left on",
           );
 
+          // L28, 0165: the cursor is where focus last sat in the tile, so a click on the focused tile's
+          // own title bar lands on the row focus is on now, the eggs row, never on the long row tezgah's
+          // view still keeps from when focus last left t1.
+          yield* promised(() =>
+            page
+              .getByRole("region", { name: regionName(t1), exact: true })
+              .getByRole("checkbox", { name: "eggs", exact: true })
+              .focus(),
+          );
+          yield* domSettles(page, (f) => f.region === regionName(t1) && f.cursor === "item:eggs", "on the eggs row");
+          yield* promised(() =>
+            page
+              .getByRole("region", { name: regionName(t1), exact: true })
+              .locator("header")
+              .first()
+              .click(),
+          );
+          yield* domSettles(
+            page,
+            (f) => f.region === regionName(t1) && f.cursor === "item:eggs",
+            "L28: a click on t1's own title bar lands on the eggs row, where focus last sat",
+          );
+
           // L30: a click on a tile focuses it, and tezgah agrees.
           yield* promised(() =>
             page

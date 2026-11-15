@@ -38,6 +38,9 @@ type PageProps = {
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
 const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
+const NO_CURSORS: Readonly<Record<string, string | null>> = {};
+/** Where the page last said DOM focus sat in each tile: the window's own note, newer than the view's. */
+const pickCursors = (m: WindowModel) => m.tezgah?.cursors ?? NO_CURSORS;
 /** Whether the window's read of its person's tezgah found no process: the boot starts only the
  *  founder's tezgah, so any other person's window finds none until one is started for them. */
 const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
@@ -147,29 +150,32 @@ const noRoom = (tile: Pick<TezgahTile, "n">): string => `No room to split t${til
 /** How the prefix line prints a key the table spells by name: an arrow as its arrow. */
 const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓" };
 
-/** The prefix line's hints: each key after the prefix and what it does, from the one table. */
-const prefixHints = (table: Keys.Table): ReadonlyArray<string> => [
-  ...table.rows.flatMap((row) => {
+/** The prefix line's hints: each key after the prefix and what it does, from the one table. The way
+ *  out, `Esc cancel`, is the line's own right end. */
+const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
+  table.rows.flatMap((row) => {
     const keys = row.keys
       .filter((k) => k.startsWith("<prefix>"))
       .map((k) => k.slice("<prefix>".length))
       .map((k) => PRINTED[k] ?? k);
     return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
-  }),
-  "Esc cancel",
-];
+  });
 
-/** The prefix line: the mode's word, then each hint whole. The status bar wraps between two hints,
- *  never inside one, and takes the lines it needs from the tiles' area, as Emacs's which-key window
- *  does at the bottom of the frame, so every key reads at every size and the bar covers no tile. */
+/** The prefix line, one line at every size (the tile guidelines; modes M3): the mode's word at the
+ *  left, the way out at the right, and the hints between them, cut with an ellipsis where they run out,
+ *  so neither end is ever cut and no tile moves when the prefix arms. A screen reader reads all of
+ *  it as one sentence; the dots between hints are hidden from it. */
 const PrefixLine = ({ table }: { readonly table: Keys.Table }) => (
   <>
     <span className="mode">prefix</span>
-    {prefixHints(table).map((hint) => (
-      <span key={hint} className="hint">
-        {hint}
-      </span>
-    ))}
+    <span className="hints">
+      {prefixHints(table).map((hint) => (
+        <span key={hint} className="hint">
+          {hint}
+        </span>
+      ))}
+    </span>
+    <span className="way-out">Esc cancel</span>
   </>
 );
 
@@ -230,8 +236,15 @@ const useSize = (send: (msg: WindowMsg) => void) => {
 const isCursor = Schema.is(CursorKey);
 
 /** Where DOM focus is, for the window: the tile whose region holds `target`, and the `data-cursor`
- *  key of the nearest element around it that carries one. A key too long to keep is none. */
+ *  key of the nearest element around it that carries one. A key too long to keep is none. Focus on a
+ *  region itself, from a click on its title bar, only passes through on its way to `landing`
+ *  (`Layout.tsx`), so it is nothing to tell while the tile has something else to focus: telling it
+ *  would wipe the note of the row focus last sat on before the region reads it. */
 const focusAt = (target: EventTarget | null) => {
+  if (target instanceof HTMLElement && target.matches("section[data-tile]") && landing(target, null) !== target) {
+    return null;
+  }
+
   const element = target instanceof Element ? target : null;
   const tile = element?.closest("section[data-tile]")?.getAttribute("data-tile") ?? null;
   const cursor = element?.closest("[data-cursor]")?.getAttribute("data-cursor") ?? null;
@@ -284,6 +297,7 @@ const Desk = (props: PageProps) => {
   const [polite] = useRuntime(props.run, pickPolite);
   const [none] = useRuntime(props.run, pickNoTezgah);
   const [size] = useRuntime(props.run, pickSize);
+  const [cursors] = useRuntime(props.run, pickCursors);
   const view = none || client === null ? null : optimisticState(client);
   const space = view?.workspaces.find((w) => w.n === client?.workspace);
   const area = useSize(send);
@@ -313,6 +327,7 @@ const Desk = (props: PageProps) => {
   ) : (
     tileName(focused)
   );
+  const said = typeof line === "string" ? <span className="says">{line}</span> : line;
   return (
     <>
       <div className="area" ref={area}>
@@ -332,6 +347,7 @@ const Desk = (props: PageProps) => {
               )
             }
             asking={asked?.id ?? null}
+            cursor={(t) => cursors[t.id] ?? null}
             size={size}
             strips={size === null ? new Set() : fold(space, size)}
             open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}
@@ -340,7 +356,7 @@ const Desk = (props: PageProps) => {
           </Layout>
         )}
       </div>
-      <div className={prefix._tag === "idle" ? "statusbar" : "statusbar on"}>{line}</div>
+      <div className={prefix._tag === "idle" ? "statusbar" : "statusbar on"}>{said}</div>
     </>
   );
 };

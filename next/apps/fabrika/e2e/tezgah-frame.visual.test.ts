@@ -73,12 +73,14 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
               label,
             );
 
-          /** The prefix line armed, read whole, shot, then disarmed by Escape with nothing sent. A
-           *  person at any size reads every key on it, the way out included: no key cut by the bar's
-           *  box or drawn past the window's edge, and the bar drawn under the tiles, never over one. */
+          /** The prefix line armed, read, shot, then disarmed by Escape with nothing sent. The bar is
+           *  one line at every size (the tile guidelines; modes M3): arming it moves, resizes or folds
+           *  no tile, the bar keeps its idle height and covers no tile, `prefix` at the left and
+           *  `Esc cancel` at the right are drawn whole; the hints between them may run out. */
           const armedShot = (layout: Shot) =>
             Effect.gen(function* () {
               const before = yield* tezgahView(r, pid);
+              const idle = yield* statusBar(page);
               yield* keys(page, "Control+b");
 
               for (let tries = 0; ; tries++) {
@@ -86,9 +88,15 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 
                 if (bar.text.includes("Esc cancel") || tries >= 120) {
                   expect(bar.text, `the prefix line is up (${layout})`).toContain("Esc cancel");
-                  expect(bar.cut, `every key on the prefix line reads whole, none cut (${layout})`).toEqual([]);
-                  expect(bar.past, `no key on the prefix line runs past the window (${layout})`).toEqual([]);
+                  expect(bar.tiles, `arming the prefix moves, resizes or folds no tile (${layout})`).toEqual(
+                    idle.tiles,
+                  );
+                  expect(bar.height, `the armed bar keeps its idle height, one line (${layout})`).toBe(idle.height);
                   expect(bar.over, `the prefix line covers no tile (${layout})`).toEqual([]);
+                  expect(bar.ends, `prefix and Esc cancel are drawn whole at the two ends (${layout})`).toEqual([
+                    { text: "prefix", whole: true },
+                    { text: "Esc cancel", whole: true },
+                  ]);
                   break;
                 }
 
@@ -200,8 +208,9 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* armedShot("small-1024x700");
           yield* askShot("small-1024x700");
 
-          // The narrowest window the desk draws, 420x700 as the fold law's band: the prefix line still
-          // reads whole. Then back to 1024x700 for the refused split.
+          // The narrowest window the desk draws, 420x700 as the fold law's band, folded: the prefix
+          // line is still one line, folds nothing more, and keeps prefix and Esc cancel whole. Then
+          // back to 1024x700 for the refused split.
           yield* promised(() => page.setViewportSize({ width: 420, height: 700 }));
           yield* foldSettle(page, r, pid, foldDifferences, "the 2x2 folded to a 420x700 window");
           yield* armedShot("narrow-420x700");

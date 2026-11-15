@@ -234,35 +234,42 @@ input {
   color: var(--text-faint);
 }
 /*
- * The status bar: more about the focused tile, the prefix line while armed, the close ask. Nothing on
- * it is cut: what does not fit on one line wraps onto the next, and the bar takes those lines from
- * the tiles' area above it, never drawn over a tile.
+ * The status bar: more about the focused tile, the prefix line while armed, the close ask. Always one
+ * line of the same height, so arming the prefix moves no tile (the tile guidelines: one line in all
+ * layouts). What runs out is cut with an ellipsis, and the prefix line's two ends never are.
  */
 .statusbar {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
   column-gap: var(--s-2);
-  min-height: var(--s-5);
+  height: var(--s-5);
   padding: 0 var(--s-3);
+  overflow: hidden;
   color: var(--tile-text);
   font: 400 var(--fs-small) / var(--s-5) var(--mono);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .statusbar.on {
   color: var(--tile-text-on);
 }
-/* The prefix line: its mode word, then each hint kept whole on one line, a dot after all but the last. */
-.statusbar .mode {
-  margin-right: var(--s-2);
+.statusbar .says,
+.statusbar .hints {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* The prefix line (modes M3): its mode word, the hints with a dot after all but the last, and the way
+ * out pinned at the right end. */
 .statusbar .mode,
-.statusbar .hint {
-  white-space: nowrap;
+.statusbar .way-out {
+  flex: none;
+}
+.statusbar .way-out {
+  margin-left: auto;
 }
 .statusbar .hint:not(:last-child)::after {
   content: "·" / "";
-  padding-left: var(--s-2);
+  padding: 0 var(--s-2);
 }
 .checklist {
   max-width: 56rem;

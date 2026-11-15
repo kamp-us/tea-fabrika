@@ -43,6 +43,9 @@ type Props = {
   readonly state?: (tile: Tile) => State;
   /** The tile whose close waits on y or n, which its state slot asks. */
   readonly asking?: TileId | null;
+  /** Where DOM focus last sat in a tile, as the window noted it (0165); a tile it has no note for
+   *  keeps the cursor tezgah's view gives it. */
+  readonly cursor?: (tile: Tile) => string | null;
   /** The area the parts are laid out in, inside the main's padding, in CSS pixels, once the page
    *  has said it. */
   readonly size?: { readonly width: number; readonly height: number } | null;
@@ -87,12 +90,14 @@ const TileRegion = ({
   focused,
   state,
   asking,
+  cursor,
   children,
 }: {
   readonly tile: Tile;
   readonly focused: boolean;
   readonly state: State;
   readonly asking: boolean;
+  readonly cursor: string | null;
   readonly children: ReactElement;
 }) => (
   <section
@@ -103,9 +108,9 @@ const TileRegion = ({
     tabIndex={-1}
     inert={!state.live}
     // A click on the title bar or on the body's empty space focuses the region itself: DOM focus goes
-    // on to where `landing` says, so what a person types next reaches the tile.
+    // on to where `landing` says, on the row it last sat on, so what a person types next reaches the tile.
     onFocus={(e) => {
-      const to = e.target === e.currentTarget ? landing(e.currentTarget, tile.cursor) : e.currentTarget;
+      const to = e.target === e.currentTarget ? landing(e.currentTarget, cursor) : e.currentTarget;
 
       if (to !== e.currentTarget) {
         to.focus({ preventScroll: true });
@@ -161,6 +166,7 @@ export const Layout = ({
   children,
   state,
   asking = null,
+  cursor,
   size = null,
   strips = NONE,
   open,
@@ -194,6 +200,7 @@ export const Layout = ({
           focused={tile.id === workspace.focus}
           state={state?.(tile) ?? LIVE}
           asking={tile.id === asking}
+          cursor={cursor?.(tile) ?? tile.cursor}
         >
           {children(tile)}
         </TileRegion>
