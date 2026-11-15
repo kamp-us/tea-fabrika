@@ -82,6 +82,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
@@ -2385,6 +2386,7 @@ type RunnerFailure =
   | ProcessError
   | NotGranted
   | RepliesError
+  | QuotasError
   | WatchersError;
 
 /**
@@ -2410,7 +2412,7 @@ export class ProcessService extends Context.Service<
     readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: unknown) => Effect.Effect<void, RunnerFailure>;
     readonly alarm: () => Effect.Effect<void, RunnerFailure>;
-    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
     /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
     readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
   }

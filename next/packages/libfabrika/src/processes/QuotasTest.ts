@@ -19,7 +19,7 @@ import { ExitReason } from "./ExitReason.ts";
 import { Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
-import { ProgramMail } from "./ProgramMail.ts";
+import { MailFailure, ProgramMail } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import { Quotas } from "./Quotas.ts";
 import * as QuotasSql from "./QuotasSql.ts";
@@ -122,9 +122,11 @@ const world = Effect.fnUntraced(function* (
     RefereeSql.layer(store.sql),
   ).pipe(Layer.provideMerge(quotas), Layer.provide(bell));
   const services = Layer.mergeAll(Mailbox.layer, manager).pipe(Layer.provideMerge(data));
-  const live = ProgramMailLedger.layer({ grants: { "alpha:1": ["beta:1", "alpha:2"], "alpha:2": ["beta:1"] } }).pipe(
-    Layer.provideMerge(services),
-  );
+  // T1041: `mail.unread`'s largest value, so no quota law here meets a full inbox.
+  const live = ProgramMailLedger.layer({
+    grants: { "alpha:1": ["beta:1", "alpha:2"], "alpha:2": ["beta:1"] },
+    cap: 16_384,
+  }).pipe(Layer.provideMerge(services));
   const run = <A, E, R extends Ledger | Referee | Mailbox | ProcessManager | ProgramMail | Quotas>(
     work: Effect.Effect<A, E, R>,
   ) => work.pipe(Effect.provide(live));
@@ -313,7 +315,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 expect((yield* w.status(PROGRAM)).writes).toBe(3);
                 expect((yield* w.status(OTHER)).writes).toBe(0);
               } else {
-                expect(answer).toMatchObject({ failure: { reason: "quota" } });
+                expect(answer).toMatchObject({ failure: { reason: MailFailure.cases.quota.make({}) } });
                 expect(w.snapshot()).toEqual(before);
                 refused++;
               }

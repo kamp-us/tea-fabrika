@@ -35,6 +35,7 @@ import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { type ProcessError, brainOnly, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { type QuotasError } from "../processes/Quotas.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
@@ -325,6 +326,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
     | RunnerError
     | ProcessError
     | RepliesError
+    | QuotasError
     | WatchersError,
     RDeliver
   >;
@@ -1966,6 +1968,7 @@ export class Gateway extends Context.Service<
       | RunnerError
       | ProcessError
       | RepliesError
+      | QuotasError
       | WatchersError
       | Audit.AuditError
       | Cause.NoSuchElementError

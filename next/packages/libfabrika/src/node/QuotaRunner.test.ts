@@ -20,6 +20,7 @@ import * as QuotaRunner from "../runtime/QuotaRunner.ts";
 import * as QuotaRunnerTest from "../runtime/QuotaRunnerTest.ts";
 import { recoveryStore } from "../runtime/RecoveryStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import * as ProgramMailTestSupport from "./ProgramMail.test-support.ts";
 
@@ -197,6 +198,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     );
     const layer = ProgramRunner.layer(descriptor, {
       recovery: { sql: sql(name), name, capacity: 1_000_000_000, accounting: local },
+      chunk: mailChunk.default,
     }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
