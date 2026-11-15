@@ -1,6 +1,5 @@
 // P13 slice 2, next/. The real build, Alchemy and local instance run under plain vitest.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { DatabaseSync } from "node:sqlite"; // edge: inspect the isolated instance's SQLite persistence cuts
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
@@ -10,6 +9,7 @@ import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { build } from "./build.ts";
+import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -55,22 +55,13 @@ const field = (bytes: Uint8Array) => {
   return Buffer.concat([n, bytes]);
 };
 
-// The live instance writes these files from its own connection while the test opens a second one:
-// once a reply write is cut, the process retries about every 100 ms, each write holding the lock
-// for 0.3 to 11.5 ms on a laptop (ticket 962). node:sqlite's default busy timeout is 0, so a
-// CREATE or DROP TRIGGER that met one of those writes failed with "database is locked"
-// (PR 1242's run 43623892315). SQLite's busy timeout waits for the lock like any second client.
-const LOCK_WAIT_MS = 5000;
-
 const recovery = Effect.fnUntraced(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
   for (const file of yield* fs.glob("**/*.{sqlite,db}", { root: home, dot: true, exclude: ["node_modules/"] })) {
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, file), { timeout: LOCK_WAIT_MS })),
-      (db) => Effect.sync(() => db.close()),
-    );
+    // It writes this file's triggers while the live instance writes it too, so it waits for the lock.
+    const db = yield* instanceDatabase(path.join(home, file), { readOnly: false });
     const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_recovery'").get();
 
     if (table !== undefined && db.prepare("SELECT name FROM process_recovery WHERE name=?").get(NAME) !== undefined) {
