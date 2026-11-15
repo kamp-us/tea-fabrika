@@ -47,10 +47,17 @@ each kind of call, and how the ban is held.
   `next/packages/libfabrika/src/settings/TomlParser.ts:35` and
   `next/packages/libfabrika/src/settings/internal/edit.ts:63`.
 - The tooling folders have none.
-- `next/` has 33 `new Proxy(` calls in 18 files. 32 are test code. One is product code, the local
-  dev client at `next/packages/libfabrika/src/node/dev/dev.ts:551`. Read line by line, 14
-  `Reflect.get` calls and all 4 `Reflect.has` calls are the pass-through inside a trap. A 15th
-  `Reflect.get` pass-through is the one in a string at `instance-records.integration.test.ts:288`.
+- `next/` has 33 `new Proxy(` calls in 18 files, each read with its next two lines:
+  - 11 are stubs that answer any method name, as a Cloudflare stub does;
+  - 7 are guards that fail the law on any use the law did not expect;
+  - 10 wrap a real object to count or change one member, one of them inside a string of generated
+    code;
+  - 4 are hostile inputs in property tests, where the `Proxy` is the value under test;
+  - 1 is product code, the local dev client at `next/packages/libfabrika/src/node/dev/dev.ts:551`.
+- 14 `Reflect.get` calls and all 4 `Reflect.has` calls are the pass-through inside a trap: 9
+  `Reflect.get` in the wrappers, 2 `Reflect.get` and 1 `Reflect.has` in the stubs, 3 of each in
+  the hostile inputs. A 15th `Reflect.get` pass-through is the one in a string at
+  `instance-records.integration.test.ts:288`.
 - The dev client is typed as a bare record of functions (`dev.ts:52`), so it carries no method
   names. A test cannot write `instance.project(p).start(...)` and writes
   `Reflect.get(instance.project(p), "start")(...)`. A one-line search for that shape finds 14 such
@@ -65,6 +72,9 @@ each kind of call, and how the ban is held.
   our lint rules refuse.
 - No earlier decision names `Reflect`. This builds on
   [0524](0524-no-list-lets-broken-code-pass.md): the ban gets no list of leftovers.
+- It adds one thing to what [0538](0538-kampus-vitest-holds-the-test-primitives.md) puts in
+  `@kampus/vitest`: the fakes of Cloudflare objects. 0538's rules hold as written, since such a
+  fake imports no service of ours.
 
 ## Decision
 
@@ -92,12 +102,16 @@ reads or writes past the types (owner, 2026-11-15).**
   field. It is the ordinary red then green loop. The tests step reports it the way
   [the tests skill](../.agents/skills/tests/SKILL.md) already says: a type law is red only in a
   typecheck, the report says so, and the build runs it.
-- **One narrow exception: the pass-through line inside a `Proxy` trap.**
-  `Reflect.get(target, key, receiver)` is the language's own way to forward a trap. That line takes
-  `// oxlint-disable-next-line <rule> -- <why>` with its reason in plain words, as
+- **`Proxy` itself is not banned.** The fakes of Cloudflare objects live in one place, `next/`'s
+  shared test tooling, `@kampus/vitest` in `next/packages/vitest`
+  ([0538](0538-kampus-vitest-holds-the-test-primitives.md)), read through its module
+  ([0029](0029-format-and-names-follow-effect.md)). A law calls the helper and does not write the
+  fake by hand. The helper's shape and file name are the plan step's to decide.
+- **One narrow exception: a pass-through `Reflect` line inside a `Proxy` trap, in two places only.**
+  The shared helper above, and the 4 hostile-input `Proxy` objects in property tests. Nowhere else.
+  `Reflect.get(target, key, receiver)` is the language's own way to forward a trap. Each such line
+  takes `// oxlint-disable-next-line <rule> -- <why>` with its reason in plain words, as
   [`AGENTS.md`](../AGENTS.md#checks) allows where the code is right and the rule does not fit.
-  Why `next/` has `Proxy` objects at all is being looked into. The exception stands until that
-  question is settled.
 - **Held at zero by a lint rule oxlint already has:** `eslint/no-restricted-properties`, which
   `.oxlintrc.json` uses today for `JSON.parse`, `Effect.retry` and `setBounds`.
 
@@ -120,7 +134,9 @@ reads or writes past the types (owner, 2026-11-15).**
   The old calls are fixed, never listed.
 - A fix does not swap one way past the types for another: no `Object(x)[key]`, no single `as` to a
   loose record, no `Object.getOwnPropertyDescriptor(x, k)?.value`.
-- A disable line is only for a `Proxy` trap's pass-through, one line each, with its reason.
+- A disable line is only for a `Proxy` trap's pass-through in the shared helper or a hostile-input
+  `Proxy`, one line each, with its reason.
+- No law writes a fake of a Cloudflare object by hand.
 
 ## Consequences
 
@@ -131,9 +147,17 @@ reads or writes past the types (owner, 2026-11-15).**
   drops fields the old loop still read, so each is checked by hand.
 - **Stricter than the makers.** The Effect team keeps `Reflect.get` for swapped globals in its own
   tests and in a few source files. We do not.
-- **The dev client gets its types.** `project` and `process` in `dev.ts` answer a typed client, so
-  the calls made through it by name become plain calls. That is one product file and 7 test files,
-  and it holds whether the `Proxy` there stays or goes.
+- **Work the cleanup must do, beside the line-by-line fixes:**
+  - **One or two helpers in `@kampus/vitest`** take the place of the 11 stubs that answer any
+    method name and the 7 guards that fail on any use, and the laws call them. Those 18 sit in 9
+    test files today.
+  - **The 9 wrappers a plain object can replace are swapped for one,** as
+    `next/packages/libfabrika/src/node/launchd/Launchd.test-support.ts:294` already does for the
+    file system: `{ ...fs, open: ... }`. Their 9 pass-through `Reflect.get` lines go with them.
+    The 10th wrapper is the one in a string.
+  - **The dev client gets real types.** `project` and `process` in `dev.ts` answer a typed client,
+    so the calls made through it by name become plain calls: at least 14 in 7 test files. That is
+    product code, so it is its own planned pull request.
 - **Three product lines have no line-for-line fix.** `control.ts:124` calls a method by a name held
   in a variable, which needs a table of typed functions or a tagged request. `TomlParser.ts:35`
   and `edit.ts:63` walk a path by key and need a narrow per step.
@@ -148,8 +172,15 @@ reads or writes past the types (owner, 2026-11-15).**
     `Reflect.apply` is not decided here, so they stand, but the cleanup reads them again.
 - **What the lint rule may miss, untested:** `globalThis.Reflect.get`, `const R = Reflect`, and a
   destructured `const { get } = Reflect`. The lint pull request plants each to find out.
+- **The hold moves to the test package later.** `next/`'s test package (today `@kampus/vitest`,
+  [0538](0538-kampus-vitest-holds-the-test-primitives.md)) is to become `@kalfa/vitest`. The
+  decision on `@kalfa/vitest`, which is its own file, records the owner's rule: a mechanism that
+  package does not export is not used, and one we need is built in that package. The shared helper
+  for Cloudflare fakes lives there. The lead's reading of what follows here: once tests get their
+  tools only from that package, the ban in test code is held by what the package does not export,
+  plus one lint rule that no file outside it imports `vitest` or `@effect/vitest` directly. Until
+  the package is in place, the oxlint rule named above holds the ban.
 - **Not decided here:**
   - `Reflect.apply`, `Reflect.construct` and `Reflect.deleteProperty`.
-  - Whether `next/` keeps its `Proxy` objects, and so how long the one exception lasts.
   - What replaces a law that hands a typed function a value its type refuses, which today goes
     through `Reflect.apply(Reflect.get(...))`.

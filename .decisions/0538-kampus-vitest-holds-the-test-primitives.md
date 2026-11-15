@@ -59,3 +59,5 @@ test decisions need. `next/` and `infra/` import it.**
 
 - A rule in a later test decision lands as a primitive here, so every folder gets it at once.
 - Not decided here: whether the package is published outside this repository. It is not, for now.
+- [0554](0554-no-reflect-get-set-has.md) puts the fakes of Cloudflare objects in this package too.
+  Everything above still holds.
