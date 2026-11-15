@@ -1,4 +1,4 @@
-Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 3726ce599e7c
+Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 3947c54334e3
 Plancheck-Version: 3
 # Plan: ticket 290, P18 slice 2: a tile monitors its process and follows the restart
 
@@ -31,8 +31,9 @@ Slice 2 makes a tile follow its process across restarts, the OTP way.
 - The window reads its own inbox, `client:<tab>/inbox`, with the protocol's existing `ledger.wait`
   and `ledger.read`, and keeps a cursor. A browser can do this: it is plain JSON-RPC text.
 - On a DOWN for a tile's current ref and pid, the tile reads `processes/<name>` again, every page.
-  A live successor is monitored and opened. No live process shows `Ended` and the reason, keeps the
-  last view, and parks a `ledger.wait` on the name's stream until the next start.
+  A live successor is monitored and opened. No live process shows `Ended` and the reason in the
+  title bar, the one word `Ended` in the body where the last view was, and parks a `ledger.wait` on
+  the name's stream until the next start.
 - When a socket closes, the brain ends that session's watches with `watcher_exited`, as OTP ends a
   dead watcher's monitors.
 - `keep` and closing a tile stay in slice 4. Until then every tile whose process ended stays, with
@@ -299,10 +300,19 @@ down: { name: Schema.String, pid: Schema.String, reason: Word, rev: Count }, // 
 
 ### 6. The drawing (`next/packages/tuval/src/window/main.tsx`)
 
+Amended 2026-11-15: an ended tile follows the tile guideline's empty state, by the owner's ruling
+of 2026-11-15 that `next/` follows the approved guidelines written for today's app as written
+(`docs/direction/tile-guidelines.md`, its Tuval line on a tile kept after a crash, and "Empty and
+loading").
+
 - The state slot says `Ended (crashed)` for `ended`, with the reason's `_tag` as the word.
-- The slot keeps drawing the last view (`last`), and the tile stays `inert`, as for every tile that
-  is not open.
-- The page's polite live region says `checklist:1 ended (crashed)` once, beside the refusal words.
+- The body shows the one word `Ended` where the view was, in `--tile-text` at `--manti-text-base`,
+  and never the ended process's last view. The tile stays `inert`, as for every tile that is not
+  open. Both words come from `next/packages/tuval/src/window/words.ts`: `stateWord` for the slot,
+  `bodyWord` for the body.
+- The page's polite live region says `checklist:1 in tile_1 ended (crashed)` once, beside the
+  refusal words: the guideline's `tracker in t2 ended`, with this slice's reason after it. It stays
+  polite, not `role="alert"`, as the guideline's live-region table and 0504 say.
 - Color is never the cue: the state is words (0502). This is no new screen, so there is no Linear
   question; the state word follows 0502.
 
@@ -343,8 +353,9 @@ The window's tab is `tab_x`; its socket's session is `S1`; the tile is `t1`.
    ref "w9" and pid A match t1. Tile `resolving {id 12}`, `read processes/checklist:1 after 0`
    (id 12), and a `down {checklist:1, A, crashed, 32}` row. Inbox cursor 32, `wait after 32` (id 13).
 8. **`read_ok` id 12:** `[started A 10, exited A 31]`. No live life; the newest exit is A crashed.
-   Tile `ended {A, crashed, id 14}`, `wait processes/checklist:1 after 31` (id 14). The tile still
-   draws A's last view and says `Ended (crashed)`; presses are blocked.
+   Tile `ended {A, crashed, id 14}`, `wait processes/checklist:1 after 31` (id 14). The tile's body
+   shows the one word `Ended` in place of A's last view, its title bar says `Ended (crashed)`, and
+   the polite region says `checklist:1 in t1 ended (crashed)`; presses are blocked.
 9. **The supervisor's backoff ends** (100 ms on main) and it writes `restarted {process B, after A}`
    at rev 35. The ring answers wait id 14 with `{rev 35}`.
 10. **`wait_ok` id 14:** tile `resolving {id 15}`, `read processes/checklist:1 after 0`. The answer
@@ -381,7 +392,8 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | P1 | `ProcessManager.leave(session)` ends exactly the live watches whose recipient is a client with that session, each with `demonitored {reason: "watcher_exited"}`. Another session of the same client, process recipients and canceled watches stay as they were. A later exit writes no DOWN for the ended ones. A second `leave` writes nothing | test | fc.array: generated watches over two clients, three sessions and two processes, 100 runs | Match on the client id, not the session (red: the other session's watch ends). Skip the `demonitored` line (red: a later DOWN is written) |
 | T1 | The door's `monitor` option takes `to` typed as the client case of `Recipient`, and the `process.monitor` params schema's keys are exactly `ref` and `pid` (the schema is not exported, so D1 holds this clause at run time: any other key is refused) | type | type | Add `to` to the params schema (red) |
 | T2 | `Reach`'s `opening` and `open` require `ref`, and `ended` requires `reason: ExitReason` | type | type | Make `ref` optional (red) |
-| E1 | On a real local instance, in Chromium and in the headless client: the checklist tile is open; the test ends its process as crashed and starts its successor through the control endpoint, as the chaos-revoke suite's `invoke` does. The tile says `Ended (crashed)`, then shows the successor's view, and an `add` lands on the successor pid. `processes` holds one `monitored` per pid, each with `to.client` the tab. After the tab closes, its session's watch is `demonitored` with `watcher_exited` | test | scenario: a real local instance, both backends of slice 1's round-trip suite | Drop the window's DOWN handler (red: the tile stays `Online` on the dead pid and the `add` is refused) |
+| E1 | On a real local instance, in Chromium and in the headless client: the checklist tile is open; the test ends its process as crashed and starts its successor through the control endpoint, as the chaos-revoke suite's `invoke` does. The tile says `Ended (crashed)`, and in Chromium its body shows one word where the view was, in the tile's text token `--tile-text` (amended 2026-11-15, the tile guideline's empty state); then it shows the successor's view, and an `add` lands on the successor pid. `processes` holds one `monitored` per pid, each with `to.client` the tab. After the tab closes, its session's watch is `demonitored` with `watcher_exited` | test | scenario: a real local instance, both backends of slice 1's round-trip suite | Drop the window's DOWN handler (red: the tile stays `Online` on the dead pid and the `add` is refused). `bodyWord` back to the last view (red in Chromium: the body reads the checklist's empty view) |
+| W1 | Amended 2026-11-15, the tile guideline's empty state. `words.test.ts`, "property: an ended tile's body is one word, whether or not a last view is there to draw, while its online title bar names the exit's reason; an open tile with a view draws it": `bodyWord` gives an ended tile one word whether or not a view is there, the online state slot names the reason, an open tile with a view draws it, and no tile's body is blank. It draws the Model's `Reach` and `link` and a boolean with Effect's `Arbitrary.schema`, seed 119120, 300 runs. A second property holds that the generated tiles reach ended tiles with and without a last view | test | Effect Arbitrary: WindowModel.fields.tiles.value.fields.reach | `bodyWord` back to the old rule, the last view while one is there and else `Ended (reason)` (red on `Ended (normal)`) |
 
 - **L8's mapping,** for `loosening.sh`. The old clause cannot hold any more: after a DOWN the tile
   must read its name again on the same dial. The new clause keeps the online read-once rule and
@@ -396,7 +408,7 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 - **Slice 1's other laws** gain only new cases: L3 (each frame reaches one owner) and L10 (the
   wire's frame families) learn the `wait` and `monitor` answers and the `process.monitor` and
   `ledger.wait` methods. Those are additions, with no narrowed `expect`.
-- **Lint, type or test:** S1 to S6, L8, F1, D1 to D3, P1 and E1 hold behavior over runs, so they
+- **Lint, type or test:** S1 to S6, L8, F1, D1 to D3, P1, E1 and W1 hold behavior over runs, so they
   are tests. T1 and T2 are shapes, so they are type laws. No rule here is about how code is
   written, so there is no new lint rule.
 - **No host-only law.** E1 needs workerd and Chromium. It is a visual test, so it runs on the
@@ -420,7 +432,9 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | `next/packages/libfabrika/src/cloudflare/connection.ts` | pass `session` to `initialize` | 2 | build |
 | `next/packages/libfabrika/src/cloudflare/bindings.ts` | `initialize`'s trusted type | 1 | build |
 | `next/apps/fabrika/src/brain.ts` | `initialize`'s trusted type | 1 | build |
-| `next/packages/tuval/src/window/main.tsx` | `Ended (reason)` in the state slot and the live region | 20 | build |
+| `next/packages/tuval/src/window/main.tsx` | `Ended (reason)` in the state slot and the live region; the body word `Ended` in place of an ended tile's view, from `bodyWord` | 20 | build |
+| `next/packages/tuval/src/window/words.ts` | New (amended 2026-11-15): `stateWord` and `bodyWord`, the words a tile shows in its slot and its body | 45 | build |
+| `next/packages/tuval/src/window/style.css` | `.tile-empty`: the body word in `--tile-text` at `--manti-text-base` | 8 | build |
 | `docs/direction/the-desktop-layer.md` | W3's sketch to the built DOWN (`reason`, the tab as client, `client:tab_…/inbox`); the open bullet becomes the answer | docs | build |
 | `docs/direction/follows/otp.md` | New row "Monitor a registered name"; "A watcher ends" covers client sessions; "Signals" cites the window's inbox reader; the count line | docs | build |
 | `.glossary/TERMS.md` | ProcessManager gains `leave`; recipient life: a window's `client` is its tab, and a session's close ends its watches | docs | build |
@@ -435,7 +449,8 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | `next/apps/fabrika/src/door.integration.test.ts` | D1 to D3 | tests | tests |
 | `next/apps/fabrika/e2e/client-protocol.visual.test.ts` | E1 in the round-trip suite, both backends | tests | tests |
 | `next/apps/fabrika/e2e/client-protocol.test-support.ts` | E1's crash and restart steps and the tile's state reads | tests | tests |
-| `next/apps/fabrika/e2e/p14.test-support.ts` | The tile helper reads the state slot, if E1 needs it | tests | tests |
+| `next/apps/fabrika/e2e/p14.test-support.ts` | The tile helper reads the state slot, and the body's words and whether they are in `--tile-text` | tests | tests |
+| `next/packages/tuval/src/window/words.test.ts` | New (amended 2026-11-15): W1 | tests | tests |
 | `next/apps/fabrika/e2e/chaos-revoke.integration.test.ts` | Read only: how a suite calls the control endpoint | 0 | tests |
 
 About 395 product lines. The tests step owns every test file; the build owns the product code and
