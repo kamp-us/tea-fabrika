@@ -18,12 +18,15 @@
 //   `processes/tezgah:<person>` once admitted, with the person from the door's admission, opens
 //   tezgah's view, attaches its workspace itself, and shows the workspace's tiles, each tile's
 //   process view opened, in place of a fixed list.
+//
+// Ticket 1042 (a new tile opens the shell, through the setting `tezgah.new`), L12 changed: with the
+// setting's default, each split's tile shows a fresh shell, `fabsh:<the tile id's body>`, that tezgah
+// started, and the close stops it. The headless window is the app's own (`entry/views.ts`), which
+// finds each tile's window and view decoder by the tile's program, so a shell's view opens.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
-import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
-import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
@@ -32,6 +35,7 @@ import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
+import { window } from "./entry/views.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -284,6 +288,19 @@ const shown = (view: any) => {
   return ids.map((id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
 };
 
+/** A tile as tezgah's view names it: its process, its program and whether tezgah started it. */
+const tileIn = (view: any, id: string) => {
+  const t = (view?.tiles ?? []).find((x: any) => x.id === id);
+  return { shows: t?.shows, program: t?.program, child: t?.child };
+};
+
+/** What a split's tile shows by the setting's default: a fresh shell tezgah started. */
+const shell = (tile: string) => ({
+  shows: `fabsh:${tile.slice(tile.lastIndexOf("_") + 1)}`,
+  program: "fabrika/fabsh",
+  child: true,
+});
+
 describe("Desk S2a L12: a headless window follows tezgah on the real instance", () => {
   it("scenario: L12: a headless client admitted as the founder reads tezgah, attaches, and sees each layout as the founder splits twice and closes once", async () => {
     // scenario: the plan's L12, one founder on the real dev brain; the generated walks are L5 to L11.
@@ -298,10 +315,6 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             found: "reused",
             sign: (bytes) => Effect.sync(() => key.sign(bytes)),
           };
-          const window = windowMachineFor({
-            decode: () => Schema.decodeUnknownSync(checklistView),
-            tile: () => undefined,
-          });
           const booting = yield* Headless.start({
             tiles: [],
             tezgah: { workspace: 1 },
@@ -379,6 +392,9 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               two.map((t) => t.id),
               "L12: the new tile follows t1",
             ).toEqual([one[0]!.id, t2]);
+            expect(tileIn(await view(), t2), "L12: the split's tile shows a fresh shell tezgah started").toEqual(
+              shell(t2),
+            );
 
             const t3 = typeId("tile", 3);
             await did({ does: "tezgah.split_down", from: t2, tile: t3 });
@@ -387,6 +403,9 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               three.map((t) => t.id),
               "L12: t3 follows t2",
             ).toEqual([one[0]!.id, t2, t3]);
+            expect(tileIn(await view(), t3), "L12: the second split's tile shows its own fresh shell").toEqual(
+              shell(t3),
+            );
 
             await did({ does: "tezgah.close", from: t2 });
             const closed = await follows("after a close", 2);

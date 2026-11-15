@@ -13,6 +13,7 @@
 //   `settings/TomlParser.ts` imports the parser. oxlint's own `no-restricted-imports` says so.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { ProgramName } from "@kampus/libfabrika/packs/ProgramName";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
@@ -108,6 +109,28 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
       expect(generated.reference).toContain("gateway.window");
     },
     { arbitrary: { seed: SEED, runs: 50 } },
+  );
+  it.prop(
+    "Ticket 1042: the person's schema carries pack.fabrika.settings.tezgah.new for any program name, the repo's refuses it, and the reference names it (100 runs)",
+    { program: ProgramName },
+    ({ program }) => {
+      // The core pack's own table (0083), set in a person's file only (the plan's scope lean).
+      const file = { pack: { fabrika: { settings: { tezgah: { new: program } } } } };
+      expect(
+        Result.isSuccess(
+          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })(file),
+        ),
+        `a person's file may set tezgah.new to ${program}`,
+      ).toBe(true);
+      expect(
+        Result.isFailure(
+          Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })(file),
+        ),
+        "a repo's file may not set tezgah.new",
+      ).toBe(true);
+      expect(outputs(Declarations.all).reference).toContain("pack.fabrika.settings.tezgah.new");
+    },
+    { arbitrary: { seed: SEED, runs: 100 } },
   );
   it("format: the committed person.json, repo.json and reference are what generation writes", async () => {
     // format: editors read the two schemas and people read the reference exactly as committed, so

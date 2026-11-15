@@ -5,7 +5,7 @@ import { Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { ProgramLoader } from "./Entry.ts";
-import { type Admission, type Prepared, type Stepper, Input, Program, Write } from "./Program.ts";
+import { type Admission, type Prepared, type Stepper, Input, Program, stepper, Write } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
@@ -327,3 +327,68 @@ function draftTypeErrors() {
 }
 
 void draftTypeErrors;
+
+// Ticket 1042, next/ (a new tile opens the shell, through the setting `tezgah.new`): law N5 of the
+// approved plan, a type law. A program declares the part of its pack's settings it reads as
+// `settings`, a schema; that schema types its machine's `init(loaded, ctx)`, as Elm's flags type
+// `init`. A program that declares none gets `{}`, so its machine's init may not ask for more. The
+// stepper's `init(saved, settings)` hands the decoded value on. Written before `settings` exists.
+const Flags = Schema.Struct({ tezgah: Schema.Struct({ new: Schema.String }) });
+
+/** A machine whose init reads its settings: the count starts at the length of `tezgah.new`. */
+const flagged = Machine.make({
+  model: Model,
+  msg: Msg,
+  cmds: [],
+  types: { ctx: {} as typeof Flags.Type },
+  init: (loaded, ctx) => [loaded ?? { count: ctx.tezgah.new.length }, []],
+  update: {
+    add: (s, m) => [{ count: s.count + m.n }, []],
+    reset: () => [{ count: 0 }, []],
+  },
+});
+
+const flaggedFields = {
+  name: "flagged",
+  machine: flagged,
+  state: { v: 1, upgrades: [] },
+  refuse: () => null,
+  inputs: { add: "Add", reset: "Reset" },
+  outputs: {},
+  writes: {},
+  wake: () => null,
+};
+
+it.prop(
+  "N5: a program's settings type its init's second argument, the stepper hands init the decoded value, and a program that declares none gets {}",
+  { value: Schema.String },
+  ({ value }) => {
+    const p = Program.make({ ...flaggedFields, settings: Flags, view: (m) => m });
+    expectTypeOf<Parameters<typeof p.machine.init>[1]>().toEqualTypeOf<typeof Flags.Type>();
+    const pure = Effect.runSync(Effect.fromResult(stepper(p)));
+    expect(pure.init(null, { tezgah: { new: value } }), "init is handed the settings it declares").toMatchObject({
+      _tag: "stepped",
+      model: { count: value.length },
+    });
+    const plain = Effect.runSync(Effect.fromResult(stepper(Program.make({ ...fields, view: (m) => m }))));
+    expect(plain.init(null, { tezgah: { new: value } }), "a program that declares none boots as before").toMatchObject({
+      _tag: "stepped",
+      model: { count: 0 },
+    });
+  },
+  { arbitrary: { seed: 119120, runs: 100 } },
+);
+
+// Every rejection has a valid neighbor. This function is never called, even by Vitest.
+function settingsTypeErrors() {
+  Program.make({ ...flaggedFields, settings: Flags, view: (m) => m });
+  // @ts-expect-error A settings schema must be the machine's own ctx, not another shape.
+  Program.make({ ...flaggedFields, settings: Schema.Struct({ other: Schema.Int }), view: (m) => m });
+  // @ts-expect-error A machine whose init reads settings must declare them: without them, init gets {}.
+  Program.make({ ...flaggedFields, view: (m) => m });
+  // @ts-expect-error Settings are a schema, not a value.
+  Program.make({ ...flaggedFields, settings: { tezgah: { new: "fabrika/fabsh" } }, view: (m) => m });
+  Program.make({ ...fields, view: (m) => m });
+}
+
+void settingsTypeErrors;

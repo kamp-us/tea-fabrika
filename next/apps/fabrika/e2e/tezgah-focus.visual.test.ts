@@ -29,6 +29,7 @@ import {
   processId,
   regionName,
   settle,
+  shellLine,
   shoot,
   type Shot,
   shown,
@@ -174,18 +175,15 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           ).toBe(true);
           // Desk round R (finding desk-dom-focus-not-following): after C-b %, keyboard focus is in the
           // new tile, so what a person types lands in the new tile's field, never t1's, and C-b x
-          // closes the new tile: its ask names it.
-          const typed = tile(page, regionName(t2));
+          // closes the new tile: its ask names it. Ticket 1042: the new tile shows the shell, so its
+          // field is the shell's line.
+          const typed = shellLine(page, regionName(t2));
           yield* promised(() => page.keyboard.type("q"));
-          yield* promised(() => typed.field.waitFor({ timeout: 30_000 }));
-          expect(yield* promised(() => typed.field.inputValue()), "R4: typing after C-b % lands in the new tile").toBe(
-            "q",
-          );
+          yield* promised(() => typed.waitFor({ timeout: 30_000 }));
+          expect(yield* promised(() => typed.inputValue()), "R4: typing after C-b % lands in the new tile").toBe("q");
           expect(yield* promised(() => list.field.inputValue()), "R4: typing after C-b % never lands in t1").toBe("");
           yield* promised(() => page.keyboard.press("Backspace"));
-          expect(yield* promised(() => typed.field.inputValue()), "R4: the new tile's field takes the Backspace").toBe(
-            "",
-          );
+          expect(yield* promised(() => typed.inputValue()), "R4: the new tile's field takes the Backspace").toBe("");
           yield* keys(page, "Control+b", "x");
           yield* promised(() => page.getByText(`close t${t2.n}? (y/n)`).first().waitFor({ timeout: 30_000 }));
           yield* keys(page, "n");
@@ -379,15 +377,15 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           // L28, L30: the click on t5's title bar lands DOM focus at t5's top, its field, never on the
           // region itself: what a person types next goes into t5. Desk round R2, from the shots: a
           // click on a title bar left DOM focus on the region, so the field had no ring and typing
-          // went nowhere.
-          const clicked = tile(page, regionName(t5));
+          // went nowhere. Ticket 1042: t5 is a split's tile, so its field is the shell's line.
+          const clicked = shellLine(page, regionName(t5));
           yield* domSettles(page, (f) => f.region === regionName(t5), "L30: DOM focus follows the click into t5");
           yield* promised(() => page.keyboard.type("z"));
           expect(
-            yield* promised(() => clicked.field.inputValue()),
+            yield* promised(() => clicked.inputValue()),
             "L28: typing after a click on t5's title bar lands in t5's field",
           ).toBe("z");
-          yield* promised(() => clicked.field.fill(""));
+          yield* promised(() => clicked.fill(""));
 
           // L30: Tab out of t1's last field moves desk focus to the tile DOM focus enters.
           yield* promised(() => list.field.focus());

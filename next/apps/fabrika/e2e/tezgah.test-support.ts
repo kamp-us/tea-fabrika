@@ -291,14 +291,23 @@ export const keys = (page: Page, ...pressed: ReadonlyArray<string>) =>
  *  420x700 window the fold law draws a band in. */
 export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small-1024x700" | "narrow-420x700";
 
-/** A shot of the tab as it is now, named by state and layout, into the folder `SHOTS` names; nothing
- *  when `SHOTS` is unset, so a plain run writes no file. */
-export const shoot = (page: Page, state: string, layout: Shot) => {
+/** A shot of the tab as it is now, named by state and layout after `prefix`, into the folder `SHOTS`
+ *  names; nothing when `SHOTS` is unset, so a plain run writes no file. */
+export const shoot = (page: Page, state: string, layout: Shot, prefix = "tezgah") => {
   const folder = process.env.SHOTS;
   return folder === undefined || folder === ""
     ? Effect.void
-    : promised(() => page.screenshot({ path: join(folder, `tezgah-${state}-${layout}.png`), fullPage: false }));
+    : promised(() => page.screenshot({ path: join(folder, `${prefix}-${state}-${layout}.png`), fullPage: false }));
 };
+
+/** format: the shell's line's accessible name, the `aria-label` fabsh's window gives its one line
+ *  (`next/programs/fabsh/src/window.tsx`). A split's tile shows the shell by `tezgah.new`'s default
+ *  (ticket 1042), so what a person types after a split lands in this line. */
+export const SHELL_LINE = "Shell line";
+
+/** The shell's line in the tile region named `name`, as a person or a screen reader meets it. */
+export const shellLine = (page: Page, name: string) =>
+  page.getByRole("region", { name, exact: true }).getByRole("textbox", { name: SHELL_LINE, exact: true });
 
 // Desk S3, next/: what the focus law reads on top of the frame's helpers.
 

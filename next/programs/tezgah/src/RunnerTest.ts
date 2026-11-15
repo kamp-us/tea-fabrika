@@ -11,6 +11,10 @@
 // run takes workspace 1, whose first tile is the boot list's `checklist:1`, and each later run a new
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
+//
+// Ticket 1042 (a new tile opens the shell, through the setting `tezgah.new`), L12's real half: the
+// instance runs with the setting's default, so every tile tezgah starts, a split's or a later
+// workspace's first, shows a fresh shell, `fabsh:<the tile id's body>`, of `fabrika/fabsh`.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Predicate, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
@@ -64,9 +68,18 @@ const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
 /** What the law reads of tezgah's view: each workspace's tiles in reading order, and each tile. */
 const View = Schema.Struct({
   workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Schema.Unknown })),
-  tiles: Schema.Array(Schema.Struct({ id: Schema.String, shows: Schema.String, child: Schema.Boolean })),
+  tiles: Schema.Array(
+    Schema.Struct({ id: Schema.String, shows: Schema.String, program: Schema.String, child: Schema.Boolean }),
+  ),
 });
 type View = typeof View.Type;
+
+/** What a tile tezgah starts shows by the setting's default: a fresh shell named by its tile id. */
+const shell = (tile: string) => ({
+  shows: `fabsh:${tile.slice(tile.lastIndexOf("_") + 1)}`,
+  program: "fabrika/fabsh",
+  child: true,
+});
 
 const order = (node: unknown): ReadonlyArray<string> =>
   Predicate.isString(node)
@@ -125,9 +138,14 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     const tile = fresh();
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
     expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
-    yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
+    const split = yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
       tilesOn(v, n).some((t) => t.id === tile),
     );
+    expect(
+      split.tiles.find((t) => t.id === tile),
+      `L12: the split's ${tile} shows a fresh shell tezgah started`,
+    ).toMatchObject(shell(tile));
+    expect((yield* live.process(shell(tile).shows)).live, `L12: ${shell(tile).shows} is running`).toBe(true);
     return;
   }
 
@@ -189,12 +207,17 @@ export const suite = (open: Open) =>
 
             for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
               const n = i + 1;
-              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
+              const opening = fresh();
+              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: opening }))._tag).toBe("accepted");
               const first = yield* until(`workspace ${n}`, readView(live), (v) => tilesOn(v, n).length === 1);
 
               if (n === 1) {
                 expect(tilesOn(first, 1), "workspace 1's first tile is the boot list's checklist:1").toMatchObject([
                   { shows: "checklist:1", child: false },
+                ]);
+              } else {
+                expect(tilesOn(first, n), `L12: workspace ${n}'s first tile is a fresh shell`).toMatchObject([
+                  shell(opening),
                 ]);
               }
 

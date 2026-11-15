@@ -9,6 +9,11 @@ import { fabshWindow, said } from "@kampus/fabsh/window";
 // suite does. Written before `@kampus/fabsh` and the `fabsh:1` tile; until the build adds them, this
 // file fails on its missing import. It needs Alchemy, workerd and Chromium, so it runs only on the
 // 3-hour schedule, or on a pull request that asks for its visual run (0536).
+//
+// Ticket 1042 (a new tile opens the shell, through the setting `tezgah.new`): the suite reads the
+// shell's inbox by the process its backend types into. The tab no longer has a fixed `fabsh:1` tile:
+// it splits `checklist, t1` and types into the shell tezgah starts in the new tile. The headless
+// client keeps its fixed `fabsh:1` tile, which any client may reach by its name.
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
@@ -24,6 +29,10 @@ const TILES = [{ id: "tile_f", name: FABSH }];
 /** What the suite asks of a client, whatever draws it. */
 export type Backend = {
   readonly name: "browser" | "headless";
+  /** The registered name of the shell process this client types into: the boot list's `fabsh:1`
+   *  for the headless client's fixed tile, or the process of the tile tezgah made for the tab's split
+   *  (ticket 1042), known once `online` has answered. */
+  readonly process: Effect.Effect<string>;
   readonly waiting: Effect.Effect<Waiting>;
   /** Waits until the client is online with its fabsh tile open. */
   readonly online: Effect.Effect<void>;
@@ -52,6 +61,9 @@ export type Backend = {
   /** A client that draws pixels: types `line` with the cursor at its end, and reads how the span
    *  layer lines up with the input. The headless client draws nothing, so it has none. */
   readonly lined?: (line: string) => Effect.Effect<Lined>;
+  /** A client that draws pixels: shoots the shell in a tile at the five layouts, into the folder
+   *  `SHOTS` names, and writes nothing when it is unset (0160). The headless client has none. */
+  readonly shots?: Effect.Effect<void>;
 };
 
 /** What the span layer really draws, against the input it sits behind. */
@@ -120,7 +132,7 @@ export const typeAndRun = (h: Home, dev: Dev, backend: Backend) =>
       Effect.map(backend.scroll, (s) => s.includes("help")),
     );
     const r = yield* reader(h, dev);
-    const inbox = yield* r.read(`${FABSH}/inbox`);
+    const inbox = yield* r.read(`${yield* backend.process}/inbox`);
     const letters = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "type") === "submitted");
     const typed = JSON.stringify(inbox).includes("hlep");
     yield* backend.reload;
@@ -178,6 +190,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
     const text = Effect.map(own, (t) => drawn(t).text);
     const backend: Backend = {
       name: "headless",
+      process: Effect.succeed(FABSH),
       waiting: until(
         "headless: the waiting code",
         Effect.sync(() => run.getState().link._tag === "waiting_grant"),

@@ -7,15 +7,46 @@
 // and Chromium, so it runs only on the 3-hour schedule, or on a pull request that asks for its visual
 // run (0536). L18, the same suite on the real built Electron app, is host-only and owed to P19 slice
 // 3's Electron client (0178).
+//
+// Ticket 1042 (a new tile opens the shell, through the setting `tezgah.new`), L17 changed: its browser
+// half splits first. The tab opens on `checklist, t1`; `C-b %` opens `fabsh, t2`, the shell tezgah
+// starts in the new tile, and the suite types there, in the region named by the tile tezgah made.
+// The old browser half looked for a region named `fabsh:1`, which no tezgah tile is ever named. The
+// headless half keeps its fixed `fabsh:1` tile. The tab then shoots the shell in a tile at the five
+// layouts, `fabsh-tile-<state>-<layout>.png`, only when `SHOTS` names a folder.
+import type { Tile } from "@kampus/libfabrika/tezgah/Workspace";
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
-import type { BrowserContext, Locator, Page } from "playwright";
+import { Effect, Schema, Scope } from "effect";
+import type { BrowserContext, Locator } from "playwright";
 import { describe, expect, it } from "vitest";
-import { type Backend, FABSH, headlessBackend, type Lined, typeAndRun } from "./fabsh.test-support.ts";
-import { browser, type Dev, devServer, home, profile, suite, tab, waiting } from "./p14.test-support.ts";
+import { type Backend, headlessBackend, type Lined, typeAndRun } from "./fabsh.test-support.ts";
+import {
+  browser,
+  type Dev,
+  devServer,
+  type Home,
+  home,
+  profile,
+  reader,
+  suite,
+  tab,
+  waiting,
+} from "./p14.test-support.ts";
+import {
+  differences,
+  focused,
+  keys,
+  regionName,
+  settle,
+  SHELL_LINE,
+  shoot,
+  shown,
+  tezgahPid,
+} from "./tezgah.test-support.ts";
 
-/** Each run's own limit in ms: a dev.ts start (up to 180 s), a grant and the typed line. */
+/** Each run's own limit in ms: a dev.ts start (up to 180 s), a grant, a split, the typed line and the
+ *  shots' layouts. */
 const LIMIT = 300_000;
 
 const Frame = Schema.Struct({ id: Schema.optionalKey(Schema.Unknown), method: Schema.optionalKey(Schema.String) });
@@ -58,19 +89,16 @@ const route = (context: BrowserContext) =>
   });
 
 /** The text of every element the line's `aria-describedby` names. */
-const describedBy = (page: Page) =>
+const describedBy = (region: Locator) =>
   Effect.promise(() =>
-    page
-      .getByRole("region", { name: FABSH })
-      .getByRole("textbox")
-      .evaluate((el) =>
-        (el.getAttribute("aria-describedby") ?? "")
-          .split(/\s+/)
-          .filter((id) => id !== "")
-          .map((id) => document.getElementById(id)?.textContent ?? "")
-          .join(" ")
-          .trim(),
-      ),
+    region.getByRole("textbox").evaluate((el) =>
+      (el.getAttribute("aria-describedby") ?? "")
+        .split(/\s+/)
+        .filter((id) => id !== "")
+        .map((id) => document.getElementById(id)?.textContent ?? "")
+        .join(" ")
+        .trim(),
+    ),
   );
 
 /**
@@ -135,18 +163,62 @@ const measure = (field: Locator, line: string) =>
     }, line),
   );
 
-/** A Chromium tab of a fresh profile, open at the instance, its socket routed. */
-const browserBackend = (context: BrowserContext, dev: Dev) =>
+/**
+ * A Chromium tab of a fresh profile, open at the instance, its socket routed. Ticket 1042: the tab
+ * opens on `checklist, t1`, and the first time it is online the person presses `C-b %`, as tmux opens
+ * a shell in a new pane; the backend then types into the region of the tile tezgah made, found by
+ * that tile's name (`regionName`, the tile guidelines' words), never by a process name.
+ */
+const browserBackend = (context: BrowserContext, h: Home, dev: Dev) =>
   Effect.gen(function* () {
     const held = yield* route(context);
     const { page } = yield* tab(context, dev.url);
-    const region = page.getByRole("region", { name: FABSH });
-    const field = region.getByRole("textbox");
+    yield* Effect.promise(() => page.setViewportSize({ width: 1440, height: 900 }));
     const run = <A>(f: () => Promise<A>) => Effect.promise(f);
+    // The reader is a second granted client, made once the tab is granted, in this backend's scope.
+    const scope = yield* Effect.scope;
+    const desk = yield* Effect.cached(
+      Effect.gen(function* () {
+        const r = yield* reader(h, dev).pipe(Scope.provide(scope));
+        return { r, pid: yield* tezgahPid(r) };
+      }),
+    );
+    /** Waits until the tab draws tezgah's workspace 1 with `count` tiles where tezgah puts them. */
+    const drawnWith = (count: number, label: string) =>
+      Effect.flatMap(desk, ({ r, pid }) =>
+        settle(
+          page,
+          r,
+          pid,
+          (v, d) => [...(shown(v).length === count ? [] : [`not yet ${label}`]), ...differences(v, d)],
+          label,
+        ),
+      );
+    // L17's browser half, once, the first time the tab is online: it opens on `checklist, t1`, and
+    // C-b % opens the shell in t2; the tile tezgah made is the one the suite types into.
+    const split = yield* Effect.cached(
+      Effect.gen(function* () {
+        const one = yield* drawnWith(1, "the tab draws checklist, t1");
+        expect(shown(one).map(regionName), "L17: the tab opens on checklist, t1").toEqual(["checklist, t1"]);
+        yield* shoot(page, "one", "one-tile", "fabsh-tile");
+        yield* keys(page, "Control+b", "%");
+        const two = yield* drawnWith(2, "C-b % opens a second tile");
+        const t2 = focused(two);
+        expect(t2.program, "L17: the split's tile shows the shell, tezgah.new's default").toBe("fabrika/fabsh");
+        expect(regionName(t2), "L17: the shell's tile is named fabsh, t2").toBe("fabsh, t2");
+        return t2;
+      }),
+    );
+    const shell = (t: Tile) => page.getByRole("region", { name: regionName(t), exact: true });
+    const field = (t: Tile) => shell(t).getByRole("textbox", { name: SHELL_LINE });
+    /** Runs `f` on the shell's line in the tile the split made. */
+    const onField = <A>(f: (line: Locator) => Promise<A>) => Effect.flatMap(split, (t) => run(() => f(field(t))));
+    const onShell = <A>(f: (region: Locator) => Promise<A>) => Effect.flatMap(split, (t) => run(() => f(shell(t))));
     const backend: Backend = {
       name: "browser",
+      process: Effect.map(split, (t) => t.shows),
       waiting: waiting(page),
-      online: run(() => region.and(page.locator(":not([inert])")).waitFor({ timeout: 60_000 })),
+      online: onShell((region) => region.and(page.locator(":not([inert])")).waitFor({ timeout: 60_000 })),
       hold: Effect.sync(() => {
         held.held = true;
         held.delivered = 0;
@@ -158,12 +230,12 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
           send();
         }
       }),
-      key: (letter) => run(() => field.press(letter)),
-      retype: (line) => run(() => field.fill(line)),
-      enter: run(() => field.press("Enter")),
+      key: (letter) => onField((line) => line.press(letter)),
+      retype: (text) => onField((line) => line.fill(text)),
+      enter: onField((line) => line.press("Enter")),
       // The span layer by the contract L3 holds: the aria-hidden element whose children carry `data-role`.
       // A tile's frame has aria-hidden parts of its own (its dot), so "the first aria-hidden" is not it.
-      drawn: run(() => region.locator("[aria-hidden='true']:has(> [data-role])").innerText()).pipe(
+      drawn: onShell((region) => region.locator("[aria-hidden='true']:has(> [data-role])").innerText()).pipe(
         Effect.map((t) => t.trim()),
       ),
       // The tab writes its frame after the key's update, and holds one frame in flight per tile, so
@@ -176,8 +248,8 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
 
         return held.waiting.length > 0 && held.delivered === 0;
       }),
-      description: describedBy(page),
-      scroll: run(() => region.getByRole("log").innerText()).pipe(
+      description: Effect.flatMap(split, (t) => describedBy(shell(t))),
+      scroll: onShell((region) => region.getByRole("log").innerText()).pipe(
         Effect.map((t) =>
           t
             .split("\n")
@@ -188,11 +260,11 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       // The key's update reaches the input on the tab's next render, after `press` resolves, so read
       // the recalled line once it is drawn (at most 10 s), and an empty line if history held nothing.
       recall: Effect.gen(function* () {
-        yield* run(() => field.press("ArrowUp"));
+        yield* onField((line) => line.press("ArrowUp"));
         let value = "";
 
         for (let n = 0; n < 100 && value === ""; n++) {
-          value = yield* run(() => field.inputValue());
+          value = yield* onField((line) => line.inputValue());
 
           if (value === "") {
             yield* Effect.sleep("100 millis");
@@ -206,12 +278,12 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
         Effect.gen(function* () {
           // A person's key at the end of the line: the input scrolls its caret into view on a key,
           // and a `fill` alone moves no caret.
-          yield* run(() => field.fill(line.slice(0, -1)));
-          yield* run(() => field.press("End"));
-          yield* run(() => field.press(line.slice(-1)));
+          yield* onField((f) => f.fill(line.slice(0, -1)));
+          yield* onField((f) => f.press("End"));
+          yield* onField((f) => f.press(line.slice(-1)));
 
           // The tile draws the line on its next render, after `fill` resolves (at most 10 s).
-          for (let n = 0; n < 100 && (yield* run(() => field.inputValue())) !== line; n++) {
+          for (let n = 0; n < 100 && (yield* onField((f) => f.inputValue())) !== line; n++) {
             yield* Effect.sleep("100 millis");
           }
 
@@ -219,9 +291,28 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
           // its caret in the key's own task, after the render that key caused, and fires `scroll`
           // only in the next frame, before that frame's animation callbacks. Between the key and
           // that frame the layer is one scroll behind, and no drawn frame shows it so.
-          yield* run(() => field.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done()))));
-          return yield* measure(field, line);
+          yield* onField((f) => f.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done()))));
+          return yield* Effect.flatMap(split, (t) => measure(field(t), line));
         }),
+      // The plan's "Show it running": the shell in a tile at the five layouts, `help` answered in t2.
+      shots: Effect.gen(function* () {
+        // The line `lined` left is cleared, so the shot shows `help` answered over an empty line.
+        yield* onField((line) => line.fill(""));
+        yield* shoot(page, "help", "side-by-side", "fabsh-tile");
+        // Stacked: C-b h back to t1, then C-b " opens a shell under it.
+        yield* keys(page, "Control+b", "h");
+        yield* keys(page, "Control+b", '"');
+        yield* drawnWith(3, 'C-b " opens a shell under t1');
+        yield* shoot(page, "under", "stacked", "fabsh-tile");
+        // The 2x2: C-b l to t2, then C-b " opens a shell under it; focus is on the bottom right.
+        yield* keys(page, "Control+b", "l");
+        yield* keys(page, "Control+b", '"');
+        yield* drawnWith(4, "a 2x2 of t1 and three shells");
+        yield* shoot(page, "grid", "grid-2x2", "fabsh-tile");
+        yield* run(() => page.setViewportSize({ width: 1024, height: 700 }));
+        yield* drawnWith(4, "the 2x2 at 1024x700");
+        yield* shoot(page, "grid", "small-1024x700", "fabsh-tile");
+      }),
     };
     return backend;
   });
@@ -258,12 +349,12 @@ const headlessKey = Effect.gen(function* () {
 });
 
 const backends = {
-  browser: (dev: Dev) =>
+  browser: (h: Home, dev: Dev) =>
     Effect.gen(function* () {
       const b = yield* browser;
-      return yield* browserBackend(yield* profile(b), dev);
+      return yield* browserBackend(yield* profile(b), h, dev);
     }),
-  headless: (dev: Dev) => Effect.flatMap(headlessKey, (key) => headlessBackend(dev, key)),
+  headless: (_h: Home, dev: Dev) => Effect.flatMap(headlessKey, (key) => headlessBackend(dev, key)),
 } as const;
 
 describe("fabsh L17: one suite, browser and headless, on a real local instance", () => {
@@ -276,7 +367,7 @@ describe("fabsh L17: one suite, browser and headless, on a real local instance",
           Effect.gen(function* () {
             const h = yield* home;
             const dev = yield* devServer(h);
-            const backend = yield* make(dev);
+            const backend = yield* make(h, dev);
             const run = yield* typeAndRun(h, dev, backend);
             expect(run.before, `${name}: each letter is drawn before its echo`).toEqual([true, true, true, true]);
             expect(run.reason, `${name}: the reason names the word`).toContain("hlep");
@@ -298,6 +389,10 @@ describe("fabsh L17: one suite, browser and headless, on a real local instance",
                 expect(lined.off, `${name}: each drawn letter of ${said} sits where the input draws it`).toEqual([]);
                 expect(lined.scrolled > 0, `${name}: ${said} scrolls the field`).toBe(line === long);
               }
+            }
+
+            if (backend.shots !== undefined) {
+              yield* backend.shots;
             }
           }),
           context,

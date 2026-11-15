@@ -3655,8 +3655,17 @@ const TEZGAH_PID = "process_of_tezgah";
 const DESK_ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: DESK_PERSON, as: "window" } };
 const deskWindow = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: tileFor });
 
-/** tezgah's workspaces as the brain holds them: each workspace's tiles in reading order, by number. */
-type Desk = { rev: number; spaces: Map<number, Array<string>>; shows: Map<string, string>; next: number };
+/** tezgah's workspaces as the brain holds them: each workspace's tiles in reading order, by number.
+ *  `programs` names each tile's program when the walk chooses it, and `mint` names a new tile's
+ *  process and program (ticket 1042's N9); without them every tile shows a checklist. */
+type Desk = {
+  rev: number;
+  spaces: Map<number, Array<string>>;
+  shows: Map<string, string>;
+  next: number;
+  programs?: Map<string, string>;
+  mint?: (n: number, pick: number) => { readonly shows: string; readonly program: string };
+};
 
 /** The brain's view as the wire carries it: each workspace one row, its percents summing to 100. */
 const deskView = (d: Desk) => ({
@@ -3680,7 +3689,7 @@ const deskView = (d: Desk) => ({
     id,
     n: i + 1,
     shows: d.shows.get(id),
-    program: "fabrika/checklist",
+    program: d.programs?.get(id) ?? "fabrika/checklist",
     child: i > 0,
     keep: "failed",
     cursor: null,
@@ -3867,7 +3876,13 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
         id,
         ...tiles.slice(c.pick % (tiles.length + 1)),
       ]);
-      d.shows.set(id, `checklist:t${d.next}`);
+      const minted = d.mint?.(d.next, c.pick);
+      d.shows.set(id, minted?.shows ?? `checklist:t${d.next}`);
+
+      if (minted !== undefined) {
+        d.programs?.set(id, minted.program);
+      }
+
       return notice();
     });
     out.push(() => {
@@ -3894,14 +3909,17 @@ const deskFold = (
   withDesk: boolean,
   each: (e: DeskEvent) => void,
   up = true,
+  minting?: Pick<Desk, "mint" | "programs">,
+  given: ReadonlyArray<{ readonly id: string; readonly name: string }> = GIVEN,
 ) => {
   const desk: Desk = {
     rev: 1,
     spaces: new Map([[1, [typeId("tile", 1)]]]),
     shows: new Map([[typeId("tile", 1), "checklist:1"]]),
     next: 2,
+    ...minting,
   };
-  const ctx = withDesk ? { tiles: GIVEN, tab: TAB, tezgah: { workspace: 1 } } : { tiles: GIVEN, tab: TAB };
+  const ctx = withDesk ? { tiles: given, tab: TAB, tezgah: { workspace: 1 } } : { tiles: given, tab: TAB };
   const [s0, cmds0] = machine.init(null, ctx as never);
   const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false, up };
   each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
@@ -4006,6 +4024,108 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
       { seed: SEED, numRuns: 200 },
     );
     expect(opened, "L10: the walks go online and open the given tiles").toBeGreaterThan(0);
+  });
+});
+
+// Ticket 1042, next/ (a new tile opens the shell, through the setting `tezgah.new`): law N9 of the
+// approved plan, on L10's walk. Written before the window finds a tile by its program. The shape it
+// holds `WindowMachine.ts` to, from the plan (the build may add more):
+// - A tile row knows its program when tezgah's view names it (`program`), and null for a given tile.
+// - `checks.tile(name, program)` and `checks.decode(pid, program)` are handed that program, so a
+//   tezgah tile's machine and its view decoder are found by the program it shows, never by its process
+//   name, which changes per tile. A given tile has no program, so its lookup stays by name.
+// The walk's tezgah tiles are named by another program's word on purpose (`beta:t4` shows
+// `demo/gamma`), so a lookup by name finds the wrong machine and decoder, and the law sees it.
+const N9_PROGRAMS = ["demo/alpha", "demo/beta", "demo/gamma"] as const;
+const word = (program: string) => program.slice(program.lastIndexOf("/") + 1);
+/** The program a process name's first word names: what a lookup by name would find. */
+const named = (name: string) => N9_PROGRAMS.find((p) => name.startsWith(`${word(p)}:`));
+
+/** A tile machine whose model says which program's window made it. */
+const stamped = (program: string) =>
+  Machine.make({
+    model: Schema.Struct({ by: Schema.String }),
+    msg: Schema.Struct({ type: Schema.Literal("noop") }),
+    cmds: [press],
+    init: (loaded) => [loaded ?? { by: program }, []],
+    update: { noop: (s) => [s, []], press_ok: (s) => [s, []], press_err: (s) => [s, []] },
+  });
+
+const STAMPED = Object.fromEntries(N9_PROGRAMS.map((p) => [p, stamped(p)]));
+
+/** A view decoder that marks the view with the program whose decoder took it. */
+const stampedView = (program: string) => (view: unknown) => ({
+  ...Schema.decodeUnknownSync(ListView)(view),
+  by: program,
+});
+
+/** The lookup each window's checks run: by the program when the window hands one, else by name. The
+ *  walk's brain names each process `process_of_<name>`. */
+const byProgramWindow = windowMachineFor({
+  decode: (pid: string, program?: string | null) =>
+    stampedView((typeof program === "string" ? program : named(pid.replace(/^process_of_/, ""))) ?? "none"),
+  tile: (name: string, program?: string | null) => {
+    const found = typeof program === "string" ? program : named(name);
+    return found === undefined ? undefined : STAMPED[found];
+  },
+});
+
+/** A new tezgah tile shows one program under a process name that leads with another's word. */
+const misleading = {
+  mint: (n: number, pick: number) => {
+    const program = N9_PROGRAMS[pick % N9_PROGRAMS.length]!;
+    return { program, shows: `${word(N9_PROGRAMS[(pick + 1) % N9_PROGRAMS.length]!)}:t${n}` };
+  },
+} satisfies Pick<Desk, "mint">;
+
+/** Given tiles carry no program: each is named by the program its lookup by name must find. */
+const GIVEN_N9 = N9_PROGRAMS.map((p, i) => ({ id: `given_${i + 1}`, name: `${word(p)}:1` }));
+
+describe("Ticket 1042 N9: the window finds a tile's machine and decoder by its program", () => {
+  it("N9: the window finds a tezgah tile's machine and its view decoder by the program in tezgah's view, never by the process name; a given tile with no program keeps its name lookup", () => {
+    const seen = { tezgahOwn: 0, tezgahView: 0, givenOwn: 0, givenView: 0 };
+    fc.assert(
+      fc.property(
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        fc.boolean(),
+        (picks, desk) => {
+          const programs = new Map<string, string>([[typeId("tile", 1), "demo/alpha"]]);
+          const each = ({ next }: DeskEvent) => {
+            for (const t of next.tiles) {
+              const want = desk ? programs.get(t.id) : named(t.name);
+              const which = desk ? "tezgah" : "given";
+              expect(want, `N9: ${t.id} shows a program the walk knows`).toBeDefined();
+              seen[`${which}Own`]++;
+              expect(t.own, `N9: ${which} tile ${t.id} (${t.name}) runs ${want}'s tile machine`).toEqual({ by: want });
+              const pid = t.reach._tag === "open" ? t.reach.pid : null;
+              const shown = pid === null ? undefined : next.client.views[pid];
+
+              if (shown !== undefined) {
+                seen[`${which}View`]++;
+                expect(
+                  Reflect.get(Object(shown.view), "by"),
+                  `N9: ${which} tile ${t.id} (${t.name})'s view is decoded by ${want}'s decoder`,
+                ).toBe(want);
+              }
+            }
+          };
+          deskFold(
+            picks,
+            byProgramWindow,
+            desk,
+            each,
+            true,
+            desk ? { ...misleading, programs } : undefined,
+            desk ? GIVEN : GIVEN_N9,
+          );
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(
+      Object.values(seen).every((n) => n > 0),
+      `N9: the walks reached every case ${JSON.stringify(seen)}`,
+    ).toBe(true);
   });
 });
 

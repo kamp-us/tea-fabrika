@@ -6,6 +6,7 @@ import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
+import type * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
 import { Origin } from "./Sources.ts";
 
@@ -104,30 +105,25 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
         : r.origin === "file"
           ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
           : Origin.cases.default.make({});
+  // Every declaration starts at its default, from its default, so a new declaration joins every start
+  // fixture as it joins the group (ticket 1042's `pack.fabrika.settings.tezgah.new` did); the recipe's
+  // port and T843's policy are then set on top.
+  const declared = Object.entries(Declarations.all.settings);
   const settings = yield* Snapshot.make(Declarations.all, {
     values: {
+      ...(Object.fromEntries(declared.map(([name, d]) => [name, d.default])) as Setting.Values<
+        typeof Declarations.all.settings
+      >),
       port: r.port,
       version: "0.0.0",
       gatewayLimit: rateLimit.limit,
       gatewayWindow: rateLimit.window,
-      gatewayDraftLimit: Declarations.gatewayDraftLimit.default,
-      brainThrottle: Declarations.brainThrottle.default,
-      brainPoll: Declarations.brainPoll.default,
-      brainStartTimeout: Declarations.brainStartTimeout.default,
-      brainStopTimeout: Declarations.brainStopTimeout.default,
-      desktopLinkTtl: Declarations.desktopLinkTtl.default,
     },
     origins: {
+      ...Object.fromEntries(declared.map(([, d]) => [d.path, Origin.cases.default.make({})])),
       "instance.port": origin,
-      "fabrika-version": Origin.cases.default.make({}),
       "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
       "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
-      "gateway.draft-limit": Origin.cases.default.make({}),
-      "desktop.brain-throttle": Origin.cases.default.make({}),
-      "desktop.brain-poll": Origin.cases.default.make({}),
-      "desktop.brain-start-timeout": Origin.cases.default.make({}),
-      "desktop.brain-stop-timeout": Origin.cases.default.make({}),
-      "desktop.link-ttl": Origin.cases.default.make({}),
     },
   });
   return {

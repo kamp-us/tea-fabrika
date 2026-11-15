@@ -39,13 +39,37 @@
 //   the split's direction; the started process is never lost: the tile shows it.
 // - L9: an `attach` of a workspace that already exists changes nothing: it is taken, not refused,
 //   and the view, the model and the Cmds stay as they were.
+//
+// Ticket 1042, next/ (a new tile opens the shell, through the setting `tezgah.new`): laws N1, N2 and
+// N3 of the approved plan (docs/plan/lanes/t1042-PLAN.md), on the same walk. Written before tezgah
+// reads the setting. The shape these laws hold `program.ts` to, from the plan (the build may add more):
+// - The runner hands tezgah its pack's settings at init, `{tezgah: {new}}`, through the stepper's
+//   `init(saved, settings)`; tezgah keeps `new` in its model, set on every load.
+// - A split, and the first tile of any workspace but 1, asks `start_child` for `new`, named
+//   `Workspace.childName(new, tile)`. Workspace 1's first tile asks for `checklist:1`, the boot
+//   list's, until fabsh can show a program it starts (fabsh slice 2b).
+// - A waiting start keeps the program it asked for, and the tile its answer makes shows that
+//   program, never the `new` in force when the answer comes.
+// - The saved model is `v: 2`; a v1 model climbs by one named upgrade that gives every waiting start
+//   the program v1 only ever started, `fabrika/checklist`.
+// Every walk now hands `init` a value of `new` drawn per run from the programs a tile may show.
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Saved, type Stepper, stepper, Workspace } from "@kampus/libfabrika";
+import { Arbitrary, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
+/** The programs of the app's table a tile may show: every one but tezgah, which is the frame. The
+ *  app's own table (`next/apps/fabrika/src/table.ts`) is the source; a program may not import an app. */
+const SHOWN = ["fabrika/checklist", "fabrika/counter", "fabrika/fabsh"] as const;
+type Shown = (typeof SHOWN)[number];
+/** The value of `tezgah.new` a walk starts with, drawn per run. */
+const News = fc.constantFrom<Shown>(...SHOWN);
+/** The core pack's settings as the runner hands them to tezgah at init. */
+const settings = (value: string) => ({ tezgah: { new: value } });
+/** Workspace 1's first tile: the boot list's checklist, until fabsh slice 2b. */
+const FIRST = { program: "fabrika/checklist", name: "checklist:1" } as const;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 // Loaded per law, so a missing module reds its law and not the file's collection.
 const load = () => import("./program.ts");
@@ -172,6 +196,8 @@ type World = {
   stops: Array<Cmd>;
   next: number;
   at: number;
+  /** The `tezgah.new` tezgah was last loaded with. */
+  new: string;
 };
 
 /** One fold of the walk, with what it was, what it became and what it asked for. */
@@ -184,6 +210,10 @@ type Event = {
   readonly waiting?: Waiting;
   readonly answer?: "started" | "already_started" | "refused";
   readonly from?: string;
+  /** The `new` in force when the move was taken. */
+  readonly new?: string;
+  /** A reload's new value of `new`, and the starts waiting through it. */
+  readonly reloaded?: { readonly from: string; readonly to: string; readonly waiting: number };
 };
 
 const spaceWith = (v: View, tile: string): Space | undefined =>
@@ -191,9 +221,10 @@ const spaceWith = (v: View, tile: string): Space | undefined =>
 
 const live = (v: View): ReadonlyArray<string> => v.workspaces.flatMap((w) => order(w.layout));
 
-/** A world at the program's real init, through the stepper. */
-const begin = (p: Stepper): World => {
-  const s = p.init(null);
+/** A world at the program's real init, through the stepper, handed `tezgah.new` as the runner hands
+ *  it. */
+const begin = (p: Stepper, value: string): World => {
+  const s = p.init(null, settings(value));
   expect(s._tag).toBe("stepped");
   const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
   return {
@@ -203,6 +234,7 @@ const begin = (p: Stepper): World => {
     stops: [],
     next: 1,
     at: 1,
+    new: value,
   };
 };
 
@@ -246,10 +278,18 @@ type Kind =
   | "refuse"
   | "stop"
   | "reused"
-  | "unknown";
+  | "unknown"
+  | "reload";
 
-/** One move of `kind`, picked from what is possible in `w`, or null when nothing of that kind is. */
+/** One move of `kind`, picked from what is possible in `w`, or null when nothing of that kind is;
+ *  the event names the `new` in force when it was taken. */
 const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
+  const now = w.new;
+  const e = picked(p, w, kind, pick);
+  return e === null ? null : { ...e, new: now };
+};
+
+const picked = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
   const tiles = live(w.view);
   const pending = new Set(w.waiting.flatMap((x) => (x._tag === "split" ? [x.from] : [])));
   const ids = new Set([...tiles, ...w.waiting.map((x) => x.tile)]);
@@ -271,11 +311,13 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       const e = take(p, w, { type: "attach", workspace: n, tile }, false);
       const cmd = starts(e.cmds)[0];
 
-      if (cmd !== undefined) {
-        w.waiting.push({ _tag: "attach", workspace: n, tile, cmd });
+      const waiting: Waiting | undefined = cmd === undefined ? undefined : { _tag: "attach", workspace: n, tile, cmd };
+
+      if (waiting !== undefined) {
+        w.waiting.push(waiting);
       }
 
-      return { move: `attach ${n} ${tile}`, ...e };
+      return { move: `attach ${n} ${tile}`, ...e, ...(waiting === undefined ? {} : { waiting }) };
     }
 
     case "split_right":
@@ -420,6 +462,28 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       };
       return { move: `${does} from unknown ${from}`, ...take(p, w, msg, false), from };
     }
+
+    case "reload": {
+      // tezgah loads again from its saved model, as a wake or a restart does, handed the value of
+      // `tezgah.new` the person's file holds now (read at restart).
+      const to = SHOWN[pick % SHOWN.length]!;
+      const before = w.view;
+      const s = p.init(w.model, settings(to));
+      expect(s._tag, `a reload with ${to} loads`).toBe("stepped");
+      const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
+      const from = w.new;
+      w.model = stepped.model;
+      w.view = Schema.decodeUnknownSync(View)(stepped.view);
+      w.new = to;
+      return {
+        move: `reload ${from} -> ${to}`,
+        before,
+        after: w.view,
+        result: { _tag: "stepped" },
+        cmds: stepped.cmds as ReadonlyArray<Cmd>,
+        reloaded: { from, to, waiting: w.waiting.length },
+      };
+    }
   }
 };
 
@@ -442,9 +506,14 @@ const tape = (kinds: ReadonlyArray<Kind>, most: number) =>
     { maxCommands: most, size: "max" },
   );
 
-/** Runs one tape from the real init, with workspace 1 attached first, and hands every event to `each`. */
-const walk = (p: Stepper, cmds: Iterable<fc.Command<{ events: Array<Event> }, { p: Stepper; w: World }>>) => {
-  const w = begin(p);
+/** Runs one tape from the real init handed `value` as `tezgah.new`, with workspace 1 attached first,
+ *  and answers every event. */
+const walk = (
+  p: Stepper,
+  cmds: Iterable<fc.Command<{ events: Array<Event> }, { p: Stepper; w: World }>>,
+  value: string,
+) => {
+  const w = begin(p, value);
   const events: Array<Event> = [];
   const first = move(p, w, "attach", 0);
   const opened = move(p, w, "answer", 0);
@@ -470,8 +539,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
           ["split_right", "split_down", "answer", "refuse", "attach", "close", "close_waiting", "close_waiting"],
           40,
         ),
-        (cmds) => {
-          const events = walk(p, cmds);
+        News,
+        (cmds, value) => {
+          const events = walk(p, cmds, value);
           expect(
             events.slice(0, 2).map((e) => [e.result._tag, starts(e.cmds).length, live(e.after).length]),
             "L6: each walk's attach asks for one start and shows nothing, and its answer makes workspace 1's one tile",
@@ -591,8 +661,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     fc.assert(
       fc.property(
         tape(["close", "close", "close_waiting", "split_right", "split_down", "answer", "answer", "attach"], 40),
-        (cmds) => {
-          for (const e of walk(p, cmds)) {
+        News,
+        (cmds, value) => {
+          for (const e of walk(p, cmds, value)) {
             if (!e.move.startsWith("close") || e.from === undefined) {
               continue;
             }
@@ -643,8 +714,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     fc.assert(
       fc.property(
         tape(["attach", "answer", "split_right", "split_down", "answer", "close", "close", "stop"], 30),
-        (cmds) => {
-          for (const e of walk(p, cmds)) {
+        News,
+        (cmds, value) => {
+          for (const e of walk(p, cmds, value)) {
             const stops = e.cmds.filter((c) => c.type === "stop_child");
 
             if (!e.move.startsWith("close") || e.from === undefined || e.result._tag !== "stepped") {
@@ -708,8 +780,9 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       fc.property(
         fc.boolean(),
         arbMsgSequence(Pick, { minLength: 4, maxLength: 40, size: "max" }),
-        (attached, picks) => {
-          const w = begin(p);
+        News,
+        (attached, picks, value) => {
+          const w = begin(p, value);
 
           if (attached) {
             move(p, w, "attach", 0);
@@ -764,8 +837,8 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
   it("L9: with no workspace at all, every did is no_workspace", async () => {
     const p = await loaded();
     fc.assert(
-      fc.property(arbMsgSequence(Pick, { minLength: 1, maxLength: 10 }), (picks) => {
-        const w = begin(p);
+      fc.property(arbMsgSequence(Pick, { minLength: 1, maxLength: 10 }), News, (picks, value) => {
+        const w = begin(p, value);
 
         for (const { pick } of picks) {
           const e = move(p, w, "unknown", pick)!;
@@ -938,12 +1011,13 @@ describe("Desk S3: focus moves at the program", () => {
         fc.array(fc.record({ down: fc.boolean(), at: fc.nat() }), { minLength: 1, maxLength: 4 }),
         fc.nat(),
         fc.nat(),
-        (does, cuts, from, to) => {
+        News,
+        (does, cuts, from, to, value) => {
           seen.add(does);
           expect(boundKeys(does), `S3: ${does} is bound to its default keys`).toEqual(
             expect.arrayContaining([...(want[does] ?? [])]),
           );
-          const w = begin(p);
+          const w = begin(p, value);
           move(p, w, "attach", 0);
           move(p, w, "answer", 0);
 
@@ -975,8 +1049,8 @@ describe("Desk S3: focus moves at the program", () => {
     const does = await focusCommands();
     const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0, split: 0, long: 0 };
     fc.assert(
-      fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), (picks) => {
-        const w = begin(p);
+      fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), News, (picks, value) => {
+        const w = begin(p, value);
         move(p, w, "attach", 0);
         move(p, w, "answer", 0);
         /** Each tile's cursor as the moves that left it set it; a tile never left has none. */
@@ -1067,10 +1141,11 @@ describe("Desk S3: focus moves at the program", () => {
           maxLength: 20,
         }),
         fc.array(fc.integer({ min: 0, max: 10_000_000 }), { minLength: 20, maxLength: 20 }),
-        (count, moves, clocks) => {
+        News,
+        (count, moves, clocks, value) => {
           /** A workspace of `count` tiles, then `moves` with the clocks `clock(i)`; the views in order. */
           const run = (clock: (i: number) => number) => {
-            const w = begin(p);
+            const w = begin(p, value);
             move(p, w, "attach", 0);
             move(p, w, "answer", 0);
 
@@ -1117,4 +1192,284 @@ describe("Desk S3: focus moves at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
   });
+});
+
+/** A tile id as the schema types it, for the library's `childName`. */
+const tileId = Schema.decodeSync(Workspace.TileId);
+
+/** What a start asks for: its program and its process name. */
+const asked = (cmd: Cmd) => ({ program: cmd["program"], name: cmd["name"] });
+
+/** What a waiting start must ask for, by the plan: workspace 1's first tile the boot list's
+ *  checklist, every other start `new`, named by the library's `childName`. */
+const wanted = (waiting: Waiting, value: string) =>
+  waiting._tag === "attach" && waiting.workspace === 1
+    ? FIRST
+    : { program: value, name: Workspace.childName(value, tileId(waiting.tile)) };
+
+describe("Ticket 1042: a new tile starts the program tezgah.new names", () => {
+  it("N1: for any tezgah.new a tile may show, every split and every first tile of a workspace other than 1 asks start_child for it, named childName(new, tile); workspace 1's first tile asks for checklist:1; each tile made records the program its start asked for", async () => {
+    const p = await loaded();
+    const seen = { first: 0, other: 0, split: 0, made: 0 };
+    /** Each value of `new` that a walk split under, so every program a tile may show is reached. */
+    const splitUnder = new Set<string>();
+    fc.assert(
+      fc.property(
+        tape(["split_right", "split_down", "answer", "answer", "refuse", "attach", "attach", "close"], 40),
+        News,
+        (cmds, value) => {
+          for (const e of walk(p, cmds, value)) {
+            const now = e.new ?? value;
+            // Every move: what it asks for, and every tile it shows, is a program a tile may show.
+            expect(
+              [...starts(e.cmds).map((c) => c["program"]), ...e.after.tiles.map((t) => t.program)].filter(
+                (program) => !(SHOWN as ReadonlyArray<unknown>).includes(program),
+              ),
+              `N1: ${e.move} starts and shows only programs a tile may show`,
+            ).toEqual([]);
+
+            if (e.waiting !== undefined && e.answer === undefined) {
+              const [cmd] = starts(e.cmds);
+              expect(cmd, `N1: ${e.move} asks for one start`).toBeDefined();
+              expect(asked(cmd!), `N1: ${e.move}, with tezgah.new ${now}, asks for what the plan names`).toEqual(
+                wanted(e.waiting, now),
+              );
+
+              if (e.waiting._tag === "split") {
+                seen.split++;
+                splitUnder.add(now);
+              } else {
+                seen[e.waiting.workspace === 1 ? "first" : "other"]++;
+              }
+            }
+
+            if (e.waiting !== undefined && (e.answer === "started" || e.answer === "already_started")) {
+              const made = e.after.tiles.find((t) => t.id === e.waiting!.tile);
+
+              // An attach whose workspace a second attach already made is dropped: it makes no tile.
+              if (made !== undefined) {
+                seen.made++;
+                expect(
+                  { program: made.program, shows: made.shows },
+                  `N1: ${e.move} makes a tile showing the program and process its start asked for`,
+                ).toEqual({ program: e.waiting.cmd["program"], shows: e.waiting.cmd["name"] });
+              }
+            }
+          }
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(
+      Object.values(seen).every((n) => n > 0),
+      `N1: the walks reached every case ${JSON.stringify(seen)}`,
+    ).toBe(true);
+    expect([...splitUnder].sort(), "N1: the walks split under every program a tile may show").toEqual([...SHOWN]);
+  });
+
+  it("N2: a waiting start and every made tile keep the program they asked for when tezgah loads again with another tezgah.new; only later starts use the new value", async () => {
+    const p = await loaded();
+    const seen = { reloads: 0, through: 0, kept: 0, later: 0 };
+    fc.assert(
+      fc.property(
+        tape(["split_right", "split_down", "answer", "attach", "reload", "reload", "close", "answer"], 40),
+        News,
+        (cmds, value) => {
+          /** Each tile's program as its start asked it, from the move that made the tile. */
+          const programs = new Map<string, unknown>();
+
+          for (const e of walk(p, cmds, value)) {
+            const now = e.new ?? value;
+
+            if (e.reloaded !== undefined) {
+              seen.reloads++;
+              seen.through += e.reloaded.waiting > 0 && e.reloaded.from !== e.reloaded.to ? 1 : 0;
+              expect(e.after, `N2: ${e.move} relabels no tile and moves nothing`).toEqual(e.before);
+              expect(e.cmds, `N2: ${e.move} asks for nothing`).toEqual([]);
+            }
+
+            if (e.waiting !== undefined && e.answer === undefined) {
+              const [cmd] = starts(e.cmds);
+              expect(asked(cmd!), `N2: ${e.move} asks with the tezgah.new in force now, ${now}`).toEqual(
+                wanted(e.waiting, now),
+              );
+              seen.later += e.waiting._tag === "split" && now !== value ? 1 : 0;
+            }
+
+            if (e.waiting !== undefined && (e.answer === "started" || e.answer === "already_started")) {
+              const made = e.after.tiles.find((t) => t.id === e.waiting!.tile);
+
+              if (made !== undefined) {
+                programs.set(made.id, e.waiting.cmd["program"]);
+                seen.kept += e.waiting.cmd["program"] !== now ? 1 : 0;
+                expect(
+                  made.program,
+                  `N2: ${e.move} makes a tile showing the program its start asked for, not tezgah.new ${now}`,
+                ).toBe(e.waiting.cmd["program"]);
+              }
+            }
+
+            // Every move: each tile keeps the program it was made with, through every reload.
+            const kept = e.after.tiles.filter((t) => programs.has(t.id));
+            expect(
+              kept.map((t) => [t.id, t.program]),
+              `N2: after ${e.move}, every tile keeps the program it was made with`,
+            ).toEqual(kept.map((t) => [t.id, programs.get(t.id)]));
+          }
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    // Every case of the law was walked: a reload, one while a start waited under another value, a
+    // start answered after tezgah.new changed under it, and a split asked under a later value.
+    expect(
+      Object.values(seen).every((n) => n > 0),
+      `N2: the walks reached every case ${JSON.stringify(seen)}`,
+    ).toBe(true);
+  });
+});
+
+/** The shape of a v1 model the law below builds: workspaces of 1 to 3 tiles in a row, and at least
+ *  one split and one attach waiting on their starts, so every draw climbs both kinds. Effect's
+ *  Arbitrary draws it; `v1` makes the model. */
+const V1Shape = Schema.Struct({
+  rows: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 }))).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(3),
+  ),
+  splits: Schema.Array(
+    Schema.Struct({
+      space: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9 })),
+      at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9 })),
+      down: Schema.Boolean,
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+  attaches: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2 })),
+});
+
+const body = (id: string) => id.slice(id.lastIndexOf("_") + 1);
+
+/** A saved tezgah model as v1 wrote it: every tile and every waiting start a checklist, the only
+ *  program v1 started, and no `program` on a waiting start. Workspace 1's first tile is the boot's. */
+const v1 = (shape: typeof V1Shape.Type) => {
+  let minted = 2_000;
+  const tiles: Array<Tile> = [];
+  const workspaces = shape.rows.map((count, k) => {
+    const ids = Array.from({ length: count }, () => typeId("tile", ++minted));
+    const base = Math.floor(100 / count);
+    ids.forEach((id, i) => {
+      const boot = k === 0 && i === 0;
+      tiles.push({
+        id,
+        n: tiles.length + 1,
+        shows: boot ? "checklist:1" : `checklist:${body(id)}`,
+        program: "fabrika/checklist",
+        child: !boot,
+        keep: "failed",
+        cursor: null,
+      });
+    });
+    return {
+      id: `workspace_${body(ids[0]!)}`,
+      n: k + 1,
+      layout:
+        count === 1
+          ? ids[0]!
+          : {
+              dir: "row",
+              parts: ids.map((inner, i) => ({ percent: i === 0 ? 100 - base * (count - 1) : base, inner })),
+            },
+      focus: ids[0]!,
+      recent: [ids[0]!],
+    };
+  });
+  const splits = shape.splits.map((s) => {
+    const space = workspaces[s.space % workspaces.length]!;
+    const on = order(space.layout as Node);
+    const tile = typeId("tile", ++minted);
+    return {
+      _tag: "split" as const,
+      space: space.id,
+      at: on[s.at % on.length]!,
+      dir: s.down ? "column" : "row",
+      tile,
+      name: `checklist:${body(tile)}`,
+    };
+  });
+  const attaches = Array.from({ length: shape.attaches }, (_, i) => {
+    const tile = typeId("tile", ++minted);
+    return { _tag: "attach" as const, workspace: shape.rows.length + 1 + i, tile, name: `checklist:${body(tile)}` };
+  });
+  return { workspaces, tiles, next: tiles.length + 1, starting: [...splits, ...attaches] };
+};
+
+const V1 = Arbitrary.schema(V1Shape).pipe(Arbitrary.map(v1));
+
+/** The program's module would not load. */
+class NotLoaded extends Schema.TaggedError<NotLoaded>()("NotLoaded", { cause: Schema.Defect() }) {}
+
+describe("Ticket 1042 N3: tezgah's saved model climbs from v1", () => {
+  it.effect.prop(
+    "N3: a v1 saved tezgah model climbs to v2 by one named upgrade, every waiting start keeping its fields with the program fabrika/checklist, and init then sets tezgah.new from the settings handed",
+    { model: V1 },
+    ({ model }) =>
+      Effect.gen(function* () {
+        const p = yield* Effect.tryPromise({ try: loaded, catch: (cause) => new NotLoaded({ cause }) });
+        const { saved, ran } = Saved.upgrade({ v: 1, build: "v1", model, after: 0 }, p.program.state, "v2");
+        expect(saved.v, "N3: the saved model's shape is v2").toBe(2);
+        expect(ran, "N3: one named upgrade takes v1 to v2").toHaveLength(1);
+        const climbed = Schema.decodeUnknownSync(
+          Schema.Struct({ starting: Schema.Array(Schema.Struct({ program: Schema.String })) }),
+        )(saved.model);
+        expect(
+          climbed.starting.map((s) => s.program),
+          "N3: every waiting start v1 saved asked for the checklist, the only program v1 started",
+        ).toEqual(model.starting.map(() => "fabrika/checklist"));
+        expect(
+          Schema.decodeUnknownSync(Schema.Struct({ starting: Schema.Array(Schema.Unknown) }))(saved.model).starting,
+          "N3: each waiting start keeps every field it had",
+        ).toEqual(model.starting.map((s, i) => ({ ...s, program: climbed.starting[i]!.program })));
+
+        // Every value a tile may show, the checklist and two others, so init's value is seen apart
+        // from the one the climb gave the old starts.
+        for (const value of SHOWN) {
+          const booted = p.init(saved.model, settings(value));
+          expect(booted._tag, `N3: the climbed model loads with tezgah.new ${value}`).toBe("stepped");
+          const s = booted as Extract<typeof booted, { _tag: "stepped" }>;
+          expect(
+            Schema.decodeUnknownSync(View)(s.view),
+            "N3: the climb moves no workspace and relabels no tile",
+          ).toEqual(Schema.decodeUnknownSync(View)({ workspaces: model.workspaces, tiles: model.tiles }));
+          const w: World = {
+            model: s.model,
+            view: Schema.decodeUnknownSync(View)(s.view),
+            waiting: [],
+            stops: [],
+            next: 9_000,
+            at: 1,
+            new: value,
+          };
+
+          // Each start v1 left waiting is answered after the climb: its tile shows the checklist.
+          for (const start of model.starting) {
+            const cmd = { type: "start_child", program: "fabrika/checklist", name: start.name };
+            take(p, w, { type: "start_child_ok", cmd, value: started(cmd, "started", w), at: 2 }, true);
+            expect(
+              w.view.tiles.find((t) => t.id === start.tile)?.program,
+              `N3: the ${start._tag} v1 left waiting makes a checklist tile under tezgah.new ${value}`,
+            ).toBe("fabrika/checklist");
+          }
+
+          // init set tezgah.new: the next split asks for it.
+          const from = live(w.view)[0]!;
+          const tile = typeId("tile", 8_000);
+          const e = take(p, w, { type: "did", does: DOES.right, from, via, tile }, false);
+          expect(
+            starts(e.cmds).map(asked),
+            `N3: after the climb, a split asks for the tezgah.new init was handed, ${value}`,
+          ).toEqual([{ program: value, name: Workspace.childName(value, tileId(tile)) }]);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
 });

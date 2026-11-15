@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -471,11 +471,17 @@ it.live("scenario: requests that reach a fresh Worker while its first read of th
   ),
 );
 
-/** One dev.ts in its own scoped home, its output collected as it comes. Scope close kills it. */
-const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<string, string>>) {
+/** One dev.ts in its own scoped home, its output collected as it comes, with `person` as the
+ *  person's file when given. Scope close kills it. */
+const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<string, string>>, person?: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t664-dev-" });
+
+  if (person !== undefined) {
+    yield* fs.writeFileString(path.join(folder, "fabrika.toml"), person);
+  }
+
   const app = path.resolve(import.meta.dirname, "..");
   const key = founding();
   const child = yield* ChildProcess.make(
@@ -514,7 +520,7 @@ const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<st
     Stream.runForEach((text) => Ref.update(output, (o) => o + text)),
     Effect.forkScoped,
   );
-  return { child, output: Ref.get(output) };
+  return { child, output: Ref.get(output), folder };
 });
 
 describe("L12, startup uses the selected port, and a taken port stops naming instance.port", () => {
@@ -552,5 +558,55 @@ describe("L12, startup uses the selected port, and a taken port stops naming ins
         }
       }
     }).pipe(Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
+  );
+});
+
+// Ticket 1042, next/ (a new tile opens the shell, through the setting `tezgah.new`): law N7 of the
+// approved plan. Written before the setting exists. dev.ts loads the settings, then checks
+// `pack.fabrika.settings.tezgah.new` against the build's programs with `refuseNew`, before the build
+// and before anything starts; the setting is a person's, so a repo's file that sets it is refused.
+const NEW = "pack.fabrika.settings.tezgah.new";
+const PROGRAMS = ["fabrika/checklist", "fabrika/counter", "fabrika/fabsh"] as const;
+
+describe("Ticket 1042 N7: a start refuses a tezgah.new the build lacks", () => {
+  it.live(
+    "scenario: N7: a person's file naming fabrika/notes stops dev.ts before the build in refuseNew's words, and no instance starts; a repo file that sets the key is refused as outside its scope",
+    () =>
+      // scenario: one real dev.ts start in a temp home, since what is under test is that the start
+      // stops before the build, and one load of a repo's file, the same loader dev.ts runs (plan N7).
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem,
+          path = yield* Path.Path;
+        const { port } = yield* held;
+        const started = yield* dev(port, {}, `[pack.fabrika.settings.tezgah]\nnew = "fabrika/notes"\n`);
+        expect(yield* started.child.exitCode, "N7: dev.ts stops").not.toBe(0);
+        // The output stream may still be draining after the exit.
+        yield* Effect.sleep("200 millis");
+        const said = yield* started.output;
+
+        for (const word of [NEW, "fabrika/notes", "$FABRIKA_HOME/fabrika.toml", ...PROGRAMS]) {
+          expect(said, `N7: the words the start stops with name ${word}`).toContain(word);
+        }
+
+        expect(said, "N7: no instance starts").not.toContain('{"ready":');
+        expect(yield* fs.exists(path.join(started.folder, "build")), "N7: the start stops before the build").toBe(
+          false,
+        );
+
+        const h = yield* home;
+        const repo = yield* Effect.exit(
+          Load.load({
+            ...h.places,
+            repo: { name: REPO, text: `[pack.fabrika.settings.tezgah]\nnew = "fabrika/fabsh"\n` },
+            env: {},
+            flags: {},
+            version: "0.0.0",
+          }),
+        );
+        expect(
+          Exit.isFailure(repo) ? Cause.findErrorOption(repo.cause) : null,
+          "N7: a repo's file that sets tezgah.new is refused as outside the setting's scope",
+        ).toMatchObject({ _tag: "Some", value: { _tag: "SettingsError", reason: "scope" } });
+      }).pipe(Effect.provide([services, FetchHttpClient.layer])),
   );
 });
