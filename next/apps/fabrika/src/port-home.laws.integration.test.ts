@@ -36,13 +36,12 @@
 import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
-// edge: Effect SQL has no read-only open of another process's SQLite file, which the T833 law reads
-import { DatabaseSync } from "node:sqlite";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
@@ -542,15 +541,16 @@ const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
       continue;
     }
 
-    const raw = yield* Effect.acquireUseRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, file), { readOnly: true })),
-      (db) =>
+    const raw = yield* TestDatabase.open(path.join(home, file), { readOnly: true }).pipe(
+      Effect.orDie,
+      Effect.flatMap((db) =>
         Effect.sync(() =>
           db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
             ? null
             : db.prepare(query).all(),
         ),
-      (db) => Effect.sync(() => db.close()),
+      ),
+      Effect.scoped,
     );
 
     if (raw !== null) {

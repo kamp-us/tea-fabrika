@@ -4,10 +4,10 @@
 // copy, and P12's browser protocol driver. Every folder, instance, watcher, child and browser is
 // acquired in a scope and given back by it (0061).
 import { execFileSync } from "node:child_process";
-import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's persisted span output
 import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
@@ -225,10 +225,8 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
   for (const file of files) {
     yield* Effect.scoped(
       Effect.gen(function* () {
-        const db = yield* Effect.acquireRelease(
-          Effect.sync(() => new DatabaseSync(`${home}/${file}`, { readOnly: true })),
-          (db) => Effect.sync(() => db.close()),
-        );
+        // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
+        const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
         const tables = new Set(
           db
             .prepare("SELECT name FROM sqlite_master WHERE type='table'")

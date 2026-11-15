@@ -4,15 +4,19 @@
 // temp file can be gone before the scan reads it: that turned L17 red on CI run 43562939099. And the
 // span queue `brain.records.sqlite` is in WAL mode, so a row deleted once delivered stays on disk in
 // its `-wal` file only until the clean stop closes the database. Each race here is certain, not timed.
-import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
 
 const SEED = 119120;
+
+/** A real WAL database, as the brain's span queue keeps one. The queue is the product's file, so
+ *  `TestDatabase.open` sets nothing in it, and each law sets the queue's own pragmas itself. */
+const spanQueue = (file: string) => TestDatabase.open(file).pipe(Effect.orDie);
 const NAMES = ["brain.last.json", "brain.pending.jsonl", "records/brain.json"] as const;
 
 /** Some of the brain's files, and which of them a write renames into place under each listing. */
@@ -97,10 +101,7 @@ describe("stored", () => {
                 path = yield* Path.Path;
               const dir = yield* fs.makeTempDirectoryScoped({ prefix: "stored." });
               const sentinel = `span_${secret}`;
-              const db = yield* Effect.acquireRelease(
-                Effect.sync(() => new DatabaseSync(path.join(dir, "brain.records.sqlite"))),
-                (db) => Effect.sync(() => (db.isOpen ? db.close() : undefined)),
-              );
+              const db = yield* spanQueue(path.join(dir, "brain.records.sqlite"));
               // The span queue's own pragmas (dev-recording.ts), and SQLite's default secure_delete.
               db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA secure_delete=0");
               db.exec("CREATE TABLE spans (id INTEGER PRIMARY KEY, body TEXT NOT NULL)");
@@ -149,10 +150,7 @@ describe("stored", () => {
                   yield* fs.writeFileString(path.join(dir, name), JSON.stringify(`${name}_${secret}`));
                 }
 
-                const db = yield* Effect.acquireRelease(
-                  Effect.sync(() => new DatabaseSync(path.join(dir, "brain.records.sqlite"))),
-                  (db) => Effect.sync(() => (db.isOpen ? db.close() : undefined)),
-                );
+                const db = yield* spanQueue(path.join(dir, "brain.records.sqlite"));
                 db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA secure_delete=0");
                 db.exec("CREATE TABLE spans (id INTEGER PRIMARY KEY, body TEXT NOT NULL)");
                 const insert = db.prepare("INSERT INTO spans (body) VALUES (?)");
