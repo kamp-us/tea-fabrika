@@ -8,7 +8,7 @@ import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
 
-const limits = { writes: 5, bytes: 31, letter: { writes: 3, bytes: 23 } };
+const limits = { writes: 5, bytes: 31, message: { writes: 3, bytes: 23 } };
 const cell = fc.record({ move: fc.nat(), pick: fc.nat(), amount: fc.nat() });
 const tape = fc.array(cell, { minLength: 12, maxLength: 60, size: "max" });
 const options = { seed: 119120, numRuns: 100 };
@@ -17,7 +17,7 @@ describe("P34c quota machine", () => {
   it("Q1 and Q5 committed bundles alone spend room; failed proposals leave use unchanged", () => {
     fc.assert(
       fc.property(tape, (cells) => {
-        const machine = Quota.make({ account: "sample/alpha", channel: "program", limits });
+        const machine = Quota.make({ account: Quota.Account.cases.program.make({ program: "sample/alpha" }), limits });
         let model = machine.init(null, {})[0];
         let at = 1;
         let bytes = 0;
@@ -97,7 +97,10 @@ describe("P34c quota machine", () => {
   it("Q8 recovery bytes leave the rolling window, stay in totals, and clock movement cannot clear a fault", () => {
     fc.assert(
       fc.property(tape, (cells) => {
-        const machine = Quota.make({ account: "alpha:1/project", channel: "recovery", limits });
+        const machine = Quota.make({
+          account: Quota.Account.cases.recovery.make({ name: "alpha:1", location: "project" }),
+          limits,
+        });
         let model = machine.init(null, {})[0];
         let at = 1;
         let totalBytes = 0;
@@ -164,31 +167,34 @@ describe("P34c quota machine", () => {
   });
 
   // replay is supplied by trusted storage after checking the committed inbox and receipt.
-  // Its letter/recovery pair identifies room used once; ordinary request data never reaches it.
-  it("Q18 replay room is spent once per accepted letter and recovery, apart from the minute window", () => {
+  // Its message/recovery pair identifies room used once; ordinary request data never reaches it.
+  it("Q18 replay room is spent once per accepted message and recovery, apart from the minute window", () => {
     fc.assert(
       fc.property(tape, (cells) => {
-        const machine = Quota.make({ account: "alpha:1/process", channel: "recovery", limits });
+        const machine = Quota.make({
+          account: Quota.Account.cases.recovery.make({ name: "alpha:1", location: "process" }),
+          limits,
+        });
         let model = machine.init(null, {})[0];
         const accepted: string[] = [];
         let bytes = 0;
         let writes = 0;
 
         for (const [n, c] of cells.entries()) {
-          const letter = `accepted:${n}:${c.amount}`;
-          accepted.push(letter);
+          const message = `accepted:${n}:${c.amount}`;
+          accepted.push(message);
           const next = applyCell(machine, model, {
             type: "propose",
             at: 1,
             operation: `replay:${n}`,
-            writes: limits.letter.writes,
-            bytes: limits.letter.bytes,
+            writes: limits.message.writes,
+            bytes: limits.message.bytes,
             ahead: { writes: 0, bytes: 0 },
-            replay: { letter, recovery: "restart:1" },
+            replay: { message, recovery: "restart:1" },
           })[0];
           expect(next.decision._tag).toBe("admitted");
-          writes += limits.letter.writes;
-          bytes += limits.letter.bytes;
+          writes += limits.message.writes;
+          bytes += limits.message.bytes;
           expect(next.total).toEqual({ writes, bytes });
           // The generated history grows beyond both minute caps at the same arrival time.
           expect(next.writes).toBe(0);
@@ -196,7 +202,7 @@ describe("P34c quota machine", () => {
           model = machine.init(next, {})[0];
         }
 
-        // Spend the entire fixed allowance, then try to spend an earlier letter's room again.
+        // Spend the entire fixed allowance, then try to spend an earlier message's room again.
         model = applyCell(machine, model, {
           type: "propose",
           at: 1,
@@ -206,7 +212,7 @@ describe("P34c quota machine", () => {
           ahead: { writes: 0, bytes: 0 },
         })[0];
         expect(model.decision._tag).toBe("admitted");
-        const letter = accepted[cells[0]!.pick % accepted.length]!;
+        const message = accepted[cells[0]!.pick % accepted.length]!;
         const twice = applyCell(machine, model, {
           type: "propose",
           at: 1,
@@ -214,12 +220,12 @@ describe("P34c quota machine", () => {
           writes: 1,
           bytes: 1,
           ahead: { writes: 0, bytes: 0 },
-          replay: { letter, recovery: "restart:1" },
+          replay: { message, recovery: "restart:1" },
         })[0];
         expect(twice._tag).toBe("reserve_fault");
 
         if (twice._tag !== "reserve_fault") {
-          throw new Error("a replay cannot spend the same letter's room twice");
+          throw new Error("a replay cannot spend the same message's room twice");
         }
 
         expect(twice.total).toEqual(model.total);
@@ -232,7 +238,7 @@ describe("P34c quota machine", () => {
   it("Q16 Process-local program accounting records exact deltas and has no minute limit", () => {
     fc.assert(
       fc.property(tape, (cells) => {
-        const machine = Quota.make({ account: "alpha:1/process", channel: "local", limits });
+        const machine = Quota.make({ account: Quota.Account.cases.local.make({ name: "alpha:1" }), limits });
         let model = machine.init(null, {})[0];
         let bytes = 0;
         let writes = 0;

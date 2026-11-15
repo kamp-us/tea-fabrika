@@ -16,7 +16,7 @@ import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import type { Sql } from "../Sql.ts";
 import { ExitReason } from "./ExitReason.ts";
-import { Mailbox } from "./Mailbox.ts";
+import { letterLine, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 import { MailFailure, ProgramMail } from "./ProgramMail.ts";
@@ -56,11 +56,17 @@ const Tape = Schema.Array(Schema.Struct({ pick: Nat, alt: Nat, text: Schema.Stri
   Schema.isMaxLength(35),
 );
 
+// A full program identity's two parts, drawn so half of them name the program `project`.
+const Identity = Schema.Struct({
+  pack: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,11}$/)),
+  project: Schema.Boolean,
+});
+
 const opts = { arbitrary: { seed: 119120, runs: 40, size: 100 } };
 
 const recovery = {
-  project: { writes: 160, bytes: 74_080, letter: { writes: 10, bytes: 5_469 } },
-  process: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+  project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
+  process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
 };
 
 const rows = (sql: Sql) => {
@@ -81,7 +87,10 @@ const world = Effect.fnUntraced(function* (
   open: Effect.Effect<Store, never, Scope.Scope>,
   writes = 6,
   storage = 1_000_000,
+  alpha = PROGRAM,
 ) {
+  // The alpha names may run under another full identity, such as one whose program is `project`.
+  const identityFor = (name: string) => (name.startsWith("alpha:") ? alpha : OTHER);
   const store = yield* open;
   let sequence = 0;
   const pid = () => `process_0000000000e008${(++sequence).toString(16).padStart(12, "0")}`;
@@ -107,7 +116,7 @@ const world = Effect.fnUntraced(function* (
         Start.cases.first.make({
           id: `boot:${name}`,
           name,
-          code: { program: program(name), hash: "test" },
+          code: { program: identityFor(name), hash: "test" },
         }),
         { ...from(), by: BRAIN },
       ),
@@ -158,7 +167,7 @@ const world = Effect.fnUntraced(function* (
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P34c program accounts on real SQL", () => {
     it.effect.prop(
-      "Q1/p118 names and lives share their full program identity; each letter costs two writes",
+      "Q1/p118 names and lives share their full program identity; each message costs two writes",
       { tape: Tape },
       ({ tape }) =>
         Effect.scoped(
@@ -169,7 +178,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             let now = 1_000;
             let lastArrival = now;
             let refused = 0;
-            let letters = 0;
+            let messages = 0;
 
             for (const [n, cell] of tape.entries()) {
               // Always reach the wall before optional clock moves. Choices then come from current history.
@@ -200,7 +209,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 lastArrival = at;
 
                 if (cost === 2) {
-                  letters++;
+                  messages++;
                 }
               }
 
@@ -216,7 +225,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             }
 
             expect(refused).toBeGreaterThan(0);
-            expect(letters).toBeGreaterThan(0);
+            expect(messages).toBeGreaterThan(0);
             // Exhaust only alpha at one clock; beta must still admit at least its own remaining room.
             yield* TestClock.setTime(lastArrival + 60_001);
 
@@ -232,25 +241,45 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     );
 
     it.effect.prop(
-      "Q2/p119 and Q17 admission includes full UTF-8 entries and the step charged ahead",
-      { tape: Tape },
-      ({ tape }) =>
+      "Q2/p119 and Q17 admission includes full UTF-8 entries and the step charged ahead, whatever the program is named",
+      { tape: Tape, identity: Identity },
+      ({ tape, identity }) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const w = yield* world(open, 13_760, 8_000);
+            // A program's name is data: one named `<pack>/project` meets the same program walls.
+            const alpha = `${identity.pack}/${identity.project ? "project" : identity.pack}`;
+            const w = yield* world(open, 13_760, 8_000, alpha);
             let count = 0;
             let refusal = 0;
+            // What an admitted message and its step cost past their text: learned from the last one.
+            let overhead = 0;
+            const textBytes = (text: string) => new TextEncoder().encode(JSON.stringify(text)).length - 2;
 
             for (const [n, cell] of tape.entries()) {
               const name = required(NAMES[cell.pick % 2]);
-              const before = yield* w.status(PROGRAM);
+              const before = yield* w.status(alpha);
               const remaining = Math.max(0, w.limits.storage - before.bytes - before.ahead.bytes);
               // Chosen relative to current remaining bytes; non-ASCII, escaping and metadata all count.
+              // Every third one is aimed at the room left, a drawn few bytes either side of it.
               const length = cell.alt % 2 === 0 ? Math.ceil(remaining / 4) + 1 : Math.min(4, remaining);
-              const text = `${cell.text}${"😀é\n".repeat(length)}`;
+              const text =
+                cell.alt % 3 === 0 && overhead > 0
+                  ? "a".repeat(Math.max(0, remaining - overhead + (cell.pick % 13) - 6))
+                  : `${cell.text}${"😀é\n".repeat(length)}`;
+              const id = `unicode:${n}`;
               const saved = w.snapshot();
-              const answer = yield* w.input(name, `unicode:${n}`, text);
-              const after = yield* w.status(PROGRAM);
+              // The door's trial is this append's own admission, at the place the message will land.
+              const trial = yield* w.run(
+                Quotas.use((q) => q.admits(name, id, letterLine(from(), { type: "input", text }), 0)),
+              );
+              expect(w.snapshot()).toEqual(saved);
+              const answer = yield* w.input(name, id, text);
+              const after = yield* w.status(alpha);
+              expect(trial).toBe(answer._tag === "placed");
+
+              if (answer._tag === "placed") {
+                overhead = after.bytes + after.ahead.bytes - before.bytes - before.ahead.bytes - textBytes(text);
+              }
 
               if (answer._tag === "refused") {
                 expect(answer.reason).toBe("quota");
@@ -266,7 +295,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               }
 
               yield* w.store.reopen;
-              expect(yield* w.status(PROGRAM)).toEqual(after);
+              expect(yield* w.status(alpha)).toEqual(after);
             }
 
             // Force a positive growth refusal in every shortened tape.
@@ -282,7 +311,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     );
 
     it.effect.prop(
-      "Q4 program mail charges its sender for receipt, letter and step, or commits none",
+      "Q4 program mail charges its sender for receipt, message and step, or commits none",
       { tape: Tape },
       ({ tape }) =>
         Effect.scoped(

@@ -875,7 +875,7 @@ const world = (
     localUsage: (pid: string) =>
       QuotasSql.accounting(nodeSql(processFor(pid).db), {
         name: nameFor(pid)!,
-        limits: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+        limits: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
       }).status,
     close: async () => {
       const index = closers.indexOf(close);
@@ -1831,9 +1831,10 @@ describe("P34c live object accounting", () => {
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
           const client = yield* Effect.promise(() => w.admit());
-          const send = (pid: string, letter: string) =>
+          // `letter` is the door's own key for the message id (0547 keeps wire names).
+          const send = (pid: string, id: string) =>
             Effect.promise(() =>
-              w.project.route(client, "process.send", { pid, letter, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+              w.project.route(client, "process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
           expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({

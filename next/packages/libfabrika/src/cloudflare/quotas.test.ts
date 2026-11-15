@@ -4,6 +4,8 @@ import { ByteSize, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { expectTypeOf } from "vitest";
 import { Appended } from "../ledger/Log.ts";
+import { Selection } from "../ledger/Referee.ts";
+import { Writer } from "../ledger/WritePolicy.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import type { QuotasError, RecoveryReserveExhausted } from "../processes/Quotas.ts";
 import * as Declarations from "../settings/Declarations.ts";
@@ -59,6 +61,28 @@ describe("P34c typed quota boundaries", () => {
       }
 
       expect(Schema.is(MailRefusal)("quota")).toBe(true);
+    },
+    { arbitrary: { seed: 119120, runs: 100 } },
+  );
+
+  // 0214: the writer trusted code names around a write, and the ledger read accounting asks for,
+  // are each one tagged case, so no reader tells them apart by which key a value happens to hold.
+  it.prop(
+    "Q14 the trusted writer and the accounting read are closed tagged unions",
+    { word: Schema.String, pos: Nat },
+    ({ word, pos }) => {
+      expectTypeOf<Writer["_tag"]>().toEqualTypeOf<"runtime" | "own">();
+      expectTypeOf<Selection["_tag"]>().toEqualTypeOf<"all" | "stream" | "entry">();
+      const writer = (pos % 2 === 0 ? Writer.cases.runtime : Writer.cases.own).make({ process: word });
+      const writers = Schema.fromJsonString(Writer);
+      expect(Schema.decodeSync(writers)(Schema.encodeSync(writers)(writer))).toEqual(writer);
+      // A value that names both cases, or neither, is no writer.
+      expect(Schema.decodeUnknownResult(Writer)({ runtime: word, own: word })._tag).toBe("Failure");
+      expect(Schema.decodeUnknownResult(Writer)({ process: word })._tag).toBe("Failure");
+      const read = Selection.cases.entry.make({ stream: `${word}/inbox`, pos });
+      const reads = Schema.fromJsonString(Selection);
+      expect(Schema.decodeSync(reads)(Schema.encodeSync(reads)(read))).toEqual(read);
+      expect(Schema.decodeUnknownResult(Selection)({ stream: word, at: pos })._tag).toBe("Failure");
     },
     { arbitrary: { seed: 119120, runs: 100 } },
   );

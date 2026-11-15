@@ -31,14 +31,14 @@ const FROM = {
 };
 
 const recovery = {
-  project: { writes: 160, bytes: 74_080, letter: { writes: 10, bytes: 5_469 } },
-  process: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+  project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
+  process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
 };
 
 // The recovery setting's value, as the settings snapshot holds it once decoded.
 const declaredRecovery = {
-  project: { writes: 160, bytes: ByteSize.bytes(74_080), letter: { writes: 10, bytes: ByteSize.bytes(5_469) } },
-  process: { writes: 290, bytes: ByteSize.bytes(207_410), letter: { writes: 50, bytes: ByteSize.bytes(18_790) } },
+  project: { writes: 160, bytes: ByteSize.bytes(74_080), message: { writes: 10, bytes: ByteSize.bytes(5_469) } },
+  process: { writes: 290, bytes: ByteSize.bytes(207_410), message: { writes: 50, bytes: ByteSize.bytes(18_790) } },
 };
 
 const field = (value: Buffer | string) => {
@@ -160,8 +160,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
-  return Effect.fnUntraced(function* (process: string, letter: string, input: unknown) {
-    const reply = yield* call("process.send", { pid: process, letter, m: input, sentAt: FROM.sentAt, seen: 0 });
+  // `letter` is the door's own key for the message id (0547 keeps wire names).
+  return Effect.fnUntraced(function* (process: string, id: string, input: unknown) {
+    const reply = yield* call("process.send", { pid: process, letter: id, m: input, sentAt: FROM.sentAt, seen: 0 });
     return reply;
   });
 });
@@ -362,7 +363,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);
           }
 
-          // The last admitted letter can still fail and be recovered with the program at its write cap.
+          // The last admitted message can still fail and be recovered with the program at its write cap.
           yield* w.send(alpha, "poison", { type: "throw" });
 
           if (mode === "reserve") {

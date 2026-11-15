@@ -117,9 +117,9 @@ it.live.prop(
     field: Schema.Literals([
       "storage",
       "project.bytes",
-      "project.letter.bytes",
+      "project.message.bytes",
       "process.bytes",
-      "process.letter.bytes",
+      "process.message.bytes",
     ]),
     suffix: Schema.String,
   },
@@ -152,14 +152,14 @@ it.live.prop(
           project:
             field === "project.bytes"
               ? { ...project, bytes: invalid }
-              : field === "project.letter.bytes"
-                ? { ...project, letter: { ...project.letter, bytes: invalid } }
+              : field === "project.message.bytes"
+                ? { ...project, message: { ...project.message, bytes: invalid } }
                 : project,
           process:
             field === "process.bytes"
               ? { ...process, bytes: invalid }
-              : field === "process.letter.bytes"
-                ? { ...process, letter: { ...process.letter, bytes: invalid } }
+              : field === "process.message.bytes"
+                ? { ...process, message: { ...process.message, bytes: invalid } }
                 : process,
         };
       }

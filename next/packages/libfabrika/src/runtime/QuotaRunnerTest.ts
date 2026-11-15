@@ -16,12 +16,12 @@ export interface Limits {
     readonly project: {
       readonly writes: number;
       readonly bytes: number;
-      readonly letter: { readonly writes: number; readonly bytes: number };
+      readonly message: { readonly writes: number; readonly bytes: number };
     };
     readonly process: {
       readonly writes: number;
       readonly bytes: number;
-      readonly letter: { readonly writes: number; readonly bytes: number };
+      readonly message: { readonly writes: number; readonly bytes: number };
     };
   };
 }
@@ -30,8 +30,8 @@ export const defaults: Limits = {
   writes: 13_760,
   storage: 1_000_000_000,
   recovery: {
-    project: { writes: 160, bytes: 74_080, letter: { writes: 10, bytes: 5_469 } },
-    process: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+    project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
+    process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
   },
 };
 
@@ -183,7 +183,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
     );
 
     it.effect.prop(
-      "Q17 an admitted letter settles its step once at the exact cap and after reopen",
+      "Q17 an admitted message settles its step once at the exact cap and after reopen",
       { tape: Tape },
       ({ tape }) =>
         Effect.scoped(
@@ -320,7 +320,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const old = yield* w.program("sample/alpha");
             const location = required(tape[0]).pick % 3;
             const resource = required(tape[0]).amount % 2 === 0 ? "writes" : "storage";
-            // A limit of N admits N writes, as Q17's cap of 2 admits a letter that counts 2. So the room
+            // A limit of N admits N writes, as Q17's cap of 2 admits a message that counts 2. So the room
             // left is drawn. With none, the call's first recovery write runs out. With one at the
             // Project alone, the call's recovery writes there may fit, and then a later one, on a
             // saved alarm, runs out.
@@ -420,17 +420,17 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
           Effect.gen(function* () {
             yield* TestClock.setTime(1_000);
             const w = yield* open(defaults);
-            const letters: string[] = [];
+            const messages: string[] = [];
 
             for (const [n, c] of tape.entries()) {
-              // Beyond the measured 350: generated histories include up to 1,001 accepted letters.
+              // Beyond the measured 350: generated histories include up to 1,001 accepted messages.
               const length = c.length;
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
                 const m = j === length - 1 ? { type: "inc", text: "é😀".repeat(c.amount % 256) } : { type: "inc" };
                 expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
-                letters.push(id);
+                messages.push(id);
               }
 
               yield* w.drain("alpha:1");
@@ -452,7 +452,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               yield* w.drain("alpha:1");
               expect((yield* w.local("alpha:1")).fault).toBeNull();
               expect(yield* w.program("sample/alpha")).toEqual(full);
-              expect(yield* w.checkpoint("alpha:1")).toHaveProperty("saved.model.count", letters.length);
+              expect(yield* w.checkpoint("alpha:1")).toHaveProperty("saved.model.count", messages.length);
               const before = yield* w.entries;
               yield* w.restart("alpha:1", `restart:${n}`, true);
               yield* w.drain("alpha:1");
@@ -460,7 +460,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               expect(yield* w.program("sample/alpha")).toEqual(full);
               const after = yield* w.entries;
 
-              for (const id of letters) {
+              for (const id of messages) {
                 expect(
                   after.filter((e) => e._tag === "stepped" && e.id === `step:${id}`).length,
                 ).toBeGreaterThanOrEqual(1);

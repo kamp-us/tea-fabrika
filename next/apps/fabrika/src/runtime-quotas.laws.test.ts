@@ -18,9 +18,12 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import { hands } from "@kampus/libfabrika/runtime/Hands";
 import * as QuotaRunnerTest from "@kampus/libfabrika/runtime/QuotaRunnerTest";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Command } from "@kampus/libfabrika/tasks/Task";
+import { targetStream } from "@kampus/libfabrika/tasks/Tasks";
 import {
   commitReply,
   configureProcess,
@@ -101,8 +104,9 @@ const identity = () => {
   };
 };
 
-// One program under two identities. It counts `inc`, throws on `throw`, and on `tell` mails an
-// `inc` to another registered name; `told` and `failed` record the answer its Send got.
+// One program under two identities. It counts `inc`, throws on `throw`, on `tell` mails an `inc`
+// to another registered name, and on `ask` asks the hands for a task; `told` and `failed` record
+// the answers its Cmds got.
 const Model = Schema.Struct({
   count: Schema.Int,
   told: Schema.Int,
@@ -122,6 +126,7 @@ const Msg = Schema.Union([
     to: Schema.NonEmptyString,
     parent: Schema.optionalKey(Schema.String),
   }),
+  Schema.Struct({ type: Schema.Literal("ask"), parent: Schema.optionalKey(Schema.String) }),
 ]);
 
 const worker = (name: string) => ({
@@ -129,7 +134,7 @@ const worker = (name: string) => ({
   machine: Machine.make({
     model: Model,
     msg: Msg,
-    cmds: [send],
+    cmds: [send, hands],
     init: (saved) => [saved ?? { count: 0, told: 0, failed: [], text: "" }, []],
     update: {
       inc: (s, m) => [{ ...s, count: s.count + 1, text: m.text ?? s.text }, []],
@@ -137,8 +142,11 @@ const worker = (name: string) => ({
         throw new TypeError("quota wiring fixture");
       },
       tell: (s, m) => [s, [send({ to: m.to, m: { type: "inc" } })]],
+      ask: (s) => [s, [hands({ command: Command.cases.git_version.make({}) })]],
       send_ok: (s) => [{ ...s, told: s.told + 1 }, []],
       send_err: (s, m) => [{ ...s, failed: [...s.failed, m.error._tag] }, []],
+      hands_ok: (s) => [s, []],
+      hands_err: (s, m) => [{ ...s, failed: [...s.failed, m.error._tag] }, []],
     },
   }),
   state: { v: 1, schema: Model, upgrades: [] },
@@ -149,6 +157,7 @@ const worker = (name: string) => ({
     inc: { _tag: "write", schema: Msg, description: "Count", personOnly: false },
     throw: { _tag: "write", schema: Msg, description: "Fail", personOnly: false },
     tell: { _tag: "write", schema: Msg, description: "Mail another name", personOnly: false },
+    ask: { _tag: "write", schema: Msg, description: "Ask the hands", personOnly: false },
   },
   outputs: {},
   writes: {},
@@ -169,7 +178,7 @@ const betaCode = built("beta");
 const allowance = (limits: Limits["recovery"]["project"]) => ({
   writes: limits.writes,
   bytes: ByteSize.bytes(limits.bytes),
-  letter: { writes: limits.letter.writes, bytes: ByteSize.bytes(limits.letter.bytes) },
+  message: { writes: limits.message.writes, bytes: ByteSize.bytes(limits.message.bytes) },
 });
 
 /** The limits as the three quota settings' values, which the start's settings snapshot carries. */
@@ -232,6 +241,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   table.programs["quota/alpha"] = alphaCode;
   table.programs["quota/beta"] = betaCode;
   const key = identity();
+  // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
+  const handsKey = identity();
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
@@ -266,9 +277,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     Effect.flatMap(required(runtimes.get(store)).contextEffect, (services) =>
       ProcessService.use(use).pipe(Effect.provideContext(services)),
     );
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
-  const env = {
-    INSTANCE: JSON.stringify(
+  /** The start's whole input, as `INSTANCE` carries it, with these limits under its own start id. */
+  const instance = (values: Limits, start?: string) =>
+    JSON.stringify(
       RecordWireTest.settingsFixture({
         name: PROJECT,
         person: PERSON,
@@ -276,11 +287,15 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         window: key.raw,
         port: 18787,
         build: "quota-laws",
+        ...(start === undefined ? {} : { start }),
         mail: { grants: everyone },
         limits: { recordBytes: 1_000_000_000 },
-        values: declared(limits),
+        values: { ...declared(values), handsTarget: handsKey.fingerprint },
       }),
-    ),
+    );
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
+  const env = {
+    INSTANCE: instance(limits),
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
       getByName: () =>
@@ -597,6 +612,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     pid,
     view,
     settle,
+    handsKey: handsKey.fingerprint,
     accounts,
     rows: Effect.gen(function* () {
       const found = yield* Effect.forEach(NAMES, storeFor, { concurrency: 1 });
@@ -611,12 +627,20 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       ),
     head: Effect.sync(() => accountingEntries(sql).at(-1)?.rev ?? 0),
     /** One input through the door, to the name's live process. */
-    input: Effect.fnUntraced(function* (name: string, letter: string, m: unknown) {
+    input: Effect.fnUntraced(function* (name: string, id: string, m: unknown) {
       const to = yield* pid(name);
-      return yield* project((p) => p.route(client, "process.send", { pid: to, letter, m, sentAt: SENT, seen: 0 }));
+      // `letter` is the door's own key for the message id (0547 keeps saved and wire names).
+      return yield* project((p) => p.route(client, "process.send", { pid: to, letter: id, m, sentAt: SENT, seen: 0 }));
     }),
     reopen: Effect.gen(function* () {
       yield* halt;
+      yield* boot;
+      yield* project((p) => p.info);
+    }),
+    /** A platform restart into a new start whose program storage wall is the decided ceiling. */
+    widen: Effect.gen(function* () {
+      yield* halt;
+      Reflect.set(env, "INSTANCE", instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
       yield* boot;
       yield* project((p) => p.info);
     }),
@@ -661,7 +685,7 @@ describe("P34c live wiring, both object stores", () => {
             const program = programFor(name);
             const other = required(PROGRAMS.find((id) => id !== program));
             // A name is crashed at most twice, so the supervisor's own restart limit is never the subject.
-            const moves = ["inc", "tell", ...(required(crashes.get(name)) < 2 ? ["throw"] : [])];
+            const moves = ["inc", "tell", "ask", ...(required(crashes.get(name)) < 2 ? ["throw"] : [])];
             const move = required(moves[c.amount % moves.length]);
             const before = yield* w.accounts;
             const head = yield* w.head;
@@ -691,13 +715,17 @@ describe("P34c live wiring, both object stores", () => {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
               const m =
-                move === "tell" ? { type: "tell", to: peer } : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+                move === "tell"
+                  ? { type: "tell", to: peer }
+                  : move === "ask"
+                    ? { type: "ask" }
+                    : { type: "inc", text: "é😀".repeat(c.amount % 64) };
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
                 told.set(name, required(told.get(name)) + 1);
                 counted.set(peer, required(counted.get(peer)) + 1);
-              } else {
+              } else if (move === "inc") {
                 counted.set(name, required(counted.get(name)) + 1);
               }
 
@@ -705,7 +733,12 @@ describe("P34c live wiring, both object stores", () => {
                 Effect.gen(function* () {
                   const sender = yield* w.view(name);
                   const receiver = yield* w.view(peer);
+                  // A hands Cmd is done here once its task request points the hands key at it.
+                  const requested =
+                    move !== "ask" ||
+                    (yield* w.entries(head)).some((entry) => entry.stream === targetStream(w.handsKey));
                   return (
+                    requested &&
                     sender.told === required(told.get(name)) &&
                     sender.count === required(counted.get(name)) &&
                     receiver.count === required(counted.get(peer))
@@ -714,8 +747,9 @@ describe("P34c live wiring, both object stores", () => {
               );
               const after = yield* w.accounts;
               const fresh = cost(yield* w.entries(head));
-              // The letter, its step, a Send's receipt, the mailed letter and its step, the answer
-              // letter and its step: all of it is the work of the program that took the input.
+              // The message, its step, a Send's receipt, the mailed message and its step, the answer
+              // message and its step, a hands task's request and its pointer for the hands key: all
+              // of it is the work of the program that took the input.
               const paid = required(after.program[program]);
               const owed = required(before.program[program]);
               expect({ writes: paid.writes - owed.writes, bytes: paid.bytes - owed.bytes }).toEqual(fresh);
@@ -768,13 +802,13 @@ describe("P34c live wiring, both object stores", () => {
           const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
           let refusals = 0;
           let admitted = 0;
-          const one = Effect.fnUntraced(function* (name: string, letter: string, text: string) {
+          const one = Effect.fnUntraced(function* (name: string, id: string, text: string) {
             const program = programFor(name);
             const before = yield* w.accounts;
             const rows = yield* w.rows;
             const head = yield* w.head;
             const used = required(before.program[program]);
-            const reply = yield* w.input(name, letter, { type: "inc", text });
+            const reply = yield* w.input(name, id, { type: "inc", text });
 
             if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
               // The typed answer, before an envelope, a binding, a reply or a local step is saved.
@@ -785,7 +819,7 @@ describe("P34c live wiring, both object stores", () => {
               refusals++;
 
               if (resource === "writes") {
-                // Refused only when the letter and its step do not both fit.
+                // Refused only when the message and its step do not both fit.
                 expect(used.writes + 2).toBeGreaterThan(cap);
               }
 
@@ -805,7 +839,7 @@ describe("P34c live wiring, both object stores", () => {
             expect(resource === "writes" ? paid.writes : paid.bytes).toBeLessThanOrEqual(cap);
 
             if (resource === "storage") {
-              // A letter bigger than the room left is never admitted.
+              // A message bigger than the room left is never admitted.
               expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(cap - used.bytes);
             }
 
@@ -814,6 +848,27 @@ describe("P34c live wiring, both object stores", () => {
 
           // With room for it, the first bare input is admitted: the wall is not shut from the start.
           expect(yield* one("alpha:1", "first", "")).toBe(true);
+
+          if (resource === "storage") {
+            // The write that reaches the cap is admitted, so the door must try a message where it
+            // will land. Aim one, with its step, at the room left, a drawn few bytes short, under an
+            // id as long as the first's, so only its text adds bytes to what the first pair cost.
+            const pair = (ids: ReadonlyArray<string>) =>
+              Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
+            const bare = yield* pair(["first", "step:first"]);
+            const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
+            const text = "a".repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)));
+
+            if (!(yield* one("alpha:1", "aimed", text))) {
+              // A refusal is true only if the message did not fit: with the wall moved away the same
+              // message lands, and its committed charge, the message and its step, passes that room.
+              yield* w.widen;
+              expect(yield* w.input("alpha:1", "aimed", { type: "inc", text })).toMatchObject(accepted);
+              yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
+              expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
+              return;
+            }
+          }
 
           for (const [n, c] of tape.entries()) {
             const name = required(NAMES[c.pick % 2]);

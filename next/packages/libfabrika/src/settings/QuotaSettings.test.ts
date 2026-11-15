@@ -35,8 +35,8 @@ const numeric = (value: unknown): unknown => {
 };
 
 const measured = {
-  project: { writes: 160, bytes: 74_080, letter: { writes: 10, bytes: 5_469 } },
-  process: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+  project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
+  process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
 };
 
 const empty = { value: {}, spans: [] };
@@ -73,12 +73,12 @@ describe("P34c Q11 settings", () => {
           process: {
             writes: Math.ceil(10 * Math.max(29, 25 + 3)),
             bytes: Math.ceil(10 * Math.max(20_741, 5_259 + 6_167 + 8_444)),
-            letter: { writes: Math.ceil(10 * 5), bytes: Math.ceil(10 * 1_879) },
+            message: { writes: Math.ceil(10 * 5), bytes: Math.ceil(10 * 1_879) },
           },
           project: {
             writes: Math.ceil(10 * Math.max(16, 5 + 5 + 6)),
             bytes: Math.ceil(10 * Math.max(7_408, 2_216 + 2_216 + 2_966)),
-            letter: { writes: Math.ceil(10 * 1), bytes: Math.ceil(10 * 546.83) },
+            message: { writes: Math.ceil(10 * 1), bytes: Math.ceil(10 * 546.83) },
           },
         };
         expect(calculated).toEqual(measured);
@@ -112,8 +112,8 @@ describe("P34c Q11 settings", () => {
             ...Object.entries(measured).flatMap(([location, value]) => [
               [`recovery.${location}.writes`, value.writes] as const,
               [`recovery.${location}.bytes`, value.bytes] as const,
-              [`recovery.${location}.letter.writes`, value.letter.writes] as const,
-              [`recovery.${location}.letter.bytes`, value.letter.bytes] as const,
+              [`recovery.${location}.message.writes`, value.message.writes] as const,
+              [`recovery.${location}.message.bytes`, value.message.bytes] as const,
             ]),
           ]);
           const selected = new Map(defaults);
@@ -149,9 +149,9 @@ describe("P34c Q11 settings", () => {
                   {
                     writes: selected.get(`recovery.${location}.writes`),
                     bytes: selected.get(`recovery.${location}.bytes`),
-                    letter: {
-                      writes: selected.get(`recovery.${location}.letter.writes`),
-                      bytes: selected.get(`recovery.${location}.letter.bytes`),
+                    message: {
+                      writes: selected.get(`recovery.${location}.message.writes`),
+                      bytes: selected.get(`recovery.${location}.message.bytes`),
                     },
                   },
                 ]),
@@ -200,9 +200,9 @@ describe("P34c Q11 settings", () => {
               const bad = structuredClone(encoded) as Record<string, Record<string, any>>;
               bad[location]![field] = field === "bytes" ? "0 B" : 0;
               expect(Schema.decodeUnknownResult(recovery.schema)(bad)._tag).toBe("Failure");
-              const letter = structuredClone(encoded) as Record<string, Record<string, any>>;
-              letter[location]!.letter[field] = field === "bytes" ? "0 B" : 0;
-              expect(Schema.decodeUnknownResult(recovery.schema)(letter)._tag).toBe("Failure");
+              const message = structuredClone(encoded) as Record<string, Record<string, any>>;
+              message[location]!.message[field] = field === "bytes" ? "0 B" : 0;
+              expect(Schema.decodeUnknownResult(recovery.schema)(message)._tag).toBe("Failure");
             }
           }
         }),
