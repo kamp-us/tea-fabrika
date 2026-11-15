@@ -5,145 +5,381 @@
       "paths": ["next/apps"]
     },
     {
-      "name": "next-node",
-      "layer": 9,
-      "paths": ["next/packages/libfabrika/src/node"]
-    },
-    {
-      "name": "next-workers",
-      "layer": 8,
-      "paths": ["next/packages/libfabrika/src/cloudflare"]
+      "name": "next-program-windows",
+      "paths": ["next/programs/*/src/**/*.tsx", "next/programs/**/*.test.ts"]
     },
     {
       "name": "next-programs",
       "paths": ["next/programs"]
     },
     {
-      "name": "next-tuval",
-      "paths": [
-        "next/packages/tuval/src/browser",
-        "next/packages/tuval/src/electron",
-        "next/packages/tuval/src/headless"
-      ]
+      "name": "next-tuval-entry",
+      "paths": ["next/packages/tuval/src/index.ts"]
+    },
+    {
+      "name": "next-browser",
+      "paths": ["next/packages/tuval/src/browser"],
+      "imports": ["next-tuval-shared", "next-desktop", "next-transport"]
+    },
+    {
+      "name": "next-electron",
+      "paths": ["next/packages/tuval/src/electron"],
+      "imports": ["next-tuval-shared", "next-desktop", "next-transport", "next-runtime-coordination"]
+    },
+    {
+      "name": "next-headless",
+      "paths": ["next/packages/tuval/src/headless"],
+      "imports": ["next-desktop"]
     },
     {
       "name": "next-tuval-shared",
-      "paths": ["next/packages/tuval/src/dom"]
+      "paths": ["next/packages/tuval/src/dom"],
+      "imports": ["next-desktop"]
     },
     {
       "name": "next-window",
-      "paths": ["next/packages/tuval/src/window"]
+      "paths": ["next/packages/tuval/src/window"],
+      "imports": ["next-desktop", "next-libfabrika-entry", "next-client", "next-tezgah", "next-transport"]
     },
     {
       "name": "next-desktop",
-      "paths": ["next/packages/tuval/src/desktop"]
+      "paths": ["next/packages/tuval/src/desktop"],
+      "imports": ["next-libfabrika-entry"]
+    },
+    {
+      "name": "next-node",
+      "layer": 10,
+      "paths": ["next/packages/libfabrika/src/node"],
+      "imports": [
+        "next-desktop-core",
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
+    },
+    {
+      "name": "next-workers",
+      "layer": 9,
+      "paths": ["next/packages/libfabrika/src/cloudflare"],
+      "imports": [
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-transport",
+        "next-shared"
+      ]
     },
     {
       "name": "next-libfabrika-entry",
-      "layer": 7,
-      "paths": ["next/packages/libfabrika/src/index.ts"]
+      "layer": 8,
+      "paths": ["next/packages/libfabrika/src/index.ts"],
+      "imports": [
+        "next-mcp",
+        "next-schedules",
+        "next-door",
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-tezgah",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-transport",
+        "next-shared"
+      ]
     },
     {
       "name": "next-mcp",
-      "paths": ["next/packages/libfabrika/src/mcp"]
+      "paths": ["next/packages/libfabrika/src/mcp"],
+      "imports": ["next-runtime", "next-transport", "next-shared"]
     },
     {
       "name": "next-desktop-core",
-      "layer": 6,
-      "paths": ["next/packages/libfabrika/src/desktop"]
+      "layer": 7,
+      "paths": ["next/packages/libfabrika/src/desktop"],
+      "imports": [
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-schedules",
-      "layer": 6,
-      "paths": ["next/packages/libfabrika/src/schedules"]
+      "layer": 7,
+      "paths": ["next/packages/libfabrika/src/schedules"],
+      "imports": [
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-transport",
+        "next-shared"
+      ]
     },
     {
       "name": "next-client",
-      "layer": 6,
-      "paths": ["next/packages/libfabrika/src/client"]
+      "layer": 7,
+      "paths": ["next/packages/libfabrika/src/client"],
+      "imports": ["next-runtime", "next-tezgah", "next-transport", "next-shared"]
     },
     {
       "name": "next-door",
-      "layer": 6,
-      "paths": ["next/packages/libfabrika/src/gateway"]
+      "layer": 7,
+      "paths": ["next/packages/libfabrika/src/gateway"],
+      "imports": [
+        "next-runtime",
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-transport",
+        "next-shared"
+      ]
     },
     {
       "name": "next-runtime",
-      "layer": 5,
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/runtime", "next/packages/libfabrika/src/Testing.ts"],
+      "imports": [
+        "next-runtime-coordination",
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-shared"
+      ]
+    },
+    {
+      "name": "next-runtime-coordination",
       "paths": [
-        "next/packages/libfabrika/src/runtime",
-        "next/packages/libfabrika/src/Testing.ts",
+        "next/packages/libfabrika/src/runtime/ProcessStore.ts",
+        "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
+        "next/packages/libfabrika/src/runtime/RecoveryStoreReadsTest.ts",
+        "next/packages/libfabrika/src/runtime/internal/recovery.ts",
         "next/packages/libfabrika/src/coordination/index.ts"
+      ],
+      "imports": [
+        "next-access",
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
       ]
     },
     {
       "name": "next-access",
-      "layer": 4,
-      "paths": ["next/packages/libfabrika/src/access"]
+      "layer": 5,
+      "paths": ["next/packages/libfabrika/src/access"],
+      "imports": [
+        "next-processes",
+        "next-presence",
+        "next-jobs",
+        "next-packs",
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-tezgah",
-      "layer": 4,
-      "paths": ["next/packages/libfabrika/src/tezgah"]
+      "layer": 5,
+      "paths": ["next/packages/libfabrika/src/tezgah"],
+      "imports": ["next-processes", "next-shared"]
     },
     {
       "name": "next-processes",
-      "layer": 3,
-      "paths": ["next/packages/libfabrika/src/processes"]
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/processes"],
+      "imports": [
+        "next-permissions",
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-presence",
-      "layer": 3,
-      "paths": ["next/packages/libfabrika/src/presence"]
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/presence"],
+      "imports": [
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-jobs",
-      "layer": 3,
-      "paths": ["next/packages/libfabrika/src/jobs"]
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/jobs"],
+      "imports": [
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-packs",
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/packs"],
+      "imports": [
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
+    },
+    {
+      "name": "next-permissions",
       "layer": 3,
-      "paths": ["next/packages/libfabrika/src/packs"]
+      "paths": ["next/packages/libfabrika/src/permissions"],
+      "imports": [
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
     },
     {
       "name": "next-ledger",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/ledger"]
+      "paths": ["next/packages/libfabrika/src/ledger"],
+      "imports": ["next-telemetry", "next-shared"]
     },
     {
       "name": "next-codehost",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/codehost"]
+      "paths": ["next/packages/libfabrika/src/codehost"],
+      "imports": ["next-telemetry", "next-shared"]
     },
     {
       "name": "next-ci",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/ci"]
+      "paths": ["next/packages/libfabrika/src/ci"],
+      "imports": ["next-telemetry", "next-shared"]
     },
     {
       "name": "next-transport",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/transport"]
+      "paths": ["next/packages/libfabrika/src/transport"],
+      "imports": ["next-shared"]
     },
     {
       "name": "next-repositories",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/repositories"]
+      "paths": ["next/packages/libfabrika/src/repositories"],
+      "imports": ["next-telemetry", "next-shared"]
     },
     {
       "name": "next-settings",
       "layer": 2,
-      "paths": ["next/packages/libfabrika/src/settings"]
+      "paths": ["next/packages/libfabrika/src/settings"],
+      "imports": ["next-telemetry", "next-shared"]
     },
     {
       "name": "next-telemetry",
       "layer": 1,
-      "paths": ["next/packages/libfabrika/src/telemetry"]
+      "paths": ["next/packages/libfabrika/src/telemetry"],
+      "imports": ["next-shared"]
     },
     {
       "name": "next-id-test-support",
-      "paths": ["next/packages/libfabrika/src/Id.test-support.ts"]
+      "paths": ["next/packages/libfabrika/src/Id.test-support.ts"],
+      "imports": ["next-shared"]
     },
     {
       "name": "next-shared",
@@ -155,7 +391,8 @@
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts",
         "next/packages/libfabrika/src/Testing.test-support.ts"
-      ]
+      ],
+      "imports": []
     },
     {
       "name": "apps",
@@ -202,6 +439,8 @@
       "paths": ["packages/fabrika/src/program"]
     }
   ],
+  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src"],
+  "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
     {
       "from": "packages/pipeline/src/laws/agent.ts",
@@ -414,25 +653,25 @@
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
     },
     {
-      "from": "next/packages/libfabrika/src/telemetry/Records.test.ts",
+      "from": "next/packages/libfabrika/src/telemetry/Records.integration.test.ts",
       "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
     },
     {
-      "from": "next/packages/libfabrika/src/telemetry/Sink.test.ts",
+      "from": "next/packages/libfabrika/src/telemetry/Sink.integration.test.ts",
       "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
     },
     {
-      "from": "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts",
+      "from": "next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts",
       "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
     },
     {
-      "from": "next/packages/libfabrika/src/presence/Connections.test.ts",
+      "from": "next/packages/libfabrika/src/presence/Connections.integration.test.ts",
       "to": "next/packages/libfabrika/src/processes/Process.test-support.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: this test reaches for storage() in processes/Process.test-support.ts, which is another module on the same layer. Ticket 641 moves storage() down beside the ledger test support."

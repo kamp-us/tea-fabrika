@@ -3,7 +3,7 @@
 // library's own `stepper`, the pure step the runner itself takes: a fresh letter is checked, maybe
 // refused, then stepped; an answer to a Cmd is folded as the runner saves it. Written before
 // `program.ts` exists. L8's real half runs on the real instance (`RunnerTest.ts`, run by the app's
-// `tezgah-runner.laws.test.ts`).
+// `tezgah-runner.laws.integration.test.ts`).
 //
 // The shape these laws hold `program.ts` to, from the plan (the build may add more):
 // - It exports `tezgah`, `Program.make({ name: "fabrika/tezgah", ... })`, whose Cmds are the

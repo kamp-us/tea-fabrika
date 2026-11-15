@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-lock-overlap-laws-wait-a-fixed-time",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "scripts/caps.test.ts",
+    "line": 266
+  },
+  "says": "Today's lead tooling: the two lock overlap checks in `scripts/caps.test.ts` (lines 266 and 1002) wait a fixed 250 ms or 100 ms and then look for overlap, so they pass on a broken lock when the second wrapper is slow to start.",
+  "proof": "Found by the review of pull request 1286 on 2026-11-14, by reading the two checks: each starts wrapper a, then wrapper b, sleeps a fixed time with `setTimeout`, and asserts on what has been written by then. If b has not started within that time, nothing overlaps and the check passes whether or not the lock holds.",
+  "cost": "On a loaded machine the checks can pass with no working lock. A fix: assert the order start a, end a, start b from the wrappers' own log, with no fixed wait.",
+  "head": "0ea3f34eafe8dba9d67a57e238f648995c3e0235",
+  "ticket": "kamp-us/tea-fabrika#1008",
+  "pr": "kamp-us/tea-fabrika#1286"
+}

@@ -113,7 +113,7 @@ describe("recorded settings dependency, next/", () => {
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
 
-  it("format: L14 consumer Layer requirements and declared value types are compiler checked", () => {
+  it("L14 type: consumer Layer requirements and declared value types are compiler checked", () => {
     // Type law: the lead's typecheck catches removal of RecordedStart even if no consumer is run.
     expectTypeOf<
       Extract<Layer.Services<ReturnType<typeof recordingLayer>>, RecordedStart>

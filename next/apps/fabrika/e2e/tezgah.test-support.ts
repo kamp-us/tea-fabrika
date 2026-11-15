@@ -5,7 +5,13 @@
 // the shots, taken only when `SHOTS` names a folder, never into the repo (0160).
 import { join } from "node:path";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
-import { type TezgahView, type Tile, TezgahView as View, tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import {
+  type TezgahView,
+  type Tile,
+  type TileId,
+  TezgahView as View,
+  tezgahName,
+} from "@kampus/libfabrika/tezgah/Workspace";
 import { Effect, Schema } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
@@ -185,7 +191,7 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
   }
 
   const byId = new Map(view.tiles.map((t) => [t.id, t]));
-  const named = (id: string) => {
+  const named = (id: TileId) => {
     const tile = byId.get(id);
     return tile === undefined ? `a tile tezgah does not list (${id})` : regionName(tile);
   };

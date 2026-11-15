@@ -1,8 +1,8 @@
 // Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L8's real half,
 // a suite the part that owns a real local instance runs (0062): `RunnerTest.suite(open)`. A program
 // imports only the library's front, so the instance, its door and its process table are the app's
-// (`next/apps/fabrika/src/tezgah-runner.laws.test.ts`); this file holds the law. L8's pure half, on
-// every generated layout, is in `program.laws.test.ts`.
+// (`next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts`); this file holds the law. L8's pure
+// half, on every generated layout, is in `program.laws.test.ts`.
 //
 // What the law holds the real instance to (plan amendment, 2026-11-14): a close of a tile tezgah
 // started stops that tile's process with `shutdown` through the Worker's `stop_child`; a close of a
@@ -179,7 +179,7 @@ const RUNS = 4;
 export const suite = (open: Open) =>
   describe("Desk S2a L8 on the real instance", () => {
     it.live(
-      "L8: a close of a tile tezgah started stops that process; a close of any other tile stops nothing",
+      "scenario: L8, four seeded walks, since a run on the real instance costs seconds: a close of a tile tezgah started stops that process; a close of any other tile stops nothing",
       () =>
         Effect.scoped(
           Effect.gen(function* () {

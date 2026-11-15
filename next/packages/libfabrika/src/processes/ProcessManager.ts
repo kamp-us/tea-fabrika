@@ -42,6 +42,8 @@ type Failure = ProcessError | LedgerError;
  * key. Every event this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & { readonly by: string };
+/** A folded process table and the log rev it was folded through. */
+type Folded = { readonly table: ProcessTable; readonly rev: Rev };
 
 const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
@@ -71,12 +73,15 @@ export class ProcessManager extends Context.Service<
   {
     /**
      * Places a new process: the first under a free name, or the next after one that ended. `first`
-     * is a child's first letter, written in the start's own turn, at `["start", id]`.
+     * is a child's first letter, written in the start's own turn, at `["start", id]`. `guard` runs
+     * in the turn that would write, after the table's own checks: when it says no, the start fails
+     * `forbidden` and nothing is written. A saved start answers without it.
      */
     readonly start: (
       request: Start,
       from: From,
       first?: { readonly m: Schema.Json },
+      guard?: (turn: LedgerTurn) => boolean,
     ) => Effect.Effect<StartAnswer, Failure>;
     /**
      * Ends a live process with `reason`, writes a `DOWN` to each of its watchers, and ends the
@@ -137,7 +142,33 @@ export class ProcessManager extends Context.Service<
       ProcessManager,
       Effect.gen(function* () {
         const tx = yield* LedgerTransaction;
-        const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
+        // The table this layer last folded from committed entries, and the log rev it was folded
+        // through: a read model of the ledger, kept in memory for the layer's life, as an informer's
+        // cache. Only a fold made before its own turn appends anything replaces it, so it holds only
+        // committed entries, and the ledger never changes or drops one: its `entries` table takes
+        // only INSERTs. So the saved table stays true below its rev, and a fold past that rev gives
+        // every answer a fold from rev 0 gives.
+        let folded: Folded | undefined;
+        const fromZero = (turn: LedgerTurn): Folded => {
+          const entries = ProcessTable.entries(turn.read, caller.by);
+          return { table: new ProcessTable(entries, caller.by), rev: entries.at(-1)?.rev ?? 0 };
+        };
+        const forward = (turn: LedgerTurn): Folded => {
+          if (folded === undefined) {
+            return fromZero(turn);
+          }
+
+          const fresh = folded.table.after(turn.read, folded.rev);
+          const last = fresh.at(-1);
+          return last === undefined ? folded : { table: folded.table.fold(fresh), rev: last.rev };
+        };
+        // The table inside a turn that may already have appended: folded forward, never saved.
+        const fold = (turn: LedgerTurn) => forward(turn).table;
+        // The table at the start of a turn, before it appends: folded forward and saved.
+        const committed = (turn: LedgerTurn) => {
+          folded = forward(turn);
+          return folded.table;
+        };
         // The brain writes every line here; `from` keeps the call's person, parent and trace, and
         // `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
         const line = (from: From, event: Parameters<typeof lineFor>[1]) =>
@@ -145,7 +176,7 @@ export class ProcessManager extends Context.Service<
         const checked = Effect.fnUntraced(function* <A>(
           step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
         ) {
-          return yield* Effect.fromResult(yield* tx.transact((turn) => step(fold(turn), turn)));
+          return yield* Effect.fromResult(yield* tx.transact((turn) => step(committed(turn), turn)));
         });
         const signal = (
           table: ProcessTable,
@@ -173,6 +204,7 @@ export class ProcessManager extends Context.Service<
           request: Start,
           from: From,
           first?: { readonly m: Schema.Json },
+          guard?: (turn: LedgerTurn) => boolean,
         ) {
           yield* Effect.annotateCurrentSpan(
             short({
@@ -195,6 +227,10 @@ export class ProcessManager extends Context.Service<
 
                   if (Option.isSome(current.success)) {
                     return Result.succeed(current.success.value);
+                  }
+
+                  if (guard !== undefined && !guard(turn)) {
+                    return Result.fail(new ProcessError({ reason: "forbidden" }));
                   }
 
                   if (table.collision(process)) {
@@ -228,6 +264,7 @@ export class ProcessManager extends Context.Service<
                         ...(request._tag === "first" && request.requester !== undefined
                           ? { requester: request.requester }
                           : {}),
+                        ...(request._tag === "first" && request.member !== undefined ? { member: request.member } : {}),
                       }),
                     ),
                   );
@@ -410,7 +447,7 @@ export class ProcessManager extends Context.Service<
             }).pipe(Effect.tapError(failed)),
           ).pipe(Stream.withSpan("process.receive"));
         const info = Effect.fn("process.info")(function* () {
-          return yield* tx.transact((turn) => fold(turn).info);
+          return yield* tx.transact((turn) => committed(turn).info);
         });
         return {
           resolve: Effect.fn("process.resolve")(function* (process: string) {
@@ -460,7 +497,7 @@ export class ProcessManager extends Context.Service<
           table: fold,
           info: info(),
           isLive: Effect.fn("process.isLive")(function* (process: string) {
-            return yield* tx.transact((turn) => fold(turn).isLive(process));
+            return yield* tx.transact((turn) => committed(turn).isLive(process));
           }),
         };
       }),
@@ -475,12 +512,18 @@ export class ProcessManager extends Context.Service<
  *
  * A receive collects its letters so the call can cross an RPC; `remoteProcessManager` rebuilds the
  * Stream. Refusals keep their `ProcessError`; a transport failure stays the caller's
- * `LedgerError`.
+ * `LedgerError`. A start takes no guard: a guard runs inside the owner's own turn, which no call
+ * across an RPC reaches.
  *
  * @stability unstable
  * @category models
  */
-export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive" | "table"> & {
+export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive" | "table" | "start"> & {
+  readonly start: (
+    request: Start,
+    from: From,
+    first?: { readonly m: Schema.Json },
+  ) => Effect.Effect<StartAnswer, Failure>;
   readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
 };
 
@@ -489,7 +532,9 @@ export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "r
  *
  * **Details**
  *
- * `by` is the brain's own writer key: a turn this side is given folds as the brain's does.
+ * `by` is the brain's own writer key: a turn this side is given folds as the brain's does. A start
+ * with a guard is refused `forbidden` and asks nothing: this side cannot run the guard in the turn
+ * that writes, and a check it cannot make never lets a start through.
  *
  * @stability unstable
  * @category layers
@@ -497,6 +542,8 @@ export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "r
 export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
   Layer.succeed(ProcessManager, {
     ...calls,
+    start: (request, from, first, guard) =>
+      guard === undefined ? calls.start(request, from, first) : Effect.fail(new ProcessError({ reason: "forbidden" })),
     table: (turn) => ProcessTable.read(turn.read, by),
     receive: (process, after) =>
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),

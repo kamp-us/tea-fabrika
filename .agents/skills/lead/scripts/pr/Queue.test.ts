@@ -373,6 +373,41 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
   );
 });
 
+describe("closeOnly: closes the named tickets and starts no sweep (0015)", () => {
+  const body = "Done.\nfabrika close ticket 5\n";
+  const run = (m: ReturnType<typeof memory>) => Queue.closeOnly({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
+
+  // Plants: kick a sweep; close from a pull request that is open, closed, unconfirmed or merged
+  // off main; close a ticket that is not open.
+  it.effect.prop(
+    "property: only a pull request confirmed merged into main closes its named open ticket, and no world starts a sweep",
+    {
+      state: State,
+      draft: Schema.Boolean,
+      base: Schema.Literals(["main", "fabrikalfa/parent"]),
+      confirmed: Schema.Boolean,
+      open: Schema.Boolean,
+    },
+    ({ state, draft, base, confirmed, open }) =>
+      Effect.gen(function* () {
+        const m = memory({
+          state,
+          draft,
+          open: open ? [5] : [],
+          more: { body, base, mergeCommit: confirmed ? merged : null },
+        });
+        const done = yield* run(m);
+        const lands = state === "MERGED" && confirmed && base === "main";
+        expect(done._tag).toBe(lands ? "merged" : "unmerged");
+        expect(m.tracker.posts.filter((p) => p._tag !== "list").map((p) => p._tag)).toEqual(
+          lands && open ? ["comment", "close"] : [],
+        );
+        expect(done.lines.includes("pr 900: closed ticket 5")).toBe(lands && open);
+        expect(m.sweeps.kicks).toBe(0);
+      }),
+  );
+});
+
 describe("the tracker's command line, as TicketsCli reads it", () => {
   // format: `cli.ts post list` prints one line per open ticket, `<home>: #<n> <state> <title>`.
   it("format: only a line that names an open ticket counts, and a failure keeps the first ERROR line, never the stack", () => {

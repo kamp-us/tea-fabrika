@@ -1,7 +1,6 @@
 // The exam's row reader: which rows of the rule file (`layer-rules.json`) claim a file. `pnpm
 // lint:layers` (code-graph) reads the same file, so the exam and the tool keep one list of paths.
-// The exam maps a row to a part (`layers.test.ts`), and the lead's move checker asks whether a moved
-// file kept its row.
+// The lead's move checker asks whether a moved file kept its row.
 //
 // The rule is `@demlik/code-graph@0.15.0`'s, read from its built source (`src/layers/classify.ts`
 // in `dist/index.js`), since the package exports no function for it:

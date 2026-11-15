@@ -316,7 +316,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
 //   button may hold no interactive content (HTML, the button element's content model), and programs
 //   know nothing about folds (0506). The focused tile is never a strip.
 // - How a strip opens (Enter or a click focuses its tile, so it opens) is the page's, walked in the
-//   app's `e2e/tezgah-fold.test.ts` (L33).
+//   app's `e2e/tezgah-fold.visual.test.ts` (L33).
 //
 // The walk draws a window size from 320x240 to 2560x1600 and a layout walked from one tile with the
 // library's real `Layout.split` and `Layout.remove`. The markup law holds for any set of strips

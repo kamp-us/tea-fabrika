@@ -5,8 +5,8 @@ summary: "Pick the riskiest promise; test the real code first (TLA+ only for a d
 
 # Five steps for every check
 
-Decided 2026-10-22. Step 5's gate is built in experiment 117 and runs in CI
-as `pnpm promises`.
+Decided 2026-10-22. Step 5's gate was built in experiment 117 (the `promises` tool, deleted
+2026-11-14).
 
 ```ts
 // A sketch: one promise as data, cut short from experiment 117's record.

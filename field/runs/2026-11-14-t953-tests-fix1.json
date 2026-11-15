@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t953-tests-fix1",
+  "ticket": "953",
+  "pr": "kamp-us/tea-fabrika#1239",
+  "started": "2026-11-14T19:30:00-08:00",
+  "ended": "2026-11-14T19:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "tests step, fix round after review at c8d72135: L10 and L14's generator now also picks a requester a member's input started, whose recorded member differs from the sender (another person, or the same person by the other key kind); the law checks the sender's person and records the sender. Red under the reviewer's plant, green on the real code. Tokens not captured by the subagent itself.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": null,
+  "billing": "subscription",
+  "step": "tests",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/processes/ChildrenMemberTest.ts senderLaw (L10 and L13, and L14)",
+      "plant": "next/packages/libfabrika/src/processes/ChildrenLedger.ts:113 `const member = requester.member ?? Option.getOrUndefined(sender.success);` (recorded member wins over the sender)",
+      "result": "red"
+    },
+    {
+      "law": "senderLaw's permission oracle alone (L10), generator narrowed in scratch to a sender with no role and a recorded member who is owner",
+      "plant": "next/packages/libfabrika/src/processes/ChildrenLedger.ts:113 as above",
+      "result": "red"
+    }
+  ]
+}

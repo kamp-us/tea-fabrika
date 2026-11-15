@@ -15,19 +15,17 @@ import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as Route from "./fetch.ts";
+import type { Env } from "./runtime.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 type Assets = Readonly<Record<string, Asset>>;
-type Fetch = (request: Request, env: Env, config: BrainOptions, assets?: Assets) => Effect.Effect<Response, unknown>;
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const HTML = "text/html; charset=utf-8";
 const JS = "text/javascript; charset=utf-8";
 const CSS = "text/css; charset=utf-8";
 const PAGE = "/index.html";
-
-const fetchApi = async (): Promise<Fetch> => ((await import("./fetch.ts")) as { fetch: Fetch }).fetch;
 
 const config = (port: number) =>
   instanceFixture({
@@ -119,7 +117,7 @@ const REACH = ["page", "plain-root", "asset", "absent", "head", "write", "stale"
 
 describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving rules", () => {
   it("generated walks of rebuilds and requests: GET, HEAD, ETag, missing routes, root fallback and access checks", async () => {
-    const fetch = await fetchApi();
+    const fetch = Route.fetch;
     const reached = new Set<(typeof REACH)[number]>();
     await fc.assert(
       fc.asyncProperty(

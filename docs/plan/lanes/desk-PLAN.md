@@ -314,10 +314,10 @@ The settled notes were checked first for each item. The lane goes on with each l
 **How the shots are taken.** Browser shots come from the app's e2e runner, run from `next/apps/fabrika` as `SHOTS=<a temp folder under runs/> node e2e.ts <file>`, on the real `dev.ts` with its own temp `FABRIKA_HOME`. No slice changes the runner: it already picks up every e2e test file. Shots come from `page.screenshot`, are attached and are never committed (0160). Each one covers the five layouts, plus 0471's eight in both looks (200% zoom on the 2x2, the smallest tile, 400% reflow).
 
 **Shots per slice:**
-- **S2b** (`next/apps/fabrika/e2e/tezgah-frame.test.ts`): one tile; after `C-b %`; after `C-b "`; the 2x2; 1024x700; the close ask; the refused split; the prefix line armed.
-- **S3** (`next/apps/fabrika/e2e/tezgah-focus.test.ts`): focus on each tile of the 2x2; back on t1 with its cursor on a row; a second tab mirroring focus.
-- **S4** (`next/apps/fabrika/e2e/tezgah-fold.test.ts`): the 2x2 in a second, smaller window at 1024x700 with strips; a strip reached by Tab, with its ring.
-- **S5** (`next/apps/fabrika/e2e/tezgah-electron.test.ts`): every state above, in Electron.
+- **S2b** (`next/apps/fabrika/e2e/tezgah-frame.visual.test.ts`): one tile; after `C-b %`; after `C-b "`; the 2x2; 1024x700; the close ask; the refused split; the prefix line armed.
+- **S3** (`next/apps/fabrika/e2e/tezgah-focus.visual.test.ts`): focus on each tile of the 2x2; back on t1 with its cursor on a row; a second tab mirroring focus.
+- **S4** (`next/apps/fabrika/e2e/tezgah-fold.visual.test.ts`): the 2x2 in a second, smaller window at 1024x700 with strips; a strip reached by Tab, with its ring.
+- **S5** (`next/apps/fabrika/e2e/tezgah-electron.visual.test.ts`): every state above, in Electron.
 
 Each shot is looked at, and the pull request says what squeezes, breaks or looks empty.
 
@@ -333,7 +333,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 | next/packages/libfabrika/src/processes/Children.ts | build | S1 | 20 |
 | next/packages/libfabrika/src/processes/ChildrenLedger.ts | build | S1 | 40 |
 | next/packages/libfabrika/src/processes/ChildrenTest.ts | tests | S1 | tests |
-| next/apps/fabrika/src/start-child.laws.test.ts | tests | S1 | tests |
+| next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | S1 | tests |
 | docs/plan/tier-1.md | build | S1, S2a, S2b, S3, S4, S5 | docs |
 | layer-rules.json | tests | S2a | tests |
 | boundary-rules.json | tests | S2a | tests |
@@ -365,13 +365,13 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 | next/apps/fabrika/src/brain.ts | build | S2a | 15 |
 | next/apps/fabrika/src/runtime.ts | build | S2a | 15 |
 | next/apps/fabrika/src/table.ts | build | S2a | 2 |
-| next/apps/fabrika/src/tezgah-runner.laws.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts | tests | S2a | tests |
 | next/packages/libfabrika/src/client/Start.types.test.ts | tests | S2a | tests |
-| next/apps/fabrika/src/instance-one-file.test.ts | tests | S2a | tests |
-| next/apps/fabrika/src/runtime.laws.test.ts | tests | S2a | tests |
-| next/apps/fabrika/src/runtime-recovery.laws.test.ts | tests | S2a | tests |
-| next/apps/fabrika/src/checklist-instance.laws.test.ts | tests | S2a | tests |
-| next/apps/fabrika/src/start-child.laws.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | S2a | tests |
+| next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | S2a | tests |
 | .glossary/TERMS.md | build | S2a, S3 | docs |
 | next/programs/tezgah/src/commands.ts | build | S2b, S3 | 80 |
 | next/programs/tezgah/src/commands.types.test.ts | tests | S2b | tests |
@@ -388,19 +388,19 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 | next/apps/fabrika/src/entry/browser.tsx | build | S2b | 15 |
 | next/apps/fabrika/src/entry/views.ts | build | S2b | 25 |
 | next/apps/fabrika/e2e/tezgah.test-support.ts | tests | S2b | tests |
-| next/apps/fabrika/e2e/tezgah-frame.test.ts | tests | S2b | tests |
-| next/apps/fabrika/e2e/first-window.test.ts | tests | S2b | tests |
+| next/apps/fabrika/e2e/tezgah-frame.visual.test.ts | tests | S2b | tests |
+| next/apps/fabrika/e2e/first-window.visual.test.ts | tests | S2b | tests |
 | .oxlintrc.json | tests | S2b | tests |
 | next/programs/tezgah/package.json | tests | S2b | tests |
 | next/apps/fabrika/e2e/client-protocol.test-support.ts | tests | S2b | tests |
 | next/programs/checklist/src/window.tsx | build | S3 | 6 |
-| next/apps/fabrika/e2e/tezgah-focus.test.ts | tests | S3 | tests |
+| next/apps/fabrika/e2e/tezgah-focus.visual.test.ts | tests | S3 | tests |
 | next/packages/libfabrika/src/tezgah/Fold.ts | build | S4 | 140 |
 | next/packages/libfabrika/src/tezgah/Fold.laws.test.ts | tests | S4 | tests |
-| next/apps/fabrika/e2e/tezgah-fold.test.ts | tests | S4 | tests |
-| next/apps/fabrika/e2e/tezgah-electron.test.ts | tests | S5 | tests |
+| next/apps/fabrika/e2e/tezgah-fold.visual.test.ts | tests | S4 | tests |
+| next/apps/fabrika/e2e/tezgah-electron.visual.test.ts | tests | S5 | tests |
 
-`next/apps/fabrika/e2e/first-window.test.ts` changes only where its tile's name moves from the bare registered name to `tileName`'s words. Its promises stay the same, and the test writer keeps each of its laws as strong as it is now.
+`next/apps/fabrika/e2e/first-window.visual.test.ts` changes only where its tile's name moves from the bare registered name to `tileName`'s words. Its promises stay the same, and the test writer keeps each of its laws as strong as it is now.
 
 ## Laws
 
@@ -489,7 +489,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
   4. `no_workspace` means tezgah has no workspace with the `from` tile yet; an unknown `from` on a known workspace is `missing`, as the tests pinned.
   5. Two cases, the lead's lean for the owner to read: (a) a close of the tile a waiting split is placed at, before `start_child` answers: when the start answers, the new tile is placed after the workspace's focused tile instead (65%); a split never loses its started process. (b) An `attach` of a workspace that already exists changes nothing and answers the current view (80%, idempotent as OTP's `whereis` then start). The tests step adds laws for both, in `next/programs/tezgah/src/program.laws.test.ts`, under L6 and L9.
 
-- 2026-11-14 (lead, after S2a's build): two test files the slice must change were in no row, and go to the tests step. `next/packages/libfabrika/src/client/Start.types.test.ts` pins the start's option keys exactly, and the `desk` option the S2a laws pass must join that list. `next/apps/fabrika/src/instance-one-file.test.ts` ("p33 real isolation") treats every program in the built table but the counter and the checklist as a planted sealed program; `fabrika/tezgah` joins the known built-ins the way P14 slice 2 added the checklist, and the check on sealed programs keeps its strength.
+- 2026-11-14 (lead, after S2a's build): two test files the slice must change were in no row, and go to the tests step. `next/packages/libfabrika/src/client/Start.types.test.ts` pins the start's option keys exactly, and the `desk` option the S2a laws pass must join that list. `next/apps/fabrika/src/instance-one-file.integration.test.ts` ("p33 real isolation") treats every program in the built table but the counter and the checklist as a planted sealed program; `fabrika/tezgah` joins the known built-ins the way P14 slice 2 added the checklist, and the check on sealed programs keeps its strength.
 
 - 2026-11-14 (lead, after S2a's first review): (1) the window's tie to its person's tezgah is named `tezgah`, never `desk`: the start option is `tezgah?: {workspace}` and the window model's field and type follow it (0491: the window manager is tezgah and never desk; this plan's own one-line rule). The plan's earlier words "a window started with a desk" mean a window started with the `tezgah` option. (2) The founder's tezgah boots from the boot list like every other entry, with no condition on the table: a build without `fabrika/tezgah` fails the boot loudly, as P14 slice 2's boot law says. The tests that mock a program table add `fabrika/tezgah` the way P14 slice 2 added the checklist, in the four app test files now listed as S2a tests rows.
 
@@ -518,12 +518,12 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 ## Validation
 
 - Each step runs only its slice's narrow files, with `nice -n 15 pnpm exec vitest run --maxWorkers=3 <files>`:
-  - **S1:** `next/packages/libfabrika/src/access/StartRule.laws.test.ts` and `next/apps/fabrika/src/start-child.laws.test.ts`.
-  - **S2a:** `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts`, `next/programs/tezgah/src/program.laws.test.ts`, `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts`, `next/packages/libfabrika/src/transport/Handshake.laws.test.ts` and `next/apps/fabrika/src/tezgah-runner.laws.test.ts`.
+  - **S1:** `next/packages/libfabrika/src/access/StartRule.laws.test.ts` and `next/apps/fabrika/src/start-child.laws.integration.test.ts`.
+  - **S2a:** `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts`, `next/programs/tezgah/src/program.laws.test.ts`, `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts`, `next/packages/libfabrika/src/transport/Handshake.laws.test.ts` and `next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts`.
   - **S2b:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`, `next/packages/libfabrika/src/client/Prefix.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then the e2e runner from `next/apps/fabrika` on `tezgah-frame.test.ts` and `first-window.test.ts`.
   - **S3:** `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts` and `next/programs/tezgah/src/program.laws.test.ts`. Then the e2e runner on `tezgah-focus.test.ts`.
-  - **S4:** `next/packages/libfabrika/src/tezgah/Fold.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then the e2e runner on `tezgah-fold.test.ts`.
-  - **S5:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`. Then the e2e runner on `tezgah-electron.test.ts`, on the host.
+  - **S4:** `next/packages/libfabrika/src/tezgah/Fold.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then the e2e runner on `tezgah-fold.visual.test.ts`.
+  - **S5:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`. Then the e2e runner on `tezgah-electron.visual.test.ts`, on the host.
 - The lead, not a boxed step, runs the type check and the changed-tests run once per slice, and reads CI. S2a changes the lockfile, so the lead lists narrow paths only.
 - Commits are plain `git commit`, with the subject `Desk <slice> <step>: <what>`. For example: `Desk S2a tests: tezgah's layout stays tidy after any split and close`. Each slice runs as tests, build, and one review, each by its own agent. `pnpm format` comes first, and `pnpm lint` runs before each commit.
 

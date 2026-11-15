@@ -49,5 +49,5 @@ default once the shell lands.
   their start (L6), the last tile never closes and focus goes to the next tile (L7), a close stops
   only tezgah's own child (L8), and what names nothing is refused (L9).
 - `src/RunnerTest.ts` holds L8 on a real local instance. The app runs it, with L12, in
-  `next/apps/fabrika/src/tezgah-runner.laws.test.ts`.
+  `next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts`.
 - The layout's tidiness (L5) is in `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts`.

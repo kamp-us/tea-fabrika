@@ -8,6 +8,11 @@ if [ ! -L node_modules ] && [ -e node_modules ] && [ ! -d node_modules ]; then
   echo "typecheck: node_modules is no folder; remove it and run pnpm install --offline --frozen-lockfile" >&2
   exit 1
 fi
+# One fixed system file, never under TMPDIR: agents' TMPDIR differs, and the lock must be shared.
+# Only a test points FABRIKA_TYPECHECK_LOCK at a file of its own, so a real typecheck on the same
+# machine never holds up its fake compilers, and they never hold up a real typecheck.
+FABRIKA_TYPECHECK_LOCK=${FABRIKA_TYPECHECK_LOCK:-/tmp/fabrika-typecheck.lock}
+export FABRIKA_TYPECHECK_LOCK
 exec python3 - <<'PY'
 import fcntl, os, subprocess, sys
 
@@ -24,8 +29,7 @@ commands = [["pnpm", "exec", "effect-tsgo", "patch", "--typescript"],
 
 # Keep this file in place. Unlinking it could give waiters different locks.
 # The OS releases a dead holder's lock, including after SIGKILL.
-# One fixed system folder, never TMPDIR: agents' TMPDIR differs, and the lock must be shared.
-with open(os.path.join(os.sep, "tmp", "fabrika-typecheck.lock"), "a") as lock:
+with open(os.environ["FABRIKA_TYPECHECK_LOCK"], "a") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     # A linked node_modules (a worktree pointed at another checkout's) is never written through:
     # the patch would change the other checkout's compiler, and an install through the link rewrites
