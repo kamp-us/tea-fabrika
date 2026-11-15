@@ -299,12 +299,22 @@ const startingRows = (roles: Roles): ReadonlyArray<Relation.Change> => [
 const holds = (roles: Roles, holder: "founder" | "other") =>
   holder === "founder" ? roles.owner : roles.other !== "none";
 
+/**
+ * Who the requester is: a boot process with no member, or a process a member's input started, so it
+ * has a recorded member. That member differs from the sender: another person, or the sender's person
+ * by the other key kind.
+ */
+const RECORDED = ["none", "another person", "another key"] as const;
+
 const SenderCase = fc.record({
   grants: Grants,
   roles: Roles,
   holder: fc.constantFrom("founder", "other"),
   as: fc.constantFrom("person", "agent"),
   requester: fc.nat(),
+  recorded: fc.constantFrom(...RECORDED),
+  recordedAs: fc.constantFrom("person", "agent"),
+  middle: fc.constantFrom(...PROGRAMS),
   program: fc.constantFrom(...PROGRAMS),
   input: fc.boolean(),
 });
@@ -320,17 +330,74 @@ const pick = <A>(items: ReadonlyArray<A>, n: number): A => {
   return item;
 };
 
-/** L10, L13 and L14 on one case: a start caused by a member's input to the requester. */
+/** The member a case's requester was started by, never the sender itself (0170: the sender wins). */
+const recordedFor = (c: SenderCase): typeof Sender.Type | undefined => {
+  switch (c.recorded) {
+    case "none":
+      return undefined;
+    case "another person":
+      return senderFrom(c.holder === "founder" ? "other" : "founder", c.recordedAs);
+    case "another key":
+      return senderFrom(c.holder, c.as === "person" ? "agent" : "person");
+  }
+};
+
+/** The row that lets a person start, written only while the requester is started and removed after. */
+const lift = (holder: "founder" | "other"): Relation.Change => (holder === "founder" ? OWNER : otherRow("member"));
+
+/**
+ * The requester of a sender's case: a boot process, or a process a member's input started. That member
+ * is let in for the requester's own start, and the case's roles are put back before the law's start.
+ */
+const requesterFor = (w: World, c: SenderCase) =>
+  Effect.gen(function* () {
+    const boot = pick([...w.boot.values()], c.requester);
+    const member = recordedFor(c);
+
+    if (member === undefined) {
+      return { ...boot, recorded: undefined };
+    }
+
+    const holder = member.for === FOUNDER ? "founder" : "other";
+    const lifted = !holds(c.roles, holder);
+
+    if (lifted) {
+      yield* w.write([lift(holder)]);
+    }
+
+    const middle = w.fresh(c.middle, boot.process, false);
+    const placed = yield* w.start(middle, from(w.deliver(boot.process, member)));
+    startedFresh(placed, "L10: a member's input starts the requester");
+    const recorded = encodeSender(member);
+    const line = yield* w.startedLine(middle.name, middle.id);
+    expect(line?.body, "L10: the requester's started line records its member").toMatchObject({ member: recorded });
+
+    if (lifted) {
+      const { subject, relation, object } = lift(holder).row;
+      yield* w.write([{ id: `drop-${holder}`, row: Relation.Row.cases.unrelated.make({ subject, relation, object }) }]);
+    }
+
+    return {
+      process: Exit.isSuccess(placed) ? placed.value.process : expect.fail("started"),
+      program: c.middle,
+      recorded,
+    };
+  });
+
+/**
+ * L10, L13 and L14 on one case: a start caused by a member's input to the requester. When the
+ * requester has a recorded member too, the sender is the one checked and the one recorded (0170).
+ */
 const senderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   Effect.fnUntraced(function* (c: SenderCase) {
     const w = yield* world(open, c.grants, startingRows(c.roles));
-    const requester = pick([...w.boot.values()], c.requester);
+    const requester = yield* requesterFor(w, c);
     const sender = senderFrom(c.holder, c.as);
     const parent = w.deliver(requester.process, sender);
     const child = w.fresh(c.program, requester.process, c.input);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `${c.as} for ${c.holder}, roles ${JSON.stringify(c.roles)}, ${requester.program} -> ${c.program}`;
+    const label = `${c.as} for ${c.holder}, requester's member ${c.recorded}, roles ${JSON.stringify(c.roles)}, ${requester.program} -> ${c.program}`;
 
     if (holds(c.roles, c.holder)) {
       startedFresh(answer, `L10: ${label} starts, whatever StartGrant says`);
@@ -556,7 +623,8 @@ const raced = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 /** Runs the laws on the store `open` gives. */
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("T953 a start is checked against the member whose input caused it", () => {
-    // Plant: also require `granted(program, program)` for a sender's start (ChildrenLedger.ts).
+    // Plant: also require `granted(program, program)` for a sender's start (ChildrenLedger.ts). Plant:
+    // the requester's recorded member wins over the sender (`requester.member ?? sender`, ChildrenLedger.ts).
     prop(
       "L10 and L13: a member's start is started exactly when the member holds start, whatever StartGrant says",
       SenderCase,
@@ -571,6 +639,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             holder: "founder",
             as: "person",
             requester: 0,
+            recorded: "none",
+            recordedAs: "person",
+            middle: QUEUE,
             program: WORKER,
             input: true,
           },
