@@ -342,7 +342,7 @@ jobs:
   # Split by file over two machines (vitest's `--shard`, each given about the same seconds by
   # vitest.shards.ts). On main run 43615844695 they took 68, 111, 125, 230, 274 and 363 s on six
   # (19.5 machine-min): four files of 124 to 362 s each sat alone on a machine, and boxrm.test.ts
-  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.ts's table and run three
+  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.json's table and run three
   # files at a time, those 97 files' seconds give two machines of 353 and 362 s (11.9 machine-min),
   # the same longest wait.
   # It runs on a pull request alone (0534): a merge queue group and a push to main never start it
@@ -447,8 +447,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # FILTER is the paths. On a sized run (a pull request, a merge queue group or a push to main
       # whose filter is all of next/), changes' `files`: the tests whose imports reach a changed file
-      # (Vitest's own `--changed`, which picks everything when a file in vitest.config.ts's
-      # forceRerunTriggers changed: configs, the lockfile, fixtures), and every reader test. Those
+      # (Vitest's `--changed`, which picks everything when a file in vitest.config.ts's
+      # forceRerunTriggers changed: configs and fixtures, and a lockfile, tsconfig or package.json
+      # change vitest.changed.ts cannot tie to packages), and every reader test. Those
       # read files as text, so the import graph misses them. Each file is listed once, so each runs
       # once, on the leg `Shards` gives it, and the legs were sized with them. Else changes' filter:
       # the reader tests, or all of next/ (the plan for CI paths, slice 2), on a run with no base

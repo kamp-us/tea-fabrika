@@ -17,7 +17,7 @@
 // as `files`; every vitest leg runs exactly it, so a reader `--changed` already picked runs once.
 //
 // A leg's files may take half the next job's limit, less its setup: vitest.shards.test.ts's E4
-// budget, the one the count of e2e legs is pinned with. Seconds come from vitest.shards.ts's table,
+// budget, the one the count of e2e legs is pinned with. Seconds come from vitest.shards.json's table,
 // a file with no row at the table's median, and `assign` splits them, so this split is the one
 // `Shards` makes on each leg.
 import { spawnSync } from "node:child_process";
