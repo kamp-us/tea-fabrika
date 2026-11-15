@@ -8,6 +8,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
 import { nodeExecution, type Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
@@ -16,6 +17,7 @@ import { accountingEntries } from "@kampus/libfabrika/ledger/RefereeSql";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import * as QuotaRunnerTest from "@kampus/libfabrika/runtime/QuotaRunnerTest";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -28,10 +30,12 @@ import {
   ProjectService,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { Clock, Effect, Option, Schema } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { ByteSize, Clock, Effect, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
@@ -153,31 +157,26 @@ const worker = (name: string) => ({
 
 const View = Schema.Struct({ view: Model });
 
-const bytes = (n: number) => `${n} B`;
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+const counterCode = built("counter");
+const checklistCode = built("checklist");
+const tezgahCode = built("tezgah");
+const alphaCode = built("alpha");
+const betaCode = built("beta");
 
-/** The limits as the checked settings encode them for the `INSTANCE` handoff. */
-const encoded = (limits: Limits) => ({
-  recordBytes: 1_000_000_000,
+/** A recovery allowance as the recovery setting's value holds it once decoded. */
+const allowance = (limits: Limits["recovery"]["project"]) => ({
   writes: limits.writes,
-  storage: bytes(limits.storage),
-  recovery: {
-    project: {
-      writes: limits.recovery.project.writes,
-      bytes: bytes(limits.recovery.project.bytes),
-      letter: {
-        writes: limits.recovery.project.letter.writes,
-        bytes: bytes(limits.recovery.project.letter.bytes),
-      },
-    },
-    process: {
-      writes: limits.recovery.process.writes,
-      bytes: bytes(limits.recovery.process.bytes),
-      letter: {
-        writes: limits.recovery.process.letter.writes,
-        bytes: bytes(limits.recovery.process.letter.bytes),
-      },
-    },
-  },
+  bytes: ByteSize.bytes(limits.bytes),
+  letter: { writes: limits.letter.writes, bytes: ByteSize.bytes(limits.letter.bytes) },
+});
+
+/** The limits as the three quota settings' values, which the start's settings snapshot carries. */
+const declared = (limits: Limits) => ({
+  writes: limits.writes,
+  storage: ByteSize.bytes(limits.storage),
+  recovery: { project: allowance(limits.recovery.project), process: allowance(limits.recovery.process) },
 });
 
 /** Row counts of every table, so a law can say "nothing was saved" without naming a table. */
@@ -226,9 +225,12 @@ const storage = (db: DatabaseSync, alarm: (at: number | null) => void) => {
 // The assembled instance. The Project and each Process run their real services; a platform restart
 // (`reopen`) ends every runtime and keeps every store and saved alarm.
 const world = Effect.fnUntraced(function* (limits: Limits) {
-  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
-  table.programs["quota/alpha"] = { hash: "alpha-a", source: "alpha" };
-  table.programs["quota/beta"] = { hash: "beta-a", source: "beta" };
+  table.programs["fabrika/counter"] = counterCode;
+  // The boot list's later entries, the checklist and the founder's tezgah, so the table holds them too.
+  table.programs["fabrika/checklist"] = checklistCode;
+  table.programs["fabrika/tezgah"] = tezgahCode;
+  table.programs["quota/alpha"] = alphaCode;
+  table.programs["quota/beta"] = betaCode;
   const key = identity();
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
@@ -266,17 +268,19 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     );
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: PROJECT,
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      limits: encoded(limits),
-      build: "quota-laws",
-      mail: { grants: everyone },
-    }),
+    INSTANCE: JSON.stringify(
+      RecordWireTest.settingsFixture({
+        name: PROJECT,
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "quota-laws",
+        mail: { grants: everyone },
+        limits: { recordBytes: 1_000_000_000 },
+        values: declared(limits),
+      }),
+    ),
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
       getByName: () =>
@@ -286,14 +290,24 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             get: (_target, method) =>
               typeof method !== "string" || method === "then"
                 ? undefined
-                : (...args: ReadonlyArray<unknown>) =>
-                    Effect.runPromise(
-                      project((p) => {
-                        const member = Reflect.get(p, method);
-                        const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
-                        return method === "sign" ? signingReply(work) : method === "commit" ? commitReply(work) : work;
-                      }),
-                    ),
+                : // A Process records its start on the Project's own small runtime, beside its service.
+                  method === "settingsStart"
+                  ? (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
+                      Effect.runPromise(required(projectHeld).settingsStart(input))
+                  : method === "settingsRead"
+                    ? (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start))
+                    : (...args: ReadonlyArray<unknown>) =>
+                        Effect.runPromise(
+                          project((p) => {
+                            const member = Reflect.get(p, method);
+                            const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
+                            return method === "sign"
+                              ? signingReply(work)
+                              : method === "commit"
+                                ? commitReply(work)
+                                : work;
+                          }),
+                        ),
           },
         ),
     },
@@ -352,15 +366,22 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          if (id.startsWith("alpha-") || id.startsWith("beta-")) {
+          const alpha = id.startsWith(`${alphaCode.hash}/`);
+
+          if (alpha || id.startsWith(`${betaCode.hash}/`)) {
             // The real box around the fixture program.
-            const alpha = id.startsWith("alpha-");
-            const Box = programBox(worker(alpha ? "quota/alpha" : "quota/beta"), alpha ? "alpha-a" : "beta-a");
+            const Box = programBox(
+              worker(alpha ? "quota/alpha" : "quota/beta"),
+              alpha ? alphaCode.hash : betaCode.hash,
+            );
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => box.init(saved),
               step: (model: unknown, msg: unknown) => box.step(model, msg),
+              fresh: (model: unknown, msg: unknown) => box.fresh(model, msg),
+              update: (model: unknown, msg: unknown) => box.update(model, msg),
+              audit: (msg: unknown) => box.audit(msg),
               fold: (model: unknown, msg: unknown) => box.fold(model, msg),
               upgrade: (saved: unknown) => box.upgrade(saved),
               reply: (cmd: unknown, outcome: unknown) => box.reply(cmd, outcome),
@@ -369,7 +390,12 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             };
           }
 
-          // The app's own bootstrap, `fabrika/counter`.
+          if (id.startsWith(`${checklistCode.hash}/`)) {
+            const Box = programBox(checklist, checklistCode.hash);
+            return Reflect.construct(Box, []);
+          }
+
+          // The app's own bootstrap, `fabrika/counter`, and the founder's tezgah, which no law here drives.
           const execution = nodeExecution(counter);
           return {
             describe: async () => ({
@@ -385,6 +411,17 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             }),
             init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
             step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
+            fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
+            update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+            audit: (msg: unknown) =>
+              Effect.runPromise(
+                execution.audit(msg).pipe(
+                  Effect.match({
+                    onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
+                    onFailure: Audit.failure,
+                  }),
+                ),
+              ),
             fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
             upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
             reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),
@@ -590,7 +627,7 @@ const Cell = Schema.Struct({
 });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
-const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: 40 } };
+const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 const refused = { _tag: "refused", reason: "quota" };
 const none = { writes: 0, bytes: 0 };

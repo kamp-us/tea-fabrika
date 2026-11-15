@@ -9,12 +9,13 @@ import { it } from "@effect/vitest";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "quota-workers";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -34,9 +35,10 @@ const recovery = {
   process: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
 };
 
-const encodedRecovery = {
-  project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
-  process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+// The recovery setting's value, as the settings snapshot holds it once decoded.
+const declaredRecovery = {
+  project: { writes: 160, bytes: ByteSize.bytes(74_080), letter: { writes: 10, bytes: ByteSize.bytes(5_469) } },
+  process: { writes: 290, bytes: ByteSize.bytes(207_410), letter: { writes: 50, bytes: ByteSize.bytes(18_790) } },
 };
 
 const field = (value: Buffer | string) => {
@@ -226,28 +228,31 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const built = yield* build({ out: path.join(home, "dist"), programs: files });
   const key = identity();
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+  // The quota settings ride in the start's settings snapshot; the fixture names the ones it tightens.
   const limits = {
-    recordBytes: 1_000_000_000,
     writes: mode === "writes" ? 44 : 13_760,
-    storage: mode === "storage" ? "12000 B" : "1000000000 B",
+    storage: ByteSize.bytes(mode === "storage" ? 12_000 : 1_000_000_000),
     recovery:
       mode === "reserve"
         ? {
-            project: { ...encodedRecovery.project, writes: 1, bytes: "1 B" },
-            process: { ...encodedRecovery.process, writes: 1, bytes: "1 B" },
+            project: { ...declaredRecovery.project, writes: 1, bytes: ByteSize.bytes(1) },
+            process: { ...declaredRecovery.process, writes: 1, bytes: ByteSize.bytes(1) },
           }
-        : encodedRecovery,
+        : declaredRecovery,
   };
-  const instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: key.line,
-    window: key.raw,
-    port: port.port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-    limits,
-  });
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.startupFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: port.port,
+      limits: { recordBytes: 1_000_000_000 },
+      values: limits,
+    }),
+  );
   const send = yield* wire(instance.url, key);
   const project = instance.project(PROJECT);
   const from = { ...FROM, by: key.fingerprint, build: built.build };

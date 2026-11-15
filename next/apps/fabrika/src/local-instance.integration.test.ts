@@ -6,6 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -123,29 +124,30 @@ it.live.prop(
         build: "quota-start",
       });
       // The quota values ride in the settings snapshot, each as its declared schema encodes it.
-      const values = structuredClone(fixture.settings.values);
-      const recovery = values[Declarations.recovery.path] as {
-        project: { bytes: string; letter: { bytes: string } };
-        process: { bytes: string; letter: { bytes: string } };
-      };
+      const values: Record<string, Schema.Json> = { ...fixture.settings.values };
+      const recovery = Schema.decodeUnknownSync(Schema.toEncoded(Declarations.recovery.schema))(
+        values[Declarations.recovery.path],
+      );
       const invalid = `invalid:${suffix}`;
+      const { project, process } = recovery;
 
-      switch (field) {
-        case "storage":
-          values[Declarations.storage.path] = invalid;
-          break;
-        case "project.bytes":
-          recovery.project.bytes = invalid;
-          break;
-        case "project.letter.bytes":
-          recovery.project.letter.bytes = invalid;
-          break;
-        case "process.bytes":
-          recovery.process.bytes = invalid;
-          break;
-        case "process.letter.bytes":
-          recovery.process.letter.bytes = invalid;
-          break;
+      if (field === "storage") {
+        values[Declarations.storage.path] = invalid;
+      } else {
+        values[Declarations.recovery.path] = {
+          project:
+            field === "project.bytes"
+              ? { ...project, bytes: invalid }
+              : field === "project.letter.bytes"
+                ? { ...project, letter: { ...project.letter, bytes: invalid } }
+                : project,
+          process:
+            field === "process.bytes"
+              ? { ...process, bytes: invalid }
+              : field === "process.letter.bytes"
+                ? { ...process, letter: { ...process.letter, bytes: invalid } }
+                : process,
+        };
       }
 
       // The snapshot's envelope accepts any JSON; each declared byte-size codec must still reject it.
@@ -155,6 +157,7 @@ it.live.prop(
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
+        Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(filesWithoutSync),
@@ -163,7 +166,7 @@ it.live.prop(
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
       expect(fetched).not.toHaveBeenCalled();
     }),
-  { arbitrary: { seed: 119120, runs: 40 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
 );
 
 it.live.prop(
