@@ -17,10 +17,12 @@ it("type: T1 HandsJobs speaks its own error and shared names only, never JobsErr
     readonly ask: (ask: typeof Ask.Type, from: From) => Effect.Effect<typeof Reply.Type, HandsJobsError>;
   }>();
   expectTypeOf<Extract<HandsJobsError, JobsError>>().toEqualTypeOf<never>();
-  // Its reasons are its own: a lost or failed call, a failed write, or a job that is not this process's.
-  expectTypeOf<HandsJobsError["reason"]>().toEqualTypeOf<"storage" | "unavailable" | "conflict">();
+  // Its reasons are its own, and each may pass: a lost or failed call, or a failed read or write.
+  expectTypeOf<HandsJobsError["reason"]>().toEqualTypeOf<"storage" | "unavailable">();
   // The answer is one of three cases, each the runner's to read.
   expectTypeOf<(typeof Reply.Type)["_tag"]>().toEqualTypeOf<"waiting" | "finished" | "refused">();
+  // A refusal is for good, and an answer: no hands key, or a job under the id that is not this process's.
+  expectTypeOf<Extract<typeof Reply.Type, { _tag: "refused" }>["reason"]>().toEqualTypeOf<"no_hands" | "conflict">();
   // The layer serves HandsJobs over the jobs service, and fails with nothing of its own while built.
   type Live = ReturnType<typeof HandsJobsLive.layer>;
   expectTypeOf<Layer.Success<Live>>().toEqualTypeOf<HandsJobs>();

@@ -21,7 +21,8 @@
 // product's step function.
 //
 // The contract these laws pin, from the plan:
-//   Hands.ts: `hands`, `Cmd.make("hands", { input: { command }, ok: Result, err: ["no_hands"] })`.
+//   Hands.ts: `hands`, `Cmd.make("hands", { input: { command }, ok: Result, err: ["no_hands",
+//   "conflict"] })`.
 //   HandsJobs.ts: `Ask`, `Reply`, `HandsJobsError`, `HandsJobs`; HandsJobsLive.ts: `layer`.
 //   Runner.ts: a runner given `HandsJobs` performs `hands` itself, saves `waiting` on the dispatched
 //   Cmd, owes it only while `pending`, and asks again on every wake or due.
@@ -31,6 +32,11 @@
 // lost reply; L13, give each delivery a fresh answer id; L14, route the answer by registered name
 // alone; L20, hold the command permit while waiting; R1, drop the Cmd when `ask` answers finished,
 // before the letter is placed; B1, take `hands` out of `BUILT_IN`.
+//
+// L21, added in the fix round: a `conflict` refusal is the program's answer, never a retry. Its
+// `foreign` cut saves another process's job under the Cmd's id through the real Project first.
+// Plants: treat a conflict refusal as a failed ask, as the build first did; keep a conflicted
+// delivery pending.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
@@ -69,6 +75,8 @@ const SETTINGS = "5e771165a5e771165";
 /** A call that does not answer in this long is held behind something it must never wait on. */
 const LIMIT = "5 seconds";
 const CHECK = "check:1";
+/** A process this walk never runs: the one whose job is found under another Cmd's id. */
+const FOREIGN = PIDS.at(-1) ?? "";
 const OTHER = "other:1";
 
 // ---------------------------------------------------------------------------------------------
@@ -160,6 +168,8 @@ type Fault = {
   /** The next answer letter is saved; the statement after it fails. */
   letter: boolean;
   letterArmed: boolean;
+  /** The next ask finds a job another process saved under the Cmd's id first. */
+  foreign: boolean;
 };
 
 /** One Cmd the walk saw dispatched, and the process generation that dispatched it. */
@@ -317,6 +327,13 @@ const host = Effect.fnUntraced(function* (
           return yield* new HandsJobsError({ reason: "unavailable" });
         }
 
+        if (world.fault.foreign) {
+          // Another process's job is saved under this Cmd's id first, through the real Project.
+          world.fault.foreign = false;
+          yield* live.ask({ ...ask, process: FOREIGN }, from);
+          world.done.add("foreign:saved");
+        }
+
         world.asked.push(ask.id);
         const reply = yield* live.ask(ask, from);
 
@@ -459,6 +476,7 @@ const walk = (
         checkpointArmed: false,
         letter: false,
         letterArmed: false,
+        foreign: false,
       },
       alarms: new Map(),
       seen: new Map(),
@@ -900,6 +918,105 @@ const walk = (
     }
   });
 
+/** What a program does after its ask was refused for good: more inputs, wakes and alarms. */
+const After = fc.array(fc.constantFrom("poke" as const, "wake" as const, "due" as const), {
+  minLength: 1,
+  maxLength: 6,
+});
+
+/**
+ * L21: a refusal for good is an answer. The real Project finds another process's job under the
+ * Cmd's id and refuses `conflict`; the program folds one `hands_err`, and the Cmd is never asked or
+ * retried again, whatever wakes, alarms and inputs come after.
+ */
+const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>) =>
+  Effect.fnUntraced(function* (tape: {
+    readonly target: string;
+    readonly after: ReadonlyArray<"poke" | "wake" | "due">;
+  }) {
+    const store = yield* open;
+    const world: World = {
+      target: tape.target,
+      fault: {
+        before: false,
+        after: false,
+        checkpoint: false,
+        checkpointArmed: false,
+        letter: false,
+        letterArmed: false,
+        foreign: true,
+      },
+      alarms: new Map(),
+      seen: new Map(),
+      asked: [],
+      sentBy: new Map(),
+      done,
+      n: 0,
+    };
+    const scope = yield* Scope.make();
+    yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+    const life = yield* host(store, world, [CHECK], ids(...PIDS).next, scope);
+    const runner = life.runners.get(CHECK) ?? expect.fail("no runner");
+    const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(life.context));
+    const process = yield* inContext(
+      ProcessManager.use((p) => p.status(CHECK)).pipe(Effect.map((s) => s.state.process)),
+    );
+    const saved = () =>
+      ProcessStore.use((p) => p.load).pipe(
+        Effect.provide(ProcessStore.layer(store.sql(`process-${CHECK}`), { process })),
+        Effect.provide(life.context),
+      );
+
+    yield* answers(runner.msg(letter(++world.n, { type: "ask" })), "the ask");
+    const id = world.asked[0] ?? expect.fail("L21: the program's hands Cmd reached the Project");
+    const foreign = yield* inContext(Jobs.use((j) => j.read(id)));
+
+    for (const move of tape.after) {
+      if (move === "poke") {
+        yield* answers(runner.msg(letter(++world.n, { type: "poke" })), "a later poke");
+      } else if (move === "wake") {
+        yield* answers(runner.mailed, "a wake");
+      } else {
+        // A saved alarm fires, or, with none, a stray one: a due asks every Cmd still dispatched.
+        const at = world.alarms.get(CHECK) ?? 1794099600000;
+        world.alarms.delete(CHECK);
+        yield* answers(runner.due(at), "a due");
+      }
+
+      done.add(move);
+    }
+
+    // A wake sets the alarm to now; firing every saved alarm must leave none behind.
+    for (let round = 0; round < 8 && world.alarms.has(CHECK); round++) {
+      const at = world.alarms.get(CHECK) ?? 0;
+      world.alarms.delete(CHECK);
+      yield* answers(runner.due(at), "a saved alarm");
+    }
+
+    const checkpoint = yield* saved();
+    const m = Option.getOrNull(decodeModel(checkpoint?.saved.model ?? null));
+    expect(m?.answers, "L21: the program folds one hands_err conflict").toEqual([{ err: "conflict" }]);
+    expect(m?.pokes, "L21: every later input steps").toBe(tape.after.filter((a) => a === "poke").length);
+    expect(
+      (checkpoint?.cmds ?? []).filter((c) => isHandsCmd(c)),
+      "L21: the refused Cmd is no longer dispatched",
+    ).toEqual([]);
+    expect(world.alarms.has(CHECK), "L21: nothing keeps an alarm for a refused Cmd").toBe(false);
+    expect(world.asked, "L21: the refused Cmd is never asked again").toEqual([id]);
+    const inbox = yield* inContext(Mailbox.use((mb) => Stream.runCollect(mb.read(CHECK, 0))));
+    const placed = inbox.filter((l) => l.id === `${id}/answer`).map((l) => Option.getOrNull(decodeLetter(l.m)));
+    expect(
+      placed.map((l) => [l?.type, l?.reason]),
+      "L21: one answer letter, hands_err conflict",
+    ).toEqual([["hands_err", "conflict"]]);
+    expect(yield* inContext(Jobs.use((j) => j.read(id))), "L21: the other process's job is left as it was").toEqual(
+      foreign,
+    );
+    expect(foreign.state._tag !== "absent" && foreign.state.request.process, "the job is the other process's").toBe(
+      FOREIGN,
+    );
+  });
+
 const Tape = (target: fc.Arbitrary<string | null>) =>
   fc.record({ target, cells: fc.array(Cell, { minLength: 8, maxLength: 30, size: "max" }) });
 
@@ -997,6 +1114,22 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         required: ["R1:result_kept", "cut_letter:fired", "lose_after:finished", "delivered"],
         runs: { fast: 30, full: 100 },
       },
+    );
+    it.effect(
+      "L21: a hands Cmd whose id holds another process's job is answered hands_err conflict once, and is never asked or retried again",
+      () =>
+        Effect.gen(function* () {
+          const done = new Set<string>();
+          const law = refusedForGood(open, done);
+          const tapes = fc.record({ target: fcFingerprint, after: After });
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
+          const property = fc.asyncProperty(tapes, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const check = { seed: SEED, numRuns: runsFor({ fast: 15, full: 40 }), includeErrorInReport: true };
+          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+          yield* Effect.promise(() => fc.assert(property, check));
+          // An empty walk cannot pass: the foreign job was really found, and every later move ran.
+          expect([...done].sort()).toEqual(["due", "foreign:saved", "poke", "wake"]);
+        }),
     );
 
     prop("B1: a forged hands answer through a client input is refused and never steps the program", open, {

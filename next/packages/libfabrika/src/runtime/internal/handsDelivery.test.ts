@@ -1,18 +1,18 @@
 // P39 slice 3 (ticket 1040), next/, D1 on one hands Cmd's delivery machine (0037, 0046): its real
 // `init` and its real reducer, walked by tea's guided sequences from `init` and from a saved
-// `waiting`, as the runner loads it. The expected next state is this file's own reading of the plan's
-// table, never the machine:
+// `waiting`, as the runner loads it. The machine takes one Msg, the Project's reply; a failed ask is
+// no reply, and the runner never steps the machine with it. The expected next state is this file's
+// own reading of the plan's table, as the fix round left it:
 //
-//   pending  + replied waiting  -> waiting          pending  + replied finished -> result ok
-//   waiting  + replied waiting  -> waiting          waiting  + replied finished -> result ok
-//   pending  + replied refused  -> result err       result   + placed           -> answered
-//   any      + failed           -> unchanged        answered + anything         -> unchanged
-//   anything else               -> unchanged
+//   pending + replied waiting  -> waiting       pending + replied finished -> result ok
+//   waiting + replied waiting  -> waiting       waiting + replied finished -> result ok
+//   pending + replied refused  -> result err    waiting + replied refused  -> result err, conflict only
+//   result  + anything         -> unchanged
 //
-// So the machine never leaves `answered`, never goes from `waiting` back to `pending`, and a failure
-// changes nothing. That only `pending` is owed (a waiting job sets no backoff alarm) is the runner's
-// half, in `RunnerHandsTest.ts` (L20). Plant (after build): let `failed` move `waiting` back to
-// `pending`, so a waiting job re-arms the backoff.
+// So a settled delivery never moves again, a saved job never goes back to pending, and no hands key
+// never undoes a saved job. That only `pending` is owed (a waiting job sets no backoff alarm) is the
+// runner's half, in `RunnerHandsTest.ts` (L20). Plants: let a `no_hands` refusal settle a waiting
+// delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
@@ -34,7 +34,12 @@ const reply = fc.oneof(
     weight: 3,
     arbitrary: fc.record({ result: fcResult, rev, arrivedAt }).map((fields) => Reply.cases.finished.make(fields)),
   },
-  { weight: 1, arbitrary: fc.constant(Reply.cases.refused.make({ reason: "no_hands" })) },
+  {
+    weight: 2,
+    arbitrary: fc
+      .constantFrom("no_hands" as const, "conflict" as const)
+      .map((reason) => Reply.cases.refused.make({ reason })),
+  },
 );
 
 const ctx = stubCtxThrowingProxy<unknown>();
@@ -42,16 +47,7 @@ const ctx = stubCtxThrowingProxy<unknown>();
 const lists = arbGuidedSequence(
   handsDelivery,
   ctx,
-  {
-    outside: {
-      replied: fc.record({ type: fc.constant("replied" as const), reply }),
-      failed: fc.record({
-        type: fc.constant("failed" as const),
-        reason: fc.constantFrom("storage" as const, "unavailable" as const, "conflict" as const),
-      }),
-      placed: fc.record({ type: fc.constant("placed" as const), rev, pos: rev }),
-    },
-  },
+  { outside: { replied: fc.record({ type: fc.constant("replied" as const), reply }) } },
   { maxLength: 30 },
 );
 
@@ -67,10 +63,12 @@ const loaded = fc.oneof(
 );
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const key = (msg: Msg) => (msg.type === "replied" ? `replied:${msg.reply._tag}` : msg.type);
+
+const key = (msg: Msg) =>
+  msg.reply._tag === "refused" ? `replied:refused:${msg.reply.reason}` : `replied:${msg.reply._tag}`;
 
 describe("P39 slice 3: one hands Cmd's delivery", () => {
-  it("D1: the delivery never leaves answered, never goes from waiting back to pending, and a failure changes nothing", () => {
+  it("D1: a settled delivery never moves again, a saved job never goes back to pending, and a refusal settles only an unsaved job or one that is another process's", () => {
     const reached = new Set<string>();
     expect(handsDelivery.init(null, undefined)[0]._tag, "D1: a Cmd saved as dispatched starts pending").toBe("pending");
     propertyInvariant(
@@ -79,78 +77,63 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
       lists,
       ({ prev, msg, next }) => {
         reached.add(`${prev._tag}+${key(msg)}`);
+        const r = msg.reply;
 
-        if (prev._tag === "answered") {
-          return same(prev, next) || "D1: nothing moves an answered delivery";
-        }
-
-        if (msg.type === "failed") {
-          return same(prev, next) || "D1: a failed ask changes nothing; the Cmd stays as it was";
+        if (prev._tag === "result") {
+          return same(prev, next) || "D1: nothing moves a settled delivery";
         }
 
         if (prev._tag === "waiting" && next._tag === "pending") {
           return "D1: a saved job never goes back to pending";
         }
 
-        if (msg.type === "replied" && (prev._tag === "pending" || prev._tag === "waiting")) {
-          const r = msg.reply;
-
-          if (r._tag === "waiting") {
-            return prev._tag === "waiting"
-              ? next._tag === "waiting" || "D1: waiting stays waiting on another waiting reply"
-              : (next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
-                  "D1: pending moves to waiting with the request's receipt";
-          }
-
-          if (r._tag === "finished") {
-            return (
-              (next._tag === "result" &&
-                next.answer._tag === "ok" &&
-                same(next.answer.result, r.result) &&
-                Object.keys(next.answer).sort().join() === "_tag,result") ||
-              "D1: a finished reply settles the delivery with that result"
-            );
-          }
-
-          return prev._tag === "pending"
-            ? (next._tag === "result" && next.answer._tag === "err" && next.answer.reason === "no_hands") ||
-                "D1: a refusal settles a pending delivery as no_hands"
-            : same(prev, next) || "D1: a refusal never undoes a saved job";
+        if (r._tag === "waiting") {
+          return prev._tag === "waiting"
+            ? same(prev, next) || "D1: waiting stays waiting, at its first receipt, on another waiting reply"
+            : (next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
+                "D1: pending moves to waiting with the request's receipt";
         }
 
-        if (msg.type === "placed" && prev._tag === "result") {
+        if (r._tag === "finished") {
           return (
-            (next._tag === "answered" && next.rev === msg.rev && next.pos === msg.pos) ||
-            "D1: a placed letter moves a settled delivery to answered, at that letter"
+            (next._tag === "result" &&
+              next.answer._tag === "ok" &&
+              same(next.answer.result, r.result) &&
+              Object.keys(next.answer).sort().join() === "_tag,result") ||
+            "D1: a finished reply settles the delivery with that result"
           );
         }
 
-        return same(prev, next) || `D1: ${prev._tag} + ${key(msg)} changes nothing`;
+        if (prev._tag === "pending" || r.reason === "conflict") {
+          return (
+            (next._tag === "result" &&
+              next.answer._tag === "err" &&
+              next.answer.reason === r.reason &&
+              Object.keys(next.answer).sort().join() === "_tag,reason") ||
+            `D1: a ${r.reason} refusal settles a ${prev._tag} delivery with that reason`
+          );
+        }
+
+        return same(prev, next) || "D1: no hands key never undoes a saved job";
       },
       { ...RUNS, loaded },
     );
     // An empty walk cannot pass: every row of the table ran at least once.
     expect([...reached].sort()).toEqual(
-      expect.arrayContaining(
-        [
-          "pending+replied:waiting",
-          "pending+replied:finished",
-          "pending+replied:refused",
-          "pending+failed",
-          "pending+placed",
-          "waiting+replied:waiting",
-          "waiting+replied:finished",
-          "waiting+replied:refused",
-          "waiting+failed",
-          "waiting+placed",
-          "result+placed",
-          "result+replied:finished",
-          "result+failed",
-          "answered+replied:finished",
-          "answered+failed",
-          "answered+placed",
-        ].sort(),
-      ),
+      [
+        "pending+replied:waiting",
+        "pending+replied:finished",
+        "pending+replied:refused:no_hands",
+        "pending+replied:refused:conflict",
+        "waiting+replied:waiting",
+        "waiting+replied:finished",
+        "waiting+replied:refused:no_hands",
+        "waiting+replied:refused:conflict",
+        "result+replied:waiting",
+        "result+replied:finished",
+        "result+replied:refused:no_hands",
+        "result+replied:refused:conflict",
+      ].sort(),
     );
   });
 });

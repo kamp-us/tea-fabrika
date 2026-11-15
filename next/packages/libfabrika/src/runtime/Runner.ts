@@ -1665,8 +1665,9 @@ export class ProgramRunner extends Context.Service<
 
         /** The built-in hands Cmd: the Project keeps its job under the Cmd's own id, for the person's
          *  hands. A finished job or a refusal is its answer. A waiting job answers nothing yet, and a
-         *  failed ask is not an answer either: the Cmd stays dispatched, and an alarm asks again. */
-        const hands = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+         *  failed ask is not an answer either: the Cmd stays dispatched, and an alarm asks again. The
+         *  ask is the life that dispatched it, `origin`, even if a restart or a swap moved on since. */
+        const hands = Effect.fnUntraced(function* (state: Live, job: Dispatched, origin: Descriptor) {
           const input = decodeHands(job.cmd);
 
           if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(HANDS) || Option.isNone(handsJobs)) {
@@ -1677,25 +1678,25 @@ export class ProgramRunner extends Context.Service<
             .ask(
               {
                 id: job.id,
-                process: process.id,
-                name: process.name,
-                program: process.program,
-                build: process.build,
+                process: origin.id,
+                name: origin.name,
+                program: origin.program,
+                build: origin.build,
                 command: input.value.command,
                 parent: job.parent,
                 traceId: job.traceId,
               },
-              yield* from(job.parent, job.traceId),
+              { ...(yield* from(job.parent, job.traceId)), build: origin.build },
             )
             .pipe(Effect.result);
 
-          // A failed ask changes nothing the delivery saved. A waiting Cmd is owed nothing, so this
-          // alarm is what asks it again.
+          // A failed ask may pass, so it is no reply and changes nothing the delivery saved. A waiting
+          // Cmd is owed nothing, so this alarm is what asks it again. A refusal for good, a conflict
+          // included, is a reply, and the program reads it.
           if (Result.isFailure(replied)) {
             yield* permit.withPermit(retryLater);
-            const { reason } = replied.failure;
             return yield* new LedgerError({
-              reason: reason === "storage" ? "storage" : reason === "unavailable" ? "unreachable" : "bad_row",
+              reason: replied.failure.reason === "storage" ? "storage" : "unreachable",
               message: Cause.pretty(Cause.fail(replied.failure)),
             });
           }
@@ -1895,7 +1896,7 @@ export class ProgramRunner extends Context.Service<
           const type = cmdType(job);
 
           if (type === HANDS) {
-            const answer = yield* cmdSpan(job, hands(state, job));
+            const answer = yield* cmdSpan(job, hands(state, job, origin));
             return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
           }
 

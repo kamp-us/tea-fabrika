@@ -10,11 +10,17 @@
 // given and answered, never the product's machine.
 //
 // The contract this law pins, from the plan:
-//   HandsJobs.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused`), `HandsJobsError`, `HandsJobs`.
+//   HandsJobs.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused` with `no_hands` or `conflict`),
+//   `HandsJobsError`, `HandsJobs`.
 //   HandsJobsLive.ts: `layer({ target, settings })`, read first, then request or collect, over `Jobs`.
 //
 // Plants (after build): fall back to the first live hands key when `hands.target` is unset; rebuild
 // the request on a retry, so a changed target answers `conflict`.
+//
+// S2, added in the fix round: a saved job's id asked by another process is refused `conflict` in
+// every state the job can be in. The job machine refuses `wrong_process` only for a finished or
+// collected job, so for a requested, assigned or started one the layer's own check is what keeps
+// another process's waiting receipt out of the reply. Plant: drop that check in `HandsJobsLive.ts`.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope } from "effect";
@@ -228,6 +234,90 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
     }
   });
 
+/** The states a saved job can be in when another process asks under its id. */
+const STATES = ["requested", "assigned", "started", "finished", "collected"] as const;
+
+/**
+ * A tape for S2: the asking process's Cmd, another process, the state its job is brought to, the
+ * hands' result, and what each writer says.
+ */
+const Foreign = fc.uniqueArray(fcFingerprint, { minLength: 1, maxLength: 1 }).chain((keys) =>
+  fc
+    .record({
+      key: fc.constant(keys[0] ?? ""),
+      mine: fcAsk(keys),
+      theirs: fcAsk(keys),
+      state: fc.constantFrom(...STATES),
+      result: fcResult,
+      said: fcRecorded,
+      asked: fcRecorded,
+    })
+    .filter(({ mine, theirs }) => mine.process !== theirs.process),
+);
+type Foreign = typeof Foreign extends fc.Arbitrary<infer A> ? A : never;
+
+/**
+ * S2: a saved job is only ever its own process's. Brings one process's job to a state, then asks
+ * under the same id as another process, and reads the job back before and after.
+ */
+const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>) =>
+  Effect.fnUntraced(function* (tape: Foreign) {
+    const store = yield* open;
+    const jobsLife = yield* Layer.build(store.jobs);
+    const ask = (a: typeof Ask.Type, from: From) =>
+      HandsJobs.use((h) => h.ask(copied(a), from)).pipe(
+        Effect.provide(
+          HandsJobsLive.layer({ target: tape.key, settings: "0123456789abcdef" }).pipe(
+            Layer.provide(Layer.succeedContext(jobsLife)),
+          ),
+        ),
+        Effect.result,
+      );
+    const jobs = <A, E>(call: (j: Jobs["Service"]) => Effect.Effect<A, E>) =>
+      Jobs.use(call).pipe(Effect.provide(jobsLife), Effect.result);
+    const from: From = { ...tape.said, seen: 0 };
+    const id = tape.mine.id;
+    const reached = STATES.indexOf(tape.state);
+
+    answered(yield* ask(tape.mine, from), "the asking process saves its job");
+
+    if (reached >= 1) {
+      const executor = { key: tape.key, connection: "hands-law", has: ["git"], build: "hands-build" };
+      const by = { ...from, by: tape.key };
+      const taken = answered(yield* jobs((j) => j.take(id, executor, by)), "the target takes the job");
+
+      if (reached >= 2) {
+        answered(yield* jobs((j) => j.started(id, taken.execution, by)), "the target starts the job");
+      }
+
+      if (reached >= 3) {
+        answered(yield* jobs((j) => j.finish(id, taken.execution, tape.result, by)), "the target finishes the job");
+      }
+
+      if (reached >= 4) {
+        answered(yield* ask(tape.mine, from), "the asking process collects its result");
+      }
+    }
+
+    const before = answered(yield* jobs((j) => j.read(id)), "the saved job reads back");
+    expect(before.state._tag, `the job is ${tape.state}`).toBe(tape.state);
+
+    // Another process asks under the same id: its own Cmd's facts, the id it does not own.
+    const reply = answered(
+      yield* ask({ ...tape.mine, process: tape.theirs.process }, { ...tape.asked, seen: 0 }),
+      "an ask from another process answers",
+    );
+    // The answer is the bare refusal, for good: no receipt and no result, the asker's to read.
+    expect(reply, `S2: another process's ask is refused conflict and nothing else (${tape.state})`).toEqual(
+      Reply.cases.refused.make({ reason: "conflict" }),
+    );
+    expect(Object.keys(reply).sort(), "S2: the refusal carries no receipt or result").toEqual(["_tag", "reason"]);
+
+    const after = answered(yield* jobs((j) => j.read(id)), "the saved job still reads back");
+    expect(after, `S2: another process's ask writes nothing (${tape.state})`).toEqual(before);
+    done.add(tape.state);
+  });
+
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P39 slice 3: the Project's half of a hands Cmd", () => {
     it.effect(
@@ -259,6 +349,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               ].sort(),
             ),
           );
+        }),
+    );
+    it.effect(
+      "S2: an ask under a saved job's id from another process is refused conflict in every state of the job, writes nothing, and reveals no receipt or result",
+      () =>
+        Effect.gen(function* () {
+          const done = new Set<string>();
+          const law = foreign(open, done);
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
+          const property = fc.asyncProperty(Foreign, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 60 }), includeErrorInReport: true };
+          // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+          yield* Effect.promise(() => fc.assert(property, options));
+          // An empty walk cannot pass: every state a job can be in when another process asks ran.
+          expect([...done].sort()).toEqual([...STATES].sort());
         }),
     );
   });
