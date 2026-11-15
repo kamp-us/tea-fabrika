@@ -47,6 +47,8 @@ The docs rule, `jsdocs`, works the same way since ticket 948. It is `"error"` fo
 
 The other 14 libfabrika folders block: `access`, `ci`, `codehost`, `desktop`, `gateway`, `jobs`, `ledger`, `packs`, `presence`, `processes`, `repositories`, `runtime`, `schedules` and `settings`. The 4 fires in `node` and `telemetry` were read: each is an export with no block or a block with no `@stability` and `@category`, not a false alarm.
 
+Count again on 2026-11-14, after merging main at `5c3b8277a`: 300 fires, all still in the same 9 folders, and 0 disable lines. Main had added a fifteenth libfabrika folder, `client`, whose fill brought it to zero, so it blocks too. Fewer fires in `transport` (23), tuval `src/*` (2), `browser` (8) and `window` (2) came from main's own changes there; no warn line has reached zero yet.
+
 ## Isolate boundary
 
 | Rule | Checks | Cannot see |
