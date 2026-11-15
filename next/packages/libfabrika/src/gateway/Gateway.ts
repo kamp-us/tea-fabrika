@@ -1181,21 +1181,30 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     if (method.startsWith("jobs.")) {
-      const { answer, wake } = yield* Effect.gen(function* () {
-        const fresh = yield* silent(Effect.result(authenticated(client)));
+      // One span for the whole jobs call: the write turn, the finish's record and the wake, so the
+      // wake joins the trace the finish saved. `flush` runs after it, so the span is written too.
+      const routeJobs = Effect.fn("gateway.route")(
+        function* () {
+          const { answer, wake } = yield* Effect.gen(function* () {
+            const fresh = yield* silent(Effect.result(authenticated(client)));
 
-        if (Result.isFailure(fresh)) {
-          return { answer: no("not_granted"), wake: null };
-        }
+            if (Result.isFailure(fresh)) {
+              return { answer: no("not_granted"), wake: null };
+            }
 
-        return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
-      }).pipe(write);
-      // A taken finish answers only once its requester is scheduled, outside the write turn. A wake
-      // that failed answers `unavailable`: the result is saved, and the same finish sent again repeats
-      // and wakes again, as MailDelivery's `queued` comes only after both.
-      const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
+            return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
+          }).pipe(write);
+          // A taken finish answers only once its requester is scheduled, outside the write turn. A
+          // wake that failed answers `unavailable`: the result is saved, and the same finish sent
+          // again repeats and wakes again, as MailDelivery's `queued` comes only after both.
+          const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
+          return Result.isSuccess(woke) ? answer : no("unavailable");
+        },
+        Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
+      );
+      const routed = yield* Effect.exit(routeJobs());
       yield* flush;
-      return Result.isSuccess(woke) ? answer : no("unavailable");
+      return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
     }
 
     if (attached.identity.as === "hands") {
