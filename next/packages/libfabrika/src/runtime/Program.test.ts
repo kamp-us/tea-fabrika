@@ -2,7 +2,7 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
+import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -1583,6 +1583,107 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       "down:error:function",
       "down:error:number",
     ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+});
+
+// Program watch (docs/plan/lanes/watch-PLAN.md), next/: law M11. A program that may `monitor` gets a
+// `DOWN` message when a watched process ends, so it must declare the port that message arrives on.
+// The loader checks it: a program whose `cmds` hold `monitor` and whose inputs have no `DOWN` port does
+// not load, `ProgramDown` with `load` and a cause that names the port. The Cmds are this file's own,
+// matched by name as the runner matches them, so the law reads no module the build has not written.
+// The program without the port is the made program with its `DOWN` input taken out, so the check is the
+// loader's, whatever `Program.make` does. Plant: load it anyway.
+describe("Program watch: a program that monitors declares DOWN, next/", () => {
+  const Watched = Schema.Struct({ type: Schema.Literal("watch"), name: Schema.String });
+  const DownMsg = Schema.Struct({ type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String });
+  const watchMsg = Schema.Union([Watched, DownMsg]);
+  const watchModel = Schema.Struct({ downs: Schema.Int });
+  /** Cmds a program may declare beside the watch: `monitor` and `demonitor` by their built-in names. */
+  const named = (name: string) =>
+    Cmd.make(name, { input: Schema.Struct({ name: Schema.String }), ok: Schema.Json, err: ["refused"] });
+  const CMDS = ["monitor", "demonitor", "send", "save"] as const;
+  const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
+    const defs = cmds.map(named);
+    const answers = Object.fromEntries(
+      defs.flatMap((d) => [
+        [d.okType, (s: typeof watchModel.Type) => [s, []]],
+        [d.errType, (s: typeof watchModel.Type) => [s, []]],
+      ]),
+    );
+    const made = Program.make({
+      name: "watcher",
+      machine: Machine.make({
+        model: watchModel,
+        msg: watchMsg,
+        cmds: defs,
+        init: (loaded) => [loaded ?? { downs: 0 }, []],
+        update: {
+          ...answers,
+          watch: (s: typeof watchModel.Type) => [s, []],
+          DOWN: (s: typeof watchModel.Type) => [{ downs: s.downs + 1 }, []],
+        } as never,
+      }),
+      state: { v: 1, upgrades: [] },
+      view: (s) => s,
+      refuse: () => null,
+      inputs: { watch: "Watch a name", DOWN: "A process this program monitors has ended" },
+      outputs: {},
+      writes: {},
+      wake: () => null,
+    });
+    const { DOWN, ...rest } = made.inputs;
+    const inputs = port === "both" ? made.inputs : port === "DOWN" ? { DOWN } : rest;
+    return { ...made, inputs };
+  };
+  const loaded = (raw: unknown) =>
+    Effect.runSync(
+      ProgramLoader.use((loader) => loader.load("watcher")).pipe(
+        Effect.provide(ProgramLoader.layer({ watcher: raw }, {})),
+        Effect.exit,
+      ),
+    );
+
+  it("M11: a program whose cmds hold monitor loads exactly when its inputs have a DOWN port, and the refusal names the port", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.subarray([...CMDS]),
+        fc.constantFrom<"DOWN" | "other" | "both">("DOWN", "other", "both"),
+        (cmds, port) => {
+          const exit = loaded(watcher(cmds, port));
+          const monitors = cmds.includes("monitor");
+          const declared = port !== "other";
+          const label = `cmds ${JSON.stringify(cmds)}, ports ${port}`;
+          seen.add(`${monitors}:${declared}`);
+
+          // The refusal a load gives, or none when it loads: ProgramDown `load`, with a cause naming the port.
+          const down = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
+          const refusal = Exit.isSuccess(exit)
+            ? "loads"
+            : {
+                error: Predicate.hasProperty(down, "_tag") ? down._tag : "none",
+                reason: Predicate.hasProperty(down, "reason") ? down.reason : "none",
+                names: String(Predicate.hasProperty(down, "cause") ? down.cause : down).includes("DOWN"),
+              };
+          expect(refusal, `M11: ${label}`).toEqual(
+            monitors && !declared ? { error: "ProgramDown", reason: "load", names: true } : "loads",
+          );
+        },
+      ),
+      {
+        seed: SEED,
+        numRuns: 100,
+        examples: [
+          [["monitor"], "other"],
+          [["monitor"], "both"],
+          [["demonitor"], "other"],
+        ],
+      },
+    );
+
+    for (const side of ["true:true", "true:false", "false:true", "false:false"]) {
       expect(seen, side).toContain(side);
     }
   });
