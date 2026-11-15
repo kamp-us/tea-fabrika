@@ -63,7 +63,7 @@ const inTests = Layer.mergeAll(Ci.fake, CodeHost.fake, Ledger.memory);         /
 - **`Ci` comes out of `CodeHost` now.** GitHub Actions and today's
   `[[checks.run]]` are its first Layers. This settles the 70% doubt under
   "How sure".
-- **Our own machines as CI hosts wait** until the new lane merges its first
+- **Our own machines as CI hosts wait** until the new quest merges its first
   ticket. Then they are one more `Ci` Layer, and no stage changes.
 - **Why:** a second backend then costs one Layer, not a change to every stage
   that called the first. Tests get a fake Layer with no network. The shape
@@ -84,7 +84,7 @@ const inTests = Layer.mergeAll(Ci.fake, CodeHost.fake, Ledger.memory);         /
   for findings. Two have no standard that fits: the ledger, and pull requests
   with their merge queue. Those keep our own typed contract.
 - **CI on our own machines works, and it is mostly parts we already have.**
-  - A job is a lease on the ledger: the same lease a lane takes on a ticket.
+  - A job is a lease on the ledger: the same lease a quest takes on a ticket.
   - A machine pulls the job, runs it in a fresh box, and writes the result
     as a signed fact. Nothing ever connects into the machine.
   - A Mac mini runs macOS jobs in a throwaway VM. A Linux machine runs Linux
@@ -231,7 +231,7 @@ ledger.register("ci/acme/app/job/j-41", "app");
  install: ["pnpm", "install", "--frozen-lockfile"], run: ["pnpm", "test"],
  needs: {os: "linux"}, recipe: "acme/app@main (9f8e7d)", by: "app", sig: "…"}
 
-// A runner that has what it needs takes the lease, as a lane takes a ticket.
+// A runner that has what it needs takes the lease, as a quest takes a ticket.
 ledger.claim("ci/acme/app/job/j-41", "linux-1", rev, 60_000); // a fence, or Held {holder}
 ledger.renew(name, fence, 60_000);                             // every 20 s while the box runs
 // The app can stop it: ledger.cancel(name, "app"). The runner's next renew is Cancelled,
@@ -402,7 +402,7 @@ the app people open, so it does not change.
 - A runner pulls jobs and opens no port.
 - A machine joins only with the owner's approval, which names its key. One fact
   takes it back, and the ledger checks the list of joined keys on every write.
-- Only the app files a job, and only for a commit the lane has pushed. A
+- Only the app files a job, and only for a commit the quest has pushed. A
   runner never files one.
 - A job and its result are both signed. A runner checks the job's signature
   before it runs it; the pipeline checks the result's before it folds it.
@@ -542,7 +542,7 @@ expect(resultWithBadSignature).toBe("refused when folded");
 
 - A job that cannot run with only its copy, its recipe and no key in the box.
 - Tart or gVisor start times that make a fresh box per job too slow for a
-  lane.
+  quest.
 - A code host that will not take an outside result for its required checks.
 
 ## What it cannot tell us
@@ -551,6 +551,6 @@ expect(resultWithBadSignature).toBe("refused when folded");
 - The research is of documentation, not of running these systems. The two-VM
   limit is from a 2022 reading of Apple's license; the current text was not
   read.
-- It cannot say how often a real lane would wait on a busy Mac mini, or how
+- It cannot say how often a real quest would wait on a busy Mac mini, or how
   much faster or slower our own CI is than GitHub's for demlik.
 - It says nothing about Windows.

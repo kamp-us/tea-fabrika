@@ -2221,7 +2221,7 @@
     },
     {
       // Today's frozen version (0525): the two top-level rules print as advice there, and a fire
-      // there needs no fix. This override goes when the freeze lane takes these paths out of lint;
+      // there needs no fix. This override goes when the freeze quest takes these paths out of lint;
       // oxlint-plugins/advice.ts names the same globs so the stale check does not read them.
       "files": ["apps/**", "programs/**", "packages/**", "bin/**"],
       "rules": {

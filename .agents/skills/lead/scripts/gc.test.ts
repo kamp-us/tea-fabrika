@@ -18,8 +18,8 @@ import {
   STUCK,
   worktreePrs,
 } from "./gc.ts";
-import { IDLE } from "./lane.ts";
 import { PgrepAnswer } from "./pgrep.ts";
+import { IDLE } from "./quest.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
@@ -47,8 +47,8 @@ const options = { seed: 119120, numRuns: 300 };
 
 describe("box gc, today's tooling", () => {
   // Plants: drop the busy check; drop the 2 h wait; drop the 24 h wait on a kept stuck box. Once its
-  // lane merged a stuck box is not held: p12's 22 stuck boxes outlived PR 530 (field note 2026-11-09-254).
-  it("never touches a box in use, touched in the last 2 h, or kept stuck under 24 h before its lane lands", () => {
+  // quest merged a stuck box is not held: p12's 22 stuck boxes outlived PR 530 (field note 2026-11-09-254).
+  it("never touches a box in use, touched in the last 2 h, or kept stuck under 24 h before its quest lands", () => {
     fc.assert(
       fc.property(seen, (s) => {
         const v = decide(s);
@@ -87,8 +87,8 @@ describe("box gc, today's tooling", () => {
 
   // Plants: back up or remove a box with uncommitted files, or one git could not read. A backup
   // pushes HEAD only (field note 2026-11-09-42: a box went with 10 uncommitted product files). Once
-  // its lane merged, a box with files goes only as "merged", after keepFiles saved them (main()).
-  it("never removes or backs up a box it could not read, or one holding uncommitted files before its lane merged", () => {
+  // its quest merged, a box with files goes only as "merged", after keepFiles saved them (main()).
+  it("never removes or backs up a box it could not read, or one holding uncommitted files before its quest merged", () => {
     fc.assert(
       fc.property(seen, sha, fc.option(fc.integer({ min: 1, max: 12 }), { nil: null }), (s, head, dirty) => {
         const idle = { ...s, git: { head, branch: s.git?.branch ?? null }, busy: [] };
@@ -100,7 +100,7 @@ describe("box gc, today's tooling", () => {
     );
   });
 
-  // scenario: a drive box never commits, so a landed lane's box holds its step's files uncommitted,
+  // scenario: a drive box never commits, so a landed quest's box holds its step's files uncommitted,
   // tracked and new. Plants: stash without -u; fetch from the tree's `.git` file; report a failed
   // stash as kept.
   it("scenario: keepFiles keeps every uncommitted and untracked file in the main checkout, ignored ones not", () => {
@@ -175,7 +175,7 @@ describe("box gc, today's tooling", () => {
 
 const prState = fc.constantFrom("OPEN" as const, "MERGED" as const, "CLOSED" as const);
 
-const lane = fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}$/);
+const quest = fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}$/);
 
 const worktree = fc.record({
   branch: fc.option(fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}(-wip)?$/), {
@@ -190,7 +190,7 @@ const worktree = fc.record({
 
 describe("worktree gc, today's tooling", () => {
   // Plants: drop the lock, busy, 2 h, branch or dirty check; remove under an open pull request.
-  it("removes a worktree only when it is clean, idle, unlocked and its lane landed", () => {
+  it("removes a worktree only when it is clean, idle, unlocked and its quest landed", () => {
     fc.assert(
       fc.property(worktree, (w) => {
         const v = decideWorktree(w);
@@ -204,14 +204,14 @@ describe("worktree gc, today's tooling", () => {
   });
 
   // Plants: drop the remote-tip or head-commit lookup, or the -wip strip on either name. The bug:
-  // a worktree on a local branch, pushed as fabrikalfa/<lane>, never matched its merged PR.
+  // a worktree on a local branch, pushed as fabrikalfa/<quest>, never matched its merged PR.
   it("finds a worktree's pull requests by its branch, by a remote branch at its HEAD, and by head commit", () => {
     fc.assert(
       fc.property(
-        fc.option(lane, { nil: null }),
+        fc.option(quest, { nil: null }),
         fc.option(sha, { nil: null }),
-        fc.array(lane, { maxLength: 3 }),
-        fc.array(fc.tuple(lane, prState), { maxLength: 4 }),
+        fc.array(quest, { maxLength: 3 }),
+        fc.array(fc.tuple(quest, prState), { maxLength: 4 }),
         fc.array(fc.tuple(sha, prState), { maxLength: 4 }),
         fc.boolean(),
         (branch, head, tips, refs, oids, wip) => {

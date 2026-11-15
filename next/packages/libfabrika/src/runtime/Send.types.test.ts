@@ -1,4 +1,4 @@
-// Ticket 1041, next/: L5 of the pipe plumbing plan (docs/plan/lanes/t1041-PLAN.md), written before
+// Ticket 1041, next/: L5 of the pipe plumbing plan (docs/plan/quests/t1041-PLAN.md), written before
 // the build. A program learns a full inbox from `send`'s own answer, and a chunked send's reader
 // types its items. tsc checks this file (the lead's typecheck); vitest only loads it.
 //

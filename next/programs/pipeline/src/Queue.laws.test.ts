@@ -76,7 +76,7 @@ const enqueue = (cell: Cell, change: number) =>
     type: "enqueue",
     change,
     head,
-    ...(cell.reply ? { reply: { to: `lane:${change}`, ref: `own:${cell.pick}` } } : {}),
+    ...(cell.reply ? { reply: { to: `quest:${change}`, ref: `own:${cell.pick}` } } : {}),
   });
 
 const reply = (cell: Cell, active: Pick<Active, "ref" | "change">): typeof Mail.Reply.Type => {
@@ -537,7 +537,7 @@ const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => 
   // @ts-expect-error idle cannot hold a current landing
   const current: Extract<Model, { _tag: "idle" }> = { ...idle, current: entry };
   // @ts-expect-error a reply address requires its ref
-  const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "lane" } };
+  const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "quest" } };
   return [line, current, partial];
 };
 

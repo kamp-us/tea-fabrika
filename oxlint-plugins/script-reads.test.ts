@@ -204,17 +204,17 @@ describe("reached", () => {
   it("scenario: a file only read at run time, under BOXES or made by the test, reaches nothing", () => {
     const tree = new Map([
       [
-        ".agents/skills/a/scripts/lane.ts",
+        ".agents/skills/a/scripts/quest.ts",
         [
-          `const state = join(env.BOXES, "state", \`\${lane}.json\`);`,
+          `const state = join(env.BOXES, "state", \`\${quest}.json\`);`,
           'writeFileSync("./out.json", x);',
           'readFileSync("runs/last.json");',
         ].join("\n"),
       ],
-      [".agents/skills/a/scripts/lane.test.ts", '"lane.ts"'],
+      [".agents/skills/a/scripts/quest.test.ts", '"quest.ts"'],
     ]);
-    expect([...reached(tree, none, ".agents/skills/a/scripts/lane.test.ts").keys()]).toEqual([
-      ".agents/skills/a/scripts/lane.ts",
+    expect([...reached(tree, none, ".agents/skills/a/scripts/quest.test.ts").keys()]).toEqual([
+      ".agents/skills/a/scripts/quest.ts",
     ]);
     expect(scriptReads(tree, none, () => "")).toEqual({ raw: [], unreached: [] });
   });

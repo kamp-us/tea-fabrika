@@ -51,7 +51,7 @@ Decided 2026-10-18.
   it means "how a program keeps and runs instances of one machine", which
   Cloudflare calls a Durable Object namespace and Akka an entity type.
 - **Done: `kid` became `child`** (picked by the owner, 2026-10-22, renamed the
-  same day). The lane said `kid` (`KIDS`, `startKid`, `kidSub`, `kid_over`,
+  same day). The quest said `kid` (`KIDS`, `startKid`, `kidSub`, `kid_over`,
   `hosted/kids.ts` and the `<parent>/kids` stream) for what `combos.ts` already
   calls a child. One idea, two words. `child` is the word Elm and OTP use. Now
   it is `CHILDREN`, `startChild`, `childSub`, `child_over`, `hosted/children.ts`

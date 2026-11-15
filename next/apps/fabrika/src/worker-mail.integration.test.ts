@@ -814,7 +814,7 @@ it("scenario: H1, two checklist adds with an immediate wake both land on the sam
 
 // --- T1041 L14: a repo file's `mail.unread` reaches the Project's cap --------------------------
 //
-// Written before the build (docs/plan/lanes/t1041-PLAN.md). The repo's file says `mail.unread = 2`;
+// Written before the build (docs/plan/quests/t1041-PLAN.md). The repo's file says `mail.unread = 2`;
 // the settings load reads it, the start hands its snapshot to the instance, and the Project's
 // program mail answers the third unread letter `full`. Nothing reads while the writer sends: the
 // reader crashes on a `crash` letter, and its own supervisor holds the successor for the policy's

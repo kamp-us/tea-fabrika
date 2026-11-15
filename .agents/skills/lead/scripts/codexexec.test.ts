@@ -127,7 +127,7 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
     });
     const ask = (over: Partial<TurnAsk<Answer>> = {}): TurnAsk<Answer> => ({
       provider: "codex-exec",
-      session: "lane-build1",
+      session: "quest-build1",
       folder: `${dir}/work`,
       prompt: "Add a function and its laws.",
       system: "You are the build step.",
@@ -342,7 +342,7 @@ describe("codex-exec: the session", () => {
       Effect.gen(function* () {
         const w = yield* world([answered(JSON.stringify(ANSWER)), answered(JSON.stringify(ANSWER))]);
         yield* w.turn();
-        yield* w.turn({ session: "lane-review1" });
+        yield* w.turn({ session: "quest-review1" });
         expect((yield* w.calls).every((argv) => !argv.includes("resume"))).toBe(true);
       }),
     ));
@@ -352,7 +352,7 @@ describe("codex-exec: the session", () => {
       Effect.gen(function* () {
         const w = yield* world([answered(JSON.stringify(ANSWER)), answered(JSON.stringify(ANSWER))]);
         yield* w.turn();
-        yield* w.turn({ provider: "codex-exec-read", session: "lane-review1" });
+        yield* w.turn({ provider: "codex-exec-read", session: "quest-review1" });
         const [write = [], read = []] = yield* w.calls;
         expect(write).toContain('sandbox_mode="workspace-write"');
         expect(read).toContain('sandbox_mode="read-only"');

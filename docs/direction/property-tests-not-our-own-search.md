@@ -69,8 +69,8 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
   3. the rest of the old pipeline's laws, when the old pipeline is deleted
      ([Sweep the core; rebuild the pipeline small](./sweep-the-core-rebuild-the-pipeline.md)
      says no cleanup goes into it);
-     - The lane's laws (`laws/lane.ts`) move to tea's pbt first, as laws of
-       the rebuilt lane (added 2026-10-24). In
+     - The quest's laws (`laws/lane.ts`) move to tea's pbt first, as laws of
+       the rebuilt quest (added 2026-10-24). In
        [experiment 139](../../experiments/139-tla-trace-validation.md) they
        were the only check that caught 5 of 46 mutants (432, 464, 465, 472,
        553): the stall rule's count and the `unseen` rule. The move is done
@@ -95,7 +95,7 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
 - **Two generator systems for a while.** tea's pbt uses fast-check, while
   Effect 4's `Arbitrary` is its own. fast-check is a new dev dependency here.
 - **One machine at a time.** tea's pbt cannot see a bug between machines,
-  like the lane's hang (experiments 115 and 116). It also cannot check a law
+  like the quest's hang (experiments 115 and 116). It also cannot check a law
   that something must happen in the end.
 - **The engine stays in the tree** until the old pipeline is deleted. The
   fence keeps it from growing.
@@ -115,7 +115,7 @@ mutants.
 - **Experiment 121, run 1: today's five laws moved to tea's pbt.**
   - It caught 45. 119's walks caught 36.
   - It lost nothing that ship's own laws caught: 9 of 9.
-  - Its 9 misses all came from 119's lane worlds, which a one-machine tool
+  - Its 9 misses all came from 119's quest worlds, which a one-machine tool
     cannot run.
 - **Run 2: plus the two new laws.**
   - It caught 118 of 150. The new laws alone caught 73, and 65 of those
@@ -154,7 +154,7 @@ mutants.
   | an undeclared Cmd passes unseen | [demlik#750](https://github.com/kamp-us/demlik/issues/750) |
 
 - **Stage 1 is not done.** `laws/ship.ts` still imports the engine, for the
-  lanes world, `specs.ts` and the promise check. So ship's entry in
+  quests world (`laws/world/lanes.ts`), `specs.ts` and the promise check. So ship's entry in
   `layer-rules.json` stays. Next: move `specs.ts` and the promise check to
   `laws/ship-pbt.ts`.
 - **Workarounds in our code.** 121 worked around eight gaps, about 200
@@ -200,7 +200,7 @@ const c = yield* checkTraces(jar, {against: "v2", n: 8, fixed: true}, [steps]);
     [Scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md),
     not in `pnpm test`, which needs no Java today.
 - **Not adopted: tests made from a spec's paths, or a trace check as a
-  ticket's gate.** On the hosted lane they caught nothing the repo's own
+  ticket's gate.** On the hosted quest they caught nothing the repo's own
   tests missed (below).
 - **The mutation step's grader stays StrykerJS with the repo's own tests,**
   with no spec arm. The spec arms took 4 and 9 times the tests' time a
@@ -209,15 +209,15 @@ const c = yield* checkTraces(jar, {against: "v2", n: 8, fixed: true}, [steps]);
 **Why:**
 
 - **116's spec was wrong in three places, and it still found the hang.** It
-  rejected all 300 real runs of the fixed lane: its rows had no kind, its N
+  rejected all 300 real runs of the fixed quest: its rows had no kind, its N
   was the plan's length, and it promised an EXIT the host never sends after
-  the lane has exited. Only real runs could show this. The code was right
+  the quest has exited. Only real runs could show this. The code was right
   each time.
 - **It is cheap here.** The ledger is the trace, with one order for every
   row, so the code logs nothing new. The trace spec is 56 lines; reading the
   log as the spec's steps is 188; TLC checks 300 runs in about 1.2 s.
 - **On mutants it adds nothing to tests.** Of 46 Stryker mutants of the
-  lane that typecheck, the trace check and the path tests caught 8, and the
+  quest that typecheck, the trace check and the path tests caught 8, and the
   repo's tests caught all 8 too, in about a quarter of the time or less.
 
 **What it costs:** a spec and a log reader per machine kept this way, and

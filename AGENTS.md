@@ -141,12 +141,12 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point: mutation runs hourly
   on main, never as a step ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)); one fresh
-  agent per step, which reads the lane's state file, does its one step and writes it back, driven by
-  flows and `chain.ts`, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
-  [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-lane-with-chaints)); a fix round is one agent, and the same
+  agent per step, which reads the quest's state file, does its one step and writes it back, driven by
+  flows and `chain.ts`, never a quest agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
+  [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-quest-with-chaints)); a fix round is one agent, and the same
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
   machine runs before the first review, and on the owner's Mac only after the lead's read and the
-  owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a lane stops at its second
+  owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a quest stops at its second
   sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)); no number caps a pull
   request's size ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)); the lead merges once
   every step passed, and only real loosening of a law or a new design call waits on the owner

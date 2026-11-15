@@ -25,7 +25,7 @@ import {
   makeMachine,
   judgedMove,
   lacks,
-  LANE_STEPS,
+  QUEST_STEPS,
   moveFrom,
   moveOf,
   providers,
@@ -40,11 +40,11 @@ import {
 } from "./chain.ts";
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 
-// Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
+// Today's tooling. The quest machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
-// Every step the chain can start at, and the lane's own steps (0066: no mutation step).
+// Every step the chain can start at, and the quest's own steps (0066: no mutation step).
 const step = fc.constantFrom(...STEPS);
-const laneStep = fc.constantFrom(...LANE_STEPS);
+const questStep = fc.constantFrom(...QUEST_STEPS);
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
 const word = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
 
@@ -80,7 +80,7 @@ const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3)
 
 type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
 
-/** A host step answered skip, as for a lane brief with no `## host`; any other state stays. */
+/** A host step answered skip, as for a quest brief with no `## host`; any other state stays. */
 const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "hosting"
     ? machine.update.host_run_ok(m, {
@@ -96,7 +96,7 @@ const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
-  // 0066: a lane's steps are tests -> build -> review; a mutation step (a lane started there)
+  // 0066: a quest's steps are tests -> build -> review; a mutation step (a quest started there)
   // hands to review. Plants: build hands to mutation; mutation hands to build; skip stops the walk.
   it("property: done walks tests -> build -> review -> open; a started mutation goes to review; skip walks the same way", () => {
     const walk: Record<StepName, string> = {
@@ -119,9 +119,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     );
   });
 
-  it("property: a send goes to the lane step it names with the sender's word; a send to plan or mutation parks", () => {
+  it("property: a send goes to the quest step it names with the sender's word; a send to plan or mutation parks", () => {
     fc.assert(
-      fc.property(step, laneStep, word, (from, to, reason) => {
+      fc.property(step, questStep, word, (from, to, reason) => {
         fc.pre(from !== to);
         const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
@@ -146,7 +146,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   // `to === step` check in moveOf, and every case here runs the same step again.
   it("property: a send to the step that sent it is never another round of that step: it goes to judgment", () => {
     fc.assert(
-      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
+      fc.property(questStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
         const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
         expect(m).toEqual({ _tag: "judge" });
       }),
@@ -218,9 +218,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 });
 
 describe("T341 the judgment agent's answer, today's tooling", () => {
-  it("reads the last answer line: a send names a lane step and carries its note; park carries its why", () => {
+  it("reads the last answer line: a send names a quest step and carries its note; park carries its why", () => {
     fc.assert(
-      fc.property(laneStep, word, word, (s, note, chatter) => {
+      fc.property(questStep, word, word, (s, note, chatter) => {
         const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
         expect(sent).toMatchObject({ _tag: "step", step: s });
 
@@ -237,17 +237,17 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
     );
   });
 
-  it("no answer line, or one naming a step that is not a lane step, parks", () => {
+  it("no answer line, or one naming a step that is not a quest step, parks", () => {
     expect(judgedOf("I think the build should run again").toString()).toBe(judgedOf("").toString());
     expect(judgedOf("answer: send plan fix it")._tag).toBe("park");
     expect(judgedOf("")._tag).toBe("park");
-    // pinned: 0066, a lane has no mutation step, so an older answer that names one parks.
+    // pinned: 0066, a quest has no mutation step, so an older answer that names one parks.
     expect(judgedOf("answer: send mutation rerun it")).toEqual({ _tag: "park", reason: "rerun it" });
   });
 });
 
-describe("T341 the lane brief is cut into one brief per step, today's tooling", () => {
-  const laneBrief = [
+describe("T341 the quest brief is cut into one brief per step, today's tooling", () => {
+  const questBrief = [
     "Shared: ticket 7, today's tooling.",
     "## tests",
     "Write the laws.",
@@ -262,10 +262,10 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
     "What changed.",
   ].join("\n");
 
-  it("each step gets the shared head, its own section, and the lane's facts", () => {
+  it("each step gets the shared head, its own section, and the quest's facts", () => {
     fc.assert(
       fc.property(step, sha, sha, fc.nat({ max: 20 }), word, (s, head, root, round, note) => {
-        const cut = sectionsOf(laneBrief);
+        const cut = sectionsOf(questBrief);
         const text = briefOf(cut, s, {
           ticket: "7",
           branch: "fabrikalfa/x",
@@ -298,7 +298,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           expect(text).toContain(`: done at ${head}: 2 host commands passed`);
           expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
           expect(text).toContain(`Parent base: origin/main at ${root}`);
-          // Ticket 850: a review reads the lane's plant records, which its box cannot open.
+          // Ticket 850: a review reads the quest's plant records, which its box cannot open.
           expect(text).toContain("## Plant records\n\n- L1, at 0123abcd:");
         }
 
@@ -310,14 +310,14 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
     );
   });
 
-  // 2026-11-11: heads fill only on a done, so a lane with partial commits read "No step has
+  // 2026-11-11: heads fill only on a done, so a quest with partial commits read "No step has
   // committed yet." Plants: print the none line whenever heads is empty; list only the last commit
   // of each step; drop the unread case into the none line.
   it("property: the round facts name every step commit by step, and say none only when there are none", () => {
     const commit = fc.record({ step: fc.constantFrom("tests", "build", "lead", "unsigned"), sha });
     fc.assert(
       fc.property(step, fc.array(commit, { maxLength: 8 }), (s, commits) => {
-        const text = briefOf(sectionsOf(laneBrief), s, {
+        const text = briefOf(sectionsOf(questBrief), s, {
           ticket: "7",
           branch: "fabrikalfa/x",
           plan: "p.md",
@@ -340,7 +340,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
       }),
       options,
     );
-    const unread = briefOf(sectionsOf(laneBrief), "tests", {
+    const unread = briefOf(sectionsOf(questBrief), "tests", {
       ticket: "7",
       branch: "fabrikalfa/x",
       plan: "p.md",
@@ -353,34 +353,34 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
       host: null,
       plants: null,
     });
-    expect(unread).toContain("The lane's step commits could not be read");
+    expect(unread).toContain("The quest's step commits could not be read");
     expect(unread).not.toContain("No step has committed yet.");
   });
 
   it("format: the pr section's first line is the title; a heading's case does not matter", () => {
-    const cut = sectionsOf(laneBrief.replace("## pr", "## PR"));
+    const cut = sectionsOf(questBrief.replace("## pr", "## PR"));
     expect(cut.sections.pr?.split("\n")[0]).toBe("# T7 the title");
     expect(Object.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
   });
 
   // 0066: a brief needs no `## mutation`; an older one that has it is accepted. Plants: demand
   // every STEPS section; refuse a brief that has mutation; drop pr from the needed list.
-  it("property: a brief lacks only what its start needs: lane steps and pr always, mutation only to start there", () => {
+  it("property: a brief lacks only what its start needs: quest steps and pr always, mutation only to start there", () => {
     const sections = fc.subarray([...STEPS, "pr"]);
     fc.assert(
       fc.property(sections, step, (have, start) => {
         const text = ["Shared.", ...have.flatMap((k) => [`## ${k}`, `body of ${k}`])].join("\n");
-        const needed = [...LANE_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"];
+        const needed = [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"];
         expect(lacks(sectionsOf(text), start).toSorted()).toEqual(needed.filter((k) => !have.includes(k)).toSorted());
       }),
       options,
     );
-    const withoutMutation = laneBrief.replace("## mutation\nRun stryker.\n", "");
+    const withoutMutation = questBrief.replace("## mutation\nRun stryker.\n", "");
     expect(sectionsOf(withoutMutation).sections.mutation).toBeUndefined();
 
-    for (const start of LANE_STEPS) {
+    for (const start of QUEST_STEPS) {
       expect(lacks(sectionsOf(withoutMutation), start)).toEqual([]);
-      expect(lacks(sectionsOf(laneBrief), start)).toEqual([]);
+      expect(lacks(sectionsOf(questBrief), start)).toEqual([]);
     }
 
     expect(lacks(sectionsOf(withoutMutation), "mutation")).toEqual(["mutation"]);
@@ -409,7 +409,7 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
   });
 });
 
-describe("T341 the lane machine, stepped by hand, today's tooling", () => {
+describe("T341 the quest machine, stepped by hand, today's tooling", () => {
   const machine = makeMachine(limits(16));
   const start = () => {
     const [idle] = machine.init(null, undefined);
@@ -419,12 +419,12 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
     hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
 
-  it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
+  it("scenario: a clean quest runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
     expect(cmds[0]).toMatchObject({ type: "step_run", step: "tests", round: 1 });
     const heads: string[] = [];
 
-    for (const [i, s] of LANE_STEPS.entries()) {
+    for (const [i, s] of QUEST_STEPS.entries()) {
       expect(m).toMatchObject({ phase: "stepping", step: s });
       const head = String(i + 1).repeat(40);
       heads.push(head);
@@ -454,7 +454,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     if (m.phase === "over") {
       expect(m.end.kind).toBe("done");
       expect(exitOf(m.end)).toBe(0);
-      expect(m.lane.heads).toEqual({
+      expect(m.quest.heads).toEqual({
         tests: heads[0],
         build: heads[1],
         review: heads[2],
@@ -463,7 +463,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   });
 
   // 0066. Plants: route build's done to mutation; let a judgment or a send start mutation.
-  it("property: no path from a lane started at tests, build or review ever runs mutation", () => {
+  it("property: no path from a quest started at tests, build or review ever runs mutation", () => {
     const answer = fc.oneof(
       outcome.map((o) => ({ _tag: "line" as const, o })),
       fc
@@ -476,7 +476,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         .map((text) => ({ _tag: "judged" as const, text })),
     );
     fc.assert(
-      fc.property(laneStep, fc.array(answer, { maxLength: 20 }), (first, answers) => {
+      fc.property(questStep, fc.array(answer, { maxLength: 20 }), (first, answers) => {
         const [idle] = machine.init(null, undefined);
         let [m, cmds] = machine.update.start(idle, { type: "start", step: first });
         const started: string[] = cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : []));
@@ -500,7 +500,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     );
   });
 
-  it("property: after a done build the lane runs review, whatever ran before", () => {
+  it("property: after a done build the quest runs review, whatever ran before", () => {
     fc.assert(
       fc.property(fc.constantFrom("tests", "build"), sha, (first, head) => {
         const [idle] = machine.init(null, undefined);
@@ -519,9 +519,9 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     );
   });
 
-  // A lane parked inside its mutation step before 0066 is not stranded. Plants: refuse a mutation
+  // A quest parked inside its mutation step before 0066 is not stranded. Plants: refuse a mutation
   // start; send a started mutation's done to build; run mutation twice.
-  it("property: a lane started at mutation runs that one step, then review", () => {
+  it("property: a quest started at mutation runs that one step, then review", () => {
     fc.assert(
       fc.property(fc.constantFrom("done", "skip:step_said"), sha, (o, head) => {
         const [idle] = machine.init(null, undefined);
@@ -540,7 +540,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a send back reruns the named step with the sender's word in its note", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, reason) => {
+      fc.property(questStep, word, (to, reason) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
         [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), reason));
@@ -566,7 +566,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a stuck asks for judgment; the judgment's send reruns that step, its park ends as ask (exit 20)", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, reason) => {
+      fc.property(questStep, word, (to, reason) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("stuck:timeout", "", reason));
         expect(m.phase).toBe("judging");
@@ -594,7 +594,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     );
   });
 
-  it("a RetriesExhausted on the step's err channel ends the lane as stuck (exit 30), naming the schedule", () => {
+  it("a RetriesExhausted on the step's err channel ends the quest as stuck (exit 30), naming the schedule", () => {
     fc.assert(
       fc.property(word, fc.integer({ min: 1, max: 9 }), (reason, times) => {
         const [m] = start();
@@ -613,15 +613,15 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
           expect(over.end.reason).toContain("slotSchedule(5 minutes)");
           expect(over.end.reason).toContain(reason);
           expect(exitOf(over.end)).toBe(30);
-          // Nothing moved: the lane's head is where it was.
-          expect(over.lane.head).toBe("");
+          // Nothing moved: the quest's head is where it was.
+          expect(over.quest.head).toBe("");
         }
       }),
       options,
     );
   });
 
-  it("the step cap parks the lane as ask, never loops forever", () => {
+  it("the step cap parks the quest as ask, never loops forever", () => {
     const small = makeMachine(limits(2));
     const [idle] = small.init(null, undefined);
     let [m] = small.update.start(idle, { type: "start", step: "tests" });
@@ -642,7 +642,7 @@ describe("the host step runs before every review of a new head, today's tooling"
   const stepped = (m: Stepped[0], l: Line) => machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
   const hosted = (m: Stepped[0], outcome: "done" | "skip" | "send" | "stuck", head: string, reason = "why") =>
     machine.update.host_run_ok(m, { type: "host_run_ok", value: { outcome, head, reason } } as never);
-  /** A lane started at build whose build answered done at `head`. */
+  /** A quest started at build whose build answered done at `head`. */
   const built = (head: string) => {
     const [idle] = machine.init(null, undefined);
     const [m] = machine.update.start(idle, { type: "start", step: "build" });
@@ -658,7 +658,7 @@ describe("the host step runs before every review of a new head, today's tooling"
         expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head, round: 2 })]);
         const next = outcome === "done" ? after : head;
         const [r, rcmds] = hosted(m, outcome, outcome === "done" ? after : "");
-        expect(r).toMatchObject({ phase: "stepping", step: "review", lane: { head: next, hosted: next } });
+        expect(r).toMatchObject({ phase: "stepping", step: "review", quest: { head: next, hosted: next } });
         expect(rcmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
       }),
       options,
@@ -674,7 +674,7 @@ describe("the host step runs before every review of a new head, today's tooling"
         expect(b).toMatchObject({ phase: "stepping", step: "build" });
         expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "build" })]);
         expect(cmds.flatMap((c) => (c.type === "step_run" ? [c.note] : []))[0]).toContain(said);
-        expect(b.lane.hosted).toBeNull();
+        expect(b.quest.hosted).toBeNull();
       }),
       options,
     );
@@ -704,7 +704,7 @@ describe("the host step runs before every review of a new head, today's tooling"
   });
 
   // 0076 with the host step: its round is a step and its send a send back. Plants: give the host
-  // step no round; leave its mark out of the window; count a host stuck against the lane.
+  // step no round; leave its mark out of the window; count a host stuck against the quest.
   it("scenario: a host send is a send back in the budget's window, and the host round counts toward the backstop", () => {
     const h = "a".repeat(40);
     let [m] = built(h);
@@ -719,11 +719,11 @@ describe("the host step runs before every review of a new head, today's tooling"
     // The window is now send, pass, send, pass: a third host send trips 3 in 5.
     const [sent] = hosted(m, "send", "", "e2e red");
     expect(sent).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
-    expect(sent.lane.window).toEqual(["send", "pass", "send", "pass", "send"]);
-    // A host stuck is the tool's: marked, never counted, and the lane ends stuck.
+    expect(sent.quest.window).toEqual(["send", "pass", "send", "pass", "send"]);
+    // A host stuck is the tool's: marked, never counted, and the quest ends stuck.
     const [stuck] = hosted(m, "stuck", "", "botpush failed");
     expect(stuck).toMatchObject({ phase: "over", end: { kind: "stuck" } });
-    expect(stuck.lane.window.at(-1)).toBe("tool");
+    expect(stuck.quest.window.at(-1)).toBe("tool");
 
     // Backstop of 2 steps: build is round 1, the host step round 2, so the review never starts.
     const small = makeMachine(limits(16, { steps: 2, dollars: 100 }));
@@ -739,7 +739,7 @@ describe("the host step runs before every review of a new head, today's tooling"
     expect(b).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "backstop", passed: "steps" } } });
   });
 
-  it("scenario: a host stuck ends the lane stuck (exit 30), and a lane started at review hosts first", () => {
+  it("scenario: a host stuck ends the quest stuck (exit 30), and a quest started at review hosts first", () => {
     const [m] = built("a".repeat(40));
     const [over] = hosted(m, "stuck", "", "git worktree add failed");
     expect(over).toMatchObject({ phase: "over", end: { kind: "stuck", reason: "host: git worktree add failed" } });
@@ -751,7 +751,7 @@ describe("the host step runs before every review of a new head, today's tooling"
     const [idle] = machine.init(null, undefined);
     const [started, cmds] = machine.update.start(idle, { type: "start", step: "review" });
     expect(started.phase).toBe("hosting");
-    // The machine has no head yet: the handler reads the lane's state file for it.
+    // The machine has no head yet: the handler reads the quest's state file for it.
     expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head: "", round: 1 })]);
   });
 });
@@ -759,7 +759,7 @@ describe("the host step runs before every review of a new head, today's tooling"
 describe("CI's typecheck job answers once the pull request opens, with no laptop typecheck (0133), today's tooling", () => {
   const machine = makeMachine(limits(16));
   type Machine = typeof machine;
-  // A lane whose review said merge-ready at `head`, after `sends` sends back: the PR opens next.
+  // A quest whose review said merge-ready at `head`, after `sends` sends back: the PR opens next.
   const merged = (head: string, sends = 0, on: Machine = machine) => {
     const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
     const [idle] = on.init(null, undefined);
@@ -777,7 +777,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     [m] = hostSkipped(on, ran(m, line("done", head)));
     return ran(m, line("done", head));
   };
-  // The same lane with PR `pr` open at `head`: CI's typecheck job is next.
+  // The same quest with PR `pr` open at `head`: CI's typecheck job is next.
   const reviewed = (head: string, sends = 0, on: Machine = machine, pr = 7) => {
     const [m] = merged(head, sends, on);
     return on.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
@@ -801,36 +801,36 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     );
   });
 
-  it("property: green goes on to loosening.sh; no answer goes on too, and the lane keeps why", () => {
+  it("property: green goes on to loosening.sh; no answer goes on too, and the quest keeps why", () => {
     fc.assert(
       fc.property(sha, pr, word, (head, n, reason) => {
         const [m] = reviewed(head, 0, machine, n);
         const loosens = [expect.objectContaining({ type: "loosen", pr: n, head })];
         const [green, next] = answered(m, { _tag: "green" });
-        expect(green).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: null } });
+        expect(green).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: null } });
         expect(next).toEqual(loosens);
         const [skipped, also] = answered(m, { _tag: "skipped", reason });
-        expect(skipped).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: reason } });
+        expect(skipped).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: reason } });
         expect(also).toEqual(loosens);
         const [threw, again] = machine.update.typecheck_read_err(m, {
           type: "typecheck_read_err",
           error: { _tag: "unknown" },
         } as never);
-        expect(threw).toMatchObject({ phase: "loosening", lane: { unchecked: "reading CI's typecheck job threw" } });
+        expect(threw).toMatchObject({ phase: "loosening", quest: { unchecked: "reading CI's typecheck job threw" } });
         expect(again).toEqual(loosens);
       }),
       options,
     );
   });
 
-  it("property: red sends the lane to the step it names with every error line, as a send back", () => {
+  it("property: red sends the quest to the step it names with every error line, as a send back", () => {
     const to = fc.constantFrom("tests" as const, "build" as const);
     fc.assert(
       fc.property(sha, to, lines, (head, step, ls) => {
         const [m] = reviewed(head);
         const [sent, cmds] = answered(m, { _tag: "red", to: step, lines: ls });
-        expect(sent).toMatchObject({ phase: "stepping", step, lane: { unchecked: null } });
-        expect(sent.lane.window.at(-1)).toBe("send");
+        expect(sent).toMatchObject({ phase: "stepping", step, quest: { unchecked: null } });
+        expect(sent.quest.window.at(-1)).toBe("send");
         expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step })]);
 
         if (cmds[0]?.type === "step_run") {
@@ -843,7 +843,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     );
   });
 
-  it("scenario: a red typecheck that fills the intensity window stops the lane (0076)", () => {
+  it("scenario: a red typecheck that fills the intensity window stops the quest (0076)", () => {
     // 2 in 5 here, so one earlier send and the red one trip it.
     const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
     const [m] = reviewed("a".repeat(40), 1, tight);
@@ -885,12 +885,12 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
 
 describe("T590 loosening.sh runs after review and before the merge queue, today's tooling", () => {
   const machine = makeMachine(limits(16));
-  // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
+  // A quest whose review said merge-ready and whose PR is open: the loosening Cmd is next.
   const opened = (pr: number, head: string) => {
     const [idle] = machine.init(null, undefined);
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
-    for (const _ of LANE_STEPS) {
+    for (const _ of QUEST_STEPS) {
       [m] = hostSkipped(
         machine,
         machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
@@ -1000,7 +1000,7 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     );
   });
 
-  it("property: the body names plain codex exec only for steps the lane ran on it", () => {
+  it("property: the body names plain codex exec only for steps the quest ran on it", () => {
     fc.assert(
       fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude, exec) => {
         const text = providers(ran, new Set(claude), new Set(exec));
@@ -1013,16 +1013,16 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     );
   });
 
-  // 0066: a lane that ran no mutation step claims none. Plants: always name mutation; name a
+  // 0066: a quest that ran no mutation step claims none. Plants: always name mutation; name a
   // Claude step that never ran.
-  it("property: the body names Claude only for steps the lane ran on it, mutation only when it ran", () => {
+  it("property: the body names Claude only for steps the quest ran on it, mutation only when it ran", () => {
     fc.assert(
       fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude) => {
         const text = providers(ran, new Set(claude));
         expect(text.startsWith("Codex in a box")).toBe(true);
         expect(text.includes("mutation")).toBe(ran.includes("mutation"));
 
-        for (const s of LANE_STEPS) {
+        for (const s of QUEST_STEPS) {
           expect(text.includes(s)).toBe(ran.includes(s) && claude.includes(s));
         }
       }),
@@ -1044,7 +1044,7 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
           line: null,
           judged: null,
         };
-        const before = { lane: "l", pr: null, landed: null, steps: [started] };
+        const before = { quest: "l", pr: null, landed: null, steps: [started] };
         const after = {
           ...before,
           pr: 7,
@@ -1082,13 +1082,13 @@ describe("T341 the judgment agent's typed answer is a move, today's tooling", ()
     });
     expect(judgedMove({ answer: "send", step: null, note: "" })).toEqual({
       _tag: "park",
-      reason: "the judgment agent parked the lane with no why",
+      reason: "the judgment agent parked the quest with no why",
     });
   });
 
   it("the judge Cmd's answer reads back as the move it chose, and an older text by its answer line", () => {
     fc.assert(
-      fc.property(laneStep, word, (s, note) => {
+      fc.property(questStep, word, (s, note) => {
         const move = { _tag: "step" as const, step: s, note };
         expect(moveFrom(JSON.stringify(move))).toEqual(move);
         expect(moveFrom(JSON.stringify({ _tag: "park", reason: note }))).toEqual({
@@ -1102,7 +1102,7 @@ describe("T341 the judgment agent's typed answer is a move, today's tooling", ()
   });
 });
 
-describe("T341 a lane started again keeps its earlier rounds, today's tooling", () => {
+describe("T341 a quest started again keeps its earlier rounds, today's tooling", () => {
   // The dry run of 2026-11-10 (ticket 522): `--start review` began at round 1 again and wrote its
   // review over the record of the tests step, which also was round 1.
   // Plants: start every run at round 1; count the steps instead of taking the highest round.
@@ -1114,7 +1114,7 @@ describe("T341 a lane started again keeps its earlier rounds, today's tooling", 
         step,
         (rounds, next, s) => {
           const record = {
-            lane: "l",
+            quest: "l",
             pr: null,
             landed: null,
             steps: rounds.map((round) => ({
@@ -1333,7 +1333,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
   });
 });
 
-describe("T675 a lane stops at its budget (0076), today's tooling", () => {
+describe("T675 a quest stops at its budget (0076), today's tooling", () => {
   const big = 1_000;
   const stepOn = (limit: Limits) => {
     const machine = makeMachine(limit);
@@ -1429,7 +1429,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
     );
   });
 
-  // The steps a run may feed, with the mark each makes. None is a done, so the lane never opens a PR.
+  // The steps a run may feed, with the mark each makes. None is a done, so the quest never opens a PR.
   const fed = fc.constantFrom(
     { o: "send:tests:step_said", reason: "a law misses a case", mark: "send" as Mark },
     { o: "send:build:step_said", reason: "a law is red", mark: "send" as Mark },
@@ -1439,7 +1439,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
     { o: "stuck:no_commit", reason: "answered done with no commit", mark: "work" as Mark },
   );
 
-  // Plants: count tool stucks; check the window only after a judgment; keep the whole lane, not its
+  // Plants: count tool stucks; check the window only after a judgment; keep the whole quest, not its
   // last 5; stop at 2 in 5 or 3 in 6.
   it("property: the chain stops at the first step where 3 of the last 5 were sent back or stuck on the work, never on tool stucks", () => {
     fc.assert(
@@ -1482,7 +1482,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
     const run = [
       line("send:build:step_said", "", "a law is red", 1.5),
       line("stuck:fetch_failed", "", "fetch failed", 0.5),
-      // The judgment sent the lane to tests: tests sends build, never itself (that goes to judgment).
+      // The judgment sent the quest to tests: tests sends build, never itself (that goes to judgment).
       line("send:build:step_said", "", "a law misses a case", 2),
       line("stuck:no_commit", "", "answered done with no commit", 1),
     ];
@@ -1515,7 +1515,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
 
   // Plants: check the backstop after the step starts; count only steps or only dollars; keep MaxSteps
   // over the backstop.
-  it("property: with a backstop, the chain stops before the next step or judgment once the lane ran its steps or spent its dollars", () => {
+  it("property: with a backstop, the chain stops before the next step or judgment once the quest ran its steps or spent its dollars", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 12 }),
@@ -1582,7 +1582,8 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
   });
 
   // pinned: chain records on disk from before 0076 carry no fault, no dollars and no stop.
-  it("pinned: a chain record written before 0076 still reads, with no fault and no dollars", () => {
+  // Plants: read only `quest`; write the old `lane` key back. Decision 0546: the record keeps its word.
+  it("pinned: a chain record written before 0076 still reads, with no fault and no dollars, and its `lane` as `quest`", () => {
     const old = {
       lane: "p14",
       pr: null,
@@ -1602,6 +1603,10 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
     const read = Schema.decodeUnknownSync(ChainRecord)(old);
     expect(read.steps[0]?.line).toMatchObject({ fault: null, listUsd: null });
     expect(read.stop).toBeUndefined();
+    expect(read.quest).toBe("p14");
+    const written = Schema.encodeSync(ChainRecord)(read);
+    expect(written).toMatchObject({ quest: "p14" });
+    expect(written).not.toHaveProperty("lane");
   });
 
   it("property: drive's line gives its fault and dollars, and a line without a fault gets one from its outcome", () => {
@@ -1626,7 +1631,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
         dollars: 31.4,
       }),
     ).toBe(
-      "backstop: the lane reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
+      "backstop: the quest reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
     );
   });
 });

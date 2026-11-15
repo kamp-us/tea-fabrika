@@ -4,7 +4,7 @@
 // in-memory database and `LedgerTurnReads.integration.test.ts` on a real SQLite file (0536); `open`
 // gives one database's Sql in a scope.
 //
-// The contract this law pins, from the lead's amendment to docs/plan/lanes/t1041-PLAN.md:
+// The contract this law pins, from the lead's amendment to docs/plan/quests/t1041-PLAN.md:
 //   LedgerTurn.end(stream): the pos of the stream's newest entry, or none for an empty stream, read
 //   by an index and with no entry's body.
 import { describe, expect, it } from "@effect/vitest";

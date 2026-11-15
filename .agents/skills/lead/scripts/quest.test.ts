@@ -2,33 +2,34 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   checkHolds,
-  laneRoot,
-  laneStuck,
+  questRoot,
+  questStuck,
   lockfileBehind,
   pinFolder,
   pinsFolder,
+  questKeyed,
   startHead,
   wipOf,
   workspaceGlobs,
-} from "./lane.ts";
+} from "./quest.ts";
 
 // Today's tooling. Pure rules drive.ts and gc.ts share.
 const options = { seed: 119120, numRuns: 300 };
 const branch = fc.stringMatching(/^fabrikalfa\/[a-z0-9]{1,8}(-[a-z0-9]{1,4})?$/);
 const step = fc.constantFrom("tests", "build", "mutation", "review", "lead");
 
-describe("lane rules, today's tooling", () => {
-  // Plant: always append -wip. p12, 2026-11-09: a -wip lane was backed up to p12-wip-wip.
+describe("quest rules, today's tooling", () => {
+  // Plant: always append -wip. p12, 2026-11-09: a -wip quest was backed up to p12-wip-wip.
   it("the backup branch ends in exactly one -wip, and a -wip branch is kept as it is", () => {
     fc.assert(
       fc.property(branch, fc.nat({ max: 3 }), (b, n) => {
-        const lane = b + "-wip".repeat(n);
-        const to = wipOf(lane);
+        const quest = b + "-wip".repeat(n);
+        const to = wipOf(quest);
         expect(to).toMatch(/(?<!-wip)-wip$/);
         expect(to.replace(/-wip$/, "")).toBe(b);
 
         if (n === 1) {
-          expect(to).toBe(lane);
+          expect(to).toBe(quest);
         }
       }),
       options,
@@ -68,7 +69,7 @@ describe("lane rules, today's tooling", () => {
 
   // Plants: keep any saved root the base holds (the old rule); always take the fresh merge base.
   // ci375 tests6, 2026-11-09: after a catch-up, 48 of main's squash commits read as unsigned.
-  it("the lane root is the fresh merge base unless the base holds a saved root the merge base does not", () => {
+  it("the quest root is the fresh merge base unless the base holds a saved root the merge base does not", () => {
     // One line of history, "c0" < "c1" < ...; "x<n>" is off the line and holds nothing.
     const at = (c: string) => Number(c.slice(1));
     const isAncestor = (a: string, b: string) => (a[0] === "c" && b[0] === "c" ? at(a) <= at(b) : a === b);
@@ -86,7 +87,7 @@ describe("lane rules, today's tooling", () => {
         ),
         (a, b, saved) => {
           const [fresh, base] = [`c${Math.min(a, b)}`, `c${Math.max(a, b)}`];
-          const got = laneRoot(saved, fresh, base, isAncestor);
+          const got = questRoot(saved, fresh, base, isAncestor);
           const between = saved !== undefined && saved[0] === "c" && at(saved) > at(fresh) && at(saved) <= at(base);
           expect(got).toBe(between ? saved : fresh);
         },
@@ -95,11 +96,11 @@ describe("lane rules, today's tooling", () => {
     );
   });
 
-  // Plants: waive every stale link; waive a stale link of a step the lane signed; waive other stuck;
+  // Plants: waive every stale link; waive a stale link of a step the quest signed; waive other stuck;
   // hold a missing signature.
-  // themes tests4, 2026-11-09: PR 565's lead link on ticket 343 made the lane's tests step stale_link lead.
-  // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the lane after 0161.
-  it("holds every stuck answer except a missing signature and a stale link of a step the lane has not signed", () => {
+  // themes tests4, 2026-11-09: PR 565's lead link on ticket 343 made the quest's tests step stale_link lead.
+  // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the quest after 0161.
+  it("holds every stuck answer except a missing signature and a stale link of a step the quest has not signed", () => {
     const answer = fc.oneof(
       fc.record({ _tag: fc.constant("stuck"), reason: fc.constant("stale_link"), step }),
       fc.record({
@@ -114,20 +115,20 @@ describe("lane rules, today's tooling", () => {
     );
     fc.assert(
       fc.property(fc.array(answer), fc.uniqueArray(step), (answers, signed) => {
-        const lane = new Set<string>(signed);
+        const quest = new Set<string>(signed);
         const out = [...answers.map((a) => JSON.stringify(a)), "commits: noise"].join("\n");
-        const held = laneStuck(out, lane).map((l) => JSON.parse(l));
+        const held = questStuck(out, quest).map((l) => JSON.parse(l));
         const want = answers.filter(
           (a) =>
             a._tag === "stuck" &&
             a.reason !== "unsigned_commit" &&
-            !(a.reason === "stale_link" && "step" in a && !lane.has(a.step)),
+            !(a.reason === "stale_link" && "step" in a && !quest.has(a.step)),
         );
         expect(held).toEqual(want);
         const stuck = answers.some((a) => a._tag === "stuck");
-        expect(checkHolds(0, out, lane)).toBe(false);
-        expect(checkHolds(1, out, lane)).toBe(want.length > 0 || !stuck);
-        expect(checkHolds(2, out, lane)).toBe(true);
+        expect(checkHolds(0, out, quest)).toBe(false);
+        expect(checkHolds(1, out, quest)).toBe(want.length > 0 || !stuck);
+        expect(checkHolds(2, out, quest)).toBe(true);
       }),
       options,
     );
@@ -216,13 +217,45 @@ describe("the lockfile follows the manifests, today's tooling", () => {
   });
 });
 
+describe("a saved quest's key, today's tooling", () => {
+  // Plants: keep `lane` beside `quest`; let `lane` win over a `quest` already there; touch a record
+  // with no `lane`. Decision 0546: saved data keeps its word, and a reader reads both.
+  it("property: a record's `lane` reads as `quest` and goes, and every other key stays as it was", () => {
+    const key = fc.stringMatching(/^[a-z]{1,8}$/).filter((k) => k !== "lane" && k !== "quest");
+    fc.assert(
+      fc.property(
+        fc.dictionary(key, fc.jsonValue(), { maxKeys: 5 }),
+        fc.option(fc.string(), { nil: undefined }),
+        fc.option(fc.string(), { nil: undefined }),
+        (rest, lane, quest) => {
+          const saved = {
+            ...rest,
+            ...(lane === undefined ? {} : { lane }),
+            ...(quest === undefined ? {} : { quest }),
+          };
+          const got = questKeyed(saved);
+          expect(got).not.toHaveProperty("lane");
+          expect(got).toEqual({ ...rest, ...((quest ?? lane) === undefined ? {} : { quest: quest ?? lane }) });
+        },
+      ),
+      options,
+    );
+  });
+
+  it("pinned: a value that is no JSON object is given back as it is, for the reader's schema to refuse", () => {
+    for (const v of [null, 3, "lane", ["lane"], true]) {
+      expect(questKeyed(v)).toBe(v);
+    }
+  });
+});
+
 describe("pin folders", () => {
-  const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
   const pid = fc.integer({ min: 1, max: 99_999 });
 
-  it("every launch's pin is in the pins folder, named for its lane and process", () =>
+  it("every launch's pin is in the pins folder, named for its quest and process", () =>
     fc.assert(
-      fc.property(fc.string({ minLength: 1 }), lane, pid, (boxes, l, p) => {
+      fc.property(fc.string({ minLength: 1 }), quest, pid, (boxes, l, p) => {
         const at = pinFolder(boxes, l, p);
         expect(at.startsWith(`${pinsFolder(boxes)}/`)).toBe(true);
         expect(at.slice(pinsFolder(boxes).length + 1)).toBe(`${l}.${p}`);
@@ -231,7 +264,7 @@ describe("pin folders", () => {
 
   it("two launches never share a pin", () =>
     fc.assert(
-      fc.property(lane, pid, lane, pid, (l1, p1, l2, p2) => {
+      fc.property(quest, pid, quest, pid, (l1, p1, l2, p2) => {
         fc.pre(l1 !== l2 || p1 !== p2);
         expect(pinFolder("/b", l1, p1)).not.toBe(pinFolder("/b", l2, p2));
       }),

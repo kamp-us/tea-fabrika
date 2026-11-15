@@ -391,7 +391,7 @@ is outside the repo until the owner files it.
 - **Lean, 70%: two tickets, after ticket 117.** First the window code follows C1 to C4, with no
   build change. Then the Compiler in the build, the rules in `.oxlintrc.json`, and the skip check.
   Why two: compiling before the store hook lands freezes the app, so the order is the risk, and
-  the first ticket is worth having alone. Cost: two lanes' overhead. Doubt: one lane could order
+  the first ticket is worth having alone. Cost: two quests' overhead. Doubt: one quest could order
   the two tasks itself.
 - **Ticket A:** the desk's one store hook (176, pick 2, about 30 edits); `Palette` numbers its rows
   before render; `useTip` takes `useId` and derives `quiet`; the time through the model, not the 8
