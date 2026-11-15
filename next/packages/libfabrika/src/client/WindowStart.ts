@@ -67,6 +67,34 @@ type Handle = {
   readonly written: Map<number, number>;
 };
 
+/** One call as the JSON-RPC method and params the door takes. */
+const wire = (call: Write["call"], label: string) => {
+  switch (call._tag) {
+    case "read":
+      return { method: "ledger.read", params: { stream: call.stream, after: call.after } };
+    case "wait":
+      return { method: "ledger.wait", params: { stream: call.stream, after: call.after } };
+    case "monitor":
+      return { method: "process.monitor", params: { ref: call.ref, pid: call.pid } };
+    case "open":
+      return { method: "view.open", params: { pid: call.pid } };
+    case "knock":
+      return { method: "gateway.knock", params: { label } };
+    case "send":
+      return {
+        method: "process.send",
+        params: {
+          pid: call.pid,
+          letter: call.letter,
+          m: call.m,
+          sentAt: call.sentAt,
+          seen: call.seen,
+          ...(call.traceId ? { traceId: call.traceId } : {}),
+        },
+      };
+  }
+};
+
 /** The id of a frame that answers a call, read only to time the answer. */
 const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
 
@@ -219,7 +247,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
     );
 
   return yield* run(options.window, {
-    ctx: { tiles: options.tiles },
+    ctx: { tiles: options.tiles, tab },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
@@ -231,25 +259,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         return { letter, sentAt: yield* sentAt };
       }),
       write: Effect.fn("Client.write")(function* (cmd: Write) {
-        const call = cmd.call;
-        const message =
-          call._tag === "read"
-            ? { method: "ledger.read", params: { stream: call.stream, after: call.after } }
-            : call._tag === "open"
-              ? { method: "view.open", params: { pid: call.pid } }
-              : call._tag === "knock"
-                ? { method: "gateway.knock", params: { label: options.client.label } }
-                : {
-                    method: "process.send",
-                    params: {
-                      pid: call.pid,
-                      letter: call.letter,
-                      m: call.m,
-                      sentAt: call.sentAt,
-                      seen: call.seen,
-                      ...(call.traceId ? { traceId: call.traceId } : {}),
-                    },
-                  };
+        const message = wire(cmd.call, options.client.label);
         const written = handles.get(cmd.dial)?.written;
         written?.set(cmd.id, yield* Clock.currentTimeMillis);
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(

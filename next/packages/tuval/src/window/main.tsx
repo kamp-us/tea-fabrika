@@ -31,6 +31,26 @@ const refusalFor = (registration: TileWindow | null, refusal: WindowModel["tiles
   return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
 };
 
+type Reach = WindowModel["tiles"][number]["reach"];
+
+/** A tile's state in words, never color alone (0502): an ended tile names its exit's reason. */
+const stateWord = (link: WindowModel["link"], reach: Reach) => {
+  if (link._tag !== "online") {
+    return link._tag === "retrying" ? "Retrying" : "Connecting";
+  }
+
+  switch (reach._tag) {
+    case "open":
+      return "Online";
+    case "ended":
+      return `Ended (${reach.reason._tag})`;
+    case "missing":
+      return "Missing";
+    default:
+      return "Opening";
+  }
+};
+
 const Waiting = ({
   code,
   fingerprint,
@@ -87,15 +107,7 @@ const Tile = ({
   const data =
     registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
   const offline = link._tag !== "online";
-  const state = offline
-    ? link._tag === "retrying"
-      ? "Retrying"
-      : "Connecting"
-    : tile.reach._tag === "missing"
-      ? "Missing"
-      : tile.reach._tag === "open"
-        ? "Online"
-        : "Opening";
+  const state = stateWord(link, tile.reach);
   const refusal = refusalFor(registration, tile.refusal);
   return (
     <section
@@ -113,7 +125,7 @@ const Tile = ({
       </header>
       <div className="slot">
         {registration === null || data === null ? (
-          <p>{tile.reach._tag === "missing" ? "Missing" : "Opening"}</p>
+          <p>{tile.reach._tag === "missing" || tile.reach._tag === "ended" ? state : "Opening"}</p>
         ) : (
           <registration.View
             data={data}
@@ -134,10 +146,12 @@ const Page = (props: PageProps) => {
   const [dials] = useRuntime(props.run, (m) => m.dials);
   const [views] = useRuntime(props.run, (m) => m.client.views);
   const [trouble] = useRuntime(props.run, (m) => m.trouble);
+  // The polite region says each refusal, and once each tile whose process ended, with the reason.
   const words = tiles
     .flatMap((t) => {
       const words = refusalFor(props.windowFor(t.name), t.refusal);
-      return words ? [words] : [];
+      const ended = t.reach._tag === "ended" ? [`${t.name} ended (${t.reach.reason._tag})`] : [];
+      return [...(words ? [words] : []), ...ended];
     })
     .join(" ");
   const content =
