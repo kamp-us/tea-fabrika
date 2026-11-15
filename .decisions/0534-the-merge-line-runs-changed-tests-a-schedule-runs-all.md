@@ -1,7 +1,7 @@
 ---
 id: 0534
 title: The merge line runs only the tests a change reaches, a schedule runs the whole next/ suite every 3 hours and opens a GitHub issue when red, and the queue builds two groups at once
-status: accepted
+status: amended-in-part by [0539](0539-the-merge-line-runs-no-tooling-tests.md)
 date: 2026-11-14
 tags: [ci, merge-queue, schedule, tests, next, main, github-issues]
 ---

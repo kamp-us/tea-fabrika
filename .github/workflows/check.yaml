@@ -28,7 +28,9 @@ on:
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below). Neither runs the whole of next/ (0534): next/ runs the tests the change
   # reaches, and the schedule (scheduled.yaml) runs everything every 3 hours. No event here runs a
-  # tooling test (0539): their author runs the narrow ones, and the schedule runs them all.
+  # tooling test (0539): their author runs the narrow ones, and the schedule runs them all. A group
+  # whose tree and base tree a ready pull request run already tested green runs no tests (the
+  # changes job below).
   merge_group:
     types: [checks_requested]
 
@@ -77,6 +79,14 @@ jobs:
   # (0534). Push run 43625168838 repeated queue run 43623078615 on tree 758c5cf5 that way: 61
   # machine-min of next and 26 of test. check and typecheck run, and typecheck saves main's tsc cache. An admin
   # merge, a direct push, a failed or canceled queue run, or any error asking runs every job.
+  # In a merge queue group, changes asks the same way whether a ready pull request run already tested
+  # the group's tree from its base's tree: a pull request runs on `refs/pull/<n>/merge`, itself merged
+  # onto main as main was then, so while main has not moved its tree is the group's. GitHub lists that
+  # run under the branch's head, not the tree it tested, so the record step below leaves an artifact
+  # named for both trees. A run of this workflow from this repository that passed with `ci-required`
+  # green, and whose selection covered the group's (changes.mjs's `record`), lets every job but
+  # changes and ci-required skip, and the job summary links it (changes.mjs's `matched`). Any other
+  # group, and any error asking, runs as before.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -185,6 +195,40 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
         run: node .github/ci/legs.ts
+      # A ready pull request run's record of what it tests, for the merge queue: the tree of
+      # `github.sha`, the merge commit every job here checks out, and the tree of the base its tests
+      # were picked from, in the artifact's name. It is written only when what changes printed (the
+      # same expressions as its outputs above) covers what a group of the same two trees needs, so a
+      # run that tests less never stands in for one; it counts only once the run ends green. A day is
+      # enough: main moves many times a day, and a record of an older main matches no group. Neither
+      # step may fail the run: without a record the group runs its tests.
+      - name: record
+        id: record
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        continue-on-error: true
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          TESTED: ${{ github.sha }}
+          CHECK: ${{ steps.diff.outputs.check }}
+          TYPECHECK: ${{ steps.diff.outputs.typecheck }}
+          FIELD: ${{ steps.diff.outputs.field }}
+          BUILD: ${{ steps.diff.outputs.build }}
+          NEXT: ${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}
+          FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
+        run: node .github/ci/changes.mjs --record
+      - name: upload the record
+        if: steps.record.outputs.name != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.record.outputs.name }}
+          path: ${{ runner.temp }}/tested.json
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
       # Fail fast (ticket 990): the first red job cancels its own run, so the jobs still running free
       # their runners and ci-required answers within seconds, not after the slowest job. Merge queue
       # group 1199 (run 43633120187) waited about 10 minutes behind a lint that failed at 43 s.

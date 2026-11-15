@@ -2,8 +2,10 @@
 // decide what to run before pnpm setup or cache restoration. Only the `--same` pass loads
 // program.ts and its parser, after their own install, and a failed load runs all of next/.
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
@@ -315,12 +317,37 @@ export const readPaths = (base, head, event, run = git) => {
  */
 
 /**
- * What a push asks GitHub. Each call may reject, and any rejection runs every job.
- * `runs` lists this workflow's passed merge queue runs, and `commit` reads one commit's tree and
- * parents.
+ * An artifact, as GitHub's API lists it: the fields `matched` reads.
+ * @typedef {{name: string, expired: boolean, workflow_run: {id: number} | null}} Artifact
+ */
+
+/**
+ * One run of this workflow, as GitHub's API reads it: the fields `vouches` reads.
  * @typedef {{
+ *   event: string,
+ *   status: string,
+ *   conclusion: string | null,
+ *   path: string,
+ *   html_url: string,
+ *   repository: {id: number},
+ *   head_repository: {id: number} | null,
+ * }} WorkflowRun
+ */
+
+/** One job of a run, as GitHub's API lists it. @typedef {{name: string, conclusion: string | null}} Job */
+
+/**
+ * What a push or a merge queue's group asks GitHub. Each call may reject, and any rejection runs
+ * every job. `runs` lists this workflow's passed merge queue runs, and `commit` reads one commit's
+ * tree and parents: a push asks those. `artifacts` lists the artifacts of one name, `run` reads one
+ * run and `jobs` lists its jobs: a group asks those. `workflow` is this run's workflow file.
+ * @typedef {{
+ *   workflow: string,
  *   runs: () => Promise<readonly QueueRun[]>,
  *   commit: (sha: string) => Promise<{tree: string, parents: readonly string[]}>,
+ *   artifacts: (name: string) => Promise<readonly Artifact[]>,
+ *   run: (id: number) => Promise<WorkflowRun>,
+ *   jobs: (id: number) => Promise<readonly Job[]>,
  * }} Api
  */
 
@@ -364,6 +391,7 @@ export const github = (env, get = globalThis.fetch) => {
   };
 
   return {
+    workflow,
     runs: async () =>
       (
         await read(
@@ -374,6 +402,9 @@ export const github = (env, get = globalThis.fetch) => {
       const commit = await read(`git/commits/${sha}`);
       return { tree: commit.tree.sha, parents: commit.parents.map((/** @type {{sha: string}} */ p) => p.sha) };
     },
+    artifacts: async (name) => (await read(`actions/artifacts?name=${encodeURIComponent(name)}&per_page=20`)).artifacts,
+    run: (id) => read(`actions/runs/${id}`),
+    jobs: async (id) => (await read(`actions/runs/${id}/jobs?per_page=100`)).jobs,
   };
 };
 
@@ -437,6 +468,171 @@ const tested = async (before, head, run, api) => {
  * @returns {Flags}
  */
 const skipTested = (flags) => ({ ...flags, next: false });
+
+// A merge queue's group whose tree a ready pull request run already tested green passes at once
+// (experiment 292, change 5). GitHub runs a pull request's checks on `refs/pull/<n>/merge`: the pull
+// request merged onto main as main was then. A group of one entry is the same pull request merged
+// onto main as main is now. When main has not moved, both are one tree, and the group would test
+// byte-identical files. But GitHub lists a pull request run under its branch's head, whose tree is
+// not the one it tested, so the run records it: the changes job's record step (`--record`) uploads
+// an artifact named for the tree it tested and the tree of the base it picked its tests from. A
+// group asks for the artifact of its own two trees, the same pair `tested` matches for a push.
+
+/** @typedef {Flags & {scope: Scope}} Selection */
+
+/** The jobs whose flags a selection holds beside next, which `covers` judges with its scope. */
+const flagged = /** @type {const} */ (["check", "typecheck", "field", "build"]);
+
+/**
+ * The record's artifact name: the tree a pull request run tested and the tree of its base.
+ * @param {string} tree
+ * @param {string} base
+ */
+export const recordName = (tree, base) => `tested-${tree}-${base}`;
+
+/**
+ * What a run's changes job selected, from what it printed: a job runs only when its flag is exactly
+ * "true", so an empty or unknown value counts as a job that did not run. The filter names all of
+ * next/ or the reader tests; anything else covers no next/ test.
+ * @param {Record<string, string | undefined>} printed
+ * @returns {Selection}
+ */
+export const selectionOf = (printed) => ({
+  check: printed["check"] === "true",
+  typecheck: printed["typecheck"] === "true",
+  next: printed["next"] === "true",
+  field: printed["field"] === "true",
+  build: printed["build"] === "true",
+  scope: printed["filter"] === "next/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
+});
+
+/**
+ * Whether a run that selected `ran` tested at least what one that needs `needed` runs: every job
+ * `needed` runs, `ran` ran, and when `needed` runs next, `ran` ran it over as much of next/ or more.
+ * The two runs this compares have the same tree and the same base tree, so their next/ tests on the
+ * same scope are the same files: the size step lists Vitest's `--changed` from that base over those
+ * files, and a run whose size step failed ran every file.
+ * @param {Selection} ran
+ * @param {Selection} needed
+ */
+export const covers = (ran, needed) =>
+  flagged.every((job) => !needed[job] || ran[job]) &&
+  (!needed.next || (ran.next && rank[ran.scope] >= rank[needed.scope]));
+
+/**
+ * What a merge queue's group from `base` to `head` needs, on its first pass: its jobs and how much
+ * of next/. The parser's pass and the size step only narrow it. `null` when git cannot read it.
+ * @param {string} base
+ * @param {string} head
+ * @param {Runner} run
+ * @returns {Selection | null}
+ */
+const groupNeeds = (base, head, run) => {
+  const paths = readPaths(base, head, "merge_group", run);
+  return paths === null ? null : { ...jobs(paths, "merge_group", false), scope: scope(paths, "merge_group") };
+};
+
+/**
+ * A ready pull request run's record, or why it records none. The run tested TESTED (`github.sha`,
+ * the merge commit) and picked its tests from BASE; CHECK to FILTER are what its changes job
+ * printed. It records only when that selection covers what a merge queue group of the same two trees
+ * needs, so a run that tested less never stands in for one. A draft run records nothing: it runs
+ * no test. Nor does any other event, or a tree git cannot read.
+ * @param {Record<string, string | undefined>} env
+ * @param {Runner} [run]
+ * @returns {{name: string, record: {tree: string, base: string, ran: Selection, needed: Selection}} | {name: null, reason: string}}
+ */
+export const record = (env, run = git) => {
+  if (env["EVENT"] !== "pull_request" || env["DRAFT"] !== "false") {
+    return { name: null, reason: "only a ready pull request's run records the tree it tested" };
+  }
+
+  const merge = env["TESTED"] ?? "";
+  const from = env["BASE"] ?? "";
+  const tree = treeOf(merge, run);
+  const base = treeOf(from, run);
+  const needed = groupNeeds(from, merge, run);
+
+  if (tree === null || base === null || needed === null) {
+    return { name: null, reason: "git could not read the tested tree or its base" };
+  }
+
+  const ran = selectionOf({
+    check: env["CHECK"],
+    typecheck: env["TYPECHECK"],
+    next: env["NEXT"],
+    field: env["FIELD"],
+    build: env["BUILD"],
+    filter: env["FILTER"],
+  });
+
+  if (!covers(ran, needed)) {
+    return { name: null, reason: "this run tests less than a merge queue group of the same trees needs" };
+  }
+
+  return { name: recordName(tree, base), record: { tree, base, ran, needed } };
+};
+
+/**
+ * Whether a run found through its record vouches for a group's tree: a run of this workflow on a
+ * pull request from this repository, not a fork, that ended `success` with its required check
+ * `ci-required` green. A draft's is `ci-required (draft)`, so a draft run never vouches.
+ * @param {WorkflowRun} found
+ * @param {readonly Job[]} list
+ * @param {string} workflow
+ */
+export const vouches = (found, list, workflow) =>
+  found.event === "pull_request" &&
+  found.status === "completed" &&
+  found.conclusion === "success" &&
+  found.path === `.github/workflows/${workflow}` &&
+  found.head_repository?.id === found.repository.id &&
+  list.some((job) => job.name === "ci-required" && job.conclusion === "success");
+
+/**
+ * The pull request run that already tested this group's tree from its base's tree, or `null`. It
+ * asks for the record of the group's two trees, then reads each run that left one. Any doubt is
+ * `null`: a tree git cannot read, a rejected or malformed answer, an expired record, or no run that
+ * vouches (main moved since the run, the group holds more than one entry, or the run failed).
+ * @param {string} base the commit the group was built on
+ * @param {string} head the group's commit
+ * @param {Runner} run
+ * @param {Api} api
+ * @returns {Promise<{id: number, url: string, tree: string} | null>}
+ */
+const matched = async (base, head, run, api) => {
+  const tree = treeOf(head, run);
+  const from = treeOf(base, run);
+
+  if (tree === null || from === null) {
+    return null;
+  }
+
+  const name = recordName(tree, from);
+
+  try {
+    for (const artifact of await api.artifacts(name)) {
+      const id = artifact.workflow_run?.id;
+
+      if (artifact.name !== name || artifact.expired || typeof id !== "number") {
+        continue;
+      }
+
+      const found = await api.run(id);
+
+      if (vouches(found, await api.jobs(id), api.workflow)) {
+        return { id, url: found.html_url, tree };
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+/** A group a pull request run already tested runs no job but changes and ci-required. @type {Flags} */
+const none = { check: false, typecheck: false, next: false, field: false, build: false };
 
 /** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
 const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
@@ -518,9 +714,11 @@ const parserVersion = () => {
  * program.ts cannot load, it prints what the first pass printed, so a failed install runs every
  * next/ test. `note` hears one line per candidate file and the parser's version.
  * On a push, the first pass also asks `api` whether a merge queue run already passed the same
- * change (`tested`), and then prints next off and that run's id as `tested`. With no
- * `api`, as when the run gave no token, it asks nothing. Since next is then off, `probe` is false
- * and the parser's pass does not run.
+ * change (`tested`), and then prints next off and that run's id as `tested`. On a merge queue's
+ * group, it asks for a pull request run's record of the group's two trees (`matched`), and when a
+ * run vouches for it prints every job off and that run's id as `tested`. With no `api`, as when the
+ * run gave no token, it asks nothing. Since next is then off, `probe` is false and the parser's
+ * pass does not run.
  * @param {{same: boolean, env: Record<string, string | undefined>, run?: Runner, load?: () => Promise<{samePaths: (base: string, head: string, paths: readonly string[], run: Runner, note?: (path: string, verdict: string) => void) => string[]}>, note?: (line: string) => void, api?: Api | null}} options
  * @returns {Promise<Record<string, string>>}
  */
@@ -544,10 +742,18 @@ export const outputs = async ({
 
   if (!same) {
     const queued = event === "push" && paths !== null && api !== null ? await tested(base, head, run, api) : null;
-    const flags = queued === null ? changed : skipTested(changed);
+    const pulled =
+      event === "merge_group" && paths !== null && api !== null ? await matched(base, head, run, api) : null;
+    const flags = pulled !== null ? none : queued === null ? changed : skipTested(changed);
 
     if (queued !== null) {
       note(`merge queue run ${queued} passed this tree from the same base tree, so next skips`);
+    }
+
+    if (pulled !== null) {
+      note(
+        `pull request run ${pulled.url} passed tree ${pulled.tree} from the same base tree, and its tests covered this group's, so every job but changes and ci-required skips`,
+      );
     }
 
     const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);
@@ -555,7 +761,7 @@ export const outputs = async ({
       ...Object.fromEntries(Object.entries(flags).map(([job, on]) => [job, String(on)])),
       filter: filterOf(first),
       probe: String(worth),
-      tested: queued === null ? "" : String(queued),
+      tested: pulled !== null ? String(pulled.id) : queued === null ? "" : String(queued),
     };
   }
 
@@ -584,6 +790,29 @@ export const outputs = async ({
   };
 };
 
+/**
+ * The record step's pass (`--record`): writes the record to RUNNER_TEMP's tested.json and prints its
+ * artifact name as `name`, or prints an empty `name` and says why not. The upload step that follows
+ * runs only on a name.
+ * @param {Record<string, string | undefined>} env
+ * @param {(line: string) => void} note
+ * @returns {Record<string, string>}
+ */
+const recorded = (env, note) => {
+  const made = record(env);
+
+  if (made.name === null) {
+    note(`no record of the tested tree: ${made.reason}`);
+    return { name: "" };
+  }
+
+  writeFileSync(join(env["RUNNER_TEMP"] ?? tmpdir(), "tested.json"), `${JSON.stringify(made.record, null, 2)}\n`);
+  note(
+    `recorded tree ${made.record.tree} from base tree ${made.record.base}, for a merge queue group of the same trees`,
+  );
+  return { name: made.name };
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const same = process.argv.includes("--same");
   const summary = process.env["GITHUB_STEP_SUMMARY"];
@@ -595,7 +824,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       appendFileSync(summary, `- ${line}\n`);
     }
   };
-  const printed = await outputs({ same, env: process.env, note });
+  const recording = process.argv.includes("--record");
+  const printed = recording ? recorded(process.env, note) : await outputs({ same, env: process.env, note });
   const output = `${Object.entries(printed)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n")}\n`;
@@ -606,7 +836,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     appendFileSync(file, output);
   }
 
-  if (readPaths(process.env["BASE"] ?? "", process.env["HEAD"] ?? "", process.env["EVENT"] ?? "") === null) {
+  if (
+    !recording &&
+    readPaths(process.env["BASE"] ?? "", process.env["HEAD"] ?? "", process.env["EVENT"] ?? "") === null
+  ) {
     console.error("changes: history could not be read; every job is enabled");
     process.exitCode = 1;
   }
