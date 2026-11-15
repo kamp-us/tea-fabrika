@@ -8,8 +8,8 @@
 //   `Socket.WebSocketConstructor` and a `Scope`: closing the scope stops the run and its sockets,
 //   which is how these laws crash a client.
 // - Its hello is `initialize` with `has` from `Commands.has`, `platform: "headless"` and `build`.
-//   Its calls are JSON-RPC 2.0 `jobs.list {}`, `jobs.wait { after }`, `jobs.take { process }`,
-//   `jobs.started` and `jobs.finish`, answered as `gateway/Jobs.ts` answers them.
+//   Its calls are JSON-RPC 2.0 `tasks.list {}`, `tasks.wait { after }`, `tasks.take { process }`,
+//   `tasks.started` and `tasks.finish`, answered as `gateway/Tasks.ts` answers them.
 // - `journal_read`, `journal_write` and `execute` go to `Journal.read`, `Journal.write` and
 //   `Commands.execute`, and nothing else reads or writes the journal or runs a command.
 //
@@ -29,7 +29,7 @@ import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
-import { fcTypeId } from "../jobs/JobsTest.ts";
+import { fcTypeId } from "../tasks/TasksTest.ts";
 import { property } from "../Testing.test-support.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { KeyLine } from "../transport/Sshsig.ts";
@@ -86,7 +86,7 @@ const Call = Schema.fromJsonString(
 
 const decodeCall = Schema.decodeUnknownOption(Call);
 
-/** How the door cuts the next jobs call: drop the socket before it reads the call, or after it acted. */
+/** How the door cuts the next tasks call: drop the socket before it reads the call, or after it acted. */
 type CallCut = "before" | "after" | null;
 
 /** What the door holds: the socket open now, the cut armed, the waits it parked, and what it heard. */
@@ -122,7 +122,7 @@ const door = (b: Brain) => {
       return;
     }
 
-    if (!call.method.startsWith("jobs.")) {
+    if (!call.method.startsWith("tasks.")) {
       return;
     }
 
@@ -254,8 +254,8 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       const stopped = yield* Deferred.isDone(s.stopped);
       const held = yield* Deferred.isDone(s.paused);
       const open = b.all().filter((j) => j.phase !== "finished");
-      // A new job is asked for a process only when that process has no open job (0093): two open
-      // jobs of one process wedge `jobs.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
+      // A new task is asked for a process only when that process has no open task (0093): two open
+      // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
       const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
       const asks = free.length === 0 ? [] : open.length === 0 ? ["request", "request"] : ["request"];
       const options: Array<string> =
@@ -320,7 +320,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       }
     }
 
-    // Quiet now: no cut, no pause, and the client runs until the brain has every job finished.
+    // Quiet now: no cut, no pause, and the client runs until the brain has every task finished.
     s.armed = null;
     d.state.cut = null;
     yield* resumed(s);
@@ -335,12 +335,12 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
 
     const { runs, results } = expectedResults(s.events);
 
-    for (const job of b.all()) {
-      const id = job.request.id;
-      expect(job.phase, `${focus}: ${id} ends finished`).toBe("finished");
+    for (const task of b.all()) {
+      const id = task.request.id;
+      expect(task.phase, `${focus}: ${id} ends finished`).toBe("finished");
       expect(runs.get(id) ?? 0, `H2: ${id}'s command ran at most once across every restart`).toBeLessThanOrEqual(1);
-      expect(job.result, `H2: ${id} ends with the result its journal held`).toEqual(results.get(id));
-      done.add(job.result?._tag === "unknown" ? "ended:unknown" : "ended:result");
+      expect(task.result, `H2: ${id} ends with the result its journal held`).toEqual(results.get(id));
+      done.add(task.result?._tag === "unknown" ? "ended:unknown" : "ended:result");
     }
 
     expect(runs.get("") ?? 0, "a command ran with no `executing` entry saved before it").toBe(0);
@@ -418,7 +418,7 @@ describe("P39 slice 4b: the host's os in the hello", () => {
 
 describe("P39 slice 4a: the hands start", () => {
   law(
-    "H2: after a cut at any journal or call boundary and a restart, the job ends finished with the fake's result when the journal held one, and with unknown interrupted when it held executing and no result",
+    "H2: after a cut at any journal or call boundary and a restart, the task ends finished with the fake's result when the journal held one, and with unknown interrupted when it held executing and no result",
     "H2",
     [
       "request",

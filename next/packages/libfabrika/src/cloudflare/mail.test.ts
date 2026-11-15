@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
-// R2 (sev1 of 2026-11-15): the gateway wakes a finished job's requester outside any span. A wake that
+// R2 (sev1 of 2026-11-15): the gateway wakes a finished task's requester outside any span. A wake that
 // required the caller's span died there, and the real Project answered that finish `unreachable`.
 // Plant: read the span with `Effect.orDie` again; R2's untraced callers go red.
 import { it, expect } from "@effect/vitest";

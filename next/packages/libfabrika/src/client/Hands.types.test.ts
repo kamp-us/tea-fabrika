@@ -7,8 +7,8 @@
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Context, Effect, Layer, PlatformError } from "effect";
 import type { KeyValueStore } from "effect/persistence";
-import type { Command, Result } from "../jobs/Job.ts";
 import type { Rev } from "../Rev.ts";
+import type { Command, Result } from "../tasks/Task.ts";
 import type * as CommandsFront from "./Commands.ts";
 import type { Commands } from "./Commands.ts";
 import type * as JournalFront from "./Journal.ts";
@@ -16,15 +16,15 @@ import type { Entry, Journal, JournalError } from "./Journal.ts";
 import type * as JournalStore from "./JournalStore.ts";
 
 it("type: T1 Journal and Commands speak their own errors and shared names only, never KeyValueStore's or PlatformError", () => {
-  // The journal's two calls, as the contract writes them: one entry per job, read or written.
+  // The journal's two calls, as the contract writes them: one entry per task, read or written.
   expectTypeOf<Context.Service.Shape<typeof Journal>>().toEqualTypeOf<{
-    readonly read: (job: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (job: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
+    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
   }>();
   expectTypeOf<Extract<JournalError, PlatformError.PlatformError>>().toEqualTypeOf<never>();
   expectTypeOf<Extract<JournalError, KeyValueStore.KeyValueStoreError>>().toEqualTypeOf<never>();
   expectTypeOf<JournalError["reason"]>().toEqualTypeOf<"storage" | "bad_entry">();
-  // The five steps a job's entry may stand at, each keeping its execution and the client's own clock.
+  // The five steps a task's entry may stand at, each keeping its execution and the client's own clock.
   expectTypeOf<(typeof Entry.Type)["_tag"]>().toEqualTypeOf<
     "prepared" | "executing" | "result" | "acknowledged" | "held"
   >();

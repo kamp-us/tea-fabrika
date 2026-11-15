@@ -1,14 +1,14 @@
-// P39 slice 1, L1 and L8 on the job's own schemas. L1: every fact a request, an executor, a result
+// P39 slice 1, L1 and L8 on the task's own schemas. L1: every fact a request, an executor, a result
 // and a writer's record carry comes back from its JSON form, field for field. L8: one field made
 // invalid, or left out, is refused at decoding. The values are generated; the database half of both
-// laws is in `JobsTest.ts`.
+// laws is in `TasksTest.ts`.
 //
 // P39 slice 3 (ticket 1040): the `collected` state and event keep every field through JSON too,
 // with the collection (which process took the result, and its answer letter) whole.
 import { describe, expect, it } from "@effect/vitest";
 import { Result as R, Schema } from "effect";
 import * as fc from "fast-check";
-import { Collection, Event, Executor, Recorded, Request, Result, State } from "./Job.ts";
+import { Collection, Event, Executor, Recorded, Request, Result, State } from "./Task.ts";
 import {
   BAD_EXECUTOR,
   BAD_RECORDED,
@@ -21,7 +21,7 @@ import {
   fcRequest,
   fcResult,
   fcTypeId,
-} from "./JobsTest.ts";
+} from "./TasksTest.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
@@ -44,7 +44,7 @@ const Values = fc.uniqueArray(fcFingerprint, { minLength: 2, maxLength: 3 }).cha
   }),
 );
 
-describe("P39 slice 1: the job's schemas", () => {
+describe("P39 slice 1: the task's schemas", () => {
   it("L1: a request, an executor, a result and a writer's record keep every field through JSON", () => {
     fc.assert(
       fc.property(Values, ({ request, executor, result, recorded }) => {

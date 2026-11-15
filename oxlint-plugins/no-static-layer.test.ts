@@ -134,7 +134,7 @@ it("fires exactly on the static members of a class that extends Context.Service,
       });
       const code = [...head, ...body.map((b) => b.text), expression ? "};" : "}", ""].join("\n");
       const lines = body.flatMap((b, i) => (b.fires ? [head.length + i + 1] : []));
-      const filename = "next/packages/libfabrika/src/jobs/Retries.ts";
+      const filename = "next/packages/libfabrika/src/tasks/Retries.ts";
 
       if (lines.length === 0) {
         tester.run("no-static-layer", noStaticLayer, { valid: [{ code, filename }], invalid: [] });
@@ -159,7 +159,7 @@ const LISTED = [
   "next/packages/libfabrika/src/ci/**",
   "next/packages/libfabrika/src/codehost/**",
   "next/packages/libfabrika/src/coordination/**",
-  "next/packages/libfabrika/src/jobs/**",
+  "next/packages/libfabrika/src/tasks/**",
   "next/packages/libfabrika/src/ledger/**",
   "next/packages/libfabrika/src/node/**",
   "next/packages/libfabrika/src/packs/**",
@@ -224,10 +224,10 @@ it("scenario: the real config holds a static layer in each listed folder, and le
   const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
   const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
   const off = [
-    "next/packages/libfabrika/src/jobs/Planted.test.ts",
-    "next/packages/libfabrika/src/jobs/Planted.test.tsx",
-    "next/packages/libfabrika/src/jobs/PlantedTest.ts",
-    "next/packages/libfabrika/src/jobs/Planted.test-support.ts",
+    "next/packages/libfabrika/src/tasks/Planted.test.ts",
+    "next/packages/libfabrika/src/tasks/Planted.test.tsx",
+    "next/packages/libfabrika/src/tasks/PlantedTest.ts",
+    "next/packages/libfabrika/src/tasks/Planted.test-support.ts",
     "next/apps/fabrika/src/Planted.test.ts",
     "packages/fabrika/src/Planted.ts",
   ];

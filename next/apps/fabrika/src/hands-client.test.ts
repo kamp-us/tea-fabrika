@@ -16,10 +16,6 @@ import { start } from "@kampus/libfabrika/client/HandsStart";
 import * as JournalStore from "@kampus/libfabrika/client/JournalStore";
 import { MemorySocket } from "@kampus/libfabrika/client/WindowStart.test-support";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
-import { Command, type Result } from "@kampus/libfabrika/jobs/Job";
-import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
-import * as JobsLedger from "@kampus/libfabrika/jobs/JobsLedger";
-import { fcTypeId } from "@kampus/libfabrika/jobs/JobsTest";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerStreamsSql from "@kampus/libfabrika/ledger/LedgerStreamsSql";
@@ -29,6 +25,10 @@ import { Referee } from "@kampus/libfabrika/ledger/Referee";
 import * as RefereeSql from "@kampus/libfabrika/ledger/RefereeSql";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Command, type Result } from "@kampus/libfabrika/tasks/Task";
+import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
+import * as TasksLedger from "@kampus/libfabrika/tasks/TasksLedger";
+import { fcTypeId } from "@kampus/libfabrika/tasks/TasksTest";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
@@ -39,7 +39,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
-// and the real `Gateway` and `Jobs` on node:sqlite at `:memory:`. Its journal is the real
+// and the real `Gateway` and `Tasks` on node:sqlite at `:memory:`. Its journal is the real
 // `JournalStore.layer` on a string store this file keeps across restarts, and its `Commands` is the
 // fake, the only one in 4a. No port, no real socket, no process and no container: it runs on the
 // merge line (0536).
@@ -49,12 +49,12 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // every other call goes to `Gateway.route` naming this one object as the reader its rings reach,
 // and each ring the ledger asks for this object is handed to every connection's `ring`; a ring for
 // any other name reaches nobody, as on the Worker. A parked wait on a `target:` stream is asked again as the hands' own
-// `jobs.wait`, since a hands key may not call `ledger.wait`.
+// `tasks.wait`, since a hands key may not call `ledger.wait`.
 //
-// E1: a requested job ends finished with the fake's result, or `unknown interrupted` where a crash
+// E1: a requested task ends finished with the fake's result, or `unknown interrupted` where a crash
 // fell between the command and its saved result, and its command ran at most once, through socket
 // drops, lost answers and client restarts at points the walk picks from what is happening. Plant
-// (after build): leave `jobs.list` answering an empty list.
+// (after build): leave `tasks.list` answering an empty list.
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
@@ -156,7 +156,7 @@ const Flow = fc.record({
 });
 type Flow = typeof Flow extends fc.Arbitrary<infer A> ? A : never;
 
-/** The brain: the real gateway and jobs on one in-memory database, its rings queued for the door. */
+/** The brain: the real gateway and tasks on one in-memory database, its rings queued for the door. */
 const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
@@ -187,7 +187,7 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
   };
   const services = Layer.mergeAll(
     data,
-    JobsLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer)),
+    TasksLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer)),
     ClientManagerLedger.layer(founder).pipe(Layer.provide(data)),
     SpanSink.layer(sql, { object: "hands-e1" }),
     RecordManager.memory(4 * 1024 * 1024),
@@ -239,7 +239,7 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     sql,
     d,
     rings,
-    jobs: <A, E>(f: (j: Jobs["Service"]) => Effect.Effect<A, E>) => Jobs.use(f).pipe(Effect.provide(life)),
+    tasks: <A, E>(f: (j: Tasks["Service"]) => Effect.Effect<A, E>) => Tasks.use(f).pipe(Effect.provide(life)),
   };
 });
 
@@ -302,7 +302,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         Effect.gen(function* () {
           const id = yield* connected;
           const answer = stream.startsWith("target:")
-            ? yield* b.d.route(id, "jobs.wait", { after }, reader)
+            ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
           if (answer._tag === "parked") {
@@ -445,16 +445,16 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     for (const cell of f.cells) {
       yield* pass(0);
-      // A new job is asked for a process only when that process has no open job (0093): two open
-      // jobs of one process wedge `jobs.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
-      const jobs = yield* Effect.forEach(requested, (id) => b.jobs((j) => j.read(id)).pipe(Effect.orDie), {
+      // A new task is asked for a process only when that process has no open task (0093): two open
+      // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
+      const tasks = yield* Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), {
         concurrency: 1,
       });
       const busy = new Set(
-        jobs.flatMap((job) =>
-          job.state._tag === "absent" || job.state._tag === "finished" || job.state._tag === "collected"
+        tasks.flatMap((task) =>
+          task.state._tag === "absent" || task.state._tag === "finished" || task.state._tag === "collected"
             ? []
-            : [job.state.request.process],
+            : [task.state.request.process],
         ),
       );
       const free = f.processes.filter((p) => !busy.has(p));
@@ -465,7 +465,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       if (move === "request") {
         const process = free[cell.ms % free.length] ?? "process_01m6v5270hetdrt4r8h9vvjwjs";
         const id = `${process}/${++n}/0`;
-        yield* b.jobs((j) =>
+        yield* b.tasks((j) =>
           j.request(
             {
               id,
@@ -505,11 +505,11 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       }
     }
 
-    // Quiet now: nothing lost, nothing dropped, until every job the brain was asked for is finished.
+    // Quiet now: nothing lost, nothing dropped, until every task the brain was asked for is finished.
     d.lose.next = 0;
     const finished = () =>
-      Effect.forEach(requested, (id) => b.jobs((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
-        Effect.map((jobs) => jobs.every((job) => job.state._tag === "finished")),
+      Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
+        Effect.map((tasks) => tasks.every((task) => task.state._tag === "finished")),
       );
 
     for (let i = 0; i < 300 && !(yield* finished()); i++) {
@@ -519,9 +519,9 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     const { runs, results } = expectedResults(s.events);
 
     for (const id of focus === "E1" ? requested : []) {
-      const job = yield* b.jobs((j) => j.read(id)).pipe(Effect.orDie);
-      expect(job.state._tag, `E1: ${id} ends finished`).toBe("finished");
-      const result: Result | null = job.state._tag === "finished" ? job.state.result : null;
+      const task = yield* b.tasks((j) => j.read(id)).pipe(Effect.orDie);
+      expect(task.state._tag, `E1: ${id} ends finished`).toBe("finished");
+      const result: Result | null = task.state._tag === "finished" ? task.state.result : null;
       expect(result, `E1: ${id} ends with the result its journal held`).toEqual(results.get(id));
       expect(runs.get(id) ?? 0, `E1: ${id}'s command ran at most once`).toBeLessThanOrEqual(1);
       done.add(result?._tag === "unknown" ? "ended:unknown" : "ended:result");
@@ -587,7 +587,7 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
 
 describe("P39 slice 4a: the hands client end to end", () => {
   law(
-    "E1: a requested job ends finished with the fake's result through the real client start, the in-memory socket, the real Gateway and Jobs on :memory:, with sockets dropped and answers lost; execute runs once; every parked wait is rung at the object its socket lives on",
+    "E1: a requested task ends finished with the fake's result through the real client start, the in-memory socket, the real Gateway and Tasks on :memory:, with sockets dropped and answers lost; execute runs once; every parked wait is rung at the object its socket lives on",
     "E1",
     ["request", "drop", "lose", "restart", "ended:result", "ring:target"],
     60,

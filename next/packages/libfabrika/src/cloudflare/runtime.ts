@@ -36,8 +36,6 @@ import {
 } from "../access/SessionManager.ts";
 import * as SessionSenders from "../access/SessionSenders.ts";
 import * as Id from "../Id.ts";
-import type { Jobs } from "../jobs/Jobs.ts";
-import * as JobsLedger from "../jobs/JobsLedger.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -91,8 +89,8 @@ import { CodeStore, type CodeStoreError } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
 import type { Declaration } from "../runtime/Execution.ts";
-import { type Ask, HandsJobs, type HandsJobsError, type Reply as HandsReply } from "../runtime/HandsJobs.ts";
-import * as HandsJobsLive from "../runtime/HandsJobsLive.ts";
+import { type Ask, HandsTasks, type HandsTasksError, type Reply as HandsReply } from "../runtime/HandsTasks.ts";
+import * as HandsTasksLive from "../runtime/HandsTasksLive.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
@@ -107,6 +105,8 @@ import { RecordedStart } from "../settings/RecordedStart.ts";
 import * as SettingsStart from "../settings/Start.ts";
 import * as Starts from "../settings/Starts.ts";
 import { type Sql } from "../Sql.ts";
+import type { Tasks } from "../tasks/Tasks.ts";
+import * as TasksLedger from "../tasks/TasksLedger.ts";
 import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -383,7 +383,7 @@ export interface ProjectOptions {
     | SpanSink
     | RecordManager
     | Archive
-    | Jobs
+    | Tasks
     | MailWakeups
     | RecordedStart
   >;
@@ -874,13 +874,13 @@ const projectLogic = Effect.fn("project.init")(function* (
     ids.next,
   );
   const managers = Layer.mergeAll(
-    JobsLedger.layer,
+    TasksLedger.layer,
     ClientManagerLedger.layer(founder),
     // 0526: the relation rows the brain trusts are its own.
     RelationsLedger.layer({ by }),
     processManager,
   ).pipe(Layer.provideMerge(base));
-  // The door wakes a job's requester after a finish with the same wake mail uses.
+  // The door wakes a task's requester after a finish with the same wake mail uses.
   const services = Context.add(
     Context.add(
       yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
@@ -891,9 +891,9 @@ const projectLogic = Effect.fn("project.init")(function* (
     yield* MailWakeups.pipe(Effect.provide(wakeups(env, name))),
   );
   // A program's hands Cmd targets the person's hands key, and its request records this start's settings.
-  const hands = yield* HandsJobs.pipe(
+  const hands = yield* HandsTasks.pipe(
     Effect.provide(
-      HandsJobsLive.layer({ target: checked.values.handsTarget, settings: checked.snapshot.hash }).pipe(
+      HandsTasksLive.layer({ target: checked.values.handsTarget, settings: checked.snapshot.hash }).pipe(
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
@@ -1805,7 +1805,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
-      // Under the shared write turn, as every job call is: a read and its request or collect are one step.
+      // Under the shared write turn, as every task call is: a read and its request or collect are one step.
       const work = write(hands.ask(ask, origin));
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
@@ -1961,7 +1961,7 @@ export class ProjectService extends Context.Service<
       ask: typeof Ask.Type,
       origin: From,
       trace?: { traceId: string; spanId: string },
-    ) => Effect.Effect<typeof HandsReply.Type, HandsJobsError | ProjectFailure>;
+    ) => Effect.Effect<typeof HandsReply.Type, HandsTasksError | ProjectFailure>;
     readonly target: GatewayCalls["target"];
     readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
     readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
@@ -2160,14 +2160,14 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
 };
 
 /**
- * Layer that provides durable job storage on the Project's own database, for trusted startup code.
- * A job's doorbell rings the Connection object it names.
+ * Layer that provides durable task storage on the Project's own database, for trusted startup code.
+ * A task's doorbell rings the Connection object it names.
  *
  * @stability unstable
  * @category layers
  */
-export const projectJobsLayer = (ctx: DurableObjectState, env: Env) =>
-  JobsLedger.layer.pipe(
+export const projectTasksLayer = (ctx: DurableObjectState, env: Env) =>
+  TasksLedger.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         LedgerTransactionSql.layer(cloudflareSql(ctx.storage)),

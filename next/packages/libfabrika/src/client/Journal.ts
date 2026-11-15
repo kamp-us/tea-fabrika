@@ -1,5 +1,5 @@
 /**
- * The hands client's journal: one saved entry per job, written before each step that follows it,
+ * The hands client's journal: one saved entry per task, written before each step that follows it,
  * so a crash never runs a command twice. This file is the contract only (0095); `JournalStore.layer`
  * keeps it on Effect's own `KeyValueStore`.
  *
@@ -7,8 +7,8 @@
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
-import { Result } from "../jobs/Job.ts";
 import { Rev } from "../Rev.ts";
+import { Result } from "../tasks/Task.ts";
 
 const Execution = Schema.NonEmptyString;
 /** When the command started, on the client's own clock: the `executing` entry's `at`, kept by each
@@ -17,13 +17,13 @@ const Execution = Schema.NonEmptyString;
 const Started = { startedAt: Schema.optionalKey(Schema.String) };
 
 /**
- * Schema for where one job stands on the machine that runs it. Each entry keeps the execution the
+ * Schema for where one task stands on the machine that runs it. Each entry keeps the execution the
  * brain assigned and `at`, the client's own clock when it wrote it.
  *
  * **Details**
  *
  * `prepared`: taken, and nothing ran. `executing`: saved just before the command starts; found on a
- * reopen with no result after it, the job's result is `unknown interrupted`. `result`: the command's
+ * reopen with no result after it, the task's result is `unknown interrupted`. `result`: the command's
  * result, saved before it is sent. `acknowledged`: the brain answered ok to the finish, at `rev`.
  * `held`: the brain refused the finish for good, for `reason`; the result is never sent again.
  *
@@ -59,12 +59,12 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
 }) {}
 
 /**
- * Service that keeps the hands client's journal: `read` answers a job's last entry, or null before
+ * Service that keeps the hands client's journal: `read` answers a task's last entry, or null before
  * its first, and `write` replaces it.
  *
  * **Details**
  *
- * It needs no list of its keys: the brain is the index, and the client reads the entry of the job
+ * It needs no list of its keys: the brain is the index, and the client reads the entry of the task
  * the brain just assigned it.
  *
  * @stability unstable
@@ -73,7 +73,7 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
 export class Journal extends Context.Service<
   Journal,
   {
-    readonly read: (job: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (job: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
+    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
   }
 >()("@kampus/libfabrika/client/Journal") {}
