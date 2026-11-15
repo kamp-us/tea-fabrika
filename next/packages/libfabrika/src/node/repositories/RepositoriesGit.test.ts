@@ -7,22 +7,12 @@ import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
-import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
-import * as RepositoriesGit from "./RepositoriesGit.ts";
+import { fixture, git, gitCommandBudget, runs, withReader } from "./RepositoriesGit.test-support.ts";
 
-const runs = { seed: 119120, numRuns: 200 };
-const identityRuns = { ...runs, numRuns: 300 };
-// CI exhausted 60 s for L5 and both L2 properties. Allow 10 ms per real Git command,
-// including scoped setup/cleanup, and count the longest generated tape of four moves.
-// A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,
-// leaving eleven real commands per open. Failed opens stop at or before that twelfth command.
-const gitCommandBudget = 10;
 // Fixture (init, clone, add, commit, push, rev-parse), initial open, four moves
 // (at most checkout/add/commit/push plus ls-tree/cat-file), worktree add, alias open.
 const pinnedReadGitCommands = 6 + 12 + 4 * (4 + 2) + 1 + 12;
-// Fixture, clone, worktree, initial open, then four opens for each move.
-const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
 // Fixture, remove/commit/push, absent open, revert/push, four faulted opens,
 // remove origin, then the final open's four metadata commands.
 const failedReadGitCommands = 6 + 3 + 12 + 2 + 4 * 11 + 1 + 4;
@@ -30,49 +20,6 @@ const failedReadGitCommands = 6 + 3 + 12 + 2 + 4 * 11 + 1 + 4;
 const legacyGitCommands = 6 + 4 * (3 + 12);
 const text = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
 const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
-
-const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  return (yield* spawner.string(
-    ChildProcess.make("git", [...args], {
-      cwd,
-      extendEnv: true,
-      env: {
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "fixture",
-        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-        GIT_COMMITTER_NAME: "fixture",
-        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      },
-    }),
-  )).trim();
-});
-
-const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", branch: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-git-" });
-  yield* RepositoryOpenTest.isolateGit(root);
-  const origin = path.join(root, "origin.git"),
-    repo = path.join(root, "selected"),
-    person = path.join(root, "person");
-  yield* fs.makeDirectory(person);
-  yield* git(root, ["init", "--bare", `--object-format=${format}`, `--initial-branch=${branch}`, origin]);
-  yield* git(root, ["clone", origin, repo]);
-  yield* fs.makeDirectory(path.join(repo, ".fabrika"));
-  yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), 'fabrika-version = "0.0.0"\n');
-  yield* fs.writeFileString(path.join(repo, "source.txt"), "committed source");
-  yield* git(repo, ["add", "."]);
-  yield* git(repo, ["commit", "-m", "fixture"]);
-  yield* git(repo, ["push", "origin", branch]);
-  const commit = yield* git(repo, ["rev-parse", "HEAD"]);
-  return { fs, path, root, origin, repo, person, branch, commit };
-});
-
-const withReader = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
-  body.pipe(Effect.provide(RepositoriesGit.layer({ person })));
 
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
@@ -140,77 +87,6 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
       );
     },
     runs.numRuns * pinnedReadGitCommands * gitCommandBudget,
-  );
-
-  it(
-    "L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes",
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
-          fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
-          async (credential, tape) =>
-            Effect.runPromise(
-              Effect.scoped(
-                Effect.gen(function* () {
-                  const f = yield* fixture("sha1", "release");
-                  const otherRoot = f.path.join(f.root, "other");
-                  yield* f.fs.makeDirectory(otherRoot);
-                  const clone = f.path.join(otherRoot, "selected");
-                  yield* git(otherRoot, ["clone", f.origin, clone]);
-                  const alias = f.path.join(f.root, "alias");
-                  yield* git(f.repo, ["worktree", "add", "--detach", alias, f.commit]);
-                  const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                  const key = (location: string, destination: string) => {
-                    const spawner = ChildProcessSpawner.make((command) => {
-                      if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
-                        return real.spawn(command);
-                      }
-
-                      // Model a host URL rewrite while keeping every transport on the local bare origin.
-                      const bytes = new TextEncoder().encode(destination);
-                      return Effect.succeed(
-                        ChildProcessSpawner.makeHandle({
-                          pid: ChildProcessSpawner.ProcessId(1),
-                          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
-                          isRunning: Effect.succeed(false),
-                          kill: () => Effect.void,
-                          stdin: Sink.drain,
-                          stdout: Stream.make(bytes),
-                          stderr: Stream.empty,
-                          all: Stream.make(bytes),
-                          getInputFd: () => Sink.drain,
-                          getOutputFd: () => Stream.empty,
-                          unref: Effect.succeed(Effect.void),
-                        }),
-                      );
-                    });
-                    return withReader(
-                      f.person,
-                      Repositories.use((service) => service.open(location)),
-                    ).pipe(
-                      Effect.map((handle) => handle.snapshot.key),
-                      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-                    );
-                  };
-                  const destination = "https://example.invalid/repo.git";
-                  const initial = yield* key(f.repo, destination);
-
-                  for (const cell of tape) {
-                    const authorized = `https://fixture:${credential}${cell}@example.invalid/repo.git`;
-                    expect(yield* key(f.repo, authorized)).toBe(initial);
-                    expect(yield* key(alias, authorized)).toBe(initial);
-                    expect(yield* key(clone, authorized)).not.toBe(initial);
-                    expect(yield* key(f.repo, `${destination}-${cell}`)).not.toBe(initial);
-                  }
-                }),
-              ).pipe(Effect.provide(layer.services)),
-            ),
-        ),
-        identityRuns,
-      );
-    },
-    identityRuns.numRuns * identityGitCommands * gitCommandBudget,
   );
 
   it(

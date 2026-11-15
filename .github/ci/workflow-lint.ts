@@ -169,15 +169,14 @@ const numbered = (all: readonly unknown[]): string[] =>
 const ends = (all: readonly unknown[]): string[] =>
   all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
 
-// When changes' size step sizes next: any run that tests all of next/, as the parser's pass left
-// next and filter, a pull request, a merge queue group and a push to main alike (0534); legs.ts
-// itself prints the full matrix for a run with no base commit. The setup also runs for the parser's
-// pass, and reads the first pass alone.
-const SIZED =
-  "(steps.same.outputs.next||steps.diff.outputs.next)!='false'&&(steps.same.outputs.filter||steps.diff.outputs.filter)=='next/'";
+// When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
+// the parser's pass left next, a pull request, a merge queue group and a push to main alike (0534);
+// legs.ts itself prints the full matrix for a run of all of next/ with no base commit. The setup
+// also runs for the parser's pass, and reads the first pass alone.
+const SIZED = "(steps.same.outputs.next||steps.diff.outputs.next)!='false'";
 
 const PROBE = "steps.diff.outputs.probe=='true'";
-const SETUP = `${PROBE}||(steps.diff.outputs.next!='false'&&steps.diff.outputs.filter=='next/')`;
+const SETUP = `${PROBE}||steps.diff.outputs.next!='false'`;
 
 // changes' outputs from its size step, each beside the name legs.ts prints it under. `next` joins
 // changes' own; `files` is a sized run's vitest list, the reader tests included, and `base` the
@@ -462,22 +461,28 @@ export const lintWorkflow = (text: string): string[] => {
           )), "S1: changes' setup runs for the parser or for sizing, each install on its own guard");
   }
 
-  // S1. The size step (legs.ts) runs after the parser's pass, on every run that tests all of next/:
-  // a pull request, a merge queue group and a push to main (0534), so none of them runs the whole
-  // suite. Under the reader filter it does not run, and next runs the reader tests. Its install and
-  // its sizing may fail without failing changes, so a failure there is the full matrix, never a
-  // skipped next.
+  // S1. The size step (legs.ts) runs after the parser's pass, on every run that tests next: a pull
+  // request, a merge queue group and a push to main (0534), so none of them runs the whole suite,
+  // and a run of the reader tests alone starts only the legs they need. Its install and its sizing
+  // may fail without failing changes, so a failure there is the full matrix, never a skipped next.
   require(sizing !== undefined &&
     same !== undefined &&
     changeSteps.indexOf(same) < changeSteps.indexOf(sizing) &&
     sizing["run"] === "node .github/ci/legs.ts" &&
     sizing["continue-on-error"] === true &&
     compact(sizing["if"]) ===
-      SIZED, "S1: changes sizes next with legs.ts after the parser's pass, on every run that tests all of next/, and fails open");
+      SIZED, "S1: changes sizes next with legs.ts after the parser's pass, on every run that tests next, and fails open");
 
   for (const [key, expected] of Object.entries(SIZE_ENV)) {
     require(map(sizing?.["env"])[key] === expected, `S1: the size step gets ${key} through env`);
   }
+
+  // S1. BUDGET is the setting for a vitest leg's seconds (legs.ts): a positive number, declared here
+  // once. legs.ts refuses any other value, and its step then prints nothing.
+  const budget = map(sizing?.["env"])["BUDGET"];
+  require(typeof budget === "number" &&
+    Number.isFinite(budget) &&
+    budget > 0, "S1: the size step gets BUDGET, a vitest leg's seconds, as a positive number");
 
   // The parser's own install: sizing's full install comes after the parser's pass, so it cannot
   // stand in for it.

@@ -126,17 +126,17 @@ jobs:
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
       # pnpm and Node for the parser's pass and for sizing next. The size step's own guard, read from
-      # the first pass alone, which the parser's pass can only narrow. No pnpm store cache: it did not
-      # pay, and it saved a copy per ref (.github/actions/pnpm).
+      # the first pass alone, which the parser's pass can only narrow: any run next tests at all. No
+      # pnpm store cache: it did not pay, and it saved a copy per ref (.github/actions/pnpm).
       - name: setup pnpm
         uses: pnpm/action-setup@v6
-        if: steps.diff.outputs.probe == 'true' || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')
+        if: steps.diff.outputs.probe == 'true' || steps.diff.outputs.next != 'false'
         continue-on-error: true
         with:
           run_install: false
       - name: setup node
         uses: actions/setup-node@v7
-        if: steps.diff.outputs.probe == 'true' || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')
+        if: steps.diff.outputs.probe == 'true' || steps.diff.outputs.next != 'false'
         continue-on-error: true
         with:
           node-version: 26.13.0
@@ -163,27 +163,36 @@ jobs:
       # measured seconds: none when nothing is picked, then `next` is false and next skips; one when
       # they fit one leg; else the fewest that fit, up to the full matrix. `files` is that vitest
       # list, each file once, and every vitest leg runs exactly it; `base` is the commit the
-      # end-to-end legs narrow from. The merge line never runs the whole suite: the schedule does
-      # (scheduled.yaml). With the reader tests alone, or no base commit (a first push), legs.ts
-      # prints the full matrix and no list. A failed install or list prints nothing, so it fails open
-      # to the full matrix and every file. It was its own job, legs, until each small job's about
+      # end-to-end legs narrow from. On a run of the reader tests alone it lists them whole, with no
+      # base, and sizes them the same way: a queue group of 11 reader files once started all five legs,
+      # four of them for 12 s of tests or less (run 43656691809). The merge line never runs the whole
+      # suite: the schedule does (scheduled.yaml). With no base commit (a first push), legs.ts prints
+      # the full matrix and no list. A failed install or list prints nothing, so it fails open to the
+      # full matrix and every file. It was its own job, legs, until each small job's about
       # 30 s of setup and its machine slot were counted (ticket 985). It lists the `next` project's
       # files, and sizes end-to-end legs, which run the visual tests, only on a pull request with the
       # `visual` label (VISUAL); everywhere else it prints none (0536).
       # No install scripts: listing runs no test, and builds nothing.
       - name: install for sizing
         run: pnpm install --frozen-lockfile --ignore-scripts
-        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'
+        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false'
         continue-on-error: true
       - name: size
         id: size
-        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'
+        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false'
         continue-on-error: true
         env:
           EVENT: ${{ github.event_name }}
           FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
+          # The setting for how long a vitest leg's files may take, in seconds of vitest.shards.ts's
+          # table: the fewest legs whose longest share fits it start (legs.ts). Lower starts more
+          # machines for a shorter run. 240 gives the full next set 3 legs and about 105 s for the
+          # slowest leg's job, and the reader tests alone 1 leg, by the model fitted to the 10 legs of
+          # runs 43653934535 to 43657535864. legs.ts caps it at half the next job's limit less a
+          # leg's setup.
+          BUDGET: 240
         run: node .github/ci/legs.ts
       # Fail fast (ticket 990): the first red job cancels its own run, so the jobs still running free
       # their runners and ci-required answers within seconds, not after the slowest job. Merge queue
