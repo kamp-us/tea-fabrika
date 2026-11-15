@@ -112,10 +112,12 @@ All on main in `next/`, read 2026-11-13.
 
 - **The base layers:** the ledger, the door, processes, programs, the local instance, supervision
   and the span sink (P6, P7, P9 to P12, P33, P34, P37, and P34c's slices 1 to 3).
-- **A program can start a child:** the `start_child` Cmd
-  (`next/packages/libfabrika/src/runtime/StartChild.ts:33`), run by the runner itself
-  (`runtime/Runner.ts:1356`). A start right is one exact pair of programs
-  (`processes/ChildrenLedger.ts:100`).
+- **A program can start a child:** the `start_child` Cmd (`startChild` in
+  `next/packages/libfabrika/src/runtime/StartChild.ts`), run by the runner itself (`startChild`
+  in `runtime/Runner.ts`). A start with a member behind it (the letter's sender, else the
+  requester's recorded member) is checked with `StartProgram` on the fabrika, in `judge` in
+  `processes/ChildrenLedger.ts`. Only a start with no member behind it falls back to the host's
+  `StartGrant`, one exact pair of programs.
 - **Program mail:** the `send` Cmd (`runtime/Send.ts:14`) and its refusals, which have no `full`
   (`processes/ProgramMail.ts:13`). A child and its starter may mail each other with no grant
   (`processes/ProgramMailLedger.ts:122`); anyone else needs a host grant (`ProgramMailLedger.ts:172`).
@@ -215,7 +217,8 @@ In build order. "Decide first" lists only what no decision answers yet.
     owner, admin or member row may start any program, and no start grant is read. A sender with no
     row is refused `forbidden`. The desk holds no start right of its own, and its laws drive the
     check through the runner's `start_child`.
-  - **A start carries its member down (S1, from ticket 953).** A start with no member's letter
+  - **A start carries its member down (built on main by ticket 953, in
+    [PR 1239](https://github.com/kamp-us/tea-fabrika/pull/1239), not by this lane).** A start with no member's letter
     behind it is checked as the member its requester was checked against, down the whole chain of
     starts ([0531](../../.decisions/0531-a-start-carries-its-member-down.md)). The child's
     `started` line records that member.
@@ -252,7 +255,8 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
   two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program when a start right names
   one exact pair: *2026-11-14: settled by 0170 and 0526. A start is checked against the member
-  whose line caused it, and no program, `fabsh` included, holds a start right of its own.* Whether the desk's commands need the palette now: 0278 says every command also
+  whose line caused it, so `fabsh` needs no start right. The host's `StartGrant` pairs judge only a
+  start with no member behind it.* Whether the desk's commands need the palette now: 0278 says every command also
   has a shell word and a palette entry (`.decisions/0278-each-window-runs-its-own-prefix.md:33`), and the palette is in Tier 6 (open).
 
 **3. `fabsh`, a program in a tile.**

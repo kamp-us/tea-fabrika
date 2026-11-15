@@ -822,8 +822,8 @@
     },
     {
       // Desk S2b L22 (the plan's fifth amendment): Tuval never imports libfabrika's brain side. The
-      // brain's side is what layer-rules.json puts there: `cloudflare/` (next-workers, layer 8) and
-      // `node/` (next-node, layer 9), the platforms, and `gateway/` (next-door), the brain's door.
+      // brain's side is what layer-rules.json puts there: `cloudflare/` (next-workers, layer 9) and
+      // `node/` (next-node, layer 10), the platforms, and `gateway/` (next-door), the brain's door.
       // After next/**, since an override replaces options: this repeats that block's import bans.
       "files": ["next/packages/tuval/**"],
       "rules": {
@@ -833,15 +833,15 @@
             "paths": [
               {
                 "name": "@kampus/libfabrika/cloudflare",
-                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
               },
               {
                 "name": "@kampus/libfabrika/node",
-                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
               },
               {
                 "name": "@kampus/libfabrika/gateway",
-                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
               },
               {
                 "name": "@radix-ui/colors",
@@ -873,6 +873,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": [
                   "@kampus/libfabrika/cloudflare/**",
                   "@kampus/libfabrika/node/**",
@@ -881,7 +885,7 @@
                   "**/libfabrika/src/node/**",
                   "**/libfabrika/src/gateway/**"
                 ],
-                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 8 and 9) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
               },
               {
                 "group": ["@radix-ui/colors/*"],

@@ -149,13 +149,12 @@ export const STARTS = [
   { source: "plain", to: "merger" },
   { source: "starter", to: BOUNDARY_PROGRAM },
   { source: "merger", to: BOUNDARY_PROGRAM },
-  // Desk S1, L3: the three stoppers may start mergers on their own grant, so L3 holds apart from L1.
-  { source: "stopa", to: "merger" },
-  { source: "stopb", to: "merger" },
-  { source: "stopc", to: "merger" },
 ];
 
-/** Desk S1, L3: three programs that start and stop children. Booted only by a walk that stops. */
+/**
+ * Desk S1, L3: three programs that start and stop children. Booted only by a walk that stops.
+ * Their starts are founder letters, so the founder's owner row allows them; no StartGrant is read.
+ */
 const STOPPERS: ReadonlyArray<readonly [string, string]> = [
   ["stopa:1", "stopa"],
   ["stopb:1", "stopb"],
