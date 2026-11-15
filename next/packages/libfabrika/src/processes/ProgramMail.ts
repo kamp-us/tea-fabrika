@@ -24,14 +24,7 @@ export type Grants = Readonly<Record<string, ReadonlyArray<string>>>;
  * @stability unstable
  * @category schemas
  */
-export const MailRefusal = Schema.Literals([
-  "no_name",
-  "forbidden",
-  "stale_sender",
-  "bad_message",
-  "id_reused",
-  "quota",
-]);
+export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
 
 /**
  * Schema for why a delivery failed, each case under its own `_tag`: the `MailRefusal` reasons,
@@ -46,7 +39,6 @@ export const MailFailure = Schema.TaggedUnion({
   stale_sender: {},
   bad_message: {},
   id_reused: {},
-  quota: {},
   full: { unread: Schema.Int },
   storage: {},
 });
@@ -63,7 +55,6 @@ export const MailFailure = Schema.TaggedUnion({
  * - `stale_sender`: the sending process is no longer its name's live process.
  * - `bad_message`: the message is not JSON, or the ledger refused its line.
  * - `id_reused`: the command already sent a different letter.
- * - `quota`: the sending program has used up its write or storage room.
  *
  * Two reasons are not final, and the same delivery may be tried again:
  *

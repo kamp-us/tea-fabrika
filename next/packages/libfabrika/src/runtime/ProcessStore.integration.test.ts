@@ -16,7 +16,6 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
-import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
 
@@ -163,7 +162,7 @@ type Checkpoint = {
 
 type Store = {
   readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
-  readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError | QuotasError>;
+  readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError>;
   readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 

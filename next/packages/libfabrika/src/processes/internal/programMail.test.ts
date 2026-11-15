@@ -153,9 +153,8 @@ describe("P41 slice 1: program mail rules", () => {
   });
 
   it("L13 format: other clients decode the refusal reasons by name, so the closed list is pinned exactly", () => {
-    // P34c slice 4 adds `quota`: a sender whose program used up its room (0147, the plan's Q14).
     expect([...MailRefusal.literals].sort()).toEqual(
-      ["bad_message", "forbidden", "id_reused", "no_name", "quota", "stale_sender"].sort(),
+      ["bad_message", "forbidden", "id_reused", "no_name", "stale_sender"].sort(),
     );
   });
 });
