@@ -1,7 +1,7 @@
 ---
 id: 0067
 title: The hourly mutation run runs in GitHub CI on an arm64 runner, started by hand each hour, never by a push, a pull request or a cron trigger
-status: amended-in-part by [0123](0123-githubs-schedule-starts-the-mutation-run.md)
+status: amended-in-part by [0123](0123-githubs-schedule-starts-the-mutation-run.md), [0535](0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md)
 date: 2026-11-10
 tags: [mutation, schedule, ci, github-actions, arm64, trial]
 ---

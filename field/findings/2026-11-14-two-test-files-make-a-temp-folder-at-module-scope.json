@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-two-test-files-make-a-temp-folder-at-module-scope",
+  "date": "2026-11-14",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/Process.test-support.ts",
+    "line": 160
+  },
+  "says": "next/: two test files make a temp folder with `mkdtempSync` at module scope, outside any scope, against 0061 (a temp folder is acquired in a scope): `processes/Process.test-support.ts:160` (`const folder = mkdtempSync(join(tmpdir(), \"p33-\"))`) and `apps/fabrika/src/door.integration.test.ts:255` (`const top = mkdtempSync(join(tmpdir(), \"p10-door-\"))`).",
+  "proof": "Experiment 292 (pull request 1267) found both at origin/main 4120e0500, and they are unchanged at 0b9067c64. Process.test-support.ts is imported for its constants by six files that stay in the `next` project, the one pull requests run (processTable.laws.test.ts, supervisor.laws.test.ts, processes/ExitReason.test.ts, internal/programMail.test.ts, runtime/internal/exitReason.test.ts, node/ErrorCause.test.ts), so each of them writes an empty folder to disk on import, and the folder is released by an `afterAll` hook, not by a scope.",
+  "cost": "Six tests that 0536 keeps on the merge line as memory tests touch the file system on every pull request, and a killed run leaves the folders behind.",
+  "head": "0b9067c646179b18e7f85a1b4da990cccb11f487",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1267"
+}

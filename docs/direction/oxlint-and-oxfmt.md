@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; CSS gets stylelint, 2026-11-07"
+summary: "These two tools lint and format the repo. Biome is gone. The custom rules are oxlint JS plugin rules that fire on the same lines, and two advice rules still print without failing `pnpm lint`. CSS and HTML linting, and some real catches of the built-in rules, are lost, each one named."
+---
+
 # Oxlint and oxfmt, and nothing else
 
 Decided 2026-10-31 by the owner. This covers the whole repo: today's version, and `next/` when it
@@ -14,7 +19,7 @@ A study of Rust CSS linters, Biome's among them, is running; if it finds one tha
 rules, that replaces stylelint. Not decided: which tests move, each an exam change for the owner.
 
 ```sh
-pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, the code-graph and browser checks, then stylelint.ts on tracked CSS
+pnpm lint     # oxlint-plugins/parallel.ts runs them at once: lint.ts, format.ts --check, the code-graph and browser checks, stylelint.ts on tracked CSS
 pnpm format   # format.ts, lint.ts --fix, format.ts
 ```
 

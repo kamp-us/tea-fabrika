@@ -373,6 +373,29 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
   );
 });
 
+describe("closeOnly: closes the named tickets and starts no sweep (0015)", () => {
+  const body = "Done.\nfabrika close ticket 5\n";
+  const run = (m: ReturnType<typeof memory>) => Queue.closeOnly({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
+
+  // Plant: kick a sweep, or close from a pull request that did not merge.
+  it.effect("a merged pull request closes its open ticket and kicks no sweep", () =>
+    Effect.gen(function* () {
+      const m = memory({ state: "MERGED", open: [5], more: { body, mergeCommit: merged } });
+      const done = yield* run(m);
+      expect(done.lines).toContain("pr 900: closed ticket 5");
+      expect(m.sweeps.kicks).toBe(0);
+    }),
+  );
+
+  it.effect("an open pull request closes nothing", () =>
+    Effect.gen(function* () {
+      const m = memory({ state: "OPEN", open: [5], more: { body } });
+      yield* run(m);
+      expect(m.tracker.posts.filter((p) => p._tag !== "list")).toEqual([]);
+    }),
+  );
+});
+
 describe("the tracker's command line, as TicketsCli reads it", () => {
   // format: `cli.ts post list` prints one line per open ticket, `<home>: #<n> <state> <title>`.
   it("format: only a line that names an open ticket counts, and a failure keeps the first ERROR line, never the stack", () => {

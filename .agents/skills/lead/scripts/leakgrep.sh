@@ -6,7 +6,9 @@
 # Private words are literal, case-insensitive strings, one per line, outside the Git tree.
 # Diagnostics name only the kind, the added-line number and the commit, never matched text or
 # private words.
-# In a diff, an added line that only respaces a line the same file's diff removes is old text.
+# In a diff, an added line that only respaces a line the same diff removes, from any file, is old text:
+# a line moved between files was already in the tree the diff starts from (0047, amended 2026-11-14).
+# In a pnpm patch under patches/, upstream's text the patch only quotes skips the style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
 set -eu
 # Only deliberate diagnostics use fd 3. Shell and tool failures may contain private paths.
@@ -20,7 +22,7 @@ if [ "$#" = 0 ]; then
     cat > "$input" || { echo 'leakgrep: cannot read check input' >&3; exit 2; }; mode=diff
 elif [ "$#" = 2 ] && [ "$1" = --text ]; then
     cat -- "$2" > "$input" || { echo 'leakgrep: cannot read check input' >&3; exit 2; }; mode=text
-    set --
+    set -- "$2"
 elif [ "$#" -ge 2 ] && [ "$1" = --commits ]; then
     shift; mode=commits
 else
@@ -75,6 +77,25 @@ def kinds_of(line):
     kinds = ['private_word'] if any(w in public for w in words) else []
     return kinds + [kind for kind, pattern in patterns if pattern.search(line)]
 
+# A `pnpm patch` file under the repo's patches/ quotes upstream's removed and context lines byte for
+# byte: the patch stops applying if anyone rewords them. Those lines skip only the shapes here, which
+# are about how our own prose reads. Every secret, path, name and private-word shape still reads them,
+# and a patch's own added lines, its headers and every other file keep every shape.
+style_only = {'em_dash'}
+
+# Whether a file is a pnpm patch, by its path from the repo root.
+def is_patch(path):
+    return path is not None and path.startswith('patches/')
+
+# Reads the lines of one patch file in order, and says which are upstream text inside a hunk.
+class Quotes:
+    def __init__(self):
+        self.in_hunk = False
+    def quoted(self, line):
+        if line.startswith('diff '): self.in_hunk = False
+        if line.startswith('@@ '): self.in_hunk = True; return False
+        return self.in_hunk and line.startswith(('-', ' '))
+
 # Ticket 500 (owner, 2026-11-09): a line that only changes spacing is old text. Two lines hold the
 # same text when they are equal after each run of spaces and tabs becomes one space, the ends are
 # trimmed and one last ; or , is dropped. Runs are collapsed, never deleted, so two words never join.
@@ -86,41 +107,55 @@ def same_text(line):
 
 # The hits of one diff or one draft, as (line number in the input, place, kind), and how many flagged
 # lines were read as old text. A place is the new file's header and the line's number in that file.
-def scan(text, mode, clears=True):
+def scan(text, mode, clears=True, draft=None):
     added = []
-    # The hits of each removed line, by file and text. Only a hunk under git's own `diff --git` header
-    # counts, so a removal never reaches another file, another commit's diff or a diff git did not write.
+    # The hits of each removed line, by text. Only a hunk under git's own `diff --git` header counts, so
+    # a removal clears a line in any file of the same diff, never another commit's diff or a diff git did
+    # not write.
     removed = {}
+    # Which diff a line belongs to. Git names each file once per diff, so a file named again starts a
+    # new one: diffs read back to back never clear each other.
+    part = 0
+    named = set()
     file = None
     in_hunk = False
     old_header = False
     path = None
+    # In a diff, a patch file's lines are read from the top of each hunk git wrote for it: a hunk that
+    # starts inside one of the patch's own hunks has no `@@` to start from, so all its lines keep every
+    # shape. A draft is read from its first line.
+    quotes = Quotes() if mode != 'diff' and is_patch(draft) else None
     new = 0
     for number, line in enumerate(text.split('\n'), 1):
         if mode == 'diff':
-            if line.startswith('diff '): file = number if line.startswith('diff --git ') else None
-            if line.startswith('diff --git '): in_hunk = False; path = None
+            if line.startswith('diff '): file = number if line.startswith('diff --git ') else None; quotes = None
+            if line.startswith('diff --git '):
+                in_hunk = False; path = None
+                if line in named: part += 1; named = set()
+                named.add(line)
             if line.startswith('@@ '):
                 in_hunk = True
                 start = re.match(r'@@ -\S+ \+(\d+)', line)
                 new = int(start.group(1)) if start else 0
+                quotes = Quotes() if path and path.startswith('+++ b/') and is_patch(path[6:]) else None
             header = line.startswith('+++ ') and not in_hunk and old_header
             old_header = line.startswith('--- ') and not in_hunk
             if header: path = line
             if line.startswith('-') and in_hunk and file is not None:
-                removed.setdefault((file, same_text(line[1:])), []).append(kinds_of(line[1:]))
+                removed.setdefault((part, same_text(line[1:])), []).append(kinds_of(line[1:]))
             if in_hunk and line.startswith((' ', '+')): new += 1
+            quoted = in_hunk and line.startswith((' ', '+')) and quotes is not None and quotes.quoted(line[1:])
             if not line.startswith('+') or header:
                 continue
-            added.append((number, file if in_hunk else None, (path, new - 1) if in_hunk else (None, number), line[1:]))
+            added.append((number, part if in_hunk and file is not None else None, (path, new - 1) if in_hunk else (None, number), line[1:], quoted))
         else:
-            added.append((number, None, (None, number), line))
+            added.append((number, None, (None, number), line, quotes is not None and quotes.quoted(line)))
     hits = []
     respaced = 0
-    for number, file, place, line in added:
-        kinds = kinds_of(line)
+    for number, file, place, line, quoted in added:
+        kinds = [kind for kind in kinds_of(line) if not (quoted and kind in style_only)]
         # One removed line clears one added line, and only the kinds of hit it had itself.
-        old = removed.get((file, same_text(line))) if kinds and clears else None
+        old = removed.get((file, same_text(line))) if kinds and clears and file is not None else None
         if old:
             cleared = old.pop(0)
             respaced += all(kind in cleared for kind in kinds)
@@ -164,13 +199,20 @@ if sys.argv[2] == 'commits':
             bad += 1
     clean = f'leakgrep: {len(commits)} commits read, added text clean'
 else:
-    hits, respaced = scan(text, sys.argv[2])
+    # A draft's path from the repo root, when it is a file inside the repo. Stdin has none.
+    draft = None
+    if sys.argv[2] == 'text' and sys.argv[3] != '-':
+        try:
+            draft = Path(sys.argv[3]).resolve().relative_to(Path(tree.stdout.strip()).resolve()).as_posix()
+        except (OSError, RuntimeError, ValueError):
+            draft = None
+    hits, respaced = scan(text, sys.argv[2], draft=draft)
     for number, _, kind in hits:
         print(f'leakgrep: leak {kind} at added line {number}', file=diagnostics)
         bad += 1
     clean = 'leakgrep: added text clean'
 if respaced:
-    print(f'leakgrep: {respaced} flagged lines only respace a removed line of their file; read as old text', file=diagnostics)
+    print(f'leakgrep: {respaced} flagged lines only respace or move a removed line of the same diff; read as old text', file=diagnostics)
 if not bad:
     print(clean)
 sys.exit(1 if bad else 0)

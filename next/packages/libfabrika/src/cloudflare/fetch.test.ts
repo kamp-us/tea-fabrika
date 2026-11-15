@@ -5,27 +5,10 @@ import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as Route from "./fetch.ts";
+import type { Env } from "./runtime.ts";
 
-type Fetch = (request: Request, env: Env, config: BrainOptions) => Effect.Effect<Response, unknown>;
-const moduleURL = new URL("./fetch.ts", import.meta.url).href;
-
-const load = async (): Promise<Fetch> => {
-  const module: { fetch?: Fetch } = await import(/* @vite-ignore */ moduleURL).catch((error: unknown) => {
-    if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
-      return {};
-    }
-
-    throw error;
-  });
-  expect(module.fetch, "P12 requires the public fetch function in libfabrika/workers/fetch.ts").toBeTypeOf("function");
-
-  if (module.fetch === undefined) {
-    throw new Error("Missing public fetch function");
-  }
-
-  return module.fetch;
-};
+type Fetch = typeof Route.fetch;
 
 const generated = fc.record({
   port: fc.integer({ min: 1024, max: 65535 }),
@@ -40,7 +23,7 @@ const law = (
   check: (input: ReturnType<typeof generated.generate>["value"], fetch: Fetch) => Promise<void>,
 ) =>
   it(name, async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     await fc.assert(
       fc.asyncProperty(generated, (input) => check(input, fetch)),
       { seed: 119120, numRuns: 20 },
@@ -106,7 +89,7 @@ const world = (
 
 describe("P12 public Worker fetch", () => {
   it("malformed grant target escapes fail typed before any Project call", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     const bad = fc
       .tuple(fc.string(), fc.constantFrom("%", "%G0", "%0G", "%C0%AF", "%E0%A4", "%ED%A0%80", "%F4%90%80%80"))
       .map(([prefix, suffix]) => encodeURIComponent(prefix) + suffix);
@@ -124,7 +107,7 @@ describe("P12 public Worker fetch", () => {
     );
   });
   it("malformed JSON grant bodies fail typed before any Project call", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     await fc.assert(
       fc.asyncProperty(
         fc.jsonValue().map((v) => `${JSON.stringify(v)}!`),
@@ -183,8 +166,18 @@ describe("P12 public Worker fetch", () => {
         path = `/client/${encodeURIComponent(id)}`;
       const request = w.request(path, "GET", originHeader);
       const answer = await Effect.runPromise(fetch(request, w.env, w.config));
-      expect(answer).toBe(w.response);
-      expect(w.calls).toEqual([{ to: path, method: "fetch", args: [request] }]);
+      // T502 S1: the request crosses through Alchemy's typed stub, whose fetcher sends the object a
+      // copy of it with every part kept, and gives the object's answer back as a Response of its own.
+      expect(answer.status).toBe(w.response.status);
+      expect(await answer.text()).toBe("gateway");
+      expect(w.calls.map(({ to, method }) => ({ to, method }))).toEqual([{ to: path, method: "fetch" }]);
+      const sent: unknown = w.calls[0]?.args[0];
+      expect(sent).toBeInstanceOf(Request);
+      expect(sent instanceof Request ? [sent.method, sent.url, [...sent.headers]] : []).toEqual([
+        request.method,
+        request.url,
+        [...request.headers],
+      ]);
     }
   });
   law("POST grant forwards parsed JSON only to the configured project", async ({ port, name, body }, fetch) => {
@@ -213,7 +206,7 @@ describe("P12 public Worker fetch", () => {
   // The platform gives each request to a Worker its own I/O context and cancels as hung a request
   // that waits on work another request started. So a request never waits on another's read.
   it("requests that arrive before any read of the recorded start has finished each read for themselves, and a finished read serves the later ones", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     const arrivals = fc.integer({ min: 2, max: 8 }).chain((n) =>
       fc.shuffledSubarray(
         Array.from({ length: n }, (_, at) => at),

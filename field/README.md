@@ -83,6 +83,11 @@ The `field` job in [check.yaml](../.github/workflows/check.yaml) runs
 changed path in `field/notes/`, `field/runs/` and `field/findings/`, and reports the number of added
 rows, including zero. Missing history fails the check.
 
+A pull request that changes only row files (`field/<log>/*.json`) and plan files starts no CI run
+at all (ticket 988), so `pnpm lint` runs the same check on your laptop: `field-check.ts --local`
+reads the rows your checkout adds to `origin/main`, committed or not. Run `pnpm lint` before you
+push a row. The field job still checks the rows on the push to main after the merge.
+
 - **An added row file** must be named `<YYYY-MM-DD>-<slug>.json`, hold one JSON object, and pass
   the field rules below. Its id (`id` on a note or a finding, `run` on a run) must be its file name
   without `.json`; a missing or different id fails. A `date` that differs from the name's date

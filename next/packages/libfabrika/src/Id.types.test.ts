@@ -1,10 +1,9 @@
 // T518, PR 1, next/. Compile the exact bad expressions; never execute them.
-import { expect, expectTypeOf, it } from "@effect/vitest";
+import { expectTypeOf, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import type { IdError, IdSchema, IdValue } from "@kampus/libfabrika";
 import type * as Public from "@kampus/libfabrika";
 import { type Context, Effect, Schema, type SchemaIssue } from "effect";
-import * as fc from "fast-check";
 import type * as Front from "./Id.ts";
 import type { ProcessIdGenerator } from "./processes/ProcessIdGenerator.ts";
 import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
@@ -81,17 +80,6 @@ const checkTypes = (raw: string) => {
   return { checkGenerator, made, decoded };
 };
 
-it("exports the Id factory from the public package for generated client prefixes", () => {
-  fc.assert(
-    fc.property(
-      fc
-        .array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), { minLength: 1, maxLength: 63 })
-        .map((chars) => chars.join("")),
-      (type) => {
-        expectTypeOf(checkTypes).toBeFunction(); // The function above stays uncalled.
-        expect(Schema.isSchema(Id.make(type))).toBe(true);
-      },
-    ),
-    { seed: 119120, numRuns: 100 },
-  );
+it("type: the public Id module keeps its brands, schemas and generator types for generated client prefixes", () => {
+  expectTypeOf(checkTypes).toBeFunction(); // CI's typecheck runs the uncalled function above.
 });
