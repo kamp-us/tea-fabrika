@@ -1,7 +1,6 @@
 // T878, next/, L11. Lead runs this scenario on the host: it needs workerd, sockets and a PTY.
 // No substitute for the real dev subprocess or private append transport is used.
 import { generateKeyPairSync } from "node:crypto"; // edge: the founder uses SSH's public-key packet format
-import { DatabaseSync } from "node:sqlite"; // edge: inspect the real object's durable rows after dev exits
 import { stripVTControlCharacters } from "node:util"; // edge: decode script's terminal output before reading JSON lines
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -9,6 +8,7 @@ import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
@@ -42,10 +42,7 @@ const entries = Effect.fnUntraced(function* (home: string) {
 
     yield* Effect.scoped(
       Effect.gen(function* () {
-        const db = yield* Effect.acquireRelease(
-          Effect.sync(() => new DatabaseSync(path.join(home, file), { readOnly: true })),
-          (value) => Effect.sync(() => value.close()),
-        );
+        const db = yield* instanceDatabase(path.join(home, file), { readOnly: true });
 
         if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get() !== undefined) {
           for (const row of db.prepare("SELECT * FROM entries ORDER BY rev").all()) {
