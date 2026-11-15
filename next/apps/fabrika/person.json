@@ -5,6 +5,19 @@
     "desktop": {
       "type": "object",
       "properties": {
+        "brain-grace": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+          "default": 5000
+        },
+        "brain-memory": {
+          "type": "string",
+          "pattern": "^-?\\d+$",
+          "description": "The memory the local runtime may hold before the brain replaces it, a byte size such as \"500 MB\".",
+          "default": "500000000"
+        },
         "brain-poll": {
           "type": "integer",
           "minimum": 1,

@@ -1,6 +1,6 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
- * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, `hands.target`, and `all`, the group of the ten.
+ * six local brain settings under `desktop.brain-*`, `desktop.link-ttl`, `hands.target`, and `all`, the group of the twelve.
  *
  * **Details**
  *
@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { ByteSize, Schema } from "effect";
 import * as Setting from "./Setting.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -171,6 +171,48 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+/**
+ * Setting for the memory the local runtime may hold before the brain replaces it.
+ *
+ * **Details**
+ *
+ * The value is a byte size written with its unit, as `"500 MB"` or `"1 GiB"`. The default is
+ * 500 MB. Once a sample of the runtime's memory reaches it, the brain ends the runtime with SIGTERM,
+ * then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same ports.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainMemory = Setting.make("desktop.brain-memory", {
+  schema: Schema.ByteSize,
+  default: ByteSize.bytes(500_000_000),
+  doc: 'The memory the local runtime may hold before the brain replaces it, a byte size such as "500 MB".',
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the milliseconds the brain waits after a SIGTERM to the local runtime before it
+ * sends SIGKILL.
+ *
+ * **Details**
+ *
+ * The default is 5000, an OTP worker's shutdown default. Control calls wait through a replace, so
+ * this is also about how long one replace keeps the control connection closed.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainGrace = Setting.make("desktop.brain-grace", {
+  schema: Positive,
+  default: 5000,
+  doc: "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 // The u flag lets Effect write the pattern into the generated JSON Schema.
 const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{43}$/u)).annotate({
   title: "a key fingerprint",
@@ -203,9 +245,9 @@ export const handsTarget = Setting.make("hands.target", {
  *
  * **Details**
  *
- * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl` and
- * `handsTarget`.
+ * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the six local brain settings
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout`, `brainStopTimeout`, `brainMemory` and
+ * `brainGrace`), `desktopLinkTtl` and `handsTarget`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -220,6 +262,8 @@ export const all = Setting.group({
   brainPoll,
   brainStartTimeout,
   brainStopTimeout,
+  brainMemory,
+  brainGrace,
   desktopLinkTtl,
   handsTarget,
 });
