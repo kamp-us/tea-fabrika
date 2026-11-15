@@ -1025,6 +1025,14 @@
       "rules": { "fabrika/integration-test-name": "error" }
     },
     {
+      // Ticket 1029, decision 0538: a test, shared suite or test kit opens a SQLite file through
+      // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
+      // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
+      // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/test-database": "error" }
+    },
+    {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (0061). Setup hooks stay.
       "files": ["next/**/*.ts", "next/**/*.tsx"],

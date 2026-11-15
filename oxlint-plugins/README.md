@@ -1065,5 +1065,7 @@ does; if a line must still write the constructor, it carries
 the import form (named, renamed, namespace, default), the module (`node:sqlite`, `sqlite`, two
 look-alikes), the argument (`":memory:"` in three spellings, a variable, a literal or built path,
 with options) and the path (a test, a suite, a test kit, product code, outside `next/`). Its three
-plants are named in its header. `integration-test-name` and `runs-from-depth` read the module too,
+plants are named in its header. Two scenarios run oxlint with the repo's own config: one over a
+planted `next/` folder, where a hand-opened file is refused in a test, a suite and a test kit and
+passes in product code, and one over the real tree, which is at zero. `integration-test-name` and `runs-from-depth` read the module too,
 so a file that moves to it keeps its integration name and its depth-read count.
