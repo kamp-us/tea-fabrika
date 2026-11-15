@@ -402,7 +402,7 @@ unless they start at the repo root.
 | `next/packages/libfabrika/src/cloudflare/runtime.ts` `next/packages/libfabrika/src/cloudflare/connection.ts` `next/packages/libfabrika/src/cloudflare/control.ts` `next/packages/libfabrika/src/cloudflare/fetch.ts` | build | 1, 2, 3, 6, 7 | 120 | only the lines the type checker forces: error unions and tag matches. Their own `new LedgerError` stay; `cloudflare/` is not under rule 11 |
 | `next/packages/libfabrika/src/runtime/Runner.ts` `next/packages/libfabrika/src/runtime/Entry.ts` `next/packages/libfabrika/src/coordination/index.ts` | build | 3 | 150 | the runner's 17 build sites take `RunnerError`; the two pass-through lines go |
 | `.oxlintrc.json` | tests | 3, 7 | 6 | slice 3: the pass-through file joins the block's `files`. Slice 7: the comment that points at the list goes |
-| `next/apps/fabrika/src/exam/layers.test.ts` | tests | 4 | tests | law 4: `runtime/ProcessStore`, `runtime/RecoveryStore` and `runtime/internal/recovery` leave the list |
+| `layer-rules.json` | tests | 4 | tests | law 4: `runtime/ProcessStore.ts`, `runtime/RecoveryStore.ts`, `runtime/RecoveryStoreReadsTest.ts` and `runtime/internal/recovery.ts` leave the `next-runtime-coordination` row (the exam's list moved there in ticket 987) |
 | `next/packages/libfabrika/src/processes/Streams.ts` `next/packages/libfabrika/src/processes/StreamsLedger.ts` | build | 4 | 230 | new: the contract and its layer |
 | `next/packages/libfabrika/src/processes/StreamsTest.ts` `next/packages/libfabrika/src/node/Streams.test.ts` | tests | 4 | tests | new: laws 5, 6, 7 and 8 as a suite, and its runner |
 | `next/packages/libfabrika/src/runtime/ProcessStore.ts` `next/packages/libfabrika/src/Rev.ts` | build | 4, 7 | 70 | `ProcessStoreError`, `record` through the stream service; `PAGE` joins `Rev.ts` in slice 7 |
@@ -539,7 +539,8 @@ Estimate: 24 steps, $39
   compiled.
 - **How the old move plan cut this work.** Ticket 477's plan named pull requests 10 to 13, "the
   error PRs". That plan is not in the repo, so this plan does not follow its rows. The exam's
-  comment "until old PR 13" (`next/apps/fabrika/src/exam/layers.test.ts:281`) points at it.
+  comment "until old PR 13" (now in `next/apps/fabrika/src/exam/layers.test.ts`, beside the
+  `next-runtime-coordination` row's plant) points at it.
 - **The state of demlik issues 912 and 913.** Not fetched. Rule 12 for success types has no
   check until one lands or a type test is written for each answer.
 - **Two other lists of the same family** are outside this plan: the 40 dated `allowed` entries

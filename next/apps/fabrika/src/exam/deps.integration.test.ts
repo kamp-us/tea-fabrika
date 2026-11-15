@@ -1,7 +1,7 @@
 // p65, `next/` stands alone (docs/plan/tier-1-detail.md, "Packages" and p65). `package.json` alone
 // stops neither a walk up to the root's `node_modules` nor a Node import at a top level, so this
-// test reads the imports and bundles the top levels. With `layers.test.ts`. Item 9 of the detail's
-// exam; written by the exam (Tier 1, P1).
+// test reads the imports and bundles the top levels. With `pnpm lint:layers` and
+// `fabrika/package-imports`. Item 9 of the detail's exam; written by the exam (Tier 1, P1).
 import {
   existsSync,
   mkdirSync,
@@ -703,7 +703,7 @@ describe("planted breaks", () => {
 // Ticket 477, kind 2 (PR 9): each module has a pair of keys, `"./<module>/*": "./src/<module>/*.ts"` and
 // `"./<module>/internal/*": null`. The exam reads an exports map the way Node does: a pattern key holds
 // one `*`, and `"./ledger/internal/*": null` beats `"./ledger/*"` because its part before the `*` is
-// longer. Fixed seed, as `layers.test.ts` and the lead scripts' laws use.
+// longer. Fixed seed, as `rows.test.ts` and the lead scripts' laws use.
 describe("a module's front files and its internal/ in the exports map", () => {
   const options = { seed: 119120, numRuns: 200 };
   const LIBRARY = "@kampus/libfabrika";

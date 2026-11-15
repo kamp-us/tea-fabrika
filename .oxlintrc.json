@@ -709,6 +709,110 @@
       }
     },
     {
+      // p32 and p65, strict layers: the names of our own packages each part of next/ may import, as
+      // written. `pnpm lint:layers` (code-graph, `layer-rules.json`) holds which part's files may
+      // reach which; this holds the names, so it tells two front files of one module apart and
+      // sees a stylesheet code-graph cannot place. A file's part is the first whose glob matches
+      // it. next/apps is not judged, and a test only where its part has `tests`. Its own override,
+      // so the `next/**` block above stays the `.agents/` block's twin.
+      "files": ["next/packages/**", "next/programs/**"],
+      "rules": {
+        "fabrika/package-imports": [
+          "error",
+          {
+            "scope": "@kampus/",
+            "parts": [
+              {
+                // Every file of the library package, wherever it sits: none of our names. Its tests
+                // name only the library itself, so no file of it imports tuval, a program or the app.
+                "name": "library",
+                "files": ["next/packages/libfabrika/**"],
+                "may": [],
+                "tests": ["@kampus/libfabrika"]
+              },
+              {
+                "name": "desktop",
+                "files": ["next/packages/tuval/src/desktop/**"],
+                "may": ["@kampus/libfabrika"]
+              },
+              {
+                // A window is a client (the note's T3): the library's root, transport's and the
+                // window client's front files, and the design package's public names.
+                "name": "window",
+                "files": ["next/packages/tuval/src/window/**"],
+                "may": [
+                  "@kampus/libfabrika",
+                  "@kampus/libfabrika/transport",
+                  "@kampus/libfabrika/transport/Answer",
+                  "@kampus/libfabrika/transport/ClientKey",
+                  "@kampus/libfabrika/transport/ClientRows",
+                  "@kampus/libfabrika/transport/Hello",
+                  "@kampus/libfabrika/transport/Link",
+                  "@kampus/libfabrika/transport/Sshsig",
+                  "@kampus/libfabrika/transport/Webauthn",
+                  "@kampus/libfabrika/transport/Wire",
+                  "@kampus/libfabrika/client/WindowMachine",
+                  "@kampus/libfabrika/client/WindowStart",
+                  "@kampus/libfabrika/client/Headless",
+                  "@kampus/fabrika-design",
+                  "@kampus/fabrika-design/tokens.css"
+                ]
+              },
+              { "name": "dom", "files": ["next/packages/tuval/src/dom/**"], "may": [] },
+              {
+                // Its key signs transport's helloText, and its layers meet transport's contracts.
+                "name": "browser",
+                "files": ["next/packages/tuval/src/browser/**"],
+                "may": [
+                  "@kampus/libfabrika/transport",
+                  "@kampus/libfabrika/transport/Answer",
+                  "@kampus/libfabrika/transport/ClientKey",
+                  "@kampus/libfabrika/transport/ClientRows",
+                  "@kampus/libfabrika/transport/Hello",
+                  "@kampus/libfabrika/transport/Link",
+                  "@kampus/libfabrika/transport/Sshsig",
+                  "@kampus/libfabrika/transport/Webauthn",
+                  "@kampus/libfabrika/transport/Wire"
+                ]
+              },
+              {
+                // The menu bar signs what the door takes, so it also reaches coordination.
+                "name": "electron",
+                "files": ["next/packages/tuval/src/electron/**"],
+                "may": [
+                  "@kampus/libfabrika/transport",
+                  "@kampus/libfabrika/transport/Answer",
+                  "@kampus/libfabrika/transport/ClientKey",
+                  "@kampus/libfabrika/transport/ClientRows",
+                  "@kampus/libfabrika/transport/Hello",
+                  "@kampus/libfabrika/transport/Link",
+                  "@kampus/libfabrika/transport/Sshsig",
+                  "@kampus/libfabrika/transport/Webauthn",
+                  "@kampus/libfabrika/transport/Wire",
+                  "@kampus/libfabrika/coordination"
+                ]
+              },
+              { "name": "headless", "files": ["next/packages/tuval/src/headless/**"], "may": [] },
+              {
+                // A program's window: its `.tsx` files, which `./window` exports
+                // (fabrika/program-package-layout). Public names only.
+                "name": "program window",
+                "files": ["next/programs/*/src/**/*.tsx"],
+                "may": ["@kampus/libfabrika", "@kampus/tuval"]
+              },
+              {
+                // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
+                // that imports a window file.
+                "name": "program",
+                "files": ["next/programs/**"],
+                "may": ["@kampus/libfabrika"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
       // habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
       // shrinks. This rule block is the `next/**` block above, repeated: change both together.
