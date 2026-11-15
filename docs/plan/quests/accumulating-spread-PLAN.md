@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0559, 0560, 0524, 0168; body dca29d804a38
 Plancheck-Version: 3
 
 # `oxc/no-accumulating-spread` is on as an error in `next/` and our tooling, and its 11 hits are rewritten
