@@ -23,7 +23,7 @@ const MODULES = [
   "transport",
   "processes",
   "presence",
-  "jobs",
+  "tasks",
   "access",
   "runtime",
   "gateway",
@@ -369,7 +369,7 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
 describe("unicorn/filename-case: a front file is PascalCase and an internal/ file is camelCase", async () => {
   // The modules with no file on main. `transport/` joins in PR 2 and `door/` in PR 5, when their
   // lowercase files have moved, so the rule fires on nothing on main.
-  const FRESH = ["telemetry", "ledger", "processes", "presence", "jobs", "access", "runtime"] as const;
+  const FRESH = ["telemetry", "ledger", "processes", "presence", "tasks", "access", "runtime"] as const;
   const refused = [
     `${SRC}/ledger/log.ts`, // the plan's plant
     `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
