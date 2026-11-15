@@ -562,6 +562,31 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
+  // Plant: ask the file system whether a path is a folder, which follows a link. A skill's
+  // `.claude/skills/<name>` is a link to its folder, and git keeps a link as one file (ticket 991).
+  it("K4 commits a link to a folder as the one file git keeps, and still refuses the folder itself", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (only) =>
+        withRepo(
+          [
+            [".claude/skills/one", "tests"],
+            ["src/owned.ts", "tests"],
+          ],
+          (r) => {
+            mkdirSync(join(r.repo, ".claude/skills"), { recursive: true });
+            symlinkSync("../../src", join(r.repo, ".claude/skills/one"));
+            expect(r.commit("tests", ["src"], only).code).not.toBe(0);
+            const got = r.commit("tests", [".claude/skills/one"], only);
+            expect(got.code, got.text).toBe(0);
+            expect(r.git("show", "--name-only", "--format=", "HEAD").trim()).toBe(".claude/skills/one");
+            expect(r.git("ls-tree", "HEAD", ".claude/skills/one")).toMatch(/^120000 /);
+          },
+        ),
+      ),
+      { ...options, numRuns: 2 },
+    );
+  });
+
   // Plant: check the working file instead of the staged bytes, or skip staged formatting.
   it("K4 refuses unformatted staged content and accepts formatted content", () => {
     fc.assert(
