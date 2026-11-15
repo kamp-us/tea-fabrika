@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-no-law-holds-the-uninterruptible-keep",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": "packages/fabrika/src/agents/summon/manager.ts",
+    "line": 660
+  },
+  "says": "In today's version, no law fails if the uninterruptible wrap around the keep is removed: L6's cut cases never read the kept names in storage.",
+  "proof": "manager.lifetime.laws.test.ts:416-418 checks only left pids and that the run count equals the listed count. With the wrap at manager.ts:660 gone, an interrupt between `kept.take` and `put` leaves a kept name with no run and no live entry: zero runs, zero listed, zero pids, so all three checks pass.",
+  "cost": "A later edit can bring back a kept name that no host lists and whose run is gone.",
+  "head": "5fcc56dbca9c7e184324b0c6b81da93893b25d74",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}

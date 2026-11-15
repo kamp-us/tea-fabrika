@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, FileSystem, Option } from "effect";
 import type { SystemPrompt } from "../agent/turn.ts";
-import { agentEnv, type Env, runEnv, toolHome } from "../claude/env.ts";
+import { agentEnv, type Env, notAsNode, runAsNode, runEnv, toolHome } from "../claude/env.ts";
 import { fencedEnv, filesOf, gitOf, inside, LOGIN_FILES, opens, TOOLS, toolchain } from "../claude/sandbox.ts";
 import type { Spawnable } from "./client.ts";
 
@@ -788,7 +788,7 @@ export const withSystem = (
       const prepare = harness.prepare ?? Effect.void;
       return {
         ...harness,
-        env: codexEnv(parent, folder, harness.access, toolchain(parent), config),
+        ...node(harness.script, codexEnv(parent, folder, harness.access, toolchain(parent), config)),
         prepare: Effect.andThen(prepare, writeSystem(file)),
       };
     }
@@ -800,7 +800,13 @@ export const withSystem = (
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
 export const claudeOptions = (folder: string, budget: number | null) => {
   const files = filesOf(folder);
+  // The Claude adapter spreads `env` over its own environment before it starts the CLI
+  // (claude-agent-acp 0.99.1, acp-agent.js), so the switch it runs with can only be set there, not
+  // removed: set empty, which Electron reads as unset, the CLI's commands never inherit it. On
+  // plain Node there is nothing to clear, and no `env` key.
+  const cleared = notAsNode();
   return {
+    ...(Object.keys(cleared).length === 0 ? {} : { env: cleared }),
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: {},
@@ -846,10 +852,17 @@ const claudeRepoOptions = (folder: string, budget: number | null) => {
   };
 };
 
-/** Node, warnings about its own experimental parts off: they go to stderr, which nobody reads. */
-const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
+/**
+ * A Node helper on this process's own binary, with its environment: warnings about Node's own
+ * experimental parts off, since they go to stderr, which nobody reads. On Electron that binary is
+ * Electron's, which boots its whole app, with a Dock icon on a Mac, unless it is told to run as
+ * Node. So the env carries the switch, and a row gets its command only with it (`runAsNode`). The
+ * adapter's own Node children inherit it from there: codex-acp hands Codex its whole environment.
+ */
+const node = (script: string, env: Readonly<Record<string, string>>): Pick<Spawnable, "command" | "args" | "env"> => ({
   command: process.execPath,
   args: ["--disable-warning=ExperimentalWarning", script],
+  env: { ...env, ...runAsNode() },
 });
 
 export function harnessOf(row: Row, folder: string, budget: number | null, parent: Env = process.env): Harness {
@@ -857,8 +870,7 @@ export function harnessOf(row: Row, folder: string, budget: number | null, paren
     return {
       name: row.name,
       access: row.access,
-      ...node(CODEX),
-      env: codexEnv(parent, folder, row.access),
+      ...node(CODEX, codexEnv(parent, folder, row.access)),
       script: CODEX,
       meta: undefined,
       // codex-acp 2.5.0: `ApprovalOptionId.Cancel` and `McpApprovalOptionId.Cancel` interrupt the turn.
@@ -874,8 +886,7 @@ export function harnessOf(row: Row, folder: string, budget: number | null, paren
     case "claude":
       return {
         name: row,
-        ...node(CLAUDE),
-        env: fencedEnv(agentEnv(parent)),
+        ...node(CLAUDE, fencedEnv(agentEnv(parent))),
         script: CLAUDE,
         meta: { claudeCode: { options: claudeRepoOptions(folder, budget) } },
         // claude-agent-acp 0.99.1: its one no, `reject`, denies without an interrupt.
@@ -883,6 +894,6 @@ export function harnessOf(row: Row, folder: string, budget: number | null, paren
       };
     case "fake":
       // The fake's `cancel` ends its turn, as Codex's does (./fake-agent.ts).
-      return { name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined, cancels: ["cancel"] };
+      return { name: row, ...node(FAKE, runEnv(parent)), script: FAKE, meta: undefined, cancels: ["cancel"] };
   }
 }
