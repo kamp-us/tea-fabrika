@@ -51,9 +51,14 @@ const job = (r: number, from: number, to: number, runner: string | null = "GitHu
 const pull = (o: Partial<Pull> & { readonly merged: string }): Pull => ({
   number: 7,
   branch: "fabrikalfa/a",
-  queued: [],
+  queue: [],
   ...o,
 });
+
+/** The PR entered the queue at minute `m`. */
+const added = (m: number) => ({ _tag: "added", at: t(m) }) as const;
+/** The queue let the PR go at minute `m`, for `reason` (GitHub's words). */
+const removed = (m: number, reason: string) => ({ _tag: "removed", at: t(m), reason }) as const;
 
 /** A report over the 24 hours that end at minute 1440. */
 const day = (pulls: ReadonlyArray<Pull>, runs: ReadonlyArray<Run>, jobs: ReadonlyArray<Job>) =>
@@ -94,11 +99,37 @@ describe("percentile, today's tooling", () => {
 describe("the three stages of one merged pull request, today's tooling", () => {
   it("scenario: through the queue: push at 0, green at 4, queued at 5, merged at 9", () => {
     const r = day(
-      [pull({ merged: t(1009), queued: [t(1005)] })],
+      [pull({ merged: t(1009), queue: [added(1005)] })],
       [run(1, { at: 1000 })],
       [job(1, 1000, 1002), job(1, 1001, 1004)],
     );
     expect(numbers(r)).toEqual({ pr: [1, 4, true], queue: [1, 4, true], merge: [1, 9, true] });
+  });
+
+  it("scenario: the queue let it go and an admin merge landed it later: no queue number, the other two kept", () => {
+    // As PR 1244 on 2026-11-14: queued, the queue cleared, merged by hand long after.
+    const r = day(
+      [pull({ merged: t(1128), queue: [added(1000), removed(1080, "queue_cleared")] })],
+      [run(1, { at: 990 })],
+      [job(1, 990, 992)],
+    );
+    expect(numbers(r)).toEqual({ pr: [1, 2, false], queue: [0, null, false], merge: [1, 138, true] });
+  });
+
+  it("scenario: the queue's own merge counts, even when GitHub stamps its removal a second before the merge", () => {
+    // As PR 1270: removed for "merged" at 23:30:51, merged at 23:30:52.
+    const r = day(
+      [pull({ merged: t(1004), queue: [added(1000), removed(1004 - 1 / 60, "merged")] })],
+      [run(1, { at: 990 })],
+      [job(1, 990, 992)],
+    );
+    expect(numbers(r).queue).toEqual([1, 4, true]);
+  });
+
+  it("scenario: dropped, then queued again and merged by the queue: the last entry counts", () => {
+    const queue = [added(1000), removed(1010, "failed_checks"), added(1020), removed(1023, "merged")];
+    const r = day([pull({ merged: t(1023), queue })], [run(1, { at: 990 })], [job(1, 990, 992)]);
+    expect(numbers(r).queue).toEqual([1, 3, false]);
   });
 
   it("scenario: an admin merge has no queue number and keeps the other two", () => {
@@ -117,7 +148,8 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       run(5, { at: 1000, sha: "new", branch: "fabrikalfa/other" }),
     ];
     const jobs = [job(1, 900, 990), job(2, 1000, 1002), job(3, 1001, 1003), job(4, 1020, 1060)];
-    const r = day([pull({ merged: t(1012), queued: [t(1004), t(1010)] })], runs, jobs);
+    const queue = [added(1004), removed(1006, "manual"), added(1010), removed(1012, "merged")];
+    const r = day([pull({ merged: t(1012), queue })], runs, jobs);
     expect(numbers(r)).toEqual({ pr: [1, 2, false], queue: [1, 2, false], merge: [1, 12, true] });
   });
 
@@ -167,7 +199,7 @@ describe("the runners' use, today's tooling", () => {
 });
 
 describe("the day's issue, today's tooling", () => {
-  const over = day([pull({ merged: t(1009), queued: [t(1005)] })], [run(1, { at: 1000 })], [job(1, 1000, 1004)]);
+  const over = day([pull({ merged: t(1009), queue: [added(1005)] })], [run(1, { at: 1000 })], [job(1, 1000, 1004)]);
   const within = day([pull({ merged: t(1003) })], [run(1, { at: 1000 })], [job(1, 1000, 1002)]);
   const ours = { number: 41, title: TITLE };
   const other = { number: 42, title: "Scheduled run red on main" };
@@ -182,12 +214,17 @@ describe("the day's issue, today's tooling", () => {
 
   it("format: the summary has one row per stage, the goal beside it, and names each stage over", () => {
     const text = markdown(over);
-    expect(text).toContain("| PR checks, ready to green | 1 | 4.0 | 4.0 | 3 / 5 | **over** |");
-    expect(text).toContain("| Last push to merged | 1 | 9.0 | 9.0 | 8 / 15 | **over** |");
+    expect(text).toContain("| PR checks, ready to green | 1 | 4.00 | 4.00 | 3 / 5 | **over** |");
+    expect(text).toContain("| Last push to merged | 1 | 9.00 | 9.00 | 8 / 15 | **over** |");
     expect(text).toContain(
       "Over its goal: PR checks, ready to green, Merge queue, entering to merged, Last push to merged.",
     );
     expect(markdown(within)).toContain("Every stage is within its goal.");
+  });
+
+  it("format: a number just past its goal shows two decimals, so 3.033 over a goal of 3 reads 3.03, never 3.0", () => {
+    const close: Report = { hours: 24, pulls: 1, stages: [stageFor("queue", [3.033])], perHour: 0, capacity: 0 };
+    expect(markdown(close)).toContain("| Merge queue, entering to merged | 1 | 3.03 | 3.03 | 3 / 5 | **over** |");
   });
 
   const synced = (r: Report, issues: HistoryTest.Facts["issues"]) =>
@@ -320,12 +357,38 @@ describe("gh's answers, today's tooling", () => {
           data: {
             search: {
               pageInfo: { hasNextPage: true, endCursor: "Y3Vy" },
-              nodes: [{ number: 7, headRefName: "a", mergedAt: t(9), timelineItems: { nodes: [{ createdAt: t(5) }] } }],
+              nodes: [
+                {
+                  number: 7,
+                  headRefName: "a",
+                  mergedAt: t(9),
+                  timelineItems: {
+                    nodes: [
+                      { __typename: "AddedToMergeQueueEvent", createdAt: t(1) },
+                      { __typename: "RemovedFromMergeQueueEvent", createdAt: t(3), reason: "queue_cleared" },
+                      { __typename: "AddedToMergeQueueEvent", createdAt: t(5) },
+                      { __typename: "RemovedFromMergeQueueEvent", createdAt: t(9), reason: "merged" },
+                    ],
+                  },
+                },
+              ],
             },
           },
         }),
       );
-      expect(page).toEqual({ pulls: [{ number: 7, branch: "a", merged: t(9), queued: [t(5)] }], next: "Y3Vy" });
+      expect(page).toEqual({
+        pulls: [
+          {
+            number: 7,
+            branch: "a",
+            merged: t(9),
+            queue: [added(1), removed(3, "queue_cleared"), added(5), removed(9, "merged")],
+          },
+        ],
+        next: "Y3Vy",
+      });
+      expect(HistoryGh.MERGED).toContain("REMOVED_FROM_MERGE_QUEUE_EVENT");
+      expect(HistoryGh.MERGED).toContain("... on RemovedFromMergeQueueEvent { createdAt reason }");
       const issues = yield* HistoryGh.issuesIn(
         JSON.stringify([
           { number: 41, title: TITLE },
