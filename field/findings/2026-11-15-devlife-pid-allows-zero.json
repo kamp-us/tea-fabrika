@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-devlife-pid-allows-zero",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/DevLife.ts",
+    "line": 54
+  },
+  "says": "In next/, the local runtime's life state holds its pid as a plain Schema.Number in spawned, online and replacing, and the started Msg takes any number, so a start that reports 0 or a negative number reaches the state, and the memory replace would send process.kill to it; kill with 0 or below signals a whole process group. Fixed in the same pull request: DevLife.ts declares Pid, a whole number above zero, for the state and for the started, replacing and killed Msgs; the started fold refuses any other pid, and dev.ts refuses such a start before it reaches the state, failing a first start as bad_pid. Laws L1 (DevLife.laws.test.ts) and L13 (dev.laws.integration.test.ts) hold it.",
+  "proof": "At 490d3f7a9e40c387808db514281f8adbd293f587, DevLife.ts lines 54, 55, 58 and 84 declare pid as Schema.Number, and dev.ts line 391 folds started with event.pid as Alchemy gives it, which is child.pid in the installed Workerd.mjs and may be undefined. L13, run with the two guards removed, fails.",
+  "cost": "A start with a pid of zero or below would let a memory replace signal a process group on a person's laptop.",
+  "head": "490d3f7a9e40c387808db514281f8adbd293f587",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}
