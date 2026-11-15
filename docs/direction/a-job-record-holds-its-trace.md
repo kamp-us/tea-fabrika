@@ -169,7 +169,8 @@ after, and no Cmds.
   object.
 - **Jaeger goes.** tsh and every program send their spans to the record.
   `trace:up`, `trace:down`, `trace:wipe`, `jaeger/` and the docs that point at
-  them are removed once the trace tile shows a tsh line.
+  them are removed once the trace tile shows a tsh line. Done 2026-11-14: they
+  are removed.
 - **It lives in the project's ledger Worker.** On 2026-10-25 each project got
   one Worker with an object for the project and one per person
   ([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)). This
