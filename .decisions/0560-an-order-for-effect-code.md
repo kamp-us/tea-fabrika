@@ -1,12 +1,12 @@
 ---
 id: 0560
-title: Effect code in next/ and our tooling follows the Effect team first, then the trusted repos, and a clash with a decision of ours is settled by comparing ours with what the Effect team does
+title: Effect code in next/ and our tooling follows the Effect team first, then the trusted repos, and a clash with a decision of ours is settled by comparing ours with what the Effect team does, unless the owner rules otherwise and says so
 status: accepted
 date: 2026-11-15
 tags: [effect, precedence, order, trusted-repos, lint, checker, guidelines, known-way, next, tooling]
 ---
 
-# 0560: Effect code in next/ and our tooling follows the Effect team first, then the trusted repos, and a clash with a decision of ours is settled by comparing ours with what the Effect team does
+# 0560: Effect code in next/ and our tooling follows the Effect team first, then the trusted repos, and a clash with a decision of ours is settled by comparing ours with what the Effect team does, unless the owner rules otherwise and says so
 
 ```mermaid
 flowchart TD
@@ -70,6 +70,8 @@ export const layer = Layer.effect(
 - **A third source, with its rank.** The records above know two voices: the Effect team and our
   own decisions. This names a third, the trusted repos, and puts it below the Effect team.
 - **A named list** of which repos count. None existed.
+- **That the owner may rule against the order,** and what the decision that records such a ruling
+  must say.
 - **How a clash with our decision is settled.** 0023 and 0114 say our decision stays. This says
   what happens next: the clash is not closed by rank, in either direction. Our decision is put
   beside what the Effect team does, and then it is decided.
@@ -86,6 +88,9 @@ This builds on 0023, 0114 and 0120 and changes none of their rules, so none is a
 a trusted repo has, and where either clashes with a decision of ours, we compare our decision with
 what the Effect team does, and then decide (owner, 2026-11-15).**
 
+- **The top line: the owner may rule against the order.** Then the decision that records the
+  ruling says plainly that it is stricter than, or different from, the makers' code, and that this
+  is the owner's choice. The order is what holds when no such ruling exists.
 - **1. What the Effect team does, we follow.** It is read, never remembered, in the places 0114
   and `AGENTS.md` already name:
   - the installed source and `node_modules/effect/AGENTS.md`, at the version in the lockfile;
@@ -118,6 +123,13 @@ what the Effect team does, and then decide (owner, 2026-11-15).**
   team's checker forbids: `leakingRequirements` reports a service whose methods ask every caller
   for an inner dependency, and it is an error here (`tsconfig.base.json:49`). Our way is 0120's
   E5.
+- **The second use: the rule `require-readable-spacing` is taken against the order, by the
+  owner's choice.** It asks for a blank line before every `return` and around a multi-line
+  binding. That clashes with step 2: the Effect team's own code does not do it. The count made for
+  the decision that takes it found a blank line above 9.2% of the 6,306 returns in the source of
+  `effect` 4.1.2, and their formatter and lint config ask for none. The owner took the rule anyway,
+  as his own taste. The decision that takes the anti-slop plugin as it ships, and this rule with
+  it, records that. It is not on main yet.
 - **Following a rule is not the same as switching on a check.** A check that can block still has
   its false alarms measured first ([`AGENTS.md`](../AGENTS.md#checks),
   [0523](0523-advice-rules-block-where-clean.md)), and a ban still gets no list of leftovers
