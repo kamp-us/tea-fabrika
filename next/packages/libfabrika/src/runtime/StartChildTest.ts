@@ -14,16 +14,20 @@
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
 //
 // Desk S1, next/: L1 to L3 on the same real runners. The contract they pin, from the approved
-// desk plan's shape:
-//   0170: a start caused by a letter is checked against that letter's sender, read through
-//     `SessionManager.signer` (or the CheckedWriter's `sign`, which the real door backs with it),
-//     with `mayStart(member, program)`, which is always true. The program that asked holds no
-//     grant for it. A start with no letter behind it keeps the `starts` pair list.
+// desk plan (amendment 15):
+//   0170, 0526: a start a letter caused is checked by main's permission core, `ChildrenLedger`'s
+//     `judge`, with `StartProgram` on the fabrika, against that letter's sender. The runner hands
+//     the core the letter's id as `from.parent`, and the core asks `Senders` who sent it. The
+//     program that asked and the requester's own member are never the one checked, and no
+//     `StartGrant` is read for a start with a sender behind it. A start with no letter behind it
+//     keeps the `starts` pair list.
 //   StartChild.ts: `stopChild`, `Cmd.make("stop_child", { input: {name}, ok: null, err:
 //     ["not_child", "noproc"] })`, OTP's terminate_child: it ends the requester's own child with
 //     `shutdown`, and its watchers get one DOWN.
 // Every letter a runner here takes is recorded and delivered in a real SessionManager first, as the
-// door does, so the sender of a start's parent is on record where the real door keeps it.
+// door does, and `Senders` is made from that SessionManager's `sender`, as `cloudflare/runtime.ts`
+// makes the real one. The relation rows are the world's: the founder's owner row, and one row per
+// role the walk drew.
 import type { Tagged } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -47,6 +51,9 @@ import {
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
+import { Model as FabrikaModel } from "../permissions/Model.ts";
+import * as Relation from "../permissions/Relation.ts";
+import { Sender } from "../permissions/Senders.ts";
 import { Children, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -65,9 +72,12 @@ import * as StartChild from "./StartChild.ts";
 export type Store = {
   readonly sql: (part: string) => Sql;
   readonly reopen: Effect.Effect<void>;
+  /** The host's shared services. `world` holds the relation rows, and the door's own `SessionManager`,
+   *  whose `sender` answers who sent a start's parent. */
   readonly shared: (
     sql: Sql,
     next: Effect.Effect<string>,
+    world: { readonly rows: ReadonlyArray<Relation.Change>; readonly sessions: SessionManager["Service"] },
   ) => Layer.Layer<
     | Children
     | ProgramMail
@@ -162,8 +172,34 @@ const outsider = Writer.cases.person.make({ key: OUTSIDER_KEY, for: OUTSIDER_PER
 /** Desk S1, L1: a member's own writer, keyed by the person. */
 const memberWriter = (member: string) => Writer.cases.person.make({ key: `SHA256:${member}`, for: member });
 
-/** Programs a member's letter may start; no grant names `starter` or `plain` as a start's target. */
+/** Programs a letter may ask a starter for; no grant names `starter` or `plain` as a start's target. */
 const ANY_PROGRAM = ["starter", "plain", "merger"] as const;
+
+/** This fabrika's object in the permission model, the one the host checks starts on. */
+export const FABRIKA = FabrikaModel.ref("fabrika", "p42");
+
+/** Desk S1: a role on the fabrika, or none. */
+type Role = "owner" | "admin" | "member" | null;
+type Drawn = { readonly person: string; readonly role: Role };
+
+const subject = (person: string) => `person:${person}`;
+
+const related = (id: string, person: string, relation: Exclude<Role, null>): Relation.Change => ({
+  id,
+  row: Relation.Row.cases.related.make({ subject: subject(person), relation, object: FABRIKA }),
+});
+
+/** The owner row the boot writes for the founder, whose letters every older law sends. */
+const FOUNDER_ROW = related("owner", PERSON, "owner");
+
+/** The world's rows: the founder's, and one `related` row for each drawn person who holds a role. */
+const rows = (people: ReadonlyArray<Drawn>): ReadonlyArray<Relation.Change> => [
+  FOUNDER_ROW,
+  ...people.flatMap(({ person, role }, n) => (role === null ? [] : [related(`role-${n}`, person, role)])),
+];
+
+/** The started line's `member`, as the store keeps it. */
+const encodeSender = Schema.encodeSync(Sender);
 
 /** Desk S1, L3: one stopper program. It asks for starts and stops, and keeps every answer, in order,
  *  as `childStarter` does. Built on first use: `stopChild` is the build's. */
@@ -354,6 +390,10 @@ type Name = { readonly program: string; pid: string; live: boolean };
 
 /** What the walk knows, from its own moves only, except what a cut made unknown. */
 type World = {
+  /** Desk S1: the three people this run drew, each with a role or none. */
+  readonly people: ReadonlyArray<Drawn>;
+  /** Desk S1, L2: each child a drawn person's letter started, and that person, its own member. */
+  readonly members: Map<string, string>;
   readonly names: Map<string, Name>;
   /** Each start a `start_child` wrote: its Cmd id, the name, program, requester and first input. */
   readonly starts: Map<
@@ -390,10 +430,8 @@ type World = {
  * piece, and one runner per process that a runner steps, built when first asked for.
  */
 const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effect.Effect<string>, scope: Scope.Scope) {
-  const shared = store.shared(faulting(store.sql("ledger"), world.fault), next);
-  const context = yield* Layer.buildWithScope(shared, scope);
-  const children = Context.get(context, Children);
-  // Desk S1: the door's SessionManager, on its own store. Every key is a member but the outsider's.
+  // Desk S1: the door's SessionManager, on its own store, built before the shared services that ask
+  // it who sent a start's parent. Every key is admitted but the outsider's, which was removed.
   const sessions = Context.get(
     yield* Layer.buildWithScope(
       SessionManager.layer(
@@ -405,6 +443,12 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     ),
     SessionManager,
   );
+  const shared = store.shared(faulting(store.sql("ledger"), world.fault), next, {
+    rows: rows(world.people),
+    sessions,
+  });
+  const context = yield* Layer.buildWithScope(shared, scope);
+  const children = Context.get(context, Children);
   const hold = Effect.gen(function* () {
     const held = world.hold;
 
@@ -531,10 +575,23 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
     return value as S["Type"];
   });
 
+/** Desk S1: three people per run, none of them the founder or the outsider, each with a role or none. */
+const People = fc.uniqueArray(
+  fc.record({
+    person: generated(Id.Person).filter((p) => p !== PERSON && p !== OUTSIDER_PERSON),
+    role: fc.constantFrom<Role>("owner", "admin", "member", null),
+  }),
+  { minLength: 3, maxLength: 3, selector: (drawn) => drawn.person },
+);
+
+/** The laws that draw nobody: only the founder's row is in their world. */
+const NOBODY = fc.constant<ReadonlyArray<Drawn>>([]);
+
 const Cell = fc.record({
-  /** Desk S1, L1: the member whose letter asks for a start. */
-  member: generated(Id.Person),
   move: fc.nat(),
+  /** Desk S1: which drawn person sends the letter, and which program it asks for. */
+  sender: fc.nat(),
+  program: fc.nat(),
   pick: fc.nat(),
   alt: fc.nat(),
   shape: fc.nat(),
@@ -579,8 +636,9 @@ type Move =
   | "boundary_start"
   | "checkpoint_starts"
   // Desk S1
-  | "member_start"
-  | "outsider_start"
+  | "related_start"
+  | "unrelated_start"
+  | "removed_start"
   | "stopper_start"
   | "stop_own"
   | "stop_other"
@@ -604,8 +662,9 @@ const forged = (field: string, world: World): unknown => {
 };
 
 /**
- * Folds one tape through real runners. Each cell reads the world the fold has reached and picks a
- * move possible there; the oracle checks every prefix against the store's raw rows.
+ * Folds one tape through real runners, in a world holding the people this run drew. Each cell reads
+ * the world the fold has reached and picks a move possible there; the oracle checks every prefix
+ * against the store's raw rows.
  */
 const walk = (
   open: Effect.Effect<Store, never, Scope.Scope>,
@@ -613,10 +672,15 @@ const walk = (
   done: Set<Move>,
   seen: Set<string>,
 ) =>
-  Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, Walk>>) {
+  Effect.fnUntraced(function* ([people, tape]: readonly [
+    ReadonlyArray<Drawn>,
+    Iterable<fc.AsyncCommand<object, Walk>>,
+  ]) {
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
+      people,
+      members: new Map(),
       names: new Map(),
       starts: new Map(),
       parents: new Map(),
@@ -713,6 +777,11 @@ const walk = (
       Effect.map(all(), (rows) =>
         rows.some((e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
       );
+    /** Desk S1: the `started` line a start wrote for `name`, read from the store's raw rows. */
+    const startedLine = (name: string) =>
+      Effect.map(all([name]), (rows) => rows.find((e) => e._tag === "started" && body(e)["name"] === name));
+    /** Desk S1: the drawn people, by whether they hold a role. */
+    const drawn = (holds: boolean) => world.people.filter(({ role }) => (role !== null) === holds);
     const exitedRows = (pid: string) =>
       Effect.map(all(), (rows) => rows.filter((e) => e._tag === "exited" && body(e)["process"] === pid));
     // Built on each read: `all()` lists the streams of the names known at the time it is called.
@@ -721,6 +790,11 @@ const walk = (
     const runnable = () =>
       [...world.names].filter(([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain").map(([n]) => n);
     const starters = () => runnable();
+    /** Desk S1, L2: a starter, often a child a drawn person's letter started, so it has a member of its own. */
+    const requester = (cell: Cell) => {
+      const children = starters().filter((n) => world.members.has(n));
+      return children.length > 0 && cell.shape % 2 === 0 ? choose(children, cell.pick) : choose(starters(), cell.pick);
+    };
     const ended = () => [...world.names].filter(([n, h]) => !h.live && world.parents.has(n)).map(([n]) => n);
     const stoppers = () => STOPPERS.map(([n]) => n).filter((n) => world.names.get(n)?.live === true);
     /** Desk S1, L3: each stopper's children, by state. */
@@ -772,8 +846,9 @@ const walk = (
         worker_after_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         cut_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         checkpoint_starts: starters().length > 0 && next.calls() < PIDS.length - 6,
-        member_start: starters().length > 0 && next.calls() < PIDS.length - 6,
-        outsider_start: starters().length > 0,
+        related_start: starters().length > 0 && drawn(true).length > 0 && next.calls() < PIDS.length - 6,
+        unrelated_start: starters().length > 0 && drawn(false).length > 0,
+        removed_start: starters().length > 0,
         stopper_start: stoppers().length > 0 && next.calls() < PIDS.length - 6,
         stop_own: stopperChildren(true).length > 0,
         stop_other: stoppers().length > 0,
@@ -1314,44 +1389,68 @@ const walk = (
           seen.add("already_present");
           break;
         }
-        case "member_start": {
-          // L1: a member's letter asks for any program, granted to the requester or not.
-          const name = choose(starters(), cell.pick);
+        case "related_start": {
+          // L1, L2: a drawn person with a role asks for any program, which no grant may name. The
+          // sender is the one checked and the one recorded, never the requester's own member.
+          const { person: sender, role } = choose(drawn(true), cell.sender);
+          const name = requester(cell);
           const held = world.names.get(name) as Name;
-          const program = choose(ANY_PROGRAM, cell.alt);
+          const own = world.members.get(name);
+          const program = choose(ANY_PROGRAM, cell.program);
           const target = fresh(program);
+          const label = `${role} ${sender} asks ${name} for ${program}`;
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "start", ask: { program, name: target } }, memberWriter(cell.member));
+          yield* door(name, { type: "start", ask: { program, name: target } }, memberWriter(sender));
           const told = yield* lastAnswer(name, before);
-          expect(told, `L1: ${cell.member}'s letter may start ${program}`).toMatchObject({ type: "start_child_ok" });
-          expect(
-            Schema.decodeUnknownOption(Started)(told.outcome)._tag,
-            "L1: a member's start answers in Started's shape",
-          ).toBe("Some");
-          expect(tagged(told.outcome), "L1: a fresh name answers started").toBe("started");
+          expect(told, `L1: ${label}: the start is allowed`).toMatchObject({ type: "start_child_ok" });
+          expect(Schema.decodeUnknownOption(Started)(told.outcome)._tag, `L1: ${label}: Started's shape`).toBe("Some");
+          expect(tagged(told.outcome), `L1: ${label}: a fresh name answers started`).toBe("started");
           yield* sync([{ name: target, requester: held.pid }]);
-          expect(world.names.get(target)?.program, "L1: the child runs the program asked for").toBe(program);
-          seen.add(`member_${program}`);
+          expect(world.names.get(target)?.program, `L1: ${label}: the child runs that program`).toBe(program);
+          expect(
+            body(yield* startedLine(target))["member"],
+            `L1, L2: ${label}: the started line names the sender as member`,
+          ).toEqual(encodeSender(Sender.cases.person.make({ key: `SHA256:${sender}`, for: sender })));
+          world.members.set(target, sender);
+          seen.add(`related_${role}`);
+          seen.add(`related_${program}`);
+
+          if (own !== undefined && own !== sender) {
+            seen.add("related_child");
+          }
+
           break;
         }
-        case "outsider_start": {
-          // L2: the sender of the start's parent is checked, never the life that asked: its owner
-          // is a member, and a check of it would let this start through. Every program, `merger`
-          // included, which the requester's own grant names: no grant lets a non-member's start
-          // through (0170).
-          const name = choose(starters(), cell.pick);
-          const program = choose(ANY_PROGRAM, cell.alt);
+        case "unrelated_start":
+        case "removed_start": {
+          // L1: a sender with no row is refused. L2: so is a sender whose key was removed, and
+          // neither the program that asked, whose grant names `merger`, nor the requester's own
+          // member, which holds start, lets either through.
+          const kind = move === "removed_start" ? "removed" : "unrelated";
+          const by = move === "removed_start" ? outsider : memberWriter(choose(drawn(false), cell.sender).person);
+          const name = requester(cell);
+          const program = choose(ANY_PROGRAM, cell.program);
           const target = fresh(program);
+          const label = `${kind} ${by.for} asks ${name} for ${program}`;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "start", ask: { program, name: target } }, outsider);
-          expect(yield* lastAnswer(name, before), "L2: a start whose letter's sender is no member").toEqual({
+          yield* door(name, { type: "start", ask: { program, name: target } }, by);
+          expect(yield* lastAnswer(name, before), `L1, L2: ${label}: refused`).toEqual({
             type: "start_child_err",
             outcome: "forbidden",
           });
-          expect(yield* processRows(revBefore), "L2: a refused start writes no process row").toEqual([]);
-          expect(yield* registered(target), "L2: a refused start registers nothing").toBe(false);
-          seen.add(`outsider_${program}`);
+          expect(yield* processRows(revBefore), `L1, L2: ${label}: no process row`).toEqual([]);
+          expect(yield* registered(target), `L1, L2: ${label}: no name registered`).toBe(false);
+          expect(
+            (yield* all([target])).filter((e) => e.stream === `${target}/inbox`),
+            `L1, L2: ${label}: no first letter`,
+          ).toEqual([]);
+          seen.add(`${kind}_${program}`);
+
+          if (world.members.has(name)) {
+            seen.add(`${kind}_child`);
+          }
+
           break;
         }
         case "stopper_start": {
@@ -1486,6 +1585,7 @@ const prop = (
   required: ReadonlyArray<Move>,
   answers: ReadonlyArray<string>,
   numRuns: number,
+  people: fc.Arbitrary<ReadonlyArray<Drawn>> = NOBODY,
 ) =>
   it.effect(
     name,
@@ -1495,7 +1595,7 @@ const prop = (
         const seen = new Set<string>();
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(fc.tuple(people, Tape), (run) => Effect.runPromise(Effect.scoped(law(run))));
         const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1535,6 +1635,8 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
+      people: [],
+      members: new Map(),
       names: new Map(),
       starts: new Map(),
       parents: new Map(),
@@ -1768,20 +1870,32 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       200,
     );
     prop(
-      "Desk S1 L1: a start caused by any member's letter is allowed for any program, with no grant, and answers in Started's shape",
+      "Desk S1 L1: a start a letter caused is started for any program when its sender holds owner, admin or member on the fabrika, and refused forbidden with nothing written when it holds none; no start grant is read, and the started line names the sender as member",
       open,
-      ["member_start", "door_start", "mail_start"],
-      ["member_start"],
-      ANY_PROGRAM.map((program) => `member_${program}`),
+      ["related_start", "unrelated_start", "door_start", "mail_start"],
+      ["related_start", "unrelated_start"],
+      [
+        ...["owner", "admin", "member"].map((role) => `related_${role}`),
+        ...ANY_PROGRAM.map((program) => `related_${program}`),
+        ...ANY_PROGRAM.map((program) => `unrelated_${program}`),
+      ],
       200,
+      People,
     );
     prop(
-      "Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked",
+      "Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked nor the requester's own member; a sender with no row or a removed key is forbidden even where the requester's grant or member would allow it",
       open,
-      ["member_start", "outsider_start"],
-      ["member_start", "outsider_start"],
-      [...ANY_PROGRAM.map((program) => `member_${program}`), ...ANY_PROGRAM.map((program) => `outsider_${program}`)],
+      ["related_start", "unrelated_start", "removed_start"],
+      ["related_start", "unrelated_start", "removed_start"],
+      [
+        "related_child",
+        "unrelated_child",
+        "removed_child",
+        ...ANY_PROGRAM.map((program) => `unrelated_${program}`),
+        ...ANY_PROGRAM.map((program) => `removed_${program}`),
+      ],
       200,
+      People,
     );
     prop(
       "Desk S1 L3: stop_child ends only the requester's own child, with shutdown and one DOWN per watcher; another's is not_child, an ended one noproc",
@@ -1872,6 +1986,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           Effect.gen(function* () {
             const store = yield* open;
             const world: World = {
+              people: [],
+              members: new Map(),
               names: new Map([["starter:1", { program: "starter", pid: PIDS[0] as string, live: true }]]),
               starts: new Map(),
               parents: new Map(),
