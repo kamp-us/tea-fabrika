@@ -23,7 +23,16 @@ import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
 import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
-import { lastCursor, type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
+import {
+  type Handling,
+  handle,
+  type KeyPress,
+  lastCursor,
+  type Unread,
+  type WindowModel,
+  type WindowMsg,
+  windowMachineFor,
+} from "./WindowMachine.ts";
 
 const SEED = 119120;
 /** JSON text, the only form a view takes on the wire. */
@@ -1282,5 +1291,165 @@ describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
     expect(seen.newer, "L28: the walks note a row newer than the view's cursor for the tile").toBeGreaterThan(0);
     expect(seen.none, "L28: the walks note focus on no row while the view keeps a row").toBeGreaterThan(0);
     expect(seen.view, "L28: the walks land a window with no note on the view's cursor").toBeGreaterThan(0);
+  });
+});
+
+// Ticket 1043, next/: a burst of presses is judged as the same presses one step apart. The page must
+// answer each press at once, to keep or stop its default, while the run reads its line later, so a
+// press can arrive before the window has read the ones before it. `handle` judges each press against
+// the window as it is after every earlier press. The walk presses what a person types, a key alone
+// or the prefix and the key after it, with no read between the two, and after each the run reads as
+// many of the presses waiting in its line as the walk picks, from none to all. The same presses go
+// through three runs: one that reads each press as soon as it is handed over, the walk's own, and a
+// burst that reads nothing until the last press. Each run then reads what is left, has its splits'
+// tiles minted, and delivers everything until quiet.
+
+/** What a person types: tezgah's focus keys, the splits and the close after the prefix, an answer, the
+ *  prefix again or Escape after it, an unbound key, a key a browser keeps, and the prefix alone. */
+const CHORDS: ReadonlyArray<ReadonlyArray<string>> = [
+  ...FOCUS_KEYS.map((k) => k.keys),
+  ["ctrl+b", "%"],
+  ["ctrl+b", '"'],
+  ["ctrl+b", "|"],
+  ["ctrl+b", "-"],
+  ["ctrl+b", "x"],
+  ["y"],
+  ["n"],
+  ["ctrl+b", "ctrl+b"],
+  ["ctrl+b", "escape"],
+  ["ctrl+b", "q"],
+  ["a"],
+  ["meta+w"],
+  ["ctrl+b"],
+];
+
+const MOVES = new Set(FOCUS_KEYS.filter((k) => k.keys.length === 2).map((k) => k.keys[1]!));
+const SPLIT_KEYS = new Set(["%", '"', "|", "-"]);
+
+const Typed = fc.record({ chord: fc.nat(), reads: fc.nat() });
+type Typed = typeof Typed extends fc.Arbitrary<infer A> ? A : never;
+
+type Schedule = "apart" | "walked" | "burst";
+
+/** The two schedules held to the run that reads each press at once. */
+const SCHEDULES: ReadonlyArray<Schedule> = ["walked", "burst"];
+
+/** One run of `picks` on `desk`: each press judged by `handle` against the run's state, the presses
+ *  handed over waiting in the run's line until the schedule reads them. */
+const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule) => {
+  const letters: Array<unknown> = [];
+  const each = (e: Event) => {
+    for (const c of e.cmds) {
+      const call = c["call"] as Call | undefined;
+
+      if (c.type === "write" && call?._tag === "send") {
+        letters.push(call["m"]);
+      }
+    }
+  };
+  const world = makeWorld(desk, 1, () => {});
+  const w = world.wins[0]!;
+  const line: Array<WindowMsg> = [];
+  const read = (n: number) => {
+    for (const m of line.splice(0, n)) {
+      stepWin(world, 0, m, each);
+    }
+  };
+  let unread: Unread = { from: w.s.presses, keys: [] };
+  let at = 10;
+  const handlings: Array<{ readonly key: string; readonly handling: Handling; readonly waiting: number }> = [];
+
+  for (const pick of picks) {
+    for (const key of CHORDS[pick.chord % CHORDS.length]!) {
+      const press: KeyPress = { type: "key", key, at: (at += 10) };
+      const judged = handle(focusWindow, TABLE!, w.s, unread, press);
+      unread = judged.unread;
+      handlings.push({ key, handling: judged.handling, waiting: line.length });
+
+      if (judged.handling !== "leave") {
+        line.push(press);
+      }
+
+      if (schedule === "apart") {
+        read(line.length);
+      }
+    }
+
+    if (schedule === "walked") {
+      read(pick.reads % (line.length + 1));
+    }
+  }
+
+  read(line.length);
+
+  for (let minted = 0, guard = 0; guard < 200; guard++) {
+    const mint = w.waiting.find((c) => c.type === "mint");
+
+    if (mint === undefined) {
+      break;
+    }
+
+    // The world answers a Cmd as its other steps do (`date`, the S3 cursor walk's mint).
+    stepWin(
+      world,
+      0,
+      { type: "mint_ok", cmd: mint, value: { tile: typeId("tile", 7_000 + ++minted) } } as WindowMsg,
+      each,
+    );
+    housekeep(world, 0, each);
+  }
+
+  settle(world, each);
+  return { handlings, world, letters, s: w.s };
+};
+
+describe("Ticket 1043: a burst of presses is judged as the same presses one step apart", () => {
+  it("1043: for any presses, however many the run has not read yet when each is judged, the page keeps or stops the same defaults, and the window ends with the same tiles, focus, prefix and letters as when it reads each press at once", () => {
+    const counts = { raced: 0, unread: 0, splits: 0 };
+    fc.assert(
+      fc.property(Desk, fc.array(Typed, { minLength: 1, maxLength: 24 }), (d, picks) => {
+        const desk = makeDesk(d.cuts, d.focus);
+        const apart = typed(desk, picks, "apart");
+        counts.splits += apart.letters.filter((m) =>
+          String(Reflect.get(Object(m), "does")).startsWith("tezgah.split"),
+        ).length;
+
+        for (const schedule of SCHEDULES) {
+          const run = typed(desk, picks, schedule);
+          counts.unread += run.handlings.filter((h) => h.waiting > 0).length;
+
+          for (const [i, h] of run.handlings.entries()) {
+            const before = run.handlings.slice(Math.max(0, i - 3), i);
+            counts.raced +=
+              before.length === 3 &&
+              SPLIT_KEYS.has(h.key) &&
+              h.waiting >= 3 &&
+              MOVES.has(before[1]!.key) &&
+              [...before, h].every((x, k) => apart.handlings[i - 3 + k]!.handling === "take" && x.handling === "take")
+                ? 1
+                : 0;
+          }
+
+          expect(
+            run.handlings.map((h) => `${h.key} ${h.handling}`),
+            `1043 (${schedule}): each press keeps or stops its default as when the window has read every press before it`,
+          ).toEqual(apart.handlings.map((h) => `${h.key} ${h.handling}`));
+          expect(run.world.view, `1043 (${schedule}): tezgah ends with the same tiles and layout`).toEqual(
+            apart.world.view,
+          );
+          expect(drawnFocus(run.s), `1043 (${schedule}): the window draws the same focus`).toBe(drawnFocus(apart.s));
+          expect(run.s.prefix, `1043 (${schedule}): the prefix ends the same`).toEqual(apart.s.prefix);
+          expect(run.letters, `1043 (${schedule}): the window sends tezgah the same letters`).toEqual(apart.letters);
+          expect(run.s, `1043 (${schedule}): the window ends in the same state`).toEqual(apart.s);
+        }
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(counts.splits, "1043: the walks send split letters").toBeGreaterThan(0);
+    expect(counts.unread, "1043: the walks judge presses while earlier ones wait unread").toBeGreaterThan(0);
+    expect(
+      counts.raced,
+      "1043: the walks reach a prefix move followed at once by a prefix split, judged while the move waits unread",
+    ).toBeGreaterThan(0);
   });
 });

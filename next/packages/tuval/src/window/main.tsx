@@ -13,7 +13,15 @@ import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
-import { lastCursor, type WindowModel, type WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
+import {
+  handle,
+  type KeyPress,
+  lastCursor,
+  type Unread,
+  type windowMachineFor,
+  type WindowModel,
+  type WindowMsg,
+} from "@kampus/libfabrika/client/WindowMachine";
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
@@ -29,6 +37,8 @@ type LiveWindow = EffectRun<WindowModel, WindowMsg>;
 
 type PageProps = {
   readonly run: LiveWindow;
+  /** The window machine the run was started with, whose update judges each press in order. */
+  readonly machine: ReturnType<typeof windowMachineFor>;
   readonly origin: string;
   /** The window registered for a program, found by the program a tile shows, never by its name. */
   readonly windowFor: (program: string) => TileWindow | null;
@@ -165,10 +175,15 @@ const PrefixLine = ({ table }: { readonly table: Keys.Table }) => (
   </>
 );
 
-/** Reads every press on the page for the window's prefix. A key the window does not take keeps its
- *  default and reaches the tile; one it takes goes to the window and nowhere else. */
-const useKeys = (run: LiveWindow, table: Keys.Table, send: (msg: WindowMsg) => void) =>
+/** Reads every press on the page for the window's prefix, in the order pressed. A key the window
+ *  does not take keeps its default and reaches the tile; one it takes goes to the window and nowhere
+ *  else. The run reads its line after the press must be answered, so each press is judged by
+ *  `handle`, which reads the presses still waiting in that line first (0278: one prefix, the
+ *  window's). */
+const useKeys = (run: LiveWindow, machine: PageProps["machine"], table: Keys.Table, send: (msg: WindowMsg) => void) =>
   useEffect(() => {
+    // The presses this listener handed the run that it may not have read yet, the listener's own.
+    const line: { unread: Unread } = { unread: { from: run.getState().presses, keys: [] } };
     const listener = (e: KeyboardEvent) => {
       const key = Keys.spell(e);
 
@@ -176,24 +191,25 @@ const useKeys = (run: LiveWindow, table: Keys.Table, send: (msg: WindowMsg) => v
         return;
       }
 
-      const prefix = run.getState().prefix;
-      const routed = Keys.route(table, prefix, null, { key });
+      const press: KeyPress = { type: "key", key, at: Math.max(0, e.timeStamp) };
+      const judged = handle(machine, table, run.getState(), line.unread, press);
+      line.unread = judged.unread;
 
-      if (routed._tag === "platform" || (routed._tag === "tile" && prefix._tag === "idle")) {
+      if (judged.handling === "leave") {
         return;
       }
 
       // The prefix again passes the prefix key on to the tile, as tmux's send-prefix does.
-      if (routed._tag !== "tile") {
+      if (judged.handling === "take") {
         e.preventDefault();
         e.stopPropagation();
       }
 
-      send({ type: "key", key, at: Math.max(0, e.timeStamp) });
+      send(press);
     };
     document.addEventListener("keydown", listener, true);
     return () => document.removeEventListener("keydown", listener, true);
-  }, [run, table, send]);
+  }, [run, machine, table, send]);
 
 /** Tells the window the size of the area its tiles are laid out in, inside the desk's padding,
  *  whenever it changes. */
@@ -359,7 +375,7 @@ const Page = (props: PageProps) => {
   const [polite] = useRuntime(props.run, pickPolite);
   const [none] = useRuntime(props.run, pickNoTezgah);
   const [said] = useRuntime(props.run, (m) => m.said);
-  useKeys(props.run, props.keys, send);
+  useKeys(props.run, props.machine, props.keys, send);
   const view = client === null ? null : optimisticState(client);
   const named = (id: string) => view?.tiles.find((t) => t.id === id);
   // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus

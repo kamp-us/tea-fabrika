@@ -1,12 +1,16 @@
 // P41 slice 2, next/. Exercise the public delivery layer at its RPC handles.
+// R2 (sev1 of 2026-11-15): the gateway wakes a finished job's requester outside any span. A wake that
+// required the caller's span died there, and the real Project answered that finish `unreachable`.
+// Plant: read the span with `Effect.orDie` again; R2's untraced callers go red.
 import { it, expect } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Logger, References, Result, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { State } from "../processes/Process.ts";
 import { type Delivery, ProgramMailError, type Receipt } from "../processes/ProgramMail.ts";
 import { MailDelivery } from "../runtime/MailDelivery.ts";
+import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
-import { mailLayer } from "./mail.ts";
+import { mailLayer, wakeups } from "./mail.ts";
 import type { Env } from "./runtime.ts";
 
 const Cases = fc.constantFrom(
@@ -280,3 +284,62 @@ for (const flow of [
 }
 
 const MailOk = Schema.TaggedStruct("ok", { receipt: Schema.Any });
+
+it.effect(
+  "R2: a wake schedules its name once from any caller, with the caller's span as its trace or none, and fails only as unavailable",
+  () =>
+    Effect.gen(function* () {
+      const reached = new Set<string>();
+      const check = Effect.fnUntraced(function* (name: string, traced: boolean, rejects: boolean) {
+        const objects: Array<string> = [];
+        const traces: Array<unknown> = [];
+        // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
+        const env = {
+          PROCESS: {
+            getByName: (object: string) => {
+              objects.push(object);
+              return {
+                mailed: async (trace?: unknown) => {
+                  traces.push(trace);
+
+                  if (rejects) {
+                    return Promise.reject(new Error("connection lost"));
+                  }
+                },
+              };
+            },
+          },
+        } as unknown as Env;
+        const wake = MailWakeups.use((mail) => mail.wake(name)).pipe(
+          Effect.provide(wakeups(env, "mail-test")),
+          Effect.exit,
+        );
+        const [caller, exit] = traced
+          ? yield* Effect.gen(function* () {
+              const span = yield* Effect.currentSpan;
+              return [{ traceId: span.traceId, spanId: span.spanId }, yield* wake] as const;
+            }).pipe(Effect.withSpan("caller"))
+          : ([undefined, yield* wake] as const);
+        reached.add(`${traced ? "traced" : "untraced"}:${rejects ? "rejects" : "saves"}`);
+        expect(objects, "the wake reaches its name's one object").toEqual([JSON.stringify(["mail-test", name])]);
+        expect(traces, "the wake carries the caller's span, or no trace when it has none").toEqual([caller]);
+
+        if (rejects) {
+          expect(Exit.isFailure(exit) && Cause.squash(exit.cause), "a lost wake may be asked again").toBeInstanceOf(
+            MailWakeupsError,
+          );
+        } else {
+          expect(Exit.isSuccess(exit), "a saved wake answers").toBe(true);
+        }
+      });
+      const property = fc.asyncProperty(
+        fc.string({ minLength: 1 }),
+        fc.boolean(),
+        fc.boolean(),
+        (name, traced, rejects) => Effect.runPromise(check(name, traced, rejects)),
+      );
+      yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
+      // An empty run cannot pass: every caller and answer was met.
+      expect([...reached].sort()).toEqual(["traced:rejects", "traced:saves", "untraced:rejects", "untraced:saves"]);
+    }),
+);
