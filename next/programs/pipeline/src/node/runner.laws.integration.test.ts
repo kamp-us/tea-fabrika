@@ -113,7 +113,8 @@ const life = Effect.fnUntraced(function* (
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] } }),
+        // T1041: mail.unread's largest value, so no law here meets a full inbox.
+        ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] }, cap: 16_384 }),
         ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws grant no start, and the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),

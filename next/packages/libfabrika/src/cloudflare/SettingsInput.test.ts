@@ -1,7 +1,7 @@
 // T753, next/, L3 and L10 [secrets]. The Worker reads only INSTANCE through Alchemy.
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { ByteSize, Effect, Exit } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -82,6 +82,9 @@ describe("shared Worker settings reader, next/", () => {
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
+              // T1041: the two mail settings; a byte size is saved as its count of bytes in text.
+              mailUnread: current.settings.values["mail.unread"],
+              mailChunk: ByteSize.bytes(BigInt(String(current.settings.values["mail.chunk"]))),
             });
             StartsTest.exclude(exit.value, secret);
           }

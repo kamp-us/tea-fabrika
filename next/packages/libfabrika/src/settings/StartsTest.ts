@@ -1,6 +1,6 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -95,6 +95,14 @@ export interface Input {
 // T843's test policy: every start fixture names it, so no test start leans on the declared default.
 export const rateLimit = { limit: 100_000, window: 60_000 };
 
+/** Each declaration's default value, by its key, and the default origin, by its path. */
+const defaults = {
+  values: Object.fromEntries(
+    Object.entries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
+  ) as Config.Success<typeof Declarations.all>,
+  origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
+};
+
 export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<Input, never, Digest.Digest> {
   const origin =
     r.origin === "flag"
@@ -105,27 +113,21 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
           ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
           : Origin.cases.default.make({});
   const settings = yield* Snapshot.make(Declarations.all, {
+    // Every declaration starts at its declared default, so a setting added to `all` (T1041's two
+    // mail settings) needs no edit here; the fixture then names the values it chooses.
     values: {
+      ...defaults.values,
       port: r.port,
       version: "0.0.0",
       gatewayLimit: rateLimit.limit,
       gatewayWindow: rateLimit.window,
-      brainThrottle: Declarations.brainThrottle.default,
-      brainPoll: Declarations.brainPoll.default,
-      brainStartTimeout: Declarations.brainStartTimeout.default,
-      brainStopTimeout: Declarations.brainStopTimeout.default,
-      desktopLinkTtl: Declarations.desktopLinkTtl.default,
     },
     origins: {
+      ...defaults.origins,
       "instance.port": origin,
       "fabrika-version": Origin.cases.default.make({}),
       "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
       "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
-      "desktop.brain-throttle": Origin.cases.default.make({}),
-      "desktop.brain-poll": Origin.cases.default.make({}),
-      "desktop.brain-start-timeout": Origin.cases.default.make({}),
-      "desktop.brain-stop-timeout": Origin.cases.default.make({}),
-      "desktop.link-ttl": Origin.cases.default.make({}),
     },
   });
   return {

@@ -119,7 +119,7 @@ const line = (body: string): Line =>
 
 type Observed = {
   turn: number;
-  op: "read" | "get" | "head" | "append";
+  op: "read" | "get" | "head" | "end" | "append";
   stream: string;
   after?: number;
   inside: boolean;
@@ -160,6 +160,11 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
             head: (stream) => {
               observations.push({ turn: n, op: "head", stream, inside: db.isTransaction });
               return turn.head(stream);
+            },
+            // T1041: the turn's position-only read, observed as the others are.
+            end: (stream) => {
+              observations.push({ turn: n, op: "end", stream, inside: db.isTransaction });
+              return turn.end(stream);
             },
             append: (stream, id, value) => {
               observations.push({ turn: n, op: "append", stream, inside: db.isTransaction });

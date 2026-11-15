@@ -199,7 +199,11 @@ const life = Effect.fnUntraced(function* (
           Layer.provide(RelationsMemory.layer([])),
           Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
         ),
-        ProgramMailLedger.layer({ grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) } }),
+        // T1041: mail.unread's largest value, so no law here meets a full inbox.
+        ProgramMailLedger.layer({
+          grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) },
+          cap: 16_384,
+        }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),

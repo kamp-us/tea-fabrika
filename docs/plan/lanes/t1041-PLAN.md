@@ -522,3 +522,46 @@ Estimate: 6 steps, $43
 ## Findings
 
 None.
+
+## Amendment, 2026-11-15
+
+The lead's calls after the tests step, taken while the owner is away. Each replaces what the plan
+said above where they differ.
+
+- **`send_chunks` takes `as`, not `type`.** tea reserves `type` on a Cmd's input (`CmdInput` is
+  `{ type?: never }`, and `Cmd.make` builds `{ ...input, type: name }`, `@demlik/tea` 0.25.0), so
+  the operand is `as`: `sendChunks({ to: "r:1", as: "rows", items })`, "send chunks to r:1 as
+  rows". Each chunk letter still carries `type`. 80%.
+- **The cap reads where the inbox ends without a body: `LedgerTurn.end(stream)`.** It answers the
+  pos of the stream's newest entry, or none for an empty stream, by an index and reading no body.
+  `head`'s rev cannot give it: a rev is the log's number, and its pos is only in that entry's row,
+  which `read` returns whole, body included. The cap uses `end` on the inbox, and reads the acked
+  stream's newest entry, whose small body holds the acked pos, so its lookups stay flat in rows and
+  in bytes (experiment 295: a full read of a
+  1 MiB newest letter was 28% of a turn). `ledger/` opens for this one read only; the per-page
+  count finding stays closed. 80%; the doubt was `head`, settled above.
+- **L12's mid-send refusal is `id_reused`.** A stopped target refuses no mail today, so the law
+  forges a letter under a later part's command and the real part answers `id_reused` for good.
+- **L14 resolves the repo file's parsed value through `Sources.resolve`.** Only the settings module
+  and start code read TOML (lint L15), so the law hands the parsed `[mail] unread = 2` to the
+  common source order and saves its snapshot, as a start does.
+- **The integration laws open SQLite through the existing node drivers.** `TestDatabase` is not on
+  main yet.
+- **`cap` is required on `ProgramMailLedger.layer`,** so no caller can leave it out. The tests step
+  passed `cap: 16_384` (the largest value) to every test caller whose law is not about the cap.
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/packages/libfabrika/src/ledger/LedgerTransaction.ts | build | 3 | `end(stream)` on `LedgerTurn`, its doc |
+| next/packages/libfabrika/src/ledger/internal/ledgerStore.ts | build | 8 | `end`: `SELECT pos ... ORDER BY rev DESC LIMIT 1` by the stream index, no body |
+| next/packages/libfabrika/src/ledger/LedgerTurnEndTest.ts | tests | tests | L7 ledger: `end` equals read's last pos, none when empty, the same bytes whatever the newest body |
+| next/packages/libfabrika/src/ledger/LedgerTurnReads.test.ts | tests | tests | runs L7 ledger on an in-memory database |
+| next/packages/libfabrika/src/ledger/LedgerTurnReads.integration.test.ts | tests | tests | runs L7 ledger on a real SQLite file |
+| next/packages/libfabrika/src/permissions/Rebac.test.ts | tests | tests | its in-memory `LedgerTurn` answers `end` |
+| next/packages/libfabrika/src/access/Authorization.integration.test.ts | tests | tests | its observed `LedgerTurn` passes `end` through |
+| next/packages/libfabrika/src/settings/StartsTest.ts | tests | tests | the start fixture starts every declaration at its default |
+| next/packages/libfabrika/src/settings/Start.test.ts | tests | tests | L19's declaration list holds `mail.chunk` and `mail.unread` |
+| next/packages/libfabrika/src/cloudflare/SettingsInput.test.ts | tests | tests | L3's values hold the two mail settings |
+| next/packages/libfabrika/src/node/StartChild.integration.test.ts | tests | tests | passes `cap` |
+| next/programs/pipeline/src/node/queue.laws.integration.test.ts | tests | tests | passes `cap` |
+| next/programs/pipeline/src/node/runner.laws.integration.test.ts | tests | tests | passes `cap` |
