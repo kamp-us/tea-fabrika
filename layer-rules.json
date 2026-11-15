@@ -39,7 +39,7 @@
     {
       "name": "next-window",
       "paths": ["next/packages/tuval/src/window"],
-      "imports": ["next-desktop", "next-libfabrika-entry", "next-client", "next-transport"]
+      "imports": ["next-desktop", "next-libfabrika-entry", "next-client", "next-tezgah", "next-transport"]
     },
     {
       "name": "next-desktop",
@@ -104,6 +104,7 @@
         "next-runtime",
         "next-runtime-coordination",
         "next-access",
+        "next-tezgah",
         "next-processes",
         "next-presence",
         "next-jobs",
@@ -174,7 +175,7 @@
       "name": "next-client",
       "layer": 7,
       "paths": ["next/packages/libfabrika/src/client"],
-      "imports": ["next-runtime", "next-transport", "next-shared"]
+      "imports": ["next-runtime", "next-tezgah", "next-transport", "next-shared"]
     },
     {
       "name": "next-door",
@@ -260,6 +261,12 @@
         "next-telemetry",
         "next-shared"
       ]
+    },
+    {
+      "name": "next-tezgah",
+      "layer": 5,
+      "paths": ["next/packages/libfabrika/src/tezgah"],
+      "imports": ["next-processes", "next-shared"]
     },
     {
       "name": "next-processes",

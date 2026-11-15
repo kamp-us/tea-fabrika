@@ -23,6 +23,9 @@ export type ErrorClass = typeof ErrorClass.Type;
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
+/** A length in CSS pixels, as a window measures its own area: never a duration (0212). */
+export const Pixels = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
+
 /**
  * One checked observation. Ids, counts, durations and fixed words only: no program body, no key
  * material, no message text. Client clocks and durations are measurements, never authority.
@@ -40,7 +43,7 @@ export const ClientRecord = Schema.TaggedUnion({
   },
   press: {
     command: Schema.String,
-    via: Schema.Literals(["button", "key"]),
+    via: Schema.Literals(["button", "key", "click"]),
     pid: Schema.String,
     viewRev: Count,
     seen: Count,
@@ -63,6 +66,15 @@ export const ClientRecord = Schema.TaggedUnion({
     /** On a `patch` row only: how many patches the run installed. */
     patches: Schema.optionalKey(Count),
   },
+  /** A command reached through the prefix key: which, and how long after the prefix it came. */
+  prefix: { does: Schema.String, ms: Ms },
+  /** A focus move the window drew, dropped once tezgah answered it: `kept` when tezgah's focus is
+   *  the move's tile, `overridden` when tezgah refused it or another move won, so the drawn focus
+   *  jumped back. A jump back is recorded here and never announced. `ms` is how long its answer took. */
+  focus: { letter: Schema.String, result: Schema.Literals(["kept", "overridden"]), ms: Ms },
+  /** The tiles a window draws as strips changed: how many it draws now, and the size it folded at.
+   *  Which tiles folded is not written: tezgah's view, the window's size and its focus rebuild it. */
+  fold: { strips: Count, width: Pixels, height: Pixels },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),

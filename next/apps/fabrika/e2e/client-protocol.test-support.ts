@@ -12,8 +12,13 @@ import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientR
 import { Effect, Layer, Option, Schema } from "effect";
 import { type Dev, grant, type Home, reader, type Waiting } from "./p14.test-support.ts";
 
-export const NAME = "checklist:1";
-const TILES = [{ id: "tile_1", name: NAME }];
+/** The registered name of the checklist's process: the headless tile shows it, and its streams are
+ *  read by it. */
+const PROCESS = "checklist:1";
+/** format: the browser tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program
+ *  first, then `t<n>`. The tab draws workspace 1 of the founder's tezgah, whose t1 shows PROCESS. */
+export const NAME = "checklist, t1";
+const TILES = [{ id: "tile_1", name: PROCESS }];
 
 /** One row of the checklist as the backend shows it. */
 export type Row = { readonly name: string; readonly checked: boolean };
@@ -88,7 +93,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
       backend.last,
     );
     const r = yield* reader(h, dev);
-    const inbox = yield* r.read(`${NAME}/inbox`);
+    const inbox = yield* r.read(`${PROCESS}/inbox`);
     const sent = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
     return { first, kept, sent: sent.length };
   });

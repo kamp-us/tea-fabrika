@@ -57,6 +57,13 @@ const TABLE: { scope: string; parts: Part[] } = {
         `${LIBRARY}/client/WindowMachine`,
         `${LIBRARY}/client/WindowStart`,
         `${LIBRARY}/client/Headless`,
+        // Desk S2a, S2b and S4: the key table, the window's side of tezgah, and tezgah's wire shapes
+        // and drawn geometry.
+        `${LIBRARY}/client/Keys`,
+        `${LIBRARY}/client/Tezgah`,
+        `${LIBRARY}/tezgah/Layout`,
+        `${LIBRARY}/tezgah/Workspace`,
+        `${LIBRARY}/tezgah/Fold`,
         "@kampus/fabrika-design",
         "@kampus/fabrika-design/tokens.css",
       ],
@@ -203,6 +210,8 @@ const target = fc.oneof(
       `${LIBRARY}/transport/Dial`,
       `${LIBRARY}/client`,
       `${LIBRARY}/client/WindowStart.test-support`,
+      `${LIBRARY}/client/Prefix`,
+      `${LIBRARY}/tezgah/internal/tree`,
       `${LIBRARY}/coordination/index`,
       `${LIBRARY}/ledger/Log`,
       `${LIBRARY}/processes/Process`,
