@@ -33,6 +33,7 @@ import { fcTypeId } from "../jobs/JobsTest.ts";
 import { property } from "../Testing.test-support.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { KeyLine } from "../transport/Sshsig.ts";
+import { Hello } from "../transport/Wire.ts";
 import {
   type Armed,
   crashed,
@@ -361,6 +362,59 @@ const law = (name: string, focus: Focus, required: ReadonlyArray<string>, runs: 
       }),
     300_000,
   );
+
+/** Every `os` the hello's wire schema accepts. */
+const OSES: ReadonlyArray<(typeof Hello.Type)["os"]> = ["macos", "windows", "linux", "android", "ios", "unknown"];
+
+describe("P39 slice 4b: the host's os in the hello", () => {
+  // O1, from the approved plan (docs/plan/lanes/p39-s5-PLAN.md): `start` takes the host's `os` and its
+  // hello sends it, in place of `unknown`. Plant, run once and undone (recorded in the tests step's
+  // field row): keep `os: "unknown"`.
+  it.effect(
+    "O1: the hello carries the os the start was given, for every value the wire accepts",
+    () =>
+      Effect.gen(function* () {
+        const reached = new Set<string>();
+        yield* property(
+          fc.constantFrom(...OSES),
+          (os) =>
+            Effect.gen(function* () {
+              const d = door(brain());
+              const s: Seen = seen();
+              const store = yield* Layer.build(KeyValueStore.layerMemory);
+              const layers = Layer.mergeAll(
+                d.socket,
+                keys,
+                fakeCommands(s),
+                JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(store))),
+                Id.Generator.layer,
+              );
+              const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os }).pipe(
+                Effect.provide(layers),
+              );
+              yield* booting.ready;
+
+              for (let i = 0; i < 50 && d.state.hellos.length === 0; i++) {
+                yield* pass(100);
+              }
+
+              expect(d.state.hellos.length, "O1: the start says hello").toBeGreaterThan(0);
+
+              for (const hello of d.state.hellos) {
+                expect(Schema.decodeUnknownSync(Hello)(hello).os, "O1: every hello carries the os it was given").toBe(
+                  os,
+                );
+              }
+
+              reached.add(os);
+            }).pipe(Effect.provide(TestClock.layer())),
+          { numRuns: 30 },
+        );
+        expect([...reached]).toEqual(expect.arrayContaining([...OSES]));
+      }),
+    120_000,
+  );
+});
 
 describe("P39 slice 4a: the hands start", () => {
   law(
