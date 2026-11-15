@@ -102,6 +102,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
                 url: `http://127.0.0.1:${port}`,
                 tab,
                 name: key,
+                session,
               }),
             );
 

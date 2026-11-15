@@ -694,6 +694,13 @@ export class ProcessTable {
       .map(shown);
   }
 
+  /** The live watches a client session holds: those whose recipient is a client with `session`. */
+  held(session: string): ReadonlyArray<Watch> {
+    return [...this.#model.watches.values()]
+      .filter(({ _tag, to }) => _tag === "live" && to._tag === "client" && to.session === session)
+      .map(shown);
+  }
+
   /**
    * How fresh delivery treats one letter. A DOWN is a signal only under its signal id, from the
    * brain, with a watch of that recipient, ref and target, live or canceled. A signal reaches only
