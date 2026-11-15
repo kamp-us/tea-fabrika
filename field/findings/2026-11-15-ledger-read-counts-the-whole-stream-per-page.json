@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-ledger-read-counts-the-whole-stream-per-page",
+  "date": "2026-11-15",
+  "by": "experiment",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts",
+    "line": 214
+  },
+  "says": "In next/, every page of a ledger `read` runs `behind`, which counts `sum(rev > ?)` over every entry of the stream for the span's `lag` tag, so a reader's catch-up gets slower with every letter its inbox ever held, read or not.",
+  "proof": "Experiment 295 (`experiments/295-inbox-cap.md`), node:sqlite on main at this head: a catch-up over the same 256 unread letters of 1 KiB through `Mailbox.read` took 2.5 ms p50 with 0 read letters before them, 3.3 ms with 10,000 and 13.4 ms with 100,000, five runs each.",
+  "cost": "A long-lived reader's inbox only grows, so each wake costs more over the process's life, and on a Durable Object each scanned row is a row read billed; the inbox cap of ticket 1041 bounds unread letters, not this.",
+  "head": "ce15d9cb617a24230c98037528206f8b22c1d570",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": null
+}
