@@ -156,6 +156,9 @@ turns into, and how the limit is held.
 - **Not decided here:**
   - Effect's `Match` in place of a ternary. 0046 keeps the plain conditional inside `update`, and
     the two `Match` rules from the same rule set are not taken.
+    Since decided: [0566](0566-a-tagged-value-is-matched.md) takes both rules and supersedes that
+    amendment of 0046, so a check on `_tag` in this file's sketch is written as a match. The cap
+    of 2 holds as written.
   - The folder order of the cleanup. The plan of that work says.
   - Today's app.
 

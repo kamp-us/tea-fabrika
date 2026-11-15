@@ -129,6 +129,8 @@ authors already wrote (owner, 2026-11-15).**
   `no-unsafe-dictionary-type`, `no-widen-then-assert`, and from the Effect entry point
   `no-manual-effect-error-tag`, `no-service-constructor-imports` and
   `prefer-tagged-error-handling`.
+- **Since taken:** the two Match rules, by [0566](0566-a-tagged-value-is-matched.md), which also
+  says the form we write. They no longer wait.
 
 **`no-unknown-parameters`**
 
