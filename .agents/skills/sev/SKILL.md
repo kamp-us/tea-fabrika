@@ -27,9 +27,10 @@ sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue 
 | Who calls it | Only the owner | Nobody: the 3-hour run or the daily speed check opens its issue |
 | Ends when | Every fix has merged, or the owner calls it off; it then becomes a sev1 or ends | That issue closes, which the same check does when it is green or inside the goal again |
 
-The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md). The sev1 rule is being
-recorded. Below a sev1 there is no level: a slow or odd run is a ticket, and a flaky test is fixed
-the day it is seen ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
+The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md); the two levels and the
+sev1 rule are [0542](../../../.decisions/0542-two-sev-levels-one-skill.md). Below a sev1 there is
+no level: a slow or odd run is a ticket, and a flaky test is fixed the day it is seen
+([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
 
 The cost of a sev1 with no caller: the two checks must stay worth trusting. A false alarm puts us in
 a sev1, so a check that cries wolf is itself a fix that goes first.

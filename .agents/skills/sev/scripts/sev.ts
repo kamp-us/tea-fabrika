@@ -1,5 +1,5 @@
-// sev.ts: the command line of a sev, the level CI is in (decision 0532 for sev0; the sev1 rule is
-// being recorded). Today's lead tooling, run on our own laptop; it is not product. Incident.ts
+// sev.ts: the command line of a sev, the level CI is in (decision 0532 for sev0, 0542 for the two
+// levels and sev1). Today's lead tooling, run on our own laptop; it is not product. Incident.ts
 // says what each command does, Freeze.ts what the loop does, Level.ts what the levels are.
 //
 //   node sev.ts open 0 --reason <why> --allow <branch>...   a sev0, on the owner's call; runs the

@@ -1,4 +1,4 @@
-// Level: the level CI is in, as data (decision 0532 for sev0; the sev1 rule is being recorded).
+// Level: the level CI is in, as data (decision 0532 for sev0, 0542 for the two levels and sev1).
 // Today's lead tooling, run on our own laptop; it is not product.
 //
 //   sev0   the owner called it; the log below holds it, from `opened` to `closed`
