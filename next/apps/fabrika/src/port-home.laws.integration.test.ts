@@ -132,9 +132,15 @@ const Frame = Schema.Struct({
 
 const SENT = "2026-11-14T00:00:00Z";
 
-/** Signs in as the test key through the door, sends `pid` one `inc` as `letter`, and answers the
- *  count the process's view shows after it. */
-const inc = Effect.fnUntraced(function* (instance: any, key: typeof TestKey.Type, pid: string, letter: string) {
+/** Signs in as the test key through the door, sends `pid` the one input `m` as `letter`, and
+ *  answers the `view.open` reply it reads after it. */
+const press = Effect.fnUntraced(function* (
+  instance: any,
+  key: typeof TestKey.Type,
+  pid: string,
+  letter: string,
+  m: { readonly type: string; readonly name?: string },
+) {
   const id = identity(key);
   const url: string = instance.url;
   const tab = `port-home-${letter}`;
@@ -189,13 +195,36 @@ const inc = Effect.fnUntraced(function* (instance: any, key: typeof TestKey.Type
     signed: id.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
   expect(hello.error, "the test key is admitted").toBeUndefined();
-  const sent = yield* ask("process.send", { pid, letter, m: { type: "inc" }, sentAt: SENT, seen: 0 });
+  const sent = yield* ask("process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
   expect(sent, "the input is accepted").toMatchObject({ result: { _tag: "accepted" } });
-  const opened = yield* ask("view.open", { pid });
-  return yield* Schema.decodeUnknownEffect(
-    Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Number }) }) }),
-  )(opened).pipe(Effect.map((answer) => answer.result.view.count));
+  return yield* ask("view.open", { pid });
 }, Effect.scoped);
+
+/** Sends a counter one `inc` through `press`, and answers the count its view shows after it. */
+const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: string) =>
+  press(instance, key, pid, letter, { type: "inc" }).pipe(
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Number }) }) }),
+      ),
+    ),
+    Effect.map((answer) => answer.result.view.count),
+  );
+
+/** Adds the item `name` to a checklist through `press`, and answers the item names its view shows. */
+const add = (instance: any, key: typeof TestKey.Type, pid: string, letter: string, name: string) =>
+  press(instance, key, pid, letter, { type: "add", name }).pipe(
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({
+            view: Schema.Struct({ items: Schema.Array(Schema.Struct({ name: Schema.String })) }),
+          }),
+        }),
+      ),
+    ),
+    Effect.map((answer) => answer.result.view.items.map((item) => item.name)),
+  );
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
   method: Schema.String,
@@ -414,7 +443,10 @@ const written = Effect.gen(function* () {
 // code this build does not have, as after any change to a program's code. The records read: each
 // process's checkpoint, its saved supervision (the build each `begin`
 // names), its activity marker, its lines on its own stream and its job records, after the open
-// and after counter:1 steps one real input signed with the fixture's test key.
+// and after each saved process steps one real input signed with the fixture's test key. Every
+// process steps, not only counter:1: whether the app's own checklist moved depends on whether its
+// bundle changed since the saved home, and a process that moved must show records that name its
+// code.
 // Plant: on 004c3c412 the open loads by name but keeps the saved hash, so a job record names it.
 
 /** A counter of the law's own, by state version: the app's counter machine and inputs, at `v`
@@ -622,7 +654,10 @@ const reopenedOnItsCode = Effect.gen(function* () {
   );
   const after = last?.rev ?? 0;
   expect(descriptors.length, "the saved home has its processes' descriptors").toBeGreaterThan(0);
+  // Each saved process steps below, so the law names them all: a new one needs its own step here.
+  expect(descriptors.map((d) => d.name).toSorted(), "the saved home's processes").toEqual(["checklist:1", "counter:1"]);
   const counter = descriptors.find((d) => d.name === "counter:1")!;
+  const checklist = descriptors.find((d) => d.name === "checklist:1")!;
   const since = BigInt(yield* Clock.currentTimeMillis) * 1_000_000n;
   const code = yield* open(
     home,
@@ -631,6 +666,10 @@ const reopenedOnItsCode = Effect.gen(function* () {
       Effect.gen(function* () {
         // The fixture's checkpoint holds count 1, so one more input shows 2.
         expect(yield* inc(instance, saved.key, counter.id, "t833-one"), "counter:1 stepped one real input").toBe(2);
+        expect(
+          yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
+          "checklist:1 stepped one real input",
+        ).toContain("t833 item");
         return Object.fromEntries(Object.entries(built.programs).map(([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
