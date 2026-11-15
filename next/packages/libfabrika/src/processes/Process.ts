@@ -475,17 +475,21 @@ export class ProcessTable {
   }
 
   /**
-   * The entries past the log rev `rev` this table has not folded, oldest first: the `processes`
-   * stream and each name this table knows past `rev`, and from rev 0 the stream of a name those new
-   * entries register, since its entries may sit below `rev`.
+   * The entries past the log rev `rev`, oldest first, when this table holds every entry up to it:
+   * the `processes` stream, and the stream of each name this table knows or those entries register.
+   *
+   * **Details**
+   *
+   * A name's stream holds nothing of the brain's below its own `registered` line: only the brain
+   * writes there, and it writes a name's first event in the turn that registers it, after that line.
+   * So a name registered past `rev` has nothing to fold at or below `rev` either.
    */
   after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, rev)];
-    const known = [...this.#model.names.keys()].flatMap((name) => [...read(eventStream(name), rev)]);
-    const fresh = registered(control, this.#by)
-      .filter((name) => !this.#model.names.has(name))
-      .flatMap((name) => [...read(eventStream(name), 0)]);
-    return [...control, ...known, ...fresh].sort((a, b) => a.rev - b.rev);
+    const names = new Set([...this.#model.names.keys(), ...registered(control, this.#by)]);
+    return [...control, ...[...names].flatMap((name) => [...read(eventStream(name), rev)])].sort(
+      (a, b) => a.rev - b.rev,
+    );
   }
 
   /** A new table with `entries` folded onto this one, oldest first; this table is unchanged. */

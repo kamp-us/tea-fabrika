@@ -9,7 +9,7 @@
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
-import { Entry, lineFor } from "../ledger/Log.ts";
+import { lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
@@ -42,9 +42,8 @@ type Failure = ProcessError | LedgerError;
  * key. Every event this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & { readonly by: string };
-/** A folded process table, the log rev it was folded through, and the entry at that rev, if any. */
-type Folded = { readonly table: ProcessTable; readonly rev: Rev; readonly entry: Entry | undefined };
-const sameEntry = Schema.toEquivalence(Entry);
+/** A folded process table and the log rev it was folded through. */
+type Folded = { readonly table: ProcessTable; readonly rev: Rev };
 
 const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
@@ -142,52 +141,23 @@ export class ProcessManager extends Context.Service<
         const tx = yield* LedgerTransaction;
         // The table this layer last folded from committed entries, and the log rev it was folded
         // through: a read model of the ledger, kept in memory for the layer's life, as an informer's
-        // cache. Only a fold made before its own turn appends anything replaces it, so a turn that
-        // rolls back never reaches it.
+        // cache. Only a fold made before its own turn appends anything replaces it, so it holds only
+        // committed entries, and the ledger never changes or drops one: its `entries` table takes
+        // only INSERTs. So the saved table stays true below its rev, and a fold past that rev gives
+        // every answer a fold from rev 0 gives.
         let folded: Folded | undefined;
         const fromZero = (turn: LedgerTurn): Folded => {
           const entries = ProcessTable.entries(turn.read, caller.by);
-          const entry = entries.at(-1);
-          return { table: new ProcessTable(entries, caller.by), rev: entry?.rev ?? 0, entry };
+          return { table: new ProcessTable(entries, caller.by), rev: entries.at(-1)?.rev ?? 0 };
         };
-        // Folds only the entries past the saved rev, or from rev 0 when the saved point no longer
-        // fits the ledger. Every answer is the one a fold from rev 0 gives.
         const forward = (turn: LedgerTurn): Folded => {
           if (folded === undefined) {
             return fromZero(turn);
           }
 
-          const { table, rev, entry } = folded;
-          let read = turn.read;
-
-          // The guard: the entry at the saved rev is still there and the same. A rollback or a
-          // rewrite below the saved rev fails it, and the table is folded again from rev 0. The
-          // same read gives that stream's new entries, so the guard costs no extra query.
-          if (entry !== undefined) {
-            const [kept, ...rest] = turn.read(entry.stream, rev - 1);
-
-            if (kept === undefined || !sameEntry(kept, entry)) {
-              return fromZero(turn);
-            }
-
-            read = (stream, after) => (stream === entry.stream && after === rev ? rest : turn.read(stream, after));
-          }
-
-          const fresh = table.after(read, rev);
-          const [oldest] = fresh;
+          const fresh = folded.table.after(turn.read, folded.rev);
           const last = fresh.at(-1);
-
-          if (oldest === undefined || last === undefined) {
-            return folded;
-          }
-
-          // A name the new entries register may have entries below the saved rev; folding them after
-          // the saved table would break log order, so the table is folded again from rev 0.
-          if (oldest.rev <= rev) {
-            return fromZero(turn);
-          }
-
-          return { table: table.fold(fresh), rev: last.rev, entry: last };
+          return last === undefined ? folded : { table: folded.table.fold(fresh), rev: last.rev };
         };
         // The table inside a turn that may already have appended: folded forward, never saved.
         const fold = (turn: LedgerTurn) => forward(turn).table;
