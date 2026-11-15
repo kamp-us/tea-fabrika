@@ -38,13 +38,16 @@ const close = (db: DatabaseSync): Effect.Effect<void> =>
  * **When to use**
  *
  * Use when a law writes a store in a temp folder the law made. Wrap it in `ScopedRef.fromAcquire` for
- * a law that reopens the store: `ScopedRef.set(ref, make(file))` closes the old connection first.
+ * a law that reopens the store: `ScopedRef.set(ref, make(file))` opens the new connection, then
+ * closes the old one.
  *
  * **Gotchas**
  *
  * - A file that will not open is a broken test, so it dies rather than fails.
  * - The journal lives in memory, so a second connection writing the same file at the same time can
  *   meet `database is locked`. Such a file belongs to `open`.
+ * - A reopen through `ScopedRef.set` holds two connections for a moment, so the old one must be idle
+ *   (no open transaction) when the law reopens.
  *
  * @stability unstable
  * @category constructors
