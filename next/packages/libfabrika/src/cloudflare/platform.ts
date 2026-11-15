@@ -220,6 +220,9 @@ export class ProjectClient extends Context.Service<
       processIsLive: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processIsLive RPC enters Effect
         Effect.tryPromise({ try: () => stub.processIsLive(...args), catch: unreachable }),
+      processAck: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project processAck RPC enters Effect
+        Effect.tryPromise({ try: () => stub.processAck(...args), catch: unreachable }),
       processMonitor: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processMonitor RPC enters Effect
         Effect.tryPromise({ try: () => stub.processMonitor(...args), catch: unreachable }),

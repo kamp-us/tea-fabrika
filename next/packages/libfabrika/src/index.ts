@@ -106,6 +106,10 @@ export * as Send from "./runtime/Send.ts";
 /**
  * @stability unstable
  */
+export * as Chunk from "./runtime/Chunk.ts";
+/**
+ * @stability unstable
+ */
 export * as StartChild from "./runtime/StartChild.ts";
 /**
  * @stability unstable

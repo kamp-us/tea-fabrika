@@ -10,8 +10,10 @@
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { Rev } from "../Rev.ts";
 import { ExitReason, sameReason } from "./ExitReason.ts";
 import {
   Code,
@@ -387,6 +389,46 @@ const isText = Schema.is(Text);
  * @category getters
  */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
+
+/**
+ * Returns the stream where the brain keeps how far a name's reader has read its inbox,
+ * `processes/<name>/acked`. Its prefix makes it brain-only, so no program write and no mail
+ * forges an ack.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const acked = (name: string): string => `${eventStream(name)}/acked`;
+
+/**
+ * Schema for one ack: the reader's live process, and the inbox pos its saved checkpoint reached.
+ * An inbox's unread letters are its newest pos minus the newest ack's.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Acked = Schema.TaggedStruct("acked", { process: ProcessId, pos: Rev });
+
+const decodeAcked = Schema.decodeUnknownOption(Acked);
+
+/**
+ * Returns the newest pos the brain acked for `name`, or 0 before any ack.
+ *
+ * **Details**
+ *
+ * It reads only the acked stream's newest entry, by an index, so it costs the same however many
+ * acks the stream holds. Only a line `by` wrote counts.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
+  const stream = acked(name);
+  const newest = [...turn.read(stream, Math.max(0, turn.head(stream) - 1))].at(-1);
+  return newest === undefined || newest.by !== by
+    ? 0
+    : Option.match(decodeAcked(valueFor(newest)), { onNone: () => 0, onSome: (ack) => ack.pos });
+};
 
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 

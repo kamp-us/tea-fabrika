@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
-import type { Sql } from "../Sql.ts";
+import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
 import type { Database } from "./RepliesTest.ts";
@@ -50,8 +50,25 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
   }
 });
 
+/** Copy saved rows into `sql`'s watcher table, column for column. */
+const restore = (sql: Sql, saved: ReadonlyArray<Record<string, SqlValue>>) => {
+  for (const row of saved) {
+    const columns = Object.keys(row);
+    sql.exec(
+      `INSERT INTO process_watchers (${columns.map((c) => `"${c}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+      ...columns.map((c) => row[c] ?? null),
+    );
+  }
+};
+
 export const suite = (database: Database) =>
   describe("saved watchers SQL, next/", () => {
+    // Only W3's fixed fill is shared, as in runtime/internal/watchers.test.ts: its 1026 opens take no
+    // generated value, and each rewrites the whole saved list. The first run makes them through the
+    // layer, checks them and keeps the row they leave; every later run copies that row into its own
+    // fresh database, then keeps the original generated walk and the full drain.
+    const filled: Array<Record<string, SqlValue>> = [];
+
     it.live.prop(
       "W3: names are isolated; refresh, removal and eviction keep a bounded live list",
       [Walk],
@@ -74,12 +91,24 @@ export const suite = (database: Database) =>
             const a = yield* build(sql, "counter:a", publish);
             const b = yield* build(sql, "counter:b", publish);
             yield* b.open("isolated", whole);
-            let held: Array<string> = [];
+            const opened = Array.from({ length: 1026 }, (_, i) => `window-${i}`);
+            let held = opened.slice(-1024);
 
-            for (let i = 0; i < 1026; i++) {
-              const client = `window-${i}`;
-              yield* a.open(client, whole);
-              held = [...held, client].slice(-1024);
+            if (filled.length === 0) {
+              for (const client of opened) {
+                yield* a.open(client, whole);
+              }
+
+              frames.length = 0;
+              yield* a.publish(patch);
+              expect(
+                frames.map((f) => f.client),
+                "the fill holds the newest 1024 in order",
+              ).toEqual(held);
+              filled.push(...rows(sql).filter((row) => row.name === "counter:a"));
+              expect(filled, "the fill is one saved row").toHaveLength(1);
+            } else {
+              restore(sql, filled);
             }
 
             for (const step of walk) {

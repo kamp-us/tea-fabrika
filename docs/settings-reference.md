@@ -188,6 +188,34 @@ The port the local instance listens on.
 | Reload | restart |
 | Since | 0.0.0 |
 
+### `mail.chunk`
+
+The most bytes in one letter of a chunked send.
+
+| Field | Value |
+|---|---|
+| Scope | repo |
+| Environment | `FABRIKA_MAIL_CHUNK` |
+| Flag | `--mail.chunk` |
+| Default | `"65536"` |
+| File default | `"65536 bytes"` |
+| File input | Text, using the spelling shown by the file default. Recorded values use JSON. |
+| Reload | restart |
+| Since | 0.0.0 |
+
+### `mail.unread`
+
+The most unread letters one inbox holds. A send past it answers full, and nothing is saved.
+
+| Field | Value |
+|---|---|
+| Scope | repo |
+| Environment | `FABRIKA_MAIL_UNREAD` |
+| Flag | `--mail.unread` |
+| Default | `256` |
+| Reload | restart |
+| Since | 0.0.0 |
+
 ### `pack.fabrika.settings.tezgah.new`
 
 The program a new tile starts.

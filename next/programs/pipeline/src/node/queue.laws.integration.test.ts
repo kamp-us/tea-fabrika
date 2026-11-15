@@ -32,6 +32,7 @@ import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { Redacted } from "effect";
@@ -199,7 +200,11 @@ const life = Effect.fnUntraced(function* (
           Layer.provide(RelationsMemory.layer([])),
           Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
         ),
-        ProgramMailLedger.layer({ grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) } }),
+        // T1041: mail.unread's largest value, so no law here meets a full inbox.
+        ProgramMailLedger.layer({
+          grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) },
+          cap: 16_384,
+        }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),
@@ -267,7 +272,7 @@ const life = Effect.fnUntraced(function* (
     const built = yield* Layer.buildWithScope(
       ProgramRunner.layer(
         { id: pid, name, program: status.state.code.program, build: BUILD, owner },
-        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 } },
+        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provide(own)),
       scope,
     );

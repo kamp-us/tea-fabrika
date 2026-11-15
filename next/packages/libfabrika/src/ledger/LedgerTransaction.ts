@@ -16,8 +16,8 @@ import type { Entry, Line } from "./Log.ts";
  * **Details**
  *
  * `read` gives every entry of the stream past `after`, with no page limit. `get` finds one entry by
- * its id and `head` gives a stream's newest rev, each by an index, so neither grows with the
- * stream. `append` returns the entry's place, a resend's first place included. When the referee refuses the line, `append`
+ * its id, `head` gives a stream's newest rev and `end` its newest pos, each by an index, so none
+ * grows with the stream. `append` returns the entry's place, a resend's first place included. When the referee refuses the line, `append`
  * throws a `LedgerError` with `reason: "refused"`, which rolls the whole turn back.
  *
  * @stability unstable
@@ -30,6 +30,9 @@ export interface LedgerTurn {
   readonly get: (stream: string, id: string) => Option.Option<Entry>;
   /** The stream's newest rev, or 0 for an empty stream. One index read. */
   readonly head: (stream: string) => Rev;
+  /** The pos of the stream's newest entry, or none for an empty stream. One index read, and no
+   *  entry's body. */
+  readonly end: (stream: string) => Option.Option<Rev>;
   readonly append: (stream: string, id: string, line: Line) => { readonly rev: Rev; readonly pos: Rev };
 }
 

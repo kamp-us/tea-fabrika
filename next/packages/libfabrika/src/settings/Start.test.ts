@@ -27,6 +27,9 @@ describe("instance start envelope, next/", () => {
           "gateway.window",
           "hands.target",
           "instance.port",
+          // T1041: the inbox cap and the chunk size.
+          "mail.chunk",
+          "mail.unread",
           "pack.fabrika.settings.tezgah.new",
         ]);
         const base = yield* StartsTest.input(recipe);

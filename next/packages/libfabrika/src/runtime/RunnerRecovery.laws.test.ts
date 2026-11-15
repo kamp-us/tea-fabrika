@@ -13,6 +13,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -172,7 +173,7 @@ describe("P12 saved mail recovery", () => {
                     build: "test",
                     owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                   },
-                  { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 } },
+                  { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                 ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
                 yield* Effect.gen(function* () {
                   const runner = yield* ProgramRunner,
@@ -404,7 +405,7 @@ describe("P34 id reuse at the runner", () => {
                       build: "test",
                       owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                     },
-                    { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 } },
+                    { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                   ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
                   const letter = (type: "inc" | "boom", n: number) => ({
                     id,

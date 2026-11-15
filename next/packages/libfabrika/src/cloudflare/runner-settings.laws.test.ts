@@ -33,6 +33,7 @@ import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "
 import { nodeExecution, workerExecution } from "../runtime/Execution.ts";
 import { Program, stepper } from "../runtime/Program.ts";
 import { ProgramRunner, type Swapped } from "../runtime/Runner.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -205,7 +206,7 @@ const world = () => {
         build: `build-v${v}`,
         owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
       },
-      { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, settings: handed },
+      { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default, settings: handed },
     ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
     return Effect.gen(function* () {
       // A first life folds one letter, so its checkpoint is saved and the next life is a real wake.
