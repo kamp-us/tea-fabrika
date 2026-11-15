@@ -493,3 +493,23 @@ Estimate: 6 steps, $40
 ## Findings
 
 None.
+
+## Amendment A-Workerd, 2026-11-15
+
+Two changes to the files table, found by the tests step after the build. Each replaces what the
+table above says where they differ; nothing else in the plan changes.
+
+- **M13 moves to the app.** Its old path, `next/packages/libfabrika/src/cloudflare/monitor.laws.integration.test.ts`,
+  cannot start workerd: libfabrika has no code that does, and it may not import the app. The app
+  has that setup (`worker-mail.integration.test.ts`, `record-wire.test-support.ts`,
+  `port.test-support.ts`), so M13 is written there, in the same shape. Its two programs are source
+  text inside the test file, bundled by the real app build, so it needs no fixture file of its own.
+- **`brain.ts` forwards the two new Project calls.** The Process object's watch reaches the Project
+  over RPC, and on workerd the Project class in the app is what answers it. It forwards
+  `programMonitor` and `programDemonitor` to `ProjectService` as it forwards `processChild` and
+  `processStop` today. Without them M13 is red on workerd.
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/apps/fabrika/src/worker-monitor.integration.test.ts | tests | tests | M13, on real workerd, CI's full run only; replaces the libfabrika path above |
+| next/apps/fabrika/src/brain.ts | build | 10 | `programMonitor` and `programDemonitor` on the Project class, forwarding to `ProjectService` |

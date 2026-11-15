@@ -1,5 +1,5 @@
 // Program watch (docs/plan/lanes/watch-PLAN.md), next/: the built-in `monitor` and `demonitor` Cmds on
-// real runners, laws M2, M3, M7, M8, M9 and M10, and no driver. A runner in the module that owns a
+// real runners, laws M2, M3, M7, M8, M9, M10 and M15, and no driver. A runner in the module that owns a
 // driver calls `MonitorTest.suite(open)`; `open` acquires real stores in a scope and gives them back
 // when that scope closes (0061, 0062).
 //
@@ -12,6 +12,8 @@
 //   race         the brain's monitor turn commits, and the watched life ends before the runner goes on
 //   lose_after   the brain's monitor turn commits, its reply is lost, and the call reaches the brain
 //                again under the same id, one to three times
+//   overtake     the brain's monitor turn commits, and another call's catch-up folds the saved answer
+//                before the runner's own settle does
 //   gate         a demonitor is held after it was dispatched, while the watched life ends
 //   cut          the ledger fails the write of a DOWN once, and with it the exit's turn
 //   reopen       the host goes away and comes back on the same stores
@@ -25,10 +27,25 @@
 //   Process.ts: `Down` gains `name`, the registered name the watch was made by.
 // The oracle is the walk's own record of what it asked and ended, the reader's saved model read from
 // its checkpoint, and the ledger's raw rows read with SQL; it never calls the product's fold.
-import { Machine } from "@demlik/tea/effect";
+import { Outcome } from "@demlik/tea";
+import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope } from "effect";
+import {
+  Arbitrary,
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Scope,
+} from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
@@ -94,47 +111,62 @@ const ReaderMsg = Schema.Union([
 
 const logged = (s: ReaderModel, entry: Schema.Json): ReaderModel => ({ log: [...s.log, entry] });
 
-const readerMachine = Machine.make({
-  model: ReaderModel,
-  msg: ReaderMsg,
-  cmds: [Monitor.monitor, Monitor.demonitor],
-  init: (loaded) => [loaded ?? { log: [] }, []],
-  update: {
-    watch: (s, m) => [s, [Monitor.monitor({ name: m.name })]],
-    forget: (s, m) => [s, [Monitor.demonitor({ ref: m.ref })]],
-    rows: (s, m) => [logged(s, { type: "rows", life: m.life, n: m.n }), []],
-    DOWN: (s, m) => [
-      logged(s, { type: "DOWN", ref: m.ref, process: m.process, name: m.name ?? null, reason: m.reason }),
-      [],
-    ],
-    monitor_ok: (s, m) => [
-      logged(s, { type: "monitor_ok", ref: m.value.ref, process: m.value.process, name: m.value.name }),
-      [],
-    ],
-    monitor_err: (s, m) => [logged(s, { type: "monitor_err", reason: m.error._tag }), []],
-    demonitor_ok: (s) => [logged(s, { type: "demonitor_ok" }), []],
-    demonitor_err: (s) => [logged(s, { type: "demonitor_err" }), []],
-  },
-});
+/** M15's follow-up: a Cmd the reader's own handler runs, so the walk sees every run. */
+const ping = Cmd.make("ping", { input: Schema.Struct({ ref: Schema.String }), ok: Schema.String, err: [] });
 
-const readerProgram = Program.make({
-  name: "reader",
-  machine: readerMachine,
-  state: { v: 1, upgrades: [] },
-  view: (s) => s,
-  refuse: () => null,
-  inputs: {
-    watch: "Watch a registered name",
-    forget: "End a watch",
-    rows: "A message from a process this program reads",
-    DOWN: "A process this program monitors has ended",
-  },
-  outputs: {},
-  writes: {},
-  wake: () => null,
-});
+/**
+ * A reader program. `reader` returns nothing on `monitor_ok`; `chaser` returns a `ping` for the
+ * watch's ref there, the follow-up M15 counts.
+ */
+const reading = (name: "reader" | "chaser") =>
+  Program.make({
+    name,
+    machine: Machine.make({
+      model: ReaderModel,
+      msg: ReaderMsg,
+      cmds: [Monitor.monitor, Monitor.demonitor, ping],
+      init: (loaded) => [loaded ?? { log: [] }, []],
+      update: {
+        watch: (s, m) => [s, [Monitor.monitor({ name: m.name })]],
+        forget: (s, m) => [s, [Monitor.demonitor({ ref: m.ref })]],
+        rows: (s, m) => [logged(s, { type: "rows", life: m.life, n: m.n }), []],
+        DOWN: (s, m) => [
+          logged(s, { type: "DOWN", ref: m.ref, process: m.process, name: m.name ?? null, reason: m.reason }),
+          [],
+        ],
+        monitor_ok: (s, m) => [
+          logged(s, { type: "monitor_ok", ref: m.value.ref, process: m.value.process, name: m.value.name }),
+          name === "chaser" ? [ping({ ref: m.value.ref })] : [],
+        ],
+        monitor_err: (s, m) => [logged(s, { type: "monitor_err", reason: m.error._tag }), []],
+        demonitor_ok: (s) => [logged(s, { type: "demonitor_ok" }), []],
+        demonitor_err: (s) => [logged(s, { type: "demonitor_err" }), []],
+        ping_ok: (s, m) => [logged(s, { type: "ping_ok", ref: m.value }), []],
+        ping_err: (s) => [logged(s, { type: "ping_err" }), []],
+      },
+    }),
+    state: { v: 1, upgrades: [] },
+    view: (s) => s,
+    refuse: () => null,
+    inputs: {
+      watch: "Watch a registered name",
+      forget: "End a watch",
+      rows: "A message from a process this program reads",
+      DOWN: "A process this program monitors has ended",
+    },
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
 
-const PROGRAMS: Record<string, unknown> = { [readerProgram.name]: readerProgram };
+type Reading = ReturnType<typeof reading>;
+const readerProgram = reading("reader");
+const chaserProgram = reading("chaser");
+
+const PROGRAMS: Record<string, unknown> = {
+  [readerProgram.name]: readerProgram,
+  [chaserProgram.name]: chaserProgram,
+};
 
 /** One entry of the reader's log, as the walk reads it back. */
 type Logged = {
@@ -256,7 +288,11 @@ type World = {
     gate: { readonly entered: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
     /** The next write of a DOWN fails once, and the turn that holds it with it. */
     cut: boolean;
+    /** After the next monitor's turn commits, another call's catch-up folds its answer first. */
+    overtake: ((ref: string) => Effect.Effect<void>) | undefined;
   };
+  /** The ref of each `ping` the readers' handler ran, one entry per run. */
+  readonly pings: Array<string>;
   readonly done: Set<string>;
   n: number;
 };
@@ -309,7 +345,13 @@ const cutting = (sql: Sql, world: World): Sql => ({
  * service behind the cut layer, and one runner per reader, all in `scope`. Closing the scope is the
  * host going away; the stores keep their rows.
  */
-const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effect.Effect<string>, scope: Scope.Scope) {
+const host = Effect.fnUntraced(function* (
+  store: Store,
+  world: World,
+  next: Effect.Effect<string>,
+  scope: Scope.Scope,
+  program: Reading,
+) {
   const shared = Layer.mergeAll(
     ProgramMailLedger.layer({ grants: GRANTS, cap: 16_384 }),
     MonitorsLedger.layer({ fabrika: FABRIKA }).pipe(
@@ -370,6 +412,16 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           target.live = false;
           world.ends.set(target.pid, race);
           world.done.add("race");
+        }
+
+        const overtake = world.fault.overtake;
+
+        if (overtake !== undefined) {
+          // The answer is saved: another call's catch-up folds it before this call's settle can.
+          world.fault.overtake = undefined;
+          yield* overtake(watch.id);
+        } else if (world.fault.lose === 0) {
+          world.done.add("settle");
         }
 
         if (world.fault.lose > 0) {
@@ -470,7 +522,14 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       }),
     );
     const own = Layer.mergeAll(
-      ProgramLoader.layer(PROGRAMS, {}),
+      ProgramLoader.layer(PROGRAMS, {
+        ping: (cmd: unknown) =>
+          Effect.sync(() => {
+            const ref = typeof cmd === "object" && cmd !== null && "ref" in cmd ? String(cmd.ref) : "";
+            world.pings.push(ref);
+            return Outcome.ok(ref);
+          }),
+      }),
       ProcessStore.layer(store.sql(`process-${name}`), { process: pid }),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(WatcherManager, { publish: () => Effect.void }),
@@ -479,7 +538,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const runner = ProgramRunner.layer(
-      { id: pid, name, program: readerProgram.name, build: BUILD, owner: person },
+      { id: pid, name, program: program.name, build: BUILD, owner: person },
       { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
     ).pipe(Layer.provide(own));
     runners.set(name, Context.get(yield* Layer.buildWithScope(runner, scope), ProgramRunner));
@@ -503,6 +562,7 @@ type Move =
   | "watch"
   | "watch_race"
   | "watch_lost"
+  | "watch_overtake"
   | "end_cut"
   | "send"
   | "send_stale"
@@ -522,7 +582,12 @@ type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
  * move possible there; once every reader has read its inbox to the end, each watch has the end the
  * walk's record gives it.
  */
-const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<Move>, done: Set<string>) =>
+const walk = (
+  open: Effect.Effect<Store, never, Scope.Scope>,
+  moves: ReadonlyArray<Move>,
+  done: Set<string>,
+  program: Reading,
+) =>
   Effect.fnUntraced(function* (cells: ReadonlyArray<Cell>) {
     const store = yield* open;
     const next = ids(...PIDS);
@@ -533,12 +598,13 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       watches: new Map(),
       ends: new Map(),
       forgets: [],
-      fault: { race: undefined, lose: 0, gate: undefined, cut: false },
+      fault: { race: undefined, lose: 0, gate: undefined, cut: false, overtake: undefined },
+      pings: [],
       done,
       n: 0,
     };
     let scope = yield* Scope.make();
-    let life = yield* host(store, world, next.next, scope);
+    let life = yield* host(store, world, next.next, scope, program);
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const runner = (name: string) => life.runners.get(name) ?? expect.fail(`no runner for ${name}`);
     const now = Clock.currentTimeMillis;
@@ -602,9 +668,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       switch (move) {
         case "watch":
         case "watch_race":
-        case "watch_lost": {
+        case "watch_lost":
+        case "watch_overtake": {
           const name = move === "watch_race" ? choose(live, cell.alt) : choose(TARGETS, cell.alt);
           const lives = world.targets.get(name)?.lives.length ?? 1;
+          const overtaking: Array<Fiber.Fiber<unknown>> = [];
 
           if (move === "watch_race") {
             world.fault.race = cell.reason;
@@ -614,9 +682,35 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             world.fault.lose = 1 + (cell.alt % 3);
           }
 
+          if (move === "watch_overtake") {
+            const pid = world.readers.get(reader)?.pid ?? "";
+            const held = scope;
+            world.fault.overtake = (ref) =>
+              Effect.gen(function* () {
+                // A wake's catch-up takes the permit the monitor's perform does not hold, and folds the
+                // saved answer; its Cmds wait for this call's Cmds to finish.
+                overtaking.push(yield* Effect.forkIn(wake(reader), held));
+                const folded = yield* savedLog(store, life.context, reader, pid).pipe(
+                  Effect.orDie,
+                  Effect.repeat({
+                    until: (log) => log.some((e) => e.type === "monitor_ok" && e.ref === ref),
+                    schedule: Schedule.spaced("2 millis"),
+                  }),
+                  Effect.timeoutOption(LIMIT),
+                );
+                expect(Option.isSome(folded), `M15: a catch-up folds ${ref}'s answer before the settle`).toBe(true);
+                world.done.add("overtake");
+              });
+          }
+
           const before = new Set(world.asked.keys());
           yield* say(reader, { type: "watch", name });
           world.fault.race = undefined;
+          world.fault.overtake = undefined;
+
+          for (const fiber of overtaking) {
+            yield* Fiber.join(fiber);
+          }
 
           if (lives > 1) {
             done.add("rewatch");
@@ -756,7 +850,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           yield* Scope.close(scope, Exit.void);
           yield* store.reopen;
           scope = yield* Scope.make();
-          life = yield* host(store, world, next.next, scope);
+          life = yield* host(store, world, next.next, scope, program);
 
           for (const name of READERS) {
             yield* answers(runner(name).init(), `${name}'s init after the reopen`);
@@ -815,6 +909,17 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       expect(placed.length, `${label}: one answer message`).toBe(1);
       const folded = log.filter((e) => e.type === "monitor_ok" && e.ref === id);
       expect(folded.length, `${label}: the watcher folds one answer, with the Cmd's id as its ref`).toBe(1);
+    }
+
+    // M15: the Cmds a watch's `monitor_ok` step made run exactly once, whichever call folded the
+    // answer the brain saved: a chaser's `ping` once per watch, a reader's nothing.
+    for (const watch of world.watches.values()) {
+      const owed = program.name === "chaser" ? 1 : 0;
+      const label = `M15: ${watch.reader} (${watch.watcher}) watching ${watch.target} as ${watch.ref}`;
+      const runs = world.pings.filter((ref) => ref === watch.ref).length;
+      const folded = logFor(watch.watcher).filter((e) => e.type === "ping_ok" && e.ref === watch.ref).length;
+      expect(runs, `${label}: its follow-up runs ${owed} times`).toBe(owed);
+      expect(folded, `${label}: the follow-up's answer folds ${owed} times`).toBe(owed);
     }
 
     // M3: in every reader life, a watch's answer folds before any DOWN for it.
@@ -918,14 +1023,19 @@ const Tape = fc.array(Cell, { minLength: 8, maxLength: 24, size: "max" });
 const prop = (
   name: string,
   open: Effect.Effect<Store, never, Scope.Scope>,
-  options: { readonly moves: ReadonlyArray<Move>; readonly required: ReadonlyArray<string>; readonly runs: Runs },
+  options: {
+    readonly moves: ReadonlyArray<Move>;
+    readonly required: ReadonlyArray<string>;
+    readonly runs: Runs;
+    readonly program?: Reading;
+  },
 ) =>
   it.effect(
     name,
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
-        const law = walk(open, options.moves, done);
+        const law = walk(open, options.moves, done, options.program ?? readerProgram);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
         const check = { seed: SEED, numRuns: runsFor(options.runs), includeErrorInReport: true, endOnFailure: true };
@@ -961,6 +1071,18 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         moves: ["watch", "watch_race", "end", "restart", "wake"],
         required: ["race", "noproc", "watch:live"],
         runs: RUNS,
+      },
+    );
+    // Plants: drop the catch-up's handling of its own answer to a still-pending monitor Cmd (the
+    // follow-up never runs); run the follow-up twice, once from each order.
+    prop(
+      "M15: the Cmds a monitor_ok step returns run exactly once, whether a catch-up folds the brain's saved answer before the runner's settle or the settle folds it",
+      open,
+      {
+        moves: ["watch", "watch_overtake", "watch_lost", "end", "restart", "wake"],
+        required: ["overtake", "settle", "lose_after", "noproc"],
+        runs: RUNS,
+        program: chaserProgram,
       },
     );
     // Plant: write a new round on each retry.
