@@ -59,7 +59,7 @@
     },
     {
       "name": "next-client",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/client"]
     },
     {

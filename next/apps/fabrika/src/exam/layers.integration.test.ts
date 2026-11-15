@@ -1291,6 +1291,7 @@ describe("layers", () => {
       "next-node": 10,
       "next-workers": 9,
       "next-libfabrika-entry": 8,
+      "next-client": 7, // P18: the window client, beside the door
       "next-door": 7,
       "next-desktop-core": 7,
       "next-schedules": 7,
@@ -1313,7 +1314,7 @@ describe("layers", () => {
   });
 
   // pinned: T953 L19, main's layer table at 85cb7c224, the last commit before the permission core took
-  // layer 3. Moving every row from the processes up by one may change numbers only: for each two rows
+  // layer 3, with the `next-client` row main added after it (P18). Moving every row from the processes up by one may change numbers only: for each two rows
   // that had a layer then, one is below the other now exactly when it was below then, so no import
   // that was refused becomes allowed and none that was allowed becomes refused.
   it("pinned: T953 L19 the renumbered layers keep the order of every pair of rows main had", () => {
