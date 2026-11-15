@@ -53,6 +53,12 @@ import { type Name, openNames } from "./names.ts";
 // A host started again opens each kept name again in the background, in the same session: the
 // agent keeps running between turns (T1), and opening a session calls no model. One that will not
 // open is `down`, with its why, and a turn to it says so.
+//
+// A name's helper processes (its adapter and the adapter's own children) live in its run's scope,
+// and end when that closes: on a dismiss, when it reopens down (its record stays for the next
+// host), when a summon is refused or cut off before its keep, and when the host stops. A turn's
+// end ends nothing, and neither does a tile closing or the app quitting: the host outlives the app.
+// Each end is a `helper ended` log line, with why.
 
 /** The words no agent is named: they mean a group, or the person. */
 const RESERVED = ["all", "here", "everyone", "me"];
@@ -299,15 +305,27 @@ export const summonManager = (options: {
       };
 
       /**
-       * Start a name's acp run, and hear it. Answers at once; `opened` is done once its session is
-       * open. A run keeps the flags it was first started with, so no setting is a flag: each is set
-       * after the session opens (`settle`), at every start. It runs in `at`, the name's own folder,
-       * or its project's root when that folder spells the root another way (a link, a subfolder).
+       * End a name's run: its scope closes, so its acp run ends, and with it the adapter's process
+       * group (Effect's spawner: SIGTERM, then SIGKILL). Logged with why, so a pile of helpers can
+       * be explained afterward. Closing a scope that is closed already does nothing more.
        */
-      const open = (name: Name, at: string = name.folder) =>
+      const ended = (own: Scope.Closeable, name: Name, reason: "dismissed" | "down" | "refused" | "interrupted") =>
+        Scope.close(own, Exit.void).pipe(
+          Effect.andThen(Effect.logInfo("helper ended")),
+          Effect.annotateLogs({ name: name.name, run: name.run, agent: name.agent, reason }),
+        );
+
+      /**
+       * Start a name's acp run in `own`, and hear it. Answers at once; `opened` is done once its
+       * session is open. The caller made `own` and closes it on every exit that does not keep the
+       * name, an interrupt inside this too. A run keeps the flags it was first started with, so no
+       * setting is a flag: each is set after the session opens (`settle`), at every start. It runs
+       * in `at`, the name's own folder, or its project's root when that folder spells the root
+       * another way (a link, a subfolder).
+       */
+      const open = (name: Name, own: Scope.Closeable, at: string = name.folder) =>
         Effect.gen(function* () {
           const { acpInRepo } = yield* acpCode;
-          const own = yield* Scope.fork(scope);
           const heard = yield* PubSub.unbounded<Heard>();
           const l: Live = {
             name,
@@ -375,7 +393,6 @@ export const summonManager = (options: {
           ).pipe(Effect.provide(nodeServices), Scope.provide(own));
 
           if (started.kind !== "running") {
-            yield* Scope.close(own, Exit.void);
             return yield* refuse(`${name.agent} would not start: ${started.why}`);
           }
 
@@ -401,7 +418,7 @@ export const summonManager = (options: {
           return l;
         });
 
-      /** Stop a name's run and let go of it. */
+      /** Stop a name's run and let go of it, its record too. */
       const close = (l: Live) =>
         Effect.gen(function* () {
           if (live.get(l.name.name) === l) {
@@ -409,7 +426,7 @@ export const summonManager = (options: {
           }
 
           changed();
-          yield* Scope.close(l.scope, Exit.void);
+          yield* ended(l.scope, l.name, "dismissed");
           yield* PubSub.shutdown(l.heard);
           yield* storage.remove(l.name.run).pipe(Effect.mapError((e) => new SummonRefused({ why: e.message })));
         });
@@ -550,20 +567,29 @@ export const summonManager = (options: {
           continue;
         }
 
-        const l = yield* open(name, root).pipe(Effect.result);
+        const run = yield* Scope.fork(scope);
+        const l = yield* open(name, run, root).pipe(Effect.result);
 
         if (l._tag === "Failure") {
+          yield* ended(run, name, "down");
           yield* downOf(name, l.failure);
           continue;
         }
 
         const agent = l.success;
         put(name.name, agent);
+        // Down means no process: a name that will not open or take its settings stays listed down
+        // with why, and its record stays for the next host, but its run ends. The close is forked
+        // in the manager's scope, since this fiber is in the name's own and would cut itself off.
         yield* opening(agent).pipe(
           Effect.flatMap((o) => settle(agent, o, { model: name.model.resolved, effort: name.effort.set })),
           Effect.exit,
-          Effect.flatMap((done) => readied(agent, Exit.asVoid(done))),
-          Effect.forkIn(agent.scope),
+          Effect.flatMap((done) =>
+            readied(agent, Exit.asVoid(done)).pipe(
+              Effect.andThen(Exit.isFailure(done) ? Effect.forkIn(ended(run, name, "down"), scope) : Effect.void),
+            ),
+          ),
+          Effect.forkIn(run),
         );
       }
 
@@ -609,28 +635,54 @@ export const summonManager = (options: {
                 since,
                 by,
               };
-              const l = yield* open(first);
-              const gone = (why: string) => close(l).pipe(Effect.andThen(refuse(why)));
-              const o = yield* opening(l).pipe(Effect.catch((e) => gone(e.why)));
-              const words = sorted(agent, settings, o);
+              // The run's scope is made before anything starts in it, and every exit that does not
+              // keep the name closes it: a refusal, or an interrupt anywhere from here to the keep,
+              // inside `open` too. Once kept, the name owns it until a dismiss or the host stops.
+              const { l, set, words } = yield* Effect.acquireUseRelease(
+                Scope.fork(scope),
+                (own) =>
+                  Effect.gen(function* () {
+                    const l = yield* open(first, own);
+                    const o = yield* opening(l);
+                    const words = sorted(agent, settings, o);
 
-              if (typeof words === "string") {
-                return yield* gone(words);
-              }
+                    if (typeof words === "string") {
+                      return yield* refuse(words);
+                    }
 
-              const set = yield* settle(l, o, words).pipe(Effect.catch((e) => gone(e.why)));
-              l.name = {
-                ...first,
-                model: { typed: words.model, resolved: set.model },
-                effort: { typed: words.effort, set: set.effort },
-              };
+                    const set = yield* settle(l, o, words);
+                    l.name = {
+                      ...first,
+                      model: { typed: words.model, resolved: set.model },
+                      effort: { typed: words.effort, set: set.effort },
+                    };
+                    // Kept and listed at once, or neither: no interrupt lands between the two.
+                    yield* Effect.uninterruptible(
+                      Effect.gen(function* () {
+                        if (!(yield* kept.take(l.name))) {
+                          return yield* refuse(`${name} was summoned meanwhile: dismiss ${name} first`);
+                        }
 
-              if (!(yield* kept.take(l.name))) {
-                return yield* gone(`${name} was summoned meanwhile: dismiss ${name} first`);
-              }
-
-              put(name, l);
-              yield* readied(l, Exit.void);
+                        put(name, l);
+                        yield* readied(l, Exit.void);
+                      }),
+                    );
+                    return { l, set, words };
+                  }),
+                // Listed with this scope means kept: an interrupt that lands just after the keep
+                // cuts only this call, never the name.
+                (own, exit) =>
+                  Exit.isSuccess(exit) || live.get(name)?.scope === own
+                    ? Effect.void
+                    : ended(own, first, Cause.hasInterruptsOnly(exit.cause) ? "interrupted" : "refused").pipe(
+                        Effect.andThen(storage.remove(first.run)),
+                        Effect.catch((e) =>
+                          Effect.logWarning("an unkept run's record was not removed").pipe(
+                            Effect.annotateLogs({ name, run: first.run, why: e.message }),
+                          ),
+                        ),
+                      ),
+              );
               yield* log("summoned", {
                 by,
                 name,

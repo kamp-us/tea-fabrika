@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-dock-fixed-tests-carry-no-label",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "rule_break",
+  "location": {
+    "path": "packages/fabrika/src/agents/claude/env.test.ts",
+    "line": 157
+  },
+  "says": "In today's version, seven fixed tests have no label at the start of their names: the plain-Node default test in env.test.ts, and the six L7 and L8 tests the plan calls scenarios.",
+  "proof": "env.test.ts:157 is titled `on plain Node, as these tests run, both default to nothing` with `Label: scenario.` only in a comment at line 158; oxlint-plugins/law-shape.ts:4 says a label only in a comment does not count. helpers.host.test.ts:156, 205 and 238 start with `${name}:`, run for two rows each, and are not properties.",
+  "cost": "A reader cannot tell these are meant as scenarios, and lint does not judge the host titles because they start with a template value.",
+  "head": "5fcc56dbca9c7e184324b0c6b81da93893b25d74",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}

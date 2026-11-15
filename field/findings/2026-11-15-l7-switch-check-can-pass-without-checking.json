@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-l7-switch-check-can-pass-without-checking",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": "packages/fabrika/src/agents/acp/helpers.host.test.ts",
+    "line": 119
+  },
+  "says": "In today's version, L7's check that a process on the Electron binary carries the switch fires only for a command line that starts with the exact path the test holds, so a child whose binary path is spelled another way passes unchecked, and a green run prints no group listing to tell.",
+  "proof": "helpers.host.test.ts:119 tests `p.line.startsWith(`${electron} `)` before it looks for ELECTRON_RUN_AS_NODE=1. The by-hand run at head 0af17320c passed 6 of 6, and its saved output holds only vitest's summary: no pid or command line of any group member.",
+  "cost": "If codex-acp's child names the binary through a link, L7 stays green with the switch missing on that child. The Electron Helper and LaunchServices checks in the same law would still catch an app that booted.",
+  "head": "0af17320c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}
