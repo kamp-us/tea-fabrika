@@ -49,6 +49,14 @@ type NextStep = {
   "working-directory"?: string;
 };
 
+// A test leg's time table and its timings upload, with the keys a plain step leaves out. The wiring
+// below adds both to each test job, last before the stop step.
+type Timed = Record<string, unknown> & {
+  if?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
+};
+
 const nextSteps = (list: NextStep[]) => list;
 
 type StepOf<T> = T extends { steps: readonly (infer S)[] } ? S : never;
@@ -202,6 +210,47 @@ const stop = {
 
 // Every job that carries the stop step: all of them but ci-required.
 const stopping = ["changes", "check", "typecheck", "test", "next"] as const;
+
+// TT1 and TT2: each test leg's time table, the job's last command, reading its own report and its
+// own job's steps with the token; then its timings file's upload. Both on every result, and neither
+// fails the job.
+const timeTable = (report: string): Timed => ({
+  name: "time table",
+  if: "always()",
+  "continue-on-error": true,
+  "timeout-minutes": 1,
+  env: {
+    GITHUB_TOKEN: token,
+    JOB_ID: `\${{ job.check_run_id }}`,
+    HEAD: env.HEAD,
+    LEG: `\${{ matrix.shard }}`,
+    REPORT: `\${{ runner.temp }}/${report}`,
+  },
+  run: "node .github/ci/time-table.ts",
+});
+
+// M1: a step outside the test jobs with the time table's command, the token and a loader that runs
+// any file first. Only the test jobs' exact table step may have the token.
+const loader = "--import ./x.mjs";
+
+const tableElsewhere = (): Timed => ({
+  run: "node .github/ci/time-table.ts",
+  env: { GITHUB_TOKEN: token, NODE_OPTIONS: loader },
+});
+
+const timings = (): Timed => ({
+  name: "timings",
+  if: "always()",
+  "continue-on-error": true,
+  "timeout-minutes": 1,
+  uses: "actions/upload-artifact@v7",
+  with: {
+    name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
+    path: `\${{ runner.temp }}/timings-\${{ github.job }}-\${{ matrix.shard }}.json`,
+    "if-no-files-found": "warn",
+    "retention-days": 90,
+  },
+});
 
 const valid = (label: string, extra: string) => ({
   name: label,
@@ -439,6 +488,10 @@ const wiring = fc
       step(clean, "next", "shard times").if = `\${{${gap}!cancelled()${gap}}}`;
     }
 
+    // TT1 and TT2: each test job ends its commands with its time table, then uploads its timings.
+    stepsOf(clean, "test").push(timeTable("tooling.json"), timings());
+    stepsOf(clean, "next").push(timeTable("next.json"), timings());
+
     // F1: the stop step comes last in every job but ci-required, after every step added above, its
     // `if` spaced as the rest.
     for (const job of stopping) {
@@ -584,6 +637,33 @@ const plants: [string, (workflow: Workflow) => void][] = [
       stepsOf(w, "check").splice(place(w, "check", "field rows"), 0, upload);
     },
   ],
+  // Q1 beside TT2: the one other upload is a test leg's timings file, exactly TT2's, in a test job.
+  // Anything else is still refused, and no allowed upload can carry a record's `tested-` name.
+  [
+    "Q1: typecheck uploads an artifact, before its stop step",
+    (w) => {
+      const upload = { name: "upload", uses: "actions/upload-artifact@v7", with: { name: "typecheck", path: "x" } };
+      stepsOf(w, "typecheck").splice(-1, 0, upload);
+    },
+  ],
+  [
+    "Q1: typecheck uploads a timings file, outside the test jobs",
+    (w) => stepsOf(w, "typecheck").splice(-1, 0, timings()),
+  ],
+  ...(["test", "next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    const upload = (w: Workflow) => (stepsOf(w, job) as Timed[]).find((s) => s["name"] === "timings")!;
+    return [
+      [
+        `Q1: ${job}'s timings upload is named as a tested-tree record`,
+        (w) => (upload(w).with!["name"] = `tested-\${{ github.sha }}-\${{ github.event.pull_request.base.sha }}`),
+      ],
+      [`Q1: ${job}'s timings upload overwrites an artifact of its name`, (w) => (upload(w).with!["overwrite"] = true)],
+      [
+        `Q1: ${job}'s timings upload takes another file`,
+        (w) => (upload(w).with!["path"] = `\${{ runner.temp }}/x.json`),
+      ],
+    ];
+  }),
   // M1: a push the merge queue already tested asks GitHub from changes' classify step alone. The
   // token is the workflow's (F3's plants hold its map), since changes' stop step needs it whole.
   [
@@ -2002,6 +2082,61 @@ const plants: [string, (workflow: Workflow) => void][] = [
       (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
     },
   ],
+  // TT1 and TT2: every test leg writes its time table and uploads its timings file. Each plant was
+  // also run once on workflow-lint.ts with its rule dropped, and that turned it red.
+  ...(["test", "next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    const steps = (w: Workflow) => stepsOf(w, job) as Timed[];
+    const named = (w: Workflow, name: string) => steps(w).find((s) => s["name"] === name)!;
+    const table = (w: Workflow) => named(w, "time table");
+    const upload = (w: Workflow) => named(w, "timings");
+    return [
+      [`TT1: ${job} drops its time table`, (w) => void steps(w).splice(place(w, job, "time table"), 1)],
+      [`TT1: ${job}'s time table skips a red leg`, (w) => (table(w).if = "success()")],
+      [`TT1: ${job}'s time table skips a canceled leg`, (w) => (table(w).if = "!cancelled()")],
+      [`TT1: ${job}'s time table can fail the job`, (w) => Reflect.deleteProperty(table(w), "continue-on-error")],
+      [`TT1: ${job}'s time table has no time limit`, (w) => Reflect.deleteProperty(table(w), "timeout-minutes")],
+      [`TT1: ${job}'s time table has no job id`, (w) => Reflect.deleteProperty(table(w).env!, "JOB_ID")],
+      [
+        `TT1: ${job}'s time table reads the other leg's report`,
+        (w) => (table(w).env!["REPORT"] = `\${{ runner.temp }}/${job === "test" ? "next" : "tooling"}.json`),
+      ],
+      [
+        `TT1: ${job}'s time table comes before shard times, so it misses that step`,
+        (w) => {
+          const [moved] = steps(w).splice(place(w, job, "time table"), 1);
+          steps(w).splice(place(w, job, "shard times"), 0, moved!);
+        },
+      ],
+      [`TT1: ${job} runs its time table twice`, (w) => void steps(w).splice(-1, 0, structuredClone(table(w)))],
+      [`TT2: ${job} drops its timings upload`, (w) => void steps(w).splice(place(w, job, "timings"), 1)],
+      [
+        `TT2: ${job}'s timings lose the attempt, so a rerun's upload clashes`,
+        (w) => (upload(w).with!["name"] = `timings-\${{ github.job }}-\${{ matrix.shard }}`),
+      ],
+      [`TT2: ${job}'s timings skip a red leg`, (w) => (upload(w).if = "success()")],
+      [`TT2: ${job}'s timings can fail the job`, (w) => Reflect.deleteProperty(upload(w), "continue-on-error")],
+      [`TT2: ${job}'s timings have no time limit`, (w) => Reflect.deleteProperty(upload(w), "timeout-minutes")],
+      [
+        `TT2: ${job}'s timings upload before the time table writes them`,
+        (w) => {
+          const [moved] = steps(w).splice(place(w, job, "timings"), 1);
+          steps(w).splice(place(w, job, "time table"), 0, moved!);
+        },
+      ],
+    ];
+  }),
+  // M1: the time table's exact step, in a test job, is the one test step that gets the token. The
+  // same command elsewhere, or with one more variable, does not. The typecheck plant passed the M1
+  // that let any step whose command is the time table's have the token.
+  ["M1: shard times gets the token too", (w) => (step(w, "test", "shard times").env = { GITHUB_TOKEN: token })],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w) => stepsOf(w, "typecheck").splice(-1, 0, tableElsewhere()),
+  ],
+  [
+    "M1: test's time table carries a loader beside the token",
+    (w) => ((stepsOf(w, "test").find((s) => s["name"] === "time table") as Timed).env!["NODE_OPTIONS"] = loader),
+  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -2440,7 +2575,8 @@ for (const [name, plant, error] of [
 
 // T1 to T5 on the checked-in check.yaml: each plant puts back one piece of how today's tests ran
 // before 0533, and gives its one error.
-const testError = "check.yaml: T1: the test job runs exactly its install, the tooling tests and shard times, once each";
+const testError =
+  "check.yaml: T1: the test job runs exactly its install, the tooling tests, shard times and its time table, once each";
 
 for (const [name, plant, error] of [
   [
@@ -2518,4 +2654,63 @@ it("T1 (0536): the tooling project, the test job's one project, holds no glob of
   expect(tooling).toBeDefined();
   expect(tooling!.test.include.length).toBeGreaterThan(0);
   expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+});
+
+// TT1 and TT2 on the checked-in check.yaml: the lint's own words for each, one error each.
+for (const [name, plant, error] of [
+  [
+    "TT1: next's time table skips a red leg",
+    (w: Parsed) => {
+      step(w, "next", "time table")["if"] = "success()";
+    },
+    "check.yaml: TT1: next ends its commands with the time table step once, on every result, never failing the job, reading next.json",
+  ],
+  [
+    // A change to its `with:` is Q1's too (the scenario after this block), so this one keeps it.
+    "TT2: the test job's timings skip a red leg",
+    (w: Parsed) => {
+      // The upload is one YAML alias in both test jobs, so the plant takes this job's own copy.
+      const list = w.jobs["test"]!.steps;
+      const at = place(w, "test", "timings");
+      list[at] = { ...list[at]!, if: "success()" };
+    },
+    "check.yaml: TT2: test uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",
+  ],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w: Parsed) => {
+      // Before its stop step, which stays last (F1).
+      w.jobs["typecheck"]!.steps.splice(-1, 0, tableElsewhere());
+    },
+    "check.yaml: M1: only changes' classify step and the test jobs' time tables get the token",
+  ],
+  [
+    "Q1: typecheck uploads a timings file, outside the test jobs",
+    (w: Parsed) => {
+      // Before its stop step, which stays last (F1).
+      w.jobs["typecheck"]!.steps.splice(-1, 0, timings());
+    },
+    "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",
+  ],
+] as const) {
+  it(`scenario: ${name} is named by its one error`, () => {
+    const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+    plant(workflow);
+    expect(lint(JSON.stringify(workflow))).toEqual([error]);
+  });
+}
+
+it("scenario: Q1 and TT2: a timings upload named as a tested-tree record is refused by both", () => {
+  // `matched` (changes.mjs) trusts an artifact by its `tested-<tree>-<base>` name from a green run,
+  // so a timings upload under that name could stand in for a record. The upload is one YAML alias
+  // in both test jobs, so the plant takes the test job's own copy.
+  const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  const list = workflow.jobs["test"]!.steps;
+  const at = place(workflow, "test", "timings");
+  list[at] = structuredClone(list[at]!);
+  (list[at]["with"] as Record<string, unknown>)["name"] = `tested-\${{ github.sha }}-base`;
+  expect(lint(JSON.stringify(workflow))).toEqual([
+    "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",
+    "check.yaml: TT2: test uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",
+  ]);
 });
