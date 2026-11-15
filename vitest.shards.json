@@ -326,7 +326,6 @@
   "next/packages/libfabrika/src/settings/Toml.types.test.ts": 0,
   "next/packages/libfabrika/src/settings/TomlEdit.test.ts": 5.6,
   "next/packages/libfabrika/src/settings/TomlParser.test.ts": 0.2,
-  "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0,
   "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": 0.2,
   "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.3,
   "next/packages/libfabrika/src/telemetry/Records.integration.test.ts": 5.2,
