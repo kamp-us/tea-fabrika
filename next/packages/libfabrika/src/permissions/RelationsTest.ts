@@ -18,6 +18,7 @@ import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import type { Sql } from "../Sql.ts";
+import { property } from "../Testing.test-support.ts";
 import * as Rebac from "./Rebac.ts";
 import * as Relation from "./Relation.ts";
 import { Relations } from "./Relations.ts";
@@ -28,7 +29,6 @@ import { Sender } from "./Senders.ts";
 /** One real store. */
 export type Store = { readonly sql: Sql };
 
-const SEED = 119120;
 const BRAIN = "SHA256:brain";
 const OTHER = "SHA256:program-writer";
 
@@ -222,13 +222,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("T953 the relation store's two layers", () => {
     // Plant: the memory layer ignores `unrelated` (RelationsMemory.ts).
     it.effect("L8: the memory and ledger layers agree on every tuple, with resent ids and another writer's rows", () =>
-      Effect.gen(function* () {
-        const law = agree(open);
-        const batches = fc.array(Cell, { minLength: 0, maxLength: 20 });
-        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(batches, (cells) => Effect.runPromise(Effect.scoped(law(cells))));
-        // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, endOnFailure: true }));
-      }),
+      property(fc.array(Cell, { minLength: 0, maxLength: 20 }), agree(open), { numRuns: 100, endOnFailure: true }),
     );
   });
