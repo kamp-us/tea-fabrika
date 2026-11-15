@@ -4,7 +4,7 @@
 // it holds `views.ts` to, from the plan: `windowFor(program)` answers the window that program's own
 // package exports, for every program of the app's table but `fabrika/tezgah`, the frame itself; the
 // tab decodes a tile's view with that window's `data`, so one program's decoder takes any view of
-// its own window and refuses the other windows' views.
+// its own window and refuses the other windows' views; a name no tile may show has no window.
 import { describe, expect, it } from "@effect/vitest";
 import { checklist } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
@@ -12,6 +12,7 @@ import { counter } from "@kampus/counter";
 import { counterWindow } from "@kampus/counter/window";
 import { fabsh } from "@kampus/fabsh";
 import { fabshWindow } from "@kampus/fabsh/window";
+import { ProgramName } from "@kampus/libfabrika/packs/ProgramName";
 import { Arbitrary, Result, Schema } from "effect";
 import { programs } from "../table.ts";
 import { windowFor } from "./views.ts";
@@ -32,6 +33,21 @@ const Views = Arbitrary.all({
   [counter.name]: Arbitrary.schema(Schema.toType(counterWindow.data)),
   [fabsh.name]: Arbitrary.schema(Schema.toType(fabshWindow.data)),
 });
+
+/** Program names no tile may show, drawn each run: the frame `fabrika/tezgah`, any program name,
+ *  and names that sit next to a table name (one with more after it, one in other case), each kept
+ *  only when it is a program name outside the tiles' programs. */
+const Outside = Arbitrary.map(
+  Arbitrary.all({
+    any: Arbitrary.schema(ProgramName),
+    near: Arbitrary.schema(Schema.Literals(SHOWN)),
+    more: Arbitrary.schema(ProgramName),
+  }),
+  ({ any, near, more }) =>
+    ["fabrika/tezgah", any, `${near}${more.slice(more.indexOf("/") + 1)}`, near.toUpperCase(), near.toLowerCase()]
+      .filter(Schema.is(ProgramName))
+      .filter((name) => !SHOWN.includes(name)),
+);
 
 const decodes = (schema: Schema.Top, view: unknown) =>
   Result.isSuccess(Schema.decodeUnknownResult(Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>))(view));
@@ -69,10 +85,15 @@ describe("Ticket 1042 N8: the tab registers a window for every program a tile ma
     },
   );
 
-  it("vector: N8: fabrika/tezgah, the frame, has no tile window, and a name outside the table has none", () => {
-    // vector: the two names the registry must never answer for: the frame itself, and a program the
-    // build lacks (the plan's start check refuses both as a value of tezgah.new).
-    expect(windowFor("fabrika/tezgah"), "N8: tezgah is the frame, never a tile").toBeNull();
-    expect(windowFor("fabrika/notes"), "N8: a program the build lacks has no window").toBeNull();
-  });
+  it.prop(
+    "N8: a program name no tile may show, fabrika/tezgah or any name outside the app's table, has no window registered",
+    { names: Outside },
+    ({ names }) => {
+      // The plan's start check refuses each of these as a value of tezgah.new; the registry must
+      // never answer for one either, however close it sits to a name the table has.
+      for (const name of names) {
+        expect(windowFor(name), `N8: ${name} is no tile's program, so it has no window`).toBeNull();
+      }
+    },
+  );
 });

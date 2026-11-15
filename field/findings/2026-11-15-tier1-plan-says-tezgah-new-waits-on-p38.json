@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-tier1-plan-says-tezgah-new-waits-on-p38",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/tier-1.md",
+    "line": 291
+  },
+  "says": "In next/, the Tier 1 plan's fabsh row still said a new tile shows a checklist until `tezgah.new` (P38 slice 5), so no tile shows `fabsh:1`, while ticket 1042 builds `tezgah.new` without P38 slice 5 and a split's new tile starts the shell. Fixed in the same pull request by the fix round of 2026-11-15: the row now says a split's new tile starts the program `tezgah.new` names, `fabrika/fabsh` by default, and the desk plan has a dated amendment saying ticket 1042 built the setting without P38 slice 5.",
+  "proof": "docs/plan/tier-1.md:291 read 'checklist until `tezgah.new` (P38 slice 5), so no tile in the tab shows `fabsh:1` yet', and docs/plan/tier-1.md:141 on the same head says a split opens the shell through the core pack's setting `tezgah.new`; docs/plan/lanes/desk-PLAN.md:232 and :478 also tie the setting to P38 slice 5.",
+  "cost": "A reader of the plan is told the opposite of what the branch builds, and may plan work that waits on P38 slice 5 for nothing.",
+  "head": "2f90f751ce5ddae7bf4602d54077f25c0a7f7c23",
+  "ticket": "kamp-us/tea-fabrika#1042",
+  "pr": "kamp-us/tea-fabrika#1312"
+}

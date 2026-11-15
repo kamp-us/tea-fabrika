@@ -287,9 +287,10 @@ In build order. "Decide first" lists only what no decision answers yet.
   that gives every word a role (S1); the tile with local echo, one draft frame in flight, and one
   `draft` client row per line; the library's `process.draft`, its own budget
   `gateway.draft-limit`, and the runner's memory-only draft. The boot starts `fabsh:1`. *2026-11-15,
-  after main's merge:* the app's tab draws only `fabrika/tezgah`'s tiles, and a new tile shows a
-  checklist until `tezgah.new` (P38 slice 5), so no tile in the tab shows `fabsh:1` yet; the
-  library's headless client still opens it in a tile of its own. The branch waits for the owner's
+  after main's merge:* the app's tab draws only `fabrika/tezgah`'s tiles, so no tile in the tab
+  shows the boot's `fabsh:1`; the library's headless client still opens it in a tile of its own.
+  *2026-11-15,* on its branch (ticket 1042): a split's new tile starts the program the core pack's
+  setting `tezgah.new` names, `fabrika/fabsh` by default, as `fabsh:<tile body>`. The branch waits for the owner's
   walk of the fabsh guidelines ([PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254)).
   Today's `tsh` (`packages/fabrika/src/shell/grammar.ts:83`) mapped the jobs and is not copied.
 - In code now (*2026-11-14,* slice 2a on the same branch, the plan's A6): a program word
