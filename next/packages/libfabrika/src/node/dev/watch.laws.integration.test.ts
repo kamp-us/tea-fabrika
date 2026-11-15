@@ -212,25 +212,36 @@ const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
 describe("P15 slice 1: the watcher", () => {
   it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes", async () => {
     const seen = new Set<string>();
+    const Save = fc.record({
+      program: fc.nat(),
+      sentinel: fc.stringMatching(/^[A-Z]{12}$/),
+      move: fc.constantFrom("fit", "syntax", "compiler"),
+      repeats: fc.integer({ min: 1, max: 3 }),
+    });
+    type Save = typeof Save extends fc.Arbitrary<infer A> ? A : never;
+    const moves: ReadonlyArray<Save["move"]> = ["fit", "syntax", "compiler"];
+    // One save of each move runs before the random tail: three seeded runs at the fast depth drew no
+    // compiler move, so the reach check below failed while every rebuild was fine
+    // (field/findings/2026-11-15-watch-l17-misses-compiler-move.json).
+    const each = moves.map((move): [Save] => [{ program: 0, sentinel: "AAAAAAAAAAAA", move, repeats: 1 }]);
     await fc.assert(
-      fc.asyncProperty(fc.gen(), (g) =>
+      fc.asyncProperty(Save, (save) =>
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
               const fs = yield* FileSystem.FileSystem;
               const path = yield* Path.Path;
               const { home, programs } = yield* fixture;
-              const selected = programs[g(fc.nat, { max: programs.length - 1 })]!;
+              const selected = programs[save.program % programs.length]!;
               const short = selected.name.split("/")[1]!;
               const file = path.join(home, "programs", short, "program.ts");
               const original = yield* fs.readFileString(file);
-              const sentinel = `P15SECRET${g(() => fc.stringMatching(/^[A-Z]{12}$/))}`;
+              const sentinel = `P15SECRET${save.sentinel}`;
               const warnings = yield* Effect.acquireRelease(
                 Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
                 (spy) => Effect.sync(() => spy.mockRestore()),
               );
-              const moves = ["fit", "syntax", "compiler"];
-              const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+              const move = save.move;
               // A duplicate key makes Rolldown warn with a source excerpt while the program still builds.
               let text = `${original}\nglobalThis.__p15Secret = {${JSON.stringify(sentinel)}: 1, ${JSON.stringify(sentinel)}: 2};\n`;
 
@@ -318,7 +329,7 @@ describe("P15 slice 1: the watcher", () => {
                 }
               }
 
-              const repeats = g(fc.integer, { min: 1, max: 3 });
+              const repeats = save.repeats;
 
               for (let n = 0; n < repeats; n++) {
                 yield* opened.watchers[firstWatcher]!.repeat;
@@ -358,7 +369,7 @@ describe("P15 slice 1: the watcher", () => {
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true, examples: each },
     );
     expect(seen).toEqual(new Set(["fit", "syntax", "compiler"]));
   }, 300_000);

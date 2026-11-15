@@ -64,19 +64,23 @@ const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 );
 
 describe("P12 local brain life", () => {
-  it("p81 plant: sample workerd RSS, replace at 500000000, never measure the Node parent", async () => {
+  // The memory restart plan makes the limit a setting, `desktop.brain-memory`, so the law generates it;
+  // the pinned cases keep 0292's 500 MB mark.
+  it("p81 plant: sample workerd RSS, replace at the limit, never measure the Node parent", async () => {
     const child = fc.integer({ min: 1 }).filter((pid) => pid !== process.pid);
-    const belowCap: [number, number] = [499_999_999, 417];
-    const atCap: [number, number] = [500_000_000, 417];
-    const aboveCap: [number, number] = [500_000_001, 417];
+    const belowCap: [number, number, number] = [499_999_999, 417, 500_000_000];
+    const atCap: [number, number, number] = [500_000_000, 417, 500_000_000];
+    const aboveCap: [number, number, number] = [500_000_001, 417, 500_000_000];
+    const limit = fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER });
     await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), child, (bytes, pid) =>
+      fc.asyncProperty(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), child, limit, (bytes, pid, limit) =>
         runNode(
           Effect.gen(function* () {
             const sampled: Array<number> = [],
               requests: Array<unknown> = [];
             yield* checkMemory({
               pid,
+              limit,
               sample: (pid: number) =>
                 Effect.sync(() => {
                   sampled.push(pid);
@@ -89,7 +93,7 @@ describe("P12 local brain life", () => {
             });
             expect(sampled).toEqual([pid]);
             expect(sampled).not.toContain(process.pid);
-            expect(requests).toEqual(bytes < 500_000_000 ? [] : [{ reason: "memory", pid, bytes }]);
+            expect(requests).toEqual(bytes < limit ? [] : [{ reason: "memory", pid, bytes }]);
           }),
         ),
       ),
