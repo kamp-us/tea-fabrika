@@ -236,14 +236,16 @@ const githubReads: Plugin = {
   },
 };
 
-// vitest.shards.ts reads its table, vitest.shards.json, from disk, so that a row edit is no file the
-// config imports, which would select every test. The table is that module's watched file here, so
-// `--changed` follows it as an edge: a row edit selects the tests that import vitest.shards.ts.
+// vitest.shards.ts reads its tables, vitest.shards.json and the full-depth vitest.shards.full.json,
+// from disk, so that a row edit is no file the config imports, which would select every test. Each
+// table is that module's watched file here, so `--changed` follows it as an edge: a row edit selects
+// the tests that import vitest.shards.ts.
 const shardTable: Plugin = {
   name: "fabrika-shard-table",
   transform(_code, id) {
     if (relative(root, id) === "vitest.shards.ts") {
       this.addWatchFile(join(root, "vitest.shards.json"));
+      this.addWatchFile(join(root, "vitest.shards.full.json"));
     }
 
     return null;
