@@ -245,7 +245,12 @@ describe("the quest's state file", () => {
         const boxes = yield* temp;
         yield* fs.makeDirectory(`${boxes}/state`);
         const state = `${boxes}/state/quest.json`;
-        const before = { quest: "quest", ticket: "7", head: sha, steps: [{ step: "build", outcome: "done", head: sha }] };
+        const before = {
+          quest: "quest",
+          ticket: "7",
+          head: sha,
+          steps: [{ step: "build", outcome: "done", head: sha }],
+        };
         yield* fs.writeFileString(state, JSON.stringify(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
@@ -286,7 +291,11 @@ describe("the quest's state file", () => {
         };
         yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
         const done = { _tag: "done", reason: "ok" } as const;
-        yield* recordInQuest({ boxes, quest: "t9", name: "t9-host1", head: sha }, { outcome: done, head: sha, log: null }, "t1");
+        yield* recordInQuest(
+          { boxes, quest: "t9", name: "t9-host1", head: sha },
+          { outcome: done, head: sha, log: null },
+          "t1",
+        );
         const after = JSON.parse(yield* fs.readFileString(state));
         expect(after).toMatchObject({
           quest: "t9",

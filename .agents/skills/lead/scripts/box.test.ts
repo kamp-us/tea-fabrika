@@ -1644,7 +1644,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                     step: "mutation",
                     // drive writes `skip` for a mutation step that answered skip (ticket 423).
                     outcome:
-                      { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ?? "stopped",
+                      { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ??
+                      "stopped",
                     why: "drive.ts mutation fixture row",
                   })}\n`,
                 );

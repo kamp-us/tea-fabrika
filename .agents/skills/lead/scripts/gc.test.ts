@@ -18,8 +18,8 @@ import {
   STUCK,
   worktreePrs,
 } from "./gc.ts";
-import { IDLE } from "./quest.ts";
 import { PgrepAnswer } from "./pgrep.ts";
+import { IDLE } from "./quest.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);

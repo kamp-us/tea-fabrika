@@ -382,6 +382,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
     "tools",
     "minutes",
   ];
+
   for (const [schema, file, fields, key, required] of [
     [Note, fileOf("notes"), noteFields, "id", noteRequired],
     [OldNote, fileOf("notes"), noteFields.map(beforeRename), "id", noteRequired.map(beforeRename)],

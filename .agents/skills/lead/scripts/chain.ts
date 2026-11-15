@@ -140,13 +140,13 @@ import {
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
-import { pinFolder, stepOf, wipOf } from "./quest.ts";
 import * as Pin from "./pin.ts";
 import * as Plants from "./plants.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
+import { pinFolder, stepOf, wipOf } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1020,7 +1020,9 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const end = looseningEnd(s.pr, m.value);
-        return end === null ? [{ phase: "landing", quest: s.quest, pr: s.pr }, [land({ pr: s.pr })]] : over(s.quest, end);
+        return end === null
+          ? [{ phase: "landing", quest: s.quest, pr: s.pr }, [land({ pr: s.pr })]]
+          : over(s.quest, end);
       },
       loosen_err: (s): Step =>
         s.phase === "loosening"

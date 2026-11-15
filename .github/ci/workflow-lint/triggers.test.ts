@@ -77,6 +77,7 @@ it("0546: a quest plan is ignored in docs/plan/quests/ and, for a pull request s
   for (const folder of ["quests", "lanes"]) {
     const plan = `docs/plan/${folder}/t290-s2-PLAN.md`;
     expect(ignoredBy(plan), plan).toBe(true);
+
     for (const draft of [true, false]) {
       const { field, ...heavy } = jobs([plan], "pull_request", draft);
       expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);

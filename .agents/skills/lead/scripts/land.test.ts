@@ -320,7 +320,9 @@ describe("land.ts, today's tooling", () => {
     const got = land({ ...fine, open: "41" });
     expect(got.code, got.err).toBe(0);
     expect(got.calls).toContainEqual(
-      expect.stringMatching(/^gh api -X PATCH repos\/owner\/repo\/pulls\/41 -f title=T652 fixture: one quest -F body=@/),
+      expect.stringMatching(
+        /^gh api -X PATCH repos\/owner\/repo\/pulls\/41 -f title=T652 fixture: one quest -F body=@/,
+      ),
     );
     expect(got.calls.at(-1)).toBe(`gh pr merge 41 -R owner/repo --squash --match-head-commit ${got.head}`);
   });

@@ -2,7 +2,6 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
-import { Predicate } from "effect";
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -11,7 +10,7 @@ import { Predicate } from "effect";
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
 export const questKeyed = (saved: unknown): unknown => {
-  if (!Predicate.isObject(saved) || !("lane" in saved)) {
+  if (typeof saved !== "object" || saved === null || !("lane" in saved)) {
     return saved;
   }
 
