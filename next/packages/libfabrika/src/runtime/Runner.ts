@@ -64,6 +64,7 @@ import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import { QuotasError, RecoveryReserveExhausted, type Accounting } from "../processes/Quotas.ts";
 import { Result as TaskResult } from "../tasks/Task.ts";
 import * as Chaos from "./Chaos.ts";
 import * as Chunk from "./Chunk.ts";
@@ -82,11 +83,12 @@ import { HandsInput } from "./Hands.ts";
 import { HandsTasks } from "./HandsTasks.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { handsDelivery } from "./internal/handsDelivery.ts";
-import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
+import { Failure, Policy, type Receipt, Work } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { QuotaWaiting, reserveFault } from "./QuotaRunner.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
@@ -185,10 +187,9 @@ export type Descriptor = {
 
 /** A Cmd the runner has saved as dispatched and not yet seen answered. Its id is stable: the
  *  process, the inbox position of the letter whose step made it, and its index there. */
-const Dispatched = Schema.Struct({
+const CommandFields = {
   id: Schema.NonEmptyString,
   cmd: Schema.Json,
-  state: Schema.Literal("dispatched"),
   parent: Schema.NullOr(ParentText),
   traceId: Schema.String,
   build: Schema.String,
@@ -202,7 +203,13 @@ const Dispatched = Schema.Struct({
   chunk: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   /** A hands Cmd's saved delivery, which only its machine changes. Absent reads as `pending`. */
   hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } })),
-});
+};
+
+/** A Cmd is dispatched, or its answer is saved and waits for room to be mailed (0147). */
+const Dispatched = Schema.Union([
+  Schema.Struct({ ...CommandFields, state: Schema.Literal("dispatched") }),
+  Schema.Struct({ ...CommandFields, state: Schema.Literal("waiting_answer"), answer: Schema.Json }),
+]);
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 
@@ -231,6 +238,9 @@ const decodeChunksInput = Schema.decodeUnknownResult(ChunksInput);
 const decodeTarget = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String, to: Schema.String }));
 const isRefusal = Schema.is(MailRefusal);
 
+/** Whether a journal state is program work; the stores charge recovery by the same schema. */
+const isWork = Schema.is(Work);
+
 /** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
@@ -246,7 +256,7 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS]);
  *  or a hands Cmd the Project has not saved yet): the next alarm tries it again. A hands task that
  *  only waits on the hands is owed nothing: a wake or a due asks it again (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
-  cmds.some((cmd) => cmd.mail === true && cmd.hands?._tag !== "waiting");
+  cmds.some((cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
 
 /** The name a send or a send_chunks mails, or none for any other Cmd. */
 const mailTarget = (job: Dispatched): Option.Option<string> =>
@@ -408,7 +418,12 @@ export type RunnerOptions = {
    * The object's SQL for the recovery journal, the terminal replies and the watchers, the
    * registered name the journal is kept under, and the most bytes that database may hold.
    */
-  readonly recovery: { readonly sql: Sql; readonly name: string; readonly capacity: number };
+  readonly recovery: {
+    readonly sql: Sql;
+    readonly name: string;
+    readonly capacity: number;
+    readonly accounting?: Accounting;
+  };
   /**
    * Called at each named cut point in recovery, right after a step is saved. A failure it returns
    * stops the turn there, which is how a test cuts a recovery short. Left out, nothing is called.
@@ -609,9 +624,9 @@ export class ProgramRunner extends Context.Service<
         });
         /** Which delivery limit wins: the program's own, else the wiring's (3 when it sets none). */
         const deliveries = (s: Supervision): number => s.maxDeliveries ?? s.policy.maxDeliveries;
-        /** The journal is replacing its process: no program work runs until it is idle again. */
-        const recovering = (s: Supervision | null): boolean =>
-          s !== null && s.journal._tag !== "idle" && s.journal._tag !== "stepping" && s.journal._tag !== "checking";
+        /** The journal is replacing its process: no program work runs until it is idle again. The
+         *  stores charge their writes to recovery by the same rule. */
+        const recovering = (s: Supervision | null): boolean => s !== null && !isWork(s.journal);
         /** When recovery waits: down's own wait, or a successor's start that is not due yet. */
         const waitUntil = (s: Supervision | null): number | null => {
           const j = s?.journal;
@@ -648,7 +663,7 @@ export class ProgramRunner extends Context.Service<
           }
 
           const wake = running ? (live?.wake ?? null) : null;
-          const next = wake === null ? until : until === null ? wake : Math.min(wake, until);
+          const next = retryAt ?? (wake === null ? until : until === null ? wake : Math.min(wake, until));
 
           if (alarmAt === next) {
             return;
@@ -656,6 +671,10 @@ export class ProgramRunner extends Context.Service<
 
           yield* alarm.set(next);
           alarmAt = next;
+        });
+        const waitForRoom = Effect.gen(function* () {
+          const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
+          yield* setAlarm((yield* Clock.currentTimeMillis) + backoff);
         });
         const adopt = Effect.fnUntraced(function* (id: string, build: string) {
           if (process.id === id && process.build === build) {
@@ -1157,8 +1176,16 @@ export class ProgramRunner extends Context.Service<
               j._tag === "checking" && receipt !== undefined
                 ? { type: "check_threw", seq: attempt.seq, receipt, error, reason: fromFailure(failure), from: meta }
                 : { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta };
-            // The original program failure wins even when its observation cannot be saved.
-            yield* observed(msg, attempt.process, { failure, content: original }).pipe(Effect.mapError(() => wrapped));
+            // The original program failure wins even when its observation cannot be saved, except a
+            // reserve fault: that reports the brain's stop, keeping the failed step as its cause.
+            yield* observed(msg, attempt.process, { failure, content: original }).pipe(
+              Effect.mapError((error) => {
+                const fault = reserveFault(error);
+                return fault === undefined
+                  ? wrapped
+                  : new QuotasError({ reason: new RecoveryReserveExhausted({ ...fault, cause: wrapped }) });
+              }),
+            );
             return yield* wrapped;
           }
 
@@ -1285,7 +1312,10 @@ export class ProgramRunner extends Context.Service<
                   onSome: (letter) => (letter.rev === next.after ? letter.pos : 0),
                 });
           retry = cmds.filter(
-            (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
+            (cmd) =>
+              cmd.mail === true ||
+              cmd.state === "waiting_answer" ||
+              Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
           );
           const woke: Live = {
             loaded,
@@ -2050,6 +2080,11 @@ export class ProgramRunner extends Context.Service<
 
           const type = cmdType(job);
 
+          // An answer saved while the program had no room is mailed as it was, and the Cmd never runs again.
+          if (job.state === "waiting_answer") {
+            return yield* place(job, origin, originStore, job.answer);
+          }
+
           if (type === HANDS) {
             const answer = yield* cmdSpan(job, hands(state, job, origin));
             return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
@@ -2100,46 +2135,73 @@ export class ProgramRunner extends Context.Service<
         /** Saves one Cmd's answer as its letter and folds it, or, when the life that dispatched it
          *  ended meanwhile, records it in that life's stream. Answers the Cmds the fold made. */
         const place = (job: Dispatched, origin: Descriptor, originStore: ProcessStore["Service"], m: unknown) =>
-          permit.withPermit(
-            Effect.gen(function* () {
-              const answer = `${job.id}/answer`;
+          permit
+            .withPermit(
+              Effect.gen(function* () {
+                const answer = `${job.id}/answer`;
 
-              if (origin.id !== process.id || recovering(supervision)) {
-                yield* originStore.record(
-                  answer,
-                  RuntimeRecord.cases["cmd.answered"].make({
-                    m: Schema.decodeUnknownSync(Schema.Json)(m),
-                    cmd: job.id,
-                    build: origin.build,
-                  }),
-                  { ...(yield* from(job.parent, job.traceId)), build: origin.build },
-                );
-                const old = yield* originStore.load;
+                if (origin.id !== process.id || recovering(supervision)) {
+                  yield* originStore.record(
+                    answer,
+                    RuntimeRecord.cases["cmd.answered"].make({
+                      m: Schema.decodeUnknownSync(Schema.Json)(m),
+                      cmd: job.id,
+                      build: origin.build,
+                    }),
+                    { ...(yield* from(job.parent, job.traceId)), build: origin.build },
+                  );
+                  const old = yield* originStore.load;
 
-                if (old !== null) {
-                  yield* originStore.save({
-                    ...old,
-                    cmds: old.cmds.filter(
-                      (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
-                    ),
-                  });
+                  if (old !== null) {
+                    yield* originStore.save({
+                      ...old,
+                      cmds: old.cmds.filter(
+                        (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
+                      ),
+                    });
+                  }
+
+                  return [];
                 }
 
-                return [];
-              }
+                const current = yield* ready();
+                const sent = yield* mailbox
+                  .send(process.name, answer, m, yield* from(job.parent, job.traceId))
+                  .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
-              const current = yield* ready();
-              const sent = yield* mailbox
-                .send(process.name, answer, m, yield* from(job.parent, job.traceId))
-                .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
+                if (sent._tag === "refused") {
+                  if (sent.reason === "quota") {
+                    return yield* new QuotaWaiting();
+                  }
 
-              if (sent._tag === "refused") {
-                return yield* new LedgerError({ reason: "refused", message: sent.reason });
-              }
+                  return yield* new LedgerError({ reason: "refused", message: sent.reason });
+                }
 
-              return (yield* catchUp(current, { mine: answer })).fresh;
-            }),
-          );
+                return (yield* catchUp(current, { mine: answer })).fresh;
+              }),
+            )
+            .pipe(
+              Effect.catchTag("QuotaWaiting", () =>
+                permit.withPermit(
+                  Effect.gen(function* () {
+                    if (live !== null && job.state !== "waiting_answer") {
+                      const answer = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
+                      const next = {
+                        ...live,
+                        cmds: live.cmds.map((cmd): Dispatched =>
+                          cmd.id === job.id ? { ...cmd, state: "waiting_answer", answer } : cmd,
+                        ),
+                      };
+                      yield* store.save(checkpoint(next, null));
+                      live = next;
+                    }
+
+                    yield* waitForRoom;
+                    return [] as ReadonlyArray<Dispatched>;
+                  }),
+                ),
+              ),
+            );
 
         /** Sets the alarm that tries a failed drain again. The permit is held. */
         const retryLater = Effect.gen(function* () {
@@ -2439,7 +2501,7 @@ export class ProgramRunner extends Context.Service<
                 // Any alarm tries again every host Cmd a failure left dispatched.
                 mailRetry = null;
                 const state = yield* ready();
-                const sends = state.cmds.filter((cmd) => cmd.mail === true);
+                const sends = state.cmds.filter((cmd) => cmd.mail === true || cmd.state === "waiting_answer");
 
                 if (state.wake === null || state.wake > time) {
                   yield* setAlarm();
@@ -2464,12 +2526,17 @@ export class ProgramRunner extends Context.Service<
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
                 if (sent._tag === "refused") {
+                  if (sent.reason === "quota") {
+                    return yield* new QuotaWaiting();
+                  }
+
                   return yield* new LedgerError({ reason: "refused", message: sent.reason });
                 }
 
                 const { fresh } = yield* catchUp(state, { mine: id });
                 return { answer: undefined, jobs: [...sends, ...fresh] };
               }).pipe(
+                Effect.catchTag("QuotaWaiting", () => Effect.as(waitForRoom, { answer: undefined, jobs: [] })),
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
@@ -2757,6 +2824,7 @@ type RunnerFailure =
   | ProcessError
   | NotGranted
   | RepliesError
+  | QuotasError
   | WatchersError;
 
 /** Why a checked write did not land: a refusal, or a fault in the ledger or the session table. */

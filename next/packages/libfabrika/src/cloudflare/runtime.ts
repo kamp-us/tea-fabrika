@@ -46,6 +46,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
+import { WritePolicy } from "../ledger/WritePolicy.ts";
 import { Model } from "../permissions/Model.ts";
 import * as Relation from "../permissions/Relation.ts";
 import { Relations } from "../permissions/Relations.ts";
@@ -80,6 +81,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import { Quotas, type QuotasError } from "../processes/Quotas.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
@@ -95,6 +97,7 @@ import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as QuotaRunner from "../runtime/QuotaRunner.ts";
 import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import type { RepliesError } from "../runtime/Replies.ts";
 import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner.ts";
@@ -135,6 +138,7 @@ import { mailLayer, wakeups } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import * as Publish from "./Publish.ts";
+import * as ProjectQuotas from "./quotas.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
@@ -340,6 +344,12 @@ export interface ProjectDoorOptions {
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
+  /**
+   * Whether the program behind `process` has room for this input, asked before it is saved (0147).
+   * `before` counts the entries the door writes ahead of the message, so the trial measures the
+   * message at the place it will land.
+   */
+  readonly admit: (process: string, input: Incoming, before: number) => Effect.Effect<boolean, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
   /** Watches `pid` for one window session, `to`, in the Project's turn. */
   readonly monitor: (
@@ -712,7 +722,7 @@ const flushed = SpanSink.use((sink) => sink.flush);
  * **Details**
  *
  * The flush is skipped when the call failed with a `RateCountFailure`, when `counted` is true of its
- * value, or when it answered a `reserved` or `rate_limited` refusal. A failed flush fails a call that
+ * value, or when it answered a `reserved`, `rate_limited` or `quota` refusal. A failed flush fails a call that
  * succeeded; a call that failed keeps its own failure.
  *
  * @stability unstable
@@ -733,7 +743,8 @@ export const complete = Effect.fn(function* <A, E, R>(
       if (
         Exit.isSuccess(exit) &&
         (counted(exit.value) ||
-          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
+          (Schema.is(Answer.cases.refused)(exit.value) &&
+            ["reserved", "rate_limited", "quota"].includes(exit.value.reason)))
       ) {
         return exit;
       }
@@ -794,7 +805,12 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 
-const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
+const projectLedger = (
+  ctx: DurableObjectState,
+  env: Env,
+  name: string,
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError>,
+) => {
   const sql = cloudflareSql(ctx.storage);
   const turn = Semaphore.makeUnsafe(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
@@ -835,7 +851,7 @@ const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
     LedgerTransactionSql.layer(sql),
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
-  ).pipe(Layer.provide(bell));
+  ).pipe(Layer.provideMerge(ProjectQuotas.project(sql, `brain:${name}`, input)), Layer.provide(bell));
   const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
   return { sql, turn, write, ledgerLayer, starts };
 };
@@ -939,6 +955,16 @@ const projectLogic = Effect.fn("project.init")(function* (
       }
     }
   };
+  // A reader's ack is its own work, so it is asked through a manager that speaks for that process,
+  // and its write is charged as the process's own (0147).
+  const readerAck = Effect.fnUntraced(function* (pid: string, pos: number, origin: From) {
+    const caller = { by, owner: Owner.cases.brain.make({}), recipient: Recipient.cases.process.make({ process: pid }) };
+    const reader = yield* ProcessManager.pipe(
+      Effect.provide(ProcessManager.layer(caller, ids.next)),
+      Effect.provideContext(services),
+    );
+    return yield* reader.ack(pid, pos, origin);
+  });
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
@@ -1201,6 +1227,8 @@ const projectLogic = Effect.fn("project.init")(function* (
       }),
       nextProcess: () => ids.next,
       notify,
+      admit: (pid, incoming, before) =>
+        ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
       deliver: (pid, incoming) =>
         processObject(pid).pipe(
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).msg(incoming))),
@@ -1806,7 +1834,8 @@ const projectLogic = Effect.fn("project.init")(function* (
     },
     hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
       // Under the shared write turn, as every task call is: a read and its request or collect are one step.
-      const work = write(hands.ask(ask, origin));
+      // The request, its pointer and the collect are the asking program's own writes, charged to it.
+      const work = write(ProjectQuotas.own(ask.process, hands.ask(ask, origin)));
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     target: door.target,
@@ -1865,10 +1894,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
     read: (stream: string, after: number, reader: string) => wrapped(referee.read(stream, after, reader)),
     wait: referee.wait,
-    append: (stream: string, id: string, input: unknown) => wrapped(write(append(stream, id, input))),
+    append: (stream: string, id: string, input: unknown) =>
+      wrapped(write(ProjectQuotas.runtimeAppend(stream, processes.resolve(stream), append(stream, id, input)))),
     sign: (pid: string, id: string, parent: string, kind: string) => wrapped(door.sign(pid, id, parent, kind)),
     commit: (pid: string, input: Omit<Parameters<typeof door.append>[0], "process">) =>
-      wrapped(door.append({ ...input, process: pid })),
+      wrapped(ProjectQuotas.ownWrite(pid, door.append({ ...input, process: pid }))),
     inbox: (pid: string, input: Incoming) =>
       wrapped(
         Effect.gen(function* () {
@@ -1886,27 +1916,12 @@ const projectLogic = Effect.fn("project.init")(function* (
           return yield* ledger.append(
             `${row.name}/inbox`,
             input.id,
-            lineFor(
-              {
-                by: input.envelope.by.key,
-                for: input.envelope.by.for,
-                sentAt: input.sentAt,
-                seen: input.seen,
-                parent: input.envelope.id,
-                traceId: input.span.traceId,
-                build: config.build,
-              },
-              Schema.TaggedStruct("send", { m: Schema.Json }).make({
-                m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                ),
-              }),
-            ),
+            yield* ProjectQuotas.inboxLine(input, config.build),
           );
         }).pipe(write),
       ),
     own: (pid: string, id: string, stream: string, event: unknown, trace?: { traceId: string; spanId: string }) => {
-      const work = own(pid, id, stream, event);
+      const work = ProjectQuotas.ownWrite(pid, own(pid, id, stream, event));
       return wrapped(write(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)))));
     },
     brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
@@ -1920,8 +1935,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       wrapped(processReply(write(processes.dead(pid, dead, origin)))),
     processIsLive: (pid: string) => wrapped(processes.isLive(pid)),
     // The brain binds the reader's name from its live process, never from the call.
-    processAck: (pid: string, pos: number, origin: From) =>
-      wrapped(processReply(write(processes.ack(pid, pos, origin)))),
+    processAck: (pid: string, pos: number, origin: From) => wrapped(processReply(write(readerAck(pid, pos, origin)))),
     processMonitor: (ref: string, pid: string, origin: From) =>
       wrapped(processReply(write(processes.monitor(ref, pid, origin)))),
     processDemonitor: (ref: string, origin: From) => wrapped(processReply(write(processes.demonitor(ref, origin)))),
@@ -2095,7 +2109,12 @@ export const projectLayer = (
   ctx: DurableObjectState,
   env: Env,
   options: ProjectOptions,
-  local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project"),
+  local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  ),
 ) => {
   const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
   return Layer.unwrap(
@@ -2128,7 +2147,12 @@ export const projectLayer = (
  * @category constructors
  */
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
-  const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
+  const local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  );
   const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
   const ready = Layer.unwrap(
     minimal.contextEffect.pipe(
@@ -2140,6 +2164,9 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
             Layer.succeed(LedgerTransaction, Context.get(services, LedgerTransaction)),
             Layer.succeed(Referee, Context.get(services, Referee)),
             Layer.succeed(LedgerStreams, Context.get(services, LedgerStreams)),
+            // The same accounts the ledger admits with, so a manager's trusted call charges them.
+            Layer.succeed(Quotas, Context.get(services, Quotas)),
+            Layer.succeed(WritePolicy, Context.get(services, WritePolicy)),
           ),
           starts: Layer.succeed(Starts.Starts, Context.get(services, Starts.Starts)),
         }),
@@ -2203,9 +2230,11 @@ const processLogic = Effect.fnUntraced(function* (
     sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs, (hash) => rpc(p.code(hash)));
   const saved = yield* processDescriptor(ctx);
+  // The name's own accounts and fault slot, kept beside its data in this object's SQLite (0147).
+  const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
-  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
+  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage, accounting }), Mailbox.layer).pipe(
     Layer.provideMerge(base),
   );
   const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
@@ -2325,12 +2354,13 @@ const processLogic = Effect.fnUntraced(function* (
     },
     {
       policy: defaultPolicy,
-      recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
+      recovery: { sql, name: saved.name, capacity: 1024 ** 3, accounting },
       // `mail.chunk`, read at the brain's edge with the start's other settings (0086).
       chunk: checked.values.mailChunk,
     },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
-  const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
+  // A name stopped under its reserve does no work until a person restarts it.
+  const runner = QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(runnerLayer)), accounting);
   yield* sink.flush.pipe(Effect.provideContext(services));
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
@@ -2361,7 +2391,10 @@ const processLogic = Effect.fnUntraced(function* (
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-        Effect.flatMap((checked) => attributed(runner.restart(checked))),
+        // The control door is the person's gate: only the instance's own token reaches this call,
+        // and it carries no checked requester. So a restart here is the person's, and it may clear
+        // the name's saved reserve fault.
+        Effect.flatMap((checked) => attributed(QuotaRunner.personRestart(runner, accounting, checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
     alarm: () =>
@@ -2369,8 +2402,8 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap((at) => (at === undefined ? Effect.void : attributed(runner.due(at)))),
       ),
     activity: store.activity,
-    recover: () =>
-      rpc(storage.get("activity")).pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
+    // The marker is the accounted SQL row, read through the store (0147).
+    recover: () => store.readActivity.pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
   };
 });
 
@@ -2385,6 +2418,7 @@ type RunnerFailure =
   | ProcessError
   | NotGranted
   | RepliesError
+  | QuotasError
   | WatchersError;
 
 /**
@@ -2410,7 +2444,7 @@ export class ProcessService extends Context.Service<
     readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: unknown) => Effect.Effect<void, RunnerFailure>;
     readonly alarm: () => Effect.Effect<void, RunnerFailure>;
-    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
     /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
     readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
   }
