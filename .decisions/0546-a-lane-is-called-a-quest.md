@@ -32,10 +32,16 @@ we already use run for one agent's turn, so the owner picked a word of our own.
 ## Consequences
 
 - The glossary's `lane` row becomes `quest`.
-- Decisions and notes written before today still say lane in their text; their rules do not change.
+- Decision files, field rows, experiments, saved data and today's version's code written before
+  today still say lane; their rules do not change.
 - Not decided here: who accepts a quest, who it is turned in to, what leaving one means, a chain of
   quests, and anything a person earns. Those get their own talk.
 
 ## Records
 
 - `.glossary/TERMS.md`: the `lane` row is now `quest`.
+
+## Amendments
+
+- 2026-11-15: the Consequences line on what still says lane was made exact. It said "decisions
+  and notes", which contradicted the Decision section's rename of the plan and the notes.

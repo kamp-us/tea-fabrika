@@ -191,7 +191,7 @@ describe("mutbox, the pure parts", () => {
       ),
       {
         ...options,
-        // pinned: lane t389's oxlint-plugins/e2e-windows.test.ts, left out though it opens no window.
+        // pinned: quest t389's oxlint-plugins/e2e-windows.test.ts, left out though it opens no window.
         examples: [
           [
             "electron",
@@ -290,7 +290,7 @@ describe("mutbox, the pure parts", () => {
     );
   });
 
-  // Lane t389, 2026-11-10: five rounds read done with no arm a, and with the hook, the launcher
+  // Quest t389, 2026-11-10: five rounds read done with no arm a, and with the hook, the launcher
   // and the rule unreached. A gap the run knows about is a done that names it, with narrowing
   // unknown; only an unexpected arm a or an unreached build file is stuck. Plants, each one: make
   // no_reach or no_arm_a stuck; drop a gap from the reason; read none_pass as base_has_none; drop
@@ -369,9 +369,9 @@ describe("mutbox, the pure parts", () => {
       {
         ...options,
         examples: [
-          // pinned: lane t389's build owned electron-hook.d.cts, a file no mutant can ever reach.
+          // pinned: quest t389's build owned electron-hook.d.cts, a file no mutant can ever reach.
           [[{ file: "src/b.cjs", total: 0, selected: 0 }], null, { "src/b.cjs": "build" }],
-          // pinned: lane t389's base had none of its related tests.
+          // pinned: quest t389's base had none of its related tests.
           [[{ file: "src/a.ts", total: 1, selected: 1 }], { a: null, has: 0, kept: 0 }, null],
           // pinned: t502b's base tests failed on the build, so none passed.
           [[{ file: "src/a.ts", total: 1, selected: 1 }], { a: null, has: 2, kept: 0 }, null],
@@ -559,7 +559,7 @@ const run = (setup: Setup = {}) => {
   writeFileSync(join(repo, "secret.txt"), "never committed\n");
   git("commit", "-qam", "build");
   const build = git("rev-parse", "HEAD");
-  // The build commit is not a branch tip, as on a lane whose later steps moved on.
+  // The build commit is not a branch tip, as on a quest whose later steps moved on.
   writeFileSync(join(repo, "src/a.ts"), "export const a = null;\n");
   git("commit", "-qam", "later");
 
@@ -807,7 +807,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     }
   });
 
-  // scenario: lane t389 read done five times with its build's files unreached and no arm a.
+  // scenario: quest t389 read done five times with its build's files unreached and no arm a.
   // Plants: skip the plan read; drop the no_build_reach check; make no_arm_a stuck; leave
   // narrowing null or armA out; drop the arm_a_failed check.
   it("scenario: a build file with no mutant is stuck, no passing base test is a done with narrowing unknown", () => {
@@ -998,7 +998,7 @@ describe("mutbox gc against a stand-in docker", () => {
   });
 });
 
-// 2026-11-10: a `docker ps` in gc never returned, and two lanes sat 1 h 50 min with no agent.
+// 2026-11-10: a `docker ps` in gc never returned, and two quests sat 1 h 50 min with no agent.
 // The stand-in is a real child process that writes its pid, then waits for one line on stdin.
 // Without that line it never ends by itself.
 // That line comes at `delay` on the test clock, so the child's run time follows the test clock and

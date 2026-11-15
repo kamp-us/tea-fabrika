@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-helper-ended-line-is-not-one-per-end",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "packages/fabrika/src/agents/summon/manager.ts",
+    "line": 61
+  },
+  "says": "In today's version, the `helper ended` log line is not one line per helper end: a run that ends by itself logs none, a dismiss of a name already down logs a second one, and a summon refused before any helper started logs one.",
+  "proof": "manager.ts:61 says each end is a `helper ended` line; the watcher at lines 401-417 sets the name down and logs nothing. Line 589 logs `down` for a run and line 429 logs `dismissed` for the same run and scope at its later dismiss. Line 677 logs for a summon that failed at line 396, before a helper ran.",
+  "cost": "The log cannot say when and why each helper ended, which the plan's Records section names as the fact to keep.",
+  "head": "5fcc56dbca9c7e184324b0c6b81da93893b25d74",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}

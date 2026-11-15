@@ -931,7 +931,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 
 // --- T1041 L6 and L8: the inbox cap and the reader's ack -----------------------------------------
 //
-// Written before the build (docs/plan/lanes/t1041-PLAN.md). The contract these laws pin:
+// Written before the build (docs/plan/quests/t1041-PLAN.md). The contract these laws pin:
 //   ProgramMailLedger.ts: `layer({ grants, cap })`; in the commit turn, after the saved receipt, a
 //     send answers `ProgramMailError { reason: "full" }` and appends nothing when the inbox's newest
 //     pos minus the reader's acked pos is at least `cap`.

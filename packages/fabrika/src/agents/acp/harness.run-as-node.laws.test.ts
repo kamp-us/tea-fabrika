@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { SystemPrompt } from "../agent/turn.ts";
 import { type Harness, harnessOf, type Row, withSystem } from "./harness.ts";
 
-// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), laws L1 and L2, today's version. The host
+// The agent helpers plan (docs/plan/quests/dock-PLAN.md), laws L1 and L2, today's version. The host
 // runs on Electron's binary, run as Node, and starts each adapter on that same binary
 // (`process.execPath`). Electron boots its whole app, with a Dock icon on a Mac, unless
 // ELECTRON_RUN_AS_NODE is set and not empty (electron_main_mac.cc at v45.2.1, lines 37 to 40 and

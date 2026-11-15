@@ -552,7 +552,7 @@ Where they clash, the owner picks.
 
 - **Both were used for years.** Reading what Tuval and tmux did is cheaper
   than designing it again, and their keys are muscle memory.
-- **A lane runs for hours.** Closing a window should not end it.
+- **A quest runs for hours.** Closing a window should not end it.
 - **One store, one way to save.** A crash cannot leave the layout and the
   jobs disagreeing, so nothing needs cleaning up after one.
 
@@ -565,7 +565,7 @@ Where they clash, the owner picks.
 - **How sure: 80%.** The doubt: an agent halfway through a call when the host
   stops needs its own way back. Coming back running would send the call
   again: a second paid model call, or a second comment on a real ticket. It is
-  decided before the lane that builds the restore, not found on a real
+  decided before the quest that builds the restore, not found on a real
   ticket. The shape to start from is already in kept programs
   (`packages/fabrika/src/program/kept.test.ts`): the program gets `resume` and
   its own `update` says what each half-done step does, with a write carrying
@@ -586,7 +586,7 @@ Where they clash, the owner picks.
 The host now runs apart, and the app attaches to it. The answer first: quit
 the app with `counter` up in a tile, start it again, and the same desk comes
 back with `counter` still at 1. Nothing restarted. The ledger state and
-coming back after a host stop are the next lane.
+coming back after a host stop are the next quest.
 
 ```text
 <home>/host/sock    the link: a Unix socket, 0600, in a 0700 folder; NDJSON, one message a line

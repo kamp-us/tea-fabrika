@@ -12,7 +12,7 @@ Its decided rules are in: [0396](../../.decisions/0396-every-step-answers-in-fiv
 
 *2026-10-22: every stage is built on it now. Each writes its own words with
 `outcomesOf`, in its own `outcome.ts`: sort, plan, catch-up, task, build,
-review, ship, the lane and the operate loop.*
+review, ship, the quest and the operate loop.*
 
 *2026-11-09: the reason part is renamed from why to `reason`, the industry's word (owner). In
 `next/` and in every doc from now on, the grammar reads `verb : who : reason`, and the data key is
@@ -122,8 +122,8 @@ Built in `src/stages/outcome.ts` (`outcomesOf`, `nameOf`, `partsOf`). Ship has
 - **Ship: `send:builder:behind`.** No merge queue, and main moved on since the
   head left it, so the head was never tested with what landed. Back to the
   builder ([read fresh](./read-fresh-run-alone.md)).
-- **The operate loop: `skip:claimed`.** Another lane holds the ticket; `said`
-  names that lane.
+- **The operate loop: `skip:claimed`.** Another quest holds the ticket; `said`
+  names that quest.
 - **The operate loop: `stuck:claim`.** The ledger could not be asked who holds
   the ticket.
 - The claim behind both is in [the ledger note](./ledger-behind-a-service.md).

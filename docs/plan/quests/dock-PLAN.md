@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0061, 0178, 0069; body d295c286e6dc
+Approved by the lead agent, builds 0061, 0178, 0069, 0533; body 04a1130dfd55
 Plancheck-Version: 3
 
 # Plan: an agent's helper processes run as Node, never as an app in the Dock, and each one ends when its agent does, in today's version
@@ -459,6 +459,27 @@ None.
 
 Every call above builds a settled note: the switch (the GUI direction note), when a helper ends
 (T1 and the host outliving the app), the scope (0061) and where the host-only laws run (0178).
+
+## Amendment, 2026-11-15
+
+Made by the lead after the build and the review, on decision
+[0533](../../../.decisions/0533-today-keeps-its-tests-off-ci.md): CI runs none of today's tests.
+
+- **No `helpers` job.** `.github/workflows/host.yaml` is not changed, and its row in the files
+  table is void. Where this plan says L7 and L8 run on GitHub's macOS runner, read: they run by
+  hand on the owner's Mac, with the one command in the head comment of
+  `packages/fabrika/src/agents/acp/helpers.host.test.ts`, only after the lead's read of every
+  line that inspects or ends a process and the owner's yes (0178).
+- **What that changes for L8.** No runner is thrown away. If L8 fails, the adapter and its
+  children stay running on that Mac, the failure message lists their pids, and a person ends
+  them by hand. The test itself sends no signal.
+- **The order 0178 asks for was not met.** The first review ran before L7 and L8. Its verdict
+  for "no Dock icon" and "an orphaned adapter exits" rests on reading until they run.
+- **`Effect.acquireUseRelease` in place of `Effect.onError`** in `summon`: the run's scope exists
+  before `open` starts anything, so an interrupt inside `open` closes it too. The review read
+  it and found it better than the plan's shape.
+- **The plan file moved** from `docs/plan/lanes/` to `docs/plan/quests/` when main renamed the
+  folder (0546).
 
 ## Findings
 

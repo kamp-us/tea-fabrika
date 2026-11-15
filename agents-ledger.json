@@ -201,22 +201,22 @@
 			"code": "const prsOf = new Map<string, PrState[]>();"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { dirname, matchesGlob } from \"node:path\";"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { dirname, matchesGlob } from \"node:path\";"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-of)",
 			"code": "export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, \"\")}-wip`;"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
+			"file": ".agents/skills/lead/scripts/quest.ts",
 			"rule": "fabrika(no-of)",
 			"code": "export const stepOf = (note: string): string[] => {"
 		},

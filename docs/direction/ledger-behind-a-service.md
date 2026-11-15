@@ -103,7 +103,7 @@ The cost: two things to wire instead of one.
   ticket), `Worktrees`, and the older `tracker.ts` (fetching a ticket and its
   comments).
 
-## Claims are the ledger's leases: one lane a ticket
+## Claims are the ledger's leases: one quest a ticket
 
 Built 2026-10-18 as facts (`claimed`, folded by a compare-and-set append).
 Since 2026-10-21 (experiment 110) a claim is the tea-host ledger's lease on
@@ -111,33 +111,33 @@ the ticket's name, in `packages/pipeline/src/asks/claims.ts` (its own package si
 experiment 114).
 
 ```ts
-// two facts
-{ type: "lane", ticket }              // a lane began; its id is L + this fact's rev in the ticket's inbox
-{ type: "released", ticket, lane }    // a lane let it go, written under its lease
+// two facts (today's code keeps the key `lane` in both)
+{ type: "lane", ticket }              // a quest began; its id is L + this fact's rev in the ticket's inbox
+{ type: "released", ticket, lane }    // a quest let it go, written under its lease
 
 // the claim: the ledger's own calls on pipeline/ticket/<ticket>
-ledger.register(name, lane)           // once; idempotent
-ledger.claim(name, lane, rev, ttlMs)  // → a fence, or Held { holder }
+ledger.register(name, quest)          // once; idempotent
+ledger.claim(name, quest, rev, ttlMs) // → a fence, or Held { holder }
 ledger.renew(name, fence, ttlMs)      // every third of the ttl, from the holder's process
 ledger.renew(name, fence, 0)          // release: the lease ends at once
 ```
 
 - **First claim wins until released or lost.**
   - Who holds a ticket is the lease, kept nowhere else.
-  - A later claim is told who holds it (`Held`). A release from a lane that
+  - A later claim is told who holds it (`Held`). A release from a quest that
     does not hold the ticket changes nothing.
 - **The claim is the ledger's compare-and-set.** Two processes that both see
   the ticket free cannot both claim it.
 - **A lost lease fences the old holder.** A process that dies, freezes or
   loses the ledger stops renewing; the lease runs out, the next claim takes
   the name with a new fence, and every write under the old fence is refused.
-- **A lane started again after a crash, as the same lane, waits its old lease
+- **A quest started again after a crash, as the same quest, waits its old lease
   out** and claims again. The loop's door (`holding`) does that too.
 - **The loop claims first and lets go before it ends.** Build and ship refuse
-  a lane that does not hold the ticket. A loop that finds it held ends
+  a quest that does not hold the ticket. A loop that finds it held ends
   `skip:claimed`; one that cannot read the ledger ends `stuck:claim`.
-- **Why:** experiment 91 found two lanes working one ticket, and through that,
-  a failed head landing. With the claim, its two-lane worlds keep every law.
+- **Why:** experiment 91 found two quests working one ticket, and through that,
+  a failed head landing. With the claim, its two-quest worlds keep every law.
 
 ## The pipeline's facts on the tea-host ledger
 
@@ -162,7 +162,7 @@ readFacts                             // every fact, oldest first; a fact's plac
 
 - **Every read folds the ledger again.** A fresh process, or a fresh layer
   over the same file, folds the same state as the in-memory ledger fed the
-  same calls (tested on experiment 89's plans, three lanes, review rounds,
+  same calls (tested on experiment 89's plans, three quests, review rounds,
   answers and a ship, over two runs).
 - **A row that is not a fact stops the read**, naming its place and stream.
   So does a fact read back from a name that is not its home.

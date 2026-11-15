@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-10-28, one part proposed 2026-10-30; today's version; walked if a tryout is picked"
-summary: "The WezTerm model. The host keeps every terminal (a tsh, its front job, its screen) and every job, one list per host process, ids that count up and are never reused. A tile only shows one; any tile in any window can attach to a running terminal or job, and every tile on a terminal shares its front job. The layout is the app's, as i3 arranges windows it does not own. The Unix model (each shell keeps its own jobs) was weighed and dropped: a lane is not a shell's child. Proposed on top: a job names its owner, and a tsh says only its own earlier jobs."
+summary: "The WezTerm model. The host keeps every terminal (a tsh, its front job, its screen) and every job, one list per host process, ids that count up and are never reused. A tile only shows one; any tile in any window can attach to a running terminal or job, and every tile on a terminal shares its front job. The layout is the app's, as i3 arranges windows it does not own. The Unix model (each shell keeps its own jobs) was weighed and dropped: a quest is not a shell's child. Proposed on top: a job names its owner, and a tsh says only its own earlier jobs."
 ---
 
 # The host keeps terminals and jobs; a tile attaches to one
@@ -87,7 +87,7 @@ tiles.attach("tile-b", "term-1"); // tile B shows the same terminal, counter in 
   host process, not one per tile.
 - **The Unix model was weighed and dropped.** In Unix the kernel keeps process
   groups and each shell keeps its own job table, which dies with it. That fits
-  short jobs tied to one terminal. A lane runs for hours, may move to the
+  short jobs tied to one terminal. A quest runs for hours, may move to the
   cloud host, and no tsh started it, so its job cannot belong to a shell.
 
 ## Why

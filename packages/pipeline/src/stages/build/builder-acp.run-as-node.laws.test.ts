@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import { builderHarness, underGuard } from "./builder-acp.ts";
 
-// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), law L1's guarded arm and L2's builder
+// The agent helpers plan (docs/plan/quests/dock-PLAN.md), law L1's guarded arm and L2's builder
 // arm, today's version. They live here, not beside harness.ts, because `underGuard` and
 // `builderHarness` are this package's, and @kampus/fabrika-old does not depend on it.
 //

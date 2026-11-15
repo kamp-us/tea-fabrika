@@ -83,7 +83,7 @@ const shared = {
 
 // Shared by local Vitest and Stryker's config: one run over every package, which the default export
 // splits into its projects. `fixtures/` holds toy repos with their own `node --test` files. They are
-// the lane's subject, not this repo's tests.
+// the quest's subject, not this repo's tests.
 export const testConfig = {
   test: { ...shared, include: [...TODAY, ...TOOLING, ...NEXT, ...INTEGRATION, ...VISUAL], exclude: EXCLUDE },
 };

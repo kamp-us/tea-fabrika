@@ -117,7 +117,7 @@ const Level = Schema.TaggedUnion({
 | [The tracker is like Linear](../../.decisions/0346-the-tracker-is-built-like-linear.md) | product | merge with tracker views and areas | One program in three notes. |
 | [Tracker views are programs](./tracker-views-are-programs.md) | product | merge into the tracker's page | Its section 7 goes to program guidelines. |
 | [Areas](./areas.md) | product | merge into the tracker's page, once decided | Same program. |
-| [The ticket is the lane's view](./the-ticket-is-the-lane-view.md) | product | merge with what a ticket shows | One view in two notes. |
+| [The ticket is the quest's view](./the-ticket-is-the-lane-view.md) | product | merge with what a ticket shows | One view in two notes. |
 | [What a ticket shows](./what-a-ticket-shows.md) | product | merge | Same. |
 | [A canvas per work](./a-canvas-per-work.md) | product (vision) | keep | A vision, not a guideline. |
 | [Designs on Claude Design](./design-on-claude-design.md) | guide: contributing | keep | Where designs are drawn. |

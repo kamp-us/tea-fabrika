@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { connect } from "./client.ts";
 import { type Harness, harnessOf, type Row } from "./harness.ts";
 
-// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), laws L7 and L8, today's version. Host-only
+// The agent helpers plan (docs/plan/quests/dock-PLAN.md), laws L7 and L8, today's version. Host-only
 // (0178): they need a real macOS session, the real Electron 45.2.1 binary and the real adapters
 // (`pnpm --dir adapters install --ignore-workspace --frozen-lockfile`). They run only where a person
 // chose to run them, on a Mac, after the lead read every line below that touches a process.

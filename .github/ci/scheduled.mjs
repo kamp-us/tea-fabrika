@@ -2,9 +2,11 @@
 // next/ and every tooling test on main every 3 hours, and its report job runs this. A red run opens
 // one GitHub issue labeled `ci-scheduled` naming the commits since the last green scheduled run and
 // the failing tests, or comments on the open one; a green run closes it. Those are the only issues
-// automation opens on this repository (0534's exception to "no GitHub issues here").
+// automation opens on this repository (0534's exception to "no GitHub issues here"), with the
+// daily speed check's (0541). That one carries the same label, so the report's own issue is the
+// open one with the label and its exact `TITLE`.
 //
-//   the run           an open ci-scheduled issue   what happens
+//   the run           its own open issue           what happens
 //   red               none                         open one
 //   red               #n                           comment on #n
 //   green             #n                           comment on #n, close it
@@ -351,7 +353,7 @@ export const TITLE = "Scheduled CI is red on main";
 
 /**
  * @param {Verdict} result
- * @param {number | null} open the open `ci-scheduled` issue's number, or `null`
+ * @param {number | null} open the number of the open `ci-scheduled` issue titled `TITLE`, or `null`
  * @param {Run} run
  * @returns {Action}
  */
@@ -441,8 +443,12 @@ export const github = (env, send = globalThis.fetch) => {
     },
     open: async () => {
       const issues = await call("GET", `issues?labels=${LABEL}&state=open&sort=created&direction=asc&per_page=20`);
-      // The issues list holds pull requests too; one with the label is not this report's.
-      const issue = (Array.isArray(issues) ? issues : []).filter(isMap).find((item) => !("pull_request" in item));
+      // The issues list holds pull requests too; one with the label is not this report's. The daily
+      // speed check keeps an issue with the same label (0541), so the report's own is the one with
+      // its own title: taking the first put a red main's report on the speed issue (2026-11-15).
+      const issue = (Array.isArray(issues) ? issues : [])
+        .filter(isMap)
+        .find((item) => !("pull_request" in item) && item["title"] === TITLE);
       return typeof issue?.["number"] === "number" ? issue["number"] : null;
     },
     // 422: the label is there already.

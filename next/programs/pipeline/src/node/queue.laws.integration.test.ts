@@ -202,7 +202,7 @@ const life = Effect.fnUntraced(function* (
         ),
         // T1041: mail.unread's largest value, so no law here meets a full inbox.
         ProgramMailLedger.layer({
-          grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) },
+          grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`) },
           cap: 16_384,
         }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
@@ -216,7 +216,7 @@ const life = Effect.fnUntraced(function* (
 
   const registrations: ReadonlyArray<readonly [string, string]> = [
     [NAME, "pipeline/queue"],
-    ...Array.from({ length: 6 }, (_, i) => [`lane:${i + 1}`, "lane"] as const),
+    ...Array.from({ length: 6 }, (_, i) => [`quest:${i + 1}`, "quest"] as const),
   ];
 
   for (const [name, program] of registrations) {
@@ -380,7 +380,7 @@ const open = Effect.fnUntraced(function* (
     const info = yield* statuses.pipe(Effect.provide(current.context));
     const names = [
       NAME,
-      ...Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`),
+      ...Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`),
       ...info.filter((i) => i.program === "pipeline/merger").map((i) => i.name),
     ];
     const letters = yield* Effect.forEach(
@@ -475,7 +475,7 @@ const open = Effect.fnUntraced(function* (
           type: "enqueue",
           change,
           head: found!.head,
-          ...(ref === null ? {} : { reply: { to: `lane:${change}`, ref } }),
+          ...(ref === null ? {} : { reply: { to: `quest:${change}`, ref } }),
         });
       }),
     drop: (change) => deliver({ type: "drop", change }),

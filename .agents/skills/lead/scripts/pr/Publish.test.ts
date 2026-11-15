@@ -8,8 +8,8 @@ import * as PullRequestsTest from "./PullRequestsTest.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 
-/** Branch names of every kind the commit step meets: the bot's, a lane's backup, a person's, a bare one. */
-const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/lane-wip", "person/b", "c"]);
+/** Branch names of every kind the commit step meets: the bot's, a quest's backup, a person's, a bare one. */
+const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/quest-wip", "person/b", "c"]);
 const Sha = Schema.Literals(["1".repeat(40), "2".repeat(40), "a".repeat(40)]);
 /** No PR on the branch yet, an open draft, or an open ready one. */
 const Already = Schema.NullOr(Schema.Boolean);
@@ -118,7 +118,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   );
 });
 
-describe("ready: a lane's steps passed, so its pull request takes the brief's words and is ready (0134)", () => {
+describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (0134)", () => {
   it.effect.prop(
     "property: the PR gets the brief's text, a draft is marked ready, a ready one is left as it is",
     { b: Branch, head: Sha, already: Already },

@@ -134,7 +134,7 @@ describe("the environment a started process is handed", () => {
   });
 });
 
-// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), law L3. Electron's binary boots its whole
+// The agent helpers plan (docs/plan/quests/dock-PLAN.md), law L3. Electron's binary boots its whole
 // app, with a Dock icon on a Mac, unless ELECTRON_RUN_AS_NODE is set and not empty
 // (electron_main_mac.cc at v45.2.1, lines 37 to 40). `runAsNode` is what a Node helper started on
 // that binary needs; `notAsNode` clears it for the commands an agent runs. On plain Node each is

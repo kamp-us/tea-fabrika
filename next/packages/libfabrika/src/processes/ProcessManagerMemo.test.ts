@@ -1,4 +1,4 @@
-// T753 L16 lane, slice 1: the ProcessManager keeps its last folded process table. These laws hold
+// T753 L16 quest, slice 1: the ProcessManager keeps its last folded process table. These laws hold
 // with or without that memo; they exist to turn a wrong memo red. A long-lived manager is one layer
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 import { describe, expect, it } from "@effect/vitest";
@@ -220,7 +220,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, law: (a: A) => Effect.Effect<void,
     );
   });
 
-describe("T753 L16 lane: a long-lived ProcessManager answers as a fresh one", () => {
+describe("T753 L16 quest: a long-lived ProcessManager answers as a fresh one", () => {
   it.effect("every call over a generated history answers the same as a freshly built manager's", () =>
     check(fcHistory(4, 30), (calls) =>
       Effect.scoped(

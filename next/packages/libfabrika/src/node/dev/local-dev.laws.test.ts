@@ -1,4 +1,4 @@
-// The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md), next/, L5, L6 and L12. `terminate`
+// The memory restart plan (docs/plan/quests/memory-restart-PLAN.md), next/, L5, L6 and L12. `terminate`
 // is the brain's bounded stop: SIGTERM once, a grace, then SIGKILL, each sent in one step on the
 // brain's real life state, and only while that state still says the pid is being replaced. These laws
 // run it on a real `lifeCell` with a stand-in process on the test clock and record every signal with

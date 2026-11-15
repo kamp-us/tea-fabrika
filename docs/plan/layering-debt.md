@@ -465,13 +465,13 @@ side.
   only. They land first. Every new export here carries its doc block, since the rule is turning
   on folder by folder (pull request 1178).
 - **The Alchemy port** ([its plan](./ticket-502-alchemy-port.md)) rewrites the shells in
-  `cloudflare/`. Its own rule holds: the other lane lands first and the port rebases, one line a
+  `cloudflare/`. Its own rule holds: the other quest lands first and the port rebases, one line a
   method. This plan touches `cloudflare/` only where the type checker forces it. The exception
   is the port's S5, which changes 19 call sites in 12 files across `gateway/`, `runtime/` and
   `access/` in one sitting: the lead holds this plan's merges to those files for that check run.
 - **Pull request 1104** gives every `next/` test file a measured shard row. A test that becomes
   a suite plus a runner changes its row. Whichever lands second fixes the rows.
-- **Product lanes** (pull requests 1092, 1099 and 1012) land first; a slice here rebases.
+- **Product quests** (pull requests 1092, 1099 and 1012) land first; a slice here rebases.
 
 ## What this records
 

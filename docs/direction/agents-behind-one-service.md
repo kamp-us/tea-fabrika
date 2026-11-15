@@ -56,7 +56,7 @@ const drafted = yield* Agents.run({
   today. A provider's own schema support (Codex's `--output-schema`, Claude's
   `outputFormat`) is only an extra on top.
 - **The service's name is a working name** until the naming pass
-  (tracker #32) or the build lane picks the industry's word.
+  (tracker #32) or the build quest picks the industry's word.
 
 ## Where the code is today
 

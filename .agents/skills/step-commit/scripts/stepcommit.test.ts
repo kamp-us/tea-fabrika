@@ -485,7 +485,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
           widened(r);
 
           if (kind === "widened-before") {
-            r.git("commit", "-q", "-am", "an earlier lane commit widens the exam");
+            r.git("commit", "-q", "-am", "an earlier quest commit widens the exam");
             paths = ["src/new-unknown.ts"];
           } else {
             paths = ["exam-paths.json", "src/new-unknown.ts"];
@@ -746,7 +746,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {
   // Plants: drop the check; compare the branch without its -wip; check --commit-only or other
   // steps; pass when gh cannot be read. PRs 609, 614, 615 and 617, 2026-11-09: field-row PRs signed
-  // lead under a lane's ticket, and the lane's own lead links read as stale_link.
+  // lead under a quest's ticket, and the quest's own lead links read as stale_link.
   it("T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket", () => {
     // scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
     // time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
@@ -766,7 +766,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     each(cases, ({ location, ticket, step, only }) =>
       withRepo([["src/owned.ts", step]], (r) => {
         const head = {
-          other: "fabrikalfa/lane",
+          other: "fabrikalfa/quest",
           same: "fabrikalfa/one",
           "own-wip": "fabrikalfa/one-wip",
         };
@@ -781,7 +781,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 
         if (refused) {
           expect(got.code, got.text).toBe(5);
-          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/lane");
+          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
           expect(got.text).toContain("Sign under a lead ticket");
           expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
           expect(r.git("diff", "--cached", "--name-only")).toBe("");
@@ -803,7 +803,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       [
         "fail\n",
         JSON.stringify(open([], 101)),
-        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/lane", commits }])),
+        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/quest", commits }])),
       ],
       (answer) =>
         withRepo([["src/owned.ts", "lead"]], (r) => {

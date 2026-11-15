@@ -1,6 +1,6 @@
 ---
 state: "decided"
-summary: "Tickets, criteria, questions, review results, who is on it, lanes. Priority, types, labels and links wait for a run that needed them."
+summary: "Tickets, criteria, questions, review results, who is on it, quests. Priority, types, labels and links wait for a run that needed them."
 ---
 
 # The smallest ledger, and proof before it grows
@@ -19,7 +19,7 @@ Its decided rules are in: [0216](../../.decisions/0216-ledger-is-a-folded-list.m
   - questions to the owner, with answers;
   - review results, with the commit they saw;
   - who is on a ticket now;
-  - lanes (one ticket's trip to its one PR), with how each ended.
+  - quests (one ticket's trip to its one PR), with how each ended.
 - **Left out until proven:** priority and order, ticket types and labels,
   tickets that depend on tickets, and a free comment thread.
 - **Nothing is added without proof.** Proof is a real run that got stuck, or
@@ -31,7 +31,7 @@ Its decided rules are in: [0216](../../.decisions/0216-ledger-is-a-folded-list.m
   proof rule is for fields, which are cheap to add to an event list.
 - **Every ledger entity has an id** (decided 2026-10-18). Anything the ledger
   keeps that stays the same thing through change (ticket, plan, story,
-  criterion, task, question, answer, review verdict, lane) is built on one
+  criterion, task, question, answer, review verdict, quest) is built on one
   entity base with a typed id, and a test fails if a ledger shape has none.
   Values (a commit, a reason, a fixture, a route) have no id: equal content is
   the same thing. Agent answer forms, config and fact snapshots are not
@@ -43,7 +43,7 @@ Its decided rules are in: [0216](../../.decisions/0216-ledger-is-a-folded-list.m
 ## Why
 
 - Today's fabrika grew its board from opinion: labels, priorities and
-  milestones that later steps barely read. A real lane in experiment 85 read
+  milestones that later steps barely read. A real quest in experiment 85 read
   only a ticket's state, title, body and one label.
 - Adding a field to an event list later is cheap. Removing one that every stage
   learned to lean on is not.

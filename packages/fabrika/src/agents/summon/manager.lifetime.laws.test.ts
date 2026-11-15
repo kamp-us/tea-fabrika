@@ -20,7 +20,7 @@ import { SummonManager, SummonRefused } from "../../shell/summon.ts";
 import { summonManager } from "./manager.ts";
 import { openNames } from "./names.ts";
 
-// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), laws L4 to L6, today's version. A helper
+// The agent helpers plan (docs/plan/quests/dock-PLAN.md), laws L4 to L6, today's version. A helper
 // lives while its name is summoned and up. Down, cut off before it was kept, dismissed, or its host
 // stopped: its process ends. A turn's end ends nothing (T1: the agent keeps running between turns).
 //

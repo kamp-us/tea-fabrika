@@ -77,10 +77,10 @@ known login path (`~/.cargo/credentials.toml`) or a file named like one in that 
 (`credentials`, `auth.json`, `.npmrc`). The toolchain and Codex's own binary follow this one rule, so
 `~/.cargo/bin/codex` opens `~/.cargo/bin` and never `~/.cargo`.
 
-A run in a lane's tree also opens the clone's `.git`, to read. A tree's `.git` is a file that leads
+A run in a quest's tree also opens the clone's `.git`, to read. A tree's `.git` is a file that leads
 there, and `git status`, `git diff` and `git log` need it. It counts only for a real worktree of that
 tree, so a `.git` an agent wrote opens nothing next turn. `git add` and `git commit` are refused in the
-box, which is fine: the lane stages and commits outside it. In the box, Codex's own rule also refuses
+box, which is fine: the quest stages and commits outside it. In the box, Codex's own rule also refuses
 any change to the tree's `.git`, and nothing in the clone is writable.
 
 ## What links do now
@@ -126,7 +126,7 @@ A tool that really is a link to a plain folder opens that folder. That is what i
   a login folder's insides to find such a link. Codex's own login is the one exception, as above.
 - A login we do not know the name of is not seen. A tool's folder is checked for known names in it, not
   any deeper.
-- A run in a lane's tree can read the clone's whole `.git`: every branch, and the remote's address.
+- A run in a quest's tree can read the clone's whole `.git`: every branch, and the remote's address.
 - No box caps its processes. See the next section.
 
 We accept the second because the files that hold logins exist before a run starts, and
@@ -263,7 +263,7 @@ should be dropped.
   the table holds through ACP too. That run had a local stand-in for the model
   ([PR 258](https://github.com/usirin/tea-fabrika/pull/258)), so no real model has been through it.
 - A writable folder reached through a link is proved in `codex sandbox`, not in `codex exec`. So are git
-  in a lane's tree, and Codex's own refusal of changes to its `.git`: no model was called.
+  in a quest's tree, and Codex's own refusal of changes to its `.git`: no model was called.
 - Whether a real run hits an odd name it has not met yet. The tests cover the names we thought of.
 - Whether the token drop is all the table's doing. The turn's commands were the same, but a model does
   not answer the same way twice.
