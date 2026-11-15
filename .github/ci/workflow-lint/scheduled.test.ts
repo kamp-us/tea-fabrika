@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { lintIssues, lintScheduled } from "./workflow-lint.ts";
+import { lintScheduled } from "./scheduled.ts";
 
-// Today's CI, serving both versions. Covers workflow-lint.ts's laws on scheduled.yaml, the schedule
-// that runs all of next/ and every tooling test on main (0534), and on who may touch issues. Each
-// generated workflow is the real one with what does not change its meaning varied, and each plant is
-// applied to it alone, so an unrelated error cannot mask it. Each plant was also run once on
-// workflow-lint.ts with its rule dropped, and that turned this law red.
+// Today's CI, serving both versions. Covers scheduled.ts's laws on scheduled.yaml, the schedule
+// that runs all of next/ and every tooling test on main (0534). Each generated workflow is the real
+// one with what does not change its meaning varied, and each plant is applied to it alone, so an
+// unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
+// dropped, and that turned this law red.
 const options = { seed: 119120, numRuns: 100 };
-const read = (path: string) => readFileSync(new URL(`../workflows/${path}`, import.meta.url), "utf8");
+const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
 const check = read("check.yaml");
 
 type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
@@ -380,62 +380,6 @@ it("property: the schedule's legs follow check.yaml's full matrix, so a new leg 
       expect(otherCheck.includes(JSON.stringify(legs)), "the plant found check.yaml's fallback").toBe(true);
       const errors = lintScheduled(read("scheduled.yaml"), otherCheck);
       expect(errors.length === 0).toBe(e2es === 2);
-    }),
-    options,
-  );
-});
-
-// 0534's binding constraint: the only issues automation opens here are the scheduled report's.
-const grant = fc.constantFrom<unknown>(
-  "write-all",
-  { issues: "write" },
-  { issues: "read" },
-  { contents: "read", issues: "write" },
-);
-
-const other = fc.constantFrom(
-  ".github/workflows/check.yaml",
-  ".github/workflows/host.yaml",
-  ".github/workflows/mutation.yaml",
-  ".github/workflows/new.yaml",
-);
-
-it("pinned: the real workflows grant issues nowhere but scheduled.yaml", () => {
-  const workflows = Object.fromEntries(
-    ["check.yaml", "host.yaml", "mutation.yaml", "scheduled.yaml"].map((name) => [
-      `.github/workflows/${name}`,
-      read(name),
-    ]),
-  );
-  expect(lintIssues(workflows)).toEqual([]);
-});
-
-it("property: any other workflow that grants issues, at the top or on a job, is named", () => {
-  fc.assert(
-    fc.property(other, grant, fc.boolean(), (path, given, onJob) => {
-      const workflow: Record<string, unknown> = {
-        on: { push: {} },
-        jobs: { a: { "runs-on": "ubuntu-latest", steps: [] } },
-      };
-
-      if (onJob) {
-        (workflow["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = given;
-      } else {
-        workflow["permissions"] = given;
-      }
-
-      const files = { [path]: JSON.stringify(workflow), ".github/workflows/scheduled.yaml": read("scheduled.yaml") };
-      expect(lintIssues(files)).toEqual([`${path}: only scheduled.yaml's report job may touch issues (0534)`]);
-      // The same workflow with a grant that leaves issues alone is fine.
-      const clean = structuredClone(workflow);
-
-      if (onJob) {
-        (clean["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = { contents: "read" };
-      } else {
-        clean["permissions"] = { contents: "read" };
-      }
-
-      expect(lintIssues({ [path]: JSON.stringify(clean) })).toEqual([]);
     }),
     options,
   );
