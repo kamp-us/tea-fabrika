@@ -446,23 +446,29 @@ export class ProcessManager extends Context.Service<
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
-        const ack = Effect.fn("process.ack")(function* (process: string, input: Rev, from: From) {
-          yield* Effect.annotateCurrentSpan({ "fab.process": process });
-          const pos = yield* Schema.decodeUnknownEffect(Rev)(input).pipe(
-            Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
-          );
-          yield* Effect.annotateCurrentSpan({ [tag("pos")]: pos });
-          yield* checked((table, turn) => {
-            const life = table.life(process);
+        const ack = Effect.fn("process.ack")(
+          function* (process: string, input: Rev, from: From) {
+            yield* Effect.annotateCurrentSpan({ "fab.process": process });
+            const pos = yield* Schema.decodeUnknownEffect(Rev)(input).pipe(
+              Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
+            );
+            yield* Effect.annotateCurrentSpan({ [tag("pos")]: pos });
+            yield* checked((table, turn) => {
+              const life = table.life(process);
 
-            if (Option.isNone(life) || !table.isLive(process) || pos <= ackedPos(turn, life.value.name, caller.by)) {
+              if (Option.isNone(life) || !table.isLive(process) || pos <= ackedPos(turn, life.value.name, caller.by)) {
+                return Result.succeed(undefined);
+              }
+
+              turn.append(acked(life.value.name), `${process}/acked/${pos}`, line(from, Acked.make({ process, pos })));
               return Result.succeed(undefined);
-            }
-
-            turn.append(acked(life.value.name), `${process}/acked/${pos}`, line(from, Acked.make({ process, pos })));
-            return Result.succeed(undefined);
-          });
-        }, Effect.tapError(failed));
+            });
+          },
+          // The ack's own ledger turn is the reader's work too: the sink files it in the reader's job,
+          // so the span says whose it is, as every span in a job does.
+          (effect, process) => Effect.annotateSpans(effect, { "fab.process": process }),
+          Effect.tapError(failed),
+        );
         const receive = (process: string, after: Rev): Stream.Stream<Letter, Failure> =>
           Stream.unwrap(
             Effect.gen(function* () {

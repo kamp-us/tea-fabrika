@@ -352,7 +352,9 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
 
         if (node !== undefined) {
           expect(node.description).toBe(d.doc);
-          expect(node.default).toEqual(Schema.encodeSync(Schema.toCodecJson(d.schema))(d.default));
+          // The default as the file spells it: JSON, or a `text` setting's text, as `mail.chunk`'s "65536 bytes".
+          const spelled = d.format === "text" ? Schema.toCodecStringTree(d.schema) : Schema.toCodecJson(d.schema);
+          expect(node.default).toEqual(Schema.encodeSync(spelled)(d.default));
         }
       }
 
