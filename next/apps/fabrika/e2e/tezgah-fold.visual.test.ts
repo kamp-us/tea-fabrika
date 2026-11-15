@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem } from "effect";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
 // plan (docs/plan/lanes/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab
@@ -25,6 +26,12 @@ import { Effect } from "effect";
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-fold-<state>-<layout>.png`. One tile is never
 // shot: a lone tile is focused, so it never folds.
+//
+// Ticket 1042: a split now opens what `tezgah.new` names, the shell by default, and the shell's line
+// keeps Tab, without Shift, for completion (next/programs/fabsh/src/window.tsx:262-265), so Tab from a
+// shell tile never reaches the strip after it. This suite is about the fold, not the shell, so its home sets
+// `tezgah.new` to the checklist in the person's own file, as a person would, and every tile it makes
+// is a checklist.
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
 import {
@@ -57,6 +64,13 @@ const TABS = 30;
 
 const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
 
+/** Writes the person's file in the suite's home, naming the checklist as the tile a split opens. */
+const person = (dir: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFileString(`${dir}/fabrika.toml`, `[pack.fabrika.settings.tezgah]\nnew = "fabrika/checklist"\n`);
+  }).pipe(Effect.provide(NodeServices.layer));
+
 type View = Parameters<typeof foldDifferences>[0];
 type Page = Parameters<typeof shoot>[0];
 
@@ -68,6 +82,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
       suite(
         Effect.gen(function* () {
           const h = yield* home;
+          yield* person(h.dir);
           const dev = yield* devServer(h);
           const b = yield* browser;
           const big = (yield* tab(yield* profile(b), dev.url)).page;
