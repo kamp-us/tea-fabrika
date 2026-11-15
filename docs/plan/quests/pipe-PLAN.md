@@ -697,3 +697,280 @@ here".
 ```json
 {"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package (0456), so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
 ```
+
+## Amendment A-Fit, 2026-11-15
+
+Where this section and the sections above differ, this one wins. It changes only the fit check
+(`processes/Fit.ts`), what the loader writes for it, and their laws. `RULE` stays `"fit/v1"`: no
+pipe was judged by the narrower rule, so the first rule that runs is this one.
+
+**The answer first.** Of the pairs a person pipes in today's version, none is refused by v1 only
+because it cannot tell: `tracker | ticket`, `ticket | trace`, `tracker | trace`, `pipeline | trace`
+carry a ticket number, `experiment | markdown`, `experiments | markdown` and `compare | markdown` a
+string, and `seq | tally`, `seq | double`, `counter | double` an integer. v1 compares all three. But
+v1 cannot tell 18 of the 82 real ports even when one is piped into an equal shape, through a
+nullable field (12 ports) or a union that is not only literals (6 ports, 4 of them holding a union
+tagged with `_tag`), so the first reader
+that needs `note: NullOr(String)` or a command struct is refused. The survey also found three places
+where the plan as written is wrong, whatever the union rule:
+
+- **The encoded side hides a transformation.** A reader field `Schema.DateTimeUtcFromString` shows as
+  `String` on its encoded side, so v1 passes a writer's plain `String`, and the reader then refuses
+  `"x"` (tried on effect 4.1.2). That breaks 0550's "pipe stays typed".
+- **A custom filter makes `toJson` throw.** `SchemaRepresentation.toJson` fails with `Missing key
+  at ["representation"]["checks"][0]["representation"]` on a `Schema.makeFilter` check with no
+  persistence id (tried on effect 4.1.2). The loader would fail on today's shell's `table` output
+  instead of the fit answering `cannot_tell`.
+- **A check id is only safe when it is Effect's own.** A custom filter may carry an id of its own
+  (`Schema.makeFilter(f, { representation: { id: "pack/isTicket", payload: null } })`, tried on
+  effect 4.1.2), so two packs may give two different checks one id. The same id with the same
+  payload means the same predicate only for the ids of the revivers the installed
+  `SchemaRepresentation` exports (`effect/schema/isInt`, `effect/schema/isGreaterThanOrEqualTo`,
+  ...). The rule trusts that a check under one of those ids is Effect's own; a pack that puts its
+  own code under Effect's id is out of its reach.
+
+### The survey
+
+Read from the code on 2026-11-15, at this branch's head. A port's shape is counted once for each
+construct it holds anywhere in it. "Real" is every declared input and output of today's programs and
+of `next/`'s; `next/` declares only one output today, and no chunk input outside test fixtures.
+
+| Construct | Real ports | v1 as planned | After this amendment |
+|---|---|---|---|
+| String, Number, Boolean, Null, Unknown | 78 | compares | compares |
+| an Effect check (isInt in 43 ports, isGreaterThanOrEqualTo 25, isMaxLength 14, isPattern 9, ...) | 49 | compares: same id and payload | compares: same Effect id and payload, in any order |
+| a literal set (`Schema.Literals`) | 15 | compares | compares, as a union |
+| an optional field (`optionalKey`) | 9 | compares | compares |
+| a list (`Schema.Array`) | 8 | compares | compares |
+| `NullOr(X)` | 12 | cannot tell | compares |
+| a union of structs tagged with `_tag` (`TaggedUnion`) | 4 | cannot tell | compares |
+| a union with no tag (`Union([String, Struct])`, `Union([Struct, Struct])`) | 4 | cannot tell | compares |
+| a single literal, sent into a reader that takes its primitive | 7 | does not fit | compares |
+| `TemplateLiteral` (an experiment's run id and label) | 3 | cannot tell | cannot tell |
+| a record (`Schema.Record`) | 2 | cannot tell | cannot tell |
+| a tuple or `NonEmptyArray` | 1 | cannot tell | cannot tell |
+| a custom filter (`Schema.makeFilter`, no id) | 1 | the loader throws | cannot tell |
+| a date, `Option`, a class, a transformation | 0 | cannot tell, or passes wrongly | cannot tell on a reader |
+| a branded id (`Schema.brand`) | 0 | compares as its base: a brand adds no check | the same |
+| recursion (`Suspend`, `Reference`) | 0 | cannot tell | cannot tell |
+
+Where each port is declared, by program:
+
+- Today's `tracker`: inputs at `programs/tracker/src/index.ts` lines 207 to 247 (`file`,
+  `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `make_area`, `rename_area`,
+  `merge_area`, `skip_onboarding`, `query`, `quit`); output `ticket` at line 250, a ticket number
+  (`Int` checked `>= 1`, `packages/pipeline/src/tickets/ticket.ts` line 22). `file` holds a tagged
+  union (`from`, `ticket.ts` line 189), `make_area` another (`suggested`, `area.ts` line 29),
+  `answer` is a union of two structs with no tag (`programs/tracker/src/ticket.ts` line 80), and
+  `query` a union of two structs with no tag (`index.ts` line 135).
+- Today's `ticket`: inputs at `programs/ticket/src/index.ts` lines 70 to 79, output `ticket` at
+  line 85, a ticket number. `answer` is the tracker's union.
+- Today's `trace`: inputs at `programs/trace/src/index.ts` lines 224 to 234. `choose` is
+  `{row: NullOr(String, max 512)}` and `seek` is `{at: NullOr(Finite)}` (lines 60 and 62); `id` is a
+  32-hex-character string (`packages/fabrika/src/host/traces.ts` line 30); `ticket` a ticket
+  number; `any` takes anything. No outputs.
+- Today's `pipeline`: outputs at `programs/pipeline/src/index.ts` lines 32 and 33, a ticket number
+  and a string.
+- Today's `compare`, `experiment`, `experiments`: outputs at `programs/compare/src/index.ts` lines
+  36 and 40, `programs/experiment/src/index.ts` lines 27 and 31, `programs/experiments/src/index.ts`
+  lines 48 and 69: a structure (`Comparison`, `ExperimentPage`, `Experiment` in
+  `packages/pipeline/src/experiments/experiment.ts`, with nullable fields, records at lines 112 to
+  116 and template literals at lines 46 and 52) and a markdown string each.
+- Today's `counter`: input `press` (two literals) and output `n` (`Int`) at
+  `programs/counter/src/index.ts` lines 32 and 33. `markdown`: inputs `text` (string) and `quit` at
+  `programs/markdown/src/index.ts` lines 43 and 44. `map`: input `quit` at
+  `programs/map/src/index.ts` line 22.
+- Today's small shell programs, `packages/fabrika/src/shell/small.ts`: `say` line 29, `seq` line 38,
+  `double` lines 50 and 51, `upper` lines 58 and 59, `tally` lines 131 to 134 (`refused` is
+  `{n: Int, why: "out_of_range"}`). All strings and integers.
+- Today's shell, `packages/fabrika/src/shell/shell.ts`: inputs lines 88 to 115 (`line` is
+  `Union([String, Struct])`), outputs lines 122 to 147 (`status` and `asked` hold
+  `text: NullOr(String)`; `table` holds `Table`, `packages/fabrika/src/shell/table.ts` line 57, a
+  `NonEmptyArray` and a custom filter).
+- Today's agent programs: `packages/fabrika/src/agents/summon/turn.ts` inputs lines 87 and 88,
+  outputs lines 95 to 113 (`result` holds `turn: NullOr(Count)` and `cost: NullOr(Finite)`);
+  `packages/fabrika/src/agents/acp/program.ts` inputs lines 228 to 233, outputs lines 236 to 244
+  (`opened`, `settings` and `result` hold nullable fields).
+- `next/`: the checklist's output `done` at `next/programs/checklist/src/program.ts` line 164, a
+  struct `{items: Array(String, checked)}` (line 59). Every other `next/` program declares
+  `outputs: {}`. Test fixtures, not counted above: the reader's chunk input in libfabrika's
+  `src/runtime/internal/chunkPrograms.test-support.ts` line 160 (a list of
+  `{s: Int, i: Int, pad: String}`) and `Chunk.input("rows", Row)` in
+  libfabrika's `src/runtime/Send.types.test.ts` line 16 (`{path: String, line: Int}`);
+  v1 compares both.
+- Not a program: `runs` is a tool of today's MCP server (`packages/fabrika/src/mcp/tools.ts`), with
+  no declared ports.
+
+The pairs, judged on the two shapes (scratch script, never committed):
+
+- **Connects in v1 and after:** `tracker | ticket`, `ticket | trace`, `tracker | trace` and
+  `pipeline | trace` (ticket number into ticket number), `experiment | markdown`,
+  `experiments | markdown`, `compare | markdown` (string into string, through each one's `markdown`
+  output), `seq | tally`, `seq | double`, `counter | double` (`Int` into `Int`), `tally | trace`
+  (into `any`).
+- **Refused rightly in both:** `seq | upper` (number into string), `seq | counter` (number into two
+  literals), `experiments`'s `row` into `markdown` (struct into string).
+- **Refused only because v1 cannot tell, connects after:** `seq --to 1 | tracker <answer` becomes a
+  right refusal (`does_not_fit`, a number is no struct) in place of `cannot_tell`; any reader of
+  `{input: NullOr(Count)}` fed by the agent program's `result`; any reader of a tracker command
+  (`file`, `answer`, `make_area`, `query`) fed by a writer of the same struct.
+- **Still refused after, with no real reader that needs it:** a reader that needs an experiment's
+  `run` id (a template literal) or a run's `metrics` (a record), and a reader of the shell's
+  `table`. A reader that needs only other fields of those shapes fits, since the rest are extra.
+
+**Ids across packs.** Ids are checked primitives, never brands: no real port uses `Schema.brand`,
+and a brand adds no check to the representation, so a branded string compares as a string. Two packs
+that each spell the ticket number as `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))` fit, and
+so does `Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))`, since checks
+compare in any order. A pack that spells it `Schema.Int.check(Schema.isGreaterThan(0))`, as today's
+area number does (`packages/pipeline/src/tickets/area.ts` line 22), gets `cannot_tell`: the two
+accept the same integers, but the check compares by id and payload, never by meaning. That is the
+price of the sound pick, and the next rule to add once a real pair needs it is a small table of
+bounds Effect's ids imply.
+
+**Found outside this amendment's question, not changed here.** As planned, a pipe carries only a
+list: the reader's `items` is a list, and the runner sends `items: out.value`. Every pair above
+carries one value, a ticket number, a string or an integer, and the checklist's own `done` is a
+struct, so none of them can be piped as the plan stands; the fit would answer `does_not_fit` at the
+top. The lead's call: whether a non-list output is sent as a list of one item, or the rebuilt
+programs declare list outputs.
+
+### The added rules
+
+The fit reads the reader's node, then the writer's. Every rule keeps the property F1 states: a pipe
+that passes never hands the reader a value its input schema refuses.
+
+```ts
+// next/packages/libfabrika/src/processes/Fit.ts, a sketch of the added rules, each read at one node.
+// 1. A union on the writer: each case it can send must fit. A union on the reader: the writer fits one case.
+//    Literal sets are the special case of both. A reader union in Effect's `oneOf` mode is cannot_tell.
+// 2. The node's kind is compared before its checks, so a case of the wrong kind is does_not_fit.
+// 3. A literal fits the reader's primitive of its type, when that primitive carries no check.
+// 4. A reader check fits when the writer carries one with the same id and the same payload, in any
+//    order, and only for an id Effect's own revivers know; any other id is cannot_tell.
+// 5. A reader node that decodes through a transformation is cannot_tell, at its path.
+// 6. A port with no persisted shape (a custom filter) is cannot_tell, at the top.
+export const fits: (writer: Shape, reader: Shape) => typeof Fit.Type;
+type Shape = { readonly doc: SchemaRepresentation.Document; readonly decodes: Path | null } | null;
+```
+
+Why each is sound: Effect decodes a union (its default mode) by trying its cases, and succeeds when
+one decodes, so a writer value from any writer case lands on a reader case that takes it. Comparing
+the kind first changes only which refusal is given, never a pass. A literal is a value of its
+primitive. A check with Effect's id and the same payload is the same predicate on both ends, since
+`SchemaRepresentation` revives it from that id to Effect's own code. A transformation's decode can
+refuse what its encoded side shows, so the fit never vouches for it. A writer's transformation is
+fine: its encoded side is what it sends.
+
+**Nullable and optional fields,** through rule 1 and v1's struct rule:
+
+```ts
+// Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), as the agent program declares it.
+fits(Struct({ input: NullOr(Count) }), Struct({ input: NullOr(Count) }));
+// { _tag: "fits" }                                                 the agent's `result` field, both ends
+fits(Struct({ input: NullOr(Count) }), Struct({ input: Count }));
+// { _tag: "does_not_fit", path: ["input"], need: "Number", has: "Null" }   the writer may send null
+fits(Struct({ note: Schema.String }), Struct({ note: Schema.optionalKey(Schema.String) }));
+// { _tag: "fits" }                                                 a reader's optional field may be present
+fits(Struct({ note: Schema.optionalKey(Schema.String) }), Struct({ note: Schema.String }));
+// { _tag: "does_not_fit", path: ["note"], need: "String", has: "optional" }   unchanged from v1
+```
+
+**A union of structs told apart by `_tag`,** through rule 1:
+
+```ts
+const From = Schema.TaggedUnion({ person: { name: Str }, agent: { lane: Str } });
+const FromMore = Schema.TaggedUnion({ person: { name: Str }, agent: { lane: Str }, bot: {} });
+fits(From, FromMore);
+// { _tag: "fits" }                        every case the writer sends is a case the reader takes
+fits(FromMore, From);
+// { _tag: "does_not_fit", path: ["_tag"], need: "\"person\" | \"agent\"", has: "\"bot\"" }
+```
+
+**A literal into its primitive,** through rule 3:
+
+```ts
+fits(Struct({ why: Schema.Literal("out_of_range") }), Struct({ why: Schema.String }));      // fits
+fits(Struct({ why: Schema.Literal("out_of_range") }), Struct({ why: Schema.NonEmptyString }));
+// { _tag: "cannot_tell", path: ["why"], shape: "check effect/schema/isMinLength" }
+```
+
+**A checked id across packs,** through rule 4:
+
+```ts
+const TicketNumber = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));          // pack A
+fits(Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)), TicketNumber);  // fits
+fits(Schema.Int.check(Schema.isGreaterThan(0)), TicketNumber);
+// { _tag: "cannot_tell", path: [], shape: "check effect/schema/isGreaterThanOrEqualTo" }
+```
+
+**A date or another transformation,** through rule 5. A plain `Schema.Date` encodes to a `Date`
+object, which is no JSON and which `send_chunks` refuses (`Schema.Json`), so its `Declaration` node
+stays `cannot_tell`. A string that decodes to a date shows as `String` on its encoded side, which is
+why the loader records where a reader decodes:
+
+```ts
+fits(Struct({ at: Schema.String }), Struct({ at: Schema.DateTimeUtcFromString }));
+// { _tag: "cannot_tell", path: ["at"], shape: "transformation" }    v1 said fits, and "x" fails the reader
+fits(Struct({ at: Schema.DateTimeUtcFromString }), Struct({ at: Schema.String }));
+// { _tag: "fits" }                                                 the writer sends a string
+fits(Struct({ at: Schema.Finite }), Struct({ at: Schema.Finite }));
+// { _tag: "fits" }                                                 a time as Unix ms, as today's ports carry it
+```
+
+**What the loader writes,** in `runtime/Program.ts` and `runtime/Execution.ts`:
+
+```ts
+// A port's shape: its encoded side, and the first path where the reader decodes through a
+// transformation (an AST node with `encoding`), or null when the persisted form cannot be written.
+const Shape = Schema.NullOr(Schema.Struct({ doc: Schema.Json, decodes: Schema.NullOr(Path) }));
+// inputs[k].items: Schema.optionalKey(Shape)     outputs[k]: Schema.Struct({ shape: Shape })
+const shapeOf = (schema: Schema.Top) =>
+  Result.try(() => SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(schema.ast))).pipe(
+    Result.map((doc) => ({ doc, decodes: decodesAt(schema.ast) })),
+    Result.getOrNull,  // a custom filter: no persisted form, so the fit answers cannot_tell
+  );
+```
+
+**What stays refused,** as `cannot_tell`: a record, a tuple or `NonEmptyArray`, a template literal,
+recursion, a `Declaration` (a plain date, `Option`), `Enum`, `BigInt`, `Symbol`, a reader union in
+`oneOf` mode, a reader transformation, a check whose id is not Effect's own, and a custom filter. The
+real ports that hold one are writers whose readers need other fields: `compare`'s `comparison`,
+`experiment`'s `page`, `experiments`'s `row` and the shell's `table`. No real reader needs one, so
+no real pair loses today. The first reader that needs an experiment's `run` or `metrics` loses, and
+the next rule then is that equal records, tuples and template literals fit, with the same soundness
+law.
+
+### The added laws
+
+F1 gains the new grammar: its generator adds `NullOr`, tagged and untagged unions of structs, and
+literals read as primitives, and its property sends each writer value through JSON text and draws
+only values whose encoded form is `Schema.Json`, since a message never carries anything else. F3
+loses `NullOr` and the non-literal union from its list, and gains a transformation, a custom filter
+and a check id that is not Effect's. Each new law below states the soundness property: for generated
+pairs where `fits` answers `fits`, every value Effect Arbitrary makes from the writer's schema,
+encoded and sent through JSON text, decodes with the reader's schema.
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where | Runs |
+|---|---|---|---|---|---|
+| F6, unions are sound: generated writer and reader pairs built from `NullOr`, `TaggedUnion`, untagged unions of structs and literal sets, where the reader may take more cases; a pass is sound as above; a writer case the reader takes nowhere answers `does_not_fit` at that case's path, and a `oneOf` reader union answers `cannot_tell`. 200 runs | test | fc.letrec: union shape pairs, with a case added to or dropped from either end | (a) pass a writer union when one case fits; (b) compare checks before the kind, so a null case answers `cannot_tell`: F6 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
+| F7, a reader's transformation: a reader field from `DateTimeUtcFromString`, `NumberFromString`, `Trim` or a `decodeTo` whose decode can fail answers `cannot_tell` at its path, while the same schema on the writer compares on its encoded side; a pass is sound as above. 100 runs | test | fc.constantFrom: the four transformations, each at a generated depth in a struct | read only the encoded document, with no `decodes`: a writer `String` into a reader `DateTimeUtcFromString` passes, F7 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
+| F8, checks across packs: Effect's own checks with equal payloads fit in any order; a payload that differs, or an id that is not Effect's (a check annotated with its own id), answers `cannot_tell`, even when both ends are equal; the ticket number spelled two ways fits; a pass is sound as above. 200 runs | test | fc.record: a base primitive, a subset and an order of Effect checks for each end, and an optional foreign id | (a) compare ids without payloads (`isMaxLength` 10 against 256); (b) trust any equal id: F8 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
+| F9, a port with no persisted form: a program whose output or chunk input holds a `Schema.makeFilter` check loads, with that port's shape `null`, and a pipe from or to it answers `cannot_tell` at the top; every other port of the same program keeps its shape | test | scenario: a test writer whose output carries the shell's `Table` shape, and a test reader of it | let `toJson` throw at load: F9 red | next/packages/libfabrika/src/runtime/Program.test.ts | laptop |
+
+F6 to F9 are about values, which no type or lint rule sees: tests.
+
+### The change to the files table and the size
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/packages/libfabrika/src/processes/Fit.ts | build | 80 | 80 more than in the Files section, 250 in all: unions on both ends, kind before checks, a literal as its primitive, Effect-only check ids, `decodes`, a `null` shape |
+| next/packages/libfabrika/src/runtime/Program.ts | build | 20 | 20 more, 90 in all: `shapeOf` with `decodes` and the `null` shape for a custom filter |
+| next/packages/libfabrika/src/runtime/Execution.ts | build | 5 | 5 more, 30 in all: `items` and `outputs[k].shape` become `Shape` |
+| next/packages/libfabrika/src/processes/Fit.test.ts | tests | tests | F1 to F4, and F6 to F8 |
+| next/packages/libfabrika/src/runtime/Program.test.ts | tests | tests | F5 and F9 |
+
+The pull request grows from about 1,100 to about 1,205 product lines (Fit 250, Program 90,
+Execution 30). The step count and the estimate in the Size section stay as they are, 65% sure: the
+added rules are pure functions beside the ones v1 already has, and the four new laws sit in two test
+files the tests step already writes.
