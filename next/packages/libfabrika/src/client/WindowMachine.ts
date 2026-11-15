@@ -10,6 +10,8 @@
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Predicate, Result, Schema } from "effect";
+import { ExitReason } from "../processes/ExitReason.ts";
+import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
@@ -21,6 +23,7 @@ import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass, Pixels } from "../transport/ClientRows.ts";
 import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
+import { PAGE } from "../transport/Wire.ts";
 import * as Keys from "./Keys.ts";
 import { Prefix, prefixMachine } from "./Prefix.ts";
 import { optimisticState, TezgahClient, type TezgahCmd, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
@@ -30,17 +33,43 @@ const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(
 
 const Reach = Schema.TaggedUnion({
   unresolved: {},
-  resolving: { id: Schema.Int },
-  opening: { pid: Schema.String, id: Schema.Int },
-  open: { pid: Schema.String },
+  // Reading `processes/<name>` page by page: what every page read so far says of the name's life.
+  // (A model key never says fold: that word is the window's strips, which it never stores.)
+  resolving: { id: Schema.Int, life: C.NameFold },
+  // From its monitor on, the tile holds a watch on `pid` under `ref`.
+  opening: { pid: Schema.String, id: Schema.Int, ref: Schema.String },
+  open: { pid: Schema.String, ref: Schema.String },
+  // No live process: the newest exit, and the wait on `processes/<name>` for the next start.
+  ended: { pid: Schema.String, reason: ExitReason, id: Schema.Int },
   missing: {},
 });
+type Reach = typeof Reach.Type;
+
+// The window's own inbox, `client:<tab>/inbox`, read past the cursor `after`, one call at a time.
+const Inbox = Schema.TaggedUnion({
+  idle: { after: Schema.Int },
+  waiting: { after: Schema.Int, id: Schema.Int },
+  reading: { after: Schema.Int, id: Schema.Int },
+});
+
+// A status message for the window's polite region (WCAG 4.1.3), written by the step its event
+// happened in: a tile without focus whose process ended, or a tile's refused letter. The region says
+// the messages of one burst as one line and never the standing state, so a tile that stays ended is
+// shown by its tile and never said again (0504).
+const StatusMessage = Schema.TaggedUnion({
+  ended: { tile: Schema.String, reason: ExitReason },
+  refused: { tile: Schema.String, m: Schema.Json, reason: Schema.String },
+});
+type StatusMessage = typeof StatusMessage.Type;
 
 // A bad recovery answer does not permit another ask. A checked whole or a new dial does.
 const Recovery = Schema.Literals(["ready", "asked"]);
 
 const Call = Schema.TaggedUnion({
   read: { stream: Schema.String, after: Schema.Int },
+  wait: { stream: Schema.String, after: Schema.Int },
+  // `tile` asked: its answer's record names that tile even after the tile moved on.
+  monitor: { ref: Schema.String, pid: Schema.String, tile: Schema.String },
   open: { pid: Schema.String },
   send: {
     pid: Schema.String,
@@ -67,6 +96,16 @@ const Via = Schema.Literals(["button", "key"]);
 // another tile by the page's own means.
 const By = Schema.Literals(["button", "key", "click"]);
 
+// How far a tezgah window reached its person's tezgah process: read once, then opened. The window
+// holds no watch on it; a tile's watch and its name's fold are the tile's own (`Reach`).
+const TezgahReach = Schema.TaggedUnion({
+  unresolved: {},
+  resolving: { id: Schema.Int },
+  opening: { pid: Schema.String, id: Schema.Int },
+  open: { pid: Schema.String },
+  missing: {},
+});
+
 // A tezgah window's own attach to its workspace: nothing asked yet, a tile id being minted for it,
 // or its letter written.
 const Attach = Schema.Literals(["waiting", "minting", "sent"]);
@@ -76,7 +115,7 @@ const Attach = Schema.Literals(["waiting", "minting", "sent"]);
  *  the link is back, the window's tezgah child, its own attach, and the `data-cursor` key the page
  *  last said DOM focus was on in each tile (null for none), which a letter leaving the tile carries. */
 const TezgahLink = Schema.Struct({
-  reach: Reach,
+  reach: TezgahReach,
   last: Schema.NullOr(Schema.String),
   client: TezgahClient,
   attach: Attach,
@@ -97,8 +136,10 @@ const Size = Schema.Struct({ width: Pixels, height: Pixels });
  * **Details**
  *
  * `link` is where the connection is, `handshake` the hello exchange of its dial, and `fingerprint`
- * the key the window dials with, once the key store has answered. `flight` holds each written call
- * by its id and dial until its answer comes. `client` holds the program client's letters and views.
+ * the key the window dials with, once the key store has answered. `tab` is the window's own tab,
+ * and `inbox` reads that tab's inbox for the DOWNs of the watches its tiles hold. `said` holds the
+ * status messages of the polite region's current burst. `flight` holds each written call by its id
+ * and dial until its answer comes. `client` holds the program client's letters and views.
  * `tezgah` is null for a window given fixed tiles; a window started on tezgah takes its tiles
  * from its person's tezgah, whose view its tezgah child holds. `prefix` is the window's own prefix
  * key (`Prefix`), `polite` what the window says on its own in the polite region, and `size` the
@@ -117,8 +158,15 @@ export const WindowModel = Schema.Struct({
       recovery: Recovery,
       own: Schema.Json,
       refusal: Schema.NullOr(Schema.Struct({ m: Schema.Json, reason: Schema.String })),
+      // The process whose end this tile's status message told, so a re-read that finds it ended again is quiet.
+      told: Schema.NullOr(Schema.String),
     }),
   ),
+  tab: Schema.String,
+  inbox: Inbox,
+  // The status messages of the polite region's current burst, in order. `id` grows with each one
+  // appended; the resend tick ends the burst and empties the list, keeping `id`.
+  said: Schema.Struct({ id: Count, messages: Schema.Array(StatusMessage) }),
   link: Link,
   handshake: Handshake,
   fingerprint: Schema.NullOr(Schema.String),
@@ -207,6 +255,10 @@ const Own = Schema.Union([
   Schema.Struct({ type: Schema.Literal("resend"), dial: Schema.Int }),
   Schema.Struct({ type: Schema.Literal("read_ok"), ...OnWrite, value: Schema.Array(Schema.Unknown), ms: Ms }),
   Schema.Struct({ type: Schema.Literal("read_err"), ...OnWrite, error: CallError }),
+  Schema.Struct({ type: Schema.Literal("wait_ok"), ...OnWrite, value: Schema.Struct({ rev: Schema.Int }), ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("wait_err"), ...OnWrite, error: CallError }),
+  Schema.Struct({ type: Schema.Literal("monitor_ok"), ...OnWrite, value: Schema.Null, ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("monitor_err"), ...OnWrite, error: CallError }),
   Schema.Struct({
     type: Schema.Literal("open_ok"),
     ...OnWrite,
@@ -321,6 +373,7 @@ const Nonce = Schema.Struct({ nonce: Schema.String });
 const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
 const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
 const Entries = Schema.Struct({ entries: Schema.Array(Schema.Unknown) });
+const Woke = Schema.Struct({ rev: Schema.Int });
 const ViewNotice = Schema.Struct({ pid: Schema.String, type: Schema.Literals(["whole", "patch"]) });
 
 /** The door's error reasons after which the same call may be tried again. */
@@ -349,6 +402,7 @@ type WindowChecks<P extends AnyProgram> = {
 
 type WindowCtx = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  readonly tab: string;
   /** The window takes its tiles from this workspace of its person's tezgah. */
   readonly tezgah?: { readonly workspace: number };
 };
@@ -396,18 +450,213 @@ const flush = (s: WindowModel): Step => {
   return wrote({ ...s, sent: [...s.sent, ...calls.map((c) => c.letter)], attempts }, s.link.dial, calls);
 };
 
-const answered = (s: WindowModel, m: { readonly id: number; readonly dial: number }, tag: Call["_tag"]) => {
+/** The write an answer is for: its id and dial. */
+type On = { readonly id: number; readonly dial: number };
+
+const answered = (s: WindowModel, m: On, tag: Call["_tag"]) => {
   const found = s.flight.find((f) => f.id === m.id && f.dial === m.dial && f.call._tag === tag);
   return found === undefined ? null : { call: found.call, rest: s.flight.filter((f) => f !== found) };
 };
 
-/** The brain's own writer, the one a client trusts for process facts. */
-const brainWriter = (by: string): boolean => by === "brain" || by.startsWith("brain:");
+// --- Following a tile's process ---------------------------------------------------------------------
+
+/** The writer the window trusts for process facts and DOWNs: the brain's own. */
+const isBrain = (by: string): boolean => by === "brain" || by.startsWith("brain:");
+
+/** The watch a tile holds and the pid it shows, while it is opening or open. */
+const held = (reach: Reach): { readonly pid: string; readonly ref: string } | null =>
+  reach._tag === "opening" || reach._tag === "open" ? reach : null;
+
+const nameStream = (name: string): string => `processes/${name}`;
+
+const reached = (s: WindowModel, tile: string, reach: Reach): WindowModel => ({
+  ...s,
+  tiles: s.tiles.map((t) => (t.id === tile ? { ...t, reach } : t)),
+});
+
+/** Appends one status message to the current burst, under the next id. */
+const say = (s: WindowModel, message: StatusMessage): WindowModel => ({
+  ...s,
+  said: { id: s.said.id + 1, messages: [...s.said.messages, message] },
+});
+
+/** The burst is over: the next status message starts a new line. The id is kept, so the clearing
+ *  itself is no new line. */
+const hushed = (s: WindowModel): WindowModel =>
+  s.said.messages.length === 0 ? s : { ...s, said: { id: s.said.id, messages: [] } };
+
+/**
+ * A tile whose process `pid` ended tells it once, and only when it is not the drawn focus at that
+ * moment: the tile guideline's row is "Program ends, unfocused tile", followed as written (0543). It
+ * has no row for the focused tile's own end, so that end is noted as told and says nothing; the tile
+ * shows it in its state slot and body. Finding the same end again tells nothing.
+ */
+const tellEnded = (s: WindowModel, tile: TileRow, pid: string, reason: ExitReason): WindowModel => {
+  if (tile.told === pid) {
+    return s;
+  }
+
+  const noted: WindowModel = { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) };
+  return drawnSpace(s.tezgah)?.space.focus === tile.id
+    ? noted
+    : say(noted, StatusMessage.cases.ended.make({ tile: tile.id, reason }));
+};
+
+/** Reads each tile in `ids` from rev 0 of its name, as a dial's start does, with a fresh fold. */
+const resolveAgain = (s: WindowModel, dial: number, ids: ReadonlySet<string>): Step => {
+  const picked = s.tiles.filter((t) => ids.has(t.id));
+  const reads = picked.map((t) => Call.cases.read.make({ stream: nameStream(t.name), after: 0 }));
+  const [written, out] = wrote(s, dial, reads);
+  const flights = new Map(picked.map((t, i) => [t.id, s.serial + i]));
+  const tiles = written.tiles.map((t) => {
+    const id = flights.get(t.id);
+    // A new life starts its own view recovery, as a new dial does.
+    return id === undefined
+      ? t
+      : { ...t, reach: Reach.cases.resolving.make({ id, life: C.emptyFold }), recovery: Recovery.make("ready") };
+  });
+  return [{ ...written, tiles }, out];
+};
+
+/** Parks one `ledger.wait` on the window's own inbox past `after`. */
+const waitInbox = (s: WindowModel, dial: number, after: number): Step => {
+  const [written, out] = wrote(s, dial, [Call.cases.wait.make({ stream: clientInbox(s.tab), after })]);
+  return [{ ...written, inbox: Inbox.cases.waiting.make({ after, id: s.serial }) }, out];
+};
+
+/** The inbox is idle again with its cursor kept; the resend timer arms it while online. */
+const inboxIdle = (s: WindowModel): WindowModel => ({ ...s, inbox: Inbox.cases.idle.make({ after: s.inbox.after }) });
+
+/**
+ * Decides a tile from `life`, its name's fold after one more page. A full page reads the next page
+ * first.
+ * Then a live process is monitored under a ref never used before, and opened; a name whose newest
+ * life ended waits for its next start; a name with neither is missing.
+ */
+const resolved = (s: WindowModel, dial: number, tile: TileRow, life: C.NameFold, full: boolean): Step => {
+  const stream = nameStream(tile.name);
+
+  if (full) {
+    const [written, out] = wrote(s, dial, [Call.cases.read.make({ stream, after: life.after })]);
+    return [reached(written, tile.id, Reach.cases.resolving.make({ id: s.serial, life })), out];
+  }
+
+  if (life.live !== null) {
+    const pid = life.live;
+    // `serial` only grows and is saved, so a ref made from it never repeats in the Model's life.
+    const ref = `w${s.serial}`;
+    const calls = [Call.cases.monitor.make({ ref, pid, tile: tile.id }), Call.cases.open.make({ pid })];
+    const [written, out] = wrote(s, dial, calls);
+    return [reached(written, tile.id, Reach.cases.opening.make({ pid, id: s.serial + 1, ref })), out];
+  }
+
+  if (life.ended !== null) {
+    const { pid, reason } = life.ended;
+    const [written, out] = wrote(s, dial, [Call.cases.wait.make({ stream, after: life.after })]);
+    return [
+      tellEnded(reached(written, tile.id, Reach.cases.ended.make({ pid, reason, id: s.serial })), tile, pid, reason),
+      out,
+    ];
+  }
+
+  return [reached(s, tile.id, Reach.cases.missing.make({})), []];
+};
+
+const decodeLetter = Schema.decodeUnknownOption(
+  Schema.Struct({ by: Schema.String, id: Schema.String, rev: Schema.Int, body: Schema.Struct({ m: Schema.Unknown }) }),
+);
+
+const decodeRev = Schema.decodeUnknownOption(Schema.Struct({ rev: Schema.Int }));
+const decodeDown = Schema.decodeUnknownOption(Down);
+
+/**
+ * The tile a letter is a DOWN for, or null. It is one only when the brain wrote it under a signal
+ * id, it decodes as a `Down` for this window's tab, and it names the watch a tile holds now.
+ */
+const downFor = (s: WindowModel, raw: unknown) => {
+  const letter = Option.getOrNull(decodeLetter(raw));
+
+  if (letter === null || !isBrain(letter.by) || !inSignalSpace(letter.id)) {
+    return null;
+  }
+
+  const down = Option.getOrNull(decodeDown(letter.body.m));
+
+  if (down === null || down.to._tag !== "client" || down.to.client !== s.tab) {
+    return null;
+  }
+
+  const tile = s.tiles.find((t) => {
+    const watch = held(t.reach);
+    return watch !== null && watch.ref === down.ref && watch.pid === down.process;
+  });
+  return tile === undefined ? null : { tile, down, rev: letter.rev };
+};
+
+/**
+ * One page of the window's inbox. Each DOWN for a watch a tile holds sends that tile back to read
+ * its name from 0, with one `down` row. The cursor moves to the page's highest rev, and the inbox
+ * waits past it again.
+ */
+const inboxRead = (s: WindowModel, dial: number, page: ReadonlyArray<unknown>): Step => {
+  const downs = page.flatMap((letter) => downFor(s, letter) ?? []);
+  const revs = page.flatMap((letter) => Option.toArray(decodeRev(letter)).map(({ rev }) => rev));
+  const rows = downs.map(({ tile, down, rev }) =>
+    record({
+      record: ClientRecord.cases.down.make({ name: tile.name, pid: down.process, reason: down.reason._tag, rev }),
+    }),
+  );
+  const [again, reads] = resolveAgain(s, dial, new Set(downs.map(({ tile }) => tile.id)));
+  const [waited, waits] = waitInbox(again, dial, Math.max(s.inbox.after, ...revs));
+  return [waited, [...rows, ...reads, ...waits]];
+};
+
+/** A monitor's answer: one row naming the tile that asked. The tile's reach does not change. */
+const monitorAnswered = (s: WindowModel, m: On, result: "watching" | "refused"): Step => {
+  const found = answered(s, m, "monitor");
+
+  if (found === null || found.call._tag !== "monitor") {
+    return [s, []];
+  }
+
+  const { pid, tile } = found.call;
+  const asker = s.tiles.find((t) => t.id === tile);
+  const rows =
+    asker === undefined ? [] : [record({ record: ClientRecord.cases.monitor.make({ name: asker.name, pid, result }) })];
+  return [{ ...s, flight: found.rest }, rows];
+};
+
+/**
+ * A wait's answer, an error included. The inbox's own wait reads its letters; an ended tile's wait
+ * reads its name from 0 again; an error makes the inbox idle.
+ */
+const waitAnswered = (s: WindowModel, m: On, woke: boolean): Step => {
+  const found = answered(s, m, "wait");
+
+  if (found === null) {
+    return [s, []];
+  }
+
+  const next = { ...s, flight: found.rest };
+
+  if (s.inbox._tag === "waiting" && s.inbox.id === m.id) {
+    if (!woke) {
+      return [inboxIdle(next), []];
+    }
+
+    const { after } = s.inbox;
+    const [written, out] = wrote(next, m.dial, [Call.cases.read.make({ stream: clientInbox(s.tab), after })]);
+    return [{ ...written, inbox: Inbox.cases.reading.make({ after, id: s.serial }) }, out];
+  }
+
+  const tile = s.tiles.find((t) => t.reach._tag === "ended" && t.reach.id === m.id);
+  return tile === undefined ? [next, []] : resolveAgain(next, m.dial, new Set([tile.id]));
+};
 
 /** A tezgah link whose read `id` failed: its process is missing. */
 const lostRead = (link: TezgahLink | null, id: number): TezgahLink | null =>
   link !== null && link.reach._tag === "resolving" && link.reach.id === id
-    ? { ...link, reach: Reach.cases.missing.make({}) }
+    ? { ...link, reach: TezgahReach.cases.missing.make({}) }
     : link;
 
 const runEnd = (s: WindowModel, pid: string): ReadonlyArray<ReturnType<typeof record>> =>
@@ -431,9 +680,7 @@ const noticed = (
   note: unknown,
 ): readonly [WindowModel, Out, ReadonlyArray<string>] => {
   const [client, requested] = step(s.client, { type: "notice", pid, note });
-  const asks = requested.filter(
-    (p) => !s.tiles.some((t) => "pid" in t.reach && t.reach.pid === p && t.recovery === "asked"),
-  );
+  const asks = requested.filter((p) => !s.tiles.some((t) => held(t.reach)?.pid === p && t.recovery === "asked"));
   const shown = client.views[pid];
   const changed = shown !== undefined && shown !== s.client.views[pid];
   const patch = Predicate.isObject(note) && Predicate.hasProperty(note, "type") && note.type === "patch";
@@ -466,7 +713,7 @@ const noticed = (
       ...s,
       client,
       tiles: s.tiles.map((t) =>
-        "pid" in t.reach && t.reach.pid === pid
+        held(t.reach)?.pid === pid
           ? { ...t, recovery: Recovery.make(changed ? "ready" : asks.includes(pid) ? "asked" : t.recovery) }
           : t,
       ),
@@ -480,9 +727,10 @@ const noticed = (
 const opened = (s: WindowModel, pid: string): WindowModel => ({
   ...s,
   trouble: null,
-  tiles: s.tiles.map((t) =>
-    "pid" in t.reach && t.reach.pid === pid ? { ...t, last: pid, reach: Reach.cases.open.make({ pid }) } : t,
-  ),
+  tiles: s.tiles.map((t) => {
+    const watch = held(t.reach);
+    return watch?.pid === pid ? { ...t, last: pid, reach: Reach.cases.open.make({ pid, ref: watch.ref }) } : t;
+  }),
   flight: s.flight.filter((f) => f.call._tag !== "open" || f.call.pid !== pid),
 });
 
@@ -540,22 +788,7 @@ const followed = (s: WindowModel, fresh: (t: Shown) => TileRow): Step => {
     return [next, []];
   }
 
-  const [reading, reads] = wrote(
-    next,
-    s.link.dial,
-    added.map((t) => Call.cases.read.make({ stream: `processes/${t.name}`, after: 0 })),
-  );
-  const ids = new Map(added.map((t, i) => [t.id, next.serial + i]));
-  return [
-    {
-      ...reading,
-      tiles: reading.tiles.map((t) => {
-        const id = ids.get(t.id);
-        return id === undefined ? t : { ...t, reach: Reach.cases.resolving.make({ id }) };
-      }),
-    },
-    reads,
-  ];
+  return resolveAgain(next, s.link.dial, new Set(added.map((t) => t.id)));
 };
 
 /** tezgah's view reached the tezgah window, whole or as a patch: its tezgah child takes it, the tiles
@@ -576,7 +809,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
       ...s,
       tezgah: {
         ...link,
-        reach: Reach.cases.open.make({ pid }),
+        reach: TezgahReach.cases.open.make({ pid }),
         last: pid,
         client,
         attach: due ? "minting" : link.attach,
@@ -972,13 +1205,13 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 
     return [
       {
-        ...next,
+        ...inboxIdle(next),
         tiles: next.tiles.map((t) => ({
           ...t,
           reach: Reach.cases.unresolved.make({}),
           recovery: Recovery.make("ready"),
         })),
-        tezgah: next.tezgah === null ? null : { ...next.tezgah, reach: Reach.cases.unresolved.make({}) },
+        tezgah: next.tezgah === null ? null : { ...next.tezgah, reach: TezgahReach.cases.unresolved.make({}) },
         sent: [],
         patches: s.link._tag === "online" ? {} : s.patches,
       },
@@ -995,23 +1228,15 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   const first =
     next.tezgah === null || person === null
       ? []
-      : [Call.cases.read.make({ stream: `processes/${tezgahName(person)}`, after: 0 })];
-  const [reading, reads] = wrote(next, link.dial, [
-    ...first,
-    ...s.tiles.map((t) => Call.cases.read.make({ stream: `processes/${t.name}`, after: 0 })),
-  ]);
-  next = {
-    ...reading,
-    trouble: null,
-    tiles: reading.tiles.map((t, i) => ({
-      ...t,
-      reach: Reach.cases.resolving.make({ id: next.serial + first.length + i }),
-    })),
-    tezgah:
-      reading.tezgah === null || first.length === 0
-        ? reading.tezgah
-        : { ...reading.tezgah, reach: Reach.cases.resolving.make({ id: next.serial }) },
-  };
+      : [Call.cases.read.make({ stream: nameStream(tezgahName(person)), after: 0 })];
+  const [asked, firsts] = wrote(next, link.dial, first);
+  const tezgah =
+    asked.tezgah === null || first.length === 0
+      ? asked.tezgah
+      : { ...asked.tezgah, reach: TezgahReach.cases.resolving.make({ id: next.serial }) };
+  const [reading, reads] = resolveAgain({ ...asked, tezgah }, link.dial, new Set(s.tiles.map((t) => t.id)));
+  const [waiting, waits] = waitInbox(reading, link.dial, reading.inbox.after);
+  next = { ...waiting, trouble: null };
   const askPersist = next.persist === "due";
 
   if (askPersist) {
@@ -1019,7 +1244,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   }
 
   const [flushed, sends] = flush(next);
-  return [flushed, [...out, ...reads, ...sends, ...(askPersist ? [persist({})] : [])]];
+  return [flushed, [...out, ...firsts, ...reads, ...waits, ...sends, ...(askPersist ? [persist({})] : [])]];
 };
 
 const linkUpdate = Object.fromEntries(
@@ -1126,6 +1351,13 @@ const answerTo = (
         onNone: () => [],
         onSome: (read) => [{ type: "read_ok", ...on, value: read.entries, ms }],
       });
+    case "wait":
+      return Option.match(Schema.decodeUnknownOption(Woke)(result), {
+        onNone: () => [],
+        onSome: (value) => [{ type: "wait_ok", ...on, value, ms }],
+      });
+    case "monitor":
+      return Schema.is(Schema.Null)(result) ? [{ type: "monitor_ok", ...on, value: null, ms }] : [];
     case "open":
       return Option.match(Schema.decodeUnknownOption(Opened)(result), {
         onNone: () => [],
@@ -1247,6 +1479,14 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
 };
 
 /**
+ * A saved Model loaded into a tab: its own tab keeps its inbox cursor; another tab's inbox is not
+ * this one's, so the cursor starts over there. Either way the region mounts empty (0504): the
+ * saved burst is not said again, and its id is kept.
+ */
+const loadedInto = (loaded: WindowModel, tab: string): WindowModel =>
+  hushed(loaded.tab === tab ? loaded : { ...loaded, tab, inbox: Inbox.cases.idle.make({ after: 0 }) });
+
+/**
  * Makes the window parent for one client, from the checks of the programs its tiles show.
  *
  * **Details**
@@ -1272,6 +1512,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     own: checks.tile?.(t.name)?.init(null, {})[0] ?? {},
     refusal: null,
     last: null,
+    told: null,
   });
   const machine = Machine.make({
     model: WindowModel,
@@ -1279,41 +1520,45 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     cmds: [key, now, write, persist, record, ping, hello, enroll, mint],
     types: { ctx: {} as WindowCtx, sub: {} as SocketSub },
     init: (loaded, ctx) => [
-      loaded ??
-        WindowModel.make({
-          // A window on tezgah shows no given tile: its tiles come from tezgah's view.
-          tiles: ctx.tezgah === undefined ? ctx.tiles.map(fresh) : [],
-          link: linkMachine.init(null, {})[0],
-          // Dial 1's exchange waits for its challenge; its socket opening times it.
-          handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
-          fingerprint: null,
-          dials: 1,
-          tries: 0,
-          client: client.init(null, {})[0],
-          serial: 1,
-          flight: [],
-          sent: [],
-          attempts: {},
-          patches: {},
-          persist: "not_due",
-          rejected: null,
-          trouble: null,
-          from: {},
-          redate: [],
-          tezgah:
-            ctx.tezgah === undefined
-              ? null
-              : {
-                  reach: Reach.cases.unresolved.make({}),
-                  last: null,
-                  client: tezgahMachine.init(null, { workspace: ctx.tezgah.workspace })[0],
-                  attach: "waiting",
-                  cursors: {},
-                },
-          prefix: idle,
-          polite: null,
-          size: null,
-        }),
+      loaded === null
+        ? WindowModel.make({
+            // A window on tezgah shows no given tile: its tiles come from tezgah's view.
+            tiles: ctx.tezgah === undefined ? ctx.tiles.map(fresh) : [],
+            tab: ctx.tab,
+            inbox: Inbox.cases.idle.make({ after: 0 }),
+            said: { id: 0, messages: [] },
+            link: linkMachine.init(null, {})[0],
+            // Dial 1's exchange waits for its challenge; its socket opening times it.
+            handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
+            fingerprint: null,
+            dials: 1,
+            tries: 0,
+            client: client.init(null, {})[0],
+            serial: 1,
+            flight: [],
+            sent: [],
+            attempts: {},
+            patches: {},
+            persist: "not_due",
+            rejected: null,
+            trouble: null,
+            from: {},
+            redate: [],
+            tezgah:
+              ctx.tezgah === undefined
+                ? null
+                : {
+                    reach: TezgahReach.cases.unresolved.make({}),
+                    last: null,
+                    client: tezgahMachine.init(null, { workspace: ctx.tezgah.workspace })[0],
+                    attach: "waiting",
+                    cursors: {},
+                  },
+            prefix: idle,
+            polite: null,
+            size: null,
+          })
+        : loadedInto(loaded, ctx.tab),
       [key({ rejected: null })],
     ],
     update: {
@@ -1394,23 +1639,22 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const call = found.call;
-        return [
-          {
-            ...s,
-            flight: found.rest,
-            tezgah: call._tag === "read" ? lostRead(s.tezgah, m.cmd.id) : s.tezgah,
-            sent: call._tag === "send" ? s.sent.filter((l) => l !== call.letter) : s.sent,
-            tiles:
-              call._tag === "read"
-                ? s.tiles.map((t) =>
-                    t.reach._tag === "resolving" && t.reach.id === m.cmd.id
-                      ? { ...t, reach: Reach.cases.missing.make({}) }
-                      : t,
-                  )
-                : s.tiles,
-          },
-          [],
-        ];
+        const next: WindowModel = {
+          ...s,
+          flight: found.rest,
+          tezgah: call._tag === "read" ? lostRead(s.tezgah, m.cmd.id) : s.tezgah,
+          sent: call._tag === "send" ? s.sent.filter((l) => l !== call.letter) : s.sent,
+          tiles:
+            call._tag === "read"
+              ? s.tiles.map((t) =>
+                  t.reach._tag === "resolving" && t.reach.id === m.cmd.id
+                    ? { ...t, reach: Reach.cases.missing.make({}) }
+                    : t,
+                )
+              : s.tiles,
+        };
+        // The inbox's own call never reached the door: it waits for the resend timer.
+        return [s.inbox._tag !== "idle" && s.inbox.id === m.cmd.id ? inboxIdle(next) : next, []];
       },
       read_ok: (s, m): Step => {
         const found = answered(s, m, "read");
@@ -1419,31 +1663,35 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
+        if (s.inbox._tag === "reading" && s.inbox.id === m.id) {
+          return inboxRead({ ...s, flight: found.rest }, m.dial, m.value);
+        }
+
         const link = s.tezgah;
 
         if (link !== null && link.reach._tag === "resolving" && link.reach.id === m.id && found.call._tag === "read") {
           const name = found.call.stream.slice("processes/".length);
-          const pid = C.resolveName(m.value, name, brainWriter);
+          const pid = C.resolveName(m.value, name, isBrain);
           const next = { ...s, flight: found.rest };
 
           if (pid === null) {
-            return [{ ...next, tezgah: { ...link, reach: Reach.cases.missing.make({}) } }, []];
+            return [{ ...next, tezgah: { ...link, reach: TezgahReach.cases.missing.make({}) } }, []];
           }
 
           const [written, cmds] = wrote(next, m.dial, [Call.cases.open.make({ pid })]);
           return [
-            { ...written, tezgah: { ...link, reach: Reach.cases.opening.make({ pid, id: written.serial - 1 }) } },
+            { ...written, tezgah: { ...link, reach: TezgahReach.cases.opening.make({ pid, id: written.serial - 1 }) } },
             cmds,
           ];
         }
 
         const tile = s.tiles.find((t) => t.reach._tag === "resolving" && t.reach.id === m.id);
 
-        if (tile === undefined) {
+        if (tile?.reach._tag !== "resolving") {
           return [{ ...s, flight: found.rest }, []];
         }
 
-        const pid = C.resolveName(m.value, tile.name, brainWriter);
+        const life = C.foldName(tile.reach.life, m.value, tile.name, isBrain);
         const [seen] = step(s.client, {
           type: "read",
           rev: Math.max(
@@ -1453,31 +1701,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             ),
           ),
         });
-        const next = { ...s, client: seen, flight: found.rest };
-
-        if (pid === null) {
-          return [
-            {
-              ...next,
-              tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, reach: Reach.cases.missing.make({}) } : t)),
-            },
-            [],
-          ];
-        }
-
-        const [written, cmds] = wrote(next, m.dial, [Call.cases.open.make({ pid })]);
-        return [
-          {
-            ...written,
-            tiles: written.tiles.map((t) =>
-              t.id === tile.id ? { ...t, reach: Reach.cases.opening.make({ pid, id: written.serial - 1 }) } : t,
-            ),
-          },
-          cmds,
-        ];
+        return resolved({ ...s, client: seen, flight: found.rest }, m.dial, tile, life, m.value.length === PAGE);
       },
       read_err: (s, m): Step => {
         const found = answered(s, m, "read");
+
+        if (found !== null && s.inbox._tag === "reading" && s.inbox.id === m.id) {
+          return [inboxIdle({ ...s, flight: found.rest }), []];
+        }
+
         return found === null
           ? [s, []]
           : [
@@ -1514,6 +1746,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         if (asks.length > 0 && s.link._tag === "online") {
           const calls = asks
+            .filter((p) => next.tiles.some((t) => held(t.reach)?.pid === p))
             .filter((p) => !next.flight.some((f) => f.call._tag === "open" && f.call.pid === p))
             .map((p) => Call.cases.open.make({ pid: p }));
           const [written, writes] = wrote({ ...next, trouble: "Bad view" }, s.link.dial, calls);
@@ -1540,6 +1773,14 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const owner = slot && s.from[slot.n]?.tile;
+        // A letter to tezgah names its command, and its refusal is no tile's.
+        const refusal =
+          m.value._tag === "refused" &&
+          slot !== undefined &&
+          s.from[slot.n]?.does === undefined &&
+          s.tiles.some((t) => t.id === owner)
+            ? { m: slot.m, reason: m.value.reason }
+            : null;
         // A focus move is dropped on its refusal, or once its position is shown (0167).
         const [moves, rows] = tezgahStep(
           s,
@@ -1547,23 +1788,19 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             ? { type: "accepted", letter, pos: m.value.pos, ms: m.ms }
             : { type: "refused", letter, ms: m.ms },
         );
+        const settled = {
+          ...moves,
+          client,
+          flight: found.rest,
+          sent: s.sent.filter((l) => l !== letter),
+          attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
+          from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
+          tiles: refusal === null ? s.tiles : s.tiles.map((t) => (t.id === owner ? { ...t, refusal } : t)),
+        };
         return [
-          {
-            ...moves,
-            client,
-            flight: found.rest,
-            sent: s.sent.filter((l) => l !== letter),
-            attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
-            from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
-            tiles:
-              m.value._tag !== "refused" || slot === undefined || s.from[slot.n]?.does !== undefined
-                ? s.tiles
-                : s.tiles.map((t) =>
-                    t.id === owner
-                      ? { ...t, refusal: { m: slot.m, reason: m.value._tag === "refused" ? m.value.reason : "" } }
-                      : t,
-                  ),
-          },
+          refusal === null || owner === undefined
+            ? settled
+            : say(settled, StatusMessage.cases.refused.make({ tile: owner, ...refusal })),
           [
             record({
               record: ClientRecord.cases.reply.make({
@@ -1597,6 +1834,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           [],
         ];
       },
+      wait_ok: (s, m): Step => waitAnswered(s, m, true),
+      wait_err: (s, m): Step => waitAnswered(s, m, false),
+      monitor_ok: (s, m): Step => monitorAnswered(s, m, "watching"),
+      monitor_err: (s, m): Step => monitorAnswered(s, m, "refused"),
       knock_ok: (s, m): Step => {
         const f = answered(s, m, "knock");
         return f === null ? [s, []] : [{ ...s, flight: f.rest }, []];
@@ -1623,11 +1864,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const [next, rows, asks] = noticed(s, step, m.pid, m.note);
         const after = next.client.views[m.pid] !== s.client.views[m.pid] ? opened(next, m.pid) : next;
 
-        if (
-          asks.length === 0 ||
-          s.link._tag !== "online" ||
-          !s.tiles.some((t) => "pid" in t.reach && t.reach.pid === m.pid)
-        ) {
+        if (asks.length === 0 || s.link._tag !== "online" || !s.tiles.some((t) => held(t.reach)?.pid === m.pid)) {
           return [after, rows];
         }
 
@@ -1640,12 +1877,19 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
       seen: (s, m): Step => [{ ...s, client: step(s.client, { type: "read", rev: m.rev })[0] }, []],
       resend: (s, m): Step => {
-        if (socketDial(s.link) !== m.dial) {
-          return [s, []];
+        // Every tick ends the polite region's burst, on any dial or none.
+        const quiet = hushed(s);
+
+        if (socketDial(quiet.link) !== m.dial) {
+          return [quiet, []];
         }
 
-        const [next, out] = flush({ ...s, redate: [] });
-        return [next, [...s.redate.map((n) => now({ n })), ...out]];
+        const [flushed, out] = flush({ ...quiet, redate: [] });
+        const [next, waits] =
+          flushed.link._tag === "online" && flushed.inbox._tag === "idle"
+            ? waitInbox(flushed, flushed.link.dial, flushed.inbox.after)
+            : [flushed, []];
+        return [next, [...s.redate.map((n) => now({ n })), ...out, ...waits]];
       },
       persist_ok: (s, m): Step => [
         s,
@@ -1723,7 +1967,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         type: "timer",
         deps: (s) =>
           s.redate.length > 0 ||
-          (s.link._tag === "online" && C.sendable(s.client).some((p) => !s.sent.includes(p.letter)))
+          s.said.messages.length > 0 ||
+          (s.link._tag === "online" &&
+            (s.inbox._tag === "idle" || C.sendable(s.client).some((p) => !s.sent.includes(p.letter))))
             ? { ms: 2000, msg: { type: "resend" as const, dial: socketDial(s.link) ?? 0 } }
             : null,
       },

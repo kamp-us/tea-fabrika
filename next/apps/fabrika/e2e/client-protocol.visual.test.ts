@@ -9,7 +9,15 @@ import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Schema } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
-import { type Backend, headlessBackend, NAME, roundTrip, SuiteError } from "./client-protocol.test-support.ts";
+import {
+  type Backend,
+  followRestart,
+  headlessBackend,
+  NAME,
+  roundTrip,
+  served,
+  SuiteError,
+} from "./client-protocol.test-support.ts";
 import { browser, type Dev, devServer, home, profile, suite, tab, tile, waiting } from "./p14.test-support.ts";
 
 /** Each run's own limit in ms: a dev.ts start (up to 180 s), a grant, a 12 s ping wait and a round trip. */
@@ -38,6 +46,15 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
         }).pipe(Effect.orDie),
       shown: t.shown,
       dials: () => seen.sockets.length,
+      state: t.state,
+      body: t.body,
+      // The tab's socket path is `/client/<fingerprint>/<tab>`: its last part is the tab id.
+      tab: Effect.sync(() => new URL(seen.sockets[0] ?? "ws://x/").pathname.split("/").at(-1) ?? ""),
+      pid: Effect.succeed(null),
+      close: Effect.tryPromise({
+        try: () => page.close(),
+        catch: () => new SuiteError({ waited: "browser: the tab's close" }),
+      }).pipe(Effect.orDie),
     };
     return backend;
   });
@@ -98,6 +115,64 @@ describe("P18 L9: one client, two backends, one real round trip", () => {
             expect(trip.first, `${name} dials once before its grant`).toBe(1);
             expect(trip.kept, `${name} stays online on its one dial: its text pings are answered`).toBe(true);
             expect(trip.sent, `${name}'s add reached the ledger once`).toBe(1);
+          }),
+          context,
+        ),
+    );
+  }
+});
+
+// P18 slice 2, next/ (ticket 979): law E1 of the approved plan. On a real local instance of its own,
+// started in this process so the test holds its control endpoint, each backend opens the checklist,
+// sees its process end as crashed, follows its successor and submits one `add` to it. The ledger
+// then holds one watch per pid for the tab, and the close ends the last one. Like L9, it needs
+// Alchemy, workerd and Chromium, so it runs in CI's end-to-end job, never on a laptop step.
+// Plant: drop the window's DOWN handler; the tile stays `Online` on the dead pid and the wait for
+// `Ended (crashed)` runs out.
+describe("P18 E1: a tile monitors its process and follows the restart, on both backends", () => {
+  for (const [name, make] of Object.entries(backends)) {
+    it(
+      `scenario: the ${name} client's tile says Ended (crashed), opens the successor, sends it one add, and its watch ends when the client closes`,
+      { timeout: LIMIT },
+      (context) =>
+        suite(
+          Effect.gen(function* () {
+            const h = yield* home;
+            const s = yield* served(h);
+            const backend = yield* make(s.dev);
+            const walk = yield* followRestart(h, s, backend);
+            expect(walk.ended, `${name}'s tile says why its process ended`).toBe("Ended (crashed)");
+
+            // The tile guideline's empty state, which a tile kept after a crash follows: one word where
+            // the content will start, in `--tile-text`, and never the ended process's last view.
+            if (walk.endedBody !== null) {
+              expect(
+                /^\S+$/.test(walk.endedBody.words),
+                `${name}'s ended tile shows one word where its view was, not ${JSON.stringify(walk.endedBody.words)}`,
+              ).toBe(true);
+              expect(walk.endedBody.ink, `${name}'s ended tile's word is in the tile's text token`).toBe(true);
+            }
+
+            expect(walk.second, `${name}: the successor is a new pid`).not.toBe(walk.first);
+
+            if (walk.shownPid !== null) {
+              expect(walk.shownPid, `${name}'s tile shows the successor`).toBe(walk.second);
+            }
+
+            expect(walk.restartedAt, `${name}: the successor's restart is in the name's stream`).not.toBeNull();
+            expect(walk.sent, `${name}'s add reached the ledger once`).toHaveLength(1);
+            expect(walk.sent[0], `${name}'s add came after the successor started`).toBeGreaterThan(
+              walk.restartedAt ?? Number.POSITIVE_INFINITY,
+            );
+            expect(
+              walk.watched.map((w) => w.process).toSorted(),
+              `${name}: processes holds one watch per pid, each for the tab`,
+            ).toEqual([walk.first, walk.second].toSorted());
+            const last = walk.watched.find((w) => w.process === walk.second);
+            expect(
+              walk.unwatched,
+              `${name}: the close ends the successor's watch, and only the client's leaving ends it`,
+            ).toEqual([{ ref: last?.ref, reason: "watcher_exited" }]);
           }),
           context,
         ),

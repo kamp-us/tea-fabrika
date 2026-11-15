@@ -314,10 +314,11 @@ const world = (view: TezgahView, count: number, size = { width: 1440, height: 86
   const out: World = { rev: 1, view, wins: [], minted: 0, letters: 0, sent: [] };
 
   for (let i = 0; i < count; i++) {
-    const [s, cmds] = machine.init(null, { tiles: [], tezgah: { workspace: 1 } } as never) as readonly [
-      WindowModel,
-      ReadonlyArray<Cmd>,
-    ];
+    const [s, cmds] = machine.init(null, {
+      tiles: [],
+      tab: `tab_${i + 1}`,
+      tezgah: { workspace: 1 },
+    } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
     out.wins.push({ s, waiting: [...cmds], subscribed: false, answered: new Set() });
     step(out, i, { type: "size", ...size } as WindowMsg);
     online(out, i);

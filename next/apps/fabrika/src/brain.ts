@@ -57,7 +57,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.challenge(client)));
   }
 
-  initialize(client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) {
+  initialize(
+    client: ConnectionId,
+    input: unknown,
+    trusted: { url: string; tab: string; name: string; session?: string },
+  ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }

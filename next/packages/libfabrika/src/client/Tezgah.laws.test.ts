@@ -729,10 +729,11 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
   const world: World = { pos: 1, view, wins: [], letters: 0 };
 
   for (let i = 0; i < count; i++) {
-    const [s, cmds] = focusWindow.init(null, { tiles: [], tezgah: { workspace: 1 } } as never) as readonly [
-      WindowModel,
-      ReadonlyArray<Cmd>,
-    ];
+    const [s, cmds] = focusWindow.init(null, {
+      tiles: [],
+      tab: `tab_${i + 1}`,
+      tezgah: { workspace: 1 },
+    } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
     world.wins.push({
       s,
       waiting: [...cmds],

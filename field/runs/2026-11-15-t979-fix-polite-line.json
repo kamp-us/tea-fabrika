@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t979-fix-polite-line",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-15T01:52:00-08:00",
+  "ended": "2026-11-15T02:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round, one agent, in next/: the polite line for an ended tile now follows the tile guideline as written (0543). It says `<program> in t<n> ended`, as `checklist in t1 ended`, with no exit reason, and only when the ended tile is not the drawn focus at that moment. The program and the handle come from tileWords in next/packages/tuval/src/window/Layout.tsx, which tileName now reads too, so the line and the tile's own name cannot disagree. The focus rule lives in tellEnded in the window machine, where focus is known; a focused tile's end is noted as told and says nothing, since the guideline has no row for it. The title bar's Ended (crashed) and the body's Ended are unchanged, as 0543 shows them. L26's settle now leaves only the inbox's own parked wait unanswered and requires the world to settle. The plan's line on the polite words is amended and its body digest updated. Two finding rows from the review are saved.",
+  "plants": [
+    {
+      "law": "spoken.test.ts: an end is the tile guideline's `<program> in t<n> ended`, with no exit reason",
+      "plant": "the old spoken.ts, the row's process name and tile id with the reason",
+      "result": "red"
+    },
+    {
+      "law": "spoken.test.ts: an end is the tile guideline's `<program> in t<n> ended`, with no exit reason",
+      "plant": "spoken.ts: the reason appended again after ended",
+      "result": "red"
+    },
+    {
+      "law": "spoken.test.ts: an end is the tile guideline's `<program> in t<n> ended`, with no exit reason",
+      "plant": "spoken.ts: the tile's raw id in place of its handle",
+      "result": "red"
+    },
+    {
+      "law": "WindowMachine.laws.test.ts S9: an end is said only when the tile is not the drawn focus, once either way",
+      "plant": "the old tellEnded, which says every end whatever has focus",
+      "result": "red"
+    },
+    {
+      "law": "WindowMachine.laws.test.ts S9: an end is said only when the tile is not the drawn focus, once either way",
+      "plant": "tellEnded: a focused tile's end not noted as told, so a later read says it",
+      "result": "red"
+    },
+    {
+      "law": "WindowMachine.laws.test.ts L26: the world settles with only the inbox's own wait parked",
+      "plant": "resolveAgain writes a wait on processes/<name> in place of its read",
+      "result": "red"
+    },
+    {
+      "law": "WindowMachine.laws.test.ts L26 before this round, which skipped every wait",
+      "plant": "resolveAgain writes a wait on processes/<name> in place of its read",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Ran alone, each green after the fix: spoken.test.ts 2 of 2, WindowMachine.laws.test.ts 51 of 51, Layout.laws.test.ts 3 of 3, words.test.ts 2 of 2, client-protocol.visual.test.ts 4 of 4 (next-visual, headless). pnpm lint and one pnpm typecheck passed. Not run: a real screen reader, and --changed. Open for the owner: the guideline has no row for what a person hears when their own focused tile's program ends.",
+  "step": "build"
+}

@@ -26,8 +26,16 @@ import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
-import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
-import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
+import { type From as ProcessFrom, Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import {
+  ProcessEvent,
+  Recipient,
+  Owner,
+  Down,
+  Start,
+  clientInbox,
+  signalId,
+} from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
@@ -77,6 +85,8 @@ const SAW = {
 const SENT = "2026-11-08T04:00:00.000Z";
 /** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
 const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
+/** The brain's own writer key in these worlds: the `by` its ProcessManager stamps on every line. */
+const BRAIN_KEY = "SHA256:brain";
 const START = processId();
 const TOOK = { label: "Browser", location: "test", method: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -312,11 +322,34 @@ const world = Effect.fnUntraced(function* (
     inputCap?: number;
     spentCap?: number;
     rateLimit?: { limit: number; window: number };
+    /** P18 slice 2: the door gets a `monitor` option, wired as the Project wires it. */
+    monitor?: boolean;
   } = {},
 ) {
   const dir = mkdtempSync(join(top, "w-"));
   const db = open(join(dir, "project.db"));
   const sql = nodeSql(db);
+  // Every stream an append rang a parked wait on, through the brain's own turns.
+  const rings: Array<string> = [];
+  const bell = Layer.succeed(Doorbell, {
+    ring: (_to, stream) =>
+      Effect.sync(() => {
+        rings.push(stream);
+      }),
+  });
+  /**
+   * The brain's own ProcessManager over this world's ledger, for one caller. As the Project's door
+   * option builds one per call: the window's session is its own owner, and the watch's recipient is
+   * the one the door built from the checked connection, never anything the params named.
+   */
+  const processesFor = (caller: { owner: typeof Owner.Type; recipient: typeof Recipient.Type }) =>
+    ProcessManager.layer({ ...caller, by: BRAIN_KEY }, ids.next(Id.Process).pipe(Effect.orDie)).pipe(
+      Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(bell))),
+    );
+  const monitor = (ref: string, pid: string, to: typeof Recipient.cases.client.Type, from: ProcessFrom) =>
+    ProcessManager.use((p) => p.monitor(ref, pid, from)).pipe(
+      Effect.provide(processesFor({ owner: Owner.cases.process.make({ process: to.session }), recipient: to })),
+    );
   const root = yield* key(),
     window = yield* key(),
     agent = yield* key(),
@@ -419,6 +452,7 @@ const world = Effect.fnUntraced(function* (
       name: (m: typeof Input.Type) => m._tag,
     },
     events: { personOnly: ["answered"] },
+    ...(options.monitor === true ? { monitor } : {}),
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
@@ -514,6 +548,8 @@ const world = Effect.fnUntraced(function* (
     provide: Effect.provide(layer),
     reopen,
     usedInputs,
+    rings,
+    processesFor,
     databases: () => new Map([["object", db], ...partFiles]),
     partCount: () => partFiles.size,
     bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
@@ -1490,6 +1526,7 @@ const online = Effect.fnUntraced(function* (
   w: World,
   label: string = "w1",
   k: World["window"] = w.window,
+  session?: string,
 ) {
   const client = yield* d.connect();
   const nonce = yield* d.challenge(client);
@@ -1507,9 +1544,15 @@ const online = Effect.fnUntraced(function* (
     sentAt: SENT,
     signed,
   };
-  const result = yield* d.initialize(client, hello, { url: URL, tab, name: k.fingerprint });
+  // P18 slice 2: a socket's connection object also hands the door the socket's session.
+  const result = yield* d.initialize(client, hello, {
+    url: URL,
+    tab,
+    name: k.fingerprint,
+    ...(session === undefined ? {} : { session }),
+  });
   expect(result._tag).toBe("online");
-  return { nonce, hello, client };
+  return { nonce, hello, client, tab };
 });
 
 const grantWindow = Effect.fnUntraced(function* (
@@ -5603,5 +5646,229 @@ describe("P10 refusal records and checked writes", () => {
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
+  );
+});
+
+// --- P18 slice 2, next/ (ticket 979): the door's `process.monitor` ---------------------------------
+//
+// The shape these laws hold `gateway/Gateway.ts` to, from the approved plan (the build may add more):
+// - `process.monitor {ref, pid}` is a public method for a window or an agent; a hands client is
+//   refused `not_allowed`, as for every method past that check. Its params are exactly `ref` and
+//   `pid`: any other key is `bad_input` and writes nothing.
+// - A door option `monitor(ref, pid, to, from)`. The door builds `to` from the checked connection,
+//   never from params: `{client: <the hello's tab>, session: <the socket's session>}`, where the
+//   session is the trusted `session` a socket's connection object passes to `initialize`. A door
+//   whose connection has no session answers `no_session`. `from` is the call's own: its `by` is the
+//   window's key, which ProcessManager keeps as `asked`.
+// - A ProcessManager refusal is the answer's reason: `bad_text`, `bad_ref`.
+// These worlds wire the option as the Project does: one ProcessManager per call, whose caller is
+// the session's own process and whose recipient is the `to` the door built.
+describe("P18 slice 2 D1 to D3: a window monitors a process through the door", () => {
+  const processRows = () => entries("processes");
+  const monitoredRows = () => Effect.map(processRows(), (rows) => rows.filter((row) => row._tag === "monitored"));
+  const inboxRows = (tab: string) => entries(clientInbox(tab));
+  /** A key granted as hands, online on its own connection with a session. */
+  const handsOnline = Effect.fnUntraced(function* (d: typeof Gateway.Service, w: World, session: string) {
+    const grant = {
+      id: "grant-hands",
+      key: w.agent.raw,
+      for: PERSON,
+      to: "project-a",
+      as: "hands" as const,
+      saw: SAW,
+      sentAt: SENT,
+    };
+    const text = grantText(grant);
+    expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
+    return yield* online(d, w, "hands", w.agent, session);
+  });
+  /** A ref a window could send, and the keys a forged call adds beside it: the recipient's own among them. */
+  const MonitorCall = Schema.Struct({
+    ref: Schema.NonEmptyString.check(Schema.isMaxLength(40)),
+    extra: Schema.Array(
+      Schema.Struct({
+        key: Schema.Literals(["to", "client", "session", "by", "asked", "recipient", "other"]),
+        value: Schema.Json,
+      }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(3)),
+  });
+
+  it.effect.prop(
+    "D1 property: process.monitor {ref, pid} from a checked window writes one monitored whose to is its hello's tab and its socket's session and whose asked is its key; the same call again writes nothing; any other param key is bad_input; hands are not_allowed; a door with no session answers no_session",
+    { generated: MonitorCall },
+    ({ generated }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ monitor: true });
+        // The pid is a real process id from the id generator; the walk generates the rest.
+        const call = {
+          ref: generated.ref,
+          pid: processId(),
+          extra: Object.fromEntries(generated.extra.map((e) => [e.key, e.value])),
+        };
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const session = processId();
+          const { client, tab } = yield* online(d, w, "d1", w.window, session);
+          const to = Recipient.cases.client.make({ client: tab, session });
+          const before = yield* processRows();
+          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual({
+            _tag: "ok",
+            result: null,
+          });
+          const added = (yield* processRows()).slice(before.length);
+          expect(
+            added.map((row) => [row._tag, row.by, row.body]),
+            "one monitored line for the checked connection",
+          ).toEqual([["monitored", BRAIN_KEY, { ref: call.ref, process: call.pid, to, asked: w.window.fingerprint }]]);
+          const once = yield* processRows();
+          const letters = yield* inboxRows(tab);
+          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual({
+            _tag: "ok",
+            result: null,
+          });
+          expect(yield* processRows(), "the same monitor again wrote a line").toEqual(once);
+          expect(yield* inboxRows(tab), "the same monitor again wrote a letter").toEqual(letters);
+          const extra = { ...call.extra, ref: `${call.ref}:x`, pid: call.pid };
+          // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
+          // `reserved` refusal; any other key is this method's `bad_input`.
+          const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Object.hasOwn(extra, k));
+          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject({
+            _tag: "refused",
+            reason: reserved ? "reserved" : "bad_input",
+          });
+          expect(yield* processRows(), "params with another key wrote a line").toEqual(once);
+          // A well-formed recipient in the params is still a key the method does not take.
+          const forged = Recipient.cases.client.make({ client: "tab-forged", session: processId() });
+          expect(
+            yield* d.route(client, "process.monitor", { ref: `${call.ref}:f`, pid: call.pid, to: forged }),
+          ).toMatchObject({ _tag: "refused", reason: "bad_input" });
+          expect(yield* processRows(), "a recipient named in params wrote a line").toEqual(once);
+          const hands = yield* handsOnline(d, w, processId());
+          expect(
+            yield* d.route(hands.client, "process.monitor", { ref: `${call.ref}:h`, pid: call.pid }),
+          ).toMatchObject({ _tag: "refused", reason: "not_allowed" });
+          const bare = yield* online(d, w, "d1-bare");
+          expect(yield* d.route(bare.client, "process.monitor", { ref: `${call.ref}:b`, pid: call.pid })).toMatchObject(
+            { _tag: "refused", reason: "no_session" },
+          );
+          expect(yield* processRows(), "a refused monitor wrote a line").toEqual(once);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
+  );
+
+  it.effect(
+    "D2 scenario: through the door, a monitored process's exit puts one brain DOWN with its reason into client:<tab>/inbox under its signal id, a monitor of a gone pid puts a noproc DOWN there in the same call, and a ledger.wait parked on that inbox is answered",
+    () =>
+      Effect.gen(function* () {
+        const w = yield* world({ monitor: true });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const brain = w.processesFor({
+            owner: Owner.cases.brain.make({}),
+            recipient: Recipient.cases.client.make({ client: "brain", session: processId() }),
+          });
+          const brainFrom = {
+            by: BRAIN_KEY,
+            for: PERSON,
+            sentAt: SENT,
+            seen: 0,
+            parent: null,
+            traceId: TRACE,
+            build: "test-build",
+          };
+          const { process: counter } = yield* ProcessManager.use((p) =>
+            p.start(
+              Start.cases.first.make({
+                id: "start:counter",
+                name: "counter:1",
+                code: { program: "counter", hash: "h" },
+              }),
+              brainFrom,
+            ),
+          ).pipe(Effect.provide(brain));
+          const session = processId();
+          const { client, tab } = yield* online(d, w, "d2", w.window, session);
+          const to = Recipient.cases.client.make({ client: tab, session });
+          const inbox = clientInbox(tab);
+          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 }), "nothing waits yet").toMatchObject(
+            {
+              _tag: "parked",
+            },
+          );
+          expect((yield* d.route(client, "process.monitor", { ref: "w9", pid: counter }))._tag).toBe("ok");
+          expect(yield* inboxRows(tab), "a live target's monitor wrote a letter").toEqual([]);
+          const rang = w.rings.length;
+          yield* ProcessManager.use((p) => p.exit(counter, CRASHED, brainFrom)).pipe(Effect.provide(brain));
+          const exited = yield* inboxRows(tab);
+          const letter = (row: (typeof exited)[number]) => [row.id, row.by, Reflect.get(Object(row.body), "m")];
+          expect(exited.map(letter), "the exit's DOWN in the window's own inbox").toEqual([
+            [signalId(to, "w9", 1), BRAIN_KEY, Down.make({ ref: "w9", process: counter, reason: CRASHED, to })],
+          ]);
+          expect(w.rings.slice(rang), "the exit rang the parked wait on the window's inbox").toContain(inbox);
+          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 })).toEqual({
+            _tag: "ok",
+            result: { rev: exited[0]!.rev },
+          });
+          const after = exited[0]!.rev;
+          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after }), "past the DOWN").toMatchObject({
+            _tag: "parked",
+          });
+          const before = w.rings.length;
+          expect((yield* d.route(client, "process.monitor", { ref: "w10", pid: counter }))._tag).toBe("ok");
+          const gone = (yield* inboxRows(tab)).slice(exited.length);
+          expect(gone.map(letter), "a gone pid's monitor wrote its noproc DOWN in the same call").toEqual([
+            [
+              signalId(to, "w10", 1),
+              BRAIN_KEY,
+              Down.make({ ref: "w10", process: counter, reason: { _tag: "noproc" }, to }),
+            ],
+          ]);
+          expect((yield* monitoredRows()).map((row) => Reflect.get(Object(row.body), "ref"))).toEqual(["w9", "w10"]);
+          expect(w.rings.slice(before), "the noproc DOWN rang the parked wait").toContain(inbox);
+          expect(
+            yield* d.route(client, "ledger.wait", { stream: inbox, after }),
+            "a wait past the exit's DOWN wakes on the noproc DOWN",
+          ).toEqual({ _tag: "ok", result: { rev: gone[0]!.rev } });
+        }).pipe(w.provide);
+      }),
+  );
+
+  it.effect.prop(
+    "D3 property: a ref that is empty or over 256 characters is bad_text, the same ref on another pid is bad_ref, and a refusal writes nothing",
+    {
+      // Refs of 0 to 300 characters: short ones, ones about the 256 bound, and each bound itself.
+      ref: Schema.Union([
+        Schema.Literals(["", "r", "r".repeat(255), "r".repeat(256), "r".repeat(257)]),
+        Schema.String.check(Schema.isMaxLength(24)),
+        Schema.String.check(Schema.isMinLength(240), Schema.isMaxLength(300)),
+      ]),
+    },
+    ({ ref }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ monitor: true });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w, "d3", w.window, processId());
+          const pid = processId();
+          const before = yield* processRows();
+          const answer = yield* d.route(client, "process.monitor", { ref, pid });
+
+          if (ref.length === 0 || ref.length > 256) {
+            expect(answer, `a ${ref.length}-character ref`).toMatchObject({ _tag: "refused", reason: "bad_text" });
+            expect(yield* processRows(), "a refused ref wrote a line").toEqual(before);
+            return;
+          }
+
+          expect(answer._tag, `a ${ref.length}-character ref`).toBe("ok");
+          const once = yield* processRows();
+          expect(yield* d.route(client, "process.monitor", { ref, pid: processId() })).toMatchObject({
+            _tag: "refused",
+            reason: "bad_ref",
+          });
+          expect(yield* processRows(), "a ref moved to another pid wrote a line").toEqual(once);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

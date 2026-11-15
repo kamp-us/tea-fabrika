@@ -9,6 +9,7 @@ import { Mailbox } from "./Mailbox.ts";
 import {
   A,
   B,
+  PIDS,
   W,
   X,
   again,
@@ -32,7 +33,7 @@ const text = fc.string({ minLength: 1, maxLength: 256 });
 const refs = fc.uniqueArray(text, { minLength: 2, maxLength: 2 });
 const session = fcProcessIds;
 
-const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effect.Effect<void, E, R>) =>
+const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effect.Effect<void, E, R>, numRuns = 40) =>
   Effect.gen(function* () {
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
@@ -40,7 +41,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: 119120,
-          numRuns: 40,
+          numRuns,
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },
@@ -707,4 +708,111 @@ describe("P33, a client's inbox is not a process's inbox", () => {
       });
     });
   });
+});
+
+// P18 slice 2, next/ (ticket 979): P1. A client session is a watcher too: when its socket closes,
+// `ProcessManager.leave(session, from)` ends that session's watches, as OTP ends a dead watcher's
+// monitors. The shape this law holds `ProcessManager.ts` to, from the approved plan: one new member,
+// `leave(session, from)`, which writes `demonitored {ref, to, reason: "watcher_exited"}` for every
+// live watch whose recipient is a client with that session, and writes nothing when there is none.
+describe("P18 P1, a client session's leave ends its watches", () => {
+  const SESSIONS = [PIDS[4]!, PIDS[5]!, PIDS[6]!] as const;
+  const CLIENTS = ["window-a", "window-b"] as const;
+  const watch = fc.record({
+    to: fc.oneof(
+      fc.record({ client: fc.constantFrom(...CLIENTS), session: fc.constantFrom(...SESSIONS) }),
+      fc.constant(null),
+    ),
+    target: fc.constantFrom(A, X),
+    cancel: fc.boolean(),
+  });
+  const recipientFor = (to: { readonly client: string; readonly session: string } | null) =>
+    to === null ? Recipient.cases.process.make({ process: W }) : Recipient.cases.client.make(to);
+  const callerFor = (to: typeof Recipient.Type) =>
+    to._tag === "process"
+      ? watcher(to.process)
+      : { owner: Owner.cases.process.make({ process: to.session }), recipient: to };
+  const key = (to: typeof Recipient.Type, ref: string) => JSON.stringify([to, ref]);
+  const leave = (store: Storage, session: string) =>
+    ProcessManager.use((p) => p.leave(session, from())).pipe(Effect.provide(manager(store)));
+
+  it.effect(
+    "P1 property: leave(session) ends exactly that session's live client watches with watcher_exited; other sessions, process recipients and canceled watches stay; a later exit writes no DOWN for the ended ones; a second leave writes nothing",
+    () => {
+      const seen = { ended: 0, kept: 0, canceled: 0, processes: 0 };
+      return check(
+        fc.tuple(fc.array(watch, { minLength: 1, maxLength: 12 }), fc.constantFrom(...SESSIONS)),
+        [],
+        ([watches, session]) => {
+          const store = storage();
+          return Effect.gen(function* () {
+            yield* seed(store);
+            const made = watches.map((w, i) => ({ ...w, to: recipientFor(w.to), ref: `watch:${i}` }));
+
+            for (const w of made) {
+              yield* ProcessManager.use((p) => p.monitor(w.ref, w.target, from())).pipe(
+                Effect.provide(manager(store, callerFor(w.to))),
+              );
+
+              if (w.cancel) {
+                yield* ProcessManager.use((p) => p.demonitor(w.ref, from())).pipe(
+                  Effect.provide(manager(store, callerFor(w.to))),
+                );
+              }
+            }
+
+            const ends = made.filter((w) => !w.cancel && w.to._tag === "client" && w.to.session === session);
+            const stays = made.filter((w) => !w.cancel && !ends.includes(w));
+            seen.ended += ends.length;
+            seen.kept += stays.filter((w) => w.to._tag === "client").length;
+            seen.processes += stays.filter((w) => w.to._tag === "process").length;
+            seen.canceled += made.filter((w) => w.cancel).length;
+            const before = store.rows();
+            yield* leave(store, session);
+            const added = store.rows().slice(before.length);
+            expect(store.rows().slice(0, before.length), "leave changed an earlier row").toEqual(before);
+            expect(
+              added.map((row) => [row._tag, row.by]),
+              "leave wrote something other than the brain's demonitored lines",
+            ).toEqual(added.map(() => ["demonitored", from().by]));
+            expect(
+              added
+                .map((row) => {
+                  const body = row.body as {
+                    readonly ref: string;
+                    readonly to: typeof Recipient.Type;
+                    readonly reason: unknown;
+                  };
+                  return [key(body.to, body.ref), body.reason];
+                })
+                .sort(),
+              "the watches leave ended",
+            ).toEqual(ends.map((w) => [key(w.to, w.ref), "watcher_exited"]).sort());
+            const after = store.rows();
+            store.reopen();
+            yield* leave(store, session);
+            expect(store.rows(), "a second leave wrote something").toEqual(after);
+            yield* exit(store, A);
+            yield* exit(store, X);
+            expect(
+              signals(store)
+                .map((row) => key(row.m.to, row.m.ref))
+                .sort(),
+              "the DOWNs after leave",
+            ).toEqual(stays.map((w) => key(w.to, w.ref)).sort());
+          });
+        },
+        100,
+      ).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            expect(seen.ended, "some watches ended").toBeGreaterThan(0);
+            expect(seen.kept, "some other sessions' watches stayed").toBeGreaterThan(0);
+            expect(seen.processes, "some process recipients' watches stayed").toBeGreaterThan(0);
+            expect(seen.canceled, "some watches were canceled first").toBeGreaterThan(0);
+          }),
+        ),
+      );
+    },
+  );
 });

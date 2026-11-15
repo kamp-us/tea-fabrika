@@ -337,6 +337,13 @@ export interface ProjectDoorOptions {
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
+  /** Watches `pid` for one window session, `to`, in the Project's turn. */
+  readonly monitor: (
+    ref: string,
+    pid: string,
+    to: typeof Recipient.cases.client.Type,
+    from: From,
+  ) => Effect.Effect<void, ProcessError | LedgerError>;
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
 }
 
@@ -884,6 +891,34 @@ const projectLogic = Effect.fn("project.init")(function* (
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
+  // Each window session's own ProcessManager, so its watches deliver to that session (P18). Its
+  // owner is the session's own pid, which registered no name, so an owner-gated call through it is
+  // `not_parent`. Built at the session's first monitor and kept until its leave, so its folded
+  // table lives as long as the session, never folded again from rev 0 for each call.
+  const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
+  const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
+    const key = JSON.stringify([to.client, to.session]);
+    const kept = windows.get(key);
+
+    if (kept !== undefined) {
+      return kept.manager;
+    }
+
+    const caller = { by, owner: Owner.cases.process.make({ process: to.session }), recipient: to };
+    const manager = yield* ProcessManager.pipe(
+      Effect.provide(ProcessManager.layer(caller, ids.next)),
+      Effect.provideContext(services),
+    );
+    windows.set(key, { session: to.session, manager });
+    return manager;
+  });
+  const windowsLeave = (session: string) => {
+    for (const [key, kept] of windows) {
+      if (kept.session === session) {
+        windows.delete(key);
+      }
+    }
+  };
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
@@ -1159,6 +1194,9 @@ const projectLogic = Effect.fn("project.init")(function* (
             ),
           ),
         ),
+      // The turn holds the call, and its rings go after it, so a noproc DOWN wakes a parked wait.
+      monitor: (ref, pid, to, from) =>
+        write(windowManager(to).pipe(Effect.flatMap((manager) => manager.monitor(ref, pid, from)))),
       wait: referee.wait,
     })
     .pipe(Effect.provideContext(services));
@@ -1751,8 +1789,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     publish,
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
-    initialize: (client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) =>
-      wrapped(door.initialize(client, input, trusted)),
+    initialize: (
+      client: ConnectionId,
+      input: unknown,
+      trusted: { url: string; tab: string; name: string; session?: string },
+    ) => wrapped(door.initialize(client, input, trusted)),
     route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
       wrapped(
         door.route(client, method, params, reader).pipe(
@@ -1776,9 +1817,14 @@ const projectLogic = Effect.fn("project.init")(function* (
       );
       yield* wrapped(gateways.join(row));
     }),
-    leave: Effect.fnUntraced(function* (client: string, session: string) {
+    // Traced: a socket's close brings no caller's span, and `from` reads its trace from the current
+    // one, so an untraced leave died there before it ended the session's watches.
+    leave: Effect.fn("project.leave")(function* (client: string, session: string) {
       sql.exec("DELETE FROM dev_clients WHERE client=? AND session=?", client, session);
       yield* wrapped(gateways.leave(client, session));
+      // A closed socket's session is a watcher that ended: its watches end with it, as in OTP.
+      yield* wrapped(write(processes.leave(session, yield* from())));
+      windowsLeave(session);
     }),
     online: (key: string) => wrapped(gateways.online(key)),
     info: wrapped(processes.info),
