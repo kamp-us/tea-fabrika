@@ -54,7 +54,14 @@ import { Relations } from "../permissions/Relations.ts";
 import * as RelationsLedger from "../permissions/RelationsLedger.ts";
 import { Senders } from "../permissions/Senders.ts";
 import { Connections } from "../presence/Connections.ts";
-import { type Child, Children, ChildrenError, type StartGrant, type Started } from "../processes/Children.ts";
+import {
+  type Child,
+  Children,
+  ChildrenError,
+  type ChildStop,
+  type StartGrant,
+  type Started,
+} from "../processes/Children.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
@@ -104,6 +111,7 @@ import { SinkError } from "../telemetry/Trace.ts";
 import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   ChildReplies,
+  StopReplies,
   CommitReply,
   MailReplies,
   type MailReply,
@@ -333,10 +341,18 @@ export interface ProjectDoorOptions {
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
   /** One draft frame to the process's runner, which echoes it; nothing is recorded. */
   readonly draft: (process: string, m: Schema.Json) => Effect.Effect<DraftAnswer, LedgerError>;
+  /** Watches `pid` for one window session, `to`, in the Project's turn. */
+  readonly monitor: (
+    ref: string,
+    pid: string,
+    to: typeof Recipient.cases.client.Type,
+    from: From,
+  ) => Effect.Effect<void, ProcessError | LedgerError>;
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
 }
 
 type Boot = { readonly name: string; readonly id: string; readonly program: string };
+type Boots = readonly [Boot, ...ReadonlyArray<Boot>];
 
 /**
  * What a Project object is built with: its built-in programs, the processes it boots, the door it
@@ -350,7 +366,9 @@ export interface ProjectOptions {
   readonly mail?: { readonly grants: Grants };
   readonly config?: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
-  readonly bootstrap: readonly [Boot, ...ReadonlyArray<Boot>];
+  /** What the instance boots with: a list, or a list made for the founder, so a program each person
+   *  has one of, as tezgah, boots under the founder's own name. */
+  readonly bootstrap: Boots | ((person: string) => Boots);
   /** Which program may start which (P42), a host right. None when absent. */
   readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
   readonly door: (
@@ -497,6 +515,17 @@ const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof
     Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
       error instanceof ChildrenError && error.reason !== "storage"
         ? Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
+    ),
+  );
+
+/** A stop's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
+const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
+  work.pipe(
+    Effect.as(StopReplies.cases.ok.make({})),
+    Effect.catch((error): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
+      error instanceof ChildrenError && error.reason !== "storage"
+        ? Effect.succeed(StopReplies.cases.ChildrenError.make({ reason: error.reason }))
         : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
   );
@@ -818,7 +847,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 ) {
   const checked = yield* RecordedStart;
   const config = { ...checked.input, ...checked.input.founding, port: checked.values.port };
-  const { programs, bootstrap } = options;
+  const { programs } = options;
+  const bootstrap = typeof options.bootstrap === "function" ? options.bootstrap(config.person) : options.bootstrap;
   const name = ctx.id.name ?? config.name;
   const { sql, turn, write, ledgerLayer } = local;
   // Installs stay ordered while a Process finishes a turn that may write back to the Project.
@@ -865,6 +895,34 @@ const projectLogic = Effect.fn("project.init")(function* (
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
+  // Each window session's own ProcessManager, so its watches deliver to that session (P18). Its
+  // owner is the session's own pid, which registered no name, so an owner-gated call through it is
+  // `not_parent`. Built at the session's first monitor and kept until its leave, so its folded
+  // table lives as long as the session, never folded again from rev 0 for each call.
+  const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
+  const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
+    const key = JSON.stringify([to.client, to.session]);
+    const kept = windows.get(key);
+
+    if (kept !== undefined) {
+      return kept.manager;
+    }
+
+    const caller = { by, owner: Owner.cases.process.make({ process: to.session }), recipient: to };
+    const manager = yield* ProcessManager.pipe(
+      Effect.provide(ProcessManager.layer(caller, ids.next)),
+      Effect.provideContext(services),
+    );
+    windows.set(key, { session: to.session, manager });
+    return manager;
+  });
+  const windowsLeave = (session: string) => {
+    for (const [key, kept] of windows) {
+      if (kept.session === session) {
+        windows.delete(key);
+      }
+    }
+  };
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
@@ -1150,6 +1208,9 @@ const projectLogic = Effect.fn("project.init")(function* (
             ),
           ),
         ),
+      // The turn holds the call, and its rings go after it, so a noproc DOWN wakes a parked wait.
+      monitor: (ref, pid, to, from) =>
+        write(windowManager(to).pipe(Effect.flatMap((manager) => manager.monitor(ref, pid, from)))),
       wait: referee.wait,
     })
     .pipe(Effect.provideContext(services));
@@ -1401,6 +1462,18 @@ const projectLogic = Effect.fn("project.init")(function* (
     yield* Effect.gen(function* () {
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
+    }).pipe(write);
+  });
+  /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
+   *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
+  const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
+    yield* Effect.gen(function* () {
+      const child = (yield* processes.info).find((row) => row.name === input.name);
+      yield* children.stop(input, origin);
+
+      if (child !== undefined) {
+        yield* door.retire(child.process);
+      }
     }).pipe(write);
   });
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
@@ -1730,8 +1803,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     publish,
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
-    initialize: (client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) =>
-      wrapped(door.initialize(client, input, trusted)),
+    initialize: (
+      client: ConnectionId,
+      input: unknown,
+      trusted: { url: string; tab: string; name: string; session?: string },
+    ) => wrapped(door.initialize(client, input, trusted)),
     route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
       wrapped(
         door.route(client, method, params, reader).pipe(
@@ -1755,9 +1831,14 @@ const projectLogic = Effect.fn("project.init")(function* (
       );
       yield* wrapped(gateways.join(row));
     }),
-    leave: Effect.fnUntraced(function* (client: string, session: string) {
+    // Traced: a socket's close brings no caller's span, and `from` reads its trace from the current
+    // one, so an untraced leave died there before it ended the session's watches.
+    leave: Effect.fn("project.leave")(function* (client: string, session: string) {
       sql.exec("DELETE FROM dev_clients WHERE client=? AND session=?", client, session);
       yield* wrapped(gateways.leave(client, session));
+      // A closed socket's session is a watcher that ended: its watches end with it, as in OTP.
+      yield* wrapped(write(processes.leave(session, yield* from())));
+      windowsLeave(session);
     }),
     online: (key: string) => wrapped(gateways.online(key)),
     info: wrapped(processes.info),
@@ -1827,6 +1908,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     processReceive: (pid: string, after: number) =>
       wrapped(processReply(Stream.runCollect(processes.receive(pid, after)))),
     processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
+    processStop: (input: ChildStop, origin: From) => wrapped(stopReply(stopChild(input, origin))),
     boot,
   };
 }, projectStorage);
@@ -1966,6 +2048,7 @@ export class ProjectService extends Context.Service<
     ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
     readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
     readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
+    readonly processStop: (input: ChildStop, origin: From) => Effect.Effect<typeof StopReplies.Type, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
@@ -2144,6 +2227,15 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
         Effect.flatMap((reply) =>
           reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new ChildrenError({ reason: reply.reason })),
+        ),
+      ),
+    // A stop is decided in the project too, so the stopped child's object learns it from the table.
+    stop: (input, from) =>
+      asked(rpc(p.processStop(input, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(StopReplies)),
+        Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.void : Effect.fail(new ChildrenError({ reason: reply.reason })),
         ),
       ),
   });

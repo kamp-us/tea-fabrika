@@ -6,7 +6,7 @@
 // What these laws hold the page to, from the plan: `/` boots `startWindow` outside React and mounts
 // `Window` under Strict Mode; the screens by link state are a waiting screen with the code, the
 // fingerprint and the one `grant.ts client` line, the desk with one named tile region per tile (the
-// checklist `checklist:1`: a box per item named by the item, a `Remove <name>` button per item, and a
+// checklist `checklist:1`, named `checklist, t1` by `tileName` since Desk S2b: a box per item named by the item, a `Remove <name>` button per item, and a
 // text field named by the add input's description, with its refusal words tied to it by
 // `aria-describedby`), a removed screen with an Ask again button, and a blocked screen. A lost link dims
 // the tile and makes it `inert`.
@@ -45,7 +45,11 @@ import {
 import { stored } from "./stored.test-support.ts";
 
 const SEED = 119120;
+/** The registered name of the process the window's one tile shows: its streams are read by it. */
 const NAME = "checklist:1";
+/** format: that tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program first, then
+ *  `t<n>`. The window draws workspace 1 of the founder's tezgah, whose first tile, t1, shows NAME. */
+const REGION = "checklist, t1";
 /** How a red law ends: at its first failing run, with that run's seed, path and moves, and no
  *  shrinking. Each retry of a shrink starts a brain and a browser again and may wait 30 s for what
  *  never shows, so a shrink outlasts CI's job. The seed and the run counts stay as they are. */
@@ -101,10 +105,12 @@ const blockKeyStore = () => {
   };
 };
 
-/** Let the brain settle each press, then lose its first answer and the socket. The next dial
- *  must resend that press before the page can see its terminal answer. Each close the page starts
- *  is kept as the page is told of it: its code, whether it was clean, and how long it took. */
-const loseFirstAnswers = () => {
+/** Let the brain settle each press to `pid`, the checklist's process, then lose its first answer
+ *  and the socket. The next dial must resend that press before the page can see its terminal
+ *  answer. Each close the page starts is kept as the page is told of it: its code, whether it was
+ *  clean, and how long it took. A letter to another process, such as the window's own attach to its
+ *  tezgah (Desk S2b), passes untouched and joins no group. */
+const loseFirstAnswers = (pid: string) => {
   const NativeSocket = WebSocket;
   const observed: {
     groups: Array<{
@@ -161,7 +167,7 @@ const loseFirstAnswers = () => {
       if (typeof data === "string" && data !== "ping") {
         const frame = JSON.parse(data);
 
-        if (frame.method === "process.send") {
+        if (frame.method === "process.send" && frame.params?.pid === pid) {
           if (active === undefined) {
             active = { attempts: [], firstAnswer: null, result: null, closed: null };
             observed.groups.push(active);
@@ -180,6 +186,18 @@ const loseFirstAnswers = () => {
     }
   };
 };
+
+/** The checklist's process id, from the `started` entry of `processes/<NAME>`. */
+const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
+  Effect.gen(function* () {
+    const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+    const pids = (yield* r.read(`processes/${NAME}`)).flatMap((e) => {
+      const started = Schema.decodeUnknownOption(Started)(e);
+      return started._tag === "Some" ? [started.value.body.process] : [];
+    });
+    expect(pids.length, `the brain started ${NAME}`).toBeGreaterThan(0);
+    return pids.at(-1) ?? "";
+  });
 
 const Resends = Schema.Struct({
   groups: Schema.Array(
@@ -220,11 +238,11 @@ const useChecklist = (
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
     const words = tabs.map(() => "");
-    yield* settle(tile(tabs[0]!.page, NAME).shown, (r) => r.length === 0, "a fresh brain's list is empty");
+    yield* settle(tile(tabs[0]!.page, REGION).shown, (r) => r.length === 0, "a fresh brain's list is empty");
 
     for (const p of moves) {
       const at = p.tab % tabs.length;
-      const t = tile(tabs[at]!.page, NAME);
+      const t = tile(tabs[at]!.page, REGION);
       // A tab whose last answer was lost has dialed again: its tile takes no press until it is live.
       yield* t.live;
       const shown = yield* t.shown;
@@ -265,7 +283,7 @@ const useChecklist = (
     for (const [at, t] of tabs.entries()) {
       const want = foldRows(model);
       yield* settle(
-        Effect.all([tile(t.page, NAME).shown, tile(t.page, NAME).refusal], { concurrency: 1 }),
+        Effect.all([tile(t.page, REGION).shown, tile(t.page, REGION).refusal], { concurrency: 1 }),
         ([r, said]) => JSON.stringify(r) === JSON.stringify(want) && said === words[at],
         `tab ${at} at the end`,
       );
@@ -342,16 +360,16 @@ describe("L14: the first window (p29)", () => {
           // The person's grant brings both tabs online on the same socket: no reload, no new dial.
           const before = first.seen.sockets.length;
           expect((yield* grant(h, w1)).ok).toBe(true);
-          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
-          yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, REGION).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(second.page, REGION).field.waitFor({ timeout: 30_000 }));
           expect(first.seen.sockets.length, "online without a new dial").toBe(before);
           expect(
-            yield* Effect.promise(() => tile(first.page, NAME).region.getAttribute("inert")),
+            yield* Effect.promise(() => tile(first.page, REGION).region.getAttribute("inert")),
             "an online tile is live",
           ).toBeNull();
           // A reload uses the same key and needs no new grant.
           yield* Effect.promise(() => first.page.reload());
-          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, REGION).field.waitFor({ timeout: 30_000 }));
           expect(
             yield* Effect.promise(() => first.page.locator("body").innerText()),
             "a reload shows no code",
@@ -393,12 +411,15 @@ describe("L15: use in two tabs (W2)", () => {
               const dev = yield* devServer(h);
               const b = yield* browser;
               const context = yield* profile(b);
-              yield* Effect.promise(() => context.addInitScript(loseFirstAnswers));
+              // The checklist's pid, read as any client finds it, so only its letters are lost and resent.
+              const r = yield* reader(h, dev);
+              const pid = yield* checklistPid(r);
+              yield* Effect.promise(() => context.addInitScript(loseFirstAnswers, pid));
               const tabs = [yield* tab(context, dev.url), yield* tab(context, dev.url)];
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
                 tabs,
-                (t) => Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 })),
+                (t) => Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })),
                 { concurrency: 1 },
               );
               const settled = tabs.map(() => 0);
@@ -440,7 +461,6 @@ describe("L15: use in two tabs (W2)", () => {
                 }),
               );
               // No letter id lands twice: a duplicated add could hide as a taken refusal.
-              const r = yield* reader(h, dev);
               const inbox = yield* r.read(`${NAME}/inbox`);
               const ids = inbox.map((e) => e.id);
               expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
@@ -519,9 +539,9 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 yield* grant(h, w);
                 // A sentinel item name, added twice: the second add is refused `taken`. The name is
                 // input text, so the page may show it but no row, record, URL or console line may.
-                const field = tile(t.page, NAME).field;
+                const field = tile(t.page, REGION).field;
                 yield* Effect.promise(() => field.waitFor({ timeout: 30_000 }));
-                yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
+                yield* Effect.promise(() => tile(second.page, REGION).field.waitFor({ timeout: 30_000 }));
                 yield* observe;
                 yield* useChecklist([t, second], moves, ["milk", "bread", "eggs"], observe);
 
@@ -531,13 +551,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
 
                   if (n === 0) {
                     yield* settle(
-                      tile(t.page, NAME).shown,
+                      tile(t.page, REGION).shown,
                       (shown) => shown.some((row) => row.name === `itm_${item}`),
                       "the sentinel item lands",
                     );
                   } else {
                     yield* settle(
-                      tile(t.page, NAME).refusal,
+                      tile(t.page, REGION).refusal,
                       (words) => words === checklistWindow.refused!({ type: "add", name: `itm_${item}` }, "taken"),
                       "the duplicate sentinel is refused",
                     );
@@ -547,7 +567,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 yield* Effect.promise(() => t.page.reload());
-                yield* Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 }));
+                yield* Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 }));
                 yield* observe;
                 const r = yield* reader(h, dev);
                 const revoked = yield* remove(h, dev, tt);

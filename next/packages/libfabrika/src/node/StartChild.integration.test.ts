@@ -5,11 +5,14 @@
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient } from "../processes/Process.ts";
@@ -99,12 +102,13 @@ const databases = Effect.gen(function* () {
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
-  // The suite hands in who sent a start's cause and the relation rows: none for the P42 laws, which
-  // pin `StartGrant`, and the door's senders and members for Desk S1's.
-  const shared: StartChildTest.Store["shared"] = (sql, next, permissions) =>
+  const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
       ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
-        Layer.provide(permissions),
+        // Desk S1 (amendment 15): the world's relation rows, and the door's own record of who sent
+        // each letter, made into `Senders` as `cloudflare/runtime.ts` makes the real one.
+        Layer.provide(RelationsMemory.layer(world.rows)),
+        Layer.provide(Layer.succeed(Senders, SessionSenders.make(world.sessions.sender))),
       ),
       ProgramMailLedger.layer({ grants: StartChildTest.HOST }),
     ).pipe(

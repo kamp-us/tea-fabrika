@@ -20,6 +20,7 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import {
   commitReply,
   configureProcess,
@@ -30,6 +31,7 @@ import {
   savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
+import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
@@ -130,6 +132,7 @@ const built = (source: string) => ({ hash: createHash("sha256").update(source).d
 const counterCode = built("counter");
 const checklistCode = built("checklist");
 const fabshCode = built("fabsh");
+const tezgahCode = built("tezgah");
 const approvalCode = built("approvals");
 const poisonCode = built("poison");
 const requesterCode = built("requester");
@@ -476,6 +479,8 @@ const world = (
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
   table.programs["fabrika/checklist"] = checklistCode;
+  // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+  table.programs["fabrika/tezgah"] = tezgahCode;
   // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
   table.programs["fabrika/fabsh"] = fabshCode;
   table.programs["p12/approvals"] = approvalCode;
@@ -805,6 +810,12 @@ const world = (
             return Reflect.construct(Box, []);
           }
 
+          // The founder's tezgah runs tezgah's own box too, so its init is never counted as the counter's.
+          if (id.startsWith(`${tezgahCode.hash}/`)) {
+            const Box = programBox(tezgah, tezgahCode.hash);
+            return Reflect.construct(Box, []);
+          }
+
           const approval = id.startsWith(`${approvalCode.hash}/`),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
@@ -1092,7 +1103,7 @@ StartsTest.law(
       const boot = yield* Effect.promise(() => w.project.info());
       const [first] = boot;
       // The build never waits on its deliveries: it sends each boot entry's start one at a time, after
-      // it answers (counter:1, then checklist:1 and fabsh:1). So the law waits until every entry's
+      // it answers (counter:1, then checklist:1, the founder's tezgah and fabsh:1). So the law waits until every entry's
       // configure has ended before it counts, and the walk below meets no configure still in flight.
       // The refusal stays planted until then: the gate is the instance's, so it refuses every entry.
       const delivered = yield* Effect.promise(() => w.delivered(boot.length));
@@ -1109,7 +1120,9 @@ StartsTest.law(
         appends: 1,
       });
       // No first turn before the gate: a refused configure never runs the program's init, a passed one runs it once.
-      // Only the walked counter's init counts here: checklist:1 and fabsh:1 run their own boxes.
+      // Only the walked counter's init counts here: checklist:1, the founder's tezgah and fabsh:1 run
+      // their own boxes. Every boot entry's delivery has settled above, so no other process's first
+      // gate lands inside a move counted below (Desk S2a).
       expect(w.inits()).toBe(refusedStart ? 0 : 1);
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
@@ -1250,6 +1263,7 @@ describe("P12 Project configure recovery", () => {
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
         { process: expect.any(String), name: "checklist:1", program: "fabrika/checklist" },
+        { process: expect.any(String), name: tezgahName(PERSON), program: "fabrika/tezgah" },
         { process: expect.any(String), name: "fabsh:1", program: "fabrika/fabsh" },
       ]);
       // The next reopen delivers the same descriptor once and clears pending.

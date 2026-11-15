@@ -14,6 +14,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { stopOnAbort } from "@kampus/libfabrika/Testing.test-support";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
@@ -40,6 +41,7 @@ const built = (source: string) => ({ hash: createHash("sha256").update(source).d
 const counterCode = built("counter");
 const checklistCode = built("checklist");
 const fabshCode = built("fabsh");
+const tezgahCode = built("tezgah");
 const approvalCode = built("approvals");
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -196,6 +198,8 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   table.programs["fabrika/counter"] = counterCode;
   // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
   table.programs["fabrika/checklist"] = checklistCode;
+  // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+  table.programs["fabrika/tezgah"] = tezgahCode;
   // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
   table.programs["fabrika/fabsh"] = fabshCode;
   table.programs["p12/approvals"] = approvalCode;
@@ -509,18 +513,22 @@ const bends: ReadonlyArray<(name: string) => string> = [
 // registered name, or tries a current name bent into a slashed one, which is refused.
 const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
   const names = ["counter:1"];
-  // P14 slice 2: the boot's later entries, checklist:1 and (fabsh slice 1) fabsh:1. The walk starts
-  // only the counter's code, so these stay the processes of other programs, under their own names.
-  const rest = [
+  // P14 slice 2: the boot's second entry, Desk S2a's third, the founder's tezgah, and fabsh slice
+  // 1's fourth, fabsh:1. The walk starts only the counter's code, so these stay the only processes
+  // of other programs.
+  const boots = [
     { name: "checklist:1", program: "fabrika/checklist" },
+    { name: tezgahName(PERSON), program: "fabrika/tezgah" },
     { name: "fabsh:1", program: "fabrika/fabsh" },
   ];
+  const byName = (list: ReadonlyArray<{ readonly name: string }>) =>
+    [...list].sort((a, b) => (a.name < b.name ? -1 : 1));
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
     list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
   let refused = 0;
   expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
-    ...rest,
+    ...boots,
   ]);
   const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
@@ -542,9 +550,9 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, ...rest.map((r) => r.name)].sort());
-    expect(others(info)).toEqual(rest);
-    expect(others(w.configured)).toEqual(rest);
+    expect(info.map((p) => p.name).sort()).toEqual([...names, ...boots.map((b) => b.name)].sort());
+    expect(byName(others(info))).toEqual(byName(boots));
+    expect(byName(others(w.configured))).toEqual(byName(boots));
     expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
   }
 
@@ -747,6 +755,7 @@ describe("P12 Project authority", () => {
       expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
         { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
         { _tag: "ok", value: { name: "checklist:1" } },
+        { _tag: "ok", value: { name: tezgahName(PERSON) } },
         { _tag: "ok", value: { name: "fabsh:1" } },
       ]);
     }, signal);

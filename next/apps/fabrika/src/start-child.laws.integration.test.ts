@@ -29,6 +29,7 @@ import {
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
   checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+  tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
   child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
   fabsh: { hash: "a4f7ceb0f245c9e4be350dc2cabacd70c90a9884c0d3db6b6f5021e5cdff0fd1", source: "fabsh" },
 }));
@@ -40,6 +41,8 @@ vi.mock("virtual:fabrika-built", () => ({
     "fabrika/checklist": CODE.checklist,
     // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
     "fabrika/fabsh": CODE.fabsh,
+    // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+    "fabrika/tezgah": CODE.tezgah,
     "p42/child": CODE.child,
   },
   assets: {},
@@ -898,14 +901,17 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     );
   });
 
-  // scenario: Desk S1 L1, L2. Only the real door stamps a letter's sender and keeps it where the
-  // runner signs: generated members and programs walk on real runners in `StartChildTest.ts`, and
-  // this one founder's letters prove the same rule end to end, on an instance with no start grant.
-  it("scenario: Desk S1 L1, L2: the founder's letter starts any program with no start grant at all", async () => {
+  // scenario: Desk S1 L1, L2. Only the real door stamps a letter's sender and keeps it where main's
+  // permission core asks for it, and only the real boot writes the owner row: generated roles and
+  // senders walk on real runners in `StartChildTest.ts`, and this one founder's letters prove the
+  // same check end to end, on an instance with no start grant. Only the founder can be admitted on a
+  // real instance today, so the refusal half stays with L1 and L2 there, and with T953's L18.
+  it("scenario: Desk S1 L1, L2: the founder's letter starts two programs with no start grant, as the fabrika's owner, and each started line names the founder as member", async () => {
     await world(async (fixture, connect) => {
       const { start, live, facts } = helpers(fixture);
       const starter = await start("starter:1", "starter");
       const client = await connect("desk-s1");
+      const founder = { _tag: "person", key: fixture.key.fingerprint, for: fixture.from.for };
       const asks = [
         { program: "p42/child", name: "child:desk-s1" },
         { program: "p42/starter", name: "starter:desk-s1" },
@@ -933,11 +939,27 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         ).toBe("Some");
         expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
-        expect(
-          (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started"),
-          "L2: the start's requester is the starter's life, the program that asked",
-        ).toMatchObject([{ requester: { process: starter } }]);
+        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
+          { requester: { process: starter } },
+        ]);
+        expect(lines[0]?.member, `L1, L2: the started line of ${ask.name} names the founder as member`).toEqual(
+          founder,
+        );
       }
+
+      // The starts were allowed because of this one row: no grant names either program.
+      expect(
+        (await facts("permissions/relations")).map(({ _tag, subject, relation, object }) => ({
+          _tag,
+          subject,
+          relation,
+          object,
+        })),
+        "L1: the boot's one relation row makes the founder the fabrika's owner",
+      ).toEqual([
+        { _tag: "related", subject: `person:${founder.for}`, relation: "owner", object: `fabrika:${PROJECT}` },
+      ]);
     }, []);
   });
 

@@ -227,7 +227,8 @@ const PROGRAMS = "programs";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT]);
-/** This life still owes a host Cmd (a send, a start_child, a stop_child or an exit): the next alarm tries it again. */
+/** This life still owes a host Cmd (a send, a start_child, a stop_child or an exit): the next alarm
+ *  tries it again. */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
 
 /**
@@ -1695,14 +1696,13 @@ export class ProgramRunner extends Context.Service<
          *  stays dispatched. */
         const stopChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const input = decodeStopChild(job.cmd);
-          const stop = Option.flatMap(children, (c) => Option.fromUndefinedOr(c.stop));
 
-          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(stop) || Option.isNone(input)) {
+          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(children) || Option.isNone(input)) {
             return yield* err(job, "bad_cmd");
           }
 
-          const stopped = yield* stop
-            .value(
+          const stopped = yield* children.value
+            .stop(
               { name: input.value.name, requester: Recipient.cases.process.make({ process: process.id }) },
               yield* from(job.parent, job.traceId),
             )

@@ -219,23 +219,90 @@ describe("the real rule file on planted trees", () => {
   );
 
   // scenario: P18 L8, the window client takes the runtime, transport and Id, and transport may not
-  // import it.
-  it.effect("scenario: the client takes runtime, transport and Id, and transport may not import it", () =>
-    Effect.gen(function* () {
-      const { plant } = yield* planter;
-      const tree = plant({
-        [`${LIB}/client/WindowStart.ts`]: lines(
-          'import {Client} from "../runtime/Client.ts";',
-          'import {Link} from "../transport/Link.ts";',
-          'import {Generator} from "../Id.ts";',
-        ),
-        [`${LIB}/transport/Dial.ts`]: lines('import {start} from "../client/WindowStart.ts";'),
-        [`${LIB}/runtime/Client.ts`]: lines("export const Client = 1;"),
-        [`${LIB}/transport/Link.ts`]: lines("export const Link = 1;"),
-        [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
-      });
-      expect(runTool(tree, REAL).edges).toEqual([`${LIB}/transport/Dial.ts -> next-client [upward]`]);
-    }),
+  // import it. P18 slice 2 (ticket 979, its plan's "Where each file lives"): the client also takes
+  // the processes, for `Down`, `inSignalSpace`, `clientInbox` and `ExitReason`. A lower module its
+  // row does not list, such as access, stays refused.
+  it.effect(
+    "scenario: the client takes runtime, processes, transport and Id, refuses a lower module its row does not list, and transport may not import it",
+    () =>
+      Effect.gen(function* () {
+        const { plant } = yield* planter;
+        const tree = plant({
+          [`${LIB}/client/WindowStart.ts`]: lines(
+            'import {Client} from "../runtime/Client.ts";',
+            'import {Down} from "../processes/Process.ts";',
+            'import {Link} from "../transport/Link.ts";',
+            'import {Generator} from "../Id.ts";',
+          ),
+          [`${LIB}/client/Grant.ts`]: lines('import {members} from "../access/Access.ts";'),
+          [`${LIB}/transport/Dial.ts`]: lines('import {start} from "../client/WindowStart.ts";'),
+          [`${LIB}/runtime/Client.ts`]: lines("export const Client = 1;"),
+          [`${LIB}/processes/Process.ts`]: lines("export const Down = 1;"),
+          [`${LIB}/access/Access.ts`]: lines("export const members = 1;"),
+          [`${LIB}/transport/Link.ts`]: lines("export const Link = 1;"),
+          [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
+        });
+        expect(runTool(tree, REAL).edges).toEqual([
+          `${LIB}/client/Grant.ts -> next-access [outside-imports]`,
+          `${LIB}/transport/Dial.ts -> next-client [upward]`,
+        ]);
+      }),
+  );
+
+  // scenario: Desk S2a, fixed imports probe tezgah's row from each side. It takes processes and Id
+  // and nothing above them. The client, the library's entry and Tuval's window reach it; the runtime,
+  // access beside it, the modules below it and every other part of Tuval may not. Which of tezgah's
+  // front files the window may name is held by `fabrika/package-imports`, not here.
+  // Plant: add `next-tezgah` to the runtime's `imports`. Its Runner line then passes.
+  it.effect(
+    "scenario: Desk S2a tezgah takes processes and Id; only the client, the entry and the window reach it",
+    () =>
+      Effect.gen(function* () {
+        const { plant } = yield* planter;
+        const tree = plant({
+          "pnpm-workspace.yaml": 'packages:\n  - "next/packages/*"\n',
+          "next/packages/tuval/package.json": { name: "@kampus/tuval", exports: { ".": "./src/index.ts" } },
+          "next/packages/libfabrika/package.json": {
+            name: "@kampus/libfabrika",
+            exports: { ".": "./src/index.ts", "./tezgah/*": "./src/tezgah/*.ts" },
+          },
+          [`${LIB}/index.ts`]: lines('export {split} from "./tezgah/Layout.ts";'),
+          [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
+          [`${LIB}/tezgah/Workspace.ts`]: lines(
+            'import {ProcessName} from "../processes/Process.ts";',
+            'import {Generator} from "../Id.ts";',
+            'import {run} from "../runtime/Runner.ts";',
+            'import {start} from "../client/WindowStart.ts";',
+          ),
+          [`${LIB}/tezgah/Layout.ts`]: lines('import {Tile} from "./Workspace.ts";'),
+          [`${LIB}/client/WindowStart.ts`]: lines(
+            'import {Tile} from "../tezgah/Workspace.ts";',
+            'import {split} from "../tezgah/Layout.ts";',
+          ),
+          [`${LIB}/runtime/Runner.ts`]: lines('import {Tile} from "../tezgah/Workspace.ts";'),
+          [`${LIB}/access/Access.ts`]: lines('import {Tile} from "../tezgah/Workspace.ts";'),
+          [`${LIB}/processes/Process.ts`]: lines('import {Tile} from "../tezgah/Workspace.ts";'),
+          [`${LIB}/transport/Dial.ts`]: lines('import {split} from "../tezgah/Layout.ts";'),
+          [`${TUVAL}/index.ts`]: lines("export const mount = 1;"),
+          [`${TUVAL}/window/Layout.tsx`]: lines('import {GAP} from "@kampus/libfabrika/tezgah/Layout";'),
+          [`${TUVAL}/desktop/fold.ts`]: lines('import {split} from "@kampus/libfabrika/tezgah/Layout";'),
+          [`${TUVAL}/browser/rows.ts`]: lines('import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";'),
+        });
+        expect(runTool(tree, REAL)).toMatchObject({
+          edges: [
+            `${LIB}/access/Access.ts -> next-tezgah [sideways]`,
+            `${LIB}/processes/Process.ts -> next-tezgah [upward]`,
+            `${LIB}/runtime/Runner.ts -> next-tezgah [outside-imports]`,
+            `${LIB}/tezgah/Workspace.ts -> next-client [upward]`,
+            `${LIB}/tezgah/Workspace.ts -> next-runtime [upward]`,
+            `${LIB}/transport/Dial.ts -> next-tezgah [upward]`,
+            `${TUVAL}/browser/rows.ts -> next-tezgah [outside-imports]`,
+            `${TUVAL}/desktop/fold.ts -> next-tezgah [outside-imports]`,
+          ],
+          unclaimed: [],
+          status: 1,
+        });
+      }),
   );
 
   // format: P21 L12, the desktop module takes access and refuses the gateway and the platform
@@ -462,7 +529,9 @@ describe("the real rule file on planted trees", () => {
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access`
   // is put on the runtime's layer (6 since T953): an import from the runtime to access, which went
-  // down, must now fail, and no other pair changes.
+  // down, must now fail. Only access's pairs with the runtime and with `next-tezgah`, its neighbor on
+  // layer 5 (Desk S2a), change: tezgah's import of access, sideways before, is now upward, and
+  // access's import of tezgah now goes down and passes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
@@ -475,8 +544,13 @@ describe("the real rule file on planted trees", () => {
       expect(after.filter((edge) => !before.includes(edge))).toEqual([
         "next-access -> next-runtime [sideways]",
         "next-runtime -> next-access [sideways]",
+        "next-tezgah -> next-access [upward]",
       ]);
-      expect(before.filter((edge) => !after.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
+      expect(before.filter((edge) => !after.includes(edge))).toEqual([
+        "next-access -> next-runtime [upward]",
+        "next-access -> next-tezgah [sideways]",
+        "next-tezgah -> next-access [sideways]",
+      ]);
     }),
   );
 
@@ -498,6 +572,7 @@ describe("the real rule file on planted trees", () => {
       "next-door": 7,
       "next-runtime": 6,
       "next-access": 5,
+      "next-tezgah": 5, // Desk S2a: above `processes/`, whose `ProcessName` it takes, and below the client
       "next-processes": 4,
       "next-presence": 4,
       "next-jobs": 4,

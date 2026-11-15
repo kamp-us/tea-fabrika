@@ -85,22 +85,21 @@ on the laptop, which the owner accepts. The merge line is decided
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
 and the bot's plain tooling. Nothing in `next/` names `summon` or a room yet; *2026-11-14:* `fabsh`
-slice 1 is built on its branch ([the plan](./lanes/fabsh-PLAN.md)): the program in a fixed tile,
-its reader and the `process.draft` frame. Slice 2a is built there too: a program word starts that
-program, checked against the line's member with no grant for `fabsh`, and the runner's `programs`
-Cmd says what can be started; the tile that shows a started process waits on the desk. Open pull
-requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
-(P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
-[1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
-[1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
-[1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
-[1097](https://github.com/usirin/tea-fabrika/pull/1097) (P21),
+slice 1 is built on its branch ([the plan](./lanes/fabsh-PLAN.md)): the program, its reader and the
+`process.draft` frame. Slice 2a is built there too: a program word starts that program, checked
+against the line's member with no grant for `fabsh`, and the runner's `programs` Cmd says what can
+be started. *2026-11-15:* since `fabrika/tezgah` landed, the app's tab draws only tezgah's tiles,
+and a new tile shows a checklist until `tezgah.new` (P38 slice 5), so `fabsh:1` boots and runs but
+no tile in the tab shows it yet. Open pull requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
 [1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
-[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the lead: pick and restart PR 1028
-and PR 1044, past their budget stop with red laws (0162;
-[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)). → the owner: walk the focus clash
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25, taken back out of
+[PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146)). *Changed 2026-11-15: PRs 1028 (P14),
+1044 (P13), 1054 (P38), 1074 (P39) and 1097 (P21) were closed on 2026-11-13 Pacific because they
+were folded into PR 1146, which merged that day, so their slices are on main. They stood in this
+list, and PR 1028 and PR 1044 had stopped past their budget with red laws (0162;
+[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)).* → the owner: walk the focus clash
 between 0279 and 0274 before the desk is built, then S1 of the
 [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
@@ -142,7 +141,8 @@ wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 
 pure `Menu.view`, `PersonCheck` contract and declared `desktop.link-ttl`. The check keeps
 the row shown at the click, and browser passes expire and work once. It draws nothing and
 starts no Electron or gateway work. P21 stays open for slices 2 to 4; the finished-row count
-stays 21 of 44.
+stays 21 of 44. *Changed 2026-11-15: slice 1 merged on 2026-11-13 Pacific through
+[PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146); PR 1097 was closed for that reason.*
 
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes

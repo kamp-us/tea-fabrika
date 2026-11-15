@@ -14,8 +14,9 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
-import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
+import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { PAGE } from "@kampus/libfabrika/transport/Wire";
 import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -492,6 +493,26 @@ export const tile = (page: Page, name: string) => {
     box: (item: string) =>
       region.locator("label").filter({ has: page.getByRole("checkbox", { name: item, exact: true }) }),
     remove: (item: string) => region.getByRole("button", { name: `Remove ${item}`, exact: true }),
+    /** The words of the tile's state slot as a person reads them: `Online`, `Ended (crashed)` and so on. */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's innerText is a Promise
+    state: Effect.promise(() => region.locator(".tile-state").innerText()),
+    /** The words of the tile's body as a person reads them, and whether its first part is drawn in
+     *  the tile guideline's text token, `--tile-text`, as its empty state's word is. */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's evaluate is a Promise
+    body: Effect.promise(() =>
+      region.locator(".tile-body").evaluate((body) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--tile-text)";
+        body.appendChild(probe);
+        const token = getComputedStyle(probe).color;
+        probe.remove();
+        const first = body.firstElementChild;
+        return {
+          words: body instanceof HTMLElement ? body.innerText.trim() : "",
+          ink: first !== null && getComputedStyle(first).color === token,
+        };
+      }),
+    ),
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>

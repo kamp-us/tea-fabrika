@@ -10,6 +10,7 @@ import { run } from "@demlik/tea/effect";
 import { Clock, DateTime, Deferred, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
 import { Socket } from "effect/socket";
 import * as Id from "../Id.ts";
+import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";
 import { ClientRow, ClientRows, ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
@@ -33,7 +34,7 @@ export const ClientInfo = Schema.Struct({
 });
 
 /**
- * What a start is given: the tiles to show, the window parent, the brain's origin, the build that
+ * What a start is given: the tiles to show or a tezgah workspace, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
  * @stability unstable
@@ -41,6 +42,8 @@ export const ClientInfo = Schema.Struct({
  */
 export type StartOptions = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  /** The window shows this workspace of its person's tezgah, in place of `tiles`. */
+  readonly tezgah?: { readonly workspace: number };
   readonly window: ReturnType<typeof windowMachineFor>;
   readonly origin: string;
   readonly build: string;
@@ -65,6 +68,36 @@ type Handle = {
   readonly writer: Socket.Writer;
   readonly key: Identity;
   readonly written: Map<number, number>;
+};
+
+/** One call as the JSON-RPC method and params the door takes. */
+const wire = (call: Write["call"], label: string) => {
+  switch (call._tag) {
+    case "read":
+      return { method: "ledger.read", params: { stream: call.stream, after: call.after } };
+    case "wait":
+      return { method: "ledger.wait", params: { stream: call.stream, after: call.after } };
+    case "monitor":
+      return { method: "process.monitor", params: { ref: call.ref, pid: call.pid } };
+    case "open":
+      return { method: "view.open", params: { pid: call.pid } };
+    case "knock":
+      return { method: "gateway.knock", params: { label } };
+    case "draft":
+      return { method: "process.draft", params: { pid: call.pid, m: call.m } };
+    case "send":
+      return {
+        method: "process.send",
+        params: {
+          pid: call.pid,
+          letter: call.letter,
+          m: call.m,
+          sentAt: call.sentAt,
+          seen: call.seen,
+          ...(call.traceId ? { traceId: call.traceId } : {}),
+        },
+      };
+  }
 };
 
 /** The id of a frame that answers a call, read only to time the answer. */
@@ -219,7 +252,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
     );
 
   return yield* run(options.window, {
-    ctx: { tiles: options.tiles },
+    ctx: { tiles: options.tiles, tab, ...(options.tezgah === undefined ? {} : { tezgah: options.tezgah }) },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
@@ -230,28 +263,12 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
         return { letter, sentAt: yield* sentAt };
       }),
+      mint: Effect.fn("Client.mint")(function* () {
+        const tile = yield* ids.next(TileId).pipe(Effect.mapError(() => F.entropy.make({})));
+        return { tile };
+      }),
       write: Effect.fn("Client.write")(function* (cmd: Write) {
-        const call = cmd.call;
-        const message =
-          call._tag === "read"
-            ? { method: "ledger.read", params: { stream: call.stream, after: call.after } }
-            : call._tag === "open"
-              ? { method: "view.open", params: { pid: call.pid } }
-              : call._tag === "knock"
-                ? { method: "gateway.knock", params: { label: options.client.label } }
-                : call._tag === "draft"
-                  ? { method: "process.draft", params: { pid: call.pid, m: call.m } }
-                  : {
-                      method: "process.send",
-                      params: {
-                        pid: call.pid,
-                        letter: call.letter,
-                        m: call.m,
-                        sentAt: call.sentAt,
-                        seen: call.seen,
-                        ...(call.traceId ? { traceId: call.traceId } : {}),
-                      },
-                    };
+        const message = wire(cmd.call, options.client.label);
         const written = handles.get(cmd.dial)?.written;
         written?.set(cmd.id, yield* Clock.currentTimeMillis);
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(

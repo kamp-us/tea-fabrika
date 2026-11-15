@@ -7,7 +7,7 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
-import { type Ledger, type LedgerError } from "../ledger/Ledger.ts";
+import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
@@ -118,6 +118,12 @@ export class ProcessManager extends Context.Service<
     /** Cancels the caller's own live watch under `ref`. With no such watch it writes nothing. */
     readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
     /**
+     * Ends every live watch whose recipient is the client session `session`, as a watcher's exit
+     * ends its watches: each gets `demonitored {reason: "watcher_exited"}`. With none it writes
+     * nothing. It never refuses.
+     */
+    readonly leave: (session: string, from: From) => Effect.Effect<void, LedgerError>;
+    /**
      * A live process's letters past the log rev `after`, oldest first. A `DOWN` signal whose watch
      * was canceled, or that is for another recipient, is left out.
      */
@@ -199,6 +205,19 @@ export class ProcessManager extends Context.Service<
           }
 
           turn.append(inbox, letter, line(from, Send.make({ m: Down.make({ ref, process, reason, to }) })));
+        };
+        // A watcher that ends takes its watches with it, as OTP's monitors go with a dead process.
+        const watcherExited = (turn: LedgerTurn, watches: ReturnType<ProcessTable["held"]>, from: From) => {
+          for (const watch of watches) {
+            turn.append(
+              ProcessTable.stream,
+              id("demonitored", watch.to, watch.ref, watch.round),
+              line(
+                from,
+                ProcessEvent.cases.demonitored.make({ ref: watch.ref, to: watch.to, reason: "watcher_exited" }),
+              ),
+            );
+          }
         };
         const start = Effect.fn("process.start")(function* (
           request: Start,
@@ -328,23 +347,13 @@ export class ProcessManager extends Context.Service<
               signal(table, turn, watch, process, reason, watch.to, from);
             }
 
-            for (const watch of table.outbound(process)) {
-              turn.append(
-                ProcessTable.stream,
-                id("demonitored", watch.to, watch.ref, watch.round),
-                line(
-                  from,
-                  ProcessEvent.cases.demonitored.make({
-                    ref: watch.ref,
-                    to: watch.to,
-                    reason: "watcher_exited",
-                  }),
-                ),
-              );
-            }
-
+            watcherExited(turn, table.outbound(process), from);
             return Result.succeed(undefined);
           });
+        }, Effect.tapError(failed));
+        const leave = Effect.fn("process.leave")(function* (session: string, from: From) {
+          yield* Effect.annotateCurrentSpan({ [tag("session")]: session });
+          yield* tx.transact((turn) => watcherExited(turn, committed(turn).held(session), from));
         }, Effect.tapError(failed));
         const monitor = Effect.fn("process.monitor")(function* (ref: string, process: string, from: From) {
           yield* Effect.annotateCurrentSpan({
@@ -492,6 +501,7 @@ export class ProcessManager extends Context.Service<
           exit,
           monitor,
           demonitor,
+          leave,
           down,
           receive,
           table: fold,
@@ -513,12 +523,16 @@ export class ProcessManager extends Context.Service<
  * A receive collects its letters so the call can cross an RPC; `remoteProcessManager` rebuilds the
  * Stream. Refusals keep their `ProcessError`; a transport failure stays the caller's
  * `LedgerError`. A start takes no guard: a guard runs inside the owner's own turn, which no call
- * across an RPC reaches.
+ * across an RPC reaches. There is no `leave`: a session ends where its socket closes, in the
+ * owner itself.
  *
  * @stability unstable
  * @category models
  */
-export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive" | "table" | "start"> & {
+export type ProcessCalls = Omit<
+  Context.Service.Shape<typeof ProcessManager>,
+  "receive" | "table" | "start" | "leave"
+> & {
   readonly start: (
     request: Start,
     from: From,
@@ -534,7 +548,8 @@ export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "r
  *
  * `by` is the brain's own writer key: a turn this side is given folds as the brain's does. A start
  * with a guard is refused `forbidden` and asks nothing: this side cannot run the guard in the turn
- * that writes, and a check it cannot make never lets a start through.
+ * that writes, and a check it cannot make never lets a start through. A `leave` fails `refused`
+ * and writes nothing: only the owner, where the socket closed, ends a session.
  *
  * @stability unstable
  * @category layers
@@ -544,6 +559,7 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
     ...calls,
     start: (request, from, first, guard) =>
       guard === undefined ? calls.start(request, from, first) : Effect.fail(new ProcessError({ reason: "forbidden" })),
+    leave: () => Effect.fail(new LedgerError({ reason: "refused" })),
     table: (turn) => ProcessTable.read(turn.read, by),
     receive: (process, after) =>
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),

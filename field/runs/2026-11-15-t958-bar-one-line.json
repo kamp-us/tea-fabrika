@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t958-bar-one-line",
+  "ticket": "kamp-us/tea-fabrika#958",
+  "pr": "kamp-us/tea-fabrika#1231",
+  "started": "2026-11-14T23:55:00-08:00",
+  "ended": "2026-11-15T00:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "second fix round after the recheck, in next/: (1) merged origin/main; four conflicts kept both sides: package.json and the checklist law import both @kampus/tezgah and @kampus/vitest, StartChildTest.ts takes main's fast/full run counts plus the branch's drawn people, and the lockfile is main's plus the tezgah package only; (2) the status bar is one fixed line again, so arming the prefix moves no tile: the prefix line keeps its words from before the wrap round, `prefix` at the left, `Esc cancel` pinned at the right, and the hints between cut by an ellipsis where they run out. A first try shortened the hints to one per job; the owner's ruling, through the coordinator, was to keep the old words, and it was taken out. The frame law now checks at every armed size and 420x700 that no tile box changes, the bar keeps its idle height, covers no tile, and draws prefix and Esc cancel whole; red on the wrapping code at 1024x700 (tiles moved), green on the new; (3) a click on the focused tile's own title bar lands on the row focus last sat on: the region reads the window's own cursor note, and a focus on the bare region that only passes through no longer wipes that note. New step in the focus law, red then green. Ran the frame, focus and fold visual files with shots, Layout.laws.test.ts, start-child.laws.integration.test.ts, pnpm lint and one pnpm typecheck.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "The one-per-job wording was a design call not in the decided notes; building it before asking cost one revert.",
+  "step": "build"
+}
