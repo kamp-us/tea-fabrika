@@ -8,6 +8,11 @@
 // when the file is opened again; never a torn value, which the 4a machine reads as `bad_entry` and
 // then skips for good.
 //
+// The child prints `ready` only once all sixteen keys are saved, so none is ever right after the
+// kill: a key that reads null lost an entry the journal had said was saved. To 4a's machine a lost
+// `executing` entry means "never seen", and the task runs a second time. So every key must read a
+// whole entry the child wrote for that key.
+//
 // Plant, run once and undone (recorded in the tests step's field row): swap the store for
 // `KeyValueStore.layerFileSystem`.
 import { NodeServices } from "@effect/platform-node";
@@ -21,15 +26,41 @@ import * as JournalStore from "../../client/JournalStore.ts";
 import { property } from "../../Testing.test-support.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
 
-/** The jobs the child writes (`JournalSqlite.child.test-support.ts`). */
-const JOBS = Array.from({ length: 16 }, (_, i) => `P/${i}/0`);
+/** The tasks the child writes (`JournalSqlite.child.test-support.ts`): write `n` goes to `n % 16`. */
+const TASKS = Array.from({ length: 16 }, (_, i) => `P/${i}/0`);
+
+/**
+ * Every one of the sixteen keys reads a whole entry the child wrote for it: no error, no null, a
+ * `result` whose execution `execution-<n>` has `n % 16` equal to the key's place, and whose version
+ * is the full 64 KiB value that starts `<n>:`.
+ */
+const everyKeyWhole = (label: string) =>
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+
+    for (const [place, task] of TASKS.entries()) {
+      const read = yield* journal.read(task).pipe(Effect.result);
+      const shown = JSON.stringify(read).slice(0, 200);
+      expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
+      const entry = read._tag === "Success" ? read.success : null;
+      expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();
+      expect(entry?._tag, `J2: ${task} ${label} holds a whole result entry`).toBe("result");
+      const n = entry?._tag === "result" ? Number(entry.execution.replace(/^execution-/, "")) : Number.NaN;
+      expect(Number.isInteger(n) && n % TASKS.length === place, `J2: ${task} ${label} holds its own write`).toBe(true);
+      const result = entry?._tag === "result" ? entry.result : null;
+      const version = result?._tag === "exited" ? result.version : "";
+      expect(
+        version.length === 64 * 1024 && version.startsWith(`${n}:`),
+        `J2: ${task} ${label} holds the whole value of write ${n}`,
+      ).toBe(true);
+    }
+  });
 
 describe("P39 slice 4b: the journal file after a crash", () => {
   it.live(
-    "J2: a hands-like child that writes journal entries in a loop and is killed with SIGKILL at a generated moment leaves every key holding one whole entry when the file is opened again",
+    "J2: a hands-like child that saves all sixteen keys, then writes in a loop and is killed with SIGKILL at a generated moment, leaves every one of the sixteen keys holding one whole entry when the file is opened again",
     () =>
       Effect.gen(function* () {
-        const reached = new Set<string>();
         yield* property(
           fc.integer({ min: 1, max: 200 }),
           (delay) =>
@@ -45,7 +76,8 @@ describe("P39 slice 4b: the journal file after a crash", () => {
                     cwd: import.meta.dirname,
                     killSignal: "SIGKILL",
                   });
-                  // The kill delay counts from the first saved entry, so every run kills a writer.
+                  // The kill delay counts from the first full round, so every run kills a writer
+                  // whose sixteen keys are all saved.
                   const ready = yield* handle.stdout.pipe(
                     Stream.decodeText(),
                     Stream.splitLines,
@@ -53,7 +85,7 @@ describe("P39 slice 4b: the journal file after a crash", () => {
                     Stream.runHead,
                     Effect.timeout("30 seconds"),
                   );
-                  expect(Option.isSome(ready), "J2: the child saved its first entry").toBe(true);
+                  expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
                   yield* Effect.sleep(`${delay} millis`);
                   yield* handle.kill({ killSignal: "SIGKILL" });
                   yield* handle.exitCode.pipe(Effect.ignore);
@@ -61,31 +93,12 @@ describe("P39 slice 4b: the journal file after a crash", () => {
               );
               // Opened again, as the next hands start opens it. The reads run inside the provide: the
               // layer closes the file when its scope closes, so a read after it would fail for that.
-              const whole = yield* Effect.gen(function* () {
-                const journal = yield* Journal;
-                let saved = 0;
-
-                for (const job of JOBS) {
-                  const read = yield* journal.read(job).pipe(Effect.result);
-                  expect(read._tag, `J2: ${job} after a SIGKILL at ${delay} ms: ${JSON.stringify(read)}`).toBe(
-                    "Success",
-                  );
-
-                  if (read._tag === "Success" && read.success !== null) {
-                    expect(read.success._tag, "J2: a saved entry is whole").toBe("result");
-                    saved++;
-                  }
-                }
-
-                return saved;
-              }).pipe(Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))));
-
-              expect(whole, "J2: at least the first entry was saved whole").toBeGreaterThan(0);
-              reached.add(whole === JOBS.length ? "all-keys" : "some-keys");
+              yield* everyKeyWhole(`after a SIGKILL at ${delay} ms`).pipe(
+                Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
+              );
             }).pipe(Effect.provide(NodeServices.layer)),
           { numRuns: runsFor({ fast: 3, full: 20 }) },
         );
-        expect(reached.size).toBeGreaterThan(0);
       }),
     600_000,
   );
