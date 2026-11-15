@@ -694,10 +694,17 @@ export class ProcessTable {
       .map(shown);
   }
 
-  /** The live watches a client session holds: those whose recipient is a client with `session`. */
+  /**
+   * The live watches a client session holds: those whose recipient is a client with `session` and
+   * whose process still runs. A watch whose process exited already fired its DOWN, and in OTP a
+   * monitor that fired is gone, so the session's leave has nothing left to end there.
+   */
   held(session: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
-      .filter(({ _tag, to }) => _tag === "live" && to._tag === "client" && to.session === session)
+      .filter(
+        ({ _tag, to, process }) =>
+          _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
+      )
       .map(shown);
   }
 

@@ -1782,7 +1782,9 @@ const projectLogic = Effect.fn("project.init")(function* (
       );
       yield* wrapped(gateways.join(row));
     }),
-    leave: Effect.fnUntraced(function* (client: string, session: string) {
+    // Traced: a socket's close brings no caller's span, and `from` reads its trace from the current
+    // one, so an untraced leave died there before it ended the session's watches.
+    leave: Effect.fn("project.leave")(function* (client: string, session: string) {
       sql.exec("DELETE FROM dev_clients WHERE client=? AND session=?", client, session);
       yield* wrapped(gateways.leave(client, session));
       // A closed socket's session is a watcher that ended: its watches end with it, as in OTP.
