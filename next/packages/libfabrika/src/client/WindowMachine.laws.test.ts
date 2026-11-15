@@ -46,12 +46,12 @@ import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Option, Schema } from "effect";
 import * as fc from "fast-check";
-import { PAGE } from "../ledger/Log.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
 import { diff } from "../runtime/Patch.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
+import { PAGE } from "../transport/Wire.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
