@@ -2,15 +2,14 @@
 // socket and its timers belong to the scope the caller started it in.
 import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
-import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import type { WindowModel, WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
-import { type ReactNode, StrictMode } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { refusalFor, spoken, type TileWindow } from "./spoken.ts";
 
 type LiveWindow = EffectRun<WindowModel, WindowMsg>;
-type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
 
 type PageProps = {
   readonly run: LiveWindow;
@@ -20,16 +19,6 @@ type PageProps = {
 
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
-
-const refusalFor = (registration: TileWindow | null, refusal: WindowModel["tiles"][number]["refusal"]) => {
-  if (refusal === null) {
-    return null;
-  }
-
-  // Unknown free text never reaches the frame's fallback.
-  const reason = /^[a-z_]{1,40}$/.test(refusal.reason) ? refusal.reason : "";
-  return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
-};
 
 type Reach = WindowModel["tiles"][number]["reach"];
 
@@ -146,14 +135,10 @@ const Page = (props: PageProps) => {
   const [dials] = useRuntime(props.run, (m) => m.dials);
   const [views] = useRuntime(props.run, (m) => m.client.views);
   const [trouble] = useRuntime(props.run, (m) => m.trouble);
-  // The polite region says each refusal, and once each tile whose process ended, with the reason.
-  const words = tiles
-    .flatMap((t) => {
-      const words = refusalFor(props.windowFor(t.name), t.refusal);
-      const ended = t.reach._tag === "ended" ? [`${t.name} ended (${t.reach.reason._tag})`] : [];
-      return [...(words ? [words] : []), ...ended];
-    })
-    .join(" ");
+  const [said] = useRuntime(props.run, (m) => m.said);
+  // The polite region says the newest news once: a refusal, or a tile whose process ended. Each news
+  // is a new node under its own id, so the same words said again are a change a reader hears.
+  const words = spoken({ said, tiles }, props.windowFor);
   const content =
     link._tag === "waiting_grant" ? (
       <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
@@ -194,7 +179,7 @@ const Page = (props: PageProps) => {
     <>
       {content}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {words}
+        {words === "" ? null : <span key={said.id}>{words}</span>}
       </div>
       <div className="sr-only" role="alert" aria-atomic="true" />
     </>

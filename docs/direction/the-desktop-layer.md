@@ -108,7 +108,8 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
  to: {_tag: "client", client: "tab_01jc9q5a…", session: "process_01jc9q5b2k…"}}
 // lands in client:tab_01jc9q5a…/inbox, which the window reads with ledger.wait and ledger.read
 // then the tile reads processes/<name> again: a live successor is monitored as "w16" and opened;
-// none shows "Ended (crashed)" and waits on the name. Until slice 4 the tile then follows its keep:
+// none shows "Ended (crashed)" and waits on the name. Until slice 4 every such tile stays, with
+// its reason. From slice 4 the tile then follows its keep:
 //   "never"   close it, as a tmux pane closes when its command exits
 //   "failed"  keep it only after a crash, with the final view and the reason (the default)
 //   "always"  keep it, for test runs

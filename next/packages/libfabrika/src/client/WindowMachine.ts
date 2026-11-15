@@ -45,6 +45,15 @@ const Inbox = Schema.TaggedUnion({
   reading: { after: Schema.Int, id: Schema.Int },
 });
 
+// What the window's polite region says, written by the step the event happened in: a tile whose
+// process ended, or a tile's refused letter. The region holds the newest news only, so a tile that
+// stays ended is shown by its tile and never said again (0504, WCAG 4.1.3).
+const News = Schema.TaggedUnion({
+  ended: { tile: Schema.String, reason: ExitReason },
+  refused: { tile: Schema.String, m: Schema.Json, reason: Schema.String },
+});
+type News = typeof News.Type;
+
 // A bad recovery answer does not permit another ask. A checked whole or a new dial does.
 const Recovery = Schema.Literals(["ready", "asked"]);
 
@@ -83,9 +92,9 @@ const Via = Schema.Literals(["button", "key"]);
  *
  * `link` is where the connection is, `handshake` the hello exchange of its dial, and `fingerprint`
  * the key the window dials with, once the key store has answered. `tab` is the window's own tab,
- * and `inbox` reads that tab's inbox for the DOWNs of the watches its tiles hold. `flight` holds
- * each written call by its id and dial until its answer comes. `client` holds the program client's
- * letters and views.
+ * and `inbox` reads that tab's inbox for the DOWNs of the watches its tiles hold. `said` is the
+ * newest news for the page's polite region. `flight` holds each written call by its id and dial
+ * until its answer comes. `client` holds the program client's letters and views.
  *
  * @stability unstable
  * @category models
@@ -100,10 +109,14 @@ export const WindowModel = Schema.Struct({
       recovery: Recovery,
       own: Schema.Json,
       refusal: Schema.NullOr(Schema.Struct({ m: Schema.Json, reason: Schema.String })),
+      // The process whose end this tile's news told, so a re-read that finds it ended again is quiet.
+      told: Schema.NullOr(Schema.String),
     }),
   ),
   tab: Schema.String,
   inbox: Inbox,
+  // The polite region's newest news, null before the first; `id` grows by one with each news.
+  said: Schema.Struct({ id: Count, news: Schema.NullOr(News) }),
   link: Link,
   handshake: Handshake,
   fingerprint: Schema.NullOr(Schema.String),
@@ -352,6 +365,18 @@ const reached = (s: WindowModel, tile: string, reach: Reach): WindowModel => ({
   tiles: s.tiles.map((t) => (t.id === tile ? { ...t, reach } : t)),
 });
 
+/** The step's news: it replaces what the polite region said before, under the next id. */
+const say = (s: WindowModel, news: News): WindowModel => ({ ...s, said: { id: s.said.id + 1, news } });
+
+/** A tile whose process `pid` ended tells it once; finding the same end again tells nothing. */
+const tellEnded = (s: WindowModel, tile: Tile, pid: string, reason: ExitReason): WindowModel =>
+  tile.told === pid
+    ? s
+    : say(
+        { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) },
+        News.cases.ended.make({ tile: tile.id, reason }),
+      );
+
 /** Reads each tile in `ids` from rev 0 of its name, as a dial's start does, with a fresh fold. */
 const resolveAgain = (s: WindowModel, dial: number, ids: ReadonlySet<string>): Step => {
   const picked = s.tiles.filter((t) => ids.has(t.id));
@@ -402,7 +427,10 @@ const resolved = (s: WindowModel, dial: number, tile: Tile, fold: C.NameFold, fu
   if (fold.ended !== null) {
     const { pid, reason } = fold.ended;
     const [written, out] = wrote(s, dial, [Call.cases.wait.make({ stream, after: fold.after })]);
-    return [reached(written, tile.id, Reach.cases.ended.make({ pid, reason, id: s.serial })), out];
+    return [
+      tellEnded(reached(written, tile.id, Reach.cases.ended.make({ pid, reason, id: s.serial })), tile, pid, reason),
+      out,
+    ];
   }
 
   return [reached(s, tile.id, Reach.cases.missing.make({})), []];
@@ -997,9 +1025,11 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
               own: checks.tile?.(t.name)?.init(null, {})[0] ?? {},
               refusal: null,
               last: null,
+              told: null,
             })),
             tab: ctx.tab,
             inbox: Inbox.cases.idle.make({ after: 0 }),
+            said: { id: 0, news: null },
             link: linkMachine.init(null, {})[0],
             // Dial 1's exchange waits for its challenge; its socket opening times it.
             handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
@@ -1203,23 +1233,23 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const owner = slot && s.from[slot.n]?.tile;
+        const refusal =
+          m.value._tag === "refused" && slot !== undefined && s.tiles.some((t) => t.id === owner)
+            ? { m: slot.m, reason: m.value.reason }
+            : null;
+        const settled = {
+          ...s,
+          client,
+          flight: found.rest,
+          sent: s.sent.filter((l) => l !== letter),
+          attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
+          from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
+          tiles: refusal === null ? s.tiles : s.tiles.map((t) => (t.id === owner ? { ...t, refusal } : t)),
+        };
         return [
-          {
-            ...s,
-            client,
-            flight: found.rest,
-            sent: s.sent.filter((l) => l !== letter),
-            attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
-            from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
-            tiles:
-              m.value._tag !== "refused" || slot === undefined
-                ? s.tiles
-                : s.tiles.map((t) =>
-                    t.id === owner
-                      ? { ...t, refusal: { m: slot.m, reason: m.value._tag === "refused" ? m.value.reason : "" } }
-                      : t,
-                  ),
-          },
+          refusal === null || owner === undefined
+            ? settled
+            : say(settled, News.cases.refused.make({ tile: owner, ...refusal })),
           [
             record({
               record: ClientRecord.cases.reply.make({
