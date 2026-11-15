@@ -269,7 +269,14 @@ export const served = (h: Home) =>
     ).pipe(Effect.provide(localState()), Effect.provide(SecureRandom.layerWebCrypto));
     const control = instance.project(PROJECT);
     // The private binding already speaks the project's public ledger-call protocol.
-    const ledger = LedgerRemote.layer(control as LedgerCalls, { reader: "p18-e1" });
+    const { append, read, wait } = control;
+
+    if (append === undefined || read === undefined || wait === undefined) {
+      return yield* Effect.die(new Error("the project binding has no ledger calls"));
+    }
+
+    const calls: LedgerCalls = { append, read, wait };
+    const ledger = LedgerRemote.layer(calls, { reader: "p18-e1" });
     const facts = (stream: string) =>
       Ledger.use((l) => Stream.runCollect(l.read(stream, 0))).pipe(
         Effect.map((entries): ReadonlyArray<Fact> => entries),
@@ -298,13 +305,23 @@ export const served = (h: Home) =>
 
 export type Served = Effect.Success<ReturnType<typeof served>>;
 
+/** A local binding's calls, as the dev command hands them out. */
+type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 /** One control call, as the chaos-revoke suite's `invoke` makes it: the binding's method, awaited. */
-const invoke = (binding: object, method: string, args: ReadonlyArray<unknown>) =>
+const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, args: ReadonlyArray<unknown>) {
+  const target = binding[method];
+
+  if (target === undefined) {
+    return yield* new SuiteError({ waited: `the control endpoint's ${method}, which the binding does not have` });
+  }
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance's Durable Object RPC answers a Promise
-  Effect.tryPromise({
-    try: () => Reflect.apply(Reflect.get(binding, method), binding, args),
+  return yield* Effect.tryPromise({
+    try: () => Reflect.apply(target, binding, args),
     catch: () => new SuiteError({ waited: `the control endpoint's ${method}` }),
   });
+});
 
 /** The pid of the name's newest life fact, started or restarted. */
 const newest = (facts: ReadonlyArray<Fact>) =>

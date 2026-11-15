@@ -22,6 +22,7 @@
 //
 // The peer is the door as a script: it answers what the walk lets it answer and nothing else, on the
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
+import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
@@ -33,7 +34,7 @@ import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRow, ClientRows, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
 import { backoff, CAP, linkTimer, ping } from "../transport/Link.ts";
 import { KeyLine } from "../transport/Sshsig.ts";
-import { windowMachineFor, write } from "./WindowMachine.ts";
+import { windowMachineFor, type WindowModel, type WindowMsg, write } from "./WindowMachine.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
 import { start } from "./WindowStart.ts";
 
@@ -54,6 +55,8 @@ const list = (n: number) => ({
 });
 
 const window = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: () => undefined });
+/** Every Cmd the window's update hands the start. */
+type WindowCmd = ReturnType<typeof window.init>[1][number];
 const tiles = [{ id: "tile_1", name: "checklist:1" }];
 /** The browser's facts, as the browser entry passes them. */
 const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" } as const;
@@ -1283,22 +1286,17 @@ const LIVE = Schema.Literals([
 ]);
 
 /** The real window, with every write Cmd its update hands the start kept, in order. */
-const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => ({
-  ...window,
-  update: Object.fromEntries(
-    Object.entries(window.update).map(([type, handler]) => [
-      type,
-      (s: never, m: never) => {
-        const [next, cmds] = (handler as (s: never, m: never) => readonly [unknown, ReadonlyArray<{ type: string }>])(
-          s,
-          m,
-        );
-        writes.push(...cmds.filter((c): c is ReturnType<typeof write> => c.type === "write"));
-        return [next, cmds];
-      },
-    ]),
-  ) as typeof window.update,
-});
+const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
+  const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<WindowCmd>] => {
+    const [next, cmds] = applyCell<WindowModel, WindowMsg, WindowCmd>(window, s, m);
+    writes.push(...cmds.filter((c): c is ReturnType<typeof write> => c.type === "write"));
+    return [next, cmds];
+  };
+  return {
+    ...window,
+    update: Object.fromEntries(Object.keys(window.update).map((type) => [type, step])) as typeof window.update,
+  };
+};
 
 describe("P18 slice 2: the start's wire for wait and monitor", () => {
   it.effect.prop(

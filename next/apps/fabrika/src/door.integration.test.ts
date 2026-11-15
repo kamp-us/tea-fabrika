@@ -342,12 +342,8 @@ const world = Effect.fnUntraced(function* (
    * the one the door built from the checked connection, never anything the params named.
    */
   const processesFor = (caller: { owner: typeof Owner.Type; recipient: typeof Recipient.Type }) =>
-    ProcessManager.layer(
-      { ...caller, by: BRAIN_KEY },
-      ProcessIdGenerator.use((g) => g.next),
-    ).pipe(
+    ProcessManager.layer({ ...caller, by: BRAIN_KEY }, ids.next(Id.Process).pipe(Effect.orDie)).pipe(
       Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(bell))),
-      Layer.provide(ProcessIdGenerator.layer),
     );
   const monitor = (ref: string, pid: string, to: typeof Recipient.cases.client.Type, from: ProcessFrom) =>
     ProcessManager.use((p) => p.monitor(ref, pid, from)).pipe(
