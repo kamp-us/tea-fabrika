@@ -7,6 +7,7 @@
 // counts at each history size it reaches: the generated ones, and the domain's two ends (0 and TOP),
 // so a failure always prints the count at the largest history the law uses.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -21,7 +22,7 @@ import { type Grants, ProgramMail, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
-const RUNS = 25;
+const RUNS = runsFor({ fast: 3, full: 25 });
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
 const BRAIN = "SHA256:brain";
@@ -119,6 +120,12 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         p.start(Start.cases.first.make({ id: `start:${name}`, name, code: CODE }), from({ by: BRAIN })),
       ).pipe(Effect.provide(context), Effect.orDie);
     }
+
+    // The manager keeps its process table folded through the last rev it saw before a turn
+    // appends, so it has not folded the second start's own lines yet. One read folds them here,
+    // before any count, so every counted delivery starts from the same folded table and the
+    // counts differ only by the mail history.
+    yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(context), Effect.orDie);
 
     const source = { name: REQUESTER, process: PIDS[0] as string };
     let sent = 0;

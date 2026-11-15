@@ -4,6 +4,7 @@
 // RunnerInitTest.suite(files), acquiring each world's database files in its own scope (0062, 0061).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -173,7 +174,7 @@ export const suite = (
               }).pipe(Effect.scoped),
             ),
         ),
-        { seed: SEED, numRuns: 150 },
+        { seed: SEED, numRuns: runsFor({ fast: 15, full: 150 }) },
       );
     });
 

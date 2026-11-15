@@ -15,16 +15,18 @@ import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 
-const options = { arbitrary: { seed: 119120, runs: 20, size: 4096, concurrency: 1 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 4096, concurrency: 1 } };
 const bounded = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 
 const GatewayCalls = Arbitrary.schema(
@@ -100,6 +102,7 @@ const world = Effect.fnUntraced(function* () {
     SpanSink.layer(sql, { object: pid }),
     RecordManager.memory(4 * 1024 * 1024),
     Archive.memory,
+    Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
     Layer.succeed(Jobs, {
       request: () => Effect.die("unexpected job request in legacy gateway law"),
       take: () => Effect.die("unexpected job take in legacy gateway law"),
@@ -107,6 +110,7 @@ const world = Effect.fnUntraced(function* () {
       finish: () => Effect.die("unexpected job finish in legacy gateway law"),
       read: () => Effect.die("unexpected job read in legacy gateway law"),
       forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+      collected: () => Effect.die("unexpected job collect in legacy gateway law"),
     }),
     Id.Generator.layer,
     ProcessIdGenerator.layer,

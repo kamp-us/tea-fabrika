@@ -1,17 +1,20 @@
 // P42 slice 1 (ticket 770): the store `start_child` and `exit` run on, on node:sqlite (0062). This
 // module owns the driver, so it acquires the folder and every database in a scope, and the scope
 // gives each file and handle back (0061). `probe.open` counts the handles still open, for L13.
-// StartChild*.test.ts run the laws over it, a part each, so CI can run the parts on different
-// machines.
+// StartChild*.integration.test.ts run the laws over it, a part each, so CI can run the parts on
+// different machines.
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient } from "../processes/Process.ts";
@@ -101,9 +104,14 @@ export const databases = Effect.gen(function* () {
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
-  const shared: StartChildTest.Store["shared"] = (sql, next) =>
+  const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
-      ChildrenLedger.layer({ grants: StartChildTest.STARTS }),
+      ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
+        // Desk S1 (amendment 15): the world's relation rows, and the door's own record of who sent
+        // each letter, made into `Senders` as `cloudflare/runtime.ts` makes the real one.
+        Layer.provide(RelationsMemory.layer(world.rows)),
+        Layer.provide(Layer.succeed(Senders, SessionSenders.make(world.sessions.sender))),
+      ),
       ProgramMailLedger.layer({ grants: StartChildTest.HOST }),
     ).pipe(
       Layer.provideMerge(

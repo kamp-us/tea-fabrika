@@ -314,6 +314,8 @@ export const canRestart = (times: ReadonlyArray<number>, now: number, period: nu
  * - `ended`: the process is unknown, or no longer live.
  * - `bad_ref`: the monitor reference already watches another process.
  * - `bad_name`, `bad_text`: a name, a reference or another text did not pass its schema.
+ * - `forbidden`: a start's guard said no in the turn that would write it, such as a permission
+ *   whose relation was removed after the start was checked.
  *
  * @stability unstable
  * @category errors
@@ -330,6 +332,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
     "bad_ref",
     "bad_name",
     "bad_text",
+    "forbidden",
   ]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -418,6 +421,15 @@ export const inNoticeSpace = led("notice");
  */
 export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
 
+/** The names the brain's own `registered` lines in `control` register, each once, in log order. */
+const registered = (control: ReadonlyArray<Entry>, by: string): ReadonlyArray<string> => [
+  ...new Set(
+    control
+      .filter((entry) => entry._tag === "registered" && entry.by === by)
+      .map((entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name),
+  ),
+];
+
 /**
  * Class that folds the ledger's process events into the current table of names, lives and
  * watches, and answers what a call on it would be allowed to do.
@@ -436,29 +448,56 @@ export class ProcessTable {
   static readonly stream = PROCESSES;
   static readonly events = eventStream;
   readonly #by: string;
+  readonly #machine: ReturnType<typeof processTableFor>;
   readonly #model: Model;
 
-  constructor(entries: Iterable<Entry>, by: string) {
+  /** Folds `entries`, oldest first, onto `base`'s table, or onto an empty one. */
+  constructor(entries: Iterable<Entry>, by: string, base?: ProcessTable) {
     this.#by = by;
-    const machine = processTableFor(by);
-    let model = machine.init(null, undefined)[0];
+    this.#machine = base === undefined ? processTableFor(by) : base.#machine;
+    let model = base === undefined ? this.#machine.init(null, undefined)[0] : base.#model;
 
     for (const entry of entries) {
-      model = applyCell(machine, model, { type: "recorded", entry })[0];
+      model = applyCell(this.#machine, model, { type: "recorded", entry })[0];
     }
 
     this.#model = model;
   }
 
+  /** The table folded from rev 0: the `processes` stream and every registered name's stream. */
   static read(read: (stream: string, after: number) => Iterable<Entry>, by: string): ProcessTable {
+    return new ProcessTable(ProcessTable.entries(read, by), by);
+  }
+
+  /** Every entry `read` folds from rev 0, oldest first. */
+  static entries(read: (stream: string, after: number) => Iterable<Entry>, by: string): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, 0)];
-    const names = control
-      .filter((entry) => entry._tag === "registered" && entry.by === by)
-      .map((entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name);
-    return new ProcessTable(
-      [...control, ...names.flatMap((name) => [...read(eventStream(name), 0)])].sort((a, b) => a.rev - b.rev),
-      by,
+    return [...control, ...registered(control, by).flatMap((name) => [...read(eventStream(name), 0)])].sort(
+      (a, b) => a.rev - b.rev,
     );
+  }
+
+  /**
+   * The entries past the log rev `rev`, oldest first, when this table holds every entry up to it:
+   * the `processes` stream, and the stream of each name this table knows or those entries register.
+   *
+   * **Details**
+   *
+   * A name's stream holds nothing of the brain's below its own `registered` line: only the brain
+   * writes there, and it writes a name's first event in the turn that registers it, after that line.
+   * So a name registered past `rev` has nothing to fold at or below `rev` either.
+   */
+  after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
+    const control = [...read(ProcessTable.stream, rev)];
+    const names = new Set([...this.#model.names.keys(), ...registered(control, this.#by)]);
+    return [...control, ...[...names].flatMap((name) => [...read(eventStream(name), rev)])].sort(
+      (a, b) => a.rev - b.rev,
+    );
+  }
+
+  /** A new table with `entries` folded onto this one, oldest first; this table is unchanged. */
+  fold(entries: Iterable<Entry>): ProcessTable {
+    return new ProcessTable(entries, this.#by, this);
   }
 
   start(request: Start, caller: Caller, from: From): Result.Result<Option.Option<StartAnswer>, ProcessError> {
@@ -652,6 +691,20 @@ export class ProcessTable {
   outbound(process: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
       .filter(({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process)
+      .map(shown);
+  }
+
+  /**
+   * The live watches a client session holds: those whose recipient is a client with `session` and
+   * whose process still runs. A watch whose process exited already fired its DOWN, and in OTP a
+   * monitor that fired is gone, so the session's leave has nothing left to end there.
+   */
+  held(session: string): ReadonlyArray<Watch> {
+    return [...this.#model.watches.values()]
+      .filter(
+        ({ _tag, to, process }) =>
+          _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
+      )
       .map(shown);
   }
 

@@ -3,6 +3,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -27,7 +28,7 @@ import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManage
 import { ProcessStore } from "./ProcessStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
-const CHECK = { seed: 119120, numRuns: 40 };
+const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) };
 
 const text = fc.string({
   unit: fc.constantFrom("a", "b", "7", ":", "_"),

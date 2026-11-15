@@ -252,6 +252,8 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         };
         let text = damaged(good, recipe);
         let reads = 0;
+        // The one query a build makes: whether the object holds a checkpoint yet (none here).
+        let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
         const storage = {
           get: (key: string) => Promise.resolve(values.get(key)),
@@ -262,7 +264,16 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           delete: unexpected,
           setAlarm: unexpected,
           deleteAlarm: unexpected,
-          sql: { exec: unexpected },
+          sql: {
+            exec: (query: string) => {
+              if (query !== "SELECT name FROM sqlite_master WHERE name='process_state'") {
+                return unexpected();
+              }
+
+              lookups++;
+              return [];
+            },
+          },
           transactionSync: unexpected,
         };
         yield* Effect.acquireRelease(
@@ -291,6 +302,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
                   due: unexpected,
                   mailed: Effect.void,
                   restart: unexpected,
+                  swap: unexpected,
                 }),
               ),
             ),
@@ -334,6 +346,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         );
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);
+        expect(lookups, "no storage is read before the first call").toBe(0);
 
         for (const [index, name] of calls.entries()) {
           // `flip` lets a defect through and fails on an answer, so a die or a fallback fails here.

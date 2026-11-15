@@ -26,8 +26,9 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
-import type { Client, ClientMsg, Pending } from "./Client.ts";
-import { clientMachineFor, sendable } from "./Client.ts";
+import { ProcessId } from "../ProcessId.ts";
+import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
+import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
@@ -665,5 +666,102 @@ describe("L5: client views (p3)", () => {
       opts,
     );
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+// --- P18 slice 2, next/ (ticket 979): F1, a name's fold over pages ---------------------------------
+//
+// The shape this law holds `Client.ts` to, from the approved plan (the build may add more):
+// `foldName(fold, entries, name, by)` folds one page of `processes/<name>` as `ledger.read` sent it
+// into a `NameFold` {after, live, ended}: `live` is the newest start or restart by a writer `by`
+// trusts, unless a later exit by one ended it, and `ended` is the newest such exit, {pid, reason}.
+// `resolveName(entries, name, by)` stays, as the `live` of a fold from empty. A window reads a name
+// one page at a time (at most 256 entries a page), so a fold over the pages must be the fold over
+// the whole list.
+
+/** Process ids the fold can confuse: few enough that starts, exits and restarts name the same ones. */
+const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`);
+const F1_NAME = "checklist:1";
+const trusted = (writer: string) => writer === "brain" || writer.startsWith("brain:");
+const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
+
+const EXITS = [
+  { _tag: "normal" },
+  { _tag: "shutdown" },
+  { _tag: "kill" },
+  { _tag: "crashed", phase: "step", error: "TypeError" },
+  { _tag: "crashed", phase: "interrupted" },
+] as const;
+
+const fact = fc.record({
+  tag: fc.constantFrom("started", "restarted", "exited", "exited", "down"),
+  writer: fc.constantFrom("brain", "brain:p18", "brain", "SHA256:person"),
+  pid: fc.constantFrom(...F1_PIDS),
+  after: fc.constantFrom(...F1_PIDS),
+  name: fc.constantFrom(F1_NAME, F1_NAME, F1_NAME, "checklist:2"),
+  reason: fc.constantFrom(...EXITS),
+  gap: fc.integer({ min: 1, max: 3 }),
+});
+
+/** A name's stream as the door reads it out: each fact under its own rev, in rev order. */
+const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ? F : never>) => {
+  let rev = 0;
+  return facts.map((f) => {
+    rev += f.gap;
+    const body =
+      f.tag === "started"
+        ? { process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" }
+        : f.tag === "restarted"
+          ? { process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" }
+          : f.tag === "exited"
+            ? { process: f.pid, reason: f.reason }
+            : { process: f.pid, reason: "too_many", crashes: 1, until: 0 };
+    return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
+  });
+};
+
+describe("P18 F1: a name's fold over pages", () => {
+  it("F1 property: foldName over any split of the entries into pages equals foldName over the whole list, its live equals resolveName, and entries by other writers never count", () => {
+    expect(
+      F1_PIDS.every((pid) => Schema.is(ProcessId)(pid)),
+      "the fixture's ids are process ids",
+    ).toBe(true);
+    const seen = { live: 0, ended: 0, split: 0, forged: 0 };
+    fc.assert(
+      fc.property(
+        fc.array(fact, { minLength: 0, maxLength: 60 }),
+        fc.array(fc.nat(), { maxLength: 6 }),
+        (facts, cuts) => {
+          const entries = stream(facts);
+          const at = [...new Set(cuts.map((n) => n % (entries.length + 1)))].sort((a, b) => a - b);
+          const pages = [0, ...at, entries.length].flatMap((start, i, all) =>
+            i + 1 < all.length ? [entries.slice(start, all[i + 1])] : [],
+          );
+          const whole = foldName(FROM_EMPTY, entries, F1_NAME, trusted);
+          const paged = pages.reduce((acc, page) => foldName(acc, page, F1_NAME, trusted), FROM_EMPTY);
+          seen.split += pages.length > 1 ? 1 : 0;
+          seen.live += whole.live === null ? 0 : 1;
+          seen.ended += whole.ended === null ? 0 : 1;
+          seen.forged += facts.some((f) => !trusted(f.writer) && f.tag !== "down") ? 1 : 0;
+          expect(paged, "a fold over pages differs from the fold over the whole list").toEqual(whole);
+          expect(whole.live, "live is not resolveName's").toBe(resolveName(entries, F1_NAME, trusted));
+          const own = foldName(
+            FROM_EMPTY,
+            entries.filter((e) => trusted(e.by)),
+            F1_NAME,
+            trusted,
+          );
+          expect({ live: whole.live, ended: whole.ended }, "another writer's entry counted").toEqual({
+            live: own.live,
+            ended: own.ended,
+          });
+        },
+      ),
+      opts,
+    );
+    expect(seen.split).toBeGreaterThan(0);
+    expect(seen.live).toBeGreaterThan(0);
+    expect(seen.ended).toBeGreaterThan(0);
+    expect(seen.forged).toBeGreaterThan(0);
   });
 });

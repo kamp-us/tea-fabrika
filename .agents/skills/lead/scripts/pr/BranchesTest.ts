@@ -7,6 +7,8 @@ export type Model = {
   readonly branches: ReadonlyArray<Branch>;
   /** Commits each tip holds that origin/main does not. */
   readonly ahead: Readonly<Record<string, number>>;
+  /** Commits origin/main holds that each tip does not; a tip it does not name fails `behind`. */
+  readonly behind?: Readonly<Record<string, number>>;
   /** The tips whose trial merge into origin/main changes nothing. */
   readonly empty: ReadonlyArray<string>;
   /** Fails the listing, as a git call that cannot run does. */
@@ -23,6 +25,12 @@ export const layer = (model: Model): Layer.Layer<Branches> =>
         : Effect.succeed(model.branches),
       ahead: (tip) => {
         const n = model.ahead[tip];
+        return n === undefined
+          ? Effect.fail(new BranchesError({ command: "rev-list", reason: `unknown ${tip}` }))
+          : Effect.succeed(n);
+      },
+      behind: (tip) => {
+        const n = model.behind?.[tip];
         return n === undefined
           ? Effect.fail(new BranchesError({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);

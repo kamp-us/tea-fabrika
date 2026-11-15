@@ -25,7 +25,7 @@ const contract = () => {
   }>();
 };
 
-it("scenario: L9 Toml's complete contract and tagged reasons are typechecked", () => {
-  // scenario: these compile-time laws need tsc, which the lead runs after build.
+it("L9 type: Toml's complete contract and tagged reasons are typechecked", () => {
+  // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(contract).toBeFunction();
 });

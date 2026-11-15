@@ -86,6 +86,14 @@ Not waivers, checked and left as they are:
 - **tsconfig `exclude`**: only `packages/fabrika` and `packages/pipeline` build configs leave tests
   out of the built package. The typecheck still reads them. `adapters/` has no `typecheck` script
   and no TypeScript.
+- **tsconfig `include`**: a scope too, and a list under 0524 when it leaves files out. The e2e
+  typecheck pull request closes `next/apps/fabrika`'s: its `e2e/` and `e2e.ts` were outside the type
+  check from 2026-11-06, hiding 19 errors. Three gaps stay, each a finding: `.agents/tsconfig.json`
+  lists files one by one (72 outside); the repo root's 16 TypeScript files, which no typecheck runs;
+  today's `apps/fabrika` (2 files), frozen by
+  [0525](../../.decisions/0525-todays-version-is-frozen.md). One error it hid: every run of P19's
+  L13 before that pull request sent `SIGTERM`, not `SIGKILL`, since the kill passed `signal`, a key
+  Effect's `KillOptions` does not have.
 - **vitest `exclude`**: skill fixtures, and `next/packages/tuval/src/browser/key.laws.test.ts`, which
   `next/apps/fabrika/e2e.ts` runs in headless Chromium; CI runs that runner. Not hidden.
 - **CI `--exclude` flags**: they route tests to jobs. `.github/ci/workflow-lint.ts` checks the
@@ -141,9 +149,10 @@ adds it.
   the 13 hook rows, `next-ledger.json` is then empty.
 - **The advice set** empties through decision 0523 (https://github.com/kamp-us/tea-fabrika/pull/1194)
   and its lane: the five advice rules block folder by folder at zero, and the docs rule turns on the
-  same way. `fabrika/service-id`, the sixth, blocks in
-  https://github.com/kamp-us/tea-fabrika/pull/1170. When the last folder reaches zero, `ADVICE` is
-  empty and no `"warn"` level is left. Slice 13 then deletes the set and turns on its guard.
+  same way. `fabrika/service-id` blocks since
+  https://github.com/kamp-us/tea-fabrika/pull/1186, so it is not in the set. When the last folder
+  reaches zero, `ADVICE` is empty and no `"warn"` level is left. Slice 13 then deletes the set and
+  turns on its guard.
 - Note: 0523 keeps a dirty folder printing as advice until its fill lands. That is a per-folder
   scope while the fills run, not a list of breaks, and it ends when they do.
 

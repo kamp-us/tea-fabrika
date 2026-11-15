@@ -33,11 +33,12 @@ import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
-import { type ProcessError, brainOnly } from "../processes/Process.ts";
+import { type ProcessError, brainOnly, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
@@ -239,6 +240,19 @@ const Read = Schema.Struct({
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
+/** `process.monitor`'s params: exactly these two keys. The recipient is never one of them. */
+const Monitor = Schema.Struct({ ref: Schema.String, pid: ProcessId });
+const decodeMonitor = Schema.decodeUnknownResult(Monitor, { onExcessProperty: "error" });
+
+/** Who a window's watches deliver to: its hello's tab and its socket's session, saved at its hello. */
+const ClientRecipient = Recipient.cases.client;
+
+/**
+ * What the door trusts about a connection, from the object that holds its socket, never from the
+ * client: the url, the tab and the key's fingerprint, and the socket's session when there is one.
+ */
+type Trusted = { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string };
+
 const SpanRead = Schema.Struct({
   chain: Chain,
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -252,6 +266,7 @@ const methods: ReadonlySet<string> = new Set([
   "view.open",
   "ledger.read",
   "ledger.wait",
+  "process.monitor",
   "spans.read",
   "spans.content",
   "spans.deleteContent",
@@ -280,6 +295,16 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<{ readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string> }, LedgerError>;
   readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly open?: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError, RDeliver>;
+  /**
+   * Watches `pid` under the caller's `ref` for `to`, the recipient the door built from the checked
+   * connection. The door never builds `to` from params.
+   */
+  readonly monitor?: (
+    ref: string,
+    pid: string,
+    to: typeof ClientRecipient.Type,
+    from: From,
+  ) => Effect.Effect<void, ProcessError | LedgerError, RDeliver>;
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
   readonly nextProcess: () => Effect.Effect<string, never, RNext>;
   readonly deliver: (
@@ -319,6 +344,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
   const jobs = yield* Jobs;
+  const wakeups = yield* MailWakeups;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
@@ -399,6 +425,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
+  // A connection's checked state: its attachment, its key and its watches' recipient.
+  const forget = (client: string) => {
+    sql.exec(
+      "DELETE FROM gateway_state WHERE name IN (?,?,?)",
+      `client/${client}`,
+      `key/${client}`,
+      `recipient/${client}`,
+    );
+  };
   const prunePending = (at: number) => {
     const expired = sql.exec(
       "SELECT client FROM gateway_pending WHERE until<=? OR client IN (SELECT client FROM gateway_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
@@ -408,8 +443,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     for (const row of expired) {
       const client = String(row.client);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `client/${client}`);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     }
   };
@@ -456,16 +490,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     yield* store.atomic(() => {
       // A reconnect retires this checked connection, never another client's proof.
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
     return yield* silent(nonces.issue(client));
   });
-  const initialize = Effect.fnUntraced(function* (
-    client: ConnectionId,
-    input: unknown,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
-  ) {
+  const initialize = Effect.fnUntraced(function* (client: ConnectionId, input: unknown, trusted: Trusted) {
     if (trusted.url !== options.url) {
       return no("bad_nonce");
     }
@@ -503,7 +533,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const initializeChecked = Effect.fnUntraced(function* (
     client: ConnectionId,
     hello: typeof Hello.Type,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    trusted: Trusted,
     until: number,
     attempt: { current: boolean },
   ) {
@@ -511,7 +541,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const result = yield* silent(
       checkHello({
         hello,
-        ...trusted,
+        url: trusted.url,
+        tab: trusted.tab,
+        name: trusted.name,
         nonce: hello.nonce,
         versions: options.versions,
         ping: options.ping,
@@ -619,6 +651,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       yield* store.atomic(() => {
         sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
         store.set(`key/${client}`, Schema.String, result.hello.key);
+
+        // A door with no socket has no session, so its watches have no recipient: `no_session`.
+        const recipient =
+          trusted.session === undefined
+            ? Option.none()
+            : ClientRecipient.makeOption({ client: trusted.tab, session: trusted.session });
+
+        if (Option.isSome(recipient)) {
+          store.set(`recipient/${client}`, ClientRecipient, recipient.value);
+        }
+
         store.set(
           `client/${client}`,
           Attached,
@@ -723,7 +766,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         saveWaiting(stepWaiting(waiting(at), { type: "leave", key: attached.key, client }));
       }
 
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
   });
@@ -1117,17 +1160,21 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     if (method.startsWith("jobs.")) {
-      const answer = yield* Effect.gen(function* () {
+      const { answer, wake } = yield* Effect.gen(function* () {
         const fresh = yield* silent(Effect.result(authenticated(client)));
 
         if (Result.isFailure(fresh)) {
-          return no("not_granted");
+          return { answer: no("not_granted"), wake: null };
         }
 
         return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
       }).pipe(write);
+      // A taken finish answers only once its requester is scheduled, outside the write turn. A wake
+      // that failed answers `unavailable`: the result is saved, and the same finish sent again repeats
+      // and wakes again, as MailDelivery's `queued` comes only after both.
+      const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
       yield* flush;
-      return answer;
+      return Result.isSuccess(woke) ? answer : no("unavailable");
     }
 
     if (attached.identity.as === "hands") {
@@ -1139,6 +1186,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
     if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params)) {
+      refusal ??= "bad_input";
+    }
+
+    if (method === "process.monitor" && Result.isFailure(decodeMonitor(params))) {
       refusal ??= "bad_input";
     }
 
@@ -1509,6 +1560,28 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return ok(yield* options.open(opened.success.pid, String(client)).pipe(Effect.provideContext(context)));
         }
 
+        if (method === "process.monitor" && options.monitor !== undefined) {
+          const asked = decodeMonitor(params);
+
+          if (Result.isFailure(asked)) {
+            return no("bad_input");
+          }
+
+          const to = yield* store.atomic(() => store.get(`recipient/${client}`, ClientRecipient));
+
+          if (to === null) {
+            return no("no_session");
+          }
+
+          // The call's own `from`, as a letter's: the window's key, which the brain keeps as `asked`.
+          const from = { ...fromInput(binding), parent: binding.id };
+          return yield* options.monitor(asked.success.ref, asked.success.pid, to, from).pipe(
+            Effect.provideContext(context),
+            Effect.as(ok(null)),
+            Effect.catchTag("ProcessError", (error) => Effect.succeed(no(error.reason))),
+          );
+        }
+
         if (method === "ledger.read" || method === "ledger.wait") {
           const p = Schema.decodeUnknownResult(Read)(params);
 
@@ -1774,6 +1847,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         .signer(parent, process, kind)
         .pipe(Effect.provideService(SignRequest, { id }));
     }),
+    // Who sent an input is the same for every policy: no event kind is asked, so none is loaded.
+    sender: Effect.fn("gateway.sender")(function* (process: string, parent: string) {
+      return yield* sessions.sender(parent, process);
+    }),
     retire: sessions.end,
     checkDelivery: Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
       const binding = yield* savedBinding(input.envelope.id);
@@ -1824,7 +1901,9 @@ type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => E
  * does not decode. `checkDelivery` refuses with `not_delivered` when an input does not match its
  * saved binding. `sign`, `signer` and `append` serve a process answering an input it was delivered.
  * They refuse with `SigningRefused`: `not_delivered` when the process is not live or no delivery is
- * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases.
+ * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases. `sender` answers who
+ * sent an input delivered to a process, refused as `sign` is, and writes nothing: the brain asks it
+ * before a start (0170).
  *
  * @stability unstable
  * @category services
@@ -1846,7 +1925,7 @@ export class Gateway extends Context.Service<
     readonly initialize: (
       client: ConnectionId,
       input: unknown,
-      trusted: { readonly url: string; readonly tab: string; readonly name: string },
+      trusted: Trusted,
     ) => Effect.Effect<
       typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
       GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
@@ -1902,6 +1981,11 @@ export class Gateway extends Context.Service<
       parent: string,
       kind: string,
     ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError>;
+    /** Who sent `parent`, an input delivered to `process`, as `sign` would sign it, writing nothing. */
+    readonly sender: (
+      process: string,
+      parent: string,
+    ) => Effect.Effect<Writer, SigningRefused | NotGranted | SessionManagerError>;
     readonly retire: (process: string) => Effect.Effect<void, SessionManagerError>;
     readonly checkDelivery: (
       process: string,

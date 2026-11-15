@@ -323,6 +323,21 @@ export type Program<
   readonly wake: (model: T["model"]["Type"]) => number | null;
 };
 
+/**
+ * One of a program's commands, as a row of its default keys (0267's `commands`, 0278): its name,
+ * which carries its program's name (`tezgah.split_right`), its keys, its shell word and its
+ * palette label. A window is handed a program's rows as a value and loads them into its key table.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Binding = {
+  readonly does: string;
+  readonly keys: ReadonlyArray<string>;
+  readonly word: string;
+  readonly label: string;
+};
+
 const Authoring = Schema.Struct({
   name: Declaration.fields.name,
   maxDeliveries: Declaration.fields.maxDeliveries,

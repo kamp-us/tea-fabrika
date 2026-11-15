@@ -6,6 +6,19 @@
  */
 import { Schema } from "effect";
 
+export {
+  /**
+   * How many entries one `ledger.read` answer holds at most, and how many spans one `spans.read`
+   * answer holds, re-exported from `Rev.ts`, the log's own page size. The door cuts every page
+   * here, so a client that gets a full page knows to ask again after its last entry, and a shorter
+   * page is the last.
+   *
+   * @stability unstable
+   * @category constants
+   */
+  PAGE,
+} from "../Rev.ts";
+
 /**
  * Schema for the hello a client sends to start a connection.
  *

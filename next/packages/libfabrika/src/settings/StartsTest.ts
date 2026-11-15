@@ -115,17 +115,15 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
       brainStartTimeout: Declarations.brainStartTimeout.default,
       brainStopTimeout: Declarations.brainStopTimeout.default,
       desktopLinkTtl: Declarations.desktopLinkTtl.default,
+      // P39 slice 3: no hands key is set, the person's default.
+      handsTarget: null,
     },
     origins: {
+      // Every declared setting this recipe does not name comes from its default.
+      ...Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
       "instance.port": origin,
-      "fabrika-version": Origin.cases.default.make({}),
       "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
       "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
-      "desktop.brain-throttle": Origin.cases.default.make({}),
-      "desktop.brain-poll": Origin.cases.default.make({}),
-      "desktop.brain-start-timeout": Origin.cases.default.make({}),
-      "desktop.brain-stop-timeout": Origin.cases.default.make({}),
-      "desktop.link-ttl": Origin.cases.default.make({}),
     },
   });
   return {

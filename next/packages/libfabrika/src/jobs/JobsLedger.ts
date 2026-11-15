@@ -14,7 +14,7 @@ import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import type { ProcessId } from "../ProcessId.ts";
 import { job, Msg } from "./internal/job.ts";
-import { Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
+import { Collection, Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
 
 /** The execution identity a take allocates, once per job. */
@@ -26,6 +26,7 @@ const Stored = Schema.TaggedUnion({
   taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
   started: { execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
   finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
+  collected: { collection: Collection, recorded: Schema.optionalKey(Recorded) },
 });
 type Stored = typeof Stored.Type;
 
@@ -45,6 +46,10 @@ const toMsg = (stored: Stored): Msg => {
     return { type: "take", executor: stored.executor, execution: stored.execution };
   }
 
+  if (stored._tag === "collected") {
+    return { type: "collect", collection: stored.collection };
+  }
+
   return stored._tag === "started"
     ? { type: "start", execution: stored.execution }
     : { type: "finish", execution: stored.execution, result: stored.result };
@@ -57,6 +62,10 @@ const toStored = (msg: Msg): Stored => {
 
   if (msg.type === "take") {
     return Stored.cases.taken.make({ executor: msg.executor, execution: msg.execution });
+  }
+
+  if (msg.type === "collect") {
+    return Stored.cases.collected.make({ collection: msg.collection });
   }
 
   return msg.type === "start"
@@ -173,6 +182,13 @@ export const layer = Layer.effect(
       }),
       finish: Effect.fn("jobs.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
         return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
+      }),
+      collected: Effect.fn("jobs.collected")(function* (
+        id: string,
+        collection: typeof Collection.Type,
+        recorded: Recorded,
+      ) {
+        return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
       }),
       read,
       forProcess: (process: typeof ProcessId.Type) =>

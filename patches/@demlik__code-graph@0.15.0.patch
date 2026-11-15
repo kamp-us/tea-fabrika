@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af9682ac527aa 100755
+index b81bf353943b40291ef6810324da31fb49234092..14250dbe315e974b1c554321d4a23196f6993f2b 100755
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -728,6 +728,35 @@ function inRepoFile(realRoot, resolved) {
@@ -69,7 +69,38 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
  }).strict();
  function importsIssue(layers) {
    const ranks = new Map(layers.map((layer, rank) => [layer.name, rank]));
-@@ -6501,7 +6543,15 @@ function discoverInFile2(unit) {
+@@ -2151,7 +2193,16 @@ var LayerRulesSchema = z9.object({
+   // A layer stack is repo-specific, so none ships: an absent `layers` parses to `[]`, which
+   // `resolveLayerRules` refuses, while an explicit stack still needs at least two layers.
+   layers: z9.array(LayerSchema).min(2).default([]),
+-  allowed: z9.array(AllowedEdgeSchema).default([])
++  allowed: z9.array(AllowedEdgeSchema).default([]),
++  // Patched (kamp-us/demlik#947, https://github.com/kamp-us/demlik/issues/947): `roots` are
++  // folders, in the `paths` pattern language, where every file must sit in a layer: a file under
++  // one that no layer claims fails the gate as unclaimed (ArchUnit's
++  // `ensureAllClassesAreContainedInArchitecture`). Patched (kamp-us/demlik#948,
++  // https://github.com/kamp-us/demlik/issues/948): `testFiles` are globs, as `--boundaries` reads
++  // its own `testFiles` key: a test file is judged upward and sideways like any other, while the
++  // `imports` lists and `roots` do not judge it.
++  roots: z9.array(z9.string().min(1)).default([]),
++  testFiles: z9.array(z9.string().min(1)).default([])
+ }).strict();
+ 
+ // src/schema/clusters.ts
+@@ -2808,6 +2859,12 @@ function resolveLayerRules(file, report) {
+     report(issue);
+     return null;
+   }
++  // Patched (kamp-us/demlik#948): a `testFiles` glob that does not compile stops the run.
++  const globIssue = globIssues("testFiles", rules.testFiles)[0];
++  if (globIssue !== void 0) {
++    report(globIssue);
++    return null;
++  }
+   return rules;
+ }
+ function resolveCommentCeilings(file, report) {
+@@ -6501,7 +6558,15 @@ function discoverInFile2(unit) {
    const { syntax, file } = unit;
    const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
    if (found.length === 0) return [];
@@ -86,7 +117,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    const locals = localExportNames(syntax);
    const isTest = isTestFile(file);
    return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({
-@@ -11035,7 +11085,24 @@ function compile(layer, pattern) {
+@@ -11035,7 +11100,24 @@ function compile(layer, pattern) {
  }
  function compileMatchers(layers) {
    const matchers = [];
@@ -112,7 +143,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
      const imports = layer.imports === void 0 ? null : new Set(layer.imports);
      for (const pattern of layer.paths) {
        matchers.push(compile({ name: layer.name, rank, imports }, pattern));
-@@ -11052,7 +11119,7 @@ function layerOf(repoRelPath, matchers) {
+@@ -11052,7 +11134,7 @@ function layerOf(repoRelPath, matchers) {
    if (winner === void 0) return null;
    for (const rival of matchers.slice(at + 1)) {
      if (compareSpecificity(winner.specificity, rival.specificity) !== 0) break;
@@ -121,7 +152,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
        throw new LayerTieError(repoRelPath, [winner.pattern, rival.pattern]);
      }
    }
-@@ -11065,6 +11132,7 @@ function directionOf(from, to) {
+@@ -11065,6 +11147,7 @@ function directionOf(from, to) {
  }
  function ruleBroken(from, to) {
    if (from.rank > to.rank) return "upward";
@@ -129,7 +160,34 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
    return "outside-imports";
  }
-@@ -11143,7 +11211,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+@@ -11106,9 +11189,17 @@ function analyzeLayers(loaded, repoRoot, rules) {
+   const census = emptyCensus();
+   const violations = [];
+   const unresolved = [];
++  // Patched (kamp-us/demlik#947, #948): the files `roots` holds that no layer claims, and the test
++  // files that `imports` and `roots` leave alone.
++  const unclaimed = [];
++  const roots = rules.roots.map((root) => ({ root, regex: prefixRegex(root.split("/")) }));
++  const tests = rules.testFiles.map(globToRegExp);
+   for (const unit of loaded.sourceFiles) {
+     const from = path26.relative(repoRoot, unit.absolutePath).split(path26.sep).join("/");
+     const fromLayer = layerOf(from, matchers);
++    const isTest = tests.some((glob) => glob.test(from));
++    const root = fromLayer === null && !isTest ? roots.find((r) => r.regex.test(from)) : void 0;
++    if (root !== void 0) unclaimed.push({ file: from, root: root.root });
+     for (const spec of specifiersOf(unit)) {
+       const target = resolveTarget2(from, spec.value);
+       if (target.kind === "external") {
+@@ -11127,7 +11218,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+       census[direction]++;
+       if (fromLayer === null || toLayer === null) continue;
+       const rule = ruleBroken(fromLayer, toLayer);
+-      if (rule === null) continue;
++      if (rule === null || (rule === "outside-imports" && isTest)) continue;
+       violations.push({
+         from,
+         fromLine: spec.line,
+@@ -11143,11 +11234,12 @@ function analyzeLayers(loaded, repoRoot, rules) {
    }
    return {
      layers: rules.layers.map((l) => l.name),
@@ -138,3 +196,51 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
      filesScanned: loaded.sourceFiles.length,
      census,
      violations: sortEdges(violations),
+-    unresolved: unresolved.sort((a, b) => a.localeCompare(b))
++    unresolved: unresolved.sort((a, b) => a.localeCompare(b)),
++    unclaimed: unclaimed.sort((a, b) => a.file.localeCompare(b.file))
+   };
+ }
+ 
+@@ -11260,9 +11352,20 @@ function verdictLines(result, importsDeclared) {
+   }
+   return lines;
+ }
++// Patched (kamp-us/demlik#947): a file under a root that no layer claims fails the gate.
++function unclaimedLines(unclaimed) {
++  if (unclaimed.length === 0) return [];
++  return [
++    "LAYER GATE FAILED.",
++    `  ${unclaimed.length} unclaimed file(s), each under a root that no layer claims:`,
++    ...unclaimed.map((u) => `  ${u.file}  [unclaimed]  (root "${u.root}")`),
++    "  Fix: add a pattern that claims the file to the layer it belongs to, or move the file into",
++    "  a folder a layer already claims."
++  ];
++}
+ function renderLayers(report, allowed, json, pretty) {
+   const result = reconcile2(report, allowed);
+-  const exitCode = result.passed ? 0 : 1;
++  const exitCode = result.passed && report.unclaimed.length === 0 ? 0 : 1;
+   if (json) {
+     const wire = (edges) => report.importsDeclared ? edges : edges.map(({ rule: _rule, ...edge }) => edge);
+     return {
+@@ -11276,7 +11379,8 @@ function renderLayers(report, allowed, json, pretty) {
+           passed: result.passed,
+           undeclared: wire(result.undeclared),
+           stale: result.stale,
+-          miscounted: result.miscounted
++          miscounted: result.miscounted,
++          unclaimed: report.unclaimed
+         },
+         pretty
+       ),
+@@ -11286,7 +11390,8 @@ function renderLayers(report, allowed, json, pretty) {
+   const lines = [
+     ...headerLines(report),
+     ...report.violations.map((edge) => edgeLine(edge, report.importsDeclared)),
+-    ...verdictLines(result, report.importsDeclared)
++    ...verdictLines(result, report.importsDeclared),
++    ...unclaimedLines(report.unclaimed)
+   ];
+   return { stdout: lines.join("\n"), exitCode };
+ }

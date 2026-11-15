@@ -1,0 +1,29 @@
+name: pnpm
+description: pnpm and Node for a job that installs this workspace. It caches nothing.
+
+# No pnpm store cache: restoring one cost more than the download it saved.
+# - Linux: `pnpm install` took 8 to 12 s with main's store restored (13 jobs of main run
+#   43615844695) and 8 and 11 s with none (pull request 1243's first run, 43624672114, lint and
+#   typecheck), from the registry.
+# - macOS: setup-node with `cache: pnpm` took 47 and 50 s, and the install 11 and 13 s (e2e in runs
+#   43620728687 and 43623635302). With no store, this action took 13 s and the install 31 s (host
+#   in run 43624672101).
+# setup-node's `cache: pnpm` also saved the store from every ref it ran on, 527 MiB on Linux and
+# 922 MiB on macOS each time: on 2026-11-14 the repository's Actions cache held 10.6 GB in 19
+# entries, over GitHub's 10 GB, 7.5 GB of it on refs other than main
+# (`gh api repos/kamp-us/tea-fabrika/actions/cache/usage`, and `.../actions/caches` for each entry).
+# Every Linux job of run 43615844695 then spent 3 to 7 s packing a copy it could not save.
+
+runs:
+  using: composite
+  steps:
+    # The pnpm version comes from `packageManager` in package.json.
+    - name: pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        run_install: false
+
+    - name: node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 26.13.0

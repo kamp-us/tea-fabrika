@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t979-fix-ended-tile",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-15T00:00:00-08:00",
+  "ended": "2026-11-15T00:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round, one agent, in next/: the ended tile now follows the tile guideline (docs/direction/tile-guidelines.md), whose Tuval line sends a tile kept after a crash to the empty state's rule. Its body shows one word, Ended, where the view starts, in --tile-text at --manti-text-base, in place of the ended process's last view; the title bar's state slot keeps Ended (crashed); the polite region says the guideline's words with this slice's reason, checklist:1 in tile_1 ended (crashed). The choice lives in next/packages/tuval/src/window/words.ts. Laws: words.test.ts (new property, the next project) and spoken.test.ts (extended to require the tile id) run on every pull request; E1 in client-protocol.visual.test.ts now reads the browser tile's body after the end and requires one word in the tile text token. Plants, each run once and undone: bodyWord back to the old rule (the last view while one is there, else Ended (reason)) made words.test.ts red on 'Ended (normal)' and E1's browser run red on 'Nothing on the list yet. 0 left'; the old spoken words made the extended spoken law red. All green after. Kept from the plan and 0504, not from the guideline's empty-state line: the end is said politely, not with role=alert, and the tile stays inert.",
+  "plants": [
+    {
+      "law": "words.test.ts: an ended tile's body is one word, whether or not a last view is there",
+      "plant": "words.ts bodyWord: ended returns null when a view is drawn, else Ended (reason)",
+      "result": "red"
+    },
+    {
+      "law": "client-protocol.visual.test.ts E1, browser: the ended tile's body is one word in --tile-text",
+      "plant": "words.ts bodyWord: ended returns null when a view is drawn, else Ended (reason)",
+      "result": "red"
+    },
+    {
+      "law": "spoken.test.ts: an end names its tile, its id and its reason",
+      "plant": "spoken.ts: the old words, name ended (reason)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": null,
+  "step": "build"
+}
