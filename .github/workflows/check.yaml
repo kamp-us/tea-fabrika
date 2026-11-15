@@ -413,11 +413,13 @@ jobs:
           REPORT: ${{ runner.temp }}/tooling.json
         run: node .github/ci/time-table.ts
       # The same numbers as one small JSON per leg, to follow each leg's balance over time. The run
-      # attempt is in its name, so a rerun keeps the first attempt's file beside its own.
+      # attempt is in its name, so a rerun keeps the first attempt's file beside its own. Its own
+      # limit, as the time table's: each upload took about 1 s on run 43657196726.
       - &timings
         name: timings
         if: always()
         continue-on-error: true
+        timeout-minutes: 1
         uses: actions/upload-artifact@v7
         with:
           name: timings-${{ github.job }}-${{ matrix.shard }}-attempt-${{ github.run_attempt }}

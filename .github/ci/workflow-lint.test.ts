@@ -229,10 +229,20 @@ const timeTable = (report: string): Timed => ({
   run: "node .github/ci/time-table.ts",
 });
 
+// M1: a step outside the test jobs with the time table's command, the token and a loader that runs
+// any file first. Only the test jobs' exact table step may have the token.
+const loader = "--import ./x.mjs";
+
+const tableElsewhere = (): Timed => ({
+  run: "node .github/ci/time-table.ts",
+  env: { GITHUB_TOKEN: token, NODE_OPTIONS: loader },
+});
+
 const timings = (): Timed => ({
   name: "timings",
   if: "always()",
   "continue-on-error": true,
+  "timeout-minutes": 1,
   uses: "actions/upload-artifact@v7",
   with: {
     name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
@@ -1937,6 +1947,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
       ],
       [`TT2: ${job}'s timings skip a red leg`, (w) => (upload(w).if = "success()")],
       [`TT2: ${job}'s timings can fail the job`, (w) => Reflect.deleteProperty(upload(w), "continue-on-error")],
+      [`TT2: ${job}'s timings have no time limit`, (w) => Reflect.deleteProperty(upload(w), "timeout-minutes")],
       [
         `TT2: ${job}'s timings upload before the time table writes them`,
         (w) => {
@@ -1946,8 +1957,18 @@ const plants: [string, (workflow: Workflow) => void][] = [
       ],
     ];
   }),
-  // M1: the time table's exact step is the one test step that gets the token.
+  // M1: the time table's exact step, in a test job, is the one test step that gets the token. The
+  // same command elsewhere, or with one more variable, does not. The typecheck plant passed the M1
+  // that let any step whose command is the time table's have the token.
   ["M1: shard times gets the token too", (w) => (step(w, "test", "shard times").env = { GITHUB_TOKEN: token })],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w) => stepsOf(w, "typecheck").splice(-1, 0, tableElsewhere()),
+  ],
+  [
+    "M1: test's time table carries a loader beside the token",
+    (w) => ((stepsOf(w, "test").find((s) => s["name"] === "time table") as Timed).env!["NODE_OPTIONS"] = loader),
+  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -2485,7 +2506,15 @@ for (const [name, plant, error] of [
       list[at] = structuredClone(list[at]!);
       (list[at]["with"] as Record<string, unknown>)["name"] = `timings-\${{ github.job }}-\${{ matrix.shard }}`;
     },
-    "check.yaml: TT2: test uploads its timings file once, after the time table step, on every result, never failing the job",
+    "check.yaml: TT2: test uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",
+  ],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w: Parsed) => {
+      // Before its stop step, which stays last (F1).
+      w.jobs["typecheck"]!.steps.splice(-1, 0, tableElsewhere());
+    },
+    "check.yaml: M1: only changes' classify step and the test jobs' time tables get the token",
   ],
 ] as const) {
   it(`scenario: ${name} is named by its one error`, () => {

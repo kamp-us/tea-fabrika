@@ -133,6 +133,12 @@ const timeTableEnv = (report: string) => ({
   REPORT: `\${{ runner.temp }}/${report}`,
 });
 
+// check.yaml's test jobs, each with the Vitest report its time table reads.
+const TIMED_LEGS = [
+  ["test", "tooling.json"],
+  ["next", "next.json"],
+] as const;
+
 const TIMINGS = {
   name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
   path: `\${{ runner.temp }}/${fileName({ job: `\${{ github.job }}`, leg: `\${{ matrix.shard }}` })}`,
@@ -173,12 +179,13 @@ const timed = (name: string, job: Record<string, unknown>, report: string): stri
       map(upload?.["with"])["name"] === TIMINGS.name &&
       compact(upload?.["if"]) === "always()" &&
       upload?.["continue-on-error"] === true &&
+      upload["timeout-minutes"] === 1 &&
       table !== undefined &&
       list.indexOf(upload ?? {}) > list.indexOf(table)
     )
   ) {
     errors.push(
-      `TT2: ${name} uploads its timings file once, after the ${STEP} step, on every result, never failing the job`,
+      `TT2: ${name} uploads its timings file once, after the ${STEP} step, on every result, never failing the job, within a minute`,
     );
   }
 
@@ -555,16 +562,21 @@ export const lintWorkflow = (text: string): string[] => {
   // M1. A push that a merge queue run already tested skips next (changes.mjs's
   // `tested`). The classify step asks GitHub with the job's own token, the workflow's (F3 holds
   // that map to actions and contents, and changes' stop step needs it whole). It and the test legs'
-  // time tables, which read their own job's steps (TT1 pins their env), are the steps in the
-  // workflow but the stop steps that get the token.
+  // time tables, which read their own job's steps, are the steps in the workflow but the stop steps
+  // that get the token. A time table counts only in a test job and only with its exact env (TT1's
+  // `timeTableEnv`): the same command in another job, or beside one more variable, gets no token.
   const classify = changeSteps.find((s) => s["id"] === "diff");
+  const tables = TIMED_LEGS.flatMap(([name, report]) =>
+    steps(map(jobs[name])).filter(
+      (s) => s["run"] === TIME_TABLE && JSON.stringify(s["env"]) === JSON.stringify(timeTableEnv(report)),
+    ),
+  );
   require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
   require(Object.entries(jobs).every(([, job]) =>
     steps(map(job)).every(
-      (s) =>
-        s === classify || s["run"] === TIME_TABLE || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
+      (s) => s === classify || tables.includes(s) || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
     ),
-  ), "M1: only changes' classify step and the time tables get the token");
+  ), "M1: only changes' classify step and the test jobs' time tables get the token");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -769,10 +781,7 @@ export const lintWorkflow = (text: string): string[] => {
   }
 
   // TT1 and TT2: every test leg writes its time table and uploads its timings file.
-  for (const [name, report] of [
-    ["test", "tooling.json"],
-    ["next", "next.json"],
-  ] as const) {
+  for (const [name, report] of TIMED_LEGS) {
     errors.push(...timed(name, map(jobs[name]), report).map((reason) => `check.yaml: ${reason}`));
   }
 
