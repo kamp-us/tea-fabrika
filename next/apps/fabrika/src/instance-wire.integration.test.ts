@@ -8,7 +8,6 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { it } from "@effect/vitest";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
@@ -17,6 +16,7 @@ import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
+import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
@@ -270,25 +270,22 @@ const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
       continue;
     }
 
-    const db = new DatabaseSync(join(entry.parentPath, entry.name), { readOnly: true });
-
-    try {
-      if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)) {
-        continue;
-      }
-
-      rows.push(
-        ...db
-          .prepare(
-            table === "gateway_bindings"
-              ? "SELECT letter,value FROM gateway_bindings"
-              : "SELECT client,connection FROM dev_clients",
-          )
-          .all(),
-      );
-    } finally {
-      db.close();
-    }
+    // The instance is running, so its own writes may hold the lock this read waits for.
+    const read = instanceDatabase(join(entry.parentPath, entry.name), { readOnly: true }).pipe(
+      Effect.map((db) =>
+        db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
+          ? db
+              .prepare(
+                table === "gateway_bindings"
+                  ? "SELECT letter,value FROM gateway_bindings"
+                  : "SELECT client,connection FROM dev_clients",
+              )
+              .all()
+          : [],
+      ),
+      Effect.scoped,
+    );
+    rows.push(...Effect.runSync(read));
   }
 
   return rows;

@@ -2,8 +2,6 @@
 // replace a zero CPU reading with a weaker assertion. The build's probe runs before this scenario.
 // edge: crypto supplies an ephemeral public identity; no person's key is read
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-// edge: Node's SQLite driver opens only this test instance's health tables read-only
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
@@ -11,6 +9,7 @@ import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -229,20 +228,18 @@ const healthRows = (home: string) =>
         }
 
         if (entry.type === "File" && /\.(sqlite|db)$/.test(entry.name)) {
-          yield* Effect.acquireUseRelease(
-            Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
-            (db) =>
-              Effect.sync(() => {
-                if (db.prepare("SELECT name FROM sqlite_master WHERE name='measurements'").get() !== undefined) {
-                  for (const row of db.prepare("SELECT spanId, ms FROM measurements WHERE piece='isolate.cpu'").all()) {
-                    found.push(
-                      Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row),
-                    );
-                  }
-                }
-              }),
-            (db) => Effect.sync(() => db.close()),
+          const rows = yield* instanceDatabase(file, { readOnly: true }).pipe(
+            Effect.map((db) =>
+              db.prepare("SELECT name FROM sqlite_master WHERE name='measurements'").get() === undefined
+                ? []
+                : db.prepare("SELECT spanId, ms FROM measurements WHERE piece='isolate.cpu'").all(),
+            ),
+            Effect.scoped,
           );
+
+          for (const row of rows) {
+            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row));
+          }
         }
       }
     }
