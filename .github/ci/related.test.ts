@@ -111,16 +111,16 @@ it("real skill Markdown subsets select no test", async () => {
 // numbered legs only, as the workflow lint does. Plant, run once on check.yaml and restored: drop
 // leg "5" from the next matrix, so file indices 5 of 5 land on no leg (red, the sorted legs are not
 // 1 to 5). The end-to-end step has a SHARD too, so the vitest step is found by its run command, which
-// takes its path from `$FILTER` (the plan for CI paths, slice 2): all of next/ unless only the reader
-// tests need to run.
+// runs the `next` project (0536) and takes its path from `$FILTER` (the plan for CI paths, slice 2):
+// all of next/ unless only the reader tests need to run.
 describe("next workflow coverage", () => {
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const nextWorkflow = parse(workflow).jobs.next;
   const indices = vitestLegs(workflow);
   const expression: string = nextWorkflow.steps.find((step: { run?: string }) =>
-    step.run?.startsWith("pnpm exec vitest run $FILTER "),
+    step.run?.startsWith("pnpm exec vitest run --project next $FILTER "),
   )?.env.SHARD;
-  // The full matrix's count, the fallback in `/${{ needs.legs.outputs.vitest || N }}`; a sized pull
+  // The full matrix's count, the fallback in `/${{ needs.changes.outputs.vitest-legs || N }}`; a sized pull
   // request's own count is legs.ts's, whose split legs.test.ts covers.
   const denominator = Number(/\|\|\s*([1-9]\d*)\s*\}\}$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];

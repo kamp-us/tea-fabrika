@@ -1,7 +1,7 @@
 import { Id } from "@kampus/libfabrika";
 import { start } from "@kampus/libfabrika/client/WindowStart";
 import { mount } from "@kampus/tuval";
-import { browserKey, browserRows } from "@kampus/tuval/browser";
+import { browserKey, browserRows, runMain } from "@kampus/tuval/browser";
 import { Effect, Layer } from "effect";
 import { Socket } from "effect/socket";
 import { tiles, window, windowFor } from "./views.ts";
@@ -26,5 +26,4 @@ const page = Effect.scoped(
   Effect.provide(Layer.mergeAll(browserKey, browserRows, Socket.layerWebSocketConstructorGlobal, Id.Generator.layer)),
 );
 
-// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the page starts its one Effect runtime outside React
-Effect.runFork(page);
+page.pipe(runMain);

@@ -1,8 +1,8 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
-import { DatabaseSync } from "node:sqlite"; // edge: inspect the instance's persisted SQLite cells, including records outside access history
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
 import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
 export type Instance<E> = { readonly dir: string; readonly stop: Effect.Effect<void, E> };
@@ -80,10 +80,8 @@ const scan = (
           continue;
         }
 
-        const db = yield* Effect.acquireRelease(
-          Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
-          (db) => Effect.sync(() => db.close()),
-        );
+        // The running pass reads while the instance writes, so it waits for the instance's lock.
+        const db = yield* instanceDatabase(file, { readOnly: true });
         const allowed = new Map<string, string>();
         retained.set(file, allowed);
         const tables = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(

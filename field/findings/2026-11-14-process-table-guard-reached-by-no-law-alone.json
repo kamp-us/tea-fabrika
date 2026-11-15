@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-process-table-guard-reached-by-no-law-alone",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/ProcessManager.ts",
+    "line": 169
+  },
+  "says": "In next/, the saved-table guard (refold when the entry at the saved rev is gone or changed) is reached by no law on its own: with it switched off, both ProcessManagerMemo laws pass, because only a save made after an append can make it matter, and no law draws a ledger rewrite below the saved rev.",
+  "proof": "Scratch worktree at caa79fedc: replacing `if (kept === undefined || !sameEntry(kept, entry))` with `if (false)` and running `vitest run --maxWorkers=1 next/packages/libfabrika/src/processes/ProcessManagerMemo.test.ts` printed `Tests 2 passed (2)`; with `table(turn)` also made to save its fold, it printed `Tests 1 failed | 1 passed (2)`.",
+  "cost": "A later change that lets a fold after an append be saved, or a ledger rewrite, would rely on a guard whose own break no law turns red.",
+  "head": "caa79fedc4fd8a4334c1aa8079c130867e3f6297",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1226"
+}

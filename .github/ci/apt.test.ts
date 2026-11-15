@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 
-// Today's CI. Covers apt.sh, the apt step of the test job and of next's chromium step. No root
+// Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
 // and no network: a fake `apt-get` fails while the Azure mirror is listed, for the verbs a case
 // names, and a fake `timeout` runs its command at once.
 const script = new URL("./apt.sh", import.meta.url).pathname;

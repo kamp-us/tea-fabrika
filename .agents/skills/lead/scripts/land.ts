@@ -45,6 +45,10 @@
 //     (`gcloop.ts kick`, 0101), which removes the lane's boxes and worktree. Not merged: one line
 //     saying how it stands. Running it again closes nothing twice.
 //
+//   land.ts close-named <pr>...
+//     as `merged`, but only the ticket closes: no box cleanup sweep. For a pull request that merged
+//     at GitHub and was never settled, and for the after-fast-forward watcher.
+//
 // Every refusal before the push puts the tree's HEAD and refs/notes/fabrika back where they were,
 // so a refused run changes nothing. It never resolves a conflict and never reads a key.
 //
@@ -641,7 +645,23 @@ const merged = Command.make(
   }),
 );
 
-const land = Command.make("land").pipe(Command.withSubcommands([ready, run, queueCommand, merged]));
+const closeNamed = Command.make(
+  "close-named",
+  { prs: PrNumber.pipe(Argument.atLeast(1)) },
+  Effect.fn("land.closeNamed")(function* ({ prs }) {
+    const env = yield* loadEnv;
+
+    for (const pr of prs) {
+      const settled = yield* Queue.closeOnly({ repo: env.GH_REPO, pr }).pipe(
+        Effect.provide(queueServices(env)),
+        Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
+      );
+      yield* Console.log(settled.lines.join("\n"));
+    }
+  }),
+);
+
+const land = Command.make("land").pipe(Command.withSubcommands([ready, run, queueCommand, merged, closeNamed]));
 
 if (import.meta.main) {
   NodeRuntime.runMain(

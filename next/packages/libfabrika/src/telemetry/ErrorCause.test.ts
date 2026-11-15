@@ -60,9 +60,10 @@ describe("T695, sinkError keeps the thrown value", () => {
 
 describe("T695, the archive keeps what failed", () => {
   // C1, Archive.ts:21. Plant: `const fail = () => new SinkError({ reason: "storage", held: 0 })`.
+  // A Promise may reject with anything, `undefined` and other primitives included.
   law(
     "C1: a digest that rejects is `storage` with the rejected value as its cause, on any archive",
-    fc.record({ failure: failures, body: bodies, onBucket: fc.boolean() }),
+    fc.record({ failure: fc.oneof(failures, fc.anything()), body: bodies, onBucket: fc.boolean() }),
     ({ failure, body, onBucket }) =>
       Effect.gen(function* () {
         const calls: BucketCalls = {
