@@ -46,7 +46,8 @@ turns into, and how the limit is held.
 - The idea comes from a public rule set, https://github.com/K-Mistele/anti-slop, a fork of
   https://github.com/dmmulroy/anti-slop. Its rule `max-ternary-depth` is in
   `src/rules/max-ternary-depth.ts` (84 lines, read at commit `5360c12`). The repository is MIT
-  licensed, and its README says the rules are meant to be copied and changed.
+  licensed. Its README registers the rules through oxlint's `jsPlugins`, under the name
+  `anti-slop`. Only the fork has this rule.
 - **What the rule counts,** read from that source:
   - A ternary's depth is 1 plus the depth of the deepest ternary that sits directly in its test,
     its "then" branch or its "else" branch.
@@ -112,11 +113,15 @@ turns into, and how the limit is held.
   - a real machine: when the ternary passes 0037's two tests, it is a tea machine (0046).
 - **Never a longer `if` chain pasted in its place.** The same branches written with `if` and
   `else` are the same unnamed machine with more lines.
-- **Held by a lint rule copied into `oxlint-plugins/`.** The copy is `max-ternary-depth` from the
-  repository named in Context, with `maxDepth` at 2. It runs on oxlint's own plugin API
-  (`@oxlint/plugins`), which the installed 1.90.0 has. The copy keeps that repository's license
-  notice, and says where it came from. Its tests are written in our style, a `*.test.ts` beside
-  the rule, since theirs are plain scripts.
+- **Held by their rule as it ships: `anti-slop/max-ternary-depth`,** with `maxDepth` at 2, its
+  default. It comes from the plugin named in Context, registered through `jsPlugins`. We do not
+  write or copy a version of our own (owner, 2026-11-15). The decision "We use the anti-slop lint
+  plugin as it ships", 0563 in its own pull request, holds the rules for every rule taken from
+  that plugin.
+- **It blocks in the pull request and in the merge line,** as every lint rule does. Nothing counts
+  hits on a schedule.
+- **An exception is one inline ignore with its reason,** in the form `AGENTS.md` already has:
+  `// oxlint-disable-next-line anti-slop/max-ternary-depth -- <why>`.
 
 **Binding constraints**
 
@@ -130,8 +135,8 @@ turns into, and how the limit is held.
 
 ## Consequences
 
-- This file records the limit and how it is held. The rule's copy and the cleanup are later pull
-  requests. The cleanup goes folder by folder, and the rule blocks in a folder when it reaches
+- This file records the limit and how it is held. Installing the plugin and the cleanup are later
+  pull requests. The cleanup goes folder by folder, and the rule blocks in a folder when it reaches
   zero (0168). Until then nothing stops a new deep ternary there.
 - **The cost:** 145 ternaries in 87 files, 117 of them in `next/` and 104 of those in tests. 94
   are one level over the limit. The 25 in product code each need a name or a table that someone
@@ -151,7 +156,7 @@ turns into, and how the limit is held.
 - **Not decided here:**
   - Effect's `Match` in place of a ternary. 0046 keeps the plain conditional inside `update`, and
     the two `Match` rules from the same rule set are not taken.
-  - The rule's name in our plugin and the folder order of the cleanup. The plan of that work says.
+  - The folder order of the cleanup. The plan of that work says.
   - Today's app.
 
 ## Records
