@@ -23,7 +23,9 @@ root = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.decode().strip())
 named = []
 for p in paths:
     n = os.path.normpath(p)
-    if p.startswith("-") or n in (".", "..") or n.startswith("../") or os.path.isabs(p) or (root / n).is_dir() or p.endswith("/"):
+    # A link is one file to git, even when it points at a folder: a skill's .claude/skills/<name>.
+    folder = (root / n).is_dir() and not (root / n).is_symlink()
+    if p.startswith("-") or n in (".", "..") or n.startswith("../") or os.path.isabs(p) or folder or p.endswith("/"):
         refuse("named file paths required, no folders: " + p)
     # A folder whose files were all deleted is gone from disk; git still knows it as a folder.
     if git("ls-files", "--cached", "--", n + "/").stdout or git("ls-tree", "-r", "--name-only", "HEAD", "--", n + "/").stdout:
