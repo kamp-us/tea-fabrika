@@ -42,6 +42,9 @@ const readTable = (path: string): Record<string, number> => {
  * file. The samples and their jobs are in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
  * attempt 1 of runs 43601966383 (job 132468657925), 43601964962 (job 132468687674) and 43605298688
  * (job 132478645693), the median of the three, from Vitest's printed Duration per file.
+ * PR 1252's split files, and the rows of the files it changed, come from one run: scheduled run 43728081584,
+ * attempt 1, started by hand on that branch, read as `shard-times` reads a report. Each is one sample,
+ * so it is that run's seconds, not a median.
  * A file with no row is placed by the fallback at the median measured time. For a next/ file, the
  * `shard-times` step of check.yaml's next job prints its real seconds for a later row. No CI step
  * prints a tooling file's since 0539 took the tooling tests off the merge line: its seconds are in

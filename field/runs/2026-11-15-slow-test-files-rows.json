@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-slow-test-files-rows",
+  "ticket": "kamp-us/tea-fabrika#982",
+  "pr": "kamp-us/tea-fabrika#1252",
+  "started": "2026-11-15T07:08:00-08:00",
+  "ended": "2026-11-15T07:27:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Wrote the vitest.shards.json rows for the files this pull request split, from the full scheduled run 43728081584 on the branch (attempt 1). Read each leg's Vitest report with shard-times.ts's own reportRows, staleRows and rowLine (the reports hold CI's paths, so the root was CI's workspace). The tool prints only rows more than 60 s from the table, so nine rows were written: the five new next/ files and the three new tooling files with their measured seconds, plus the three changed files whose old rows were far off (Watchers, StartChild, boxrm). JobsDiscovery (30.8 s) is under the 60 s line, so it was added by hand from the same report so that every new file has a row. Rows of untouched files were not refreshed: the tool's rule is advice for a gap over 60 s, not a full refresh. The pins in vitest.shards.test.ts that named these rows now hold one sample from this run.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 19,
+  "note": "vitest.shards.test.ts, shard-rows.test.ts, shard-times.test.ts and changes.test.ts: 96 tests green. pnpm format, pnpm lint, the ratchet and one pnpm typecheck: green. Not run: the full suite.",
+  "step": "build"
+}
