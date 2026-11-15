@@ -216,6 +216,8 @@ machine (`app/runner.ts:271-272`).
     machine's property tests carry that (Consequences).
   - **What it does not cover.** Only the transition code inside `update`. `Match` and `.match`
     anywhere else are untouched.
+  - **Later.** [0558](0558-no-ternary-deeper-than-two.md) caps how deep such a conditional nests
+    when it is a ternary: 2. Everything above still holds.
 
 - 2026-11-10: **a file may export a machine factory in place of a machine:** one function that
   takes a config and returns one tea machine. It is for a machine that needs something from its
