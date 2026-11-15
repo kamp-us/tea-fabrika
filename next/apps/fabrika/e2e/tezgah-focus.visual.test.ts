@@ -294,6 +294,18 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               .click(),
           );
           yield* at(page, t5.id, () => true, "L30: a click on t5 focuses it");
+          // L28, L30: the click on t5's title bar lands DOM focus at t5's top, its field, never on the
+          // region itself: what a person types next goes into t5. Desk round R2, from the shots: a
+          // click on a title bar left DOM focus on the region, so the field had no ring and typing
+          // went nowhere.
+          const clicked = tile(page, regionName(t5));
+          yield* domSettles(page, (f) => f.region === regionName(t5), "L30: DOM focus follows the click into t5");
+          yield* promised(() => page.keyboard.type("z"));
+          expect(
+            yield* promised(() => clicked.field.inputValue()),
+            "L28: typing after a click on t5's title bar lands in t5's field",
+          ).toBe("z");
+          yield* promised(() => clicked.field.fill(""));
 
           // L30: Tab out of t1's last field moves desk focus to the tile DOM focus enters.
           yield* promised(() => list.field.focus());

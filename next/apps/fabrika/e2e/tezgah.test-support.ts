@@ -287,8 +287,9 @@ export const focused = (view: TezgahView): Tile => {
 export const keys = (page: Page, ...pressed: ReadonlyArray<string>) =>
   Effect.forEach(pressed, (key) => promised(() => page.keyboard.press(key)), { concurrency: 1, discard: true });
 
-/** The five layouts a window is shot at (AGENTS.md, "Shoot more than one layout"). */
-export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small-1024x700";
+/** The five layouts a window is shot at (AGENTS.md, "Shoot more than one layout"), and the narrow
+ *  420x700 window the fold law draws a band in. */
+export type Shot = "one-tile" | "side-by-side" | "stacked" | "grid-2x2" | "small-1024x700" | "narrow-420x700";
 
 /** A shot of the tab as it is now, named by state and layout, into the folder `SHOTS` names; nothing
  *  when `SHOTS` is unset, so a plain run writes no file. */
@@ -608,6 +609,42 @@ export const whole = (on: Page, selector: string) =>
           .map((el) => el.textContent ?? ""),
       };
     }, selector),
+  );
+
+/** The status bar as a person reads it: its words, any part of it cut by its own box (its scroll size
+ *  past its client size), any part drawn past the window's edge, and the name of each tile or strip
+ *  it is drawn over. */
+export const statusBar = (on: Page) =>
+  promised(() =>
+    on.evaluate(() => {
+      const bar = document.querySelector(".statusbar");
+
+      if (!(bar instanceof HTMLElement)) {
+        return { text: "", cut: ["no status bar"], past: [], over: [] };
+      }
+
+      const top = bar.getBoundingClientRect().top;
+      const parts = [bar, ...bar.querySelectorAll("*")];
+      return {
+        text: bar.textContent ?? "",
+        cut: parts
+          .filter(
+            (el) =>
+              el instanceof HTMLElement &&
+              (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1),
+          )
+          .map((el) => el.textContent ?? ""),
+        past: parts
+          .filter((el) => {
+            const box = el.getBoundingClientRect();
+            return box.left < -1 || box.right > window.innerWidth + 1 || box.bottom > window.innerHeight + 1;
+          })
+          .map((el) => el.textContent ?? ""),
+        over: [...document.querySelectorAll("main section[aria-label], main button[aria-label]")]
+          .filter((el) => el.getBoundingClientRect().bottom > top + 0.5)
+          .map((el) => el.getAttribute("aria-label") ?? ""),
+      };
+    }),
   );
 
 /** Polls until `check` holds of the tab, strips included, and tezgah's view, or fails with the last

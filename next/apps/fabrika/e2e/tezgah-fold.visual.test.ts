@@ -300,7 +300,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             });
           }
 
-          yield* shoot(small, "fold-band", "grid-2x2");
+          yield* shoot(small, "fold-band", "narrow-420x700");
           yield* promised(() => small.setViewportSize({ width: 1024, height: 700 }));
 
           // Side by side with a strip: back to t1 alone, then t1 keeps 15/16 and j the last 1/16, by letters.

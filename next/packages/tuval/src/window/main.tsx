@@ -21,7 +21,7 @@ import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { question, Layout, tileName } from "./Layout.tsx";
+import { landing, question, Layout, tileName } from "./Layout.tsx";
 
 type LiveWindow = EffectRun<WindowModel, WindowMsg>;
 type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
@@ -147,18 +147,31 @@ const noRoom = (tile: Pick<TezgahTile, "n">): string => `No room to split t${til
 /** How the prefix line prints a key the table spells by name: an arrow as its arrow. */
 const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓" };
 
-/** The prefix line: each key after the prefix and what it does, from the one table. */
-const prefixLine = (table: Keys.Table): string =>
-  [
-    ...table.rows.flatMap((row) => {
-      const keys = row.keys
-        .filter((k) => k.startsWith("<prefix>"))
-        .map((k) => k.slice("<prefix>".length))
-        .map((k) => PRINTED[k] ?? k);
-      return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
-    }),
-    "Esc cancel",
-  ].join(" · ");
+/** The prefix line's hints: each key after the prefix and what it does, from the one table. */
+const prefixHints = (table: Keys.Table): ReadonlyArray<string> => [
+  ...table.rows.flatMap((row) => {
+    const keys = row.keys
+      .filter((k) => k.startsWith("<prefix>"))
+      .map((k) => k.slice("<prefix>".length))
+      .map((k) => PRINTED[k] ?? k);
+    return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
+  }),
+  "Esc cancel",
+];
+
+/** The prefix line: the mode's word, then each hint whole. The status bar wraps between two hints,
+ *  never inside one, and takes the lines it needs from the tiles' area, as Emacs's which-key window
+ *  does at the bottom of the frame, so every key reads at every size and the bar covers no tile. */
+const PrefixLine = ({ table }: { readonly table: Keys.Table }) => (
+  <>
+    <span className="mode">prefix</span>
+    {prefixHints(table).map((hint) => (
+      <span key={hint} className="hint">
+        {hint}
+      </span>
+    ))}
+  </>
+);
 
 /** Reads every press on the page for the window's prefix. A key the window does not take keeps its
  *  default and reaches the tile; one it takes goes to the window and nowhere else. */
@@ -214,10 +227,6 @@ const useSize = (send: (msg: WindowMsg) => void) => {
   return area;
 };
 
-/** What a tile's DOM focus can land on, in document order. */
-const FOCUSABLE =
-  'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-
 const isCursor = Schema.is(CursorKey);
 
 /** Where DOM focus is, for the window: the tile whose region holds `target`, and the `data-cursor`
@@ -254,9 +263,8 @@ type Follow = {
 };
 
 /** DOM focus follows desk focus: whenever the drawn focus, its tile's state or the layout changes and
- *  DOM focus is not in the focused tile, it lands on the tile's cursor, the element its `data-cursor`
- *  key names, when it is there, else at the top of the tile: its first control, or the region itself
- *  while it has none. */
+ *  DOM focus is not in the focused tile, it lands where `landing` says. A click on a tile's title bar
+ *  is the region's own to follow (`Layout.tsx`). */
 const useFollow = (area: { readonly current: HTMLDivElement | null }, { focus, cursor, live, layout }: Follow) =>
   useEffect(() => {
     const region = focus === null ? null : area.current?.querySelector<HTMLElement>(`section[data-tile="${focus}"]`);
@@ -265,12 +273,7 @@ const useFollow = (area: { readonly current: HTMLDivElement | null }, { focus, c
       return;
     }
 
-    const row =
-      cursor === null
-        ? undefined
-        : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
-    const target = (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
-    target.focus({ preventScroll: true });
+    landing(region, cursor).focus({ preventScroll: true });
   }, [area, focus, cursor, live, layout]);
 
 const Desk = (props: PageProps) => {
@@ -297,17 +300,19 @@ const Desk = (props: PageProps) => {
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
   const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
-  const line = none
-    ? NO_TEZGAH
-    : asked !== undefined
-      ? question(asked)
-      : prefix._tag === "armed"
-        ? `prefix  ${prefixLine(props.keys)}`
-        : roomless !== undefined
-          ? noRoom(roomless)
-          : focused === undefined
-            ? ""
-            : tileName(focused);
+  const line = none ? (
+    NO_TEZGAH
+  ) : asked !== undefined ? (
+    question(asked)
+  ) : prefix._tag === "armed" ? (
+    <PrefixLine table={props.keys} />
+  ) : roomless !== undefined ? (
+    noRoom(roomless)
+  ) : focused === undefined ? (
+    ""
+  ) : (
+    tileName(focused)
+  );
   return (
     <>
       <div className="area" ref={area}>

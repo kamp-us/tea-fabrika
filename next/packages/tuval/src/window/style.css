@@ -233,19 +233,36 @@ input {
   margin: 0;
   color: var(--text-faint);
 }
-/* The status bar: more about the focused tile, the prefix line while armed, the close ask. */
+/*
+ * The status bar: more about the focused tile, the prefix line while armed, the close ask. Nothing on
+ * it is cut: what does not fit on one line wraps onto the next, and the bar takes those lines from
+ * the tiles' area above it, never drawn over a tile.
+ */
 .statusbar {
   flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s-2);
   min-height: var(--s-5);
   padding: 0 var(--s-3);
-  overflow: hidden;
   color: var(--tile-text);
   font: 400 var(--fs-small) / var(--s-5) var(--mono);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .statusbar.on {
   color: var(--tile-text-on);
+}
+/* The prefix line: its mode word, then each hint kept whole on one line, a dot after all but the last. */
+.statusbar .mode {
+  margin-right: var(--s-2);
+}
+.statusbar .mode,
+.statusbar .hint {
+  white-space: nowrap;
+}
+.statusbar .hint:not(:last-child)::after {
+  content: "·" / "";
+  padding-left: var(--s-2);
 }
 .checklist {
   max-width: 56rem;

@@ -24,6 +24,8 @@ import {
   differences,
   drawn,
   focused,
+  foldDifferences,
+  foldSettle,
   keys,
   settle,
   shoot,
@@ -32,6 +34,7 @@ import {
   tezgahPid,
   tezgahView,
   shown,
+  statusBar,
   typeId,
 } from "./tezgah.test-support.ts";
 
@@ -70,11 +73,28 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
               label,
             );
 
-          /** The prefix line armed, shot, then disarmed by Escape with nothing sent. */
+          /** The prefix line armed, read whole, shot, then disarmed by Escape with nothing sent. A
+           *  person at any size reads every key on it, the way out included: no key cut by the bar's
+           *  box or drawn past the window's edge, and the bar drawn under the tiles, never over one. */
           const armedShot = (layout: Shot) =>
             Effect.gen(function* () {
               const before = yield* tezgahView(r, pid);
               yield* keys(page, "Control+b");
+
+              for (let tries = 0; ; tries++) {
+                const bar = yield* statusBar(page);
+
+                if (bar.text.includes("Esc cancel") || tries >= 120) {
+                  expect(bar.text, `the prefix line is up (${layout})`).toContain("Esc cancel");
+                  expect(bar.cut, `every key on the prefix line reads whole, none cut (${layout})`).toEqual([]);
+                  expect(bar.past, `no key on the prefix line runs past the window (${layout})`).toEqual([]);
+                  expect(bar.over, `the prefix line covers no tile (${layout})`).toEqual([]);
+                  break;
+                }
+
+                yield* Effect.sleep("250 millis");
+              }
+
               yield* shoot(page, "prefix-armed", layout);
               yield* keys(page, "Escape");
               yield* Effect.sleep(QUIET);
@@ -179,6 +199,14 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* shoot(page, "grid", "small-1024x700");
           yield* armedShot("small-1024x700");
           yield* askShot("small-1024x700");
+
+          // The narrowest window the desk draws, 420x700 as the fold law's band: the prefix line still
+          // reads whole. Then back to 1024x700 for the refused split.
+          yield* promised(() => page.setViewportSize({ width: 420, height: 700 }));
+          yield* foldSettle(page, r, pid, foldDifferences, "the 2x2 folded to a 420x700 window");
+          yield* armedShot("narrow-420x700");
+          yield* promised(() => page.setViewportSize({ width: 1024, height: 700 }));
+          yield* drawnAs((n) => n === 4, "the 2x2 at 1024x700 again");
 
           // C-b % on a quarter still fits; once more would leave a tile under 220 wide, and is refused.
           const quarter = focused(grid);

@@ -5,8 +5,9 @@
 // (plan amendment 7). A tile is the tile guidelines' look: one 1px edge, a 20px mono title bar on
 // its wash, and the slate focus edge on the focused tile with its name at weight 500, so color is
 // never the only cue (WCAG 1.4.1). Nothing on a tile moves. Each region carries its tile's id for
-// the page's focus reading, and takes focus itself only as the last place DOM focus can land in it:
-// a click on its title bar, or a tile with nothing to focus yet. It is never a Tab stop.
+// the page's focus reading. It is never a Tab stop: a click on its title bar or its empty body
+// focuses it for an instant, and DOM focus goes on to the tile's cursor or its top. It keeps focus
+// only while the tile has nothing to focus yet.
 //
 // A window folds what does not fit at its own size (0277): each tile in `strips` draws as a strip
 // where it sits, a real button named `open <program>, t<n>` that Tab reaches and Enter or a click
@@ -51,6 +52,23 @@ type Props = {
   readonly open?: (tile: Tile) => void;
 };
 
+/** What a tile's DOM focus can land on, in document order. */
+const FOCUSABLE =
+  'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Where DOM focus lands in a tile's `region` (0165, the plan's L28): the element its `cursor` key
+ * names, when it is there, else the top of the tile, its first control, or the region itself while
+ * it has none.
+ */
+export const landing = (region: HTMLElement, cursor: string | null): HTMLElement => {
+  const row =
+    cursor === null
+      ? undefined
+      : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
+  return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
+};
+
 const LIVE: State = { word: "", live: true };
 
 const NONE: ReadonlySet<TileId> = new Set();
@@ -84,6 +102,15 @@ const TileRegion = ({
     data-tile={tile.id}
     tabIndex={-1}
     inert={!state.live}
+    // A click on the title bar or on the body's empty space focuses the region itself: DOM focus goes
+    // on to where `landing` says, so what a person types next reaches the tile.
+    onFocus={(e) => {
+      const to = e.target === e.currentTarget ? landing(e.currentTarget, tile.cursor) : e.currentTarget;
+
+      if (to !== e.currentTarget) {
+        to.focus({ preventScroll: true });
+      }
+    }}
   >
     <header className="titlebar">
       <span className="tile-mark" aria-hidden="true">
