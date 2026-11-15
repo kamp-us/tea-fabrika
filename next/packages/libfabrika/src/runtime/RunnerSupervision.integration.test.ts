@@ -35,6 +35,7 @@ import {
 } from "../processes/Process.test-support.ts";
 import { Activity, Down, ProcessEvent, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
@@ -98,6 +99,7 @@ const thrown = ({ name, message }: { readonly name: string; readonly message: st
 type Wiring = {
   policy: WiringPolicy;
   recovery: { sql: Sql; name: string; capacity: number };
+  chunk: typeof mailChunk.default;
   fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
 
@@ -337,6 +339,7 @@ const world = (
       {
         policy: limits.policy ?? policy,
         recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
+        chunk: mailChunk.default,
         fault: (cut) =>
           Effect.suspend(() => {
             if (controls.cut !== cut) {

@@ -29,6 +29,7 @@ import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -228,7 +229,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
           Effect.provide(
             ProgramRunner.layer(
               { id: process, name, program: program.name, build, owner: writer },
-              { recovery: { sql, name, capacity: 1024 ** 3 } },
+              { recovery: { sql, name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
             ).pipe(Layer.provide(Layer.mergeAll(wiring, manager))),
           ),
         ),

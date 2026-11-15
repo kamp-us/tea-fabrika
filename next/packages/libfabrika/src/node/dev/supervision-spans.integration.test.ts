@@ -13,6 +13,7 @@ import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherM
 import { workerExecution } from "../../runtime/Execution.ts";
 import { RecoveryStore } from "../../runtime/RecoveryStore.ts";
 import { type Descriptor, ProgramRunner, Supervision } from "../../runtime/Runner.ts";
+import { mailChunk } from "../../settings/Declarations.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
@@ -34,7 +35,11 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const runnerLayer: (
   p: Descriptor,
-  options: { policy: typeof policy; recovery: { sql: Sql; name: string; capacity: number } },
+  options: {
+    policy: typeof policy;
+    recovery: { sql: Sql; name: string; capacity: number };
+    chunk: typeof mailChunk.default;
+  },
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
 
 const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
@@ -107,6 +112,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
       {
         policy: { ...policy, maxDeliveries },
         recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
+        chunk: mailChunk.default,
       },
     ).pipe(
       Layer.provideMerge(
