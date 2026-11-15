@@ -1,4 +1,4 @@
-// ci-speed.ts: the daily measure of CI against the owner's speed goal (experiment 292). Today's
+// ci-speed.ts: the daily measure of CI against the owner's speed goal (experiment 293). Today's
 // lead tooling. It prints, as Markdown, the three goal stages over the last 24 hours (median and
 // worst 10%), the runners' machine-minutes per hour and their share of capacity, and flags each
 // stage over its goal. The numbers come from ci/Speed.ts; GitHub's facts from ci/History.ts.

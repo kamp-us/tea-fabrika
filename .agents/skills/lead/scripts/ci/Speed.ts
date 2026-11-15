@@ -14,7 +14,7 @@ import { Option, Schema } from "effect";
 /** One stage's goal, in minutes: the median, and the worst 10% (the 90th percentile). */
 export type Goal = { readonly median: number; readonly worst: number };
 
-/** The owner's goal for each stage (experiment 292). */
+/** The owner's goal for each stage (experiment 293). */
 export const GOALS = {
   pr: { median: 3, worst: 5 },
   queue: { median: 3, worst: 5 },

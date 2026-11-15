@@ -4,7 +4,7 @@
 //
 // GitHub answers at most 1,000 runs to one filtered list ("List workflow runs for a repository":
 // "This endpoint will return up to 1,000 results for each search"), and a busy day here had about
-// 470 runs (experiment 292). So `runs` asks in slices of SLICE hours, each well under that cap.
+// 470 runs (experiment 293). So `runs` asks in slices of SLICE hours, each well under that cap.
 import { Context, Effect, Layer, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { History, HistoryError, Issues } from "./History.ts";
