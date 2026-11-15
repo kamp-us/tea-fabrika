@@ -1,0 +1,210 @@
+name: scheduled
+
+# The whole suite, on a schedule (0534). The merge line runs only the tests a change reaches: a pull
+# request, a merge queue group and a push to main each run the next/ tests their diff reaches, and
+# none of them runs a tooling test (0539, check.yaml). This runs all of next/, every layer of it
+# (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`) and the visual ones
+# (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head, so a
+# break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
+# and a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
+#
+#   what            legs   how
+#   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
+#                          projects, every file, no `--changed`
+#   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
+#   tooling tests   2      the `tooling` project, every file, no `--changed`
+#   report          1      after the others, on any result
+#
+# Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
+# here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
+#
+# 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
+# `max-parallel` on each matrix, which workflow-lint.ts adds up. The legs are check.yaml's full
+# matrix, so their measured split (vitest.shards.ts) holds here too; workflow-lint.ts keeps the two
+# the same.
+on:
+  # Every 3 hours, at minute 17: GitHub delays runs queued on the hour, when most schedules start
+  # (its docs, "Events that trigger workflows", schedule). The interval is a setting (0534, 0069):
+  # change this line to change it.
+  schedule:
+    - cron: "17 */3 * * *"
+  # By hand, on main, or on a branch to try a change to this file. Only main's run reports.
+  workflow_dispatch:
+
+# One run at a time, and a running one is never cut short: a newer one waits its turn, and GitHub
+# keeps one waiting at most.
+concurrency:
+  group: scheduled
+  cancel-in-progress: false
+
+# `actions: write` lets each test job's last step, `stop the run`, cancel its own run, as in
+# check.yaml, and each leg's time table read its own job's steps. `contents: read` is the
+# checkout's. The report job alone takes `issues: write`, in its own map. workflow-lint.ts holds all
+# three.
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
+  # `next-integration` projects, each a fifth of the files by measured seconds; `e2e-1` and `e2e-2`
+  # fetch chromium and run the `next-visual` project on their half of the visual files. A project,
+  # not a path, picks the files: `next/` as a path would start `next-visual` on legs with no
+  # Chromium. Nothing is narrowed: no `--changed`, no list.
+  next:
+    runs-on: ubuntu-latest
+    # check.yaml's next limit, for the same legs with the same split.
+    timeout-minutes: 17
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - name: vitest
+        if: ${{ !startsWith(matrix.shard, 'e2e-') }}
+        env:
+          SHARD: ${{ matrix.shard }}/5
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+      # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
+      # that answers, as in check.yaml.
+      - name: chromium
+        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''
+        run: |
+          sudo sh .github/ci/apt.sh update
+          pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
+      # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
+      - name: end to end
+        if: startsWith(matrix.shard, 'e2e-')
+        env:
+          SHARD: ${{ matrix.shard }}/2
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+      # The leg's Vitest report, for the report job to name each failing test. After a red step too,
+      # so the leg that failed is the one whose report is kept.
+      - name: results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-next-${{ matrix.shard }}
+          path: ${{ runner.temp }}/results.json
+          if-no-files-found: ignore
+          retention-days: 7
+      # The leg's time table (time-table.ts), as in check.yaml: each step's seconds from GitHub's jobs
+      # API, read with the workflow's token, and the ten slowest test files of the leg's report, in
+      # the job summary. On every result, and it never fails the job. Last of the job's commands.
+      - &time-table
+        name: time table
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ID: ${{ job.check_run_id }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          LEG: ${{ matrix.shard }}
+          REPORT: ${{ runner.temp }}/results.json
+        run: node .github/ci/time-table.ts
+      # The same numbers as one small JSON per leg, to follow each leg's balance over time. The run
+      # attempt is in its name, so a rerun keeps the first attempt's file beside its own. Its own
+      # limit, as the time table's: each upload took about 1 s on check run 43657196726.
+      - &timings
+        name: timings
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v7
+        with:
+          name: timings-${{ github.job }}-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 90
+      # Fail fast, as in check.yaml (ticket 990): the first red leg cancels the run, so the others
+      # free their runners. The report job's `always()` keeps it running, and it names the tests the
+      # red leg's report holds. workflow-lint.ts holds it last in every job but report.
+      - &stop
+        name: stop the run
+        if: ${{ failure() && github.event_name != 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
+  # Every tooling test: the tests of neither version's product code (CI's own, the lint plugins, the
+  # root scripts and the skill scripts), on two machines, with no `--changed`: the `tooling` project,
+  # since a project ignores `--exclude` (0536). The only CI job that runs them: the merge line runs
+  # none, and a tooling change's author runs its narrow tests on the laptop (0539). Today's tests run
+  # in no CI job (0533).
+  tooling:
+    runs-on: ubuntu-latest
+    # The limit check.yaml's tooling legs had, before 0539 took them off the merge line.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - name: tooling tests
+        env:
+          SHARD: ${{ matrix.shard }}/2
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+      - name: results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-tooling-${{ matrix.shard }}
+          path: ${{ runner.temp }}/results.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - *time-table
+      - *timings
+      - *stop
+
+  # The verdict, on main only: red opens one `ci-scheduled` issue naming the commits since the last
+  # green scheduled run and the failing tests, or comments on the open one; green closes it; a run
+  # stopped by hand does nothing (scheduled.mjs). `always()`, so it runs after a red leg stopped the
+  # run, as ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to
+  # find the last green run. No install: the runner's own Node runs scheduled.mjs.
+  report:
+    needs: [next, tooling]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/ci
+          persist-credentials: false
+      # A run that broke before any leg wrote a report has none to fetch; the report says so.
+      - name: results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: results-*
+          path: ${{ runner.temp }}/results
+      - name: report
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RESULTS: ${{ runner.temp }}/results
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/ci/scheduled.mjs
