@@ -59,21 +59,26 @@ describe("P39 slice 4b: the journal file after a crash", () => {
                   yield* handle.exitCode.pipe(Effect.ignore);
                 }),
               );
-              // Opened again, as the next hands start opens it.
-              const journal = yield* Journal.use((j) => Effect.succeed(j)).pipe(
-                Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
-              );
-              let whole = 0;
+              // Opened again, as the next hands start opens it. The reads run inside the provide: the
+              // layer closes the file when its scope closes, so a read after it would fail for that.
+              const whole = yield* Effect.gen(function* () {
+                const journal = yield* Journal;
+                let saved = 0;
 
-              for (const job of JOBS) {
-                const read = yield* journal.read(job).pipe(Effect.result);
-                expect(read._tag, `J2: ${job} after a SIGKILL at ${delay} ms: ${JSON.stringify(read)}`).toBe("Success");
+                for (const job of JOBS) {
+                  const read = yield* journal.read(job).pipe(Effect.result);
+                  expect(read._tag, `J2: ${job} after a SIGKILL at ${delay} ms: ${JSON.stringify(read)}`).toBe(
+                    "Success",
+                  );
 
-                if (read._tag === "Success" && read.success !== null) {
-                  expect(read.success._tag, "J2: a saved entry is whole").toBe("result");
-                  whole++;
+                  if (read._tag === "Success" && read.success !== null) {
+                    expect(read.success._tag, "J2: a saved entry is whole").toBe("result");
+                    saved++;
+                  }
                 }
-              }
+
+                return saved;
+              }).pipe(Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))));
 
               expect(whole, "J2: at least the first entry was saved whole").toBeGreaterThan(0);
               reached.add(whole === JOBS.length ? "all-keys" : "some-keys");

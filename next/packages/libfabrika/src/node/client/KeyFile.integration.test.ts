@@ -59,7 +59,9 @@ describe("P39 slice 4b: the hands key file on a real disk", () => {
               ]);
               found.add(delay === 0 ? "at-once" : "apart");
             }).pipe(Effect.provide(NodeServices.layer)),
-          { numRuns: runsFor({ fast: 3, full: 20 }) },
+          // Both kinds pinned beside the generated runs, so the check below holds at every depth: at
+          // the fast depth's three runs the shared seed draws no delay of 0, and no "at-once" case.
+          { numRuns: runsFor({ fast: 3, full: 20 }), examples: [[0], [5]] },
         );
         expect([...found]).toEqual(expect.arrayContaining(["at-once", "apart"]));
       }),
