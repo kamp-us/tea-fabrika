@@ -34,10 +34,12 @@ const readTable = (path: string): Record<string, number> => {
  * and 42801440878. box, boxrm, loosening and program-package-layout come from PR 757's check
  * run 42874119130, attempts 5 to 14 (a median of 10).
  * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
- * next/ rows use attempt 1 of green runs 43544589151 (push to main), 43551626086 (merge queue
- * group) and 43556494864 (push to main), rounded to one decimal: the median of the three samples,
- * or the larger of those in hand when a run did not hold the file. The samples and their jobs are
- * in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
+ * The `next` project's rows, the in-memory tests the merge line runs (0536), use attempt 1 of runs
+ * 43656757141 and 43657195723 (pull requests) and 43657535864 (a merge queue group), all after PR
+ * 1278; the `next-integration` rows use attempt 1 of green runs 43544589151 (push to main),
+ * 43551626086 (merge queue group) and 43556494864 (push to main). Each is rounded to one decimal:
+ * the median of the three samples, or the larger of those in hand when a run did not hold the
+ * file. The samples and their jobs are in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
  * attempt 1 of runs 43601966383 (job 132468657925), 43601964962 (job 132468687674) and 43605298688
  * (job 132478645693), the median of the three, from Vitest's printed Duration per file.
  * A file with no row is placed by the fallback at the median measured time; CI's `shard-times`

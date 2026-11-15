@@ -192,11 +192,11 @@ const vitestShard = (gap = " ") =>
 const e2eShard = (count: number | string, gap = " ") =>
   `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.e2e-legs || ${count}${gap}}}`;
 
-// S1: changes' sizing install and size step run only when it sizes next; its setup also for the parser.
-const sized =
-  "(steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'";
+// S1: changes' sizing install and size step run only when it sizes next, all of it or the reader
+// tests alone; its setup also for the parser.
+const sized = "(steps.same.outputs.next || steps.diff.outputs.next) != 'false'";
 
-const toolsFor = `${probe} || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')`;
+const toolsFor = `${probe} || steps.diff.outputs.next != 'false'`;
 
 // Fail fast (ticket 990, F1 to F3): the step every job but ci-required ends with. On a pull request
 // or a merge queue group, once an earlier step failed, it cancels the run; ci-required's `always()`
@@ -336,6 +336,7 @@ const valid = (label: string, extra: string) => ({
             FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
             BASE: env.BASE,
             VISUAL: `\${{ ${visualLabel} }}`,
+            BUDGET: 240,
           },
           run: "node .github/ci/legs.ts",
         },
@@ -1452,17 +1453,14 @@ const plants: [string, (workflow: Workflow) => void][] = [
       [
         "the size step sizes pull requests alone, so the queue and main run the whole suite",
         (w) =>
-          (step(w, "changes", "size")["if"] = String(step(w, "changes", "size")["if"]).replace(
-            " && (steps.same",
-            " && github.event_name == 'pull_request' && (steps.same",
-          )),
+          (step(w, "changes", "size")["if"] =
+            `${String(step(w, "changes", "size")["if"])} && github.event_name == 'pull_request'`),
       ],
       [
         "the sizing install runs on pull requests alone",
         (w) =>
-          (step(w, "changes", "install for sizing")["if"] = String(
-            step(w, "changes", "install for sizing")["if"],
-          ).replace(" && (steps.same", " && github.event_name == 'pull_request' && (steps.same")),
+          (step(w, "changes", "install for sizing")["if"] =
+            `${String(step(w, "changes", "install for sizing")["if"])} && github.event_name == 'pull_request'`),
       ],
       [
         "the size step's base is a pull request's alone",
@@ -1495,13 +1493,37 @@ const plants: [string, (workflow: Workflow) => void][] = [
         "the end-to-end legs never narrow",
         (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = ""),
       ],
+      // Ticket 997: a run of the reader tests alone is sized too, so a queue group of 11 reader
+      // files starts one leg, not five. Each plant puts back the old guard that skipped it.
       [
-        "the size step sizes the reader tests",
+        "the size step skips the reader tests, so they start the full matrix",
         (w) =>
-          (step(w, "changes", "size")["if"] = String(step(w, "changes", "size")["if"]).replace(
-            " && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'",
-            "",
-          )),
+          (step(w, "changes", "size")["if"] =
+            `${String(step(w, "changes", "size")["if"])} && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'`),
+      ],
+      [
+        "the sizing install skips the reader tests",
+        (w) =>
+          (step(w, "changes", "install for sizing")["if"] =
+            `${String(step(w, "changes", "install for sizing")["if"])} && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'`),
+      ],
+      [
+        "the setup skips the reader tests",
+        (w) =>
+          (step(w, "changes", "parser node")["if"] =
+            `${probe} || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')`),
+      ],
+      [
+        "the size step has no budget",
+        (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, unknown>, "BUDGET"),
+      ],
+      [
+        "the size step's budget is text",
+        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: "240" }),
+      ],
+      [
+        "the size step's budget is zero",
+        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: 0 }),
       ],
       [
         "the size step reads the first pass alone",

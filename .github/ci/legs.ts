@@ -7,7 +7,8 @@
 //   event and path                               legs
 //   pull request, merge queue group or push to   sized from the `next` files Vitest's `--changed`
 //   main, all of next/, with a base commit       picks from the base, and every reader test
-//   anything else                                the full matrix: the reader tests, no base
+//   the same events, the reader tests alone      sized from the reader tests, with or without a base
+//   anything else                                the full matrix: all of next/ with no base
 //
 // Only a pull request with the `visual` label starts end-to-end legs, which run `next-visual`; the
 // merge queue and main never do, and the schedule runs every layer (0536).
@@ -16,10 +17,12 @@
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
 // as `files`; every vitest leg runs exactly it, so a reader `--changed` already picked runs once.
 //
-// A leg's files may take half the next job's limit, less its setup: vitest.shards.test.ts's E4
-// budget, the one the count of e2e legs is pinned with. Seconds come from vitest.shards.json's table,
-// a file with no row at the table's median, and `assign` splits them, so this split is the one
-// `Shards` makes on each leg.
+// A vitest leg's files may take the size step's BUDGET seconds, a setting check.yaml declares once,
+// and never more than half the next job's limit less the leg's setup, so a leg cannot run into the
+// timeout. An end-to-end leg's files may take that half less its own, longer setup:
+// vitest.shards.test.ts's E4 budget, the one the count of e2e legs is pinned with. Seconds come from
+// vitest.shards.json's table, a file with no row at the table's median, and `assign` splits them, so
+// this split is the one `Shards` makes on each leg.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,11 +51,42 @@ export type Run = {
 /** Each kind's selected test files, from the repo root. */
 export type Selected = { readonly vitest: readonly string[]; readonly e2e: readonly string[] };
 
-/** A next leg's setup before its first test, in seconds: the median of E4's three samples. */
-export const OVERHEAD = 70.2;
+/**
+ * A vitest leg's setup, in seconds: its job's time less its vitest step's (checkout, pnpm, install,
+ * and the steps after the tests), the median of the 10 legs of runs 43653934535 (jobs 132628327688,
+ * 132628327717), 43654840420 (132631117471, 132631117496), 43656757141 (132637025465, 132637025443),
+ * 43657195723 (132638385663, 132638385672) and 43657535864 (132639432580, 132639432685), in that order.
+ */
+export const SETUP = median([28, 30, 35, 33, 35, 30, 34, 32, 30, 27]);
 
-/** The seconds one leg's files may take: half the job's limit, the 2x room it is sized with, less setup. */
-export const budget = (minutes: number): number => (minutes * 60) / 2 - OVERHEAD;
+/** An end-to-end leg's setup, chromium's fetch included, in seconds: the median of E4's three samples. */
+export const E2E_SETUP = 70.2;
+
+/** The seconds one leg's files may take before the job's limit: half of it, the 2x room it is sized with, less setup. */
+export const room = (minutes: number, setup: number): number => (minutes * 60) / 2 - setup;
+
+/** The seconds a leg of each kind may take on a sized run. */
+export type Limits = { readonly vitest: number; readonly e2e: number };
+
+/**
+ * Each kind's limit: a vitest leg's is `budget`, the size step's BUDGET setting, but never past its
+ * room in the job's `minutes`; an end-to-end leg's is its room alone, which no budget changes.
+ */
+export const limits = (minutes: number, budget: number): Limits => ({
+  vitest: Math.min(budget, room(minutes, SETUP)),
+  e2e: room(minutes, E2E_SETUP),
+});
+
+/** The size step's BUDGET, a vitest leg's seconds: a positive number, or a throw, so the step prints nothing. */
+export const budgetOf = (value: string | undefined): number => {
+  const seconds = Number(value);
+
+  if (value === undefined || value.trim() === "" || !Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`legs: BUDGET must be a positive number of seconds, not ${JSON.stringify(value)}`);
+  }
+
+  return seconds;
+};
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
@@ -95,10 +129,11 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
 const LINE = new Set(["pull_request", "merge_group", "push"]);
 
 /**
- * A run legs.ts sizes: one on the merge line that tests all of next/ from a base commit. Every
- * other run is the full matrix: the reader tests, and a run with no base to diff with.
+ * A run legs.ts sizes: one on the merge line that tests all of next/ from a base commit, or only the
+ * reader tests, which are listed whole and need no base. Every other run is the full matrix: one
+ * off the merge line, and one that tests all of next/ with no base to diff with.
  */
-const sizes = (run: Run) => LINE.has(run.event) && run.scope === "all" && validSha(run.base);
+const sizes = (run: Run) => LINE.has(run.event) && (run.scope === "readers" || validSha(run.base));
 
 /**
  * Whether a run's end-to-end legs, which run the visual tests, may start: only on a pull request
@@ -108,13 +143,16 @@ const sizes = (run: Run) => LINE.has(run.event) && run.scope === "all" && validS
 const visual = (run: Run) => run.event === "pull_request" && run.visual;
 
 /**
- * The legs a run starts: sized on a merge line run that tests all of next/, else `full`, each with
- * no end-to-end leg where the visual tests may not start.
+ * The legs a run starts: sized on a merge line run, each kind to its own limit, else `full`, each
+ * with no end-to-end leg where the visual tests may not start.
  */
-export const size = (run: Run, selected: Selected, full: Legs, limit: number, table = measured): Legs => {
+export const size = (run: Run, selected: Selected, full: Legs, limit: Limits, table = measured): Legs => {
   const e2e = visual(run) ? full.e2e : 0;
   return sizes(run)
-    ? { vitest: fewest(selected.vitest, full.vitest, limit, table), e2e: fewest(selected.e2e, e2e, limit, table) }
+    ? {
+        vitest: fewest(selected.vitest, full.vitest, limit.vitest, table),
+        e2e: fewest(selected.e2e, e2e, limit.e2e, table),
+      }
     : { vitest: full.vitest, e2e };
 };
 
@@ -138,13 +176,14 @@ export const withReaders = (changed: readonly string[], readerFiles: readonly st
  * throws, the step prints nothing, and next runs its full matrix on every file. No other run
  * prints `files`, so its legs keep changes' filter. With no leg, no `shards` line: if GitHub ever
  * expanded the matrix before next's `if`, it would expand the fallback, never an empty matrix.
- * A sized run with an end-to-end leg prints `base`, so those legs run the end-to-end files the
- * size step sized them with, `--changed` from the same commit; every other run prints none, and its
- * end-to-end legs run every file.
+ * A sized run of all of next/ with an end-to-end leg prints `base`, so those legs run the
+ * end-to-end files the size step sized them with, `--changed` from the same commit; every other run
+ * prints none, and its end-to-end legs run every file, as a sized run of the reader tests sized them.
  */
 export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
   const some = legs.vitest + legs.e2e > 0;
   const listed = sizes(run) && legs.vitest > 0;
+  const narrowed = sizes(run) && run.scope === "all" && legs.e2e > 0;
 
   if (listed && selected.vitest.some((path) => /\s/.test(path))) {
     throw new Error("legs: a vitest file's path holds a space, so it cannot be one word of `files`");
@@ -153,7 +192,7 @@ export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
   return [
     ...(some ? [`shards=${JSON.stringify(shards(legs))}`] : []),
     ...(listed ? [`files=${selected.vitest.join(" ")}`] : []),
-    ...(sizes(run) && legs.e2e > 0 ? [`base=${run.base}`] : []),
+    ...(narrowed ? [`base=${run.base}`] : []),
     `vitest=${legs.vitest}`,
     `e2e=${legs.e2e}`,
     `next=${some}`,
@@ -195,25 +234,31 @@ if (import.meta.main) {
     base: process.env["BASE"] ?? "",
     visual: process.env["VISUAL"] === "true",
   };
-  const changed = `--changed=${run.base}`;
+  const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
+  // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
+  const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
   // The merge line's vitest legs run the `next` project alone, and a pull request's end-to-end legs
   // the `next-visual` one, only when it asked (0536).
-  const picked = sized ? list(root, ["--project", "next", "next/", changed]) : [];
+  const picked = sized && run.scope === "all" ? list(root, ["--project", "next", "next/", ...changed]) : [];
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
   const selected: Selected = sized
     ? {
         vitest: withReaders(picked, readerFiles),
-        e2e: visual(run) ? list(root, ["--project", "next-visual", changed]) : [],
+        e2e: visual(run) ? list(root, ["--project", "next-visual", ...changed]) : [],
       }
     : { vitest: [], e2e: [] };
-  const legs = size(run, selected, full, budget(nextMinutes(workflow)));
+  const legs = size(run, selected, full, limit);
   const lines = outputs(run, legs, selected);
   const missed = selected.vitest.length - picked.length;
+  const vitestNote =
+    run.scope === "all"
+      ? `${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s, ${missed} of them reader tests \`--changed\` missed)`
+      : `${selected.vitest.length} reader test files (${seconds(selected.vitest, measured).toFixed(1)} s)`;
   const note = sized
-    ? `legs: ${selected.vitest.length} vitest files (${seconds(selected.vitest, measured).toFixed(1)} s, ${missed} of them reader tests \`--changed\` missed) on ${legs.vitest} legs, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
-    : `legs: the full matrix, on ${run.event || "an unknown event"} with ${run.scope === "all" ? "all of next/" : "the reader tests"}${validSha(run.base) ? "" : " and no base commit"}`;
+    ? `legs: ${vitestNote} on ${legs.vitest} legs of at most ${limit.vitest} s, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
+    : `legs: the full matrix, on ${run.event || "an unknown event"} with all of next/${validSha(run.base) ? "" : " and no base commit"}`;
   console.log(note);
   console.log(lines.join("\n"));
   const output = process.env["GITHUB_OUTPUT"];
