@@ -1,9 +1,11 @@
 These lint rules are the `fabrika` plugin for oxlint, written in TypeScript. `index.ts` lists them, `match.ts` holds what they share, and `.oxlintrc.json` at the top of the repo turns each one on, with the reason for every path it leaves out. Why oxlint: [`docs/direction/oxlint-and-oxfmt.md`](../docs/direction/oxlint-and-oxfmt.md).
 
 ```sh
-pnpm lint                                   # runs lint.ts, then format.ts --check, then the code-graph checks
+pnpm lint                                   # parallel.ts runs lint.ts, format.ts --check, the code-graph checks and the rest at once
 node oxlint-plugins/lint.ts packages/x      # the same oxlint step on one folder
 ```
+
+`parallel.ts` is not an oxlint rule: `pnpm lint` gives it each of its parts as one shell command, and it runs them all at once, prints each part's output whole in the order given, and exits 1 naming each failed part with its last line. Two parts that write the same file go in one argument joined by `&&`; its top comment says which parts write.
 
 `exact-versions.ts` is not an oxlint rule: `pnpm lint` runs it to refuse any ranged npm version in a tracked `package.json` or `pnpm-workspace.yaml` ([`docs/direction/pin-exact-versions.md`](../docs/direction/pin-exact-versions.md)).
 
@@ -854,3 +856,47 @@ fixes all 10.
 `no-cause-squash.test.ts` holds the laws. Law 2 is a property through oxlint's `RuleTester`: an
 import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
 run over one planted file per path kind, with the repo's config.
+
+## A test that drives a real resource says so in its name, decision 0536
+
+`integration-test-name` fires in a `next/` test file whose own code opens a real resource unless
+the file is named `*.integration.test.ts` (the `next-integration` Vitest project, which runs on the
+3-hour schedule) or `*.visual.test.ts` (`next-visual`, a browser or Electron). Pull requests and
+the merge queue run `--project next` alone, so the name is what keeps a real-resource law off the
+merge line ([0536](../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)).
+
+It reads calls through the module each name was imported from, never words:
+
+| Drives | Calls |
+|---|---|
+| a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process` |
+| a socket | `createServer`, `createSecureServer`, `connect`, `createConnection` from `node:net`, `http`, `https`, `http2` |
+| a SQLite file | `new DatabaseSync(path)` from `node:sqlite`, unless the path is the literal `":memory:"` |
+| a bundler | `rolldown` and `build` from `rolldown` |
+| a browser or Electron | `launch…` on `chromium`, `firefox`, `webkit` or `_electron` from Playwright |
+| the local instance | `localInstance(…)` |
+
+A fake with the same method names, a local function named `spawn`, `ChildProcessSpawner.make` and
+SQLite on `:memory:` (inside the process, 0536's own words) pass. A temp folder alone does not fire:
+the in-memory git laws stay on pull requests by the lead's call of 2026-11-14 and still make one
+through Effect's FileSystem, and whether a temp folder alone is a real resource is the owner's to
+rule. Effect's `ChildProcess.make` does not fire either: it only describes a command, and a fake
+spawner runs it in memory.
+
+**Measured** on experiment 292's classified tree (`origin/main` at `4120e0500`, 280 test files, 133
+of them real), one oxlint run with only this rule on, before any file was renamed: 73 files fired,
+72 of them drive a resource. The one false alarm is `exam/node-kinds.test.ts`, which reads the
+repository's own tracked list with `git ls-files`, a reader 0536 keeps on pull requests; it carries
+`// oxlint-disable-next-line fabrika/integration-test-name -- <why>`. That is 1 false alarm in 73
+fired files (1.4%). With that line the tree is at zero, so the rule blocks from the start (0523).
+Matching words in place of calls had marked 182 files (experiment 292).
+
+**What it misses:** 61 of the 133 real files open their resource only in a helper they call (a
+`*.test-support.ts` file, a shared `*Test.ts` suite, `ChildProcess.make` run on the Node spawner, or
+an Effect temp folder). It sees the file's own code only, so those names are held by the review.
+
+`integration-test-name.test.ts` holds the laws: a property through oxlint's `RuleTester` over each
+real call, three folders and both extensions, that the call fires on a plain name at its line and
+never under either layer name; one over the in-process cases, which never fire; one real oxlint run
+over a planted folder with the repo's config; and one over the real `next/` tree, which must be at
+zero. Its three plants are named in its header.

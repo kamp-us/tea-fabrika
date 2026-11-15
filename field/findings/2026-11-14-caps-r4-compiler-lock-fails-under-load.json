@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-caps-r4-compiler-lock-fails-under-load",
+  "date": "2026-11-14",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "scripts/caps.test.ts",
+    "line": 157
+  },
+  "says": "Today's tooling: the law `R4 keeps the compiler lock after its wrapper dies` in scripts/caps.test.ts failed once in a run of 11 tooling test files and passed alone on the same tree a minute later, so its result depends on the machine's load.",
+  "proof": "`nice -n 19 volta run --node 26.13.0 pnpm exec vitest run --maxWorkers=1` over 11 files (vitest.shards.test.ts, scripts/caps.test.ts, oxlint-plugins/script-reads.test.ts, six .github/ci tests, plancheck.test.ts, lane.test.ts, loosening.test.ts) printed `× R4 keeps the compiler lock after its wrapper dies 3525ms` and `1 failed | 346 passed (347)`. Then `vitest run --maxWorkers=1 scripts/caps.test.ts -t R4` on the same tree printed `7 passed | 17 skipped (24)`. The change being built touched only .github/ files, none of which caps.test.ts reads.",
+  "cost": "A red tooling run that is not about the change: a schedule run or a laptop run fails and someone spends time finding that nothing was broken.",
+  "head": "411f792898b25e754bc78d90547c3db3bb4ef8c9",
+  "ticket": null,
+  "pr": null
+}

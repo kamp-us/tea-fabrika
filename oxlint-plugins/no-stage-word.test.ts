@@ -130,7 +130,10 @@ it("an exception allows only its annotated line, at generated offsets beside una
           'assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");',
         ),
         planted: fc.constantFrom("localStage();", 'e("StageError");', "// a stage"),
-        path: fc.constantFrom("next/apps/fabrika/src/brain.ts", "next/apps/fabrika/src/sibling.laws.test.ts"),
+        path: fc.constantFrom(
+          "next/apps/fabrika/src/brain.ts",
+          "next/apps/fabrika/src/sibling.laws.integration.test.ts",
+        ),
       }),
       async ({ filler, gap, kept, planted, path }) => {
         const lines = [...filler, planted, `${DISABLE} the kept word`, kept, ...gap, planted, kept];
@@ -258,7 +261,7 @@ it("scenario: the annotated Alchemy key passes and an adjacent domain use fails"
 
 // pinned: experiment 238's saved driver name and today's app's capture stages keep their bytes.
 it("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", async () => {
-  const path = "next/apps/fabrika/src/instance-one-file.test.ts";
+  const path = "next/apps/fabrika/src/instance-one-file.integration.test.ts";
   const result = await plant({
     [path]: [
       `${DISABLE} saved speed-bar results name experiment 238's driver exactly`,

@@ -9,177 +9,50 @@
 // - `KeyLine` is a schema that decodes one `ssh-ed25519 <base64> [comment]` line. `writeSshsig`
 //   takes only a decoded one, so a bad line never reaches it, and it fails only with `sign`'s error.
 //
-// p44 runs the real `ssh-keygen`. With no `ssh-keygen` on the machine it fails loudly, never
-// skips: a skipped law is a hole. Its keys are made in a fresh temp folder, removed after.
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+// p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
+// it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit } from "effect";
 import * as fc from "fast-check";
-import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
+import {
+  SPACE,
+  refused,
+  at,
+  text,
+  goodSig,
+  signer,
+  other,
+  ecdsa,
+  check,
+  utf8,
+  join8,
+  u32,
+  str,
+  base64,
+  armor,
+  unarmor,
+  keyBlob,
+  lineFor,
+  type Blob,
+  build,
+  toSign,
+  good,
+  goodKey,
+  goodRaw,
+  type Key,
+  freshKey,
+  signWith,
+  digest,
+  decodeLine,
+  write,
+  signedByHand,
+} from "./Sshsig.test-support.ts";
+import type { writeSshsig } from "./Sshsig.ts";
 
-const SPACE = "fabrika-client";
-const refused = { reason: "bad_signature" };
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const runs = { seed: SEED, numRuns: 40 };
 const bodyArb = fc.string({ unit: "binary" });
 const wrongType = fc.string().filter((type) => type !== "ssh-ed25519");
-
-// P1's saved vectors (fixtures/next/sshsig/README.md), made once by real `ssh-keygen -Y sign`.
-const VECTORS = resolve(import.meta.dirname, "../../../../../fixtures/next/sshsig");
-const at = (name: string): string => readFileSync(join(VECTORS, name), "utf8");
-const text = at("text.txt");
-const goodSig = at("good.sig");
-const signer = at("signer.pub").trim();
-const other = at("other.pub").trim();
-const ecdsa = at("ecdsa.pub").trim();
-
-const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
-  checkSshsig({ text: body, armored, space: SPACE, signers });
-
-// The wire, for building blobs by hand: RFC 4251's `string` is a u32 length, then the bytes.
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
-
-const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  parts.reduce((offset, p) => {
-    out.set(p, offset);
-    return offset + p.length;
-  }, 0);
-  return out;
-};
-
-const u32 = (n: number): Uint8Array => {
-  const out = new Uint8Array(4);
-  new DataView(out.buffer).setUint32(0, n);
-  return out;
-};
-
-const str = (s: Uint8Array | string): Uint8Array => {
-  const bytes = typeof s === "string" ? utf8(s) : s;
-  return join8(u32(bytes.length), bytes);
-};
-
-const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
-const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
-
-const armor = (blob: Uint8Array): string =>
-  `-----BEGIN SSH SIGNATURE-----\n${rows(base64(blob))}\n-----END SSH SIGNATURE-----\n`;
-
-const unarmor = (armored: string): Uint8Array =>
-  Buffer.from(
-    armored
-      .split("\n")
-      .filter((row) => !row.startsWith("-----"))
-      .join(""),
-    "base64",
-  );
-
-const keyBlob = (key: Uint8Array): Uint8Array => join8(str("ssh-ed25519"), str(key));
-
-const lineFor = (blob: Uint8Array, comment?: string): string =>
-  comment === undefined ? `ssh-ed25519 ${base64(blob)}` : `ssh-ed25519 ${base64(blob)} ${comment}`;
-
-/** PROTOCOL.sshsig's blob, field by field. */
-type Blob = {
-  readonly magic: Uint8Array;
-  readonly version: number;
-  readonly key: Uint8Array;
-  readonly space: Uint8Array;
-  readonly reserved: Uint8Array;
-  readonly hash: Uint8Array;
-  readonly signature: Uint8Array;
-};
-
-const parse = (bytes: Uint8Array): Blob => {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
-  const take = (n: number): Uint8Array => bytes.slice(offset, (offset += n));
-  const word = (): number => {
-    const n = view.getUint32(offset);
-    offset += 4;
-    return n;
-  };
-  const field = (): Uint8Array => take(word());
-  return {
-    magic: take(6),
-    version: word(),
-    key: field(),
-    space: field(),
-    reserved: field(),
-    hash: field(),
-    signature: field(),
-  };
-};
-
-const build = (b: Blob, tail: Uint8Array = new Uint8Array()): Uint8Array =>
-  join8(b.magic, u32(b.version), str(b.key), str(b.space), str(b.reserved), str(b.hash), str(b.signature), tail);
-
-/** What the signature covers: "SSHSIG", then namespace, reserved, hash name and H(message). */
-const toSign = (space: string, hash: string, digest: Uint8Array): Uint8Array =>
-  join8(utf8("SSHSIG"), str(space), str(""), str(hash), str(digest));
-
-const good = parse(unarmor(goodSig));
-/** `ssh-ed25519`, then a 32-byte key: 4 + 11 + 4 bytes before the key itself. */
-const goodKey = good.key.slice(19);
-/** `ssh-ed25519`, then a 64-byte signature. */
-const goodRaw = good.signature.slice(19);
-
-// A fresh Ed25519 key from WebCrypto, extractable so the test can hand it to `ssh-keygen` too.
-type Key = {
-  readonly line: string;
-  readonly publicKey: Uint8Array;
-  readonly seed: Uint8Array;
-  readonly privateKey: CryptoKey;
-};
-
-const freshKey = (comment?: string): Effect.Effect<Key> =>
-  Effect.gen(function* () {
-    const pair = yield* Effect.promise(() => crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]));
-    const raw = yield* Effect.promise(() => crypto.subtle.exportKey("raw", pair.publicKey));
-    const pkcs8 = yield* Effect.promise(() => crypto.subtle.exportKey("pkcs8", pair.privateKey));
-    const publicKey = new Uint8Array(raw);
-    return {
-      line: lineFor(keyBlob(publicKey), comment),
-      publicKey,
-      seed: new Uint8Array(pkcs8).slice(-32), // PKCS#8 for Ed25519 ends with the 32-byte seed
-      privateKey: pair.privateKey,
-    };
-  });
-
-const signWith =
-  (key: Key) =>
-  (bytes: Uint8Array): Effect.Effect<Uint8Array> =>
-    Effect.promise(() => crypto.subtle.sign("Ed25519", key.privateKey, new Uint8Array(bytes))).pipe(
-      Effect.map((sig) => new Uint8Array(sig)),
-    );
-
-const digest = (name: "SHA-256" | "SHA-384" | "SHA-512", bytes: Uint8Array) =>
-  Effect.promise(() => crypto.subtle.digest(name, new Uint8Array(bytes))).pipe(Effect.map((d) => new Uint8Array(d)));
-
-const decodeLine = Schema.decodeUnknownEffect(KeyLine);
-
-/** `writeSshsig` over `body` with `key`, its line decoded first, as every caller must. */
-const write = (key: Key, body: string) =>
-  Effect.flatMap(decodeLine(key.line), (line) => writeSshsig({ text: body, space: SPACE, line, sign: signWith(key) }));
-
-/** A blob signed by hand, with any hash name: what `ssh-keygen` would write if it used one. */
-const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
-  Effect.map(signWith(key)(toSign(SPACE, hash, digested)), (raw) =>
-    armor(
-      build({
-        magic: utf8("SSHSIG"),
-        version: 1,
-        key: keyBlob(key.publicKey),
-        space: utf8(SPACE),
-        reserved: new Uint8Array(),
-        hash: utf8(hash),
-        signature: join8(str("ssh-ed25519"), str(raw)),
-      }),
-    ),
-  );
 
 describe("the test's own wire helpers", () => {
   it("format: read good.sig and write it back byte for byte, 70 to a row as ssh-keygen wraps", () => {
@@ -703,114 +576,6 @@ describe("a key line's parts and its type", () => {
       { ...runs, examples: bad.map(([, line]) => [line]) },
     );
   });
-});
-
-// p44: one signature shape, against the real `ssh-keygen`.
-// Each scenario makes its keys in its own temp folder, and the test's scope removes it (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p44-"))),
-  (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
-);
-
-const keygen = (args: ReadonlyArray<string>, input?: string) =>
-  Effect.sync(() => {
-    const run = spawnSync("ssh-keygen", args, { input, encoding: "utf8" });
-
-    if (run.error !== undefined) {
-      throw new Error(`p44 needs ssh-keygen and it did not run: ${run.error.message}`);
-    }
-
-    return run;
-  });
-
-const file = (home: string, name: string, body: string, mode = 0o644): string => {
-  const path = join(home, name);
-  writeFileSync(path, body, { mode });
-  return path;
-};
-
-/** An unencrypted `openssh-key-v1` private key file, so `ssh-keygen` can sign with a WebCrypto key. */
-const opensshPrivate = (key: Key): string => {
-  const checkWord = u32(0x5a5a5a5a);
-  const inner = join8(
-    checkWord,
-    checkWord,
-    str("ssh-ed25519"),
-    str(key.publicKey),
-    str(join8(key.seed, key.publicKey)),
-    str("same@fabrika.test"),
-  );
-  const pad = Uint8Array.from({ length: (8 - (inner.length % 8)) % 8 }, (_, i) => i + 1);
-  const blob = join8(
-    utf8("openssh-key-v1\0"),
-    str("none"),
-    str("none"),
-    str(""),
-    u32(1),
-    str(keyBlob(key.publicKey)),
-    str(join8(inner, pad)),
-  );
-  return `-----BEGIN OPENSSH PRIVATE KEY-----\n${rows(base64(blob))}\n-----END OPENSSH PRIVATE KEY-----\n`;
-};
-
-describe("p44, one signature shape, with real ssh-keygen", () => {
-  it.effect("scenario: what writeSshsig makes passes ssh-keygen -Y verify and checkSshsig", () =>
-    Effect.gen(function* () {
-      const home = yield* folder;
-      const key = yield* freshKey("ours@fabrika.test");
-      const body = "grant: a window key\nfor: a person\n";
-      const armored = yield* write(key, body);
-      const allowed = file(home, "ours.allowed", `ours@fabrika.test ${key.line}\n`);
-      const sig = file(home, "ours.sig", armored);
-      const run = yield* keygen(
-        ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", SPACE, "-s", sig],
-        body,
-      );
-      expect(run.status, run.stderr).toBe(0);
-      expect(yield* check(armored, [key.line], body)).toStrictEqual({ signer: key.line });
-      const elsewhere = yield* keygen(
-        ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", "fabrika-other", "-s", sig],
-        body,
-      );
-      expect(elsewhere.status).not.toBe(0);
-    }),
-  );
-
-  it.effect("scenario: what ssh-keygen -Y sign makes passes checkSshsig, sha512 and sha256", () =>
-    Effect.gen(function* () {
-      const home = yield* folder;
-      const made = join(home, "made");
-      const keys = yield* keygen(["-q", "-t", "ed25519", "-N", "", "-C", "made@fabrika.test", "-f", made]);
-      expect(keys.status, keys.stderr).toBe(0);
-      const line = readFileSync(`${made}.pub`, "utf8").trim();
-      const body = "made by ssh-keygen\nä ü ş\n";
-
-      for (const options of [[], ["-O", "hashalg=sha256"]]) {
-        const msg = file(home, "made.msg", body);
-        const run = yield* keygen(["-Y", "sign", "-f", made, "-n", SPACE, ...options, msg]);
-        expect(run.status, run.stderr).toBe(0);
-        const armored = readFileSync(`${msg}.sig`, "utf8");
-        rmSync(`${msg}.sig`);
-        expect(yield* check(armored, [other, line], body)).toStrictEqual({ signer: line });
-        expect(yield* check(armored, [other], body)).toStrictEqual(refused);
-      }
-    }),
-  );
-
-  it.effect("scenario: writeSshsig and ssh-keygen -Y sign give the same file, byte for byte", () =>
-    Effect.gen(function* () {
-      // Ed25519 is deterministic: one key and one text give one signature, so one file.
-      const home = yield* folder;
-      const key = yield* freshKey();
-      const body = text;
-      const ours = yield* write(key, body);
-      const keyFile = file(home, "same", opensshPrivate(key), 0o600);
-      const msg = file(home, "same.msg", body);
-      const run = yield* keygen(["-Y", "sign", "-f", keyFile, "-n", SPACE, msg]);
-      expect(run.status, run.stderr).toBe(0);
-      expect(ours).toBe(readFileSync(`${msg}.sig`, "utf8"));
-    }),
-  );
 });
 
 describe("properties", () => {

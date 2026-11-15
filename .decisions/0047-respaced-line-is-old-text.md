@@ -113,3 +113,11 @@ What does not change:
   cleared. The count it prints is how a reader sees it happened.
 - Not decided here: whether ignoring brace spacing is safe, and whether an existing tool replaces
   the check ([0040](0040-existing-tools-before-hand-written.md)).
+
+## Amendments
+
+- 2026-11-14 (owner, during the CI sev0, 0532): a removed line clears an added line from any file of
+  the same diff, not only its own file. A line moved between files was already in the tree the diff
+  starts from, so it adds nothing new. One removed line still clears one added line, and a merge
+  still clears nothing. It came up when the integration move (0536) split a test file in two and the
+  check held a line that had been on main since pull request 824.

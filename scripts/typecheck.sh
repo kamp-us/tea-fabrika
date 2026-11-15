@@ -8,17 +8,28 @@ if [ ! -L node_modules ] && [ -e node_modules ] && [ ! -d node_modules ]; then
   echo "typecheck: node_modules is no folder; remove it and run pnpm install --offline --frozen-lockfile" >&2
   exit 1
 fi
+# One fixed system file, never under TMPDIR: agents' TMPDIR differs, and the lock must be shared.
+# Only a test points FABRIKA_TYPECHECK_LOCK at a file of its own, so a real typecheck on the same
+# machine never holds up its fake compilers, and they never hold up a real typecheck.
+FABRIKA_TYPECHECK_LOCK=${FABRIKA_TYPECHECK_LOCK:-/tmp/fabrika-typecheck.lock}
+export FABRIKA_TYPECHECK_LOCK
 exec python3 - <<'PY'
 import fcntl, os, subprocess, sys
 
 INSTALL = ["pnpm", "install", "--offline", "--frozen-lockfile"]
+# Each package keeps what its last check found in this file, relative to the package, and checks
+# again only the files whose text changed and the files that reach them. tsc keys each file by a
+# hash of its text, never its mtime, so a fresh checkout reads it too. CI keeps these files in its
+# cache (check.yaml's typecheck job). Planted on next/packages/libfabrika, 2026-11-14: an error in
+# one file, an error only an unchanged importer shows, a change under the old mtime and an Effect
+# check each failed the warm run; fresh mtimes on every file kept it warm.
 commands = [["pnpm", "exec", "effect-tsgo", "patch", "--typescript"],
-            ["pnpm", "-r", "typecheck"]]
+            ["pnpm", "-r", "typecheck", "--incremental",
+             "--tsBuildInfoFile", "node_modules/.cache/tsc/typecheck.tsbuildinfo"]]
 
 # Keep this file in place. Unlinking it could give waiters different locks.
 # The OS releases a dead holder's lock, including after SIGKILL.
-# One fixed system folder, never TMPDIR: agents' TMPDIR differs, and the lock must be shared.
-with open(os.path.join(os.sep, "tmp", "fabrika-typecheck.lock"), "a") as lock:
+with open(os.environ["FABRIKA_TYPECHECK_LOCK"], "a") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     # A linked node_modules (a worktree pointed at another checkout's) is never written through:
     # the patch would change the other checkout's compiler, and an install through the link rewrites

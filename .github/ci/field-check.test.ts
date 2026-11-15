@@ -247,6 +247,100 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
   );
 });
 
+// Ticket 988: `pnpm lint`'s copy of the field job. A pull request of plan files and rows alone
+// starts no CI run, so the writer's checkout must read the rows the field job would read once its
+// tree is committed: from the merge base with main, with new, staged, edited and deleted row files
+// on disk. Each case of each file is drawn: untouched, edited, deleted, added and staged, added
+// and left untracked, plus a non-row file. Plants, each run once on field-check.ts and restored:
+// leave out the untracked files (red); read the base side from main's tip (red).
+it("ticket 988: the local reader gives the field job's inputs once the tree is committed", () => {
+  const files = ["field/findings/2026-11-11-a.json", "field/notes/2026-11-11-b.json", "field/runs/x.txt"];
+  const change = fc.constantFrom("keep", "edit", "delete", "stage", "untracked");
+  fc.assert(
+    fc.property(
+      fc.array(change, { minLength: files.length, maxLength: files.length }),
+      fc.constantFrom("keep", "stage", "untracked"),
+      fc.boolean(),
+      (changes, newRow, mainMoves) => {
+        const dir = mkdtempSync(join(tmpdir(), "ci-field-local-"));
+
+        try {
+          const git = gitIn(dir);
+          const write = (file: string, body: string) => {
+            mkdirSync(dirname(join(dir, file)), { recursive: true });
+            writeFileSync(join(dir, file), body);
+          };
+          const commit = (message: string) => {
+            expect(git(["add", "-A"]).status).toBe(0);
+            expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
+            return git(["rev-parse", "HEAD"]).stdout.trim();
+          };
+          expect(git(["init", "-q", "-b", "main"]).status).toBe(0);
+
+          for (const file of files) {
+            write(file, "{}\n");
+          }
+
+          write("docs/a.md", "");
+          commit("fork");
+          expect(git(["checkout", "-q", "-b", "pr"]).status).toBe(0);
+
+          if (mainMoves) {
+            expect(git(["checkout", "-q", "main"]).status).toBe(0);
+            write("field/findings/2026-11-12-later.json", "{}\n");
+            commit("main moves ahead");
+            expect(git(["checkout", "-q", "pr"]).status).toBe(0);
+          }
+
+          const plan = [
+            ...changes.map((how, i) => [files[i]!, how] as const),
+            ["field/runs/2026-11-13-c.json", newRow],
+          ];
+
+          for (const [file, how] of plan) {
+            if (how === "edit") {
+              write(file, '{"edited":true}\n');
+            } else if (how === "delete") {
+              rmSync(join(dir, file));
+            } else if (how === "stage" || how === "untracked") {
+              write(file, `{"new":"${file}"}\n`);
+
+              if (how === "stage") {
+                expect(git(["add", "--", file]).status).toBe(0);
+              }
+            }
+          }
+
+          write("docs/b.md", "not a row\n");
+          const local = checker.readLocalFieldFiles("main", git);
+          const base = git(["rev-parse", "main"]).stdout.trim();
+          const head = commit("the writer commits");
+          const sorted = <A extends { file: string }>(inputs: readonly A[]) =>
+            inputs.toSorted((a, b) => (a.file < b.file ? -1 : 1));
+          expect(local).toEqual(sorted(checker.readFieldFiles(base, head, "pull_request", git)));
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    ),
+    { ...options, numRuns: 25 },
+  );
+});
+
+it("ticket 988: the local reader refuses history it cannot read, never an empty list", () => {
+  // A scenario: a checkout whose main ref is gone, as with origin/main not fetched.
+  const dir = mkdtempSync(join(tmpdir(), "ci-field-local-"));
+
+  try {
+    const git = gitIn(dir);
+    expect(git(["init", "-q", "-b", "pr"]).status).toBe(0);
+    expect(git(["commit", "-q", "--allow-empty", "-m", "one"]).status).toBe(0);
+    expect(() => checker.readLocalFieldFiles("origin/main", git)).toThrow("field: Git could not read");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Plan change, 2026-11-09: `note` stays optional for rows written before the change. 111 rows
 // in field/runs.jsonl, dated 2026-10-23 to 2026-10-27, have no `note`. Plant caught: `note`
 // as a required core, which fails each such row when a PR edits or moves it.
