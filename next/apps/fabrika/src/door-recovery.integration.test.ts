@@ -20,6 +20,7 @@ import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransacti
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { type Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -259,6 +260,7 @@ const world = ({ disk }: Disks) => {
       ClientManagerLedger.layer(founder).pipe(Layer.provide(data())),
       records,
       Archive.memory,
+      Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
       Layer.succeed(Jobs, {
         request: () => Effect.die("unexpected job request in legacy gateway law"),
         take: () => Effect.die("unexpected job take in legacy gateway law"),

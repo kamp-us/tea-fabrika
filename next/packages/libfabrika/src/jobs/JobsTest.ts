@@ -4,6 +4,10 @@
 // the fold has saved so far, so a retry names a saved request, a start names a real assignment and a
 // cut lands on a transition that is legal there. The oracle is this file's own record of what each
 // call was given and answered, never the product's machine.
+//
+// P39 slice 3 (ticket 1040), J2: a `collected` event survives reopen, an equal retry answers the
+// first receipt, and a different collection is refused and writes nothing. Plant (after build):
+// append `collected` without folding first, so a retry writes a second event.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
@@ -277,11 +281,17 @@ type Move =
   | "bad"
   | "cut_before"
   | "cut_after"
-  | "reopen";
+  | "reopen"
+  | "collect_ok"
+  | "collect_again"
+  | "collect_conflict"
+  | "collect_other"
+  | "collect_early";
 
-type Phase = "requested" | "assigned" | "started" | "finished";
+type Phase = "requested" | "assigned" | "started" | "finished" | "collected";
 type Receipt = { readonly rev: number; readonly arrivedAt: number };
-type Event = "requested" | "taken" | "started" | "finished";
+type Event = "requested" | "taken" | "started" | "finished" | "collected";
+type Collection = { readonly process: string; readonly letter: string };
 
 /** What the fold knows of one job, from its own calls and their answers. */
 type Saved = {
@@ -290,6 +300,7 @@ type Saved = {
   executor?: Executor;
   execution?: string;
   result?: Result;
+  collection?: Collection;
   taken?: Receipt & { readonly execution: string };
   readonly receipts: Map<Event, Receipt>;
   readonly events: Array<Recorded & Receipt & { readonly event: Event }>;
@@ -379,9 +390,11 @@ const expected = (saved: Saved): Job => {
         ? State.cases.assigned.make({ request, assignment })
         : saved.phase === "started" && assignment !== undefined
           ? State.cases.started.make({ request, assignment })
-          : assignment !== undefined && result !== undefined
+          : saved.phase === "finished" && assignment !== undefined && result !== undefined
             ? State.cases.finished.make({ request, assignment, result })
-            : expect.fail("the fold reached a phase without its facts");
+            : assignment !== undefined && result !== undefined && saved.collection !== undefined
+              ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
+              : expect.fail("the fold reached a phase without its facts");
   return { state, events: saved.events } as Job;
 };
 
@@ -396,7 +409,9 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
   const assigned = at(world, ["assigned"]).length > 0;
   const started = at(world, ["started"]).length > 0;
   const finished = at(world, ["finished"]).length > 0;
-  const owned = at(world, ["assigned", "started", "finished"]).length > 0;
+  const collected = at(world, ["collected"]).length > 0;
+  const done = finished || collected;
+  const owned = at(world, ["assigned", "started", "finished", "collected"]).length > 0;
   const can: Record<Move, boolean> = {
     request_new: fresh,
     request_equal: any,
@@ -406,11 +421,11 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     take_other: any,
     take_lacking: any,
     start_ok: assigned,
-    start_again: started || finished,
+    start_again: started || done,
     start_wrong: owned,
     finish_ok: started,
-    finish_equal: finished,
-    finish_other: finished,
+    finish_equal: done,
+    finish_other: done,
     finish_wrong: owned,
     out_of_order: requested || assigned,
     unknown_id: true,
@@ -418,6 +433,11 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     cut_before: fresh || requested || assigned || started,
     cut_after: fresh || requested || assigned || started,
     reopen: true,
+    collect_ok: finished,
+    collect_again: collected,
+    collect_conflict: collected,
+    collect_other: done,
+    collect_early: requested || assigned || started,
   };
   return moves.filter((move) => can[move]);
 };
@@ -523,7 +543,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         case "take_again": {
           // The take reply was lost: the same key, maybe on a new connection, gets its saved assignment,
           // whether or not the job has started or finished since.
-          const saved = on(["assigned", "started", "finished"]);
+          const saved = on(["assigned", "started", "finished", "collected"]);
           const executor = able(saved, cell);
           const taken = success(yield* jobs((j) => j.take(saved.request.id, executor, recorded)), "a repeated take");
           expect(taken, "a repeated take answers the first assignment").toEqual(saved.taken);
@@ -540,7 +560,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "take_lacking": {
-          const saved = on(["requested", "assigned", "started", "finished"]);
+          const saved = on(["requested", "assigned", "started", "finished", "collected"]);
           const missing = choose(saved.request.needs, cell.variant);
           const executor = { ...able(saved, cell), has: CAPABILITIES.filter((c) => c !== missing) };
           refused(
@@ -563,7 +583,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "start_again": {
           // A lost start acknowledgement, retried even after the finish: it never moves the job back.
-          const saved = on(["started", "finished"]);
+          const saved = on(["started", "finished", "collected"]);
           const execution = saved.execution ?? expect.fail("a started job has an execution");
           const answer = yield* jobs((j) => j.started(saved.request.id, `${execution}`, recorded));
           expect(success(answer, "a repeated start"), "it answers the first start").toEqual(
@@ -573,7 +593,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "start_wrong":
         case "finish_wrong": {
-          const saved = choose(at(world, ["assigned", "started", "finished"]), cell.pick);
+          const saved = choose(at(world, ["assigned", "started", "finished", "collected"]), cell.pick);
           const wrong = otherExecution(saved.execution ?? "", cell.variant);
           const answer =
             move === "start_wrong"
@@ -606,7 +626,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "finish_equal": {
-          const saved = choose(at(world, ["finished"]), cell.pick);
+          const saved = on(["finished", "collected"]);
           const answer = yield* jobs((j) =>
             j.finish(saved.request.id, saved.execution ?? "", copied(saved.result ?? cell.result), recorded),
           );
@@ -616,7 +636,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "finish_other": {
-          const saved = choose(at(world, ["finished"]), cell.pick);
+          const saved = on(["finished", "collected"]);
           const other =
             JSON.stringify(cell.other) === JSON.stringify(saved.result)
               ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
@@ -665,6 +685,66 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           yield* store.reopen;
           life = yield* Layer.build(layer(sql));
           break;
+        case "collect_ok": {
+          const saved = on(["finished"]);
+          const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
+          const receipt = success(
+            yield* jobs((j) => j.collected(saved.request.id, copied(collection), recorded)),
+            "the requesting process collects a finished job",
+          );
+          saved.phase = "collected";
+          saved.collection = collection;
+          keep(saved, "collected", recorded, receipt);
+          break;
+        }
+        case "collect_again": {
+          // The collect reply was lost: the same process and letter, maybe after a reopen, answer the first receipt.
+          const saved = on(["collected"]);
+          const collection = saved.collection ?? expect.fail("a collected job has its collection");
+          const answer = yield* jobs((j) => j.collected(saved.request.id, copied(collection), recorded));
+          expect(success(answer, "an equal collect retry"), "it answers the first collect").toEqual(
+            saved.receipts.get("collected"),
+          );
+          break;
+        }
+        case "collect_conflict": {
+          // The same process names another letter: one result is given in one answer letter only.
+          const saved = on(["collected"]);
+          const collection = { process: saved.request.process, letter: `${saved.request.id}/answer/${cell.variant}` };
+          refused(
+            yield* jobs((j) => j.collected(saved.request.id, collection, recorded)),
+            "a different collection of a collected job",
+            "conflict",
+          );
+          break;
+        }
+        case "collect_other": {
+          // Another process generation, such as a successor, never takes this result.
+          const saved = on(["finished", "collected"]);
+          const other = choose(tape.requests, cell.variant).process;
+          const process =
+            other === saved.request.process
+              ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
+              : other;
+          refused(
+            yield* jobs((j) =>
+              j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
+            ),
+            "a collect by another process",
+            "wrong_process",
+          );
+          break;
+        }
+        case "collect_early": {
+          const saved = on(["requested", "assigned", "started"]);
+          const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
+          refused(
+            yield* jobs((j) => j.collected(saved.request.id, collection, recorded)),
+            "a collect before the job finished",
+            "wrong_state",
+          );
+          break;
+        }
       }
 
       done.add(move);
@@ -823,6 +903,33 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       open,
       [...LIFE, "bad"],
       ["bad", "request_new", "take_ok"],
+    );
+    prop(
+      "J2: a collected event survives reopen; an equal retry answers the first receipt; a different collection is refused and writes nothing",
+      open,
+      [
+        ...LIFE,
+        "collect_ok",
+        "collect_again",
+        "collect_conflict",
+        "collect_other",
+        "collect_early",
+        "finish_equal",
+        "start_again",
+        "take_again",
+      ],
+      [
+        "collect_ok@finished",
+        "collect_again@collected",
+        "collect_conflict@collected",
+        "collect_other@finished",
+        "collect_other@collected",
+        "collect_early@started",
+        "finish_equal@collected",
+        "start_again@collected",
+        "take_again@collected",
+        "reopen",
+      ],
     );
   });
 

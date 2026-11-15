@@ -2,10 +2,13 @@
 // and a writer's record carry comes back from its JSON form, field for field. L8: one field made
 // invalid, or left out, is refused at decoding. The values are generated; the database half of both
 // laws is in `JobsTest.ts`.
+//
+// P39 slice 3 (ticket 1040): the `collected` state and event keep every field through JSON too,
+// with the collection (which process took the result, and its answer letter) whole.
 import { describe, expect, it } from "@effect/vitest";
 import { Result as R, Schema } from "effect";
 import * as fc from "fast-check";
-import { Executor, Recorded, Request, Result } from "./Job.ts";
+import { Collection, Event, Executor, Recorded, Request, Result, State } from "./Job.ts";
 import {
   BAD_EXECUTOR,
   BAD_RECORDED,
@@ -17,6 +20,7 @@ import {
   fcRecorded,
   fcRequest,
   fcResult,
+  fcTypeId,
 } from "./JobsTest.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
@@ -32,6 +36,11 @@ const Values = fc.uniqueArray(fcFingerprint, { minLength: 2, maxLength: 3 }).cha
     result: fcResult,
     recorded: fcRecorded.chain((said) => fc.nat().map((seen) => ({ ...said, seen }))),
     pick: fc.nat(),
+    execution: fc.stringMatching(/^[a-z0-9]{1,12}$/),
+    letter: fc.stringMatching(/^[a-z0-9/]{1,24}$/).filter((text) => text.length > 0),
+    collector: fcTypeId("process"),
+    rev: fc.integer({ min: 1, max: 1_000_000 }),
+    arrivedAt: fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 }),
   }),
 );
 
@@ -50,6 +59,45 @@ describe("P39 slice 1: the job's schemas", () => {
           // Every key the caller gave comes back with its value: none dropped, none renamed.
           expect(R.getOrThrow(back)).toEqual(value);
           expect(Object.keys(R.getOrThrow(back) as object).sort()).toEqual(Object.keys(value).sort());
+        }
+      }),
+      RUNS,
+    );
+  });
+
+  it("J2: a collected state and a collected event keep every field through JSON, and a bad collection is refused", () => {
+    fc.assert(
+      fc.property(Values, ({ request, executor, result, recorded, execution, letter, collector, rev, arrivedAt }) => {
+        const collection = { process: request.process, letter };
+        const collected = State.cases.collected.make({
+          request,
+          assignment: { execution, executor },
+          result,
+          collection,
+        });
+        const event = { ...recorded, event: "collected" as const, rev, arrivedAt };
+
+        for (const [schema, value] of [
+          [Collection, collection],
+          [State, collected],
+          [Event, event],
+        ] as const) {
+          const back = through(schema as Schema.Codec<unknown, unknown>, value);
+          expect(R.isSuccess(back), `decodes: ${JSON.stringify(value)}`).toBe(true);
+          expect(R.getOrThrow(back)).toEqual(value);
+        }
+
+        // A collection names one process generation and one letter: neither may be missing or empty.
+        for (const bad of [
+          { process: collection.process },
+          { letter },
+          { process: "", letter },
+          { process: "not-a-process", letter },
+          { process: collector, letter: "" },
+        ]) {
+          expect(R.isFailure(Schema.decodeUnknownResult(Collection)(bad)), `refused: ${JSON.stringify(bad)}`).toBe(
+            true,
+          );
         }
       }),
       RUNS,

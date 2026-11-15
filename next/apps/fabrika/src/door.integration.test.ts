@@ -31,6 +31,7 @@ import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
+import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
@@ -450,6 +451,8 @@ const world = Effect.fnUntraced(function* (
     SpanSink.layer(sql, { object: START }),
     records,
     Archive.memory,
+    // P39 slice 3: the gateway wakes a finished job's requester; no law here finishes a job.
+    Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
     Layer.succeed(Jobs, {
       request: () => Effect.die("unexpected job request in legacy gateway law"),
       take: () => Effect.die("unexpected job take in legacy gateway law"),
@@ -477,6 +480,7 @@ const world = Effect.fnUntraced(function* (
           SpanSink.layer(storage, { object: START }),
           records,
           Archive.memory,
+          Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
           Layer.succeed(Jobs, {
             request: () => Effect.die("unexpected job request in legacy gateway law"),
             take: () => Effect.die("unexpected job take in legacy gateway law"),
