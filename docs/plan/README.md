@@ -89,8 +89,9 @@ slice 1 is built on its branch ([the plan](./lanes/fabsh-PLAN.md)): the program,
 `process.draft` frame. Slice 2a is built there too: a program word starts that program, checked
 against the line's member with no grant for `fabsh`, and the runner's `programs` Cmd says what can
 be started. *2026-11-15:* since `fabrika/tezgah` landed, the app's tab draws only tezgah's tiles,
-and a new tile shows a checklist until `tezgah.new` (P38 slice 5), so `fabsh:1` boots and runs but
-no tile in the tab shows it yet. Open pull requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
+and on its branch (ticket 1042) a new tile opens the shell: the core pack's setting `tezgah.new`,
+`fabrika/fabsh` by default, is handed to tezgah at init, and the tab draws each tile's window by its
+program. Workspace 1's first tile stays `checklist:1`. Open pull requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
 [1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and

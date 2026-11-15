@@ -6,16 +6,20 @@
 // behind it. Layout geometry and the view's shapes are the library's (its `Layout` and `Workspace`),
 // shared with every window; a program's box takes them from the library's root, as every name.
 import { Machine } from "@demlik/tea/effect";
-import { Layout, Program, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
+import { Layout, Program, ProgramName, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
-/** The program a new tile shows. A constant until programs read pack settings (P38 slice 5); then
- *  it is the pack's `tezgah.new`, and `fabrika/fabsh` its default once the shell lands. */
-export const NEW_TILE = "fabrika/checklist";
+/** The part of the core pack's settings tezgah reads: `tezgah.new`, the program a new tile starts.
+ *  The runner hands it at every init, as Elm hands `init` its flags. */
+const Settings = Schema.Struct({ tezgah: Schema.Struct({ new: ProgramName }) });
+
+/** The only program tezgah v1 started, and so what a v1 saved start asked for. */
+const CHECKLIST = "fabrika/checklist";
 
 /** Workspace 1's first tile shows the process the instance boots with; its start answers
- *  `already_started`, as OTP's whereis does. */
-const FIRST = "checklist:1";
+ *  `already_started`, as OTP's whereis does. It stays the boot list's checklist until fabsh can
+ *  show a program it starts (fabsh slice 2b); then this goes and the first tile reads `new` too. */
+const FIRST = { program: CHECKLIST, name: "checklist:1" } as const;
 
 /** The keybindings note's Via: how a person gave the command. */
 const Via = Schema.TaggedUnion({ key: { keys: Schema.String }, click: {}, word: {}, palette: {} });
@@ -69,14 +73,16 @@ const Msg = Schema.Union([
 type Msg = typeof Msg.Type;
 
 /** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. As on the
- *  wire, `workspace` is a workspace's number; a split's workspace is kept by its id, as `space`. */
+ *  wire, `workspace` is a workspace's number; a split's workspace is kept by its id, as `space`.
+ *  Each keeps the program it asked for, so its tile shows that program whatever `new` is by then. */
 const Starting = Schema.TaggedUnion({
-  attach: { workspace: Schema.Int, tile: Workspace.TileId, name: Schema.String },
+  attach: { workspace: Schema.Int, tile: Workspace.TileId, program: ProgramName, name: Schema.String },
   split: {
     space: Workspace.WorkspaceId,
     at: Workspace.TileId,
     dir: Workspace.Dir,
     tile: Workspace.TileId,
+    program: ProgramName,
     name: Schema.String,
   },
 });
@@ -88,8 +94,22 @@ const Model = Schema.Struct({
   /** The next tile's number, printed `t<n>`. */
   next: Schema.Int,
   starting: Schema.Array(Starting),
+  /** The program a new tile starts: `tezgah.new` as init was last handed it. */
+  new: ProgramName,
 });
 type Model = typeof Model.Type;
+
+/** A saved model as v1 wrote it, read only as JSON: the upgrade touches nothing else in it. */
+const SavedV1 = Schema.Record(Schema.String, Schema.Json);
+const StartsV1 = Schema.Struct({ starting: Schema.Array(Schema.Record(Schema.String, Schema.Json)) });
+
+/** v1 to v2: every start v1 left waiting asked for the checklist, the only program v1 started, so
+ *  the climb loses nothing. `init` sets `new` from the settings right after. */
+const keepsItsProgram = (raw: unknown) => ({
+  ...Schema.decodeUnknownSync(SavedV1)(raw),
+  new: CHECKLIST,
+  starting: Schema.decodeUnknownSync(StartsV1)(raw).starting.map((s) => ({ ...s, program: CHECKLIST })),
+});
 
 type Step = readonly [
   Model,
@@ -113,12 +133,12 @@ const workspaceId = Schema.decodeSync(Workspace.WorkspaceId);
 const leaving = (m: Model, from: Workspace.TileId, cursor: string | null | undefined): Model =>
   cursor === undefined ? m : { ...m, tiles: m.tiles.map((t) => (t.id === from ? { ...t, cursor } : t)) };
 
-/** The tile a start's answer makes, numbered next. */
+/** The tile a start's answer makes, numbered next, showing the program its start asked for. */
 const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
   id: s.tile,
   n: m.next,
   shows: answer.name,
-  program: NEW_TILE,
+  program: s.program,
   child: answer._tag === "started",
   keep: "failed",
   cursor: null,
@@ -163,20 +183,25 @@ export const tezgahMachine = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [StartChild.startChild, StartChild.stopChild],
-  init: (loaded) => [loaded ?? { workspaces: [], tiles: [], next: 1, starting: [] }, []],
+  types: { ctx: {} as typeof Settings.Type },
+  // Every load takes `new` as handed now: a restart with another value changes only later starts.
+  init: (loaded, settings) => [
+    { ...(loaded ?? { workspaces: [], tiles: [], next: 1, starting: [] }), new: settings.tezgah.new },
+    [],
+  ],
   update: {
     attach: (m, msg): Step => {
       if (exists(m, msg.workspace)) {
         return [m, []];
       }
 
-      const name = msg.workspace === 1 ? FIRST : Workspace.childName(NEW_TILE, msg.tile);
+      const asked = msg.workspace === 1 ? FIRST : { program: m.new, name: Workspace.childName(m.new, msg.tile) };
       return [
         {
           ...m,
-          starting: [...m.starting, Starting.cases.attach.make({ workspace: msg.workspace, tile: msg.tile, name })],
+          starting: [...m.starting, Starting.cases.attach.make({ workspace: msg.workspace, tile: msg.tile, ...asked })],
         },
-        [StartChild.startChild({ program: NEW_TILE, name })],
+        [StartChild.startChild(asked)],
       ];
     },
     did: (m, msg): Step => {
@@ -204,17 +229,17 @@ export const tezgahMachine = Machine.make({
         return [{ ...moved, workspaces: moved.workspaces.map((x) => (x === w ? Layout.focus(w, msg.to) : x)) }, []];
       }
 
-      const name = Workspace.childName(NEW_TILE, msg.tile);
+      const asked = { program: m.new, name: Workspace.childName(m.new, msg.tile) };
       const split = Starting.cases.split.make({
         space: w.id,
         at: msg.from,
         dir: DIRS[msg.does],
         tile: msg.tile,
-        name,
+        ...asked,
       });
       return [
         { ...leaving(m, msg.from, msg.cursor), starting: [...m.starting, split] },
-        [StartChild.startChild({ program: NEW_TILE, name })],
+        [StartChild.startChild(asked)],
       ];
     },
     start_child_ok: (m, msg): Step => {
@@ -264,7 +289,8 @@ const view = (m: Model): Workspace.TezgahView => ({ workspaces: m.workspaces, ti
 export const tezgah = Program.make({
   name: "fabrika/tezgah",
   machine: tezgahMachine,
-  state: { v: 1, upgrades: [] },
+  settings: Settings,
+  state: { v: 2, upgrades: [{ name: "a start keeps its program", from: 1, run: keepsItsProgram }] },
   view,
   refuse,
   inputs: {

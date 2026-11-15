@@ -356,6 +356,18 @@ export type RunnerOptions = {
    * stops the turn there, which is how a test cuts a recovery short. Left out, nothing is called.
    */
   readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
+  /**
+   * Every pack's settings, by pack, as the start read them: `{fabrika: {tezgah: {new: …}}}`. Each
+   * init of the process, fresh, woken or upgraded, is handed its program's pack's part, as OTP
+   * hands init/1 its args (0083's `pack/program`). Left out, no pack has any.
+   */
+  readonly settings?: Readonly<Record<string, unknown>>;
+};
+
+/** The settings of the pack a program is in, from its name `pack/program`. */
+const packSettings = (options: RunnerOptions, program: string): unknown => {
+  const pack = program.split("/")[0] ?? program;
+  return options.settings !== undefined && Object.hasOwn(options.settings, pack) ? options.settings[pack] : undefined;
 };
 
 /**
@@ -1139,13 +1151,15 @@ export class ProgramRunner extends Context.Service<
           }
 
           const program = loaded.declaration;
+          // Every init is handed the settings as the start read them now, never as a checkpoint kept them.
+          const settings = packSettings(options, process.program);
 
           if (supervision !== null) {
             yield* send({ type: "limited", maxDeliveries: program.maxDeliveries ?? null });
           }
 
           if (saved === null) {
-            const boot = yield* stepped(yield* booted(loaded.execution.init(null)), "load");
+            const boot = yield* stepped(yield* booted(loaded.execution.init(null, settings)), "load");
             const fresh: Live = {
               loaded,
               model: boot.model,
@@ -1167,7 +1181,7 @@ export class ProgramRunner extends Context.Service<
 
           const cmds = decoded.success;
           const { saved: next, ran } = yield* loaded.execution.upgrade(saved.saved);
-          const boot = yield* stepped(yield* booted(loaded.execution.init(next.model)), "saved_state");
+          const boot = yield* stepped(yield* booted(loaded.execution.init(next.model, settings)), "saved_state");
           const upgraded = saved.saved.v !== next.v || ran.length > 0;
 
           if (upgraded) {
@@ -2041,7 +2055,10 @@ export class ProgramRunner extends Context.Service<
                       model: state.model,
                       after: state.after,
                     });
-                    const boot = yield* stepped(yield* loaded.execution.init(upgraded.saved.model), "saved_state");
+                    const boot = yield* stepped(
+                      yield* loaded.execution.init(upgraded.saved.model, packSettings(options, process.program)),
+                      "saved_state",
+                    );
                     return { upgraded, boot };
                   }),
                 );

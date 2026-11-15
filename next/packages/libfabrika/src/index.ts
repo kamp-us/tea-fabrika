@@ -74,6 +74,7 @@ export { Gateway, type ConnectionId } from "./gateway/Gateway.ts";
  */
 export * as SettingsStart from "./settings/Start.ts";
 export { RecordedStart } from "./settings/RecordedStart.ts";
+export { ProgramName } from "./packs/ProgramName.ts";
 /**
  * @stability unstable
  */

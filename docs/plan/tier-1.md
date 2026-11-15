@@ -137,7 +137,11 @@ No code in `next/` names `summon`, a room or a registry of names (searched 2026-
 fixed `fabsh:1` tile, the reader (S1), and the ephemeral lane's first client frame,
 `process.draft`. Slice 2a is built on the same branch: a program word starts that program from the
 line's own step, checked against the line's member, and the runner's built-in `programs` Cmd tells
-`fabsh` what it can start.
+`fabsh` what it can start. *2026-11-15:* on its branch (ticket 1042), a split opens the shell in the
+new tile: the core pack's setting `tezgah.new`, `fabrika/fabsh` by default, is handed to tezgah at
+init, the start refuses a value the build cannot show in a tile, and the tab finds each tile's
+window by its program. Workspace 1's first tile stays the boot list's `checklist:1` until fabsh can
+show a program it starts (slice 2b).
 
 ### What is missing, piece by piece
 

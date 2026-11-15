@@ -215,6 +215,9 @@ const Declaration = Schema.Struct({
       refuse: code<Code<[draft: unknown], unknown>>("a draft check"),
     }),
   ),
+  /** The part of its pack's settings the program reads, handed to its init as Elm's flags. Absent:
+   *  init gets `{}`. */
+  settings: Schema.optionalKey(Schemas),
 });
 
 type Typed = { readonly type: string };
@@ -293,7 +296,17 @@ type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends De
   readonly writes: W & Policies<W>;
   readonly wake: (model: NoInfer<T["model"]["Type"]>) => number | null;
   readonly draft?: DraftSpec<D>;
-};
+} & SettingsSpec<Flags<T>>;
+
+/** What a machine's init is handed as its second argument: its pack's settings (OTP's init/1 args). */
+type Flags<T extends ProgramMachine> = Parameters<T["init"]>[1];
+
+/** A machine whose init reads settings declares their schema; one that reads none may leave it out,
+ *  and its init gets `{}`. */
+type SettingsSpec<F> =
+  Record<never, never> extends F
+    ? { readonly settings?: Schema.Codec<F, Schema.Json> }
+    : { readonly settings: Schema.Codec<F, Schema.Json> };
 
 type FilledPort<T extends ProgramMachine, P> =
   P extends Pick<typeof InputSchema.cases.read.Type, "_tag">
@@ -338,6 +351,7 @@ export type Program<
   readonly writes: W;
   readonly wake: (model: T["model"]["Type"]) => number | null;
   readonly draft?: { readonly schema: D; readonly refuse: Code<[draft: D["Type"]], Refusal | null> };
+  readonly settings?: Declared;
 };
 
 /**
@@ -380,6 +394,7 @@ const Authoring = Schema.Struct({
   writes: Declaration.fields.writes,
   wake: Declaration.fields.wake,
   draft: Declaration.fields.draft,
+  settings: Declaration.fields.settings,
 });
 
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
@@ -596,8 +611,9 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
  */
 export type Stepper = {
   readonly program: typeof Declaration.Type;
-  /** Boots from a saved model, or from nothing. */
-  readonly init: (saved: unknown) => Step;
+  /** Boots from a saved model, or from nothing, handed the program's pack's settings. Left out, the
+   *  settings are absent: a program that declares none boots as before, and one that does goes down. */
+  readonly init: (saved: unknown, settings?: unknown) => Step;
   readonly fresh: (model: unknown, msg: unknown) => Result.Result<Admission, ProgramDown>;
   readonly update: (model: unknown, msg: unknown) => Result.Result<Prepared, ProgramDown>;
   /** A fresh input: checked, maybe refused, then stepped. */
@@ -679,7 +695,9 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
  *
  * **Details**
  *
- * - `init` boots from a saved model, or from nothing when `saved` is null.
+ * - `init` boots from a saved model, or from nothing when `saved` is null. It decodes the settings it
+ *   is handed with the program's `settings` and hands them to the machine's init; a program that
+ *   declares none gets `{}`, and a value its schema refuses is `ProgramDown` `load`.
  * - `step` takes a fresh Msg. One that does not decode, that the machine has no cell for, or that
  *   is a timer or a Cmd's answer is refused `bad_msg`: only the runner makes those two. Then the
  *   program's own `refuse` may refuse it, and only then is it stepped.
@@ -708,6 +726,11 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const encodeModel = Schema.encodeUnknownResult(program.state.schema);
   const encodeView = Schema.encodeUnknownResult(program.view.data);
   const decodeMsg = Schema.decodeUnknownResult(program.msg);
+  /** A program that declares no settings gets `{}`, whatever its pack holds. */
+  const decodeSettings =
+    program.settings === undefined
+      ? (_: unknown) => Result.succeed<unknown>({})
+      : Schema.decodeUnknownResult(program.settings);
 
   /** A model as the program's own value, or ProgramDown with `reason`. */
   const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
@@ -828,9 +851,17 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     program,
     fresh,
     update,
-    init: (saved) => {
+    init: (saved, settings) => {
       const start = saved === null ? null : model(saved, "saved_state");
-      const [next] = guard("load", () => machine.init(start, {}));
+      const flags = decodeSettings(settings);
+
+      // The start checked the person's file, so a value refused here is a broken handoff: the load
+      // goes down, and no default stands in for it.
+      if (Result.isFailure(flags)) {
+        throw new ProgramDown({ reason: "load", error: "ProgramDown", cause: flags.failure });
+      }
+
+      const [next] = guard("load", () => machine.init(start, flags.success));
       return prepare(next, [], "load");
     },
     step: (raw, msg) => {

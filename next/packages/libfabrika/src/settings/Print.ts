@@ -10,7 +10,14 @@
 import type { Row, Warning } from "./Reference.ts";
 import type { Origin } from "./Sources.ts";
 
-const from = (origin: Origin) =>
+/**
+ * Formats where a value came from, as the report's `from` line says it: the file and line, `the
+ * default`, or the flag or environment name.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const source = (origin: Origin) =>
   origin._tag === "file"
     ? `${origin.file}, line ${origin.line}`
     : origin._tag === "default"
@@ -34,7 +41,7 @@ export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolea
   const blocks = shown.map((row) =>
     [
       `${row.path} = ${JSON.stringify(row.value)}`,
-      `  from ${from(row.origin)}`,
+      `  from ${source(row.origin)}`,
       `  default ${JSON.stringify(row.default)}`,
       `  ${indent(row.doc)}`,
     ].join("\n"),

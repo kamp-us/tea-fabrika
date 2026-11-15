@@ -155,6 +155,8 @@ export const WindowModel = Schema.Struct({
     Schema.Struct({
       id: Schema.String,
       name: Schema.String,
+      /** The program tezgah's view names for the tile; null for a given tile, found by its name. */
+      program: Schema.NullOr(Schema.String),
       last: Schema.NullOr(Schema.String),
       reach: Reach,
       recovery: Recovery,
@@ -410,9 +412,11 @@ type ProgramTile<P extends AnyProgram> = Machine<
 > &
   Pick<AnyTile, "model" | "msg">;
 
+/** How the window finds a tile's view decoder and its own machine: by the program tezgah's view
+ *  names for the tile, or by name when the tile was given, with no program (null). */
 type WindowChecks<P extends AnyProgram> = {
-  readonly decode?: (pid: string) => (view: unknown) => WindowData<P>;
-  readonly tile?: (name: string) => ProgramTile<P> | undefined;
+  readonly decode?: (pid: string, program: string | null) => (view: unknown) => WindowData<P>;
+  readonly tile?: (name: string, program: string | null) => ProgramTile<P> | undefined;
   /** The window's key table, as `Keys.load` answers it. Without one the window reads no key. */
   readonly keys?: Keys.Table;
 };
@@ -424,7 +428,9 @@ type WindowCtx = {
   readonly tezgah?: { readonly workspace: number };
 };
 
-type Shown = { readonly id: string; readonly name: string };
+/** A tile as the window shows it: its id, its process's name, and the program tezgah's view names
+ *  for it, or null for a given tile. */
+type Shown = { readonly id: string; readonly name: string; readonly program: string | null };
 type TileRow = WindowModel["tiles"][number];
 type SocketSub = Sub<"socket", { readonly dial: number; readonly rejected: string | null; readonly tries: number }>;
 
@@ -696,7 +702,9 @@ const noticed = (
   pid: string,
   note: unknown,
 ): readonly [WindowModel, Out, ReadonlyArray<string>] => {
-  const [client, requested] = step(s.client, { type: "notice", pid, note });
+  // The tile that shows `pid` names its program, so the client decodes with that program's decoder.
+  const program = showing(s, pid)?.program ?? null;
+  const [client, requested] = step(s.client, { type: "notice", pid, note, program });
   const asks = requested.filter((p) => !s.tiles.some((t) => held(t.reach)?.pid === p && t.recovery === "asked"));
   const shown = client.views[pid];
   const changed = shown !== undefined && shown !== s.client.views[pid];
@@ -772,14 +780,14 @@ const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json,
 };
 
 /** The tiles of a tezgah link's workspace in its drawn state, in reading order, each named by the process
- *  it shows. */
+ *  it shows, with the program tezgah says it shows. */
 const tezgahTiles = (link: TezgahLink): ReadonlyArray<Shown> => {
   const view = optimisticState(link.client);
   const space = view?.workspaces.find((w) => w.n === link.client.workspace);
   return view === null || space === undefined
     ? []
     : order(space.layout).flatMap((id) =>
-        view.tiles.filter((t) => t.id === id).map((t) => ({ id: t.id, name: t.shows })),
+        view.tiles.filter((t) => t.id === id).map((t) => ({ id: t.id, name: t.shows, program: t.program })),
       );
 };
 
@@ -1566,8 +1574,10 @@ const loadedInto = (loaded: WindowModel, tab: string): WindowModel =>
  *
  * **Details**
  *
- * `decode(pid)` is that pid's own view decoder and `tile(name)` the tile machine of the window
- * registered for a tile's name. Decoder functions and child machines stay outside the saved
+ * `decode(pid, program)` is that pid's own view decoder and `tile(name, program)` the tile machine
+ * of the window registered for a tile. A tezgah tile is found by the program tezgah's view names for
+ * it, never by its process name; a given tile has no program (null), so its lookup goes by its
+ * name. Decoder functions and child machines stay outside the saved
  * Model. The machine's `socket` Sub asks for one socket per dial the Link has; its `ctx` names the
  * tiles.
  *
@@ -1583,7 +1593,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
   /** Steps one tile's own machine with `raw`, and sends on its presses and its drafts. */
   const stepTile = (s: WindowModel, id: string, raw: unknown): Step => {
     const t = s.tiles.find((t) => t.id === id);
-    const child = t && checks.tile?.(t.name);
+    const child = t && checks.tile?.(t.name, t.program);
 
     if (t === undefined || child === undefined) {
       return [s, []];
@@ -1683,7 +1693,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     ...t,
     reach: Reach.cases.unresolved.make({}),
     recovery: "ready",
-    own: checks.tile?.(t.name)?.init(null, {})[0] ?? {},
+    own: checks.tile?.(t.name, t.program)?.init(null, {})[0] ?? {},
     refusal: null,
     last: null,
     told: null,
@@ -1697,7 +1707,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       loaded === null
         ? WindowModel.make({
             // A window on tezgah shows no given tile: its tiles come from tezgah's view.
-            tiles: ctx.tezgah === undefined ? ctx.tiles.map(fresh) : [],
+            tiles: ctx.tezgah === undefined ? ctx.tiles.map((t) => fresh({ ...t, program: null })) : [],
             tab: ctx.tab,
             inbox: Inbox.cases.idle.make({ after: 0 }),
             said: { id: 0, messages: [] },

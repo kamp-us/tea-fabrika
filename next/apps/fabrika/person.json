@@ -83,6 +83,37 @@
         }
       },
       "additionalProperties": false
+    },
+    "pack": {
+      "type": "object",
+      "properties": {
+        "fabrika": {
+          "type": "object",
+          "properties": {
+            "settings": {
+              "type": "object",
+              "properties": {
+                "tezgah": {
+                  "type": "object",
+                  "properties": {
+                    "new": {
+                      "type": "string",
+                      "pattern": "^(?=.{1,256}$)[A-Za-z_][\\w-]*\\/[A-Za-z_][\\w-]*$",
+                      "title": "a program",
+                      "description": "The program a new tile starts.",
+                      "default": "fabrika/fabsh"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

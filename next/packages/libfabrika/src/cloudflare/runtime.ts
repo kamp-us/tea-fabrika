@@ -100,6 +100,7 @@ import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner
 import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
 import type { WatchersError } from "../runtime/Watchers.ts";
+import * as Declarations from "../settings/Declarations.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import * as SettingsStart from "../settings/Start.ts";
 import * as Starts from "../settings/Starts.ts";
@@ -2292,7 +2293,12 @@ const processLogic = Effect.fnUntraced(function* (
         }),
       names: Effect.sync(() => Object.keys(programs)),
     },
-    { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
+    {
+      policy: defaultPolicy,
+      recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
+      // Each pack's settings as this start recorded them; only the core pack has any yet (0083).
+      settings: { fabrika: Declarations.corePack(checked.values) },
+    },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
   yield* sink.flush.pipe(Effect.provideContext(services));

@@ -8,6 +8,9 @@ import * as Load from "@kampus/libfabrika/node/settings/Load";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import * as Files from "@kampus/libfabrika/settings/Files";
+import * as Print from "@kampus/libfabrika/settings/Print";
+import { Origin } from "@kampus/libfabrika/settings/Sources";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
@@ -15,7 +18,8 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
-import { Founding } from "./src/settings.ts";
+import { Founding, refuseNew } from "./src/settings.ts";
+import { programs } from "./src/table.ts";
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
   reason: Schema.String,
@@ -119,6 +123,21 @@ const command = Command.make("dev", flags, (options) => {
                 Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
               )
             : { snapshot: prepared.settings, values: prepared.values };
+        // A new tile must start a program this build has: checked here, before the build, since a
+        // schema cannot know the build's table.
+        const refused = refuseNew(
+          loaded.values.tezgahNew,
+          Print.source(loaded.snapshot.origins[Declarations.tezgahNew.path] ?? Origin.cases.default.make({})),
+          programs,
+        );
+
+        if (refused !== null) {
+          return yield* new InstanceError({
+            reason: "settings",
+            cause: new Files.SettingsError({ reason: "invalid", message: `${refused} ${Files.STOP}` }),
+          });
+        }
+
         const { file, state } = yield* Effect.gen(function* () {
           yield* fs.makeDirectory(home, { recursive: true });
           const file = path.join(home, "instance.json");

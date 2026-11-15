@@ -44,7 +44,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
       { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
       { name: tezgahName(person), id: tezgahName(person), program: "fabrika/tezgah" },
-      // The seam until tezgah starts fabsh as a new tile's default process (0275, tezgah's NEW_TILE).
+      // A shell any client may reach by its name. A tile's shell is tezgah's own, from `tezgah.new`.
       { name: "fabsh:1", id: "fabsh:1", program: "fabrika/fabsh" },
     ],
     door: (options) =>

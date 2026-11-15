@@ -62,9 +62,9 @@ export const programBox = (declared: unknown, build: string) => {
       return Effect.runPromise(declaration);
     }
 
-    init(saved: unknown) {
+    init(saved: unknown, settings?: unknown) {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
-      return Effect.runPromise(checked(execution.init(saved)));
+      return Effect.runPromise(checked(execution.init(saved, settings)));
     }
 
     step(model: unknown, msg: unknown) {

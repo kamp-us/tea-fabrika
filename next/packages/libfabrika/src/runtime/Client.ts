@@ -107,8 +107,14 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("reply"), letter: Schema.String, answer: Reply }),
   /** This client has read the ledger up to revision `rev`. */
   Schema.Struct({ type: Schema.Literal("read"), rev: Schema.Int }),
-  /** One view notification for `pid`, as it arrived: a whole view, a patch, or junk. */
-  Schema.Struct({ type: Schema.Literal("notice"), pid: Schema.String, note: Schema.Unknown }),
+  /** One view notification for `pid`, as it arrived: a whole view, a patch, or junk. `program` is
+   *  the program the caller knows `pid` runs, when it knows one, as tezgah's view names a tile's. */
+  Schema.Struct({
+    type: Schema.Literal("notice"),
+    pid: Schema.String,
+    note: Schema.Unknown,
+    program: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
 ]);
 
 /**
@@ -124,13 +130,16 @@ export type ClientMsg = typeof Msg.Type;
 const ask = Cmd.make("ask", { input: Schema.Struct({ pid: Schema.String }), ok: Schema.Null, err: [] });
 
 /**
- * What a client checks a view with: each program's own decoder, by pid. The factory captures it, so
- * it is never in the Model, a Msg or a Cmd's input.
+ * What a client checks a view with: each program's own decoder, by pid and by the program the
+ * notice names, or null when it names none. The factory captures it, so it is never in the Model, a
+ * Msg or a Cmd's input.
  *
  * @stability unstable
  * @category models
  */
-export type ClientChecks = { readonly decode?: (pid: string) => (view: unknown) => unknown };
+export type ClientChecks = {
+  readonly decode?: (pid: string, program: string | null) => (view: unknown) => unknown;
+};
 
 // --- The rules the update uses ------------------------------------------------------------------
 
@@ -273,7 +282,7 @@ export const clientMachineFor = (checks: ClientChecks) =>
       dated: (c, m): Step => [dated(c, m.n, m), []],
       reply: (c, m): Step => [reply(c, m.letter, m.answer), []],
       read: (c, m): Step => [read(c, m.rev), []],
-      notice: (c, m): Step => noticed(c, m.pid, m.note, checks.decode?.(m.pid) ?? anyView),
+      notice: (c, m): Step => noticed(c, m.pid, m.note, checks.decode?.(m.pid, m.program ?? null) ?? anyView),
       // The window turns `ask` into its own move and never runs it, so no answer comes back.
       ask_ok: (c): Step => [c, []],
       ask_err: (c): Step => [c, []],

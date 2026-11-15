@@ -1,7 +1,7 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`,
- * `gateway.draft-limit`, the four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group
- * of the ten.
+ * `gateway.draft-limit`, the four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the core pack's
+ * `pack.fabrika.settings.tezgah.new`, and `all`, the group of the eleven, with `corePack`, the core pack's part of them.
  *
  * **Details**
  *
@@ -189,13 +189,44 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+// A program's name, `pack/program`, at most 256 characters, as `packs/ProgramName.ts` checks it.
+// Settings sit below packs, so the rule is written here again, as one pattern: Effect writes a
+// pattern with the u flag into the generated JSON Schema exactly, and a length check it cannot. Every
+// character the pattern takes is ASCII, so the lookahead counts what `isMaxLength` counts.
+const Program = Schema.String.check(Schema.isPattern(/^(?=.{1,256}$)[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/u)).annotate({
+  title: "a program",
+  description: "A program is its pack and its name, as fabrika/fabsh.",
+});
+
+/**
+ * Setting for the program a new tile starts, from the core pack's own settings (0083).
+ *
+ * **Details**
+ *
+ * The value is a program's name, `pack/program`. The default is `fabrika/fabsh`, the shell, as
+ * tmux's `default-command` falls back to a shell. It is set in a person's file only. The start
+ * checks it against the build's programs: `fabrika/tezgah`, the frame, never shows in a tile.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const tezgahNew = Setting.make("pack.fabrika.settings.tezgah.new", {
+  schema: Program,
+  default: "fabrika/fabsh",
+  doc: "The program a new tile starts.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 /**
  * Group of every setting fabrika declares, ready to load, validate and print.
  *
  * **Details**
  *
  * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, `gatewayDraftLimit`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`) and `desktopLinkTtl`.
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl` and the core
+ * pack's `tezgahNew`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -212,4 +243,13 @@ export const all = Setting.group({
   brainStartTimeout,
   brainStopTimeout,
   desktopLinkTtl,
+  tezgahNew,
 });
+
+/**
+ * The core pack's settings as the runner hands them to the pack's own programs, at each init.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const corePack = (values: { readonly tezgahNew: string }) => ({ tezgah: { new: values.tezgahNew } });

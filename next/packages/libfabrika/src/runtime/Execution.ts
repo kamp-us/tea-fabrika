@@ -169,7 +169,8 @@ export type Execution = {
   readonly fresh: (model: unknown, msg: unknown) => Effect.Effect<Admission, ProgramDown>;
   readonly update: (model: unknown, msg: unknown) => Effect.Effect<Prepared, ProgramDown>;
   readonly audit: (msg: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
-  readonly init: (saved: unknown) => Effect.Effect<Step, ProgramDown>;
+  /** Boots from a saved model, or from nothing, handed the settings of the program's pack. */
+  readonly init: (saved: unknown, settings?: unknown) => Effect.Effect<Step, ProgramDown>;
   readonly step: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
   readonly fold: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
   readonly upgrade: (saved: unknown) => Effect.Effect<typeof Upgraded.Type, ProgramDown>;
@@ -192,7 +193,7 @@ export type ExecutionCalls = {
   readonly fresh: (model: unknown, msg: unknown) => Promise<unknown>;
   readonly update: (model: unknown, msg: unknown) => Promise<unknown>;
   readonly audit: (msg: unknown) => Promise<unknown>;
-  readonly init: (saved: unknown) => Promise<unknown>;
+  readonly init: (saved: unknown, settings: unknown) => Promise<unknown>;
   readonly step: (model: unknown, msg: unknown) => Promise<unknown>;
   readonly fold: (model: unknown, msg: unknown) => Promise<unknown>;
   readonly upgrade: (saved: unknown) => Promise<unknown>;
@@ -309,7 +310,7 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
   return {
-    init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
+    init: Effect.fn("execution.init")((saved, settings) => run("load", (pure) => pure.init(saved, settings))),
     step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
     fresh: Effect.fn("execution.fresh")((model, msg) =>
       pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.fresh(model, msg)))),
@@ -419,7 +420,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
         ),
       ),
     ),
-    init: Effect.fn("execution.init")((saved) => ask(Step, call("init", [saved], "load"), "load")),
+    init: Effect.fn("execution.init")((saved, settings) => ask(Step, call("init", [saved, settings], "load"), "load")),
     step: Effect.fn("execution.step")((model, msg) => ask(Step, call("step", [model, msg], "step"), "step")),
     fold: Effect.fn("execution.fold")((model, msg) =>
       ask(Step, call("fold", [model, msg], "saved_letter"), "saved_letter"),
