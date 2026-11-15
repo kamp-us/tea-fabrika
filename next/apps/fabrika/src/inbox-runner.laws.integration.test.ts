@@ -14,6 +14,7 @@ import { letterLine, Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
@@ -103,7 +104,7 @@ const session = Effect.fnUntraced(function* (
   );
   return ProgramRunner.layer(
     { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
-    { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 } },
+    { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
   ).pipe(
     Layer.provideMerge(
       Layer.mergeAll(

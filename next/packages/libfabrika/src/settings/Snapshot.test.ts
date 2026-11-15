@@ -391,6 +391,13 @@ const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
   .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
 
+/**
+ * A value as searchable text. JSON has no bigint, and a decoded byte size is one, so a bigint prints
+ * as its digits and every other value as JSON does: the search still reads every value.
+ */
+const printed = (value: unknown) =>
+  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
   const tracer = Tracer.make({
@@ -403,10 +410,7 @@ const spans = () => {
   const text = () =>
     ended
       .map((span) =>
-        JSON.stringify(
-          { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
-        ),
+        printed({ name: span.name, attributes: [...span.attributes], events: span.events, status: span.status }),
       )
       .join("\n");
   return { tracer, text };
@@ -465,13 +469,13 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
           if (Exit.isSuccess(exit)) {
             expect(place.named).toBeUndefined();
             outputs.push(JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(exit.value.made)));
-            outputs.push(JSON.stringify(exit.value.resolved));
+            outputs.push(printed(exit.value.resolved));
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
             expect(place.named).toBeDefined();
             const error = exit.cause.reasons.find((r) => r._tag === "Fail");
             expect(error?._tag === "Fail" ? error.error : undefined).toBeInstanceOf(Files.SettingsError);
-            outputs.push(String(exit.cause), JSON.stringify(error?._tag === "Fail" ? error.error : null));
+            outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.
             expect(
               error?._tag === "Fail" && error.error instanceof Files.SettingsError ? error.error.message : "",

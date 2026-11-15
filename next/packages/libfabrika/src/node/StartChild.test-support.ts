@@ -112,7 +112,8 @@ export const databases = Effect.gen(function* () {
         Layer.provide(RelationsMemory.layer(world.rows)),
         Layer.provide(Layer.succeed(Senders, SessionSenders.make(world.sessions.sender))),
       ),
-      ProgramMailLedger.layer({ grants: StartChildTest.HOST }),
+      // T1041: mail.unread's largest value, so no law here meets a full inbox.
+      ProgramMailLedger.layer({ grants: StartChildTest.HOST, cap: 16_384 }),
     ).pipe(
       Layer.provideMerge(
         ProcessManager.layer(

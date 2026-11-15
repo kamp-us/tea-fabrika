@@ -64,6 +64,7 @@ import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model } from "./internal/childStarter.test-support.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
@@ -531,7 +532,10 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(runnerContext)));
     const descriptor = { id: held.pid, name, program: held.program, build: BUILD, owner };
-    const options = { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 } };
+    const options = {
+      recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
+      chunk: ANY_CHUNK,
+    };
     const layer = world.worker
       ? Layer.unwrap(
           Effect.map(ProgramLoader, (loader) =>

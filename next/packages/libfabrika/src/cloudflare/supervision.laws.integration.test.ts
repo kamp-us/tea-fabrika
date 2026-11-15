@@ -14,6 +14,7 @@ import { Declaration, workerExecution } from "../runtime/Execution.ts";
 import { Program, ProgramDown } from "../runtime/Program.ts";
 import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
 import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
@@ -181,6 +182,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
               },
             }),
         recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
+        chunk: mailChunk.default,
       },
     ).pipe(
       Layer.provideMerge(
