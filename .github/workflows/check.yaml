@@ -27,7 +27,9 @@ on:
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below). Neither runs the tooling tests or the whole of next/ (0534): next/ runs the
-  # tests the change reaches, and the schedule (scheduled.yaml) runs everything every 3 hours.
+  # tests the change reaches, and the schedule (scheduled.yaml) runs everything every 3 hours. A group
+  # whose tree and base tree a ready pull request run already tested green runs none of them (the
+  # changes job below).
   merge_group:
     types: [checks_requested]
 
@@ -76,6 +78,14 @@ jobs:
   # (0534). Push run 43625168838 repeated queue run 43623078615 on tree 758c5cf5 that way: 61
   # machine-min of next and 26 of test. check and typecheck run, and typecheck saves main's tsc cache. An admin
   # merge, a direct push, a failed or canceled queue run, or any error asking runs every job.
+  # In a merge queue group, changes asks the same way whether a ready pull request run already tested
+  # the group's tree from its base's tree: a pull request runs on `refs/pull/<n>/merge`, itself merged
+  # onto main as main was then, so while main has not moved its tree is the group's. GitHub lists that
+  # run under the branch's head, not the tree it tested, so the record step below leaves an artifact
+  # named for both trees. A run of this workflow from this repository that passed with `ci-required`
+  # green, and whose selection covered the group's (changes.mjs's `record`), lets every job but
+  # changes and ci-required skip, and the job summary links it (changes.mjs's `matched`). Any other
+  # group, and any error asking, runs as before.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -186,7 +196,7 @@ jobs:
           FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
-          # The setting for how long a vitest leg's files may take, in seconds of vitest.shards.ts's
+          # The setting for how long a vitest leg's files may take, in seconds of vitest.shards.json's
           # table: the fewest legs whose longest share fits it start (legs.ts). Lower starts more
           # machines for a shorter run. 240 gives the full next set 3 legs and about 105 s for the
           # slowest leg's job, and the reader tests alone 1 leg, by the model fitted to the 10 legs of
@@ -194,6 +204,41 @@ jobs:
           # leg's setup.
           BUDGET: 240
         run: node .github/ci/legs.ts
+      # A ready pull request run's record of what it tests, for the merge queue: the tree of
+      # `github.sha`, the merge commit every job here checks out, and the tree of the base its tests
+      # were picked from, in the artifact's name. It is written only when what changes printed (the
+      # same expressions as its outputs above) covers what a group of the same two trees needs, so a
+      # run that tests less never stands in for one; it counts only once the run ends green. A day is
+      # enough: main moves many times a day, and a record of an older main matches no group. Neither
+      # step may fail the run: without a record the group runs its tests.
+      - name: record
+        id: record
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        continue-on-error: true
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          TESTED: ${{ github.sha }}
+          CHECK: ${{ steps.diff.outputs.check }}
+          TYPECHECK: ${{ steps.diff.outputs.typecheck }}
+          TEST: ${{ steps.diff.outputs.test }}
+          FIELD: ${{ steps.diff.outputs.field }}
+          BUILD: ${{ steps.diff.outputs.build }}
+          NEXT: ${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}
+          FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
+        run: node .github/ci/changes.mjs --record
+      - name: upload the record
+        if: steps.record.outputs.name != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.record.outputs.name }}
+          path: ${{ runner.temp }}/tested.json
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
       # Fail fast (ticket 990): the first red job cancels its own run, so the jobs still running free
       # their runners and ci-required answers within seconds, not after the slowest job. Merge queue
       # group 1199 (run 43633120187) waited about 10 minutes behind a lint that failed at 43 s.
@@ -351,7 +396,7 @@ jobs:
   # Split by file over two machines (vitest's `--shard`, each given about the same seconds by
   # vitest.shards.ts). On main run 43615844695 they took 68, 111, 125, 230, 274 and 363 s on six
   # (19.5 machine-min): four files of 124 to 362 s each sat alone on a machine, and boxrm.test.ts
-  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.ts's table and run three
+  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.json's table and run three
   # files at a time, those 97 files' seconds give two machines of 353 and 362 s (11.9 machine-min),
   # the same longest wait.
   # It runs on a pull request alone (0534): a merge queue group and a push to main never start it
@@ -420,11 +465,12 @@ jobs:
   # pull request with the `visual` label.
   # The full matrix is seven machines, the fallback below on a pull request with the label; the
   # merge queue, main and a pull request without it fall back to legs `1` to `5` alone. Legs `1` to
-  # `5` run vitest, each a fifth of the files by measured seconds (vitest.shards.ts). Legs `e2e-1`
+  # `5` run vitest, each a fifth of the files by measured seconds (vitest.shards.json). Legs `e2e-1`
   # and `e2e-2` run no vitest step: each fetches chromium and runs the `next-visual` project on its
   # half of the visual files, split by the same measured seconds. On a pull request, a merge queue
-  # group or a push to main that tests all of next/ (0534), the changes job's size step prints fewer,
-  # with each kind's `/N` to match, or none, and then this job skips. Every leg
+  # group or a push to main (0534), whether it tests all of next/ or the reader tests alone, the
+  # changes job's size step prints fewer, with each kind's `/N` to match, or none, and then this
+  # job skips. Every leg
   # is a quoted string, so each `if` below compares a string with a string. workflow-lint.ts pins the
   # fallback, each `/N` and each `if`; vitest.shards.test.ts (E4) pins the count of e2e legs: the
   # fewest whose longest leg fits in half the time limit.
@@ -454,14 +500,16 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # FILTER is the paths. On a sized run (a pull request, a merge queue group or a push to main
-      # whose filter is all of next/), changes' `files`: the tests whose imports reach a changed file
-      # (Vitest's own `--changed`, which picks everything when a file in vitest.config.ts's
-      # forceRerunTriggers changed: configs, the lockfile, fixtures), and every reader test. Those
-      # read files as text, so the import graph misses them. Each file is listed once, so each runs
-      # once, on the leg `Shards` gives it, and the legs were sized with them. Else changes' filter:
-      # the reader tests, or all of next/ (the plan for CI paths, slice 2), on a run with no base
-      # commit or whose size step printed nothing, which then runs every file. A missing filter runs
+      # FILTER is the paths. On a sized run (a pull request, a merge queue group or a push to main),
+      # changes' `files`. For a run of all of next/: the tests whose imports reach a changed file
+      # (Vitest's `--changed`, which picks everything when a file in vitest.config.ts's
+      # forceRerunTriggers changed: configs and fixtures, and a lockfile, tsconfig or package.json
+      # change vitest.changed.ts cannot tie to packages), and every reader test. Those
+      # read files as text, so the import graph misses them. For a run of the reader tests alone:
+      # those reader tests, listed whole. Each file is listed once, so each runs once, on the leg
+      # `Shards` gives it, and the legs were sized with them. Else changes' filter: the reader
+      # tests, or all of next/ (the plan for CI paths, slice 2), on a run off the merge line, with no
+      # base commit or whose size step printed nothing, which then runs every file. A missing filter runs
       # all of next/. FILTER stays unquoted so each path is its own argument. `--project next` keeps
       # the run to the in-memory layer: a path filter alone finds a file in any project (0536).
       - run: pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
@@ -477,9 +525,10 @@ jobs:
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
-      # On a sized run only the visual files whose imports reach a changed file run, the ones the
-      # size step sized these legs with, from the same base commit (changes' `base`). A run the size
-      # step did not size has no `base`, and runs every visual file.
+      # On a sized run of all of next/ only the visual files whose imports reach a changed file run,
+      # the ones the size step sized these legs with, from the same base commit (changes' `base`).
+      # A sized run of the reader tests alone, and a run the size step did not size, have no `base`,
+      # and run every visual file.
       - run: pnpm exec vitest run --project next-visual $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:

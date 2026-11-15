@@ -21,7 +21,7 @@
 // and never more than half the next job's limit less the leg's setup, so a leg cannot run into the
 // timeout. An end-to-end leg's files may take that half less its own, longer setup:
 // vitest.shards.test.ts's E4 budget, the one the count of e2e legs is pinned with. Seconds come from
-// vitest.shards.ts's table, a file with no row at the table's median, and `assign` splits them, so
+// vitest.shards.json's table, a file with no row at the table's median, and `assign` splits them, so
 // this split is the one `Shards` makes on each leg.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";

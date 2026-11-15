@@ -248,7 +248,7 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
         expect(lines).toEqual(
           rows.map(
             (path) =>
-              `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts`,
+              `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`,
           ),
         );
         const silent: string[] = [];
@@ -274,7 +274,7 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
     rows
       .map(
         (path) =>
-          `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts\n`,
+          `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json\n`,
       )
       .join(""),
   );

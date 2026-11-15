@@ -1398,3 +1398,43 @@ describe("the end-to-end legs", () => {
     }
   });
 });
+
+it("scenario: L20 a change to the shard table alone selects the tests that import vitest.shards.ts, not every test", async () => {
+  // Today's CI. vitest.config.ts imports vitest.shards.ts, and Vitest selects every test when a
+  // file its config imports changes. The table is data read from disk, vitest.shards.json, and the
+  // config makes it that module's watched file, so a row edit selects the tests that import it and
+  // no other. The real config, the real files: the law is about this repo's graph. Plants, each run
+  // once and restored: vitest.shards.ts imports the JSON (red: every test); the config's
+  // `shardTable` adds no watched file (red: no test).
+  const vitest = await createVitest("test", {
+    root: ROOT,
+    watch: false,
+    related: [join(ROOT, "vitest.shards.json")],
+    project: ["tooling", "next"],
+  });
+
+  try {
+    const picked = (await vitest.specifications.getRelevantTestSpecifications()).map((s) => relative(ROOT, s.moduleId));
+    const all = (await vitest.globTestSpecifications()).map((s) => relative(ROOT, s.moduleId));
+    // Files that import vitest.shards.ts, directly or through legs.ts, shard-rows.ts or shard-times.ts.
+    expect(picked).toEqual(
+      expect.arrayContaining([
+        "vitest.shards.test.ts",
+        ".github/ci/legs.test.ts",
+        ".github/ci/shard-rows.test.ts",
+        ".github/ci/shard-times.test.ts",
+        ".github/ci/related.test.ts",
+      ]),
+    );
+
+    // Files that import nothing of it.
+    for (const path of ["vitest.changed.test.ts", "scripts/testhome.test.ts", "oxlint-plugins/no-of.test.ts"]) {
+      expect(picked).not.toContain(path);
+    }
+
+    expect(picked.filter((path) => path.startsWith("next/"))).toEqual([]);
+    expect(picked.length).toBeLessThan(all.length);
+  } finally {
+    await vitest.close();
+  }
+});
