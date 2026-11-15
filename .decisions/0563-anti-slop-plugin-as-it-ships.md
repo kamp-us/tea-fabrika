@@ -80,6 +80,10 @@ authors already wrote (owner, 2026-11-15).**
 - **A. As it ships.** The plugin is registered through `jsPlugins` under its own names, and a rule
   is turned on by its own name with its own options. Its source is not edited. It is pinned to
   one exact version, which today means one full commit.
+- **How it comes in: as its README says (owner, 2026-11-15).** The fork's `src/` folder is
+  brought into this repo whole and unchanged, at one commit, with that commit and the license
+  recorded beside it. It is not a git dependency. An update brings in a newer commit whole. This
+  is not "our own copy of a rule": that line is about rewriting or hand-copying single rules.
 - **B. It blocks where lint blocks.** Each rule is a lint rule that runs in the pull request and in
   the merge line, and fails them. There is no scheduled count and no dashboard of counts.
 - **C. An exception is one inline ignore, on the line, with its reason:**
@@ -184,7 +188,8 @@ authors already wrote (owner, 2026-11-15).**
   itself was run. Their rules follow type aliases and scopes the script does not. The first run of
   the installed plugin gives the real numbers.
 - **Not decided here:**
-  - The version to pin, and which of the two install routes in Context is used.
+  - Which commit is brought in, where the folder lives, and what holds that it still matches
+    that commit. The plan of the install says.
   - Where the plugin's config lives in `.oxlintrc.json`.
   - The order the rules are turned on.
   - How our own `fabrika/padding-line-between-statements` sits with their spacing rule.
@@ -203,3 +208,10 @@ authors already wrote (owner, 2026-11-15).**
 
 - [0554](0554-no-reflect-get-set-has.md) and [0555](0555-no-vi-mock-or-domock.md): a one-line
   pointer each. Their status does not change.
+
+## Amendments
+
+- 2026-11-15: the install route is ruled. Of the two routes in Context, the second is taken: the
+  plugin's `src/` comes in whole and unchanged at one commit of the fork, as its README says, with
+  the commit and license recorded. The first route, a git dependency, would make every install and
+  CI run depend on one fork staying online, and its `prepare` script could run on install.
