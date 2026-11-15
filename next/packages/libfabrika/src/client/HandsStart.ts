@@ -14,14 +14,16 @@ import { ClientKey } from "../transport/ClientKey.ts";
 import { ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
 import { writeSshsig } from "../transport/Sshsig.ts";
+import type { Hello } from "../transport/Wire.ts";
 import { Commands } from "./Commands.ts";
 import { handsMachine } from "./HandsMachine.ts";
 import { type DialMsg, dialer, type Handle, send } from "./internal/dial.ts";
 import { Journal, type JournalError } from "./Journal.ts";
 
 /**
- * What a hands start is given: the brain's origin, the build that runs, and the label its knock
- * shows the person who grants its key.
+ * What a hands start is given: the brain's origin, the build that runs, the label its knock
+ * shows the person who grants its key, and the host's `os`, which the hello sends; a start that
+ * gives none sends `unknown`.
  *
  * @stability unstable
  * @category models
@@ -30,6 +32,7 @@ export type StartOptions = {
   readonly origin: string;
   readonly build: string;
   readonly label: string;
+  readonly os?: (typeof Hello.Type)["os"];
 };
 
 const Failure = Schema.TaggedUnion({
@@ -56,7 +59,7 @@ const stamped = (params: unknown, sentAt: string): unknown =>
  * It needs `ClientKey`, `Journal`, `Commands`, `Id.Generator`, `Socket.WebSocketConstructor` and a
  * `Scope`: closing the scope stops the run, its sockets, its timers and every Sub, which is how a
  * crash looks from outside. It reads the key once, before the first dial. Its hello sends
- * `Commands.has` as `has`, `platform: "headless"` and `build`; its knock asks as `hands`. Only the
+ * `Commands.has` as `has`, `platform: "headless"`, `os` and `build`; its knock asks as `hands`. Only the
  * `journal_read`, `journal_write` and `execute` Cmds reach the journal and the command. A write, a
  * ping or a hello for a dial with no open socket fails at once.
  *
@@ -103,7 +106,7 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
           tab,
           nonce: cmd.nonce,
           platform: "headless",
-          os: "unknown",
+          os: options.os ?? "unknown",
           build: options.build,
           sentAt: yield* sentAt,
           signed,
