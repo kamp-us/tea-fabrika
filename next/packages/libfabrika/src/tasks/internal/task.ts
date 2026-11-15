@@ -1,9 +1,9 @@
-// One job's control state, one Msg at a time (0037, 0046). `JobsLedger.ts` folds a job's committed
+// One task's control state, one Msg at a time (0037, 0046). `TasksLedger.ts` folds a task's committed
 // events through it, steps the call it was given, and appends that call only when the answer is
 // `accepted`. A repeat answers `repeated`; a refusal names its reason. Neither changes the state.
 import { Machine } from "@demlik/tea/effect";
 import { Equal, Schema } from "effect";
-import { Collection, Executor, Request, Result, State } from "../Job.ts";
+import { Collection, Executor, Request, Result, State } from "../Task.ts";
 
 const Execution = Schema.NonEmptyString;
 
@@ -49,7 +49,7 @@ const refused = (model: Model, reason: typeof Reason.Type) => answered(model, An
 const moved = (state: State): [Model, []] => [{ state, answer: ACCEPTED }, []];
 
 /** @internal */
-export const job = Machine.make({
+export const task = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [],

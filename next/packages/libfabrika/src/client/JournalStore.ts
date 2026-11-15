@@ -1,5 +1,5 @@
 /**
- * The hands client's journal on Effect's own `KeyValueStore`, one key per job id. Memory, a file and
+ * The hands client's journal on Effect's own `KeyValueStore`, one key per task id. Memory, a file and
  * a browser's `localStorage` are each one existing store layer, so a browser tab can keep it too.
  *
  * @stability unstable
@@ -17,7 +17,7 @@ const translated = (cause: KeyValueStore.KeyValueStoreError | Schema.SchemaError
  *
  * **Details**
  *
- * Each entry is its schema's JSON under the job's id. A store error becomes `storage` and a value
+ * Each entry is its schema's JSON under the task's id. A store error becomes `storage` and a value
  * that is no entry becomes `bad_entry`, each keeping its cause.
  *
  * @stability unstable
@@ -28,8 +28,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const store = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Entry);
     return {
-      read: (job: string) => store.get(job).pipe(Effect.map(Option.getOrNull), Effect.mapError(translated)),
-      write: (job: string, entry: Entry) => store.set(job, entry).pipe(Effect.mapError(translated)),
+      read: (task: string) => store.get(task).pipe(Effect.map(Option.getOrNull), Effect.mapError(translated)),
+      write: (task: string, entry: Entry) => store.set(task, entry).pipe(Effect.mapError(translated)),
     };
   }),
 );

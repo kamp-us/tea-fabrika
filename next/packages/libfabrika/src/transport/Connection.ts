@@ -57,7 +57,7 @@ type Options<E, ReadError> = {
  *   does not fit. Waits are limited by a repeated id, by 64 waits and by 16,384 bytes of saved
  *   attachment. Every other request runs one at a time, marks the connection busy while
  *   `options.call` runs, sends the answer, and marks it idle again even if the call failed. A call
- *   answered `parked`, such as a hands key's `jobs.wait`, is saved as a wait on the stream the
+ *   answered `parked`, such as a hands key's `tasks.wait`, is saved as a wait on the stream the
  *   answer names and registered again through `options.wait`, exactly as a `ledger.wait` is. A
  *   connection that is not online may only call `initialize` or `gateway.knock`; the rest get
  *   `no_hello`.
@@ -208,7 +208,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     return yield* hold(Wait.make({ id, ...decoded.success }));
   });
   /** One call's answer on the socket. A call the door parked on a stream it names, such as a hands
-   *  key's `jobs.wait`, is kept and registered again as a parked `ledger.wait` is, so a ring that
+   *  key's `tasks.wait`, is kept and registered again as a parked `ledger.wait` is, so a ring that
    *  came while the call was out still finds it. */
   const reply = (id: string | number, answer: typeof Answer.Type) =>
     answer._tag === "parked"

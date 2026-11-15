@@ -54,7 +54,7 @@ Three answers in the transport layer follow from it:
 A browser is also a host, with capabilities of its own (show a notification, read
 the clipboard). It says so in its `has` list, the same way the Mac says `git`, and
 a Cmd that `needs` git never goes to it. That list, and not the word "window",
-is what keeps a job away from a tab. See
+is what keeps a task away from a tab. See
 [brain, hands, window, agent](./brain-hands-window-agent.md).
 
 ## Why

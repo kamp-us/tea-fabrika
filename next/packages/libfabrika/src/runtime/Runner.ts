@@ -60,11 +60,11 @@ import {
   type Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
-import { Result as JobResult } from "../jobs/Job.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import { Result as TaskResult } from "../tasks/Task.ts";
 import * as Chaos from "./Chaos.ts";
 import * as Chunk from "./Chunk.ts";
 import type { WatcherManager } from "./Entry.ts";
@@ -79,7 +79,7 @@ import {
   type View,
 } from "./Entry.ts";
 import { HandsInput } from "./Hands.ts";
-import { HandsJobs } from "./HandsJobs.ts";
+import { HandsTasks } from "./HandsTasks.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { handsDelivery } from "./internal/handsDelivery.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
@@ -236,14 +236,14 @@ const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
-/** The Cmd the runner hands to the Project as a job for the person's hands. */
+/** The Cmd the runner hands to the Project as a task for the person's hands. */
 const HANDS = "hands";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS]);
 
 /** This life still owes a host Cmd (a send, a send_chunks, a start_child, a stop_child, an exit,
- *  or a hands Cmd the Project has not saved yet): the next alarm tries it again. A hands job that
+ *  or a hands Cmd the Project has not saved yet): the next alarm tries it again. A hands task that
  *  only waits on the hands is owed nothing: a wake or a due asks it again (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
   cmds.some((cmd) => cmd.mail === true && cmd.hands?._tag !== "waiting");
@@ -288,7 +288,7 @@ const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fiel
 const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
 const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
-const encodeResult = Schema.encodeSync(JobResult);
+const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -520,7 +520,7 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
-        const handsJobs = yield* Effect.serviceOption(HandsJobs);
+        const handsTasks = yield* Effect.serviceOption(HandsTasks);
         const children = yield* Effect.serviceOption(Children);
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
@@ -1799,7 +1799,7 @@ export class ProgramRunner extends Context.Service<
           );
         });
 
-        /** Saves a hands Cmd's waiting job on its dispatched entry, so this life owes it nothing until
+        /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
          *  a wake or a due asks again. The permit is held. */
         const wait = Effect.fnUntraced(function* (job: Dispatched, waiting: NonNullable<Dispatched["hands"]>) {
           const saved = live?.cmds.find((cmd) => cmd.id === job.id);
@@ -1817,18 +1817,18 @@ export class ProgramRunner extends Context.Service<
           yield* setAlarm();
         });
 
-        /** The built-in hands Cmd: the Project keeps its job under the Cmd's own id, for the person's
-         *  hands. A finished job or a refusal is its answer. A waiting job answers nothing yet, and a
+        /** The built-in hands Cmd: the Project keeps its task under the Cmd's own id, for the person's
+         *  hands. A finished task or a refusal is its answer. A waiting task answers nothing yet, and a
          *  failed ask is not an answer either: the Cmd stays dispatched, and an alarm asks again. The
          *  ask is the life that dispatched it, `origin`, even if a restart or a swap moved on since. */
         const hands = Effect.fnUntraced(function* (state: Live, job: Dispatched, origin: Descriptor) {
           const input = decodeHands(job.cmd);
 
-          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(HANDS) || Option.isNone(handsJobs)) {
+          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(HANDS) || Option.isNone(handsTasks)) {
             return Option.some(yield* err(job, "bad_cmd"));
           }
 
-          const replied = yield* handsJobs.value
+          const replied = yield* handsTasks.value
             .ask(
               {
                 id: job.id,

@@ -14,7 +14,7 @@ import * as RateLimiter from "effect/persistence/RateLimiter";
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 
-export { projectJobsLayer } from "@kampus/libfabrika/workers/runtime";
+export { projectTasksLayer } from "@kampus/libfabrika/workers/runtime";
 
 export interface Env extends Bindings {
   readonly INSTANCE: string;
