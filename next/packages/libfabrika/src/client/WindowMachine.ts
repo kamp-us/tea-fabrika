@@ -2044,6 +2044,9 @@ export type Handling = "leave" | "pass" | "take";
  * `now`, the run's state, may not have read the presses in `unread` yet. Those it has not read are
  * read here first, by the window's own update, and nothing of that is kept: the answer's `unread`
  * holds only presses still waiting, with this one added when the window is handed it.
+ * Only presses are read ahead. A click or a tezgah frame still waiting in the run's line before
+ * them is not seen here, so a press right behind one is judged against the older focus and tiles
+ * (finding 2026-11-15-handle-skips-non-press-msgs).
  *
  * @stability unstable
  * @category getters
