@@ -409,6 +409,9 @@ describe("each rule refuses what it is there to refuse", () => {
       "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
+      // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
+      // and a named file under next/ and runs oxlint over them with the real lint config.
+      "integration-test-name",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
@@ -435,7 +438,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     "next/packages/libfabrika/src/gateway/Gateway.ts",
     "next/packages/libfabrika/src/ledger/Ledger.ts",
     "next/apps/fabrika/dev.ts",
-    "next/apps/fabrika/src/settings-start.test.ts",
+    "next/apps/fabrika/src/settings-start.integration.test.ts",
     ".agents/skills/lead/scripts/example.ts",
   ];
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";

@@ -884,6 +884,13 @@
       "rules": { "fabrika/no-cause-squash": "off" }
     },
     {
+      // 0536: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
+      // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
+      // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+      "rules": { "fabrika/integration-test-name": "error" }
+    },
+    {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (0061). Setup hooks stay.
       "files": ["next/**/*.ts", "next/**/*.tsx"],
@@ -938,7 +945,11 @@
       // T664, L15, narrowed by T730's L9: only these start files in next/apps choose the TOML
       // adapter, `settings-start.test.ts` standing in for the start it tests. Every other app file,
       // tests included, keeps the `next/**` ban, and the parser stays banned here too.
-      "files": ["next/apps/fabrika/dev.ts", "next/apps/fabrika/cli.ts", "next/apps/fabrika/src/settings-start.test.ts"],
+      "files": [
+        "next/apps/fabrika/dev.ts",
+        "next/apps/fabrika/cli.ts",
+        "next/apps/fabrika/src/settings-start.integration.test.ts"
+      ],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -2124,8 +2135,9 @@
         "next/apps/fabrika/src/exam/**",
         "next/apps/fabrika/src/settings-generated.test.ts",
         "next/apps/fabrika/src/build.test.ts",
-        "next/apps/fabrika/src/build-command.test.ts",
-        "next/apps/fabrika/src/instance-one-file.test.ts"
+        "next/apps/fabrika/src/build.integration.test.ts",
+        "next/apps/fabrika/src/build-command.integration.test.ts",
+        "next/apps/fabrika/src/instance-one-file.integration.test.ts"
       ],
       "rules": {
         "eslint/no-restricted-imports": [

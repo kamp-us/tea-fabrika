@@ -4,6 +4,7 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
@@ -53,6 +54,7 @@ const plugin: Plugin = {
     "door-is-library": doorIsLibrary,
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
+    "integration-test-name": integrationTestName,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
     jsdocs,

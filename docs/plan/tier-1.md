@@ -476,7 +476,7 @@ log           one row per agent run, with the sha of the commit it made, and a n
 P1, PR 402, the frame
   pnpm-workspace.yaml, vitest.config.ts   next/{packages,programs,apps}/* are packages; pnpm test runs their src/**/*.test.ts
   .github/workflows/check.yaml            a `next` job: vitest run next/, Chromium once an e2e file exists, then the runner
-  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails
+  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails. Since 0536 the `next-visual` Vitest project holds that job and the runner is gone
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
   src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)
@@ -559,8 +559,9 @@ P35, PR 435, edges as comments and the sync test
 **Tier 1 is done when each check below passes where it says, and the whole demo works in a browser tab and an Electron window, on the laptop and on Cloudflare** ([the rule](./tiers.md#the-rules)). Each half starts in a named pull request and stays working after it: the browser tab with P14, the first window; the Electron window with P19, the app; Cloudflare with P24 and P26, for the checklist. Each runs with `pnpm typecheck`, `pnpm lint` and `pnpm test` green. Every law in [the detail file](./tier-1-detail.md#properties) has to pass too, named below or not. These commands do not exist yet. Tier 1 builds them.
 
 ```sh
-pnpm exec vitest run next/                 # the laws that run on Node
-node next/apps/fabrika/e2e.ts              # the exam's thin runner, over each landing's e2e/*.test.ts
+pnpm exec vitest run --project next        # the laws on in-memory layers: pull requests and the merge queue (0536)
+pnpm exec vitest run --project next-integration   # the laws over a real resource, *.integration.test.ts: the schedule
+pnpm exec vitest run --project next-visual # a browser or Electron, *.visual.test.ts, one file at a time: the schedule
 node next/apps/fabrika/dev.ts --port=N --founder=<key.pub>    # a brain for agents and tests
 alchemy plan                               # read by the owner, and a yes, before any deploy
 node next/apps/fabrika/chaos-drill.ts      # a run on a throwaway ledger, to a verdict

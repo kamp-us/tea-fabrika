@@ -6,7 +6,8 @@
 # Private words are literal, case-insensitive strings, one per line, outside the Git tree.
 # Diagnostics name only the kind, the added-line number and the commit, never matched text or
 # private words.
-# In a diff, an added line that only respaces a line the same file's diff removes is old text.
+# In a diff, an added line that only respaces a line the same diff removes, from any file, is old text:
+# a line moved between files was already in the tree the diff starts from (0047, amended 2026-11-14).
 # In a pnpm patch under patches/, upstream's text the patch only quotes skips the style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
 set -eu
@@ -108,9 +109,14 @@ def same_text(line):
 # lines were read as old text. A place is the new file's header and the line's number in that file.
 def scan(text, mode, clears=True, draft=None):
     added = []
-    # The hits of each removed line, by file and text. Only a hunk under git's own `diff --git` header
-    # counts, so a removal never reaches another file, another commit's diff or a diff git did not write.
+    # The hits of each removed line, by text. Only a hunk under git's own `diff --git` header counts, so
+    # a removal clears a line in any file of the same diff, never another commit's diff or a diff git did
+    # not write.
     removed = {}
+    # Which diff a line belongs to. Git names each file once per diff, so a file named again starts a
+    # new one: diffs read back to back never clear each other.
+    part = 0
+    named = set()
     file = None
     in_hunk = False
     old_header = False
@@ -123,7 +129,10 @@ def scan(text, mode, clears=True, draft=None):
     for number, line in enumerate(text.split('\n'), 1):
         if mode == 'diff':
             if line.startswith('diff '): file = number if line.startswith('diff --git ') else None; quotes = None
-            if line.startswith('diff --git '): in_hunk = False; path = None
+            if line.startswith('diff --git '):
+                in_hunk = False; path = None
+                if line in named: part += 1; named = set()
+                named.add(line)
             if line.startswith('@@ '):
                 in_hunk = True
                 start = re.match(r'@@ -\S+ \+(\d+)', line)
@@ -133,12 +142,12 @@ def scan(text, mode, clears=True, draft=None):
             old_header = line.startswith('--- ') and not in_hunk
             if header: path = line
             if line.startswith('-') and in_hunk and file is not None:
-                removed.setdefault((file, same_text(line[1:])), []).append(kinds_of(line[1:]))
+                removed.setdefault((part, same_text(line[1:])), []).append(kinds_of(line[1:]))
             if in_hunk and line.startswith((' ', '+')): new += 1
             quoted = in_hunk and line.startswith((' ', '+')) and quotes is not None and quotes.quoted(line[1:])
             if not line.startswith('+') or header:
                 continue
-            added.append((number, file if in_hunk else None, (path, new - 1) if in_hunk else (None, number), line[1:], quoted))
+            added.append((number, part if in_hunk and file is not None else None, (path, new - 1) if in_hunk else (None, number), line[1:], quoted))
         else:
             added.append((number, None, (None, number), line, quotes is not None and quotes.quoted(line)))
     hits = []
@@ -146,7 +155,7 @@ def scan(text, mode, clears=True, draft=None):
     for number, file, place, line, quoted in added:
         kinds = [kind for kind in kinds_of(line) if not (quoted and kind in style_only)]
         # One removed line clears one added line, and only the kinds of hit it had itself.
-        old = removed.get((file, same_text(line))) if kinds and clears else None
+        old = removed.get((file, same_text(line))) if kinds and clears and file is not None else None
         if old:
             cleared = old.pop(0)
             respaced += all(kind in cleared for kind in kinds)
@@ -203,7 +212,7 @@ else:
         bad += 1
     clean = 'leakgrep: added text clean'
 if respaced:
-    print(f'leakgrep: {respaced} flagged lines only respace a removed line of their file; read as old text', file=diagnostics)
+    print(f'leakgrep: {respaced} flagged lines only respace or move a removed line of the same diff; read as old text', file=diagnostics)
 if not bad:
     print(clean)
 sys.exit(1 if bad else 0)
