@@ -1,6 +1,6 @@
-// host.ts: the host step, which runs a lane's Electron laws and retakes its shots on the laptop,
+// host.ts: the host step, which runs a quest's Electron laws and retakes its shots on the laptop,
 // outside any box. Today's lead tooling (0064). A box has no screen and no network (0045), so a
-// ticket that changes a program's window names its host commands in the lane brief:
+// ticket that changes a program's window names its host commands in the quest brief:
 //
 //   ## host
 //
@@ -15,9 +15,9 @@
 // chain.ts runs this step between build and review, and the flow runner can run it too
 // (`Step.act("host", args)`). It answers in the five verbs:
 //
-//   skip   no command: the lane brief has no `## host` section
+//   skip   no command: the quest brief has no `## host` section
 //   done   every command exited 0 at the head; any file they changed is one signed build commit,
-//          pushed to the lane's -wip branch, so review sees it at the head it reviews
+//          pushed to the quest's -wip branch, so review sees it at the head it reviews
 //   send   to build, with the last lines of the command that failed or ran past its time limit
 //   stuck  the worktree, the commit or the push failed
 //
@@ -32,12 +32,12 @@ import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } 
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
-import { wipOf } from "../lane.ts";
+import { questKeyed, wipOf } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 
 /**
- * Minutes each host command may run, when the brief names none. The hand host runs of lane
+ * Minutes each host command may run, when the brief names none. The hand host runs of quest
  * askdesk7 took 84 s (e2e.ts --ask-desk) and 62 s (the shots' vitest run); twenty minutes leaves
  * room for a whole e2e.ts run and a cold install, and `CHAIN_HOST_MINUTES` overrides it.
  */
@@ -50,7 +50,7 @@ export const INSTALL = "nice -n 15 pnpm install --frozen-lockfile --silent";
 const TAIL = 20;
 
 /**
- * The commands a lane brief's `## host` section names: each line inside its fenced code blocks,
+ * The commands a quest brief's `## host` section names: each line inside its fenced code blocks,
  * with blank lines and `#` comments left out. Prose outside a fence is never run.
  */
 export const hostCommands = (section: string | undefined): ReadonlyArray<string> => {
@@ -93,21 +93,27 @@ const SAFE_GIT = {
   GIT_CONFIG_VALUE_1: "false",
 };
 
-export const HostArgs = Schema.Struct({
-  /** The main checkout: its git data holds the lane's branch, and its signer signs. */
+const HostFields = Schema.Struct({
+  /** The main checkout: its git data holds the quest's branch, and its signer signs. */
   main: Schema.String,
   boxes: Schema.String,
-  lane: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
+  quest: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
   ticket: Schema.String,
   branch: Schema.String.check(Schema.isStartingWith("fabrikalfa/")),
-  /** The lane's approved plan, whose owner rows the step commit checks. */
+  /** The quest's approved plan, whose owner rows the step commit checks. */
   plan: Schema.String,
   head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
-  /** The run's id, `<lane>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
+  /** The run's id, `<quest>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
   name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
   minutes: Schema.Number.check(Schema.isGreaterThan(0)),
 });
+
+/**
+ * The host step's args, as a flow saves them. A flow saved before decision 0546 names the quest
+ * `lane`: it reads as `quest`, and a new flow saves `quest`.
+ */
+export const HostArgs = Schema.Union([HostFields, HostFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
 export type HostArgs = typeof HostArgs.Type;
 
 /** What the host step hands back: its outcome, the head after it, and its log. */
@@ -224,7 +230,7 @@ const logTail = Effect.fn("host.logTail")(function* (log: string) {
 
 /**
  * Run `lines` in order in `dir`, each within `minutes`. The first that exits non-zero or runs past
- * its limit sends the lane to build with the log's last lines, as a red check would; `null` when
+ * its limit sends the quest to build with the log's last lines, as a red check would; `null` when
  * every line exited 0.
  */
 export const runCommands = Effect.fn("host.runCommands")(function* (
@@ -313,7 +319,7 @@ const short = (sha: string) => sha.slice(0, 8);
 export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   if (a.commands.length === 0) {
     return {
-      outcome: Outcome.skip("the lane brief has no `## host` section, so no host command ran"),
+      outcome: Outcome.skip("the quest brief has no `## host` section, so no host command ran"),
       head: a.head,
       log: null,
     } satisfies Hosted;
@@ -379,7 +385,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   }
 
   const head = (yield* exec(dir, "git", ["rev-parse", "HEAD"])).output.trim();
-  // Pushed before the branch moves, so a failed push leaves the lane where review would find it.
+  // Pushed before the branch moves, so a failed push leaves the quest where review would find it.
   const pushed = yield* exec(a.main, "node", [path.join(scripts, "botpush.mjs"), a.main, wipOf(a.branch), head]);
 
   if (pushed.code !== 0) {
@@ -406,27 +412,29 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
 }, Effect.scoped);
 
 /**
- * The host step's outcome as drive.ts names a step's in the lane's state file: `verb:to:reason`,
+ * The host step's outcome as drive.ts names a step's in the quest's state file: `verb:to:reason`,
  * so readers of that file need no second shape.
  */
 export const outcomeName = (o: Outcome.Outcome): string =>
   o._tag === "done" ? "done" : o._tag === "send" ? `send:${o.to}:host_failed` : `${o._tag}:host`;
 
 /**
- * Write the host step's entry into the lane's state file (`state/<lane>.json`, drive.ts's), as a
- * step's: a done step that committed moves the lane's head, so the next step starts from it.
+ * Write the host step's entry into the quest's state file (`state/<quest>.json`, drive.ts's), as a
+ * step's: a done step that committed moves the quest's head, so the next step starts from it.
  */
-export const recordInLane = Effect.fn("host.recordInLane")(function* (
-  a: Pick<HostArgs, "boxes" | "lane" | "name" | "head">,
+export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
+  a: Pick<HostArgs, "boxes" | "quest" | "name" | "head">,
   hosted: Hosted,
   ended: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const state = path.join(a.boxes, "state", `${a.lane}.json`);
+  const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
-  const saved: typeof LaneFile.Type = Schema.decodeUnknownOption(Schema.fromJsonString(LaneFile))(text).pipe(
-    Option.getOrElse(() => ({ lane: a.lane, steps: [] })),
+  const saved: typeof QuestFile.Type = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+    Option.map(questKeyed),
+    Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
+    Option.getOrElse(() => ({ quest: a.quest, steps: [] })),
   );
   const done = hosted.outcome._tag === "done";
   const entry = {
@@ -443,12 +451,12 @@ export const recordInLane = Effect.fn("host.recordInLane")(function* (
     kept: false,
     ended,
   };
-  const lane = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
-  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(lane, null, "\t")}\n`);
+  const quest = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
+  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
   yield* fs.rename(`${state}.tmp`, state);
 });
 
-/** A host entry of the lane's state file, as `recordInLane` writes it. */
+/** A host entry of the quest's state file, as `recordInQuest` writes it. */
 const HostEntry = Schema.Struct({
   step: Schema.Literal("host"),
   outcome: Schema.String,
@@ -457,15 +465,18 @@ const HostEntry = Schema.Struct({
   why: Schema.String,
 });
 
-/** The last host entry among the lane's state file's steps, as a review is told it; `null` when none ran. */
+/** The last host entry among the quest's state file's steps, as a review is told it; `null` when none ran. */
 export const lastHost = (steps: ReadonlyArray<unknown>): string | null => {
   const last = steps.findLast(Schema.is(HostEntry));
   return last === undefined ? null : `${last.outcome} at ${last.head}: ${last.why}`;
 };
 
-/** The lane's state file, read loosely: what drive.ts wrote stays as it is. */
-const LaneFile = Schema.StructWithRest(
-  Schema.Struct({ lane: Schema.String, head: Schema.optional(Schema.String), steps: Schema.Array(Schema.Unknown) }),
+/**
+ * The quest's state file, read loosely: what drive.ts wrote stays as it is, except a `lane` key
+ * from before decision 0546, which `questKeyed` reads as `quest`.
+ */
+const QuestFile = Schema.StructWithRest(
+  Schema.Struct({ quest: Schema.String, head: Schema.optional(Schema.String), steps: Schema.Array(Schema.Unknown) }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
 

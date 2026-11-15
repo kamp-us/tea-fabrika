@@ -95,7 +95,7 @@ migrate: (raw) => {
     attaches.
   - Running jobs stop. Their saved lists stay, and each comes back with
     `attach %n`, through the state check above.
-  - Reconnect never retries a refused host. The reconnect lane (tracker
+  - Reconnect never retries a refused host. The reconnect quest (tracker
     ticket 10) has that rule as a state, `refused`.
 
 ```ts
@@ -123,7 +123,7 @@ const restart = Effect.gen(function* () {
 - **Cost:** small. A button, a stop by pid, and a wait for exit.
 - **How sure: 75%.** The doubt: attaching a job back may send a half-finished
   paid call, or a real comment, a second time. One test on one real job, in
-  this lane, would settle it.
+  this quest, would settle it.
 - **Built 2026-10-26.**
   - `Found` is a type in `apps/fabrika/src/messages.ts`, with `Lost`
     (reconnecting, stopped, restarting) beside it. The window draws them in one
@@ -189,8 +189,8 @@ const restart = Effect.gen(function* () {
 
 1. The state check (section 1). It touches only the program's storage and the
    machines' schemas, so it can start now.
-2. Sections 2 and 3, after the reconnect lane (ticket 10) merges. Both change
-   `attach` and the window, which that lane changes too.
+2. Sections 2 and 3, after the reconnect quest (ticket 10) merges. Both change
+   `attach` and the window, which that quest changes too.
 
 ## What it cannot tell us
 

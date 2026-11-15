@@ -126,14 +126,14 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 **Decided 2026-11-06** (lean was 90%). **Kind: law and lint.** Builds the decided "labels never gate a build".
 
-- **What it means.** No step, gate, lane, turn, notification or sort order branches on a label. A
+- **What it means.** No step, gate, quest, turn, notification or sort order branches on a label. A
   label is for people to find, filter and group work. If code needs to branch on a thing, the
   thing is a fact with its own type.
 - **Why.** Kubernetes: labels "do not directly imply semantics to the core system" [k1]. On
   phoenix, `ready-for:agent` was what the build read, and a ruled decision stayed at
   `ready-for:human` with no way back but a hand relabel
   ([#5842](https://github.com/kamp-us/phoenix/issues/5842)). Experiment 85 found
-  the lane read one label and ignored four.
+  the quest read one label and ignored four.
 - **Linear as the builder.** The tracker owns labels; filters, grouping and views read them. No
   pipeline program subscribes to the labels stream. Linear's workflow moves on status (a guess
   from use, not from a page read).

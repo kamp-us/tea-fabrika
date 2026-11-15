@@ -48,8 +48,8 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     ),
   );
 
-  // scenario: 3, the lane's branch and its -wip backup are one lane; one open PR lists both.
-  it.effect("scenario: 3, an open PR on the branch or on its lane covers it, draft or not", () => {
+  // scenario: 3, the quest's branch and its -wip backup are one quest; one open PR lists both.
+  it.effect("scenario: 3, an open PR on the branch or on its quest covers it, draft or not", () => {
     const model = {
       branches: [branch("fabrikalfa/x", "a"), branch("fabrikalfa/x-wip", "b"), branch("fabrikalfa/y", "c")],
       ahead: { a: 2, b: 3, c: 1 },
@@ -125,14 +125,14 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   });
 
   it.effect.prop(
-    "property: every branch ahead of main with no open PR on its lane is in exactly one list",
+    "property: every branch ahead of main with no open PR on its quest is in exactly one list",
     { w: World },
     ({ w }) =>
       Effect.gen(function* () {
         const prs = w.prs.map((p, i) => pr(i + 1, p.head, p.state, p.oid));
         const r = yield* checked(w, prs);
-        const openLanes = new Set(prs.filter((p) => p.state === "OPEN").map((p) => Unlisted.laneName(p.head)));
-        const due = w.branches.filter((b) => w.ahead[b.tip] > 0 && !openLanes.has(Unlisted.laneName(b.name)));
+        const openQuests = new Set(prs.filter((p) => p.state === "OPEN").map((p) => Unlisted.questName(p.head)));
+        const due = w.branches.filter((b) => w.ahead[b.tip] > 0 && !openQuests.has(Unlisted.questName(b.name)));
         const key = (b: Branch) => JSON.stringify([b.name, b.location, b.tip]);
         const found = [...r.unlisted.map((u) => u.branch), ...r.landed.map((l) => l.branch)];
         expect(found.map(key).toSorted()).toEqual(due.map(key).toSorted());

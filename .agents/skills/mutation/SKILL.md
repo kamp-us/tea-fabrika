@@ -1,6 +1,6 @@
 ---
 name: mutation
-description: Run the hourly mutation check on what merged to main with StrykerJS, and file each real gap as a tracker ticket. Use when a brief says "use the mutation skill", for the hourly run or for a lane parked inside a mutation step.
+description: Run the hourly mutation check on what merged to main with StrykerJS, and file each real gap as a tracker ticket. Use when a brief says "use the mutation skill", for the hourly run or for a quest parked inside a mutation step.
 ---
 
 # The mutation run
@@ -15,8 +15,8 @@ beside the changed files. No new merge, no run. A merge never waits on it.
   ([below](#a-gaps-category)), and counts noise without filing it.
   A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
   counts: sampled, killed, survived, real, noise, tickets, minutes, and each real gap's category.
-- **A lane parked inside its mutation step before 0066** finishes it with the steps below, as the
-  ticket's test writer, test files only; then the lane goes on to review.
+- **A quest parked inside its mutation step before 0066** finishes it with the steps below, as the
+  ticket's test writer, test files only; then the quest goes on to review.
 
 A brief names the ticket or the merged range, and the build commit or files to mutate. This skill
 holds the rest. The fast check's settings are
@@ -63,7 +63,7 @@ The settings are [the decided fast check](../../../docs/direction/fast-and-daily
 on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option).
 `--ticket` is the ticket, `--build` the build commit, `--base` the commit whose tests are arm a.
 With a base, the sample is the pull request's own lines, `base..build`, so a tip that merged main
-samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
+samples the quest and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
 `RELATED=<paths>`, which `drive.ts` reads. They are the tests that run, never the files mutated:
 the sample is drawn from every changed product file in the diff (`PRODUCT` in `scope.ts`: `.ts`,
@@ -74,7 +74,7 @@ range first, round-robin, so every changed file gets a mutant before any gets a 
 the related tests the base has. `--plan` is the approved plan; drive passes it.
 The executable inside the container is `scripts/run.sh`, from the build commit. There it mutates
 the container's own copy in place (`IN_PLACE=1`); its header says why (ticket 457: without it a
-lane read 0 kills of 61). A lane built before that fix samples with the old `run.sh` until it
+quest read 0 kills of 61). A quest built before that fix samples with the old `run.sh` until it
 merges main.
 
 **The run happens in a container, never on the host and never in an agent's sandbox**

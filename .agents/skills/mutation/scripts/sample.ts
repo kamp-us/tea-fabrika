@@ -110,7 +110,7 @@ export const sample = ({
   // cheapest range over a changed line no earlier range covers, the earlier line and then the
   // seed breaking ties. Cheapest first: a range enclosing a whole block selects every mutant in
   // it, so a few such picks filled the cap from the first files and left later ones none
-  // (ticket 655, lane t389).
+  // (ticket 655, quest t389).
   const files = [...new Set(changed.map((line) => line.file))].sort(compare);
   const open = new Map(files.map((file) => [file, new Set(changed.filter((c) => c.file === file).map((c) => c.line))]));
   const firstOpen = (candidate: Candidate) => {
@@ -178,8 +178,8 @@ export const sample = ({
 
 /**
  * Which diff the sample reads: `since..build` when a `since` is given, else the build commit
- * against its first parent. A lane whose tip is the lead's merge of main has main's lines in
- * `build^..build`, so drive's run samples from the lane's base, the pull request's own lines
+ * against its first parent. A quest whose tip is the lead's merge of main has main's lines in
+ * `build^..build`, so drive's run samples from the quest's base, the pull request's own lines
  * (p14-mutation-r1, 2026-11-10; ticket 568).
  */
 export const diffRange = (build: string, since: string | undefined): readonly [string, string] => [
@@ -229,7 +229,7 @@ if (import.meta.main) {
 
     const hunk = /^@@ .* \+(\d+)(?:,(\d+))? @@/.exec(line);
 
-    // Lead tooling other than lane code is out of the run (0089).
+    // Lead tooling other than quest code is out of the run (0089).
     if (hunk && inScope(file)) {
       const start = Number(hunk[1]);
 

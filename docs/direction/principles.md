@@ -26,7 +26,7 @@ Ticket #7, the running example, read against all four:
 ```text
 the owner works ticket #7 in t1 and summons claude there               1, 3: one tile, the person's
 claude runs `pipeline --ticket 7 | ticket`; its rows say claude         1: the agent signs its own work
-the lane asks "approve plan v1"; the inbox shows one ask, nothing more  2: only what needs the person
+the quest asks "approve plan v1"; the inbox shows one ask, nothing more 2: only what needs the person
 the owner selects the plan span, asks "why so slow?"; the span rides    2: no re-explaining
 claude reads the same plan as typed data through a tool                  4: one shape, two readers
 ```

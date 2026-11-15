@@ -40,10 +40,10 @@ import {
   endName,
   FINISH,
   firstEventAt,
-  freeLane,
-  holdLane,
+  freeQuest,
+  holdQuest,
   holdsElectron,
-  laneRunning,
+  questRunning,
   machine,
   NO_ESCALATION,
   phasesIn,
@@ -54,14 +54,14 @@ import {
   STEPS,
   tailFor,
 } from "./drive.ts";
-import { boxTree } from "./lane.ts";
+import { boxTree } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
 const ask = {
-  lane: "l",
+  quest: "l",
   step: "build" as const,
   agent: "codex" as const,
   model: "gpt-6-astra",
@@ -554,7 +554,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   });
 
   // Plants: record a refusal as stuck:box_failed, give it the stuck exit, keep its box, or let it
-  // move the lane's head. The stuck rate then counts steps no agent ran.
+  // move the quest's head. The stuck rate then counts steps no agent ran.
   it("a refusal ends at once as refused:<check>, exit 3, nothing kept, and never reads as stuck", () => {
     fc.assert(
       fc.property(check, detail, (c, d) => {
@@ -651,7 +651,7 @@ describe("T566 a mutation step while another Docker box runs is refused before i
   });
 });
 
-describe("T569 a review reads the lane's newest mutation report in its prompt, today's tooling", () => {
+describe("T569 a review reads the quest's newest mutation report in its prompt, today's tooling", () => {
   const stepName = fc.constantFrom("plan", "tests", "build", "mutation", "review");
   const path = fc.stringMatching(/^\/b\/[a-z0-9]{1,6}\.md$/);
   const row = fc.record({ step: stepName, report: fc.option(path, { nil: null }) });
@@ -693,9 +693,9 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
     sha: fc.stringMatching(/^[0-9a-f]{40}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
-  const lane = new Set(["tests", "build"]);
+  const quest = new Set(["tests", "build"]);
   const held = (a: { reason: string; step: string | undefined }) =>
-    a.reason !== "unsigned_commit" && !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
+    a.reason !== "unsigned_commit" && !(a.reason === "stale_link" && !(a.step !== undefined && quest.has(a.step)));
 
   // Plants: print only the last lines of JSON; drop the commit; name a waived stale link; name a
   // missing signature.
@@ -703,7 +703,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) => {
         const out = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a })).join("\n");
-        const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, lane);
+        const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
         const named = answers
           .filter(held)
           .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
@@ -722,13 +722,13 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 });
 
 // Decision 0161: a hand-run commit is plain, and no hand-run script refuses a step for a missing
-// signature. p34cs4, 2026-11-13: a lane of ten plain commits ended stuck:unsigned.
+// signature. p34cs4, 2026-11-13: a quest of ten plain commits ended stuck:unsigned.
 describe("0161 a missing signature never holds a step, and the kept checks still do, today's tooling", () => {
   const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
-  const lane = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
+  const quest = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
   const plain = fc.array(sha, { minLength: 1, maxLength: 12 }).map((shas) => ({
     commits: shas.length,
-    // The commits check's own answer for a lane of plain commits: one stuck line each, and exit 1.
+    // The commits check's own answer for a quest of plain commits: one stuck line each, and exit 1.
     check: {
       code: 1,
       out: shas.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })).join("\n"),
@@ -755,9 +755,9 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   });
 
   // Plants: hold a missing signature; ask each commit for a `fabrika` note.
-  it("property: a lane of plain commits is held by nothing, and the step's done is done", () => {
+  it("property: a quest of plain commits is held by nothing, and the step's done is done", () => {
     fc.assert(
-      fc.property(plain, lane, fc.constantFrom("tests", "build", "mutation"), ({ commits, check }, steps, step) => {
+      fc.property(plain, quest, fc.constantFrom("tests", "build", "mutation"), ({ commits, check }, steps, step) => {
         const unsigned = heldBy(check, steps);
         expect(unsigned).toEqual([]);
         expect(decide({ ...ask, step }, read(commits, unsigned), done).outcome).toEqual({
@@ -773,7 +773,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   // Plants: waive every answer once one is a missing signature; pass any exit 1.
   it("property: a rule the check still gives holds the step beside any plain commits, and names itself", () => {
     fc.assert(
-      fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), lane, ({ commits, check }, rules, steps) => {
+      fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), quest, ({ commits, check }, rules, steps) => {
         const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
         const unsigned = heldBy({ ...check, out }, steps);
         const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
@@ -801,7 +801,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   // Plants: drop the leak check; drop the exam-path check; drop the moved-head check.
   it("property: with plain commits, a leak, a build on an exam path and a review that moved the head are still refused", () => {
     fc.assert(
-      fc.property(plain, lane, ({ commits, check }, steps) => {
+      fc.property(plain, quest, ({ commits, check }, steps) => {
         const clean = read(commits, heldBy(check, steps));
         const leak = decide(ask, { ...clean, leaks: ["src/a.ts:3"] }, done);
         expect(nameOf(leak.outcome)).toBe("stuck:leak");
@@ -843,7 +843,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
   const manifest = fc.constantFrom("package.json", "apps/fabrika/package.json", "pnpm-workspace.yaml");
 
   // Plant: trust the step's own answer. themes build2 (ticket 385): a box could not refresh the
-  // lockfile, answered send tests, and the lane looped build -> tests -> build.
+  // lockfile, answered send tests, and the quest looped build -> tests -> build.
   it("a lockfile left behind is an ask for the lead, whatever the step answered, and names each manifest", () => {
     fc.assert(
       fc.property(answer, fc.uniqueArray(manifest, { minLength: 1 }), (report, paths) => {
@@ -945,7 +945,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
   });
 
   // Ticket 850: a review asked for plant records that already ran, the tests step answered them with
-  // no file change, and the gate ended it stuck:no_commit until the budget stopped the lane
+  // no file change, and the gate ended it stuck:no_commit until the budget stopped the quest
   // (acpcancel and sjob1, 2026-11-11). Plants run once, all red: drop the plants check (no plants
   // passes); drop the clean-tree check (changed files pass); keep the old stuck for every tests step.
   it("property: a tests step with no commit is done only when it names plants and left its tree clean", () => {
@@ -1152,7 +1152,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
   const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
-  const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
   const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", agent: "codex" | "claude", box: string) =>
     Effect.gen(function* () {
       const rows = {
@@ -1189,7 +1189,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
   // Plants: run every step in BOXES; run a plan in a box; run a review on the row that writes.
   it("a plan reads the main checkout and every other step works in its own box, never in a folder above it", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, agent, name, n) =>
+      fc.asyncProperty(steps, agent, quest, fc.integer({ min: 1, max: 99 }), (step, agent, name, n) =>
         drafted(step, agent, `${name}-${step}${n}`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
@@ -1210,7 +1210,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 
   it("on Codex a plan and a review start on the row that only reads, and a Claude step never starts on a Codex row", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, (step, agent, name) =>
+      fc.asyncProperty(steps, agent, quest, (step, agent, name) =>
         drafted(step, agent, `${name}-${step}1`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
@@ -1235,7 +1235,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
   // Plants: count only the box folders; reuse the highest number taken. p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
-  it("property: the next run id is held by no file an older run of that lane and step left", () => {
+  it("property: the next run id is held by no file an older run of that quest and step left", () => {
     const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
       fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
@@ -1260,6 +1260,17 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
     rmSync(boxes, { recursive: true, force: true });
     expect(empty).toBe("p12-build1");
     expect(next).toBe("p12-build3");
+  });
+
+  // Plant: refuse or start over a state file that says `lane`, so an old one's boxes are taken again.
+  it("scenario: a state file drive wrote before decision 0546, naming the quest `lane`, still holds its boxes' run ids", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-names-"));
+    mkdirSync(join(boxes, "state"));
+    const old = { lane: "p12", ticket: "12", branch: "fabrikalfa/p12", steps: [{ step: "build", box: "p12-build4" }] };
+    writeFileSync(join(boxes, "state", "p12.json"), `${JSON.stringify(old, null, "\t")}\n`);
+    const next = RunId.next("p12", "build", runNames(boxes, "p12"));
+    rmSync(boxes, { recursive: true, force: true });
+    expect(next).toBe("p12-build5");
   });
 
   // Plants: return the path whenever the file exists; compare to the ms without the whole second.
@@ -1460,32 +1471,32 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   });
 });
 
-describe("one live process drives a lane, today's tooling", () => {
+describe("one live process drives a quest, today's tooling", () => {
   // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.
   // p39s1, 2026-11-11: a second chain started 18 s after the first, and both took p39s1-tests2.
-  it("scenario: the lane is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
-    const boxes = mkdtempSync(join(tmpdir(), "drive-lane-"));
+  it("scenario: the quest is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-quest-"));
     const lock = join(boxes, "state", "l.lock");
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
     const live = process.ppid;
 
-    expect(holdLane(boxes, "l")).toBeNull();
+    expect(holdQuest(boxes, "l")).toBeNull();
     expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
-    expect(holdLane(boxes, "l")).toBeNull();
+    expect(holdQuest(boxes, "l")).toBeNull();
     writeFileSync(lock, String(live));
-    expect(holdLane(boxes, "l")).toBe(live);
-    freeLane(boxes, "l");
+    expect(holdQuest(boxes, "l")).toBe(live);
+    freeQuest(boxes, "l");
     expect(readFileSync(lock, "utf8")).toBe(String(live));
     writeFileSync(lock, String(dead));
-    expect(holdLane(boxes, "l")).toBeNull();
-    freeLane(boxes, "l");
+    expect(holdQuest(boxes, "l")).toBeNull();
+    freeQuest(boxes, "l");
     const gone = existsSync(lock);
     rmSync(boxes, { recursive: true, force: true });
     expect(gone).toBe(false);
   });
 
-  it("scenario: a step started while another process drives its lane is refused before any box is made", () => {
-    const dir = mkdtempSync(join(tmpdir(), "drive-lane-"));
+  it("scenario: a step started while another process drives its quest is refused before any box is made", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-quest-"));
     const boxes = join(dir, "boxes");
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "brief");
@@ -1500,8 +1511,8 @@ describe("one live process drives a lane, today's tooling", () => {
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(3);
     expect(JSON.parse(r.stdout)).toMatchObject({
-      outcome: "refused:lane_running",
-      reason: laneRunning("l", process.pid),
+      outcome: "refused:quest_running",
+      reason: questRunning("l", process.pid),
     });
     expect(made).toEqual(["state"]);
     expect(still).toBe(String(process.pid));

@@ -1,14 +1,14 @@
-// typecheck.ts: what CI's `typecheck` job says about a lane's pushed head. Today's lead tooling
+// typecheck.ts: what CI's `typecheck` job says about a quest's pushed head. Today's lead tooling
 // (0064). No push waits on a laptop typecheck: CI runs it (0133), as its own job in check.yaml, so
 // its answer comes the moment that one job ends, never after the whole run. chain.ts reads it right
 // after the pull request opens, before loosening.sh:
 //
-//   green    the job passed: the lane goes on to loosening.sh
-//   red      it failed with type errors: the lane goes back to tests when every error is in an
+//   green    the job passed: the quest goes on to loosening.sh
+//   red      it failed with type errors: the quest goes back to tests when every error is in an
 //            exam path (exam-paths.json, read by step-commit's exam.py), else to build, with the
 //            error lines from the job's log
 //   skipped  it could not be read, it failed with no type error, it ended another way (canceled,
-//            skipped), or it did not end within the time limit: the lane goes on, and its last
+//            skipped), or it did not end within the time limit: the quest goes on, and its last
 //            line says the typecheck gave no answer and why
 //
 // The wait polls that one job's check run at the head, every `every` seconds, within `minutes`. A
@@ -30,7 +30,7 @@ export type Verdict = typeof Verdict.Type;
 export const JOB = "typecheck";
 
 /**
- * Minutes the lane waits for the job to end, from the push. The job's own limit is 10 minutes; a
+ * Minutes the quest waits for the job to end, from the push. The job's own limit is 10 minutes; a
  * queue on a busy day adds to it, so twice that. `CHAIN_TYPECHECK_MINUTES` overrides it.
  */
 export const MINUTES = 20;
@@ -143,7 +143,7 @@ export const errorsIn = (output: string): ReadonlyArray<Found> => {
 export type Ended = { readonly conclusion: string | null; readonly output: string };
 
 /**
- * The Check, pure: what the ended job means for the lane. `success` is green. A `failure` with
+ * The Check, pure: what the ended job means for the quest. `success` is green. A `failure` with
  * error lines is red, sent to tests when every error's path is in `exam`, else to build, with at
  * most `LINES` lines. A failure with no error line is no answer about the code, so it is skipped
  * with the log's last line; so is any other ending, with its name.
@@ -170,7 +170,7 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
   return Verdict.cases.red.make({ to, lines });
 };
 
-/** One line for the lane's log: green, red with where it goes and its first line, or why not. */
+/** One line for the quest's log: green, red with where it goes and its first line, or why not. */
 export const summary = (v: Verdict): string =>
   v._tag === "green" ? "green" : v._tag === "red" ? `red, to ${v.to}: ${v.lines[0] ?? ""}` : `no answer: ${v.reason}`;
 
@@ -201,7 +201,7 @@ class Pending extends Schema.TaggedError<Pending>()("Pending", { reason: Schema.
 export const wait = Effect.fn("typecheck.wait")(
   function* (a: Args) {
     if (!/^[0-9a-f]{40}$/.test(a.head)) {
-      return notRun(`the lane has no head to read CI at (${a.head || "none"})`);
+      return notRun(`the quest has no head to read CI at (${a.head || "none"})`);
     }
 
     const checks = yield* Checks;

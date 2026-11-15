@@ -1582,7 +1582,7 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
 // --- T1041 L9 to L12: a full inbox, the reader's ack and the chunked send, through real runners ---
 //
-// Written before the build (docs/plan/lanes/t1041-PLAN.md). The contract these laws pin:
+// Written before the build (docs/plan/quests/t1041-PLAN.md). The contract these laws pin:
 //   ProgramMailLedger.layer({ grants, cap }): a send answers `full` and saves nothing at the cap.
 //   MailDeliveryLive: on `full` it wakes the target, then fails with `full`.
 //   Runner: a program's `send` folds `send_err { error: { _tag: "full" } }`; the reader's runner

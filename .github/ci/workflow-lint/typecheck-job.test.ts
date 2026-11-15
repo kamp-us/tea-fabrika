@@ -5,7 +5,7 @@ import { type Plant, rejects } from "./wiring.test-support.ts";
 // unrelated error cannot mask it.
 
 const plants: Plant[] = [
-  // The lane reads the typecheck job's answer alone (0133), so the typecheck lives there only.
+  // The quest reads the typecheck job's answer alone (0133), so the typecheck lives there only.
   [
     "the typecheck job runs no typecheck",
     (w) => {
