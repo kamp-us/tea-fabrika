@@ -1,7 +1,7 @@
 ---
 id: 0525
 title: Today's version is frozen, so nothing builds on it, no test or CI job runs on it, its tests are removed, and all new work, UX work included, goes into next/
-status: accepted
+status: amended-in-part by [0533](0533-today-keeps-its-tests-off-ci.md)
 date: 2026-11-13
 tags: [todays-version, next, freeze, ci, tests, clean-slate]
 ---

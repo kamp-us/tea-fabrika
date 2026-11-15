@@ -6,7 +6,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 // Ticket 500, today's tooling (owner, 2026-11-09): an added line is old text when the same diff
-// removes, from the same file, a line equal to it once each run of spaces and tabs is one space,
+// removes, from any of its files (0047, amended 2026-11-14), a line equal to it once each run of
+// spaces and tabs is one space,
 // the ends are trimmed and one last ; or , is dropped. Every diff here is one git itself wrote,
 // with the flags the bot's push reads its diff with, unless a law says it is written by hand.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
@@ -169,17 +170,29 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
   const old = `\tkeep ${word};`;
   const now = `  keep  ${word}`;
 
-  // pinned: the same text removed from one file and added to another is new text there.
-  // Plant: key removed lines by text alone.
-  it("pinned: a line removed from another file clears nothing", () => {
+  // pinned: the same text removed from one file and added to another is old text: it was already in
+  // the tree the diff starts from (0047, amended 2026-11-14). A move between files, as a split of one
+  // test file into two, adds nothing new. Plant: key removed lines by file and text again.
+  it("pinned: a line moved from another file of the same diff is old text", () => {
     lab(({ diff, hits }) => {
-      expect(hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now] }))).toBe(1);
+      expect(hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now] }))).toBe(0);
+    });
+  });
+
+  // pinned: one removed line still clears one added line, across files too. Two added copies against
+  // one removed copy leave one hit. Plant: clear every added copy of a removed text.
+  it("pinned: one line removed from one file clears only one of two copies added elsewhere", () => {
+    lab(({ diff, hits }) => {
+      expect(
+        hits(diff({ "a.txt": [old], "b.txt": ["safe"] }, { "a.txt": ["safe"], "b.txt": ["safe", now, now] })),
+      ).toBe(1);
     });
   });
 
   // scenario: git pairs a renamed file as one file, and then drops its unchanged lines from the diff
-  // already. With rename detection off the new path is a new file, and all of it is new text.
-  it("scenario: a renamed file is one file when git says so, and a new file when it does not", () => {
+  // already. With rename detection off the old path's lines are removed and the new path's added, so
+  // the moved lines are old text either way.
+  it("scenario: a renamed file's lines are old text whether git pairs the rename or not", () => {
     lab(({ diff, hits }) => {
       const rest = Array.from({ length: 20 }, (_, n) => `line ${n}`);
       const before = { "a.txt": [...rest, old] };
@@ -187,7 +200,7 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
       const renamed = diff(before, after, "-M");
       expect(renamed).toContain("rename from a.txt");
       expect(hits(renamed)).toBe(0);
-      expect(hits(diff(before, after, "--no-renames"))).toBe(1);
+      expect(hits(diff(before, after, "--no-renames"))).toBe(0);
     });
   });
 

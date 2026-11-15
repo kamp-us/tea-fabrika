@@ -321,10 +321,9 @@ type World = {
   readonly history: Map<Pair, Array<string>>;
   /** Responders a brain exit stopped and no restart has replaced. */
   readonly stopped: Set<Pair>;
-  /** Responders whose wake hangs until the walk releases it. */
-  readonly stalled: Map<Pair, Deferred.Deferred<void>>;
+  /** Responders whose wake hangs until the walk releases it: `entered` once a wake reaches the stall. */
+  readonly stalled: Map<Pair, { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }>;
   readonly holds: Map<string, { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }>;
-  readonly reached: Set<Pair>;
   readonly wakes: Map<string, Deferred.Deferred<void>>;
   readonly wakeTimes: Map<string, number>;
   readonly fault: { mail: boolean; ack: boolean; wake: boolean };
@@ -407,8 +406,8 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
         if (stall !== undefined && name === responderName(pair as Pair)) {
-          world.reached.add(pair as Pair);
-          yield* Deferred.await(stall);
+          yield* Deferred.succeed(stall.entered, undefined);
+          yield* Deferred.await(stall.release);
         }
 
         if (world.fault.wake) {
@@ -566,7 +565,6 @@ const walk = (
       stopped: new Set(),
       stalled: new Map(),
       holds: new Map(),
-      reached: new Set(),
       wakes: new Map(),
       wakeTimes: new Map(),
       fault: { mail: false, ack: false, wake: false },
@@ -765,7 +763,9 @@ const walk = (
         stall: world.stalled.size === 0 && pairs.length > 1,
         settle: true,
         reopen: world.stalled.size === 0,
-        evict: world.reached.size > 0 && world.background.length > 0,
+        evict:
+          [...world.stalled.values()].some((stall) => Deferred.isDoneUnsafe(stall.entered)) &&
+          world.background.length > 0,
         wakeDuringDrain:
           idle.some((k) => !world.stopped.has(k)) &&
           world.stalled.size === 0 &&
@@ -820,6 +820,7 @@ const walk = (
             span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
           };
           const work = runner(requesterName(k)).msg(incoming);
+          const stall = world.stalled.get(k);
 
           if (move === "wakeDuringDrain" || move === "holdAlarm") {
             const name = responderName(k);
@@ -870,18 +871,23 @@ const walk = (
             const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
             expect(alarm, "M1, M4: the wake behind the drain saves the next alarm").toBeDefined();
             expect(alarm?.at).toBeLessThanOrEqual(world.wakeTimes.get(name) ?? Number.NaN);
-          } else if (world.stalled.has(k)) {
+          } else if (stall !== undefined) {
             const background = yield* Effect.forkChild(work.pipe(Effect.result));
             world.background.push(background);
 
-            // The fork is only scheduled: let it run until its start letter lands, before the stalled wake.
-            for (let turn = 0; turn < 1000; turn++) {
-              if (world.reached.has(k) || background.pollUnsafe() !== undefined) {
-                break;
-              }
-
-              yield* Effect.yieldNow;
-            }
+            // The start ends in one of two ways, each after its letter is saved or refused: its Send
+            // reaches the stalled wake, or the call returns. Wait for that, never for a count of
+            // scheduler turns: the runner hashes each input on libuv's thread pool, so a busy machine
+            // spends more turns before the letter lands (ticket 973).
+            yield* Effect.raceFirst(Deferred.await(stall.entered), Fiber.await(background)).pipe(
+              Effect.timeoutOrElse({
+                duration: joinLimit,
+                orElse: () =>
+                  Effect.sync(() =>
+                    expect.fail(`${law}: ${requesterName(k)}'s start reached neither the stall nor its end`),
+                  ),
+              }),
+            );
           } else {
             const healthy = !world.fault.mail && !world.fault.ack && !world.fault.wake;
             // An earlier Send whose answer was lost stays owed until its own alarm: S1 keeps that one.
@@ -1008,7 +1014,7 @@ const walk = (
         }
         case "stall": {
           const k = choose(pairs, cell.pick);
-          world.stalled.set(k, yield* Deferred.make<void>());
+          world.stalled.set(k, { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() });
           break;
         }
         case "settle": {
@@ -1041,11 +1047,10 @@ const walk = (
           }
 
           for (const stall of world.stalled.values()) {
-            yield* Deferred.succeed(stall, undefined);
+            yield* Deferred.succeed(stall.release, undefined);
           }
 
           world.stalled.clear();
-          world.reached.clear();
           yield* Scope.close(scope, Exit.void);
           yield* store.reopen;
           scope = yield* Scope.make();
@@ -1071,7 +1076,7 @@ const walk = (
     world.fault.wake = false;
 
     for (const stall of world.stalled.values()) {
-      yield* Deferred.succeed(stall, undefined);
+      yield* Deferred.succeed(stall.release, undefined);
     }
 
     world.stalled.clear();
@@ -1205,7 +1210,6 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
             stopped: new Set(),
             stalled: new Map(),
             holds: new Map(),
-            reached: new Set(),
             wakes: new Map(),
             wakeTimes: new Map(),
             fault: { mail: false, ack: false, wake: false },
