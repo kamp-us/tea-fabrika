@@ -2019,7 +2019,6 @@
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/telemetry/**",
-        "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/src/browser/**",
         "next/programs/counter/src/*",
         "next/programs/inbox/src/*"
