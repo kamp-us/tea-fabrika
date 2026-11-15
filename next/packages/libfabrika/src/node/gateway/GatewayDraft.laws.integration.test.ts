@@ -19,6 +19,7 @@ import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import * as LedgerStreamsSql from "../../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
+import { MailWakeups } from "../../runtime/MailWakeups.ts";
 import type { Sql } from "../../Sql.ts";
 import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";
@@ -65,6 +66,8 @@ const open = Effect.gen(function* () {
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
       Id.Generator.layer,
+      // A draft asks for no job, so no wake: one would be a fault in the door.
+      Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in the draft laws") }),
       RateLimiter.layer.pipe(
         Layer.provide(RateLimiterSql.layer(sql, { build: options.build, policy: options.rateLimit })),
       ),
