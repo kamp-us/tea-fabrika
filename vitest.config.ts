@@ -6,6 +6,7 @@ import { configDefaults, defineConfig, type Plugin } from "vitest/config";
 import { parseCLI } from "vitest/node";
 import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
+import { changedFiles } from "./vitest.changed.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
@@ -15,6 +16,7 @@ const TODAY = ["apps/*/src/**/*.test.ts", "packages/*/src/**/*.test.ts", "progra
 const TOOLING = [
   "oxlint-plugins/*.test.ts",
   "vitest.shards.test.ts",
+  "vitest.changed.test.ts",
   ".github/ci/*.test.ts",
   "scripts/*.test.ts",
   // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as 0089's hourly
@@ -44,6 +46,8 @@ const EXCLUDE = [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixture
 const shared = {
   setupFiles: ["./scripts/vitest.setup.ts"],
   // A changed trigger selects every test in CI. Tests read these files without importing them.
+  // `--changed` swaps a lockfile, `tsconfig*.json` or `package.json` it can tie to packages for
+  // those packages' tests, and leaves the rest to select all (vitest.changed.ts).
   // `.github/` is not one (0534): no next/ test reads it, so a CI change no longer runs all of
   // next/, and the tooling tests that read it reach it through `githubReads` below.
   forceRerunTriggers: [
@@ -230,8 +234,34 @@ const githubReads: Plugin = {
   },
 };
 
+// vitest.shards.ts reads its table, vitest.shards.json, from disk, so that a row edit is no file the
+// config imports, which would select every test. The table is that module's watched file here, so
+// `--changed` follows it as an edge: a row edit selects the tests that import vitest.shards.ts.
+const shardTable: Plugin = {
+  name: "fabrika-shard-table",
+  transform(_code, id) {
+    if (relative(root, id) === "vitest.shards.ts") {
+      this.addWatchFile(join(root, "vitest.shards.json"));
+    }
+
+    return null;
+  },
+};
+
 export default defineConfig({
-  test: { ...shared, maxWorkers: workers, projects: [...projects] },
+  test: {
+    ...shared,
+    maxWorkers: workers,
+    projects: [...projects],
+    // What `--changed` starts from: git's changed files, with a lockfile, tsconfig or package.json
+    // change narrowed to the packages it reaches (vitest.changed.ts). Vitest reads it from the root.
+    experimental: { vcsProvider: changedFiles },
+  },
   // Vite runs this hook only while resolving a run. Importers can merge or spread the object.
-  plugins: [{ name: "fabrika-local-test-limits", enforce: "post", config: localLimits }, scriptReads, githubReads],
+  plugins: [
+    { name: "fabrika-local-test-limits", enforce: "post", config: localLimits },
+    scriptReads,
+    githubReads,
+    shardTable,
+  ],
 });

@@ -53,7 +53,7 @@ export const visualFiles = (root: string) => selected(root, "next-visual");
 /** Write the lint diagnostic for each stale row and return its exit code. */
 export const main = (rows: readonly string[], write: (line: string) => void): number => {
   for (const path of rows) {
-    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts`);
+    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`);
   }
 
   return rows.length === 0 ? 0 : 1;
