@@ -4,8 +4,9 @@
 // start, as `client-protocol.test.ts` runs L9. The tab's draft echoes pass through a route that can
 // hold them, so a letter is seen drawn before its echo. Written before `@kampus/fabsh` and the
 // `fabsh:1` tile; until the build adds them, it fails on its missing import. It needs Alchemy, workerd
-// and Chromium, so it runs in CI's end-to-end job. L18, the same suite on the real built Electron app,
-// is host-only and owed to P19 slice 3's Electron client (0178).
+// and Chromium, so it runs only on the 3-hour schedule, or on a pull request that asks for its visual
+// run (0536). L18, the same suite on the real built Electron app, is host-only and owed to P19 slice
+// 3's Electron client (0178).
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Schema } from "effect";
@@ -214,6 +215,11 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
             yield* Effect.sleep("100 millis");
           }
 
+          // Measure what a person sees: the next frame the tab draws. Chromium scrolls the input to
+          // its caret in the key's own task, after the render that key caused, and fires `scroll`
+          // only in the next frame, before that frame's animation callbacks. Between the key and
+          // that frame the layer is one scroll behind, and no drawn frame shows it so.
+          yield* run(() => field.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done()))));
           return yield* measure(field, line);
         }),
     };

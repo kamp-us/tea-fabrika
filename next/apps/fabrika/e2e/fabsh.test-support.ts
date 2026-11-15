@@ -7,8 +7,8 @@ import { fabshWindow, said } from "@kampus/fabsh/window";
 // and `help`'s answer is in the scrollback; a reload keeps the scrollback and the history. Each
 // backend only turns its actions and observations into the suite's words, as `client-protocol`'s
 // suite does. Written before `@kampus/fabsh` and the `fabsh:1` tile; until the build adds them, this
-// file fails on its missing import. It needs Alchemy, workerd and Chromium, so it runs in CI's
-// end-to-end job, never on a laptop step.
+// file fails on its missing import. It needs Alchemy, workerd and Chromium, so it runs only on the
+// 3-hour schedule, or on a pull request that asks for its visual run (0536).
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
