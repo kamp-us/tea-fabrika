@@ -511,7 +511,9 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     expect(signals[0], "the sampler signals the old process").toMatchObject({ pid: OLD.pid, signal: "SIGTERM" });
     return signals[0]!;
   });
-  return { dev, life, signals, requests, world, first, rows, replaced, term, listen };
+  // What the runtime reports, as Alchemy's lifecycle hook hears it.
+  const report = (event: RuntimeEvent) => observe(event);
+  return { dev, life, signals, requests, world, first, rows, replaced, term, listen, observe: report };
 });
 
 const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
@@ -749,4 +751,68 @@ effectIt.effect.prop(
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }) } },
+);
+
+// A pid that names no one process: zero, below zero, or not whole. `kill` sends to a whole process
+// group for zero and below.
+const NoPid = Schema.Union([
+  Schema.Literal(0),
+  between(-99_999, -1),
+  Schema.Finite.check(Schema.isBetween({ minimum: -99_999, maximum: 99_999 }), Schema.makeFilter((n: number) => !Number.isInteger(n))),
+]);
+
+// L13. Plant: let a start with any number reach the state: the first start answers, or the sampler
+// samples and signals a pid that is no process.
+effectIt.effect.prop(
+  "L13 a start that reports a pid of zero, below zero or not whole is refused, so the first start fails as bad_pid and a later one is never sampled or signaled",
+  { pid: NoPid, first: Schema.Boolean },
+  ({ pid, first }) =>
+    replaced(
+      Effect.gen(function* () {
+        if (first) {
+          const fs = yield* FileSystem.FileSystem;
+          const home = yield* fs.makeTempDirectoryScoped({ prefix: "mr-pid-" });
+          const kill = yield* Effect.acquireRelease(
+            Effect.sync(() => vi.spyOn(process, "kill").mockReturnValue(true)),
+            (spy) => Effect.sync(() => spy.mockRestore()),
+          );
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ value: null })),
+            ),
+            (spy) => Effect.sync(() => spy.mockRestore()),
+          );
+          const exit = yield* startDev({ name: REPLACE, port: 18787, build: "test", home, ...BRAIN }, (local) =>
+            Effect.gen(function* () {
+              Context.get(local, RuntimeLifecycle)({ type: "start", worker: REPLACE, pid });
+              yield* listenOn(local, OLD.port);
+            }),
+          ).pipe(Effect.provide(rssLayer(() => 600_000)), Effect.scoped, Effect.exit);
+          const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
+          expect(error?._tag === "Some" ? error.value : exit).toMatchObject({ _tag: "ControlError", reason: "bad_pid" });
+          expect(kill).not.toHaveBeenCalled();
+          const rows = yield* (yield* brainOutbox(home)).pending;
+          expect(rows.filter((row) => row._tag === "started")).toEqual([]);
+          return;
+        }
+
+        // The first process crashes before any sample, and its replacement reports no process's pid.
+        const w = yield* replaceWorld({ limit: 500_000_000, kib: 600_000, grace: 5000, honors: false });
+        const exit: Ended = { exitCode: 1, signal: null, stderr: "" };
+        w.observe({ type: "exit", worker: REPLACE, exit });
+        w.observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
+        w.observe({ type: "start", worker: REPLACE, pid });
+        yield* until("the crash's exited row", w.rows, (all) => all.some((row) => row._tag === "exited"));
+
+        for (let n = 0; n < 5; n++) {
+          yield* TestClock.adjust("1 second");
+          yield* TestClock.withLive(Effect.sleep("10 millis"));
+        }
+
+        expect(w.world.asked, "no sample of any process").toBe(0);
+        expect(w.signals).toEqual([]);
+        expect((yield* w.rows).filter((row) => row._tag === "started" && row.after === w.first)).toEqual([]);
+      }),
+    ),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },
 );
