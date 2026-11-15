@@ -54,3 +54,5 @@ holds no pipe permission of its own. Every permission is one system
 - Not decided here, and not in scope: two brains talking to each other.
 - Not decided here: the rule itself (who may connect what), the shape of the record, and the shape
   of the mail right in 0526's model. The note holds a sketch of each.
+- [0553](0553-a-pipe-sends-one-way.md) says one thing about the record: it holds both declared
+  shapes, the writer's output and the reader's input. The rest of this file still holds.
