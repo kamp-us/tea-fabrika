@@ -1,5 +1,4 @@
 Approved by the lead agent, builds 0061, 0178, 0069; body d295c286e6dc
-
 Plancheck-Version: 3
 
 # Plan: an agent's helper processes run as Node, never as an app in the Dock, and each one ends when its agent does, in today's version
