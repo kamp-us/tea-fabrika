@@ -149,7 +149,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a quest stops at its second
   sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
   named, located and inside the plan, when the lead decides one more fix round itself
-  ([0562](./.decisions/0562-lead-decides-further-fix-rounds.md)); no number caps a pull
+  ([0564](./.decisions/0564-lead-decides-further-fix-rounds.md)); no number caps a pull
   request's size ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)); the lead merges once
   every step passed, and only real loosening of a law or a new design call waits on the owner
   ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)); owed work needs no owner

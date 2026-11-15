@@ -1,7 +1,7 @@
 ---
 id: 0177
 title: After a review sends a lane back, one fix agent writes the law and the fix together, and the same reviewer is resumed to check only that fix
-status: amended-in-part by [0562](0562-lead-decides-further-fix-rounds.md)
+status: amended-in-part by [0564](0564-lead-decides-further-fix-rounds.md)
 date: 2026-11-13
 tags: [lead, lane, review, send, fix, recheck, tests, build, exam, hand-run]
 ---
@@ -48,7 +48,7 @@ Three fresh agents become one, and the reviewer is not started again from nothin
 does not move.
 
 Since 2026-11-15 a second send-back does not always stop the lane: the lead may decide one more fix
-round, of the same shape ([0562](0562-lead-decides-further-fix-rounds.md)). The rest of this file
+round, of the same shape ([0564](0564-lead-decides-further-fix-rounds.md)). The rest of this file
 holds.
 
 ## Context

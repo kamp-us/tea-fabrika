@@ -1,12 +1,12 @@
 ---
-id: 0562
+id: 0564
 title: After a quest's second sent-back review the lead decides a further fix round itself when the faults are named, located and inside the plan, and no approval the owner would surely give is asked for
 status: accepted
 date: 2026-11-15
 tags: [lead, quest, review, send, fix, stop, owner, approval, friction]
 ---
 
-# 0562: After a quest's second sent-back review the lead decides a further fix round itself when the faults are named, located and inside the plan, and no approval the owner would surely give is asked for
+# 0564: After a quest's second sent-back review the lead decides a further fix round itself when the faults are named, located and inside the plan, and no approval the owner would surely give is asked for
 
 **What this decides:** who decides what happens after a quest's second sent-back review, and when
 the lead acts without asking the owner for a yes the owner would surely give.

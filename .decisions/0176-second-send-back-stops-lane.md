@@ -1,7 +1,7 @@
 ---
 id: 0176
 title: A lane stops at its second sent-back review, and the lead lands what works and files the rest as a ticket, unless what is left breaks the slice's main job
-status: amended-in-part by [0562](0562-lead-decides-further-fix-rounds.md)
+status: amended-in-part by [0564](0564-lead-decides-further-fix-rounds.md)
 date: 2026-11-13
 tags: [lead, lane, review, send, stop, ticket, scope, trial]
 ---
@@ -13,7 +13,7 @@ the part that works and files the rest as a ticket, going to the owner only when
 slice's main job.
 
 Since 2026-11-15 the lead reads the faults at the second sent-back review, and decides one more fix
-round itself when they are named, located and inside the plan ([0562](0562-lead-decides-further-fix-rounds.md)). This
+round itself when they are named, located and inside the plan ([0564](0564-lead-decides-further-fix-rounds.md)). This
 file still holds for every other lane.
 
 **Before** ([0076](0076-a-lane-stops-at-its-budget.md)):

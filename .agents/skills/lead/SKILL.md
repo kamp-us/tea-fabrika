@@ -170,7 +170,7 @@ A fix round is one agent and a recheck
 on, you read the faults: you decide one more fix round yourself when every fault is named, located
 and inside the plan, and the quest stops when one is not
 ([0176](../../../.decisions/0176-second-send-back-stops-lane.md),
-[0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)).
+[0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)).
 
 ```mermaid
 flowchart TD
@@ -205,7 +205,7 @@ flowchart TD
    file the rest as a tracker ticket (`tracker_file`), and write the quest's field note in
    `field/notes/`. Take it to the owner only if what is left breaks the slice's main job.
 
-The same test holds for any approval you would ask the owner for ([0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)):
+The same test holds for any approval you would ask the owner for ([0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)):
 when the answer is surely yes, and nothing in it is a new design call, a loosened law, something a
 person sees or presses, or a decision walked back, act and put one line on your status page. A
 decision that keeps an act or a call for the owner still holds.
@@ -411,7 +411,7 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
   these numbers in a step's brief.
   Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a quest stops at its second
   sent-back review, whatever this window says, unless you decide one more fix round
-  ([0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)). The chain does not count that
+  ([0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)). The chain does not count that
   yet, so [the lead does](#when-a-review-sends-back).
 - **A parked quest** (`ask`, exit 20) is yours: a loosening hit for your hand check, a lockfile
   ask, a send to plan, or what the judgment agent parked. The why is in the line's `reason`.
