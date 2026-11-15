@@ -29,8 +29,8 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
       /** One git call; exit codes other than those `ok` names fail it. */
-      const git = Effect.fn("BranchesGit.git")(
-        function* (args: ReadonlyArray<string>, ok: ReadonlyArray<number> = [0]) {
+      const call = Effect.fn("BranchesGit.git")(
+        function* (args: ReadonlyArray<string>, ok: ReadonlyArray<number>) {
           const ran = yield* run("git", ["-C", dir, ...args], dir);
 
           if (!ok.includes(ran.code)) {
@@ -45,6 +45,7 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
             Effect.fail(new BranchesError({ command: args[0] ?? "", reason: e.message })),
           ),
       );
+      const git = (args: ReadonlyArray<string>, ok: ReadonlyArray<number> = [0]) => call(args, ok);
 
       const list = Effect.map(git(["for-each-ref", "--format=%(refname) %(objectname)", LOCAL, ORIGIN]), (ran) =>
         ran.out.split("\n").flatMap((line) => fromRefLine(line) ?? []),
@@ -52,6 +53,9 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
 
       const ahead = (tip: string) =>
         Effect.map(git(["rev-list", "--count", `origin/main..${tip}`]), (ran) => Number(ran.out.trim()));
+
+      const behind = (tip: string) =>
+        Effect.map(git(["rev-list", "--count", `${tip}..origin/main`]), (ran) => Number(ran.out.trim()));
 
       // merge-tree exits 0 with the merged tree's oid on its first line, 1 on a conflict.
       const landsEmpty = Effect.fn("BranchesGit.landsEmpty")(function* (tip: string) {
@@ -64,6 +68,7 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
         refresh: Effect.asVoid(git(["fetch", "-q", "--prune", "origin"])),
         list,
         ahead,
+        behind,
         landsEmpty,
       });
     }),
