@@ -1,0 +1,43 @@
+{
+  "id": "2026-11-15-ci-sev1-the-workspace-program-broke-the-saved-home-law",
+  "date": "2026-11-15",
+  "lanes": [
+    "kamp-us/tea-fabrika#1308",
+    "kamp-us/tea-fabrika#1313",
+    "kamp-us/tea-fabrika#1231"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "The second sev1 under decision 0542 was the open ci-scheduled issue 1308. The 3-hour full run of every next/ and tooling test, started by hand at 02:13 Pacific (10:13 UTC) on main at 706bac372, went red and opened the issue at 02:25 Pacific (10:25 UTC). Nobody called it: the run did. The failing law was 'T502 law 5, a saved home opens under this build, next/' in next/apps/fabrika/src/port-home.laws.integration.test.ts. An old saved home with two processes opened with three. A second file, next/apps/fabrika/src/start-member.laws.integration.test.ts, was red for the same cause. The red leg had stopped the other legs, so that file was found only by running the files that boot the app. The fix, pull request 1313, merged at 05:11 Pacific (13:11 UTC), first on the merge line. A full run started by hand at 05:12 Pacific (13:12 UTC) on main at 8fe2a2eb8 was green on every leg and closed the issue at 05:25 Pacific (13:25 UTC). The sev1 lasted about 3 hours. Other work kept landing, as 0542 says it should.",
+  "cause": "Since pull request 1231 merged (706bac372), the workspace program fabrika/tezgah boots on every instance, so an old home gains one process. The saved-home law compared the whole process table, so it saw three rows where it expected two. The start-member law's fake program table had no fabrika/tezgah, so its boot failed. Pull request 1231's own checks never ran these laws: integration test files run only on the schedule (decision 0536).",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Pull request 1313, test files only. The saved-home law now keeps the saved rows under their exact process ids, and requires the rows beyond them to equal a named list, so an unexpected row still fails. The start-member law's fake program table now has fabrika/tezgah. One review, merge-ready, nothing loosened. Two plants each by the fixer and the reviewer went red.",
+  "test": "The green full run 43717773862 on main at 8fe2a2eb8 closed issue 1308, as 0542 says an issue ends. The plants show the changed law still fails on a moved id, a missing saved name, a doubled name and an extra row.",
+  "levels": [
+    "sev1, start: 2026-11-15 02:25:58 PST (10:25:58 UTC), when the 3-hour run opened issue 1308.",
+    "sev1, end: 2026-11-15 05:25:48 PST (13:25:48 UTC), when the green run closed it. About 3 hours.",
+    "The lead session saw the red run at about 04:42 Pacific (12:42 UTC), about 2 hours 15 minutes after the issue opened. From seen to merged took about 30 minutes.",
+    "No sev0 in this window."
+  ],
+  "fixes": [
+    "1313, 05:11:32 PST (13:11:32 UTC): the saved-home law and the start-member law now account for the workspace program that every instance boots."
+  ],
+  "cost": "Runner minutes, from each job's start and end times: the red full run 43703058643 took about 88 machine-minutes (10 jobs, five of them cancelled when the red leg stopped the run), the green full run 43717773862 about 79 (10 jobs), and pull request 1313's five check runs about 15 together (two were canceled by newer pushes). About 182 in all. Agent work: two Claude Opus runs, the fix (about 14 minutes, about 160 thousand tokens) and the review (about 3 minutes, about 100 thousand tokens). Dollars were not computed: the earlier sev1 note has no price to copy, and the token counts are rounded. Stopped work: none, since a sev1 stops nothing.",
+  "learned": [
+    "A pull request that changes what every instance boots can break laws that only the schedule runs. The pull request's own checks cannot see it, so it merged green and the red showed only on the next full run.",
+    "The scheduled run that GitHub itself starts has still not appeared since the Actions policy change on 2026-11-14 (ticket 1034). This red was found only because a run was started by hand.",
+    "The lead session had no watch on new ci-scheduled issues, and that cost about two hours: it was reading agent reports. Once seen, the fix took about 30 minutes.",
+    "A red leg stops the others, so a second red file in the same cause can hide behind the first. Running the files that boot the app found it.",
+    "No doubt about the level: it was a sev1 by the rule, an open ci-scheduled issue."
+  ],
+  "unknown": "Whether other schedule-only laws are broken by pull requests merged since. The green run at 8fe2a2eb8 says none were at that head. The dollar cost of the agent runs.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0542-two-sev-levels-one-skill.md",
+    "https://github.com/kamp-us/tea-fabrika/issues/1308",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43703058643",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43717773862",
+    "https://github.com/kamp-us/tea-fabrika/pull/1231",
+    "https://github.com/kamp-us/tea-fabrika/pull/1313"
+  ]
+}
