@@ -3909,7 +3909,7 @@ const deskFold = (
   withDesk: boolean,
   each: (e: DeskEvent) => void,
   up = true,
-  minting?: Pick<Desk, "mint" | "programs">,
+  minting?: { readonly mint?: NonNullable<Desk["mint"]>; readonly programs?: NonNullable<Desk["programs"]> },
   given: ReadonlyArray<{ readonly id: string; readonly name: string }> = GIVEN,
 ) => {
   const desk: Desk = {
@@ -4076,7 +4076,7 @@ const misleading = {
     const program = N9_PROGRAMS[pick % N9_PROGRAMS.length]!;
     return { program, shows: `${word(N9_PROGRAMS[(pick + 1) % N9_PROGRAMS.length]!)}:t${n}` };
   },
-} satisfies Pick<Desk, "mint">;
+} satisfies { readonly mint: NonNullable<Desk["mint"]> };
 
 /** Given tiles carry no program: each is named by the program its lookup by name must find. */
 const GIVEN_N9 = N9_PROGRAMS.map((p, i) => ({ id: `given_${i + 1}`, name: `${word(p)}:1` }));

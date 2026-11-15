@@ -26,44 +26,45 @@ import { type Dev, grant, type Home, reader, type Waiting } from "./p14.test-sup
 export const FABSH = "fabsh:1";
 const TILES = [{ id: "tile_f", name: FABSH }];
 
-/** What the suite asks of a client, whatever draws it. */
-export type Backend = {
+/** What the suite asks of a client, whatever draws it. `E` is how its steps can fail: the headless
+ *  client's never do, and the tab's can fail where its reader of tezgah (ticket 1042) can. */
+export type Backend<E = never> = {
   readonly name: "browser" | "headless";
   /** The registered name of the shell process this client types into: the boot list's `fabsh:1`
    *  for the headless client's fixed tile, or the process of the tile tezgah made for the tab's split
    *  (ticket 1042), known once `online` has answered. */
-  readonly process: Effect.Effect<string>;
-  readonly waiting: Effect.Effect<Waiting>;
+  readonly process: Effect.Effect<string, E>;
+  readonly waiting: Effect.Effect<Waiting, E>;
   /** Waits until the client is online with its fabsh tile open. */
-  readonly online: Effect.Effect<void>;
+  readonly online: Effect.Effect<void, E>;
   /** Holds every draft echo until `release`, so a letter can be seen before its echo. */
-  readonly hold: Effect.Effect<void>;
-  readonly release: Effect.Effect<void>;
+  readonly hold: Effect.Effect<void, E>;
+  readonly release: Effect.Effect<void, E>;
   /** Types one letter at the end of the line, as a person's key does. */
-  readonly key: (letter: string) => Effect.Effect<void>;
+  readonly key: (letter: string) => Effect.Effect<void, E>;
   /** Moves the cursor back over the whole line and types it again as `line`. */
-  readonly retype: (line: string) => Effect.Effect<void>;
-  readonly enter: Effect.Effect<void>;
+  readonly retype: (line: string) => Effect.Effect<void, E>;
+  readonly enter: Effect.Effect<void, E>;
   /** The line the tile draws now: its span layer's text. */
-  readonly drawn: Effect.Effect<string>;
+  readonly drawn: Effect.Effect<string, E>;
   /** Whether no echo of this line's edits has reached the client yet: the headless tile has not
    *  taken one; the tab has had none delivered since `hold`, with at least one answer held, so the
    *  hold is known to be in the way. Never a reading of whether a frame happens to be on the wire. */
-  readonly unechoed: Effect.Effect<boolean>;
+  readonly unechoed: Effect.Effect<boolean, E>;
   /** The words tied to the line: its accessible description. */
-  readonly description: Effect.Effect<string>;
+  readonly description: Effect.Effect<string, E>;
   /** The scrollback's entries, as their lines. */
-  readonly scroll: Effect.Effect<ReadonlyArray<string>>;
+  readonly scroll: Effect.Effect<ReadonlyArray<string>, E>;
   /** Up: the line history recall puts in the input. */
-  readonly recall: Effect.Effect<string>;
+  readonly recall: Effect.Effect<string, E>;
   /** A reload: the same profile and key, a new page or client. */
-  readonly reload: Effect.Effect<void>;
+  readonly reload: Effect.Effect<void, E>;
   /** A client that draws pixels: types `line` with the cursor at its end, and reads how the span
    *  layer lines up with the input. The headless client draws nothing, so it has none. */
-  readonly lined?: (line: string) => Effect.Effect<Lined>;
+  readonly lined?: (line: string) => Effect.Effect<Lined, E>;
   /** A client that draws pixels: shoots the shell in a tile at the five layouts, into the folder
    *  `SHOTS` names, and writes nothing when it is unset (0160). The headless client has none. */
-  readonly shots?: Effect.Effect<void>;
+  readonly shots?: Effect.Effect<void, E>;
 };
 
 /** What the span layer really draws, against the input it sits behind. */
@@ -80,7 +81,7 @@ export type Lined = {
 };
 
 /** Polls `check` every 100 ms for at most 60 s. */
-const until = (label: string, check: Effect.Effect<boolean>) =>
+const until = <E>(label: string, check: Effect.Effect<boolean, E>) =>
   Effect.gen(function* () {
     for (let n = 0; n < 600; n++) {
       if (yield* check) {
@@ -94,7 +95,7 @@ const until = (label: string, check: Effect.Effect<boolean>) =>
   });
 
 /** The one walk: grant, type `hlep` key by key, see the reason, fix it, Enter, read the answer, reload. */
-export const typeAndRun = (h: Home, dev: Dev, backend: Backend) =>
+export const typeAndRun = <E>(h: Home, dev: Dev, backend: Backend<E>) =>
   Effect.gen(function* () {
     const w = yield* backend.waiting;
     const granted = yield* grant(h, w);

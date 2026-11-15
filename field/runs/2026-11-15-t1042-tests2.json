@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1042-tests2",
+  "ticket": "kamp-us/tea-fabrika#1042",
+  "pr": "kamp-us/tea-fabrika#1312",
+  "started": "2026-11-15T04:37:00-08:00",
+  "ended": "2026-11-15T04:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round after the build of ticket 1042, in next/. The pinned setting names and the Worker's start values now hold tezgah.new; the window law's two type annotations no longer collide with the file's own Pick; the shell suite's Backend carries the error type its steps can fail with, so the tab's reader failures stay failures. Every owed plant ran once on the build's code and was put back. Two found holes, both fixed: N4 had no case for a live code swap, so handing no settings to the swap's init stayed green, and it now swaps a running v1 process to v2 in place; N7 only failed on the test's time limit when the start went ahead, and it now races dev.ts's exit against its ready line. The shell suite's shots step stays red on tuval's stale prefix read, field/findings/2026-11-15-tuval-prefix-reads-stale-state.json, which its own pull request fixes.",
+  "plants": [
+    {
+      "law": "N1 program.laws.test.ts: every split and later first tile asks start_child for tezgah.new",
+      "plant": "program.ts asks for fabrika/checklist in place of m.new",
+      "result": "red"
+    },
+    {
+      "law": "N2 program.laws.test.ts: a waiting start and every made tile keep the program they asked for",
+      "plant": "program.ts made() takes m.new in place of s.program",
+      "result": "red"
+    },
+    {
+      "law": "N3 program.laws.test.ts: a v1 saved model climbs to v2 by one named upgrade",
+      "plant": "program.ts keepsItsProgram leaves program off each waiting start",
+      "result": "red"
+    },
+    {
+      "law": "N4 runner-settings.laws.test.ts: every init is handed its pack's settings",
+      "plant": "Runner.ts fresh start calls init(null) without settings",
+      "result": "red"
+    },
+    {
+      "law": "N4 runner-settings.laws.test.ts: every init is handed its pack's settings",
+      "plant": "Runner.ts wake calls init(next.model) without settings",
+      "result": "red"
+    },
+    {
+      "law": "N4 runner-settings.laws.test.ts: every init is handed its pack's settings",
+      "plant": "Runner.ts swap calls init(upgraded.saved.model) without settings, before the law had a swap path",
+      "result": "green"
+    },
+    {
+      "law": "N4 runner-settings.laws.test.ts: every init is handed its pack's settings, with its swap path",
+      "plant": "Runner.ts swap calls init(upgraded.saved.model) without settings",
+      "result": "red"
+    },
+    {
+      "law": "N5 Program.types.test.ts runtime half: the stepper hands init the decoded value",
+      "plant": "Program.ts stepper calls machine.init(start, {})",
+      "result": "red"
+    },
+    {
+      "law": "N5 Program.types.test.ts type half: a machine that reads settings must declare them",
+      "plant": "Program.ts SettingsSpec always optional",
+      "result": "red"
+    },
+    {
+      "law": "N5 Program.types.test.ts type half: the settings schema is the machine's own ctx",
+      "plant": "Program.ts SettingsSpec takes Schema.Codec<unknown, Json>",
+      "result": "red"
+    },
+    {
+      "law": "N6 settings.test.ts: refuseNew answers null exactly for a tile's programs",
+      "plant": "settings.ts refuseNew keeps fabrika/tezgah",
+      "result": "red"
+    },
+    {
+      "law": "N7 settings-start.integration.test.ts: a start refuses a tezgah.new the build lacks",
+      "plant": "dev.ts ignores refuseNew's words",
+      "result": "red"
+    },
+    {
+      "law": "N8 entry/views.test.ts: the tab registers each program's own window",
+      "plant": "views.ts windowFor answers the checklist's window for every program",
+      "result": "red"
+    },
+    {
+      "law": "N9 WindowMachine.laws.test.ts: a tezgah tile runs its program's tile machine",
+      "plant": "WindowMachine.ts calls checks.tile with no program",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": null,
+  "step": "tests"
+}

@@ -14,7 +14,8 @@
 // - Both executions' `init` take the settings, and the box's call carries them across.
 // - The runner is handed every pack's settings in its options, as `settings: {<pack>: <json>}`, and
 //   hands a process the settings of its program's pack (`pack/program`, 0083) at every init: a fresh
-//   start, a wake from its checkpoint, and a wake that climbs its saved model through an upgrade.
+//   start, a wake from its checkpoint, a wake that climbs its saved model through an upgrade, and a
+//   live swap to new code, OTP's code_change, which runs the new code's init on the climbed model.
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
@@ -31,7 +32,7 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { nodeExecution, workerExecution } from "../runtime/Execution.ts";
 import { Program, stepper } from "../runtime/Program.ts";
-import { ProgramRunner } from "../runtime/Runner.ts";
+import { ProgramRunner, type Swapped } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -105,18 +106,20 @@ const boxed = (program: unknown, v: number) => {
   });
 };
 
-/** One life's loader, over the in-process stepper or the real box's RPC to it. */
-const loader = (program: unknown, execution: "node" | "worker", v: number) => {
-  const pure = Result.getOrThrow(stepper(program));
-  const run = execution === "node" ? nodeExecution(program, `build-v${v}`) : boxed(program, v);
+/** One build's program, as a loader answers it, over the in-process stepper or the real box's RPC. */
+const loaded = (program: unknown, execution: "node" | "worker", v: number) => ({
+  stepper: Result.getOrThrow(stepper(program)),
+  execution: execution === "node" ? nodeExecution(program, `build-v${v}`) : boxed(program, v),
+  declaration: { name: PROGRAM, v, inputs: { inc: { write: true, personOnly: false } }, writes: {}, cmds: [] },
+  handler: () => Option.none(),
+});
+
+/** One life's loader: `program` at version `v`, and `swapTo` as build-v2 when a swap asks for it. */
+const loader = (program: unknown, execution: "node" | "worker", v: number, swapTo?: unknown) => {
+  const now = loaded(program, execution, v);
+  const next = swapTo === undefined ? now : loaded(swapTo, execution, 2);
   return Layer.succeed(ProgramLoader, {
-    load: () =>
-      Effect.succeed({
-        stepper: pure,
-        execution: run,
-        declaration: { name: PROGRAM, v, inputs: { inc: { write: true, personOnly: false } }, writes: {}, cmds: [] },
-        handler: () => Option.none(),
-      }),
+    load: (_name: string, build?: string) => Effect.succeed(build === "build-v2" ? next : now),
   });
 };
 
@@ -144,6 +147,7 @@ const world = () => {
     execution: "node" | "worker",
     v: 1 | 2,
     handed: Readonly<Record<string, unknown>>,
+    swapTo?: unknown,
   ) => {
     const base = Layer.mergeAll(
       LedgerSql.layer(sql, { reader: PID }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
@@ -154,7 +158,7 @@ const world = () => {
     const dependencies = Layer.mergeAll(
       Mailbox.layer,
       ProcessStore.layer(sql, { process: PID }),
-      loader(program, execution, v),
+      loader(program, execution, v, swapTo),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(WatcherManager, { publish: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
@@ -211,7 +215,21 @@ const world = () => {
         );
       }
 
-      return yield* Effect.exit(ProgramRunner.use((r) => r.open(`client-${v}-${execution}`)));
+      return yield* Effect.exit(
+        ProgramRunner.use((r) =>
+          Effect.gen(function* () {
+            const opened = yield* r.open(`client-${v}-${execution}`);
+
+            if (swapTo === undefined) {
+              return { view: opened.view, swapped: null };
+            }
+
+            // A swap, as a deploy asks for one: the live v1 process takes build-v2 in place.
+            const swapped: Swapped = yield* r.swap({ load: "swap-1", program: PROGRAM, hash: "build-v2" });
+            return { view: (yield* r.open(`client-swapped-${execution}`)).view, swapped };
+          }),
+        ),
+      );
     }).pipe(Effect.provide(layer));
   };
 
@@ -223,14 +241,14 @@ const world = () => {
 };
 
 /** The view an open answered, or the failure it ended in, as the law reads them. */
-const read = (exit: Exit.Exit<{ readonly view: unknown }, unknown>) =>
+const read = (exit: Exit.Exit<{ readonly view: unknown; readonly swapped: Swapped | null }, unknown>) =>
   Exit.isSuccess(exit)
-    ? { _tag: "opened" as const, view: Schema.decodeUnknownSync(Model)(exit.value.view) }
+    ? { _tag: "opened" as const, view: Schema.decodeUnknownSync(Model)(exit.value.view), swapped: exit.value.swapped }
     : { _tag: "down" as const, error: Option.getOrUndefined(Cause.findErrorOption(exit.cause)) };
 
-type Path = "fresh" | "wake" | "upgrade";
+type Path = "fresh" | "wake" | "upgrade" | "swap";
 type Kind = "takes" | "refuses" | "none";
-const PATHS: ReadonlyArray<Path> = ["fresh", "wake", "upgrade"];
+const PATHS: ReadonlyArray<Path> = ["fresh", "wake", "upgrade", "swap"];
 const KINDS: ReadonlyArray<Kind> = ["takes", "refuses", "none"];
 
 /** Values the probe's `Settings` takes and refuses, and another pack's, which no probe may see. */
@@ -243,7 +261,7 @@ const Draw = fc.record({
 });
 
 describe("Ticket 1042 N4: the runner hands each process its pack's settings at every init", () => {
-  it("N4: a fresh start, a wake and a wake through an upgrade each hand the process its pack's settings as handed now; a program that declares none gets {}; a value its settings refuse downs the load with load, never a default", async () => {
+  it("N4: a fresh start, a wake, a wake through an upgrade and a live swap each hand the process its pack's settings as handed now; a program that declares none gets {}; a value its settings refuse downs the load with load, never a default", async () => {
     const seen = new Set<string>();
     await fc.assert(
       fc.asyncProperty(Draw, async (d) => {
@@ -264,6 +282,13 @@ describe("Ticket 1042 N4: the runner hands each process its pack's settings at e
                     return read(yield* w.life(probe(1, declares), d.execution, 1, handedNow(d.limit)));
                   }
 
+                  // A swap in one life: v1 boots, then takes build-v2 in place. For a refused value v1
+                  // declares no settings, so it boots, and the swap to a v2 that declares them is refused.
+                  if (path === "swap") {
+                    const v1 = probe(1, kind === "refuses" ? false : declares);
+                    return read(yield* w.life(v1, d.execution, 1, handedNow(d.limit), probe(2, declares)));
+                  }
+
                   // The first life takes a good value; the wake is handed the value now, which a
                   // restart reads, never the one the checkpoint saved.
                   const before = read(
@@ -274,9 +299,18 @@ describe("Ticket 1042 N4: the runner hands each process its pack's settings at e
                   return read(yield* w.life(probe(v, declares), d.execution, v, handedNow(d.later)));
                 }),
               );
-              const want = path === "fresh" ? d.limit : d.later;
+              const want = path === "fresh" || path === "swap" ? d.limit : d.later;
               const label = `N4 ${path}/${kind} (${d.execution})`;
               seen.add(`${path}/${kind}/${d.execution}`);
+
+              if (path === "swap" && kind === "refuses") {
+                expect(opened, `${label}: a refused value refuses the swap, and v1 runs on`).toMatchObject({
+                  _tag: "opened",
+                  swapped: { _tag: "refused" },
+                  view: { count: 1, got: {} },
+                });
+                continue;
+              }
 
               if (kind === "refuses") {
                 expect(opened, `${label}: a refused value downs the load with load`).toMatchObject({
@@ -287,15 +321,19 @@ describe("Ticket 1042 N4: the runner hands each process its pack's settings at e
               }
 
               expect(opened._tag, `${label}: the process opens`).toBe("opened");
-              const view = (opened as Extract<typeof opened, { _tag: "opened" }>).view;
+              const { view, swapped } = opened as Extract<typeof opened, { _tag: "opened" }>;
+              expect(
+                swapped?._tag ?? null,
+                `${label}: ${path === "swap" ? "the swap takes" : "no swap was asked"}`,
+              ).toBe(path === "swap" ? "swapped" : null);
               expect(view.got, `${label}: init is handed ${declares ? "its pack's settings" : "{}"}`).toEqual(
                 declares ? { limit: want } : {},
               );
               // The first life's one letter is in the count: a wake read its checkpoint; 100 more, the
-              // climb of the saved v1 model ran.
+              // climb of the saved v1 model ran, on a wake or in the swap.
               expect(
                 view.count,
-                `${label}: ${path === "fresh" ? "a fresh start" : path === "wake" ? "the wake read its checkpoint" : "the wake climbed its v1 checkpoint"}`,
+                `${label}: ${path === "fresh" ? "a fresh start" : path === "wake" ? "the wake read its checkpoint" : path === "upgrade" ? "the wake climbed its v1 checkpoint" : "the swap climbed the live v1 model"}`,
               ).toBe(path === "fresh" ? 1 : path === "wake" ? 1 : 101);
             } finally {
               w.close();

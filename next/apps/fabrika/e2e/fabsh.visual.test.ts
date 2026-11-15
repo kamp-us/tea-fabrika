@@ -214,7 +214,7 @@ const browserBackend = (context: BrowserContext, h: Home, dev: Dev) =>
     /** Runs `f` on the shell's line in the tile the split made. */
     const onField = <A>(f: (line: Locator) => Promise<A>) => Effect.flatMap(split, (t) => run(() => f(field(t))));
     const onShell = <A>(f: (region: Locator) => Promise<A>) => Effect.flatMap(split, (t) => run(() => f(shell(t))));
-    const backend: Backend = {
+    const backend: Backend<Effect.Error<typeof split>> = {
       name: "browser",
       process: Effect.map(split, (t) => t.shows),
       waiting: waiting(page),

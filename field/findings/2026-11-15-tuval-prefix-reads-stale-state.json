@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-tuval-prefix-reads-stale-state",
+  "date": "2026-11-15",
+  "by": "t1042-build1",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/tuval/src/window/main.tsx",
+    "line": 178
+  },
+  "says": "In next/, the tab's key listener routes each press by run.getState().prefix, which lags the key Msgs it already sent, so a fast C-b h then C-b \" drops the split: the quote goes to the tile and the prefix stays armed.",
+  "proof": "Ticket 1042's fabsh shots step, headless Chromium at 1440x900: after C-b h, an immediate C-b \" left two tiles, and the polite region read 'prefix'; with a 1 s pause after C-b h the same keys opened fabsh, t3. Same for C-b l then C-b \".",
+  "cost": "A person who types tmux keys quickly loses a split with no word on screen, and a visual suite that presses keys without pauses fails.",
+  "head": "9b2ae6bef875e9567b2b7a1a981a0f80267b309a",
+  "ticket": "kamp-us/tea-fabrika#1042",
+  "pr": "kamp-us/tea-fabrika#1312"
+}

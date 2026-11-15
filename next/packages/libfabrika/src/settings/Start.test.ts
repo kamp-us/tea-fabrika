@@ -25,6 +25,7 @@ describe("instance start envelope, next/", () => {
           "gateway.limit",
           "gateway.window",
           "instance.port",
+          "pack.fabrika.settings.tezgah.new",
         ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };

@@ -579,7 +579,21 @@ describe("Ticket 1042 N7: a start refuses a tezgah.new the build lacks", () => {
           path = yield* Path.Path;
         const { port } = yield* held;
         const started = yield* dev(port, {}, `[pack.fabrika.settings.tezgah]\nnew = "fabrika/notes"\n`);
-        expect(yield* started.child.exitCode, "N7: dev.ts stops").not.toBe(0);
+        // dev.ts either stops, or starts an instance and says so with its ready line: whichever comes
+        // first, so a start that goes ahead fails here in its own words, never on the test's limit.
+        const readyLine = Effect.gen(function* () {
+          while (!(yield* started.output).includes('{"ready":')) {
+            yield* Effect.sleep("100 millis");
+          }
+
+          return { _tag: "ready" as const };
+        });
+        const ended = yield* Effect.raceFirst(
+          Effect.map(started.child.exitCode, (code) => ({ _tag: "exited" as const, code })),
+          readyLine,
+        );
+        expect(ended, "N7: dev.ts stops, and no instance starts").toMatchObject({ _tag: "exited" });
+        expect(ended._tag === "exited" ? ended.code : null, "N7: dev.ts stops with a failing code").not.toBe(0);
         // The output stream may still be draining after the exit.
         yield* Effect.sleep("200 millis");
         const said = yield* started.output;

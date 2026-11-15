@@ -84,6 +84,8 @@ describe("shared Worker settings reader, next/", () => {
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
+              // Ticket 1042: no start fixture names a tile to open, so its default, the shell.
+              tezgahNew: "fabrika/fabsh",
             });
             StartsTest.exclude(exit.value, secret);
           }
