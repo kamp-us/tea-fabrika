@@ -13,9 +13,9 @@ import * as ship from "./ship.ts";
 //   {"held":true,"checked":"an ended run sends nothing","plant":null,"bound":"...","path":[]}
 //
 // With PROMISE_PLANT=<name> in the environment it walks the planted copy of
-// the machine instead, and says which plant it ran. The runner in
-// `@kampus/promises` asks for the plant this way, so the planted break always
-// runs the same command as the check. An unknown machine, law or plant is no
+// the machine instead, and says which plant it ran. A runner
+// asks for the plant this way, so the planted break always runs the same command
+// as the check. An unknown machine, law or plant is no
 // verdict at all: it prints why on stderr and exits 2.
 //
 // The bounds are the ones `laws.test.ts` walks: 8 messages for ship, 6 for review.

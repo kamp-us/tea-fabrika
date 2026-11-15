@@ -75,7 +75,7 @@ Last fixes: <commit range and report, or none>
 
 [The review skill](../review/SKILL.md#steps) holds what to check and how to answer, so the brief
 repeats none of it.
-Keep the four reason labels in the review skill. A missed case in a named class checks the law;
+Keep the five reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
 ## When a review sends back

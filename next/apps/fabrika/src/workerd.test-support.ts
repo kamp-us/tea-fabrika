@@ -1,14 +1,13 @@
 // next/, test support. Kills the one workerd under a parent process, for the real-workerd crash laws
 // (instance-wire's cases A and C, worker-supervision's case B), and reads where the kill landed.
 // Read through its module, as port.test-support is.
-// edge: Effect SQL has no read-only open of another process's SQLite file, which killedMoment needs
-import { DatabaseSync } from "node:sqlite";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import { instanceDatabase } from "./instance-database.test-support.ts";
 
 const processes = Effect.gen(function* () {
   const ps = yield* ChildProcess.make("ps", ["-axo", "pid=,ppid=,command="]);
@@ -73,7 +72,7 @@ const Saved = Schema.fromJsonString(
 );
 
 /** One object's two rows, or null when its file holds no `process_recovery` row for `name`. */
-const objectRows = (db: DatabaseSync, name: string) => {
+const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, name: string) => {
   const table = (t: string) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
   if (!table("process_recovery")) {
@@ -123,10 +122,9 @@ export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: s
   const found: Array<NonNullable<ReturnType<typeof objectRows>>> = [];
 
   for (const file of files) {
-    const rows = yield* Effect.acquireUseRelease(
-      Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
-      (db) => Effect.sync(() => objectRows(db, name)),
-      (db) => Effect.sync(() => db.close()),
+    const rows = yield* instanceDatabase(file, { readOnly: true }).pipe(
+      Effect.map((db) => objectRows(db, name)),
+      Effect.scoped,
     );
 
     if (rows !== null) {
