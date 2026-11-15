@@ -109,8 +109,11 @@ what the Effect team does, and then decide (owner, 2026-11-15).**
   - <https://github.com/dmmulroy/anti-slop>, lint rules for oxlint (at commit `13909c9`);
   - <https://github.com/K-Mistele/anti-slop>, a fork of the first with more rules, 7 of them for
     Effect (at commit `5360c12`);
-  - the Effect skill inside that fork, `skills/effect-program-design/`, which is design notes for
-    Effect programs and no lint rule.
+  - <https://github.com/kitlangton/skills>, the Effect skill, at `skills/effect/` (at commit
+    `71195e3`). It is design notes for Effect programs and no lint rule. This is the path the
+    research read. The fork above carries the same skill in an adapted form at
+    `skills/effect-program-design/`, and its `ATTRIBUTION.md` names this repo as the source. Where
+    the two differ, the source repo is the one on the list.
 - **Scope:** `next/`, and our tooling: the lead and step scripts under `.agents/`,
   `oxlint-plugins/` and `.github/ci/`. Today's app (`packages/`, `programs/`, `apps/`) is not
   covered.
@@ -141,8 +144,6 @@ what the Effect team does, and then decide (owner, 2026-11-15).**
 - `AGENTS.md` is not changed by this pull request. Its two lines stand as written.
 - **Not decided here:**
   - How a repo gets on the list, or leaves it. Today the list is the three entries above.
-  - Whether the repo the Effect skill credits as its source, <https://github.com/kitlangton/skills>,
-    is on the list. It is not, until that is decided.
   - Which of the trusted repos' other rules are taken. Each is its own decision, as
     [0554](0554-no-reflect-get-set-has.md) and [0555](0555-no-vi-mock-or-domock.md) are.
   - Today's app.
