@@ -1,5 +1,5 @@
 // `pnpm lint`: its parts at once, so the slowest part sets the time and not their sum
-// (experiment 292: 78 to 117 s one after another in CI, about 55 s for `lint:dead` alone).
+// (experiment 293: 78 to 117 s one after another in CI, about 55 s for `lint:dead` alone).
 //
 //   node oxlint-plugins/parallel.ts '<command>' '<command>' ...
 //

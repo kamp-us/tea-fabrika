@@ -197,6 +197,8 @@ const EXIT = "exit";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, START_CHILD, EXIT]);
+/** This life still owes a host Cmd (a send, a start_child or an exit): the next alarm tries it again. */
+const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -500,7 +502,7 @@ export class ProgramRunner extends Context.Service<
 
           const running = !recovering(supervision) && (supervision === null || (yield* manager.isLive(process.id)));
           const waited = waitUntil(supervision);
-          const owes = running && (live?.cmds.some((cmd) => cmd.mail === true) ?? false);
+          const owes = running && live !== null && owesHostCmd(live.cmds);
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
@@ -1248,6 +1250,13 @@ export class ProgramRunner extends Context.Service<
           };
           yield* store.save(checkpoint(next, null), placed);
           drained = [...drained, ...drain];
+
+          // 0528: the mail wake clears once nothing is left behind it. The permit is held, and a
+          // ping or a failed send after this sets it again.
+          if (stop === letters.length && nothingLeftBehind(cmds)) {
+            mailRetry = null;
+          }
+
           live = next;
           yield* publish(state, next);
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
@@ -1307,6 +1316,10 @@ export class ProgramRunner extends Context.Service<
           drained = [];
           return taken;
         };
+        /** Nothing waits behind the mail wake: no host Cmd is owed, and takeRetry has nothing left to
+         *  run, neither an earlier life's writes and sends nor the Cmds a drain of ordinary mail made. */
+        const nothingLeftBehind = (cmds: ReadonlyArray<Dispatched>): boolean =>
+          !owesHostCmd(cmds) && retry.length === 0 && drained.length === 0;
 
         // --- Cmds ---------------------------------------------------------------------------
 
