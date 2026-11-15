@@ -23,9 +23,8 @@
 // Plants (after build): H2, read `executing` without a result as nothing, so the command runs
 // again. H5, move every work state to `offline` on a drop, losing the result.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
-import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -44,10 +43,9 @@ import {
   seen,
   type Seen,
 } from "./Commands.test-support.ts";
-import { admitted, answerText, brain, type Brain } from "./HandsDoor.test-support.ts";
+import { brain, door } from "./HandsDoor.test-support.ts";
 import { start } from "./HandsStart.ts";
 import * as JournalStore from "./JournalStore.ts";
-import { MemorySocket } from "./WindowStart.test-support.ts";
 
 const ORIGIN = "http://127.0.0.1:18787";
 const KEY = "SHA256:hands-own-key-0000000000000000000000000000";
@@ -74,112 +72,6 @@ const keys = Layer.succeed(ClientKey, {
   claimPersist: Effect.succeed(false),
   persist: Effect.succeed(true),
 });
-
-/** One JSON-RPC call the client wrote. */
-const Call = Schema.fromJsonString(
-  Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
-    method: Schema.String,
-    params: Schema.optionalKey(Schema.Unknown),
-  }),
-);
-
-const decodeCall = Schema.decodeUnknownOption(Call);
-
-/** How the door cuts the next tasks call: drop the socket before it reads the call, or after it acted. */
-type CallCut = "before" | "after" | null;
-
-/** What the door holds: the socket open now, the cut armed, the waits it parked, and what it heard. */
-type DoorState = {
-  open: MemorySocket | null;
-  cut: CallCut;
-  parked: Array<{ readonly id: string | number; readonly after: number; readonly on: MemorySocket }>;
-  readonly hellos: Array<unknown>;
-  readonly calls: Array<{ readonly method: string; readonly params: unknown }>;
-  dials: number;
-};
-
-/** The door as a script over the brain: one socket per dial, the challenge waiting in it. */
-const door = (b: Brain) => {
-  const state: DoorState = { open: null, cut: null, parked: [], hellos: [], calls: [], dials: 0 };
-  const answer = (text: string, on: MemorySocket) => {
-    if (text === "ping") {
-      on.receive("pong");
-      return;
-    }
-
-    const decoded = decodeCall(text);
-
-    if (Option.isNone(decoded)) {
-      return;
-    }
-
-    const call = decoded.value;
-
-    if (call.method === "initialize") {
-      state.hellos.push(call.params);
-      on.receive(JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(KEY) }));
-      return;
-    }
-
-    if (!call.method.startsWith("tasks.")) {
-      return;
-    }
-
-    const cut = state.cut;
-
-    if (cut === "before") {
-      state.cut = null;
-      on.drop(1006);
-      return;
-    }
-
-    state.calls.push({ method: call.method, params: call.params });
-    const outcome = b.call(KEY, call.method, call.params);
-
-    if (cut === "after") {
-      state.cut = null;
-      on.drop(1006);
-      return;
-    }
-
-    if (outcome._tag === "parked") {
-      state.parked.push({ id: call.id, after: outcome.after, on });
-      return;
-    }
-
-    const body = answerText(call.id, outcome);
-
-    if (body !== null) {
-      on.receive(body);
-    }
-  };
-  const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
-    state.dials++;
-    const made: MemorySocket = new MemorySocket(url, { send: (text, from) => answer(text, from) });
-    state.open = made;
-    made.open();
-    made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${state.dials}` } }));
-    return made;
-  });
-  return {
-    state,
-    socket,
-    /** A program asks the client's key: the brain saves it, and each parked wait past its rev is rung. */
-    request: (process: string, n: number) => {
-      const id = b.request(KEY, process, n);
-      const ringing = state.parked.filter((p) => b.rev(KEY) > p.after);
-      state.parked = state.parked.filter((p) => !ringing.includes(p));
-
-      for (const p of ringing) {
-        p.on.receive(JSON.stringify({ jsonrpc: "2.0", id: p.id, result: { rev: b.rev(KEY) } }));
-      }
-
-      return id;
-    },
-    drop: () => state.open?.drop(1006),
-  };
-};
 
 /** Lets the run go on: virtual time moves `ms`, and real work (the hello's hashing) gets its turn. */
 const pass = (ms: number) =>
@@ -216,7 +108,7 @@ const PAUSES: ReadonlyArray<Armed> = [
 const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
   Effect.gen(function* () {
     const b = brain();
-    const d = door(b);
+    const d = door(b, KEY);
     const s: Seen = seen();
     // The journal's store outlives every process, as a file would: one memory store for the walk.
     const store = yield* Layer.build(KeyValueStore.layerMemory);
@@ -379,7 +271,7 @@ describe("P39 slice 4b: the host's os in the hello", () => {
           fc.constantFrom(...OSES),
           (os) =>
             Effect.gen(function* () {
-              const d = door(brain());
+              const d = door(brain(), KEY);
               const s: Seen = seen();
               const store = yield* Layer.build(KeyValueStore.layerMemory);
               const layers = Layer.mergeAll(
