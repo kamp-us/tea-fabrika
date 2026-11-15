@@ -172,12 +172,14 @@ output as its own last section, so do not paste it twice.
   merge. We keep all four. Google writes the first line as an order. Here it is a statement, as
   main's titles already are.
 - Effect: [its template](https://github.com/Effect-TS/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
-  asks for a type, a description and related issues, and its own merged pull requests open with
-  summary bullets and end with the commands that were run
-  ([one of them](https://github.com/Effect-TS/effect-smol/pull/2613)). A change to runtime behavior
-  or an exported type also gets a changeset, a short note for people who use the package
-  ([its AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md#changesets)). Our
-  What this does, Laws and checks and What a reader should know are those three.
+  asks for a type, a description and related issues. Its
+  [pull request skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/pull-requests/SKILL.md)
+  asks for the problem addressed, the notable decisions and the issue it closes, and says not to
+  narrate the diff. Some of its merged pull requests also open with summary bullets and end with the
+  commands that were run ([one of them](https://github.com/Effect-TS/effect/pull/10627)). A change
+  to runtime behavior or an exported type also gets a changeset, a short note for people who use the
+  package ([its changesets skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/changesets/SKILL.md#requirement)).
+  Our What this does, Laws and checks and What a reader should know are those three.
 
 ## Could become a check
 
