@@ -1,6 +1,6 @@
 // The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md), next/, L10 and L11. Real workerd
 // through Alchemy, the app's own build and door, and the brain's own facts on `gateway/brain`. Only
-// the memory reading is a stand-in (`rssStandIn`, in rss.test-support.ts): no test can grow workerd to 500 MB on
+// the memory reading is a stand-in (`rssStandIn`, in rss.fixture.ts): no test can grow workerd to 500 MB on
 // purpose, so `ps -o rss= -p <pid>` answers the limit plus one for the first workerd once the test
 // says so, and every other command, workerd's build and every other `ps` included, runs for real. The
 // only process the laws look at is the workerd pid their own instance's `started` fact names, and
@@ -18,7 +18,7 @@ import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
-import { rssStandIn } from "./rss.test-support.ts";
+import { rssStandIn } from "./rss.fixture.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-15T04:00:00.000Z";

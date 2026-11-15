@@ -769,7 +769,10 @@ effectIt.effect.prop(
 const NoPid = Schema.Union([
   Schema.Literal(0),
   between(-99_999, -1),
-  Schema.Finite.check(Schema.isBetween({ minimum: -99_999, maximum: 99_999 }), Schema.makeFilter((n: number) => !Number.isInteger(n))),
+  Schema.Finite.check(
+    Schema.isBetween({ minimum: -99_999, maximum: 99_999 }),
+    Schema.makeFilter((n: number) => !Number.isInteger(n)),
+  ),
 ]);
 
 // L13. Plant: let a start with any number reach the state: the first start answers, or the sampler
@@ -800,7 +803,10 @@ effectIt.effect.prop(
             }),
           ).pipe(Effect.provide(rssLayer(() => 600_000)), Effect.scoped, Effect.exit);
           const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
-          expect(error?._tag === "Some" ? error.value : exit).toMatchObject({ _tag: "ControlError", reason: "bad_pid" });
+          expect(error?._tag === "Some" ? error.value : exit).toMatchObject({
+            _tag: "ControlError",
+            reason: "bad_pid",
+          });
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
           expect(rows.filter((row) => row._tag === "started")).toEqual([]);

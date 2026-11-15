@@ -1,4 +1,4 @@
-// next/, test support. The memory sample's stand-in: the brain reads a process's memory with
+// next/, a test fixture. The memory sample's stand-in: the brain reads a process's memory with
 // `ps -o rss= -p <pid>`, and a test answers that one command with the size it picks, so no test
 // grows a process on purpose and no test samples a pid it made up.
 import { Effect, Layer, Sink, Stream } from "effect";
