@@ -56,7 +56,9 @@ type Options<E, ReadError> = {
  *   `after` params, and it is refused with `no_hello`, `bad_input` or `too_many_waits` when it
  *   does not fit. Waits are limited by a repeated id, by 64 waits and by 16,384 bytes of saved
  *   attachment. Every other request runs one at a time, marks the connection busy while
- *   `options.call` runs, sends the answer, and marks it idle again even if the call failed. A
+ *   `options.call` runs, sends the answer, and marks it idle again even if the call failed. A call
+ *   answered `parked`, such as a hands key's `jobs.wait`, is saved as a wait on the stream the
+ *   answer names and registered again through `options.wait`, exactly as a `ledger.wait` is. A
  *   connection that is not online may only call `initialize` or `gateway.knock`; the rest get
  *   `no_hello`.
  * - `ring(stream, rev, onRefused)` answers every wait on `stream` whose position is below `rev`
@@ -179,10 +181,20 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     return Answer.cases.parked.make({ stream: wait.stream, after: wait.after });
   });
-  const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
+  /** Keeps one wait and registers it. It is saved first, so a ring during registration finds it. */
+  const hold = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
+    const next = step(now, { type: "waited", wait });
 
-    if (!State.online(now)) {
+    if (next === now) {
+      return respond(wait.id, Answer.cases.refused.make({ reason: "too_many_waits" }));
+    }
+
+    save(next);
+    return yield* register(wait);
+  });
+  const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
+    if (!State.online(yield* read)) {
       return respond(id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
@@ -192,17 +204,16 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       return respond(id, Answer.cases.refused.make({ reason: "bad_input" }));
     }
 
-    const wait = Wait.make({ id, ...decoded.success });
-    const next = step(now, { type: "waited", wait });
-
-    if (next === now) {
-      return respond(id, Answer.cases.refused.make({ reason: "too_many_waits" }));
-    }
-
-    // Saved before registration, outside the turn, so a ring during registration finds it.
-    save(next);
-    return yield* register(wait);
+    // Outside the turn, so a ring during registration finds it.
+    return yield* hold(Wait.make({ id, ...decoded.success }));
   });
+  /** One call's answer on the socket. A call the door parked on a stream it names, such as a hands
+   *  key's `jobs.wait`, is kept and registered again as a parked `ledger.wait` is, so a ring that
+   *  came while the call was out still finds it. */
+  const reply = (id: string | number, answer: typeof Answer.Type) =>
+    answer._tag === "parked"
+      ? hold(Wait.make({ id, stream: answer.stream, after: answer.after }))
+      : Effect.sync(() => respond(id, answer));
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
 
@@ -216,20 +227,19 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       save(busy);
     }
 
-    const exit = yield* Effect.exit(options.call(request.method, request.params));
+    const exit = yield* Effect.exit(
+      options.call(request.method, request.params).pipe(
+        Effect.tap((answer) =>
+          answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
+            ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
+            : Effect.void,
+        ),
+        Effect.tap((answer) => reply(request.id, answer)),
+      ),
+    );
 
-    if (Exit.isFailure(exit)) {
-      if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
-        yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
-      }
-    } else {
-      const answer = exit.value;
-
-      if (answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)) {
-        yield* Effect.annotateCurrentSpan(REFUSED, answer.reason);
-      }
-
-      respond(request.id, answer);
+    if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
+      yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
     }
 
     // The call or reply may replace the attachment. A failed call must clear busy too.

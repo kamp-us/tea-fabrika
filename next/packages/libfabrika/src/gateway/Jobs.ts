@@ -5,7 +5,7 @@
  */
 import { Effect, Result, Schema, Stream } from "effect";
 import { Job, Result as JobResult, type Recorded } from "../jobs/Job.ts";
-import type { Jobs } from "../jobs/Jobs.ts";
+import { type Jobs, targetStream } from "../jobs/Jobs.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Answer, type Attached } from "../transport/Wire.ts";
@@ -16,6 +16,11 @@ const Take = Schema.Struct({ process: ProcessId, ...Meta });
 const Read = Schema.Struct({ process: ProcessId, job: Schema.NonEmptyString });
 const Started = Schema.Struct({ ...Read.fields, execution: Schema.NonEmptyString, ...Meta });
 const Finish = Schema.Struct({ ...Started.fields, result: JobResult });
+/** `jobs.list` takes nothing: the stream it reads comes from the caller's own key. An empty
+ *  `Struct` lets any field through even when strict, so no field at all is a record of nothing. */
+const List = Schema.Record(Schema.String, Schema.Never);
+/** `jobs.wait` takes only the rev it waits past, never a stream or a key. */
+const Wait = Schema.Struct({ after: Rev });
 
 const TakeReply = Schema.TaggedUnion({
   idle: {},
@@ -30,6 +35,38 @@ const strict = { onExcessProperty: "error" } as const;
 type Routed = { readonly answer: typeof Answer.Type; readonly wake: string | null };
 
 const no = (reason: string): Routed => ({ answer: Answer.cases.refused.make({ reason }), wake: null });
+
+/** The refusal a call from someone other than a hands client that said hello gets, or null. */
+const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
+  attached.identity.as !== "hands"
+    ? "not_allowed"
+    : attached.has === undefined || attached.build === undefined
+      ? "no_hello"
+      : null;
+
+/**
+ * What one `jobs.wait` parks on: the caller's own `target:` stream past `after`, or the reason it is
+ * refused. The stream comes from the authenticated key, never from the params, which hold `after`
+ * and nothing else. The gateway parks it outside the write turn, on the path `ledger.wait` takes.
+ *
+ * @stability unstable
+ * @category routing
+ */
+export const waitOn = (
+  attached: typeof Attached.cases.online.Type,
+  input: unknown,
+): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
+  const refused = refusal(attached);
+
+  if (refused !== null) {
+    return Result.fail(refused);
+  }
+
+  const decoded = Schema.decodeUnknownResult(Wait, strict)(input);
+  return Result.isFailure(decoded)
+    ? Result.fail("bad_input")
+    : Result.succeed({ stream: targetStream(attached.identity.key), after: decoded.success.after });
+};
 
 const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
   answer: Answer.cases.ok.make({ result }),
@@ -46,13 +83,23 @@ const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
 export const route = Effect.fn("gateway.jobs")(
   function* (jobs: Jobs["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {
     const { identity, has, build, client } = attached;
+    const refused = refusal(attached);
 
-    if (identity.as !== "hands") {
-      return no("not_allowed");
+    if (refused !== null || has === undefined || build === undefined) {
+      return no(refused ?? "no_hello");
     }
 
-    if (has === undefined || build === undefined) {
-      return no("no_hello");
+    if (method === "jobs.list") {
+      if (Result.isFailure(Schema.decodeUnknownResult(List)(input))) {
+        return no("bad_input");
+      }
+
+      // Pointers only: the command stays behind `jobs.take`, the one door work reaches a machine by.
+      const listed = yield* jobs.forTarget(identity.key);
+      const pointers = listed.jobs.flatMap(({ state }) =>
+        state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
+      );
+      return ok({ jobs: pointers, rev: listed.rev });
     }
 
     const subject = { key: identity.key };

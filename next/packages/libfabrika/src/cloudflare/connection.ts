@@ -1,4 +1,5 @@
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { targetStream } from "../jobs/Jobs.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -73,10 +74,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       close: (code) => ws.close(code, "reconnect"),
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
-        const state = yield* attached(ws);
-        const answer = yield* rpc(
-          routed(p.route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader)),
-        );
+        const client = (yield* attached(ws)).client as ConnectionId;
+        // A hands key's own `target:` stream is asked again as its `jobs.wait`: it may not call
+        // `ledger.wait`, and the gateway names that stream from its key alone.
+        const asked = stream.startsWith(targetStream(""))
+          ? p.route(client, "jobs.wait", { after })
+          : p.route(client, "ledger.wait", { stream, after }, reader);
+        const answer = yield* rpc(routed(asked));
 
         if (answer._tag === "parked") {
           return Waited.cases.parked.make({});
