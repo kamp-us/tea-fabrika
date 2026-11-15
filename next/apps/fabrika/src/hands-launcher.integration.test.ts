@@ -192,8 +192,9 @@ const flow = Effect.fnUntraced(
     yield* fs.writeFileString(
       entry,
       [
-        `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-        `export { Project } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
+        `export { default, Connection, Process, RecordPart, IsolateTail } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
+        // The fixture's Control lets the three test calls past the control door's closed list.
+        `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
       ].join("\n"),
     );
     const built = yield* build({
@@ -417,7 +418,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                 }),
               ),
             ),
-            { seed: 119120, numRuns: runsFor({ fast: 1, full: 3 }), includeErrorInReport: true },
+            { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), includeErrorInReport: true },
           ),
         catch: (cause) => new Error("S2 failed", { cause }),
       }),
