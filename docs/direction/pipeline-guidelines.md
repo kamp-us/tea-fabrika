@@ -480,7 +480,7 @@ second half is a lean, 75%.**
   point, and its `over` sketch has `held?: Held`, optional. P6 wants both required. Its
   `RESTARTABLE` set lists what may restart; P4 lists what may not.
 - **The self-fix plan, on PR 289's branch.** If the fold cannot prove a field of ticket 117's carry,
-  it falls back to "a fresh quest on ticket 117, every step again". P4 and P7 say: run again only
+  it falls back to "a fresh lane on ticket 117, every step again". P4 and P7 say: run again only
   from the earliest step whose output cannot be proved.
 - **[The plan's "who decides"](../plan/README.md#who-decides-what).** "A builder's diff to the exam
   files ends the quest stuck: nothing the build did is kept." That is today's code, and P5 replaces

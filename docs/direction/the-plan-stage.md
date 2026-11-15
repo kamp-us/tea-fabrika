@@ -24,7 +24,7 @@ code still says `at`.
 // The ticket: a child that exits with no outcome row leaves the hosted quest
 // waiting for good (experiments 115 and 116).
 const plan = {
-	summary: "The hosted quest ends a child that exits with no row.",
+	summary: "The hosted lane ends a child that exits with no row.",
 	stories: [
 		{id: "s1", who: "an owner", want: "a quest that ends when its children have ended", why: "so one crashed child never holds the quest"},
 	],
@@ -37,8 +37,8 @@ const plan = {
 			scenario: {
 				id: "p1",
 				when: "a child exits with no outcome row",
-				result: "the quest ends that child as stuck:no_outcome within 5 s",
-				why: "today the quest waits for that row for good",
+				result: "the lane ends that child as stuck:no_outcome within 5 s",
+				why: "today the lane waits for that row for good",
 				behavior: "new", // its test must fail on today's code first
 				tool: "test",
 				stories: ["s1"],
@@ -50,7 +50,7 @@ const plan = {
 				{
 					id: "p2",
 					when: "a child writes a done row and exits",
-					result: "the quest reads that row and moves on",
+					result: "the lane reads that row and moves on",
 					why: "the fix must not end a healthy child as stuck",
 					behavior: "existing", // its test must pass on today's code
 					tool: "test",

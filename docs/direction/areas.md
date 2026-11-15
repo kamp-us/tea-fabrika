@@ -41,16 +41,16 @@ that experiment's links.
 ```ts
 // A sketch, today's version. The project's areas: one stream, a person's facts only.
 // tracker/areas/inbox
-{_tag: "area_made", area: 1, name: "pipeline", suggested: {_tag: "titles", word: "quest", tickets: 21}}
+{_tag: "area_made", area: 1, name: "pipeline", suggested: {_tag: "titles", word: "lane", tickets: 21}}
 {_tag: "area_made", area: 2, name: "app", suggested: {_tag: "folder", path: "apps/fabrika"}}
-{_tag: "area_made", area: 3, name: "quest"}           // typed by the person; no suggestion
-{_tag: "area_merged", area: 3, into: 1}               // every ticket in "quest" now reads "pipeline"
+{_tag: "area_made", area: 3, name: "lane"}            // typed by the person; no suggestion
+{_tag: "area_merged", area: 3, into: 1}               // every ticket in "lane" now reads "pipeline"
 {_tag: "area_renamed", area: 2, name: "desk"}         // no ticket changes: tickets hold the number
 
 // tracker/ticket/193/inbox. An agent filed it, for a person.
 {type: "filed", title: "Test writer: a failed run on base loses its cause ...", body: "...",
- from: {_tag: "run", ticket: 117, run: "quest 7"}, guess: 3}
-// areaOf(193)  {_tag: "guessed", area: 1, why: "filer"}   the guess said "quest", merged into 1
+ from: {_tag: "run", ticket: 117, run: "lane 7"}, guess: 3}
+// areaOf(193)  {_tag: "guessed", area: 1, why: "filer"}   the guess said "lane", merged into 1
 {type: "area_picked", area: 1}                          // a person; the door refuses an agent
 // areaOf(193)  {_tag: "picked", area: 1}
 ```
@@ -58,7 +58,7 @@ that experiment's links.
 ```text
 one sitting, traced (today's version, after the build; counts made up)
 tracker          the ledger has no area yet: the list opens on its onboarding step
-                 suggested: pipeline (21 titles start "Quest", "pipeline", ...), app (apps/fabrika), ...
+                 suggested: pipeline (21 titles start "Lane", "pipeline", ...), app (apps/fabrika), ...
 Space, Enter     the person ticks three; three area_made facts, by the person
 f                the Filter menu: the ledger's areas, then "No area yet"
 j, Enter         filter {area: 1}: chip "Area is pipeline", the Pipeline tab fills
@@ -350,7 +350,7 @@ filer and the source only, as before.
 ### 7. The onboarding step
 
 When the ledger has no area, the tracker's window opens on a list of suggestions, each with why
-("21 titles start with Quest", "the folder `apps/fabrika`"). Space ticks, Enter makes the ticked
+("21 titles start with Lane", "the folder `apps/fabrika`"). Space ticks, Enter makes the ticked
 ones, Esc skips. Skipping leaves every ticket in "No area yet", and "New area ..." stays in the
 menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is window
 state on the person's desk, not a fact.

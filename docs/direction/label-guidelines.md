@@ -37,15 +37,15 @@ experiment's links.
 // A sketch, next/. The project's labels: one stream, a person's facts only.
 // tracker/labels
 {_tag: "group_made", group: 1, name: "Area", pick: "one", guess: true}
-{_tag: "label_made", label: 1, name: "pipeline", group: 1, suggested: {_tag: "titles", word: "quest", tickets: 21}}
+{_tag: "label_made", label: 1, name: "pipeline", group: 1, suggested: {_tag: "titles", word: "lane", tickets: 21}}
 {_tag: "label_made", label: 2, name: "desk", group: 1}
 {_tag: "label_made", label: 3, name: "flaky"}                 // no group: any number per ticket
-{_tag: "label_made", label: 4, name: "quest", group: 1}
-{_tag: "label_merged", label: 4, into: 1}                     // every ticket on "quest" now reads "pipeline"
+{_tag: "label_made", label: 4, name: "lane", group: 1}
+{_tag: "label_merged", label: 4, into: 1}                     // every ticket on "lane" now reads "pipeline"
 
 // tracker/ticket/193. An agent filed it, for a person.
 {_tag: "filed", title: "Test writer: a failed run on base loses its cause", body: "...",
- from: {_tag: "run", ticket: 117, run: "quest 7"}, guess: [4]}
+ from: {_tag: "run", ticket: 117, run: "lane 7"}, guess: [4]}
 // TicketLabels.fromTimeline(193)  {area: {_tag: "guessed", label: 1, why: "filer"}, others: []}
 {_tag: "labeled", add: [1, 3], drop: []}                     // a person; the door refuses an agent
 // TicketLabels.fromTimeline(193)  {area: {_tag: "picked", label: 1}, others: [3]}
@@ -54,7 +54,7 @@ experiment's links.
 
 ```text
 one sitting, traced (next/, after the build; counts made up)
-tracker               193 shows "pipeline?" in its row: the filer guessed "quest", merged into pipeline
+tracker               193 shows "pipeline?" in its row: the filer guessed "lane", merged into pipeline
 Enter on #193         the ticket tile; Labels row: Area pipeline? (the filer's), no other labels
 l                     the label menu: Area as a radio list (pipeline marked "guess"), then flaky, stale, ...
 Space on pipeline     the guess becomes a pick

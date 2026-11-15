@@ -17,8 +17,8 @@ Its decided rules are in: [0348](../../.decisions/0348-a-filing-records-its-sour
 // A sketch, not built. A filing says where it came from. Effect Schema writes `_tag`.
 {type: "filed", title: "Mutation runner: sandbox links node_modules ...", body: "...",
  from: {_tag: "pr", url: "https://github.com/usirin/tea-fabrika/pull/352", step: "mutation"}}
-{type: "filed", title: "Quest checks fail when the repo path has a space", body: "...",
- from: {_tag: "run", ticket: 117, run: "quest 6", head: "<sha>"}}
+{type: "filed", title: "Lane checks fail when the repo path has a space", body: "...",
+ from: {_tag: "run", ticket: 117, run: "lane 6", head: "<sha>"}}
 {type: "filed", title: "Desk settings: reuse and place", body: "...",
  from: {_tag: "walk", pr: 332}}
 // No `from`: a person filed it from nothing, or it was filed before the key existed.

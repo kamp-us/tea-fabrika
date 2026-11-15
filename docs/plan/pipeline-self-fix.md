@@ -909,7 +909,7 @@ PR 11:  ROUTES[step][name]   one row per outcome; a missing or an extra row does
     		"ask:commenter:comment": ask("step"),
     		"skip:closed": host,
     		"skip:draft": host,
-    		"skip:not_ours": cannot("the quest opened it on the person's login"),
+    		"skip:not_ours": cannot("the lane opened it on the person's login"),
     		"stuck:merged_elsewhere": end({kind: "stuck", why: "merged_elsewhere"}),
     		done: next,
     		"done:part": cannot("ship's done never has part"),
