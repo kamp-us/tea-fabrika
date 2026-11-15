@@ -188,6 +188,9 @@ catalogs:
     '@effect/opentelemetry':
       specifier: 4.1.2
       version: 4.1.2
+    '@effect/platform-browser':
+      specifier: 4.1.2
+      version: 4.1.2
     '@effect/platform-node':
       specifier: 4.1.2
       version: 4.1.2
@@ -348,7 +351,7 @@ overrides:
 patchedDependencies:
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.85': 14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1
   '@alchemy.run/cloudflare@2.0.0-beta.85': 54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878
-  '@demlik/code-graph@0.15.0': 01a90cec241ea9a2630474812bf40c2e9cc369b852429755b8044947b26c79c1
+  '@demlik/code-graph@0.15.0': 9642ccde7d166552e6fad6491fa02ea5d8cbcb6322f031e49f2c1c46a37ac915
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   '@manti-ui/styles@0.13.0': 09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e
@@ -361,7 +364,7 @@ importers:
     dependencies:
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.15.0(patch_hash=01a90cec241ea9a2630474812bf40c2e9cc369b852429755b8044947b26c79c1)
+        version: 0.15.0(patch_hash=9642ccde7d166552e6fad6491fa02ea5d8cbcb6322f031e49f2c1c46a37ac915)
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
@@ -770,6 +773,9 @@ importers:
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+      '@effect/platform-browser':
+        specifier: 'catalog:'
+        version: 4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))
       '@kampus/fabrika-design':
         specifier: workspace:*
         version: link:../../../packages/fabrika-design
@@ -2262,6 +2268,11 @@ packages:
         optional: true
       '@opentelemetry/sdk-trace-web':
         optional: true
+
+  '@effect/platform-browser@4.1.2':
+    resolution: {integrity: sha512-O+C5hpnfdphBhSaOndFw8XA3dBG0x4SiF3m3QJzJwZZOlB4nGe+ghCZgknyaLcxigA8NqUtEj73rSsVVwshYFA==}
+    peerDependencies:
+      effect: ^4.1.2
 
   '@effect/platform-node-shared@4.1.2':
     resolution: {integrity: sha512-wSwl9A/G1hcVvF8nLI+YfB3EyOIDvWS6+lsTZBkmgDnPBL7m8YWZF+1HD+mdEsb52SUGfukip46Q3gRwSdk3QA==}
@@ -6703,7 +6714,7 @@ snapshots:
       smol-toml: 1.9.0
       zod: 4.0.0
 
-  '@demlik/code-graph@0.15.0(patch_hash=01a90cec241ea9a2630474812bf40c2e9cc369b852429755b8044947b26c79c1)':
+  '@demlik/code-graph@0.15.0(patch_hash=9642ccde7d166552e6fad6491fa02ea5d8cbcb6322f031e49f2c1c46a37ac915)':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
       chalk: 5.6.2
@@ -6801,6 +6812,10 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
+
+  '@effect/platform-browser@4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
+    dependencies:
+      effect: 4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
 
   '@effect/platform-node-shared@4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))':
     dependencies:

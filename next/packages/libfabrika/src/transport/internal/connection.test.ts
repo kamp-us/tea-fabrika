@@ -297,24 +297,19 @@ const options = { seed: SEED, numRuns: RUNS };
 
 describe("T703 connection machine laws", () => {
   it("type: busy comes only from the state tag, and unauthenticated states hold no waits", () => {
-    fc.assert(
-      fc.property(fc.constant(null), () => {
-        expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
-        expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
-        type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
-        expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
-        expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.new.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.waiting.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
-      }),
-      { seed: SEED, numRuns: 1 },
-    );
+    expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
+    expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
+    type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
+    expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
+    expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.new.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.waiting.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
   });
 
   it("every Msg keeps the transition table, the metadata and the unrelated waits", () => {

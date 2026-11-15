@@ -4,7 +4,7 @@
 // on its own after success, a setup failure, a test failure or an interruption, and leaves no owned
 // browser process, server listener or temp home behind (0061). Later browser suites reuse it.
 //
-// The child is `one-file.test.ts`'s S1.5 suite. Its fixture appends one JSON row per acquisition
+// The child is `one-file.visual.test.ts`'s S1.5 suite. Its fixture appends one JSON row per acquisition
 // and release to `P14_E2E_TRACE`, and takes `P14_E2E_FAULT` (`{at, kind}`): fail setup right after
 // acquiring `at`, fail the test once set up, or hold after `at` until this process signals it.
 //
@@ -53,8 +53,8 @@ const traceFolder = Effect.acquireRelease(
  *  child's natural exit before it ever runs. */
 /** A child suite: its file, the test it runs, and what a plain run of it must acquire. */
 type Target = { readonly file: string; readonly test: string; readonly label: string };
-const ONE_FILE: Target = { file: "one-file.test.ts", test: "S1.5", label: "P14 slice 1" };
-const FIRST_WINDOW: Target = { file: "first-window.test.ts", test: "L11", label: "P14 slice 2" };
+const ONE_FILE: Target = { file: "one-file.visual.test.ts", test: "S1.5", label: "P14 slice 1" };
+const FIRST_WINDOW: Target = { file: "first-window.visual.test.ts", test: "L11", label: "P14 slice 2" };
 
 const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(

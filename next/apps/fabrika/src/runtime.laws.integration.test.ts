@@ -35,6 +35,11 @@ vi.mock("effect", async (importOriginal) => {
   return { ...actual, Layer: { ...actual.Layer } };
 });
 
+const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+const counterCode = built("counter");
+const checklistCode = built("checklist");
+const approvalCode = built("approvals");
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -186,10 +191,10 @@ const buildLayer = Layer.buildWithMemoMap;
 // A world is opened in a scope, and that scope alone closes it (0061).
 const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", options: WorldOptions = {}) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
-  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
+  table.programs["fabrika/counter"] = counterCode;
   // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
-  table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
-  table.programs.approvals = { hash: "approvals-a", source: "approvals" };
+  table.programs["fabrika/checklist"] = checklistCode;
+  table.programs["p12/approvals"] = approvalCode;
   const key = identity();
   // The ledger is in memory: a file would sync every commit to disk, which took half of L4's time
   // on a laptop, and no law reads the file. A reopen keeps this same handle.
@@ -273,9 +278,9 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
               value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
             }),
           describe: async () =>
-            id.startsWith("approvals-")
+            id.startsWith(`${approvalCode.hash}/`)
               ? {
-                  name: "approvals",
+                  name: "p12/approvals",
                   v: 1,
                   writes: { answered: { personOnly: true } },
                   inputs: {
@@ -375,7 +380,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
             Start.cases.first.make({
               id: "approvals:1",
               name: "approvals:1",
-              code: { program: "approvals", hash: "approvals-a" },
+              code: { program: "p12/approvals", hash: approvalCode.hash },
             }),
             from,
           ),
@@ -402,7 +407,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs["fabrika/counter"] = { hash: build, source: "changed counter" };
+      table.programs["fabrika/counter"] = built(`changed counter:${build}`);
       runtime = projectRuntime(ctx, env);
       const reopened = await run(ProjectService);
       await settled(db);
@@ -428,7 +433,7 @@ StartsTest.law(
   ([word, choices]) =>
     Effect.gen(function* () {
       const grants = [
-        { source: "fabrika/counter", to: "approvals" },
+        { source: "fabrika/counter", to: "p12/approvals" },
         { source: `unused-${word}`, to: `unused-target-${word}` },
       ];
       const w = yield* openWorld(grants);
@@ -468,7 +473,7 @@ StartsTest.law(
           const child = Child.make({
             id: `child-${word}-${index}`,
             name: `child:${index}`,
-            code: { program: move === "refuse" ? `ungranted-${word}` : "approvals", hash: "approvals-a" },
+            code: { program: move === "refuse" ? `ungranted-${word}` : "p12/approvals", hash: approvalCode.hash },
             requester,
           });
           const before = w.db.prepare("SELECT count(*) AS total FROM entries").get();
@@ -514,7 +519,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
 
   for (const [i, n] of tape.entries()) {
-    const code = { program: "fabrika/counter", hash: "counter-a" };
+    const code = { program: "fabrika/counter", hash: counterCode.hash };
 
     if (i % 2 === 0) {
       const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
@@ -677,7 +682,7 @@ describe("P12 Project authority", () => {
               Start.cases.first.make({
                 id: `nested:${write}`,
                 name: `nested:${write}`,
-                code: { program: "fabrika/counter", hash: "counter-a" },
+                code: { program: "fabrika/counter", hash: counterCode.hash },
               }),
               w.from,
             )

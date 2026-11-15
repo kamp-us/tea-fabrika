@@ -12,6 +12,9 @@ import { InputId, Writer } from "@kampus/libfabrika/coordination";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import { Model } from "@kampus/libfabrika/permissions/Model";
+import * as RelationsMemory from "@kampus/libfabrika/permissions/RelationsMemory";
+import { Senders } from "@kampus/libfabrika/permissions/Senders";
 import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -36,7 +39,7 @@ import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { FileSystem, Path } from "effect";
 import type { Redacted } from "effect";
-import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -111,7 +114,11 @@ const life = Effect.fnUntraced(function* (
     Layer.provideMerge(
       Layer.mergeAll(
         ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] } }),
-        ChildrenLedger.layer({ grants: [] }),
+        ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
+          // T953: these laws grant no start, and the inputs they send are given no member behind them.
+          Layer.provide(RelationsMemory.layer([])),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+        ),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),
