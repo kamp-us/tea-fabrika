@@ -55,6 +55,7 @@ import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherM
 import { hands } from "./Hands.ts";
 import { HandsJobs, HandsJobsError } from "./HandsJobs.ts";
 import * as HandsJobsLive from "./HandsJobsLive.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
@@ -413,7 +414,7 @@ const host = Effect.fnUntraced(function* (
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const runner = ProgramRunner.layer(
       { id: pid, name, program: checkProgram.name, build: BUILD, owner },
-      { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 } },
+      { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
     ).pipe(Layer.provide(own));
     runners.set(name, Context.get(yield* Layer.buildWithScope(runner, scope), ProgramRunner));
   }

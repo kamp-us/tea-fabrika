@@ -435,9 +435,12 @@ visible, and never weaken the rules to hide this message.
    Never write "owner read" unless the owner did. Log each required owner read in a field note.
    An exam change that is all proper property tests merges without the owner's read (owner,
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
-   Then the lead session adds the pull request to GitHub's merge queue
-   ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). Main takes changes only
-   through that queue. For a lane that ended at `land.ts ready`, run `land.ts run <lane> <ticket>`
+   Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI
+   ([0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md)): the GraphQL mutation
+   `enablePullRequestAutoMerge` on the pull request's node id. GitHub puts it in the merge queue
+   when `ci-required` goes green, never when red. If anything is pushed after the final read, run
+   `disablePullRequestAutoMerge` and read again. Main takes changes only
+   through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a lane that ended at `land.ts ready`, run `land.ts run <lane> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
    are green. Both leak-check the change, each commit and the title and description, then add it to
@@ -445,8 +448,9 @@ visible, and never weaken the rules to hide this message.
    GitHub then tests the pull request on newest main and merges it. Nobody merges main in to catch
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
-   pass `--admin` or `--auto`, and never run the merge on a head whose `ci-required` is not green:
-   with a queue on, that arms auto-merge. Two exceptions take `--admin`: a sev0 fix
+   pass `--admin`, and never run a plain `gh pr merge` or pass `--auto` on a head whose `ci-required`
+   is not green: with a queue on, that arms auto-merge by side effect, so use the mutation above on
+   purpose instead. Two exceptions take `--admin`: a sev0 fix
    ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
    docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the

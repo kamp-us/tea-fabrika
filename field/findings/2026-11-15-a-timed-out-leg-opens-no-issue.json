@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-a-timed-out-leg-opens-no-issue",
+  "date": "2026-11-15",
+  "by": "builder",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/scheduled.mjs",
+    "line": 64
+  },
+  "says": "In today's CI tooling, the scheduled full run's report read a leg that ran into its 17-minute limit as stopped, so a red main opened no ci-scheduled issue. GitHub ends a timed-out leg cancelled with its test step cancelled, the same as a leg another leg's stop step canceled, and the verdict was red only on a failure. Fixed in pull request 1319: a leg canceled at or past its job's limit is a time-out, red, and named in the issue.",
+  "proof": "Run 43723335863 on main, started by hand while main was red on a schedule-only law: legs next (4) and next (e2e-1) ran 17 min 20 s and 17 min 17 s, their vitest and end to end steps ended cancelled, and the report job succeeded and opened no issue. Their check-run annotations say the job exceeded the maximum execution time of 17m0s.",
+  "cost": "A red main stayed out of sight, with no sev1 issue, until someone looked at the run by hand.",
+  "head": "a552fb67dc3a3fcc554e0a5cd7947050dbb86d07",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1319"
+}

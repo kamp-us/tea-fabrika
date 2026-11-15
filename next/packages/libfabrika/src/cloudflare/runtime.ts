@@ -898,9 +898,11 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+  // `mail.unread`, read at the brain's edge with the start's other settings (0086).
+  const cap = checked.values.mailUnread;
   const mail = yield* ProgramMail.pipe(
     Effect.provide(
-      ProgramMailLedger.layer({ grants: options.mail?.grants ?? checked.input.mail?.grants ?? {} }).pipe(
+      ProgramMailLedger.layer({ grants: options.mail?.grants ?? checked.input.mail?.grants ?? {}, cap }).pipe(
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
@@ -1786,11 +1788,19 @@ const projectLogic = Effect.fn("project.init")(function* (
     mail: (delivery: Delivery, trace?: { traceId: string; spanId: string }) => {
       const work: Effect.Effect<MailReply, ProgramMailError> = write(mail.deliver(delivery)).pipe(
         Effect.map((receipt): MailReply => MailReplies.cases.ok.make({ receipt })),
-        Effect.catchTag("ProgramMailError", (error) =>
-          error.reason === "storage"
-            ? Effect.fail(error)
-            : Effect.succeed(MailReplies.cases.refused.make({ reason: error.reason })),
-        ),
+        Effect.catchTag("ProgramMailError", (error): Effect.Effect<MailReply, ProgramMailError> => {
+          const reason = error.reason;
+
+          if (reason._tag === "storage") {
+            return Effect.fail(error);
+          }
+
+          return Effect.succeed(
+            reason._tag === "full"
+              ? MailReplies.cases.full.make({ unread: reason.unread, cap })
+              : MailReplies.cases.refused.make({ reason: reason._tag }),
+          );
+        }),
       );
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
@@ -1909,6 +1919,9 @@ const projectLogic = Effect.fn("project.init")(function* (
     processDead: (pid: string, dead: Parameters<typeof processes.dead>[1], origin: From) =>
       wrapped(processReply(write(processes.dead(pid, dead, origin)))),
     processIsLive: (pid: string) => wrapped(processes.isLive(pid)),
+    // The brain binds the reader's name from its live process, never from the call.
+    processAck: (pid: string, pos: number, origin: From) =>
+      wrapped(processReply(write(processes.ack(pid, pos, origin)))),
     processMonitor: (ref: string, pid: string, origin: From) =>
       wrapped(processReply(write(processes.monitor(ref, pid, origin)))),
     processDemonitor: (ref: string, origin: From) => wrapped(processReply(write(processes.demonitor(ref, origin)))),
@@ -2050,6 +2063,8 @@ export class ProjectService extends Context.Service<
       origin: From,
     ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
     readonly processIsLive: (pid: string) => Effect.Effect<boolean, ProjectFailure>;
+    /** Records how far `pid` has read its name's inbox; the name is bound from the live process. */
+    readonly processAck: (pid: string, pos: number, origin: From) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
     readonly processMonitor: (
       ref: string,
       pid: string,
@@ -2227,6 +2242,7 @@ const processLogic = Effect.fnUntraced(function* (
     resolve: (process) => asked(rpc(p.processResolve(process))).pipe(Effect.flatMap(processValue)),
     dead: (process, dead, from) => asked(rpc(p.processDead(process, dead, from))).pipe(Effect.flatMap(processValue)),
     isLive: (process) => asked(rpc(p.processIsLive(process))),
+    ack: (process, pos, from) => asked(rpc(p.processAck(process, pos, from))).pipe(Effect.flatMap(processValue)),
     monitor: (ref, process, from) =>
       asked(rpc(p.processMonitor(ref, process, from))).pipe(Effect.flatMap(processValue)),
     demonitor: (ref, from) => asked(rpc(p.processDemonitor(ref, from))).pipe(Effect.flatMap(processValue)),
@@ -2307,7 +2323,12 @@ const processLogic = Effect.fnUntraced(function* (
           return yield* loader.load(name, process, tail, hash);
         }),
     },
-    { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
+    {
+      policy: defaultPolicy,
+      recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
+      // `mail.chunk`, read at the brain's edge with the start's other settings (0086).
+      chunk: checked.values.mailChunk,
+    },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
   yield* sink.flush.pipe(Effect.provideContext(services));

@@ -1,7 +1,7 @@
 ---
 id: 0166
 title: A pull request that only carries out what an accepted decision already owes merges without the owner's read, exam paths included, and the lead shows it to the owner after
-status: accepted
+status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
 date: 2026-11-13
 tags: [approval, owner, exam, lead, merge, fast-track, friction, loosening]
 ---

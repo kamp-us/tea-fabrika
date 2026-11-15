@@ -53,8 +53,9 @@ jobs:
   # Chromium. Nothing is narrowed: no `--changed`, no list.
   next:
     runs-on: ubuntu-latest
-    # check.yaml's next limit, for the same legs with the same split.
-    timeout-minutes: 17
+    # check.yaml's next limit, for the same legs with the same split. The report reads it through
+    # the alias, to tell a leg that ran into it from one another leg's stop step canceled.
+    timeout-minutes: &next-limit 17
     strategy:
       fail-fast: false
       max-parallel: 7
@@ -145,7 +146,7 @@ jobs:
   tooling:
     runs-on: ubuntu-latest
     # The limit check.yaml's tooling legs had, before 0539 took them off the merge line.
-    timeout-minutes: 30
+    timeout-minutes: &tooling-limit 30
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -177,7 +178,8 @@ jobs:
       - *stop
 
   # The verdict, on main only: red opens one `ci-scheduled` issue naming the commits since the last
-  # green scheduled run and the failing tests, or comments on the open one; green closes it; a run
+  # green scheduled run, the legs that made it red and the failing tests, or comments on the open
+  # one; a leg that ran into its time limit is red, named as a time-out; green closes it; a run
   # stopped by hand does nothing (scheduled.mjs). `always()`, so it runs after a red leg stopped the
   # run, as ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to
   # read the run's jobs and steps and find the last green run: a red leg's stop step cancels its own
@@ -204,9 +206,14 @@ jobs:
         with:
           pattern: results-*
           path: ${{ runner.temp }}/results
+      # Each test job's time limit, an alias of its own line, so the limit stays one setting: GitHub
+      # ends a leg that ran into it `cancelled`, as it ends one a stop step canceled, and only the
+      # leg's run time against its limit tells a time-out apart (scheduled.mjs's `ending`).
       - name: report
         env:
           NEEDS: ${{ toJSON(needs) }}
           RESULTS: ${{ runner.temp }}/results
           GITHUB_TOKEN: ${{ github.token }}
+          LIMIT_NEXT: *next-limit
+          LIMIT_TOOLING: *tooling-limit
         run: node .github/ci/scheduled.mjs

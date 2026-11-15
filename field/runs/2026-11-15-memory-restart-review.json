@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-memory-restart-review",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316",
+  "started": "2026-11-15T07:33:00-08:00",
+  "ended": "2026-11-15T07:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of the memory restart at 490d3f7a9, in next/: sent back to the build, two blocking classes. One: a signal goes out on a pid the life state no longer vouches for. terminate sends SIGTERM and SIGKILL with no check of the state, and dev.ts's killing returns nothing when its fold finds the process already exited or stopping, so the SIGKILL still goes out (local-dev.ts:84-87, dev.ts:473-475); the SIGTERM goes out after the replacing fact's file write, which an exit can overtake (dev.ts:500-523). The plan says the state is checked first (plan lines 444-446) and L5 says SIGKILL only when the process has not gone; L6 even requires a SIGKILL to a pid that has ended. Two: the OTP follows table gets no row for the brain's bounded stop and its restarting state (0017). Everything else holds: the machine, the call and callNow split, the settings, the facts, L1 to L9 green, three new plants red.",
+  "plants": [
+    {
+      "law": "L5 (node/dev/local-dev.laws.test.ts)",
+      "plant": "local-dev.ts terminate answers killed when the process ended by itself",
+      "result": "red"
+    },
+    {
+      "law": "L1 (node/dev/DevLife.laws.test.ts)",
+      "plant": "DevLife.ts exited ignores a replacing state, so a replace never ends",
+      "result": "red"
+    },
+    {
+      "law": "L9 (settings/DesktopBrain.test.ts)",
+      "plant": "Declarations.ts desktop.brain-grace scoped person and repo",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Ran, Node 26.13.0, TYPESAFE_API_KEY unset, one file at a time: DevLife.laws 6 of 6, local-dev.laws 2 of 2, DesktopBrain 3 of 3, dev.laws.integration 4 of 4, dev-control.laws.integration 3 of 3 at fast and at full depth. Each plant restored with git checkout and git status clean. A probe of dev-control's walk with the kill move allowed while a replacement is pending was green at full depth (100 runs), so that restriction narrows the walk with no need. loosening.sh: 17 hits, none a loosened law. Not run: L10 and L11 (host-only, 0178), local-instance.integration.test.ts (it starts the real sampler on made-up pid 27001 with real process.kill), pnpm typecheck.",
+  "step": "review"
+}

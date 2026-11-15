@@ -16,6 +16,9 @@ import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 
+// The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
+const BRAIN = { memory: 500_000_000, grace: 5000 };
+
 const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -61,7 +64,10 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         try {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
-              startDev({ name: "errors", port: 18787, build: id, home }, deploy(mode === "offline" ? 0 : 27002)),
+              startDev(
+                { name: "errors", port: 18787, build: id, home, ...BRAIN },
+                deploy(mode === "offline" ? 0 : 27002),
+              ),
             ).pipe(
               Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
@@ -96,7 +102,9 @@ it("instance reports start_timeout when deployment never opens the control liste
               const deployed = yield* Deferred.make<void>();
               const running = yield* Effect.forkChild(
                 Effect.scoped(
-                  startDev({ name: "errors", port: 18787, build, home }, () => Deferred.succeed(deployed, undefined)),
+                  startDev({ name: "errors", port: 18787, build, home, ...BRAIN }, () =>
+                    Deferred.succeed(deployed, undefined),
+                  ),
                 ),
               );
               yield* Deferred.await(deployed);
@@ -183,7 +191,7 @@ for (const mode of ["exit", "spawn"] as const) {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
               Effect.gen(function* () {
-                yield* startDev({ name: "errors", port: 18787, build: "test", home }, deploy(27002));
+                yield* startDev({ name: "errors", port: 18787, build: "test", home, ...BRAIN }, deploy(27002));
                 yield* TestClock.adjust("1 second");
               }),
             ).pipe(

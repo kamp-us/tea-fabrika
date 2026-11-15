@@ -22,6 +22,7 @@ import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { type Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
@@ -295,11 +296,15 @@ const world = ({ disk }: Disks) => {
   const runner = (pid: string) => {
     const layer: (
       p: Parameters<typeof A.ProgramRunner.layer>[0],
-      options: { policy: typeof policy; recovery: { sql: Sql; name: string; capacity: number } },
+      options: {
+        policy: typeof policy;
+        recovery: { sql: Sql; name: string; capacity: number };
+        chunk: typeof mailChunk.default;
+      },
     ) => ReturnType<typeof A.ProgramRunner.layer> = A.ProgramRunner.layer;
     return layer(
       { id: pid, name: NAME, program: "counter", build: "build-a", owner },
-      { policy, recovery: { sql: process.sql, name: NAME, capacity: 1024 ** 3 } },
+      { policy, recovery: { sql: process.sql, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
     ).pipe(
       Layer.provideMerge(
         Layer.mergeAll(

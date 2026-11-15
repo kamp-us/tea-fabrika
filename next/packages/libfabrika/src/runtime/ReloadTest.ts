@@ -27,6 +27,7 @@ import { Start } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
 import { hash } from "./Built.ts";
 import { Alarm, CheckedWriter, type Loaded, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { MailDelivery, MailDeliveryError } from "./MailDelivery.ts";
 import type { RuntimeRecord } from "./ProcessStore.ts";
@@ -562,6 +563,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       loader(w.code),
       {
         recovery: { sql: storeSql, name, capacity: 1024 ** 3 },
+        chunk: ANY_CHUNK,
         fault: (cut) =>
           Effect.suspend(() => {
             if (w.cuts.armed !== cut) {
