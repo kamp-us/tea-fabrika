@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: law M12, the shapes. A program names only the
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: law M12, the shapes. A program names only the
 // registered name to watch and the ref to end; the runner binds the watcher and makes the ref, so no
 // operand can name another recipient. Their answers are `monitor_ok`, `monitor_err` and `demonitor_ok`.
 // The trusted `as` argument that lets a brain-side service write as the watcher stays off

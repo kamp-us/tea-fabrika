@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md, amendment A-Workerd), next/: law M13 on real workerd,
+// Program watch (docs/plan/quests/watch-PLAN.md, amendment A-Workerd), next/: law M13 on real workerd,
 // sockets, object storage and the private local instance capability, set up the way
 // worker-mail.integration.test.ts sets up its two Process objects. A program in one Process object
 // monitors a program in another by its registered name, the other exits, and the first folds

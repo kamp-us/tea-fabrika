@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: the built-in `monitor` and `demonitor` Cmds on
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: the built-in `monitor` and `demonitor` Cmds on
 // real runners, laws M2, M3, M7, M8, M9, M10 and M15, and no driver. A runner in the module that owns a
 // driver calls `MonitorTest.suite(open)`; `open` acquires real stores in a scope and gives them back
 // when that scope closes (0061, 0062).

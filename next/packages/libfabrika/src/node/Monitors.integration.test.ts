@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: the Monitors service's suite (M1, M4, M5, M6) on
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: the Monitors service's suite (M1, M4, M5, M6) on
 // node:sqlite (0062). This module owns the driver, so it acquires the store's folder and handle in a
 // scope, and the scope gives both back (0061).
 // Edge: Effect has no node:sqlite driver.

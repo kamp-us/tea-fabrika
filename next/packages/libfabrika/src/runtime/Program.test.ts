@@ -1588,7 +1588,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
   });
 });
 
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: law M11. A program that may `monitor` gets a
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: law M11. A program that may `monitor` gets a
 // `DOWN` message when a watched process ends, so it must declare the port that message arrives on.
 // The loader checks it: a program whose `cmds` hold `monitor` and whose inputs have no `DOWN` port does
 // not load, `ProgramDown` with `load` and a cause that names the port. The Cmds are this file's own,

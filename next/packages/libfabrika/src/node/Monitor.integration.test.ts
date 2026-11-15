@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: the monitor Cmd's laws (M2, M3, M7, M8, M9, M10)
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: the monitor Cmd's laws (M2, M3, M7, M8, M9, M10)
 // on SQLite files, on the schedule (0536). This module owns the driver, so it acquires the folder and
 // each file in a scope, and the scope gives them back (0061). A reopen closes every file and opens it
 // again, keeping only its rows.

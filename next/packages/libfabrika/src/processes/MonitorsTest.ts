@@ -1,4 +1,4 @@
-// Program watch (docs/plan/lanes/watch-PLAN.md), next/: laws M1, M4, M5 and M6 of the approved plan, on
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: laws M1, M4, M5 and M6 of the approved plan, on
 // a real store (0062). A runner in the module that owns a driver calls `MonitorsTest.suite(open)`;
 // `open` acquires one store in a scope (0061).
 //
