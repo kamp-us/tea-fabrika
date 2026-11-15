@@ -28,7 +28,7 @@ const TOOLING_PROJECT = "--project tooling";
 // opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
 // keep theirs.
 const RUNNERS = 10;
-const VERDICT = "report";
+export const VERDICT = "report";
 const REPORT_IF = "always()&&github.ref=='refs/heads/main'";
 const REPORT = "node .github/ci/scheduled.mjs";
 

@@ -8,6 +8,7 @@ import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";
 import { checkJob } from "./workflow-lint/check-job.ts";
 import { ciRequired } from "./workflow-lint/ci-required.ts";
+import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
 import { classifyStep } from "./workflow-lint/classify.ts";
 import { failFast } from "./workflow-lint/fail-fast.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
@@ -86,6 +87,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         .flatMap(([path, text]) => lintNoTooling(path, text)),
       ...lintIssues(files.workflows),
       ...lintCaches(files),
+      ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
