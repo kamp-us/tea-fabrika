@@ -40,19 +40,29 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
             return yield* fromMailReply(reply);
           }),
         }),
-        Layer.succeed(MailWakeups, {
-          wake: Effect.fnUntraced(function* (name) {
-            const span = yield* Effect.currentSpan.pipe(Effect.orDie);
-            yield* rpc(
-              ProcessClient.make(processStub(env, project, name))
-                .mailed({
-                  traceId: span.traceId,
-                  spanId: span.spanId,
-                })
-                .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
-            );
-          }),
-        }),
+        wakeups(env, project),
       ),
     ),
   );
+
+/**
+ * Layer that wakes a registered name: its Process object saves the alarm that reads its inbox. Mail
+ * and the gateway's wake after a job finish both use it.
+ *
+ * @stability unstable
+ * @category layers
+ */
+export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups> =>
+  Layer.succeed(MailWakeups, {
+    wake: Effect.fnUntraced(function* (name) {
+      const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+      yield* rpc(
+        ProcessClient.make(processStub(env, project, name))
+          .mailed({
+            traceId: span.traceId,
+            spanId: span.spanId,
+          })
+          .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
+      );
+    }),
+  });

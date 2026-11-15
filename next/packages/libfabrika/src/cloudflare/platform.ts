@@ -175,6 +175,9 @@ export class ProjectClient extends Context.Service<
       mail: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project mail RPC enters Effect
         Effect.tryPromise({ try: () => stub.mail(...args), catch: unreachable }),
+      hands: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project hands RPC enters Effect
+        Effect.tryPromise({ try: () => stub.hands(...args), catch: unreachable }),
       inbox: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project inbox RPC enters Effect
         Effect.tryPromise({ try: () => stub.inbox(...args), catch: unreachable }),

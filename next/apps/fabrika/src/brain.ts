@@ -152,6 +152,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.mail(...args)));
   }
 
+  hands(...args: Parameters<ContextProject["hands"]>) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.hands(...args)));
+  }
+
   inbox(pid: string, input: Incoming) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
