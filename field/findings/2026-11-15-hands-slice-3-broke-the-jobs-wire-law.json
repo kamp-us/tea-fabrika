@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-hands-slice-3-broke-the-jobs-wire-law",
+  "date": "2026-11-15",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/mail.ts",
+    "line": 58
+  },
+  "says": "In next/, hands slice 3 made the gateway wake a finished job's requester through wakeups, which read the caller's span with Effect.orDie. The gateway wakes outside any span, so every accepted or repeated jobs.finish over the real Project died and answered unreachable. Its own pull request never ran the real-Project law, since integration tests run only on the schedule (0536), and the gateway's W1 law used a fake wake that read no span. Fixed in kamp-us/tea-fabrika#1318, with a law that runs on every pull request.",
+  "proof": "On main at a552fb67d, jobs-wire.integration.test.ts A14 answered { code: -32000, message: 'unreachable' } at the second jobs.finish; at 8fe2a2eb8 it passed. A log line in the gateway printed 'routed jobs.finish wake=wire:1' then 'wake NoSuchElementError'.",
+  "cost": "Main's 3-hour run red, a sev1, and slice 4's hands client would have read every finish as unreachable and sent it again without end.",
+  "head": "a552fb67dc3a3fcc554e0a5cd7947050dbb86d07",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1318"
+}
