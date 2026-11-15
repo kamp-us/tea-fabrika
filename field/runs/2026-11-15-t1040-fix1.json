@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1040-fix1",
+  "ticket": "kamp-us/tea-fabrika#1040",
+  "pr": "kamp-us/tea-fabrika#1309",
+  "started": "2026-11-15T04:41:00-08:00",
+  "ended": "2026-11-15T05:05:00-08:00",
+  "parent": "2026-11-15-t1040-review1",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "fix round for hands slice 3 in next/, one agent writing the laws and the code (0177). Both review findings are fixed. Law S2 (runtime/HandsJobsTest.ts) asks under a saved job's id from another process in each of the five states and needs a bare conflict refusal that writes nothing. A conflict was an error the runner retried with the backoff forever, and on the real Worker path the Process side read it as unavailable, so it is now a refusal reply, refused conflict, which the program folds as hands_err conflict; law L21 (runtime/RunnerHandsTest.ts) holds it through a real foreign job in the Project. The delivery machine lost its failed and placed messages and its answered state, which nothing sent; D1 holds the one message it takes. The runner now builds a hands ask from the life that dispatched it, origin, as place does. The lead's doc rows (tier-1.md, the glossary, the OTP table) and two finding rows are written.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "T1's assertion on HandsJobsError's reasons changed from storage, unavailable, conflict to storage, unavailable, with a new assertion that the refused reply's reason is no_hands or conflict: the reason moved from the error to the reply, nothing was dropped. D1's title and table changed to the machine as it is; its old failed and placed rows held code that is gone. No law about the process against origin change: the gap is a few synchronous steps between dispatch's capture and the ask, reachable only through Effect's cooperative yield, and no law can force that interleaving without a hook in product code. The started time is approximate, about two minutes before the first timestamp read.",
+  "costUsd": null,
+  "billed": null,
+  "step": "fix",
+  "plants": [
+    {
+      "law": "S2 (runtime/HandsJobsTest.ts)",
+      "plant": "runtime/HandsJobsLive.ts drops the process check on a saved job, so another process's ask on a requested job answers waiting with its receipt",
+      "result": "red"
+    },
+    {
+      "law": "L21 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts treats a refused conflict reply as a failed ask: retry later and fail, as the build first did",
+      "result": "red"
+    },
+    {
+      "law": "L21 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/internal/handsDelivery.ts settles a refusal only when pending and no_hands, so a conflicted delivery stays pending and owed",
+      "result": "red"
+    },
+    {
+      "law": "D1 (runtime/internal/handsDelivery.test.ts)",
+      "plant": "runtime/internal/handsDelivery.ts lets a no_hands refusal settle a waiting delivery",
+      "result": "red"
+    },
+    {
+      "law": "D1 (runtime/internal/handsDelivery.test.ts)",
+      "plant": "runtime/internal/handsDelivery.ts lets a second finished reply settle a settled delivery again",
+      "result": "red"
+    }
+  ]
+}

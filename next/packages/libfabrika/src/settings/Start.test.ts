@@ -1,4 +1,5 @@
-// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut.
+// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut. P39 slice 3 (ticket
+// 1040) declares `hands.target`, so the declared paths gain it.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -24,6 +25,7 @@ describe("instance start envelope, next/", () => {
           "gateway.draft-limit",
           "gateway.limit",
           "gateway.window",
+          "hands.target",
           "instance.port",
           "pack.fabrika.settings.tezgah.new",
         ]);

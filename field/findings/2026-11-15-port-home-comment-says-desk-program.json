@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-port-home-comment-says-desk-program",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/apps/fabrika/src/port-home.laws.integration.test.ts",
+    "line": 65
+  },
+  "says": "In next/, the saved-home law's new comment called fabrika/tezgah 'the desk program', a word decision 0491 retired for the window manager. Fixed in the same pull request: the comment now says 'the workspace program'.",
+  "proof": "At the reviewed head, port-home.laws.integration.test.ts:65 read 'which every instance boots since the desk program landed'; .glossary/TERMS.md says tezgah's program is `fabrika/tezgah`, 'Not `desk`'; decision 0491 says the window manager is tezgah and never desk.",
+  "cost": "A reader learns the retired word from a law's comment and writes it into new code.",
+  "head": "c360986057227efb2000154a48c3defb90596fb6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1313"
+}

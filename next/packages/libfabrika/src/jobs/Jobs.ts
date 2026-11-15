@@ -8,7 +8,7 @@ import { Context, Schema } from "effect";
 import type { Effect, Stream } from "effect";
 import type { ProcessId } from "../ProcessId.ts";
 import type { Rev } from "../Rev.ts";
-import type { Executor, Job, Recorded, Request, Result } from "./Job.ts";
+import type { Collection, Executor, Job, Recorded, Request, Result } from "./Job.ts";
 
 /**
  * A job call failed. The `reason` says why. `cause` keeps the decode or ledger error underneath,
@@ -21,7 +21,8 @@ export class JobsError extends Schema.TaggedError<JobsError>()("JobsError", {
   /** `not_found`: no job has that id. `conflict`: other bytes than the saved ones under that id.
    *  `not_target`: a key the request did not select. `lacks_capability`: a need the take did not
    *  advertise. `wrong_execution`: not the saved execution identity. `wrong_state`: a call out of
-   *  order. `bad_input`: a value that does not decode. `storage`: the transaction failed. */
+   *  order. `wrong_process`: a collect by a process the request does not name. `bad_input`: a value
+   *  that does not decode. `storage`: the transaction failed. */
   reason: Schema.Literals([
     "not_found",
     "conflict",
@@ -29,6 +30,7 @@ export class JobsError extends Schema.TaggedError<JobsError>()("JobsError", {
     "lacks_capability",
     "wrong_execution",
     "wrong_state",
+    "wrong_process",
     "bad_input",
     "storage",
   ]),
@@ -78,6 +80,12 @@ export class Jobs extends Context.Service<
       recorded: Recorded,
     ) => Effect.Effect<Receipt, JobsError>;
     readonly read: (id: string) => Effect.Effect<Job, JobsError>;
+    /** The requesting process took a finished job's result, in the answer letter the collection names. */
+    readonly collected: (
+      id: string,
+      collection: typeof Collection.Type,
+      recorded: Recorded,
+    ) => Effect.Effect<Receipt, JobsError>;
     /** Jobs whose saved requests name this exact process generation. */
     readonly forProcess: (process: typeof ProcessId.Type) => Stream.Stream<Job, JobsError>;
   }

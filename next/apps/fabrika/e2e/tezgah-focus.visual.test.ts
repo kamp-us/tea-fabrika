@@ -20,10 +20,10 @@ import { Effect } from "effect";
 // `SHOTS` names, only when it is set, named `tezgah-focus-<state>-<layout>.png`.
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, tile, waiting } from "./p14.test-support.ts";
-import type { drawn } from "./tezgah.test-support.ts";
 import {
   differences,
   domSettles,
+  drawn,
   focused,
   keys,
   processId,
@@ -33,6 +33,7 @@ import {
   shoot,
   type Shot,
   shown,
+  statusBar,
   tell,
   tezgahPid,
   tezgahView,
@@ -73,6 +74,19 @@ const loseLink = () => {
 
 type View = Parameters<typeof differences>[0];
 type Page = Parameters<typeof drawn>[0];
+
+/** Whether tile `under` sits right below tile `above` in workspace 1 of `view`, the two alone in one
+ *  column: `above` split down. */
+const splitBelow = (view: View, above: string, under: string): boolean => {
+  const holds = (node: View["workspaces"][number]["layout"]): boolean =>
+    typeof node !== "string" &&
+    ((node.dir === "column" &&
+      node.parts.length === 2 &&
+      node.parts[0]!.inner === above &&
+      node.parts[1]!.inner === under) ||
+      node.parts.some((p) => holds(p.inner)));
+  return holds(view.workspaces[0]!.layout);
+};
 
 describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
   it(
@@ -424,6 +438,49 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           yield* promised(() => page.setViewportSize({ width: 1024, height: 700 }));
           yield* at(page, null, (n) => n === 4, "a 2x2 at 1024x700");
           yield* tour(page, "small-1024x700");
+
+          // Ticket 1043: prefix keys as fast as a person types them. C-b h and at once C-b " (no wait
+          // between them) move to the tile on the left and split it down, as with a pause between
+          // them: the split's new tile sits under the tile the move landed on, no tile's field takes
+          // the quote, and the prefix is disarmed after. Then the same with C-b l.
+          yield* promised(() => page.setViewportSize({ width: 1440, height: 900 }));
+          yield* at(page, t3.id, (n) => n === 4, "the 2x2 at 1440x900, the tour back on the lower tile");
+          yield* move(page, ["Control+b", "l"], t5.id, "right from the lower tile to t5");
+
+          /** Burst `pressed` then wait until tezgah's workspace has one more tile, under `above`, the
+           *  two alone in one column, focus on the new tile. */
+          const fastSplit = (pressed: ReadonlyArray<string>, above: string, count: number) =>
+            Effect.gen(function* () {
+              const before = yield* tezgahView(r, pid);
+              yield* keys(page, ...pressed);
+              const under = (view: View) => shown(view).find((t) => !shown(before).some((b) => b.id === t.id));
+              const view = yield* at(
+                page,
+                null,
+                (n, v) =>
+                  n === count &&
+                  under(v) !== undefined &&
+                  focused(v).id === under(v)!.id &&
+                  splitBelow(v, above, under(v)!.id),
+                `${pressed.join(" ")} with no pause splits the tile the move landed on`,
+              );
+              const bar = yield* statusBar(page);
+              expect(bar.text, `1043: the prefix is disarmed after ${pressed.join(" ")}`).not.toContain("Esc cancel");
+              expect((yield* drawn(page)).polite, `1043: the polite region no longer says prefix`).not.toMatch(
+                /\bprefix\b/,
+              );
+
+              for (const t of shown(view)) {
+                expect(
+                  yield* promised(() => tile(page, regionName(t)).field.inputValue()),
+                  `1043: ${regionName(t)}'s field takes no key of ${pressed.join(" ")}`,
+                ).toBe("");
+              }
+
+              return under(view)!;
+            });
+          yield* fastSplit(["Control+b", "h", "Control+b", '"'], t3.id, 5);
+          yield* fastSplit(["Control+b", "l", "Control+b", '"'], t5.id, 6);
         }),
         context,
       ),

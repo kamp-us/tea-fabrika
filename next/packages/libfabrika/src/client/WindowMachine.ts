@@ -146,6 +146,8 @@ const Size = Schema.Struct({ width: Pixels, height: Pixels });
  * from its person's tezgah, whose view its tezgah child holds. `prefix` is the window's own prefix
  * key (`Prefix`), `polite` what the window says on its own in the polite region, and `size` the
  * area its tiles are laid out in, inside the frame's padding, once the page has said it.
+ * `presses` counts the key presses the window has read, so a page can tell which of the presses it
+ * handed over are still waiting in the run's line (`handle`).
  *
  * @stability unstable
  * @category models
@@ -209,6 +211,7 @@ export const WindowModel = Schema.Struct({
   prefix: Prefix,
   polite: Schema.NullOr(Polite),
   size: Schema.NullOr(Size),
+  presses: Count,
 });
 
 /**
@@ -1741,6 +1744,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             prefix: idle,
             polite: null,
             size: null,
+            presses: 0,
           })
         : loadedInto(loaded, ctx.tab),
       [key({ rejected: null })],
@@ -1753,7 +1757,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         ]),
       ) as typeof linkUpdate),
       press: (s, m): Step => pressed(s, step, m.tile, m.m, m.via ?? "button"),
-      key: (s, m): Step => (checks.keys === undefined ? [s, []] : pressedKey(s, step, checks.keys, m.key, m.at)),
+      key: (s, m): Step => {
+        const [next, cmds] = checks.keys === undefined ? [s, []] : pressedKey(s, step, checks.keys, m.key, m.at);
+        return [{ ...next, presses: s.presses + 1 }, cmds];
+      },
       size: (s, m): Step => [{ ...s, size: { width: m.width, height: m.height } }, []],
       focus: (s, m): Step => focusedIn(s, step, m.tile, m.cursor),
       tile: (s, m): Step => stepTile(s, m.id, m.msg),
@@ -2176,3 +2183,67 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
  */
 export type WindowMsg =
   ReturnType<typeof windowMachineFor> extends Machine<WindowModel, infer M, infer _C, infer _U, infer _X> ? M : never;
+
+/**
+ * One key press a page hands its window, as the window's `key` Msg says it.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type KeyPress = Extract<WindowMsg, { readonly type: "key" }>;
+
+/**
+ * The presses a page handed its window that the window may not have read yet, in the order they
+ * were pressed. `from` is how many presses the window had read when the first of `keys` was handed
+ * over, so the window's `presses` says how many of them it has read since.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Unread = { readonly from: number; readonly keys: ReadonlyArray<KeyPress> };
+
+/**
+ * What a page does with one press: `leave` it to the browser and the focused tile, with no Msg;
+ * `pass` it to the window and keep its default, as the prefix again reaches the tile (tmux's
+ * send-prefix); or `take` it, for the window alone.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Handling = "leave" | "pass" | "take";
+
+/**
+ * Returns what a page does with one press, judged as the window will judge it when it reads it:
+ * against the window as it is after every press the page handed it before this one (0278). A page
+ * must answer at once, to keep or stop the press's default, while the run reads its line later, so
+ * `now`, the run's state, may not have read the presses in `unread` yet. Those it has not read are
+ * read here first, by the window's own update, and nothing of that is kept: the answer's `unread`
+ * holds only presses still waiting, with this one added when the window is handed it.
+ * Only presses are read ahead. A click or a tezgah frame still waiting in the run's line before
+ * them is not seen here, so a press right behind one is judged against the older focus and tiles
+ * (finding 2026-11-15-handle-skips-non-press-msgs).
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const handle = (
+  window: ReturnType<typeof windowMachineFor>,
+  table: Keys.Table,
+  now: WindowModel,
+  unread: Unread,
+  press: KeyPress,
+): { readonly handling: Handling; readonly unread: Unread } => {
+  const waiting = unread.keys.slice(Math.max(0, now.presses - unread.from));
+  const ahead = waiting.reduce((s, m) => applyCell(window, s, m)[0], now);
+  const routed = Keys.route(table, ahead.prefix, null, press);
+  const handling: Handling =
+    routed._tag === "platform" || (routed._tag === "tile" && ahead.prefix._tag === "idle")
+      ? "leave"
+      : routed._tag === "tile"
+        ? "pass"
+        : "take";
+  return {
+    handling,
+    unread: { from: now.presses, keys: handling === "leave" ? waiting : [...waiting, press] },
+  };
+};

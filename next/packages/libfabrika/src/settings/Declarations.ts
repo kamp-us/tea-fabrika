@@ -1,7 +1,8 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`,
- * `gateway.draft-limit`, the four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the core pack's
- * `pack.fabrika.settings.tezgah.new`, and `all`, the group of the eleven, with `corePack`, the core pack's part of them.
+ * `gateway.draft-limit`, the four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, `hands.target`,
+ * the core pack's `pack.fabrika.settings.tezgah.new`, and `all`, the group of the twelve, with `corePack`, the core
+ * pack's part of them.
  *
  * **Details**
  *
@@ -189,6 +190,33 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+// The u flag lets Effect write the pattern into the generated JSON Schema.
+const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{43}$/u)).annotate({
+  title: "a key fingerprint",
+  description: "A key fingerprint is SHA256: and 43 base64 characters, as ssh-keygen -l prints it.",
+});
+
+/**
+ * Setting for the hands key a program's hands command targets: the fingerprint of the hands that
+ * run its jobs.
+ *
+ * **Details**
+ *
+ * The default is none: a program's hands command is then refused with `no_hands`, and no job is
+ * made. TOML has no null, so a person sets it by writing the key and unsets it by leaving it out.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const handsTarget = Setting.make("hands.target", {
+  schema: Schema.NullOr(Fingerprint),
+  default: null,
+  doc: "The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 // A program's name, `pack/program`, at most 256 characters, as `packs/ProgramName.ts` checks it.
 // Settings sit below packs, so the rule is written here again, as one pattern: Effect writes a
 // pattern with the u flag into the generated JSON Schema exactly, and a length check it cannot. Every
@@ -225,8 +253,8 @@ export const tezgahNew = Setting.make("pack.fabrika.settings.tezgah.new", {
  * **Details**
  *
  * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, `gatewayDraftLimit`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl` and the core
- * pack's `tezgahNew`.
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl`, `handsTarget` and the
+ * core pack's `tezgahNew`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -243,6 +271,7 @@ export const all = Setting.group({
   brainStartTimeout,
   brainStopTimeout,
   desktopLinkTtl,
+  handsTarget,
   tezgahNew,
 });
 

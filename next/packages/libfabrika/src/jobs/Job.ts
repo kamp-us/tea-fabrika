@@ -32,6 +32,17 @@ export const Command = Schema.TaggedUnion({
 export type Command = typeof Command.Type;
 
 /**
+ * The capabilities a command needs: a fact about the command, never a caller's choice.
+ *
+ * @stability unstable
+ * @category models
+ */
+export const needs = (command: Command): ReadonlyArray<string> => NEEDS[command._tag];
+
+/** Each command's trusted declaration. A new command fails to compile until it says what it needs. */
+const NEEDS: Record<Command["_tag"], ReadonlyArray<string>> = { git_version: ["git"] };
+
+/**
  * Schema for the checked terminal answer. `unknown` is a crash between start and a saved result.
  *
  * @stability unstable
@@ -149,8 +160,17 @@ export type Recorded = typeof Recorded.Type;
 export const Assignment = Schema.Struct({ execution: Text, executor: Executor });
 
 /**
- * Schema for a job's control state: `absent`, `requested`, `assigned`, `started` or `finished`.
- * `finished` has no way back to execution.
+ * Schema for who took a finished job's result: the exact process generation that asked, and the id
+ * of the answer letter the result went in.
+ *
+ * @stability unstable
+ * @category models
+ */
+export const Collection = Schema.Struct({ process: ProcessId, letter: Text });
+
+/**
+ * Schema for a job's control state: `absent`, `requested`, `assigned`, `started`, `finished` or
+ * `collected`. Neither `finished` nor `collected` has a way back to execution.
  *
  * @stability unstable
  * @category models
@@ -161,10 +181,11 @@ export const State = Schema.TaggedUnion({
   assigned: { request: Request, assignment: Assignment },
   started: { request: Request, assignment: Assignment },
   finished: { request: Request, assignment: Assignment, result: Result },
+  collected: { request: Request, assignment: Assignment, result: Result, collection: Collection },
 });
 /**
- * A job's control state: `absent`, `requested`, `assigned`, `started` or `finished`. `finished` has
- * no way back to execution.
+ * A job's control state: `absent`, `requested`, `assigned`, `started`, `finished` or `collected`.
+ * Neither `finished` nor `collected` has a way back to execution.
  *
  * @stability unstable
  * @category models
@@ -180,7 +201,7 @@ export type State = typeof State.Type;
  */
 export const Event = Schema.Struct({
   ...Recorded.fields,
-  event: Schema.Literals(["requested", "taken", "started", "finished"]),
+  event: Schema.Literals(["requested", "taken", "started", "finished", "collected"]),
   rev: Rev,
   /** The referee's clock, in ms since 1970. */
   arrivedAt: Schema.Int,

@@ -42,6 +42,7 @@ export const select = (jobs: ReadonlyArray<Job>, subject: Subject): Result.Resul
     (job) =>
       job.state._tag !== "absent" &&
       job.state._tag !== "finished" &&
+      job.state._tag !== "collected" &&
       job.state.request.process === subject.process &&
       job.state.request.target === subject.key,
   );

@@ -15,13 +15,19 @@ import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./star
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
   checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+  tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
   child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
+  fabsh: { hash: "a4f7ceb0f245c9e4be350dc2cabacd70c90a9884c0d3db6b6f5021e5cdff0fd1", source: "fabsh" },
 }));
 
 vi.mock("virtual:fabrika-built", () => ({
   programs: {
     "fabrika/counter": CODE.counter,
     "fabrika/checklist": CODE.checklist,
+    // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
+    "fabrika/fabsh": CODE.fabsh,
+    // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+    "fabrika/tezgah": CODE.tezgah,
     "p42/child": CODE.child,
   },
   assets: {},
