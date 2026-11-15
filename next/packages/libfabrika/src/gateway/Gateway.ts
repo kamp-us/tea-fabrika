@@ -28,7 +28,6 @@ import {
 import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
-import { Jobs } from "../jobs/Jobs.ts";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
@@ -45,6 +44,7 @@ import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { type WatchersError } from "../runtime/Watchers.ts";
+import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
@@ -57,8 +57,8 @@ import { type GatewayError } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
-import * as JobRoutes from "./Jobs.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
+import * as TaskRoutes from "./Tasks.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 /**
@@ -351,7 +351,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
-  const jobs = yield* Jobs;
+  const tasks = yield* Tasks;
   const wakeups = yield* MailWakeups;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
@@ -1119,7 +1119,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       .write(MemberEvent.cases.denied.make({ id: random(), key, saw, by: from.by }), from)
       .pipe(write);
   });
-  /** One wait past `after` on `stream`, as `ledger.wait` and `jobs.wait` both park it: ready at once,
+  /** One wait past `after` on `stream`, as `ledger.wait` and `tasks.wait` both park it: ready at once,
    *  or parked until an append past it rings `reader`. */
   const parkOn = Effect.fnUntraced(function* (stream: string, after: number, reader: string) {
     const waited =
@@ -1219,17 +1219,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     // A hands key's wait for new work parks outside the write turn, as `ledger.wait` does, on the
     // caller's own `target:` stream: the referee rings it when a request for that key lands.
-    if (method === "jobs.wait") {
-      const asked = JobRoutes.waitOn(attached, params);
+    if (method === "tasks.wait") {
+      const asked = TaskRoutes.waitOn(attached, params);
       return Result.isFailure(asked)
         ? no(asked.failure)
         : yield* parkOn(asked.success.stream, asked.success.after, reader);
     }
 
-    if (method.startsWith("jobs.")) {
-      // One span for the whole jobs call: the write turn, the finish's record and the wake, so the
+    if (method.startsWith("tasks.")) {
+      // One span for the whole tasks call: the write turn, the finish's record and the wake, so the
       // wake joins the trace the finish saved. `flush` runs after it, so the span is written too.
-      const routeJobs = Effect.fn("gateway.route")(
+      const routeTasks = Effect.fn("gateway.route")(
         function* () {
           const { answer, wake } = yield* Effect.gen(function* () {
             const fresh = yield* silent(Effect.result(authenticated(client)));
@@ -1238,7 +1238,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               return { answer: no("not_granted"), wake: null };
             }
 
-            return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
+            return yield* TaskRoutes.route(tasks, fresh.success.attached, method, params);
           }).pipe(write);
           // A taken finish answers only once its requester is scheduled, outside the write turn. A
           // wake that failed answers `unavailable`: the result is saved, and the same finish sent
@@ -1248,7 +1248,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         },
         Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
       );
-      const routed = yield* Effect.exit(routeJobs());
+      const routed = yield* Effect.exit(routeTasks());
       yield* flush;
       return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
     }

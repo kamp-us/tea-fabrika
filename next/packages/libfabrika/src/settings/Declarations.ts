@@ -290,11 +290,11 @@ const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{
 
 /**
  * Setting for the hands key a program's hands command targets: the fingerprint of the hands that
- * run its jobs.
+ * run its tasks.
  *
  * **Details**
  *
- * The default is none: a program's hands command is then refused with `no_hands`, and no job is
+ * The default is none: a program's hands command is then refused with `no_hands`, and no task is
  * made. TOML has no null, so a person sets it by writing the key and unsets it by leaving it out.
  *
  * @stability unstable

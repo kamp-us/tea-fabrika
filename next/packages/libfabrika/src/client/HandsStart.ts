@@ -117,10 +117,10 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
         return null;
       }),
       journal_read: Effect.fn("Journal.read")(function* (cmd) {
-        return yield* journal.read(cmd.job).pipe(Effect.mapError(plain));
+        return yield* journal.read(cmd.task).pipe(Effect.mapError(plain));
       }),
       journal_write: Effect.fn("Journal.write")(function* (cmd) {
-        yield* journal.write(cmd.job, cmd.entry).pipe(Effect.mapError(plain));
+        yield* journal.write(cmd.task, cmd.entry).pipe(Effect.mapError(plain));
         return null;
       }),
       execute: Effect.fn("Commands.execute")(function* (cmd) {

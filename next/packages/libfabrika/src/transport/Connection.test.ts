@@ -922,7 +922,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
 });
 
 it.effect.prop(
-  "A3: hands job frames save checked hello facts through busy and idle",
+  "A3: hands task frames save checked hello facts through busy and idle",
   { has: Schema.Array(Schema.String), build: Schema.NonEmptyString },
   ({ has, build }) =>
     Effect.gen(function* () {
@@ -951,7 +951,7 @@ it.effect.prop(
         wait: () => Effect.succeed({ _tag: "parked" as const }),
         call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
       });
-      yield* c.frame(callFrame("take", "jobs.take"));
+      yield* c.frame(callFrame("take", "tasks.take"));
       expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
 
       for (const copy of copies) {

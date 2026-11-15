@@ -6,14 +6,14 @@ import { NodeServices } from "@effect/platform-node";
 import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
-import { Job, Result } from "@kampus/libfabrika/jobs/Job";
+import { Task, Result } from "@kampus/libfabrika/tasks/Task";
 import { Effect, FileSystem, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import type { Project as SeededProject } from "./jobs-wire.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
+import type { Project as SeededProject } from "./tasks-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
@@ -170,14 +170,14 @@ it.live(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "jobs-wire-" });
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "tasks-wire-" });
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
       const root = identity(),
         hands = identity(),
         other = identity();
       const selected: typeof SeededProject.selected = hands.fingerprint;
       const app = path.resolve(import.meta.dirname, "..");
-      const entry = path.join(home, "jobs-entry.ts");
+      const entry = path.join(home, "tasks-entry.ts");
       yield* fs.symlink(path.join(app, "node_modules"), path.join(home, "node_modules"));
       // Only a generated public fingerprint enters the bundle; no key material or extra wire method.
       yield* fs.writeFileString(
@@ -185,7 +185,7 @@ it.live(
         [
           // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
           `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-          `import { Project as SeededProject } from ${JSON.stringify(path.join(app, "src/jobs-wire.test-support.ts"))};`,
+          `import { Project as SeededProject } from ${JSON.stringify(path.join(app, "src/tasks-wire.test-support.ts"))};`,
           `export class Project extends SeededProject { static selected = ${JSON.stringify(selected)}; }`,
         ].join("\n"),
       );
@@ -212,7 +212,7 @@ it.live(
         // The settings fixture names the same gateway budget, 100,000 a minute.
         RecordWireTest.startupFixture({
           home,
-          name: "jobs-wire",
+          name: "tasks-wire",
           person: PERSON,
           founder: root.line,
           window: root.raw,
@@ -221,11 +221,11 @@ it.live(
       );
       const url = `http://127.0.0.1:${port.port}`;
       expect(running).toBeDefined();
-      // A job's requester is always a started name, since only a running program asks the hands. The
-      // seeded job names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
+      // A task's requester is always a started name, since only a running program asks the hands. The
+      // seeded task names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
       const requester = yield* Effect.tryPromise({
         try: () =>
-          Reflect.get(running.project("jobs-wire"), "start")(
+          Reflect.get(running.project("tasks-wire"), "start")(
             {
               _tag: "first",
               id: "start-wire",
@@ -250,7 +250,7 @@ it.live(
           id,
           key: key.raw,
           for: PERSON,
-          to: "jobs-wire",
+          to: "tasks-wire",
           as: "hands",
           sentAt: SENT,
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
@@ -269,51 +269,51 @@ it.live(
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
-      expect(first.frames.filter((f) => f.method?.startsWith("jobs."))).toEqual([]);
-      const taken = Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.Literal("assigned"), job: Job }))(
-        ok(yield* first.call("jobs.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
+      expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
+      const taken = Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.Literal("assigned"), task: Task }))(
+        ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
-      expect(taken.job.state._tag).toBe("assigned");
+      expect(taken.task.state._tag).toBe("assigned");
 
-      if (taken.job.state._tag !== "assigned") {
+      if (taken.task.state._tag !== "assigned") {
         return yield* Effect.die("take did not assign");
       }
 
-      const execution = taken.job.state.assignment.execution;
-      expect(taken.job.state.request).toMatchObject({ id: "wire-job", target: hands.fingerprint, process: PROCESS });
+      const execution = taken.task.state.assignment.execution;
+      expect(taken.task.state.request).toMatchObject({ id: "wire-task", target: hands.fingerprint, process: PROCESS });
       first.close();
       const resumed = yield* socket(url, hands, "resumed");
-      expect(ok(yield* resumed.call("jobs.take", { process: PROCESS, sentAt: "retry", seen: 0 }))).toEqual(taken);
+      expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: "retry", seen: 0 }))).toEqual(taken);
       const stranger = yield* socket(url, other, "stranger");
-      const resource = { process: PROCESS, job: "wire-job" };
-      no(yield* stranger.call("jobs.read", resource));
-      no(yield* stranger.call("jobs.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
-      expect(ok(yield* stranger.call("jobs.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
+      const resource = { process: PROCESS, task: "wire-task" };
+      no(yield* stranger.call("tasks.read", resource));
+      no(yield* stranger.call("tasks.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
+      expect(ok(yield* stranger.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
         _tag: "idle",
       });
-      const started = ok(yield* resumed.call("jobs.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
-      expect(ok(yield* resumed.call("jobs.started", { ...resource, execution, sentAt: "retry", seen: 0 }))).toEqual(
+      const started = ok(yield* resumed.call("tasks.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
+      expect(ok(yield* resumed.call("tasks.started", { ...resource, execution, sentAt: "retry", seen: 0 }))).toEqual(
         started,
       );
       const result = Result.cases.exited.make({ code: 0, version: "fixture-result" });
-      no(yield* stranger.call("jobs.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }));
+      no(yield* stranger.call("tasks.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }));
       const finished = ok(
-        yield* resumed.call("jobs.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }),
+        yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }),
       );
       expect(
-        ok(yield* resumed.call("jobs.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
+        ok(yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
       ).toEqual(finished);
-      const read = Schema.decodeUnknownSync(Job)(ok(yield* resumed.call("jobs.read", resource)));
-      expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.job.state.assignment });
+      const read = Schema.decodeUnknownSync(Task)(ok(yield* resumed.call("tasks.read", resource)));
+      expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.task.state.assignment });
       expect(read.events.map((e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
-      expect(ok(yield* resumed.call("jobs.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
+      expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
         _tag: "idle",
       });
       const revoke = revokeText({
         id: "revoke-hands",
         key: hands.raw,
         for: PERSON,
-        to: "jobs-wire",
+        to: "tasks-wire",
         sentAt: SENT,
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
@@ -328,8 +328,8 @@ it.live(
       });
 
       for (const [method, params] of [
-        ["jobs.finish", { ...resource, execution, result, sentAt: "revoked", seen: 0 }],
-        ["jobs.read", resource],
+        ["tasks.finish", { ...resource, execution, result, sentAt: "revoked", seen: 0 }],
+        ["tasks.read", resource],
       ] as const) {
         const answer = yield* resumed.call(method, params).pipe(Effect.result);
 

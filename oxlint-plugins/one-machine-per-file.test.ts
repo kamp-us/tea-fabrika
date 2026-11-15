@@ -393,7 +393,7 @@ it("pinned: L4 the two product blocks enforce the rule; the five test globs leav
 const REAL = [
   "next/packages/libfabrika/src/access/Access.ts",
   "next/packages/libfabrika/src/gateway/internal/waiting.ts",
-  "next/packages/libfabrika/src/jobs/internal/job.ts",
+  "next/packages/libfabrika/src/tasks/internal/task.ts",
   "next/packages/libfabrika/src/node/dev/DevLife.ts",
   "next/packages/libfabrika/src/processes/internal/processTable.ts",
   "next/packages/libfabrika/src/runtime/BrainLife.ts",

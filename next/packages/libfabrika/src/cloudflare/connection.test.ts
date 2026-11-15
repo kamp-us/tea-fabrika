@@ -8,9 +8,9 @@ import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
-import { targetStream } from "../jobs/Jobs.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import { targetStream } from "../tasks/Tasks.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
 import { Answer, Attached, type Wait } from "../transport/Wire.ts";
@@ -774,7 +774,7 @@ it.effect.prop(
               ? []
               : [
                   wait.stream.startsWith(targetStream(""))
-                    ? { method: "jobs.wait", params: { after: wait.after } }
+                    ? { method: "tasks.wait", params: { after: wait.after } }
                     : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
                 ];
           expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
@@ -919,7 +919,7 @@ it.effect.prop(
 const Rev = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }));
 
 it.effect.prop(
-  "P39 4a W2: a hands key's jobs.wait names this connection object as the one its ring reaches, for the first parked wait and for each wait asked again after a ring that does not pass it",
+  "P39 4a W2: a hands key's tasks.wait names this connection object as the one its ring reaches, for the first parked wait and for each wait asked again after a ring that does not pass it",
   { after: Rev, rings: Schema.Array(Rev).check(Schema.isMaxLength(6)) },
   ({ after, rings }) =>
     Effect.gen(function* () {
@@ -932,7 +932,7 @@ it.effect.prop(
         const service = yield* ConnectionService;
         yield* service.message(
           w.socket,
-          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "jobs.wait", params: { after } }),
+          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "tasks.wait", params: { after } }),
         );
 
         // Rings at or before `after` do not pass the wait: each asks the door again.
@@ -940,14 +940,14 @@ it.effect.prop(
           yield* service.ring(stream, Math.min(rev, after));
         }
 
-        const waits = w.readers.filter((r) => r.method === "jobs.wait");
+        const waits = w.readers.filter((r) => r.method === "tasks.wait");
         // The frame is routed once, and its parked answer is registered once, then once per ring.
         expect(waits).toHaveLength(2 + rings.length);
         // The referee rings the object a wait names (runtime.ts, CONNECTION.getByName), and the
         // hands' socket lives on this one (fetch.ts, by its URL path).
         expect(
           waits.map((r) => r.reader),
-          "every jobs.wait rings this object",
+          "every tasks.wait rings this object",
         ).toEqual(waits.map(() => "test-connection"));
         expect(w.frames, "a parked wait answers nothing yet").toEqual([]);
 

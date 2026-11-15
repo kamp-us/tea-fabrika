@@ -372,8 +372,8 @@ it("the library's and a program's code may not import the test primitives, and t
       numRuns: 200,
       examples: [
         // pinned: the review of PR 1274 named this file, which lint let import the test package.
-        [["library", "next/packages/libfabrika/src/jobs/Job.ts", 0]],
-        [["library suites", "next/packages/libfabrika/src/jobs/JobsTest.ts", 0]],
+        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0]],
+        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0]],
         [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0]],
       ],
     },

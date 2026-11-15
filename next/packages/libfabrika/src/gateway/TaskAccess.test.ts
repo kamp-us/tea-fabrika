@@ -1,31 +1,31 @@
 // T714, next/. A6/A7's pure entry points. The gateway suite exercises these rules on saved histories.
-// select(jobs, {process,key}) returns Result<Job|null,"ambiguous">; owns checks all named resource facts.
+// select(tasks, {process,key}) returns Result<Task|null,"ambiguous">; owns checks all named resource facts.
 // Ambiguity, finished-work and wrong-key plant trials are recorded in the tests-step report.
-// P39 slice 3 (ticket 1040), J1's select half: a collected job is never offered, as a finished one
-// is not. Plant (after build): let select keep `collected` jobs.
+// P39 slice 3 (ticket 1040), J1's select half: a collected task is never offered, as a finished one
+// is not. Plant (after build): let select keep `collected` tasks.
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as Id from "../Id.ts";
-import { type Job, Request, Executor, Result as JobResult, State } from "../jobs/Job.ts";
+import { type Task, Request, Executor, Result as TaskResult, State } from "../tasks/Task.ts";
 
-import * as JobAccess from "./JobAccess.ts";
+import * as TaskAccess from "./TaskAccess.ts";
 
 const Item = Schema.Struct({
   request: Schema.Struct({ ...Request.fields, process: Id.Process }),
   executor: Executor,
   execution: Schema.NonEmptyString,
-  result: JobResult,
+  result: TaskResult,
   phase: Schema.Literals(["requested", "assigned", "started", "finished"]),
   matching: Schema.Boolean,
 });
 
-/** A job in any phase, a collected one among them: what `select` must sort. */
+/** A task in any phase, a collected one among them: what `select` must sort. */
 const AnyItem = Schema.Struct({
   ...Item.fields,
   phase: Schema.Literals(["requested", "assigned", "started", "finished", "collected"]),
 });
 
-const jobFor = (a: typeof AnyItem.Type): Job => {
+const taskFor = (a: typeof AnyItem.Type): Task => {
   const assignment = {
     execution: a.execution,
     executor: { ...a.executor, key: a.matching ? a.request.target : `${a.request.target}x` },
@@ -48,7 +48,7 @@ const jobFor = (a: typeof AnyItem.Type): Job => {
   return { state, events: [] };
 };
 
-/** The phases a hands key may still work on: a finished or collected job has nothing left to run. */
+/** The phases a hands key may still work on: a finished or collected task has nothing left to run. */
 const OPEN: ReadonlyArray<string> = ["requested", "assigned", "started"];
 
 it.prop(
@@ -59,13 +59,13 @@ it.prop(
     process: Schema.String,
   },
   ({ items, key, process }) => {
-    const jobs = items.map((item) => jobFor({ ...item, matching: true }));
-    const subjects = jobs.flatMap((j) =>
+    const tasks = items.map((item) => taskFor({ ...item, matching: true }));
+    const subjects = tasks.flatMap((j) =>
       j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );
 
     for (const subject of [{ key, process }, ...subjects]) {
-      for (const values of [jobs, [...jobs, ...jobs]]) {
+      for (const values of [tasks, [...tasks, ...tasks]]) {
         const wanted = values.filter(
           (j) =>
             j.state._tag !== "absent" &&
@@ -73,7 +73,7 @@ it.prop(
             j.state.request.target === subject.key &&
             j.state.request.process === subject.process,
         );
-        expect(JobAccess.select(values, subject)).toEqual(
+        expect(TaskAccess.select(values, subject)).toEqual(
           wanted.length > 1 ? Result.fail("ambiguous") : Result.succeed(wanted[0] ?? null),
         );
       }
@@ -86,25 +86,25 @@ it.prop(
   "A7: ownership binds process, selected target, executor and execution",
   { item: Item },
   ({ item }) => {
-    const job = jobFor(item);
-    const state = job.state;
+    const task = taskFor(item);
+    const state = task.state;
 
     if (state._tag === "absent") {
       return;
     }
 
     const identity = { process: state.request.process, key: state.request.target };
-    expect(JobAccess.owns(job, identity)).toBe(
+    expect(TaskAccess.owns(task, identity)).toBe(
       state._tag === "requested" || state.assignment.executor.key === identity.key,
     );
-    expect(JobAccess.owns(job, { ...identity, key: `${identity.key}x` })).toBe(false);
-    expect(JobAccess.owns(job, { ...identity, process: `${identity.process}x` })).toBe(false);
+    expect(TaskAccess.owns(task, { ...identity, key: `${identity.key}x` })).toBe(false);
+    expect(TaskAccess.owns(task, { ...identity, process: `${identity.process}x` })).toBe(false);
 
     if (state._tag !== "requested") {
-      expect(JobAccess.owns(job, { ...identity, execution: state.assignment.execution })).toBe(
+      expect(TaskAccess.owns(task, { ...identity, execution: state.assignment.execution })).toBe(
         state.assignment.executor.key === identity.key,
       );
-      expect(JobAccess.owns(job, { ...identity, execution: `${state.assignment.execution}x` })).toBe(false);
+      expect(TaskAccess.owns(task, { ...identity, execution: `${state.assignment.execution}x` })).toBe(false);
     }
   },
   { arbitrary: { seed: 119120, runs: 100 } },

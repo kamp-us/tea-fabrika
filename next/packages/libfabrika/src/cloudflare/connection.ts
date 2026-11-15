@@ -1,9 +1,9 @@
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
-import { targetStream } from "../jobs/Jobs.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
+import { targetStream } from "../tasks/Tasks.ts";
 import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
@@ -75,11 +75,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
         const client = (yield* attached(ws)).client as ConnectionId;
-        // A hands key's own `target:` stream is asked again as its `jobs.wait`: it may not call
+        // A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
         // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring
         // goes to `reader`, this object, where the socket is.
         const asked = stream.startsWith(targetStream(""))
-          ? p.route(client, "jobs.wait", { after }, reader)
+          ? p.route(client, "tasks.wait", { after }, reader)
           : p.route(client, "ledger.wait", { stream, after }, reader);
         const answer = yield* rpc(routed(asked));
 
@@ -165,7 +165,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             return result;
           }
 
-          // A call the door parks, such as a hands key's first `jobs.wait`, is rung at this object,
+          // A call the door parks, such as a hands key's first `tasks.wait`, is rung at this object,
           // the one the socket lives on, never at an object named by the connection id.
           return yield* rpc(routed(p.route(client, method, params, gateway)));
         },

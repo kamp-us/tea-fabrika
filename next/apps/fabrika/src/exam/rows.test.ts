@@ -173,7 +173,7 @@ describe("the rule file's rows give a file its row", () => {
     expect(rowsAt(REAL, "next/packages/libfabrika/src/gateway/internal/waiting.ts")).toEqual(["next-door"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/cloudflare/runtime.ts")).toEqual(["next-workers"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/telemetry/internal/measurements.ts")).toEqual(["next-telemetry"]);
-    expect(rowsAt(REAL, "next/packages/libfabrika/src/jobs/internal/job.ts")).toEqual(["next-jobs"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/tasks/internal/task.ts")).toEqual(["next-tasks"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/data/index.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
