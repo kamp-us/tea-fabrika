@@ -7,6 +7,7 @@ import {
   lockfileBehind,
   pinFolder,
   pinsFolder,
+  questKeyed,
   startHead,
   wipOf,
   workspaceGlobs,
@@ -213,6 +214,38 @@ describe("the lockfile follows the manifests, today's tooling", () => {
     ].join("\n");
     expect(workspaceGlobs(yaml)).toEqual(["apps/*", "next/packages/*", "!next/old", ".github/ci"]);
     expect(workspaceGlobs("catalog:\n  a: 1\n")).toEqual([]);
+  });
+});
+
+describe("a saved quest's key, today's tooling", () => {
+  // Plants: keep `lane` beside `quest`; let `lane` win over a `quest` already there; touch a record
+  // with no `lane`. Decision 0546: saved data keeps its word, and a reader reads both.
+  it("property: a record's `lane` reads as `quest` and goes, and every other key stays as it was", () => {
+    const key = fc.stringMatching(/^[a-z]{1,8}$/).filter((k) => k !== "lane" && k !== "quest");
+    fc.assert(
+      fc.property(
+        fc.dictionary(key, fc.jsonValue(), { maxKeys: 5 }),
+        fc.option(fc.string(), { nil: undefined }),
+        fc.option(fc.string(), { nil: undefined }),
+        (rest, lane, quest) => {
+          const saved = {
+            ...rest,
+            ...(lane === undefined ? {} : { lane }),
+            ...(quest === undefined ? {} : { quest }),
+          };
+          const got = questKeyed(saved);
+          expect(got).not.toHaveProperty("lane");
+          expect(got).toEqual({ ...rest, ...((quest ?? lane) === undefined ? {} : { quest: quest ?? lane }) });
+        },
+      ),
+      options,
+    );
+  });
+
+  it("pinned: a value that is no JSON object is given back as it is, for the reader's schema to refuse", () => {
+    for (const v of [null, 3, "lane", ["lane"], true]) {
+      expect(questKeyed(v)).toBe(v);
+    }
   });
 });
 

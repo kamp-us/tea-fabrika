@@ -1,5 +1,5 @@
 // The host step's parts, on Node in a temp folder: the brief's commands, the Electron lock, the
-// time limit, what a failed command answers, and the lane's state file. Commands here are plain
+// time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
@@ -14,7 +14,7 @@ import {
   hostCommands,
   hostEnv,
   lastHost,
-  recordInLane,
+  recordInQuest,
   runCommands,
   runners,
 } from "./host.ts";
@@ -37,17 +37,17 @@ const sha = "a".repeat(40);
 const args = (commands: ReadonlyArray<string>) => ({
   main: "/nowhere/main",
   boxes: "/nowhere/boxes",
-  lane: "lane",
+  quest: "quest",
   ticket: "7",
-  branch: "fabrikalfa/lane",
+  branch: "fabrikalfa/quest",
   plan: "/nowhere/plan.md",
   head: sha,
-  name: "lane-host3",
+  name: "quest-host3",
   commands,
   minutes: 1,
 });
 
-describe("the lane brief's host commands", () => {
+describe("the quest brief's host commands", () => {
   it("property: only the lines inside a fence run, in order, without blanks and comments; prose never runs", () => {
     fc.assert(
       fc.property(fc.array(command, { maxLength: 6 }), fc.array(command, { maxLength: 4 }), (inside, prose) => {
@@ -113,7 +113,7 @@ describe("the lane brief's host commands", () => {
 });
 
 describe("the host step's outcomes", () => {
-  it("scenario: a lane brief with no host section is a skip that touches nothing, since most lanes have no window", () =>
+  it("scenario: a quest brief with no host section is a skip that touches nothing, since most quests have no window", () =>
     ran(
       Effect.gen(function* () {
         const hosted = yield* host(args([]));
@@ -132,7 +132,18 @@ describe("the host step's outcomes", () => {
       }),
     ));
 
-  it("property: the first command that exits non-zero sends the lane to build with its last lines, and no later command runs", () =>
+  // Plant: read only `quest`, so a flow saved before decision 0546 no longer runs its host step.
+  it("scenario: args a flow saved before decision 0546, with the quest under `lane`, still parse", () =>
+    ran(
+      Effect.gen(function* () {
+        const runner = runners.host ?? (() => Effect.die("no host runner"));
+        const { quest, ...rest } = args([]);
+        const answer = yield* runner(Step.act("host", { ...rest, lane: quest }));
+        expect(answer.outcome._tag).toBe("skip");
+      }),
+    ));
+
+  it("property: the first command that exits non-zero sends the quest to build with its last lines, and no later command runs", () =>
     fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 125 }), fc.stringMatching(/^[a-z]{4,12}$/), (code, said) =>
         ran(
@@ -168,7 +179,7 @@ describe("the host step's outcomes", () => {
       }),
     ));
 
-  it("scenario: a command past its time limit is stopped and sends the lane to build, since a hung app must not hold the lock", () =>
+  it("scenario: a command past its time limit is stopped and sends the quest to build, since a hung app must not hold the lock", () =>
     ran(
       Effect.gen(function* () {
         const dir = yield* temp;
@@ -226,21 +237,21 @@ describe("one Electron app at a time", () => {
     ));
 });
 
-describe("the lane's state file", () => {
+describe("the quest's state file", () => {
   it("scenario: a host entry joins drive's steps, keeps their fields, and moves the head only on done", () =>
     ran(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const boxes = yield* temp;
         yield* fs.makeDirectory(`${boxes}/state`);
-        const state = `${boxes}/state/lane.json`;
-        const before = { lane: "lane", ticket: "7", head: sha, steps: [{ step: "build", outcome: "done", head: sha }] };
+        const state = `${boxes}/state/quest.json`;
+        const before = { quest: "quest", ticket: "7", head: sha, steps: [{ step: "build", outcome: "done", head: sha }] };
         yield* fs.writeFileString(state, JSON.stringify(before));
-        const at = { boxes, lane: "lane", name: "lane-host3", head: sha };
+        const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
-        yield* recordInLane(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
+        yield* recordInQuest(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;
-        yield* recordInLane(at, { outcome: done, head: "b".repeat(40), log: "y.log" }, "t2");
+        yield* recordInQuest(at, { outcome: done, head: "b".repeat(40), log: "y.log" }, "t2");
         const after = JSON.parse(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
         expect(after.head).toBe("b".repeat(40));
@@ -249,10 +260,44 @@ describe("the lane's state file", () => {
           "host send:build:host_failed",
           "host done",
         ]);
-        expect(after.steps[1]).toMatchObject({ head: sha, report: "x.log", box: "lane-host3", ended: "t1" });
+        expect(after.steps[1]).toMatchObject({ head: sha, report: "x.log", box: "quest-host3", ended: "t1" });
         // A review is told the last host entry, read back from the file as written.
         expect(lastHost(after.steps)).toBe(`done at ${"b".repeat(40)}: ok`);
         expect(lastHost(before.steps)).toBeNull();
+      }),
+    ));
+
+  // Plants: keep the old `lane` key beside `quest`; start the file over when it says `lane`.
+  it("scenario: a state file drive wrote before decision 0546 names the quest `lane`; the host entry joins it, and the file then says `quest`", () =>
+    ran(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const boxes = yield* temp;
+        yield* fs.makeDirectory(`${boxes}/state`);
+        const state = `${boxes}/state/t9.json`;
+        const before = {
+          lane: "t9",
+          ticket: "9",
+          plan: "/nowhere/t9-PLAN.md",
+          branch: "fabrikalfa/t9",
+          root: sha,
+          head: sha,
+          steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
+        };
+        yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
+        const done = { _tag: "done", reason: "ok" } as const;
+        yield* recordInQuest({ boxes, quest: "t9", name: "t9-host1", head: sha }, { outcome: done, head: sha, log: null }, "t1");
+        const after = JSON.parse(yield* fs.readFileString(state));
+        expect(after).toMatchObject({
+          quest: "t9",
+          ticket: "9",
+          plan: before.plan,
+          branch: before.branch,
+          root: sha,
+          head: sha,
+        });
+        expect(after).not.toHaveProperty("lane");
+        expect(after.steps.map((e: { step: string }) => e.step)).toEqual(["build", "host"]);
       }),
     ));
 });

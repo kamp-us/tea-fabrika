@@ -3,8 +3,8 @@
 //
 //   a box is kept while   a process has its cwd there, or its git index, HEAD log or folder changed
 //                         in the last 2 h (lastTouched; gc's own reads write none of them),
-//                         or drive kept it stuck less than 24 h ago and its lane has not landed,
-//                         or it holds uncommitted or untracked files and its lane has not landed
+//                         or drive kept it stuck less than 24 h ago and its quest has not landed,
+//                         or it holds uncommitted or untracked files and its quest has not landed
 //                         (a backup saves only HEAD, so they would be lost); once it landed, the
 //                         files go first into the main checkout as a stash (keepFiles), and a box
 //                         whose git data is not its own `<box>-gitdata` keeps them
@@ -13,15 +13,15 @@
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
 //   then                  every state/<box>.box whose box folder is gone is removed too, and every
 //                         linked worktree of the main checkout outside the boxes folder whose
-//                         lane landed (decideWorktree): its branch stays in the main checkout
-//   and                   boxfiles.ts sweeps what a landed lane's gone boxes left beside the boxes:
+//                         quest landed (decideWorktree): its branch stays in the main checkout
+//   and                   boxfiles.ts sweeps what a landed quest's gone boxes left beside the boxes:
 //                         their files and mutation folders move to the main checkout's runs/, their
 //                         views and Codex homes go (boxfiles.ts says when)
 //
-// A box's tree is in BOXES/box (lane.ts boxTree); one made before that layout is still in BOXES.
+// A box's tree is in BOXES/box (quest.ts boxTree); one made before that layout is still in BOXES.
 //
-// A lane's pinned scripts (BOXES/pins/<lane>.<pid>, lane.ts pinFolder) are removed by the lane's own
-// scope; a pin a killed lane left goes once no running process names it and it is older than IDLE
+// A quest's pinned scripts (BOXES/pins/<quest>.<pid>, quest.ts pinFolder) are removed by the quest's own
+// scope; a pin a killed quest left goes once no running process names it and it is older than IDLE
 // (decidePin).
 //
 // Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
@@ -39,7 +39,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { Result, Schema } from "effect";
-import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./lane.ts";
+import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 
@@ -72,7 +72,7 @@ export type Verdict = typeof Verdict.Type;
 const keep = (reason: string) => Verdict.cases.keep.make({ reason });
 const remove = (reason: "merged" | "closed" | "on_remote") => Verdict.cases.remove.make({ reason });
 
-/** What gc does with one lane's pinned scripts. */
+/** What gc does with one quest's pinned scripts. */
 export const PinVerdict = Schema.TaggedUnion({
   keep: { reason: Schema.String },
   remove: { reason: Schema.String },
@@ -92,12 +92,12 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
   files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
 
 /**
- * The Check for one lane's pinned scripts, pure. A pin goes only when no process names it and it is
+ * The Check for one quest's pinned scripts, pure. A pin goes only when no process names it and it is
  * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
  */
 export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
   holders._tag === "refused"
-    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a lane may still run from it" })
+    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" })
     : holders.count > 0
       ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
       : idle < IDLE
@@ -118,7 +118,7 @@ export const decide = (s: Seen): Verdict => {
     return keep(`touched ${Math.round(s.idle / 60_000)} min ago`);
   }
 
-  // A stuck box is kept for the lead to read, until its lane lands (0019).
+  // A stuck box is kept for the lead to read, until its quest lands (0019).
   if (s.stuck !== null && s.stuck < STUCK && !s.merged) {
     return keep(`stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`);
   }
@@ -129,7 +129,7 @@ export const decide = (s: Seen): Verdict => {
 
   // A backup pushes HEAD only, so files never committed would go with the folder (field note
   // 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them,
-  // until the lane lands: then gc keeps them in the main checkout first (`refs/keep/box/<box>-files`,
+  // until the quest lands: then gc keeps them in the main checkout first (`refs/keep/box/<box>-files`,
   // a stash), since a drive box never commits and so always holds its step's files uncommitted.
   if (s.dirty === null) {
     return keep("its files could not be read");
@@ -165,8 +165,8 @@ export type PrState = "OPEN" | "MERGED" | "CLOSED";
 
 /** The pull requests holding a worktree's work: those of its own branch (minus -wip), of every
  * remote branch whose tip is its HEAD, and every one whose head commit is its HEAD. A lead's
- * worktree is often pushed under another name (botpush to fabrikalfa/<lane>), so its own branch
- * name alone missed a merged lane and gc kept it for good (2026-11-09: PR 623's worktree). */
+ * worktree is often pushed under another name (botpush to fabrikalfa/<quest>), so its own branch
+ * name alone missed a merged quest and gc kept it for good (2026-11-09: PR 623's worktree). */
 export const worktreePrs = (
   w: {
     readonly branch: string | null;
@@ -181,8 +181,8 @@ export const worktreePrs = (
   ...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
 ];
 
-/** A worktree goes once its lane landed, clean and idle. Its branch stays in the main checkout, so
- * only the folder goes; a worktree with no lane branch is someone's own and stays. */
+/** A worktree goes once its quest landed, clean and idle. Its branch stays in the main checkout, so
+ * only the folder goes; a worktree with no quest branch is someone's own and stays. */
 export const decideWorktree = (w: SeenWorktree): Verdict => {
   if (w.locked) {
     return keep("locked");
@@ -359,7 +359,7 @@ const pidsIn = (busyIn: readonly { pid: number; path: string }[], dir: string) =
   ...new Set(busyIn.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)).map((c) => c.pid)),
 ];
 
-/** Box name to when drive kept it stuck, from `state/<lane>.json`. */
+/** Box name to when drive kept it stuck, from `state/<quest>.json`. */
 const keptByDrive = (boxes: string): Map<string, number> => {
   const kept = new Map<string, number>();
   const dir = join(boxes, "state");
@@ -371,11 +371,11 @@ const keptByDrive = (boxes: string): Map<string, number> => {
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
     // A state file that does not read is skipped, from the step where it stopped reading.
     Result.try(() => {
-      const lane = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
+      const quest = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
         steps?: { box?: string; kept?: boolean; ended?: string }[];
       };
 
-      for (const step of lane.steps ?? []) {
+      for (const step of quest.steps ?? []) {
         if (step.kept && step.box) {
           kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
         }
@@ -534,7 +534,7 @@ const main = () => {
 
     let reason: string = verdict._tag === "remove" ? verdict.reason : "";
 
-    // A merged lane's box may hold commits no remote has: keep its HEAD in the main checkout.
+    // A merged quest's box may hold commits no remote has: keep its HEAD in the main checkout.
     if (verdict._tag === "remove" && !onRemote && !dry) {
       if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
         console.log(`keep ${name}: could not save its HEAD`);
@@ -545,7 +545,7 @@ const main = () => {
       reason += `, HEAD kept at refs/keep/box/${name}`;
     }
 
-    // A landed lane's box with files never committed: they go into the main checkout as a stash, the
+    // A landed quest's box with files never committed: they go into the main checkout as a stash, the
     // untracked ones too (git ignores node_modules), before the folder goes.
     if (verdict._tag === "remove" && (seen.dirty ?? 0) > 0) {
       const kept = `refs/keep/box/${name}-files`;
@@ -639,7 +639,7 @@ const main = () => {
     console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
   }
 
-  // A lane's pinned scripts: its own scope removes them, so one left here is a lane that was
+  // A quest's pinned scripts: its own scope removes them, so one left here is a quest that was
   // killed. It goes once no running process names it and it is older than IDLE.
   const pins = pinsFolder(env.BOXES);
 
@@ -659,8 +659,8 @@ const main = () => {
     );
   }
 
-  // What a landed lane's gone boxes left beside the boxes. Landed is the lane's own branch with a
-  // merged pull request and no open one, from the listing above: boxfiles.ts judges it per lane.
+  // What a landed quest's gone boxes left beside the boxes. Landed is the quest's own branch with a
+  // merged pull request and no open one, from the listing above: boxfiles.ts judges it per quest.
   const swept = spawnSync(
     process.execPath,
     [
@@ -685,7 +685,7 @@ const main = () => {
     repo("worktree", "prune");
   }
 
-  // Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a lane.
+  // Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a quest.
   let trees = 0;
   const blocks = repo("worktree", "list", "--porcelain").out.split("\n\n").filter(Boolean);
 
@@ -745,7 +745,7 @@ const main = () => {
   // The mutation container's leftovers (0045): a container a dead run left, and images over a
   // week old. mutbox.ts knows which are safe to remove, and keeps a live run's. Each of its Docker
   // calls has its own bound; GC_SECONDS is a second guard, so a hung Docker never holds the chain
-  // (2026-11-10: a `docker ps` here never returned, and two lanes sat 1 h 50 min).
+  // (2026-11-10: a `docker ps` here never returned, and two quests sat 1 h 50 min).
   if (!dry) {
     const swept = spawnSync(
       process.execPath,

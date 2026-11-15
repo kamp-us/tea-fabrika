@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { boxTree, oldBoxTree } from "./lane.ts";
+import { boxTree, oldBoxTree } from "./quest.ts";
 
 // Today's tooling. Real Git and the installed signer, local paths only. The only keys are
 // throwaway keys made here; scripts open them, this test never reads their files.
@@ -954,7 +954,7 @@ describe("T321 K2 box start, today's tooling", () => {
               b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
             }
 
-            // Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
+            // Lead-only field rows on an open PR are not a quest (PR 601, 2026-11-09).
             const path =
               place === "field-rows"
                 ? "field/runs.jsonl"
@@ -969,7 +969,7 @@ describe("T321 K2 box start, today's tooling", () => {
               b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
             }
 
-            // An older branch of this lane that the base already holds is history (#590).
+            // An older branch of this quest that the base already holds is history (#590).
             if (place === "inside") {
               b.git(b.main, "branch", "fabrikalfa/old", sha);
             }
@@ -990,7 +990,7 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             if (place === "history") {
-              // A box state left behind with no box on disk is not a running lane.
+              // A box state left behind with no box on disk is not a running quest.
               write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
             }
 
@@ -1088,13 +1088,13 @@ describe("T321 K2 box start, today's tooling", () => {
     });
   });
 
-  // Plant: judge a field-rows branch by its diff from the lane's base, not from main. A lane that
+  // Plant: judge a field-rows branch by its diff from the quest's base, not from main. A quest that
   // started on an older main then sees main's newer files on the rows branch and refuses
   // (projectwin build on ticket 276 beside field-rows PR 601, 2026-11-09).
-  it("K2 scenario: a rows-only branch on a newer main does not block a lane on an older one", () => {
+  it("K2 scenario: a rows-only branch on a newer main does not block a quest on an older one", () => {
     fixture((b) => {
       b.git(b.main, "checkout", "-q", b.branch);
-      const lane = b.commit(b.main, "src/a.ts", "lane work\n");
+      const quest = b.commit(b.main, "src/a.ts", "quest work\n");
       b.git(b.main, "checkout", "-q", "main");
       const newer = b.commit(b.main, "src/b.ts", "main moved on\n");
       b.git(b.main, "update-ref", "refs/remotes/origin/main", newer);
@@ -1103,13 +1103,13 @@ describe("T321 K2 box start, today's tooling", () => {
       b.sign(b.main, "lead", "321");
       b.setup({ openPrs: ["fabrikalfa/other"] });
       b.git(b.main, "checkout", "-q", "main");
-      const got = b.new(lane, b.branch);
+      const got = b.new(quest, b.branch);
       expect(got.code, got.text).toBe(0);
     });
   });
 
   // Plant: drop --root, save the base as the root, or accept a root the base does not hold.
-  it("K2 saves the lane's root only when the base holds it", () => {
+  it("K2 saves the quest's root only when the base holds it", () => {
     fc.assert(
       fc.property(word, (text) => {
         each(["none", "held", "elsewhere"] as const, (root) =>
@@ -1154,10 +1154,35 @@ describe("T321 K2 box start, today's tooling", () => {
     );
   });
 
+  // Plant: drop --quest, or drop --lane, the flag's spelling before decision 0546.
+  it("scenario: K2 saves the quest's name as `quest:`, given as --quest or as the old --lane", () => {
+    each(["--quest", "--lane"] as const, (spelling) =>
+      fixture((b) => {
+        const got = b.call("sh", [
+          program,
+          "new",
+          "new",
+          b.base,
+          b.branch,
+          "--ticket",
+          "321",
+          "--plan",
+          b.plan,
+          spelling,
+          "onequest",
+        ]);
+        expect(got.code, got.text).toBe(0);
+        const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
+        expect(state).toContain("quest: onequest\n");
+        expect(state).not.toContain("lane:");
+      }),
+    );
+  });
+
   // Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
   // layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
   // Plant: require main's tip, not any commit main holds. Eight of nine base_not_signed refusals on
-  // 2026-11-09 were a lane's plan base, an older main, after main moved on (ticket 428).
+  // 2026-11-09 were a quest's plan base, an older main, after main moved on (ticket 428).
   it("K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts", () => {
     fc.assert(
       fc.property(word, (text) => {
@@ -1310,9 +1335,9 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     });
   });
 
-  // Plants: refuse on every stale link; waive a stale link of a step the lane signed. Themes tests4
+  // Plants: refuse on every stale link; waive a stale link of a step the quest signed. Themes tests4
   // (2026-11-09) stopped at fetch on stale_link lead: PR 565 had a lead link on ticket 343.
-  it("K1 scenario: a stale link only for a step the lane has not signed does not stop the fetch", () => {
+  it("K1 scenario: a stale link only for a step the quest has not signed does not stop the fetch", () => {
     each(["lead", "tests"] as const, (step) =>
       fixture((b) => {
         const stale = JSON.stringify({ _tag: "stuck", reason: "stale_link", sha: "head", step });
@@ -1328,15 +1353,15 @@ describe("T321 review round 1 fixes, today's tooling", () => {
           refused(got, /commits check failed/);
         } else {
           expect(got.code, got.text).toBe(0);
-          expect(got.text).toContain("stale_link_outside_lane");
+          expect(got.text).toContain("stale_link_outside_quest");
         }
       }),
     );
   });
 
-  // Plants: hand the checker the lane's root, or the merge-base even when it does not hold the root.
+  // Plants: hand the checker the quest's root, or the merge-base even when it does not hold the root.
   // Layers tests10 (2026-11-09): after a lead merge of main, main's own commits sat in root..head.
-  it("K1 scenario: main's commits after the lane's root are not judged as the lane's", () => {
+  it("K1 scenario: main's commits after the quest's root are not judged as the quest's", () => {
     each(["main-moved", "root-off-main"] as const, (kind) =>
       fixture((b) => {
         const moved = b.commit(b.main, "src/b.ts", "main moved\n");
@@ -1363,9 +1388,9 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     );
   });
 
-  // One lane, end to end on the real checker: a signed tests step, main moves, the lead merges main
+  // One quest, end to end on the real checker: a signed tests step, main moves, the lead merges main
   // in (signed as `lead`, or not, or with another commit's link), main may move again, and the next
-  // step's box starts at the lane head with the first step's root saved.
+  // step's box starts at the quest head with the first step's root saved.
   const afterLeadMerge = (b: Box, lead: "signed" | "unsigned" | "foreign", movedAgain: boolean) => {
     b.setup({ operations: [{ path: "src/a.ts", text: "first tests\n" }] });
     expect(b.run().code).toBe(0);
@@ -1392,7 +1417,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
       b.git(b.main, "update-ref", "refs/remotes/origin/main", b.commit(b.main, "src/old.ts", "main moved again\n"));
     }
 
-    b.git(b.work, "fetch", "-q", b.main, `${b.branch}:refs/remotes/lane`, "refs/notes/fabrika:refs/notes/fabrika");
+    b.git(b.work, "fetch", "-q", b.main, `${b.branch}:refs/remotes/quest`, "refs/notes/fabrika:refs/notes/fabrika");
     b.git(b.work, "reset", "-q", "--hard", merged);
     b.state(merged);
     appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
@@ -1402,8 +1427,8 @@ describe("T321 review round 1 fixes, today's tooling", () => {
   };
 
   // Plants: check from the box base, from the saved root, or without main's merge-base. 13 fetches
-  // on lane p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
-  it("K1 scenario: a lane caught up with main by a signed lead merge passes the next step's fetch", () => {
+  // on quest p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
+  it("K1 scenario: a quest caught up with main by a signed lead merge passes the next step's fetch", () => {
     each([false, true], (movedAgain) =>
       fixture((b) => {
         const got = afterLeadMerge(b, "signed", movedAgain);
@@ -1427,7 +1452,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
   // 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
   it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
     const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link");
-    // A stale link holds only for a step the lane signed (tests, here); others are waived.
+    // A stale link holds only for a step the quest signed (tests, here); others are waived.
     const answer = fc
       .record({
         reason: rule,
@@ -1484,8 +1509,8 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     });
   });
 
-  // Plants: accept only origin/main or a parent build head, or treat the lane's own -wip backup
-  // as another open branch. drive.ts starts one box per step on the lane's branch, so the next
+  // Plants: accept only origin/main or a parent build head, or treat the quest's own -wip backup
+  // as another open branch. drive.ts starts one box per step on the quest's branch, so the next
   // box starts at that branch's tests head.
   it("K2 scenario: a new box may continue its own branch beside its -wip backup", () => {
     fixture((b) => {
@@ -1540,8 +1565,8 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 
 describe("T321 K3 step order and rows, today's tooling", () => {
   // Plant: count tests from before base, or any unverified note; skip review's mutation row; read
-  // only the box's own rows, not the lane's where drive writes them (review boxes, 2026-11-09); read
-  // from the box's base when the lane's root is saved (layers build, 2026-11-09: each step's box
+  // only the box's own rows, not the quest's where drive writes them (review boxes, 2026-11-09); read
+  // from the box's base when the quest's root is saved (layers build, 2026-11-09: each step's box
   // starts at the last step's head, so its tests link sat before that box's base).
   it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
     fc.assert(
@@ -1556,9 +1581,10 @@ describe("T321 K3 step order and rows, today's tooling", () => {
             "review-absent",
             "mutation",
             "skip",
-            "lane-row",
-            "lane-row-skip",
-            "lane-row-stuck",
+            "quest-row",
+            "quest-row-skip",
+            "quest-row-stuck",
+            "quest-row-lane-key",
           ],
           (kind) =>
             fixture((b) => {
@@ -1604,18 +1630,21 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 );
               }
 
-              if (kind.startsWith("lane-row")) {
-                // Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
-                appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
+              if (kind.startsWith("quest-row")) {
+                // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
+                // A box made before decision 0546 names its quest under `lane:`, read as well.
+                const key = kind === "quest-row-lane-key" ? "lane" : "quest";
+                appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
                 write(
-                  join(b.boxes, "onelane-rows.jsonl"),
+                  join(b.boxes, "onequest-rows.jsonl"),
                   `${JSON.stringify({
                     run: "t321-mutation1",
                     ticket: "321",
                     role: "hand",
                     step: "mutation",
                     // drive writes `skip` for a mutation step that answered skip (ticket 423).
-                    outcome: { "lane-row": "pass", "lane-row-skip": "skip" }[kind] ?? "stopped",
+                    outcome:
+                      { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ?? "stopped",
                     why: "drive.ts mutation fixture row",
                   })}\n`,
                 );
@@ -1625,11 +1654,20 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 "review-absent",
                 "mutation",
                 "skip",
-                "lane-row",
-                "lane-row-skip",
-                "lane-row-stuck",
+                "quest-row",
+                "quest-row-skip",
+                "quest-row-stuck",
+                "quest-row-lane-key",
               ].includes(kind);
-              const pass = ["tests", "since-root", "mutation", "skip", "lane-row", "lane-row-skip"].includes(kind);
+              const pass = [
+                "tests",
+                "since-root",
+                "mutation",
+                "skip",
+                "quest-row",
+                "quest-row-skip",
+                "quest-row-lane-key",
+              ].includes(kind);
               const got = b.run(review ? "review" : "build");
               expect(got.code).not.toBeNull();
 

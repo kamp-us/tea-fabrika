@@ -2,6 +2,22 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
+import { Predicate } from "effect";
+
+/**
+ * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
+ * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
+ * as `quest`, and the old key goes, so the next write of the file says `quest`. Anything that is not
+ * a JSON object is given back as it is, for the reader's own schema to refuse.
+ */
+export const questKeyed = (saved: unknown): unknown => {
+  if (!Predicate.isObject(saved) || !("lane" in saved)) {
+    return saved;
+  }
+
+  const { lane, ...rest } = saved;
+  return "quest" in rest ? rest : { quest: lane, ...rest };
+};
 
 /**
  * Where a box's tree is: in `BOXES/box/`, a folder that holds only trees and their git views, never
