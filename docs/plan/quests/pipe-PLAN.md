@@ -7,7 +7,7 @@ This is `next/`. It is the first pipe slice of Tier 1's step 4, and the first of
 the library, with no shell. It builds the proposed note
 [how a pipe carries output](https://github.com/kamp-us/tea-fabrika/pull/1322) and decisions 0549,
 0550 and 0551. A program asks for a pipe with a new built-in Cmd, `pipe`. The brain checks the
-member behind it and the fit of the two programs' declared shapes, and records it. The writer's
+member behind it, checks that the pipe fits on the two programs' declared shapes, and records it. The writer's
 runner sends its whole output value in chunks each time it changes, newest wins. The reader folds
 the chunks into a pending value and swaps it in at the last chunk. The reader watches each life of
 the writer with the watch slice's monitor. One pull request, about 1,100 product lines.
@@ -32,7 +32,7 @@ a chunk input and a `DOWN` input with one helper, `Piped.ports`. The loader puts
 each chunk input's shape into the program's declaration, as Effect's own `SchemaRepresentation`
 JSON, so the brain can read them without running the code. A new built-in Cmd, `pipe`, goes from
 the runner to a new brain-side service, `Pipes`, which checks the member behind the Cmd (0551),
-checks the fit on the two declared shapes (0550), and in one ledger turn writes the `piped` row, the
+checks that the pipe fits on the two declared shapes (0550), and in one ledger turn writes the `piped` row, the
 mail right as a relation row (0526) and the Cmd's answer. In the turn that starts or restarts either
 end of a live pipe, the brain writes the watch for the reader's live life on the writer's live
 life, so a watch binds one life and the pipe follows the registered name. The writer's runner owes
@@ -61,7 +61,7 @@ Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`
   after its last data; a watch binds one life and the pipe points at a registered name; a reader
   that ends makes the shell stop only the writers its line started (not in this slice); built-in
   Cmds first.
-- **Decisions this builds:** 0549 (whole value, newest wins), 0550 (fit on needed fields, refused
+- **Decisions this builds:** 0549 (whole value, newest wins), 0550 (a pipe fits on needed fields, refused
   before any start), 0551 (the brain checks the member and records the pipe), 0109 (a pipe is saved
   program mail, in chunks, with a cap, and a program can be piped with no shell present), 0260 (an
   output is a model value, `null` is nothing to send), 0170 and 0531 (a check is against the member
@@ -100,10 +100,10 @@ Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`
   checks ([Nushell pipelines](https://www.nushell.sh/book/pipelines.html), cited in the note).
 - **Structural subtyping:** a value with extra fields is a value of the narrower record type, as
   TypeScript's assignability and Effect Schema's `Struct` (which drops extra keys on decode) both
-  say. The fit check is that rule, run on the two shapes.
+  say. The check that a pipe fits is that rule, run on the two shapes.
 
 The plain reading: OTP gives the order and the end, Unix the back pressure and the flush, Elm the
-typed value and the child stepped by hand, and structural subtyping the fit. Effect gives the schema
+typed value and the child stepped by hand, and structural subtyping when a pipe fits. Effect gives the schema
 form the brain reads.
 
 ## The shape
@@ -148,7 +148,7 @@ export const pipe = Cmd.make("pipe", { input: Asked, ok: Piped, err: PipeRefusal
 `Asked` is the loose declaration `StartChild.ts` uses, so a malformed Cmd is answered `bad_cmd` by
 the host and never fails the step that asked.
 
-### The fit check
+### The check that a pipe fits
 
 ```ts
 // next/packages/libfabrika/src/processes/Fit.ts (new). Pure: no service, no clock. The brain runs
@@ -289,7 +289,7 @@ export const PipeEvent = Schema.TaggedUnion({
     pipe: Text,                                   // the pipe Cmd's id
     from: Schema.Struct({ name: ProcessName, program: ProgramName, output: Text, hash: Hash, shape: Hash }),
     to: Schema.Struct({ name: ProcessName, program: ProgramName, input: Text, hash: Hash, shape: Hash }),
-    rule: Schema.Literal(RULE),                   // the fit rule that judged it
+    rule: Schema.Literal(RULE),                   // the rule that judged whether it fits
     requester: Schema.Struct({ name: ProcessName, process: ProcessId }),
     member: Sender,                               // the member behind the Cmd, checked (0170, 0551)
   },
@@ -460,7 +460,7 @@ about 216 KB.
 | The reader's fold | a child's model stepped by its parent's `update` | a `receive` loop that keeps state | we take Elm's: `Piped` is a child machine the reader steps by hand |
 | The order and the end | none: no processes | per-pair order, one `DOWN` after the last message | we take OTP's; a watch is written for each life by the brain, since OTP's monitor never follows a name and the pipe must |
 | Back pressure | none | none: an unbounded mailbox | we leave both for Unix: a capped inbox and a writer that waits (0109) |
-| The fit | the compiler checks a port's type | none: messages are untyped | a structural check on declared shapes, since two packs are built apart |
+| Whether a pipe fits | the compiler checks a port's type | none: messages are untyped | a structural check on declared shapes, since two packs are built apart |
 
 ## Every line that ends, stops or signals a process
 
@@ -481,7 +481,7 @@ now, even with nothing reading them:
 
 - **Who made the pipe:** the member checked, and the requester's name and life.
 - **What they saw:** each program's code hash and the hash of each port's shape, so a later reader
-  knows exactly which two shapes the fit judged.
+  knows exactly which two shapes were checked.
 - **Which rule judged it:** `rule: "fit/v1"`. The rule will grow (unions, refinements); an old pipe
   must still say which rule let it through.
 - **The cause:** `parent`, the step whose message caused the Cmd, which leads to the member's own
@@ -496,14 +496,14 @@ with no seq 0 saved), how long a writer waited on `full`, a pipe's throughput.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where | Runs |
 |---|---|---|---|---|---|
-| S1, the whole pipe with no shell: a parent test program pipes a writer and a reader test program and starts the reader, then the writer; the writer's value changes three times while the reader's inbox is full, and the reader ends on the newest whole value; the writer crashes mid-send and the reader keeps its previous whole value; supervision restarts the writer, and the reader gets the new life's first whole value and exactly one `DOWN` per life; a pipe that does not fit and a pipe the member may not make are each refused, with nothing on the pipe or relation streams and no start | test | scenario: two test programs and a parent, the five moves in order | (a) send every value, not the newest; (b) swap in at the first chunk; (c) watch only the first writer life; (d) write the `piped` row before the fit check: S1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests (0536) |
-| F1, a fit is sound: for generated writer and reader shapes from v1's grammar where `fits` answers `fits`, every value Effect Arbitrary makes from the writer schema, encoded, decodes with the reader schema. 200 runs | test | fc.letrec: v1 shape pairs, structs, lists, literals, literal sets, primitives, optional fields | (a) let an extra reader field through as fine; (b) treat a literal set as fitting a smaller set: F1 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
+| S1, the whole pipe with no shell: a parent test program pipes a writer and a reader test program and starts the reader, then the writer; the writer's value changes three times while the reader's inbox is full, and the reader ends on the newest whole value; the writer crashes mid-send and the reader keeps its previous whole value; supervision restarts the writer, and the reader gets the new life's first whole value and exactly one `DOWN` per life; a pipe that does not fit and a pipe the member may not make are each refused, with nothing on the pipe or relation streams and no start | test | scenario: two test programs and a parent, the five moves in order | (a) send every value, not the newest; (b) swap in at the first chunk; (c) watch only the first writer life; (d) write the `piped` row before checking that the pipe fits: S1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests (0536) |
+| F1, a pipe that fits is sound: for generated writer and reader shapes from v1's grammar where `fits` answers `fits`, every value Effect Arbitrary makes from the writer schema, encoded, decodes with the reader schema. 200 runs | test | fc.letrec: v1 shape pairs, structs, lists, literals, literal sets, primitives, optional fields | (a) let an extra reader field through as fine; (b) treat a literal set as fitting a smaller set: F1 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F2, a missing need: removing any one required field the reader needs from a fitting writer answers `does_not_fit` with that field's path and `has: "missing"`; making it optional answers `has: "optional"`. 200 runs | test | fc.letrec: v1 shape pairs and a field to drop | (a) skip nested structs; (b) report the parent's path: F2 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F3, what v1 cannot tell: each reader shape outside v1 (`Declaration`, `Suspend`, tuple, `Record`, `NullOr`, a non-literal union, `TemplateLiteral`, `Enum`, a custom filter) answers `cannot_tell` at its path, even when the writer's shape is the same | test | scenario: one pair per shape, the plan's six examples | answer `fits` for two equal shapes: F3 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F4, checks: a reader check the writer does not carry, same id and payload, answers `cannot_tell`; a writer with more checks than the reader fits. 100 runs | test | fc.constantFrom: isInt, isMinLength, isMaxLength, isPattern, isGreaterThanOrEqualTo | ignore checks: F4 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F5, the declared shapes: a loaded program's `outputs[k].shape` and a chunk input's `items` equal `toJson(toRepresentation(...))` of the port's encoded schema and survive `fromJson`; a write port that is not a chunk message has no `items` | test | scenario: a writer and a reader test program, and the checklist | read the type side, not the encoded side: F5 red on a `Schema.NumberFromString` field | next/packages/libfabrika/src/runtime/Program.test.ts | laptop |
 | P1, a pipe is recorded: for generated members, programs and names that pass, `pipe` answers `piped` with its Cmd id and writes in one turn exactly one `piped` row with every fact (both hashes and shape hashes, `rule`, requester, member), one `related pipes_to` row and the answer message. 100 runs | test | fc.record: member, writer and reader programs, names | (a) drop `member` or `rule` from the row; (b) write the relation row in a second turn: P1 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
-| P2, the refusal order: a generated ask that fails more than one check gets the first of `bad_name`, `stale_sender`, `forbidden`, `no_output`, `no_input`, `name_taken`, `taken`, then `unfit`, and each writes nothing but its answer message. 100 runs | test | fc.record: bad name, stale requester, denied or missing member, missing ports, live name, piped input, unfit shapes | check the fit before the member: P2 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
+| P2, the refusal order: a generated ask that fails more than one check gets the first of `bad_name`, `stale_sender`, `forbidden`, `no_output`, `no_input`, `name_taken`, `taken`, then `unfit`, and each writes nothing but its answer message. 100 runs | test | fc.record: bad name, stale requester, denied or missing member, missing ports, live name, piped input, unfit shapes | check that the pipe fits before the member: P2 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | P3, a retry is one pipe: the same Cmd id asked again any number of times gives one `piped` row, one relation row and the same pipe id. 100 runs | test | fc.integer: retries 1 to 5 | mint a new id per try: P3 red | next/packages/libfabrika/src/processes/PipesTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | P4, the mail right and the end: the writer's name may mail the reader's name only while the pipe is live; before `piped`, after the requester's `stop_child` of either end, and from reader to writer, a send is `forbidden`; a `stop_child` by any other process writes no `unpiped`. 100 runs | test | fc.commands: pipe, send, reverse send, stop either end, stop by another | (a) keep the right after `unpiped`; (b) grant both ways; (c) end the pipe on a crash: P4 red | next/packages/libfabrika/src/processes/ProgramMailTest.ts, run by next/packages/libfabrika/src/node/Pipes.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | W1, one DOWN per writer life: for a generated run of writer starts, crashes, restarts and chunked sends, the reader folds exactly one `DOWN` per writer life, with ref `<pipe>/<process>`, that life's reason and the writer's name, after that life's last saved chunk; a life that crashes in the turn after its start gives `crashed`, never `noproc`. 100 runs | test | Effect Arbitrary: ExitReason | (a) write the watch in a turn after `started`; (b) reuse the pipe id as the ref: W1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
@@ -533,9 +533,9 @@ the owner's Mac under 0178.
 
 Each new choice was asked (0069):
 
-- **The fit rules,** "newest wins", one pipe per input, and a pipe ending at its requester's
+- **The rules for when a pipe fits,** "newest wins", one pipe per input, and a pipe ending at its requester's
   `stop_child`: no. Each is what a pipe is, decided in 0549 and 0550 or by the note's plumbing.
-- **The fit rule version** is a constant, `RULE`, recorded on each row, never a knob.
+- **The version of those rules** is a constant, `RULE`, recorded on each row, never a knob.
 - **The chunk size and the inbox cap** already are settings, `mail.chunk` and `mail.unread`.
 
 ## Files
@@ -575,7 +575,7 @@ Each new choice was asked (0069):
 | next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts | tests | tests | the watch slice's laws stay green with the optional `answer` |
 | next/packages/libfabrika/src/node/StartChild.integration.test.ts | tests | tests | no change: must stay green with the new `stop_child` turn |
 | layer-rules.json | tests | tests | no change expected: every new file sits in a module that has a row |
-| .glossary/TERMS.md | build | docs | rows `pipe (Cmd)`, `piped`, `fit`; `pipe` gains the fit rule's name |
+| .glossary/TERMS.md | build | docs | rows `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules for when a pipe fits |
 | docs/direction/follows/otp.md | build | docs | a row for a watch per life under a name, where we leave OTP's monitor |
 
 ## Calls taken
@@ -583,7 +583,7 @@ Each new choice was asked (0069):
 Each is mine to decide by the open questions test: it picks how the code does what a note or a
 decision already says.
 
-- **The fit reads Effect's `SchemaRepresentation`,** not JSON Schema. It is Effect's own persisted
+- **The check that a pipe fits reads Effect's `SchemaRepresentation`,** not JSON Schema. It is Effect's own persisted
   form of a schema, it keeps each check's persistence id, and it needs no second converter. JSON
   Schema loses which Effect check made a constraint, which v1's check rule reads.
 - **The encoded side is compared,** since a message carries encoded JSON and the reader decodes it.
@@ -600,7 +600,7 @@ decision already says.
   slices stop through this same path, so they get the end for free.
 - **No related-pair exception for a pipe.** 0551 checks the member behind the pipe; a pipe with no
   member is `forbidden`.
-- **The fit lives in `processes/`,** a layer the runtime, the client and the entry may all import, so
+- **The check that a pipe fits lives in `processes/`,** a layer the runtime, the client and the entry may all import, so
   it needs no new line in `layer-rules.json`.
 - **Typed services only.** The runner reaches `Pipes` as a service; nothing calls a command-line tool
   (0231).
@@ -661,7 +661,8 @@ Estimate: 7 steps, $70
 ## Records
 
 - `field/runs/` rows for each step, by the lead.
-- Glossary rows in this pull request: `pipe (Cmd)`, `piped`, `fit`; `pipe` gains the fit rule's name.
+- Glossary rows in this pull request: `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules
+  for when a pipe fits.
 - `docs/direction/follows/otp.md`: a watch per life under a name, where we leave OTP's monitor.
 - No `.decisions/` file: every call here applies a decided note or decision. The note stays proposed.
 
@@ -698,10 +699,10 @@ here".
 {"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package (0456), so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
 ```
 
-## Amendment A-Fit, 2026-11-15
+## Amendment A-Fits, 2026-11-15
 
-Where this section and the sections above differ, this one wins. It changes only the fit check
-(`processes/Fit.ts`), what the loader writes for it, and their laws. `RULE` stays `"fit/v1"`: no
+Where this section and the sections above differ, this one wins. It changes only the check that a
+pipe fits (`processes/Fit.ts`), what the loader writes for it, and their laws. `RULE` stays `"fit/v1"`: no
 pipe was judged by the narrower rule, so the first rule that runs is this one.
 
 **The answer first.** Of the pairs a person pipes in today's version, none is refused by v1 only
@@ -720,7 +721,7 @@ where the plan as written is wrong, whatever the union rule:
 - **A custom filter makes `toJson` throw.** `SchemaRepresentation.toJson` fails with `Missing key
   at ["representation"]["checks"][0]["representation"]` on a `Schema.makeFilter` check with no
   persistence id (tried on effect 4.1.2). The loader would fail on today's shell's `table` output
-  instead of the fit answering `cannot_tell`.
+  instead of answering cannot tell.
 - **A check id is only safe when it is Effect's own.** A custom filter may carry an id of its own
   (`Schema.makeFilter(f, { representation: { id: "pack/isTicket", payload: null } })`, tried on
   effect 4.1.2), so two packs may give two different checks one id. The same id with the same
@@ -831,13 +832,12 @@ bounds Effect's ids imply.
 **Found outside this amendment's question, not changed here.** As planned, a pipe carries only a
 list: the reader's `items` is a list, and the runner sends `items: out.value`. Every pair above
 carries one value, a ticket number, a string or an integer, and the checklist's own `done` is a
-struct, so none of them can be piped as the plan stands; the fit would answer `does_not_fit` at the
-top. The lead's call: whether a non-list output is sent as a list of one item, or the rebuilt
-programs declare list outputs.
+struct, so none of them could be piped as the plan stood; the check would answer `does_not_fit` at
+the top. The lead has ruled on it: Amendment A-Value below.
 
 ### The added rules
 
-The fit reads the reader's node, then the writer's. Every rule keeps the property F1 states: a pipe
+The check reads the reader's node, then the writer's. Every rule keeps the property F1 states: a pipe
 that passes never hands the reader a value its input schema refuses.
 
 ```ts
@@ -859,7 +859,7 @@ one decodes, so a writer value from any writer case lands on a reader case that 
 the kind first changes only which refusal is given, never a pass. A literal is a value of its
 primitive. A check with Effect's id and the same payload is the same predicate on both ends, since
 `SchemaRepresentation` revives it from that id to Effect's own code. A transformation's decode can
-refuse what its encoded side shows, so the fit never vouches for it. A writer's transformation is
+refuse what its encoded side shows, so the check never vouches for it. A writer's transformation is
 fine: its encoded side is what it sends.
 
 **Nullable and optional fields,** through rule 1 and v1's struct rule:
@@ -928,7 +928,7 @@ const Shape = Schema.NullOr(Schema.Struct({ doc: Schema.Json, decodes: Schema.Nu
 const shapeOf = (schema: Schema.Top) =>
   Result.try(() => SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(schema.ast))).pipe(
     Result.map((doc) => ({ doc, decodes: decodesAt(schema.ast) })),
-    Result.getOrNull,  // a custom filter: no persisted form, so the fit answers cannot_tell
+    Result.getOrNull,  // a custom filter: no persisted form, so the check answers cannot tell
   );
 ```
 
@@ -974,3 +974,192 @@ The pull request grows from about 1,100 to about 1,205 product lines (Fit 250, P
 Execution 30). The step count and the estimate in the Size section stay as they are, 65% sure: the
 added rules are pure functions beside the ones v1 already has, and the four new laws sit in two test
 files the tests step already writes.
+
+## Amendment A-Value, 2026-11-15
+
+Where this section and the sections above differ, this one wins. The lead's call on the problem
+Amendment A-Fits found: **a pipe carries the writer's output value in the shape the output
+declares.** A list output goes as chunk messages, as planned, and the reader swaps it in when the
+last chunk arrives. An output that is not a list (a struct, a number, a string) goes as one whole
+message, and it is the reader's current value as soon as it arrives. The reader's input declares the
+shape it needs, list or not, and the check that a pipe fits compares the two shapes as declared. No
+single value is wrapped in a list of one, and no rule makes a rebuilt program declare a list output.
+
+```ts
+// The whole idea, a sketch. tracker and ticket in next/ are made up (they are not built yet).
+outputs: { ticket: Output.make(TicketNumber, (m: Model) => m.picked) },   // writer: one value, null until a pick
+inputs: { ...Piped.ports("ticket", TicketNumber, "The ticket to show.") }, // reader: needs one value
+// tracker's runner, after a step that changed `picked` to 7: one message, never chunks.
+send({ to: "ticket:1", m: { type: "ticket", value: 7 } });
+```
+
+It keeps the decisions it builds. 0549 says the reader gets the writer's whole current value, and
+leaves open whether that value is always a list; this call settles that it is not. 0109 still holds:
+one transport, every message saved, and a list still goes as chunks of items, never one message per
+item. 0260 still holds: `null` is nothing to send, for both forms. Nothing in the code read for this
+plan breaks: `send` (`next/packages/libfabrika/src/runtime/Send.ts` line 40) already carries one
+JSON value as one saved message, as `send_chunks` (line 81) carries a list.
+
+### How a value travels
+
+```ts
+// next/packages/libfabrika/src/processes/Fit.ts, a sketch: the form is read from each side's top node.
+/** A list (an `Arrays` node with only a `rest` node) goes as chunks; anything else as one message. */
+export const sent = (shape: SchemaRepresentation.Representation): "chunks" | "whole" =>
+  shape._tag === "Arrays" && shape.elements.length === 0 && shape.rest.length === 1 ? "chunks" : "whole";
+```
+
+- **The writer's declared output picks the form,** at load, from its encoded shape. The reader's
+  declared input picks how it reads, by the same test. The check that a pipe fits first asks that
+  both pick the same form, and answers `does_not_fit` at the top when they do not:
+  `{ _tag: "does_not_fit", path: [], need: "one whole value", has: "a list in chunks" }`. Then it
+  compares the two shapes by the rules above, unchanged.
+- **What that refuses:** a list writer into a reader that takes `Schema.Unknown`, or a reader whose
+  top node is a union with a list in it (`NullOr(Array(X))`), since those readers read one whole
+  message. It is sound, and nothing real loses: no `next/` reader exists yet, and today's `trace`
+  input `any` is today's version. A reader that wants a list of anything declares
+  `Schema.Array(Schema.Unknown)`.
+- **One whole message has a size limit:** it is one ledger row, at most `ROW_BYTES`, 2,000,000
+  bytes (`next/packages/libfabrika/src/ledger/Log.ts` line 211). A bigger value that is not a list
+  is refused as any oversized send is, and the reader keeps its previous value. A list has no such
+  limit, since it is cut; one item over `mail.chunk` is `too_big`, as today.
+
+### What a program declares, changed
+
+```ts
+// next/packages/libfabrika/src/runtime/Execution.ts: a piped input's needed shape, list or not.
+inputs: Schema.Record(Schema.String, Schema.Struct({
+  write: Schema.Boolean,
+  personOnly: Schema.Boolean,
+  shape: Schema.optionalKey(Shape),   // was `items`; Shape as Amendment A-Fits gives it
+})),
+outputs: Schema.Record(Schema.String, Schema.Struct({ shape: Shape })),
+```
+
+The loader writes `shape` for a write port that `Piped.ports` made. A chunk message
+(`{type, items, part}`, `Chunk.input`) gives the `items` field's shape, a list. A whole message
+(`{type, value}`, exactly those two keys) gives the `value` field's shape. `no_input` now means the
+reader declares no such piped input, of either form, or no `DOWN` input.
+
+### The reader's side, both forms
+
+```ts
+// next/packages/libfabrika/src/runtime/Piped.ts, a sketch: two machine factories (0046), Elm's child.
+/** A list, sent in chunks: `current` is the last whole list, `pending` the one still arriving. */
+export const list = <S extends Schema.Top>(item: S) =>
+  Machine.make({
+    model: Schema.Struct({
+      current: Schema.NullOr(Schema.Array(item)),
+      pending: Schema.NullOr(Schema.Struct({ id: Schema.NonEmptyString, seq: Schema.Int, items: Schema.Array(item) })),
+    }),
+    // msg, init and update exactly as "The reader's side" above: chunk and down.
+  });
+
+/** One whole value, sent as one message: `current` is the last value; there is never a pending one. */
+export const whole = <S extends Schema.Top>(value: S) =>
+  Machine.make({
+    model: Schema.Struct({ current: Schema.NullOr(value) }),
+    msg: Schema.Union([
+      Schema.Struct({ type: Schema.Literal("value"), value }),
+      Schema.Struct({ type: Schema.Literal("down") }),
+    ]),
+    cmds: [],
+    init: (loaded) => [loaded ?? { current: null }, []],
+    update: {
+      value: (_m, msg) => [{ current: msg.value }, []],  // current at once: a message is never half-saved
+      down: (m) => [m, []],                              // the writer's life ended; its last value stays
+    },
+  });
+
+/** The two inputs a reader declares for one pipe: the value input, in the form its schema picks, and DOWN. */
+export const ports: <const T extends string, S extends Schema.Top>(type: T, shape: S, description: string) => Ports<T, S>;
+// ports("rows", Schema.Array(Row), ...)  gives a chunk input `{type: "rows", items, part}`, read with `list(Row)`
+// ports("ticket", TicketNumber, ...)     gives a whole input `{type: "ticket", value}`, read with `whole(TicketNumber)`
+```
+
+`whole` has no `pending` field, so a value half-arrived cannot be written down. Its `down` changes
+nothing: a writer that crashes leaves no half value, so the last whole one stays, as for a list. A
+`null` from the writer never arrives, since `null` is nothing to send, so `current: null` means only
+"no value yet".
+
+### The writer's runner, changed
+
+```ts
+// next/packages/libfabrika/src/runtime/Runner.ts, a sketch: `owe` picks the Cmd by the output's form.
+const cmd = out.sent === "chunks"
+  ? { type: SEND_CHUNKS, to: out.to, as: out.input, items: out.value }
+  : { type: SEND, to: out.to, m: { type: out.input, value: out.value } };
+```
+
+Newest wins as before: an owed send to this pipe that has not saved its first message is dropped
+for the newer one. For a whole value that first message is the only one, so a saved value is always
+delivered whole and an unsaved one is always replaceable. `exit` waits behind an owed send of either
+form. A life's first load sends each piped output that is not `null`, in its form.
+
+### One single value traced: the ticket number from tracker to ticket
+
+`lab:1` pipes `tracker:1`'s `ticket` output to `ticket:1`'s `ticket` input, as in "One value
+traced" above, and starts both. The ticket number is `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))`
+on both ends.
+
+1. `PipesLedger` runs its checks in order. At step 8, both shapes are `Number` with the checks
+   `effect/schema/isInt` and `effect/schema/isGreaterThanOrEqualTo {minimum: 1}`. Both pick
+   `whole`, the checks are equal, and the check answers `{ _tag: "fits" }`. The same turn writes
+   `piped`, the `pipes_to` row and the answer, as before.
+2. tracker's first load: `picked` is `null`, so it owes nothing. ticket's view draws "no ticket yet"
+   from `current: null`.
+3. A person picks ticket 7. tracker's step at its pos 12 sets `picked: 7`. The output changed, so
+   the runner owes `send({to: "ticket:1", m: {type: "ticket", value: 7}})` as `process_T/12/out/ticket`.
+   One message is saved at `ticket:1/inbox` pos 3, through the mail check on the `pipes_to` row.
+4. ticket folds pos 3: `Ticket.update(m.ticket, {type: "value", value: 7})`. `current` is 7 at
+   once, and its view opens ticket 7. There is no pending step.
+5. The person picks 9, then 12, while ticket's inbox is full. The send of 9 has not saved its
+   message when 12's comes, so 9's is dropped. ticket later folds 12 and shows ticket 12.
+6. tracker crashes. Its `exited {crashed}` turn writes one `DOWN` into ticket's inbox, after the
+   saved 12. ticket's `down` changes nothing: `current` stays 12. Supervision restarts `tracker:1`;
+   its first load finds `picked: 12` and sends it again, and ticket folds 12 again, which changes
+   nothing it shows.
+7. A pipe from tracker's `ticket` to a reader that needs `Schema.Array(TicketNumber)` is refused
+   before any start: `{ _tag: "does_not_fit", path: [], need: "a list in chunks", has: "one whole value" }`.
+
+### The laws that assumed a list
+
+S1, F5, W1, O1, O2, O3 and R1 were written for a list; T1 and H1 were not, and stay as they are.
+
+- **S1** gains a second pair: a writer test program with a struct output piped to a reader that
+  needs part of it. The value changes three times while the reader's inbox is full, and the reader
+  ends on the newest whole value; the writer crashes, and the reader keeps it. Its plants add (e)
+  wrap a single value in a list of one: S1 red.
+- **F5** reads `inputs[k].shape` in place of `items`, for both a chunk input and a whole input; a
+  write port that is neither has no `shape`.
+- **W1** says "after that life's last saved message", which covers a chunk and a whole value.
+- **O1** draws both forms: each `current` the reader holds is one whole writer value, in the
+  writer's order, the last one last. O2 runs its four scenarios for both forms. O3's "killed
+  mid-send" is a list case only; for a whole value it becomes "killed before the message is saved",
+  which leaves the reader on its previous value.
+- **R1** is the law of `Piped.list`, unchanged. R2 below is the law of `Piped.whole`.
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where | Runs |
+|---|---|---|---|---|---|
+| R2, the whole reader: for generated streams of value messages and `down` messages in any order, `current` is always `null` or the last value folded, a `down` never changes it, and the model has no pending value. 500 runs | test | fc.commands: value, down | (a) clear `current` on `down`; (b) keep the first value and drop later ones: R2 red | next/packages/libfabrika/src/runtime/Piped.test.ts | laptop |
+| V1, the form a value travels in: for generated pairs of shapes, a list writer and a list reader, or a non-list writer and a non-list reader, go on to the rules above; a list on one side only answers `does_not_fit` at the top; for pairs that pass, every value Effect Arbitrary makes from the writer's schema, encoded and sent through JSON text in the form `sent` picks, decodes with the reader's schema, after the reader's helper joins it. 200 runs | test | fc.letrec: shape pairs with a list or a non-list top node on each side | (a) pick the form from the reader alone; (b) pass a list writer into a `Schema.Unknown` reader: V1 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
+| V2, a whole value is one message: a writer test program whose output is a struct sends exactly one `send` per owed value and never a `send_chunks`, and its list output sends `send_chunks` only; a newer value drops an owed one not yet saved, never a saved one | test | scenario: one writer with a struct output and a list output, three changes against a full inbox | (a) send a struct as chunks; (b) drop a saved value for a newer one: V2 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
+
+R2, V1 and V2 are about values and messages, which no type or lint rule sees: tests.
+
+### The change to the files table and the size
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/packages/libfabrika/src/runtime/Piped.ts | build | 35 | 35 more than in the Files section, 115 in all: `whole`, and `ports` picking the form |
+| next/packages/libfabrika/src/runtime/Runner.ts | build | 20 | 20 more, 160 in all: `owe` sends a whole value with `send` |
+| next/packages/libfabrika/src/runtime/Program.ts | build | 10 | 10 more, 100 in all with Amendment A-Fits: the loader reads a whole message's `value` |
+| next/packages/libfabrika/src/processes/Fit.ts | build | 10 | 10 more, 260 in all with Amendment A-Fits: `sent`, and both sides in one form |
+| next/packages/libfabrika/src/runtime/Piped.test.ts | tests | tests | R1 and R2 |
+| next/packages/libfabrika/src/processes/Fit.test.ts | tests | tests | V1 beside F1 to F8 |
+| next/packages/libfabrika/src/runtime/PipeTest.ts | tests | tests | S1's second pair, V2, and W1, O1 to O3 in both forms |
+| .glossary/TERMS.md | build | docs | `pipe` says a value that is not a list goes as one message |
+
+The pull request grows from about 1,205 to about 1,280 product lines. The step count and the
+estimate in the Size section stay as they are, 60% sure: the whole form is the simpler path beside
+the chunk one, but it doubles the runner's cases that S1, O1 to O3 and V2 drive.
