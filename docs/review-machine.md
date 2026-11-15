@@ -498,7 +498,7 @@ Ends with a short message. The skill asks for two plain lines: what happened,
 and what the person does next.
 
 ```text
-What happened: the review passed and the quest moved from review to ship.
+What happened: the review passed and the lane moved from review to ship.
 What you do next: nothing — the operator can ship it.
 ```
 
