@@ -12,6 +12,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
@@ -185,6 +186,6 @@ describe("T502 S1, the writer's guard finds every machine path in a home, next/"
         expect(hits).toEqual(expected === null ? [] : [expected]);
         expect(yield* snapshot(home), "the guard leaves the folder it reads as it was").toEqual(before);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

@@ -16,6 +16,7 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
@@ -1196,7 +1197,7 @@ const prop = (
   pairs: ReadonlyArray<Pair>,
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
-  runs = 40,
+  runs: Runs = { fast: 10, full: 40 },
   examples: ReadonlyArray<ReadonlyArray<Cell>> = [],
 ) =>
   it.effect(
@@ -1216,7 +1217,7 @@ const prop = (
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
         const options = {
           seed: SEED,
-          numRuns: runs,
+          numRuns: runsFor(runs),
           examples: examples.map((tape) => [[...tape]]),
           includeErrorInReport: true,
         };
@@ -1425,8 +1426,9 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
         const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        const checks = { seed: SEED, numRuns: runsFor({ fast: 20, full: 100 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its result as a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, checks));
         expect([...visited]).toEqual(
           expect.arrayContaining(
             stopped ? ["stop", "brake", "wake", "reopen", "kept"] : ["arm", "wake", "send", "advance", "fire"],
@@ -1616,7 +1618,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             // Each run walks two real runners. Shrinking a failure runs hundreds more of them, so one
             // failed run became a 150 s timeout that hid its failing check (merge-group run
             // 43600068403). The first failing tape is reported as found.
-            const options = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+            const options = {
+              seed: SEED,
+              numRuns: runsFor({ fast: 20, full: 100 }),
+              includeErrorInReport: true,
+              endOnFailure: true,
+            };
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its property result
             yield* Effect.promise(() => fc.assert(property, options));
             expect(sends).toBeGreaterThan(0);
@@ -1646,7 +1653,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       [1],
       ["start", "wakeDuringDrain", "holdAlarm", "fire", "reopen", "settle"],
       ["wakeDuringDrain", "holdAlarm", "fire", "reopen"],
-      100,
+      { fast: 20, full: 100 },
     );
     prop(
       "M4: failed wakes and reopened recipients retry the same saved letter",
@@ -1654,7 +1661,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       [1],
       ["start", "fail_wake", "fire", "reopen", "settle"],
       ["start", "fail_wake", "fire", "reopen"],
-      100,
+      { fast: 20, full: 100 },
     );
     prop(
       "S1, S2: an evicted Send finishes from saved alarms, and its retry alarm leaves with its answer",
@@ -1662,7 +1669,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       [1, 2],
       ["start", "stall", "evict", "cut_mail", "lose_ack", "fail_wake", "fire", "settle"],
       ["start", "stall", "evict", "fire"],
-      100,
+      { fast: 20, full: 100 },
       // pinned: plan amendment 3, main saves a Send without arming its sender before delivery.
       [
         [
@@ -1787,7 +1794,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
           return true;
         },
-        { seed: SEED, numRuns: 300 },
+        { seed: SEED, numRuns: runsFor({ fast: 30, full: 300 }) },
       );
     });
 
@@ -1815,7 +1822,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             });
           },
         ),
-        { seed: SEED, numRuns: 200 },
+        { seed: SEED, numRuns: runsFor({ fast: 20, full: 200 }) },
       );
     });
   });

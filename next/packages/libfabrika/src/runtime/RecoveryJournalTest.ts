@@ -9,6 +9,7 @@
 // own account, never against the runner's saved model.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -43,7 +44,7 @@ export type Rig = {
 const NAME = "counter:1";
 const BUILD = "build-a";
 const SEED = 119120;
-const RUNS = 40;
+const RUNS = runsFor({ fast: 10, full: 40 });
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 

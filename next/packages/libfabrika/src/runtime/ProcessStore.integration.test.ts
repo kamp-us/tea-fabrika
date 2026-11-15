@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -134,7 +135,7 @@ const checkpointArb = Arbitrary.all({
   Arbitrary.map((value): typeof CheckpointSchema.Type => JSON.parse(JSON.stringify(value))),
 );
 
-const options = { arbitrary: { seed: 119120, runs: 20, size: 12 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 12 } };
 
 // Effect 4.1.1 has no examples option; run the old input beside each generated input.
 const examples =

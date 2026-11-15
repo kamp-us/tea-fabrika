@@ -1,6 +1,7 @@
 // P19 next/. These unit laws replace only the native process boundary. Native XML is L13's check.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
@@ -383,7 +384,7 @@ it.effect.prop(
         expect(output).not.toContain(encodeURIComponent(secret));
       }
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it.effect.prop(

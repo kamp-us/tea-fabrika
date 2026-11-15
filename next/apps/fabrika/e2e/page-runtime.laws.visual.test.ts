@@ -16,6 +16,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
@@ -266,7 +267,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                   ),
                 ),
               ),
-              { seed: SEED, numRuns: 12, ...RED },
+              { seed: SEED, numRuns: runsFor({ fast: 3, full: 12 }), ...RED },
             ),
           );
         }),
@@ -335,7 +336,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                   ),
                 ),
               ),
-              { seed: SEED, numRuns: 8, ...RED },
+              { seed: SEED, numRuns: runsFor({ fast: 3, full: 8 }), ...RED },
             ),
           );
         }),

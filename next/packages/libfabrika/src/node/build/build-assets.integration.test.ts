@@ -7,6 +7,7 @@ import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -37,7 +38,7 @@ const installed = (name: string) =>
   ).version;
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
-const runs = { seed: 119120, numRuns: 3 };
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
 // The clean-build property took 5.6 s for three samples under load. Budget 10 s per sample.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 
@@ -222,7 +223,7 @@ describe("P16 assets and Compiler", () => {
           });
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
         }),
-        { ...runs, numRuns: 4 },
+        { ...runs, numRuns: runsFor({ fast: 3, full: 4 }) },
       );
     },
   );
@@ -496,7 +497,7 @@ describe("P16 assets and Compiler", () => {
             expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
           },
         ),
-        { ...runs, numRuns: 8 },
+        { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
       );
     },
   );
@@ -648,7 +649,7 @@ describe("P16 cleanup and recording", () => {
               expect(existsSync(join(f.options.out, "brain.mjs")), "last good brain must remain published").toBe(true);
               expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
             }),
-            { ...runs, numRuns: 2, endOnFailure: true },
+            { ...runs, numRuns: runsFor({ fast: 2, full: 2 }), endOnFailure: true },
           );
         },
       );
@@ -802,7 +803,7 @@ describe("P16 cleanup and recording", () => {
             vi.resetModules();
           }
         }),
-        { ...runs, numRuns: 2 },
+        { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
       );
     },
   );
@@ -870,7 +871,7 @@ describe("P16 cleanup and recording", () => {
         }),
         {
           ...runs,
-          numRuns: 6,
+          numRuns: runsFor({ fast: 3, full: 6 }),
         },
       );
     },
@@ -1050,7 +1051,7 @@ describe("P16 cleanup and recording", () => {
             }
           }
         }),
-        { ...runs, numRuns: 3 },
+        { ...runs, numRuns: runsFor({ fast: 3, full: 3 }) },
       );
     },
   );
@@ -1062,7 +1063,7 @@ describe("P16 cleanup and recording", () => {
 // its own, or builds and requests every emitted file. Fixtures live in scoped temp folders.
 type WindowPick = { readonly name: string; readonly module: string };
 
-const windowRuns = { seed: 119120, numRuns: 4 };
+const windowRuns = { seed: 119120, numRuns: runsFor({ fast: 3, full: 4 }) };
 
 const windowHome = Effect.fn("p40.windowHome")(function* () {
   const fs = yield* FileSystem.FileSystem,

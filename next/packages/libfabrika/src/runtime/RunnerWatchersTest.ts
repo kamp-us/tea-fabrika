@@ -1,6 +1,7 @@
 // next/, W2/W6. No driver imports: Node supplies the scoped database and lower services (0062).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../Id.ts";
@@ -249,12 +250,12 @@ export const suite = (harness: Harness) =>
       "W2: all Layers and SQL connections can be discarded without losing live watchers",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, false)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
     it.live.prop(
       "W6: unrelated ledger writes never become patch positions",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, true)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
   });

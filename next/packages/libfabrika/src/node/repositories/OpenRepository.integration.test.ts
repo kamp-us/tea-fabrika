@@ -6,6 +6,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions are the ledger's driver contract
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
 import { Arbitrary, Effect, Exit, FileSystem, Layer, Path } from "effect";
 import { Digest } from "effect/crypto";
@@ -131,6 +132,6 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
         ).pipe(Effect.provide(services)),
       );
     }),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
 }, 900_000);

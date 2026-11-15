@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -55,7 +56,7 @@ const keyArb = MemberEvent.cases.denied.fields.key.check(Schema.isPattern(/^key-
 
 // Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
 // Bare ids, programs and hashes retain 1..31 characters too.
-const options = { arbitrary: { seed: 119120, runs: 20, size: 40 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 40 } };
 
 // The installed runner uses runs/seed; old examples stay in these callbacks.
 const examples =
@@ -727,7 +728,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         });
         expect(yield* clients.members).toEqual(before);
       }).pipe(Effect.provide(all())),
-    { arbitrary: { seed: 119120, runs: 20 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }) } },
   );
   it.prop(
     "founding twice with different person ids preserves the first membership",

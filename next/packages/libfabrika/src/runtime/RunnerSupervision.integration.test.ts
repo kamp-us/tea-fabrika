@@ -5,6 +5,7 @@ import { Outcome } from "@demlik/tea";
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -563,7 +564,7 @@ describe("T337 down event identity, next/", () => {
         const retried = w.ledger.rows().filter((row) => row._tag === "down");
         expect(retried).toEqual(first);
       }),
-    { arbitrary: { seed: 119120, runs: 40 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 });
 
@@ -701,7 +702,7 @@ describe("P34 runner supervision", () => {
           ),
           {
             seed: 119120,
-            numRuns: 12,
+            numRuns: runsFor({ fast: 3, full: 12 }),
             // Review 7 lost pending writes; round 12 keeps them without gating dispatch on flush.
             examples: [["00000000-0000-4000-8000-000000000271", 1000]],
           },
@@ -784,7 +785,7 @@ describe("P34 runner supervision", () => {
         ),
         {
           seed: 119120,
-          numRuns: 12,
+          numRuns: runsFor({ fast: 3, full: 12 }),
           // Review 6: an alarm-only wake lost main's saved-write retry.
           examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
         },
@@ -981,7 +982,7 @@ describe("P34 runner supervision", () => {
           ),
           {
             seed: 119120,
-            numRuns: 12,
+            numRuns: runsFor({ fast: 3, full: 12 }),
             // Review 5: Restart with no old timer and no accepted inbox letter.
             examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
           },
@@ -1053,7 +1054,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 review 3: external adoption drops the only acceptance marker before indexing.
         examples: [["00000000-0000-4000-8000-000000000271", 7]],
       },
@@ -1107,7 +1108,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 review 3: recovery consumes the object's alarm while its saved program wake is future.
         examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
       },
@@ -1161,7 +1162,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 re-review: Restart loses the only acceptance marker for person-only mail.
         examples: [["00000000-0000-4000-8000-000000000271", 7]],
       },
@@ -1208,7 +1209,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 re-review: the object-wide stepping key outlives A's recovered failure.
         examples: [["00000000-0000-4000-8000-000000000271"]],
       },
@@ -1254,7 +1255,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 re-review: an external replacement selects a different build from A's.
         examples: [["00000000-0000-4000-8000-000000000271", 7]],
       },
@@ -1316,7 +1317,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 review: an appended person-only letter has a turn but no placing yet.
         examples: [["00000000-0000-4000-8000-000000000271", 7]],
       },
@@ -1372,7 +1373,7 @@ describe("P34 runner supervision", () => {
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 3, full: 12 }),
         // T271 review: the manager writes _tag: DOWN, with no tea Msg type.
         examples: [[["00000000-0000-4000-8000-000000000271"], CRASHED]],
       },
@@ -1504,7 +1505,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect(
@@ -1633,7 +1634,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -1673,7 +1674,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect("p80 plant, early or duplicate alarm: exactly one successor starts when the saved deadline arrives", () =>
@@ -1735,7 +1736,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -1766,7 +1767,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -1805,7 +1806,7 @@ describe("P34 runner supervision", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect("p80 plant, resend wakes down or moves until: no load, step or start before saved deadline", () =>
@@ -1975,7 +1976,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 4, full: 12 }),
         // T271 decision check: one crash inside the budget wrote a down event.
         examples: [
           [1, "00000000-0000-4000-8000-000000000271"],
@@ -2039,7 +2040,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
       ),
       {
         seed: 119120,
-        numRuns: 12,
+        numRuns: runsFor({ fast: 6, full: 12 }),
         // Each order case once: neither, program only, wiring only, both.
         examples: [
           [undefined, undefined, "00000000-0000-4000-8000-000000000271"],
@@ -2210,7 +2211,7 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
         const done = new Set<RunnerMove>();
         await fc.assert(
           fc.asyncProperty(Tape, (tape) => Effect.runPromise(walk(moves, done)(tape))),
-          { seed: 119120, numRuns: 40, includeErrorInReport: true },
+          { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true },
         );
         // An empty flow cannot pass: each move this law is about ran.
         expect([...done]).toEqual(expect.arrayContaining([...required]));

@@ -14,6 +14,7 @@
 // Every oracle here is the walk's own model, or the store's raw rows read with SQL: never the
 // product's fold.
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Cause,
   Context,
@@ -1008,7 +1009,7 @@ const prop = (
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
   answers: ReadonlyArray<string>,
-  numRuns: number,
+  runs: Runs,
 ) =>
   it.effect(
     name,
@@ -1019,7 +1020,7 @@ const prop = (
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
+        const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
@@ -1443,7 +1444,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "exit", "down", "restart", "retry_unsaved", "reopen"],
       ["start", "exit", "down", "restart", "retry_unsaved"],
       ["started", "name_taken", "already_started", "already_present", "own_name"],
-      200,
+      // 20 walks never answer already_present at this seed.
+      { fast: 60, full: 200 },
     );
 
     it.effect(
@@ -1455,7 +1457,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
           const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            // 20 races never answer already_present at this seed.
+            numRuns: runsFor({ fast: 50, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort(), "every answer a race can give was given").toEqual(
@@ -1493,7 +1501,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ],
       ["start", "retry_saved", "retry_changed", "retry_unsaved", "exit", "down", "restart", "cut_answer", "reopen"],
       ["retried", "id_reused", "cut_answer", "asked_afresh"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L4: a start needs a live requester whose program is granted the child's program, as of the start's last turn",
@@ -1501,7 +1509,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "start_stale", "exit", "restart", "exit_between", "retry_unsaved"],
       ["start", "start_stale", "exit_between", "restart"],
       ["started", "stale_sender", "forbidden", "exit_early", "exit_late", "exit_after"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L5: every started line keeps its requester, its parent and its code, under a name the brain owns",
@@ -1509,7 +1517,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "exit", "restart", "retry_saved", "reopen"],
       ["start", "retry_saved"],
       ["started", "retried"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L6: decode comes first: a bad name is bad_name, any other field off its schema or a letter over the row limit is bad_input, and nothing is written",
@@ -1517,7 +1525,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["start", "bad", "big", "retry_saved", "cut_write"],
       ["bad", "big", "cut_write"],
       ["bad_name", "bad_input", "too_big", "storage"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     it.effect(
@@ -1528,7 +1536,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            numRuns: runsFor({ fast: 20, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(

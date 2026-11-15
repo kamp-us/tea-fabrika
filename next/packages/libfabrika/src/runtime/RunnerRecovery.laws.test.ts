@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -232,7 +233,7 @@ describe("P12 saved mail recovery", () => {
             }),
           ),
         ),
-        { seed: 119120, numRuns: 25, examples: [[1, "saved-letter"]] },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }), examples: [[1, "saved-letter"]] },
       );
     });
   }
@@ -437,7 +438,7 @@ describe("P34 id reuse at the runner", () => {
               }),
             ),
         ),
-        { seed: 119120, numRuns: 25 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
       );
     });
   }

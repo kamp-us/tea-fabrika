@@ -2,6 +2,7 @@
 // commands runs on each, and every answer must match. It needs real git, so it runs at depth `full`
 // only, on the 3-hour schedule; the repository laws run on memory git on every pull request.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -209,7 +210,7 @@ describe("0535 memory git contract", () => {
             expect(got).toEqual(want);
           },
         ),
-        { seed: 119120, numRuns: 100 },
+        { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
       );
     },
     600_000,

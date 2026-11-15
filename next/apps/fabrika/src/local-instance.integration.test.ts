@@ -6,6 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
@@ -145,7 +146,7 @@ it.live.prop(
         }),
       { discard: true, concurrency: 1 },
     ),
-  { arbitrary: { seed: 119120, runs: 20 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }) } },
 );
 
 it.live.prop(
@@ -201,5 +202,5 @@ it.live.prop(
         Effect.provide(NodeServices.layer),
       );
     }),
-  { arbitrary: { seed: 119120, runs: 10 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
 );

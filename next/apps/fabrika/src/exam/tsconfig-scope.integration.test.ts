@@ -7,6 +7,7 @@
 // file runs on the 3-hour schedule (0536).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";
@@ -225,7 +226,7 @@ it.effect(
         ),
         {
           seed: SEED,
-          numRuns: 5,
+          numRuns: runsFor({ fast: 3, full: 5 }),
           // The bug's file: e2e/node/P19Launchd.test-support.ts sent SIGTERM unseen until this law.
           examples: [[{ folder: "e2e/node", name: "P19Launchd", suffix: ".test-support.ts", word: "milk" }]],
         },
@@ -285,7 +286,7 @@ it.effect(
             }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
           ),
         ),
-        { seed: SEED, numRuns: 10 },
+        { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
       ),
     ),
   120_000,

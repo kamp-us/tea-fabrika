@@ -6,6 +6,7 @@
 // and published patches.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
@@ -22,7 +23,7 @@ import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTe
 import { ProgramRunner, Sent } from "./Runner.ts";
 
 const SEED = 119120;
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 const NAME = "drafts:1";
 const PROGRAM = "drafts";
 const CAPACITY = 1024 ** 3;

@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -381,7 +382,7 @@ for (const accepted of [true, false]) {
           expect(rows(state.sql), "the wake must leave no telemetry awaiting a later runner call").toHaveLength(0);
         }),
       ),
-    { arbitrary: { seed: 119120, runs: 40 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 }
 
@@ -445,13 +446,13 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       { minLength: 1, maxLength: 12 },
     );
     const property = fc.asyncProperty(batches, (tape) => Effect.runPromise(once(tape)));
-    yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
+    yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) }));
   }),
 );
 
 // 100 runs took 50.4 s and 58.4 s in CI (runs 43324397786 and 43323883004), and passed 60 s once
 // (43321257103, ticket 889). Budget 2 s per run, 3.4 times the slowest passing run.
-const u8Runs = { seed: 119120, numRuns: 100 };
+const u8Runs = { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) };
 
 it.effect(
   "U8 Process and rebuilt Project runtimes bind every load to its own process",

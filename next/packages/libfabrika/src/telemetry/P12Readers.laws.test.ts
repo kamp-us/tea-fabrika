@@ -1,5 +1,6 @@
 // P12, next/. Corrupt saved rows at each synchronous decoder in the changed record files.
 import { DatabaseSync } from "node:sqlite";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -93,7 +94,7 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
           db.close();
         }
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 }
@@ -132,7 +133,7 @@ for (const reader of ["chain", "row", "part"] as const) {
           db.close();
         }
       }),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 }

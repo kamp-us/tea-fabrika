@@ -17,6 +17,7 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
@@ -705,7 +706,7 @@ describe("planted breaks", () => {
 // one `*`, and `"./ledger/internal/*": null` beats `"./ledger/*"` because its part before the `*` is
 // longer. Fixed seed, as `rows.test.ts` and the lead scripts' laws use.
 describe("a module's front files and its internal/ in the exports map", () => {
-  const options = { seed: 119120, numRuns: 200 };
+  const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) };
   const LIBRARY = "@kampus/libfabrika";
   const MODULES = [
     "telemetry",
@@ -799,7 +800,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
           }),
         { discard: true, concurrency: 1 },
       ),
-    { arbitrary: { seed: options.seed, runs: 60 } },
+    { arbitrary: { seed: options.seed, runs: runsFor({ fast: 6, full: 60 }) } },
   );
 });
 

@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions ar
 import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable diagnostic fields
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Effect,
@@ -303,7 +304,7 @@ it.effect.prop(
         }
       }),
     ).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
@@ -537,6 +538,6 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         }
       },
     ),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
   );
 });
