@@ -33,8 +33,9 @@ const wordsFor = (
     return null;
   }
 
+  // The tile guideline's words, `tracker in t2 ended`, with this slice's reason after them.
   return message._tag === "ended"
-    ? `${tile.name} ended (${message.reason._tag})`
+    ? `${tile.name} in ${tile.id} ended (${message.reason._tag})`
     : refusalFor(windowFor(tile.name), message);
 };
 

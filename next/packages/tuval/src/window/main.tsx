@@ -8,6 +8,7 @@ import { Effect, Option, Schema } from "effect";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { refusalFor, spoken, type TileWindow } from "./spoken.ts";
+import { bodyWord, stateWord } from "./words.ts";
 
 type LiveWindow = EffectRun<WindowModel, WindowMsg>;
 
@@ -19,26 +20,6 @@ type PageProps = {
 
 const pickLink = (m: WindowModel) => m.link;
 const pickTiles = (m: WindowModel) => m.tiles;
-
-type Reach = WindowModel["tiles"][number]["reach"];
-
-/** A tile's state in words, never color alone (0502): an ended tile names its exit's reason. */
-const stateWord = (link: WindowModel["link"], reach: Reach) => {
-  if (link._tag !== "online") {
-    return link._tag === "retrying" ? "Retrying" : "Connecting";
-  }
-
-  switch (reach._tag) {
-    case "open":
-      return "Online";
-    case "ended":
-      return `Ended (${reach.reason._tag})`;
-    case "missing":
-      return "Missing";
-    default:
-      return "Opening";
-  }
-};
 
 const Waiting = ({
   code,
@@ -98,6 +79,7 @@ const Tile = ({
   const offline = link._tag !== "online";
   const state = stateWord(link, tile.reach);
   const refusal = refusalFor(registration, tile.refusal);
+  const word = bodyWord(tile.reach, registration !== null && data !== null);
   return (
     <section
       className={offline ? "tile disconnected" : "tile"}
@@ -113,8 +95,8 @@ const Tile = ({
         <span className="tile-id">{tile.id}</span>
       </header>
       <div className="slot">
-        {registration === null || data === null ? (
-          <p>{tile.reach._tag === "missing" || tile.reach._tag === "ended" ? state : "Opening"}</p>
+        {word !== null || registration === null || data === null ? (
+          <p className="tile-empty">{word}</p>
         ) : (
           <registration.View
             data={data}

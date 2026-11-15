@@ -125,6 +125,11 @@ input {
   min-width: 0;
   padding: var(--s-3);
 }
+/* The tile guideline's empty state: one word where the content will start, also on an ended tile. */
+.tile-empty {
+  color: var(--tile-text);
+  font-size: var(--manti-text-base);
+}
 .checklist {
   max-width: 56rem;
 }
@@ -180,7 +185,8 @@ input {
   .tile {
     outline-color: var(--wire);
   }
-  .titlebar {
+  .titlebar,
+  .tile-empty {
     color: var(--text-primary);
   }
 }
