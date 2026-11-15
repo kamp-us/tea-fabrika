@@ -14,7 +14,7 @@ import { nodeExecution, type Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { encodedBytes } from "@kampus/libfabrika/ledger/Log";
 import { accountingEntries } from "@kampus/libfabrika/ledger/RefereeSql";
-import { Start } from "@kampus/libfabrika/processes/Process";
+import { acked, Start } from "@kampus/libfabrika/processes/Process";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
@@ -58,6 +58,9 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const URL = "http://127.0.0.1:18787";
 const NAMES = ["alpha:1", "alpha:2", "beta:1"] as const;
 const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
+// Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
+// record, so no account pays for one.
+const ACKS: ReadonlyArray<string> = NAMES.map(acked);
 const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 const live = TestClock.withLive;
@@ -618,12 +621,26 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       const found = yield* Effect.forEach(NAMES, storeFor, { concurrency: 1 });
       return { project: counts(db), process: found.map((store) => counts(store.db)) };
     }),
-    /** The committed entries after `rev` that the door's own record does not hold (0153). */
+    /**
+     * The committed entries after `rev` that an account pays for: all but the door's own record
+     * (0153) and the brain's own acks, which `acks` reads.
+     */
     entries: (rev: number) =>
       Effect.sync(() =>
         accountingEntries(sql).filter(
-          (entry) => entry.rev > rev && entry.stream !== "gateway" && !entry.stream.startsWith("gateway/"),
+          (entry) =>
+            entry.rev > rev &&
+            entry.stream !== "gateway" &&
+            !entry.stream.startsWith("gateway/") &&
+            !ACKS.includes(entry.stream),
         ),
+      ),
+    /** The names whose reader's ack the brain recorded after `rev`, in the order it recorded them. */
+    acks: (rev: number) =>
+      Effect.sync(() =>
+        accountingEntries(sql)
+          .filter((entry) => entry.rev > rev && ACKS.includes(entry.stream))
+          .map((entry) => required(NAMES.find((name) => acked(name) === entry.stream))),
       ),
     head: Effect.sync(() => accountingEntries(sql).at(-1)?.rev ?? 0),
     /** One input through the door, to the name's live process. */
@@ -698,7 +715,9 @@ describe("P34c live wiring, both object stores", () => {
               const after = yield* w.accounts;
               const fresh = cost(yield* w.entries(head));
               expect(fresh.writes).toBeGreaterThan(0);
-              // A throwing input never reaches the inbox, and the brain pays for the recovery.
+              // A throwing input never reaches the inbox, so no reader acks it, and the brain pays
+              // for the recovery.
+              expect(yield* w.acks(head)).toEqual([]);
               expect(after.program).toEqual(before.program);
               const paid = required(after.recovery[name]).total;
               const owed = required(before.recovery[name]).total;
@@ -747,6 +766,11 @@ describe("P34c live wiring, both object stores", () => {
               );
               const after = yield* w.accounts;
               const fresh = cost(yield* w.entries(head));
+              // Each reader that stepped a message acked it, and the ack moves no account: the
+              // program's charge below is the other entries alone, and every other account is as
+              // it was. Plant: answer the runner's ack through a manager that speaks as the
+              // reader's process, so the ack is charged as the program's own write.
+              expect(new Set(yield* w.acks(head))).toEqual(new Set(stepped));
               // The message, its step, a Send's receipt, the mailed message and its step, the answer
               // message and its step, a hands task's request and its pointer for the hands key: all
               // of it is the work of the program that took the input.
@@ -833,6 +857,8 @@ describe("P34c live wiring, both object stores", () => {
             const after = yield* w.accounts;
             const paid = required(after.program[program]);
             const fresh = cost(yield* w.entries(head));
+            // The reader's ack is written at the cap too, and it is no part of the charge.
+            expect(yield* w.acks(head)).toEqual([name]);
             expect({ writes: paid.writes - used.writes, bytes: paid.bytes - used.bytes }).toEqual(fresh);
             expect(paid.ahead).toEqual(none);
             // The write that reaches the cap is admitted; nothing passes it.
