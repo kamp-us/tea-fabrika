@@ -12,8 +12,8 @@ tags: [lint, oxlint, types, cast, type-assertion, comment, reason, next, tooling
 // refused: next/packages/libfabrika/src/cloudflare/connection.ts:77. Why is this a ConnectionId?
 const client = (yield* attached(ws)).client as ConnectionId;
 
-// taken (a sketch: the marker word is not decided here, and this reason is made up to show the
-// form, not checked against the code)
+// taken (a sketch: this reason is made up to show the form, and is not checked against the
+// code)
 // SAFETY: `attach` is the only writer of this field, and it stores a ConnectionId.
 const client = (yield* attached(ws)).client as ConnectionId;
 
@@ -93,9 +93,16 @@ cannot see (owner, 2026-11-15).**
 - **Where it sits:** before the cast or before its statement, as the rule reads it.
 - **This is added to the two rules above, and replaces neither.** `as any`, the double cast and
   `<T>x` stay refused. A reason does not make them pass.
-- **Held by a lint rule copied into `oxlint-plugins/`** from the repository named in Context. The
-  copy keeps that repository's license notice, and says where it came from. Its tests are written
-  in our style, a `*.test.ts` beside the rule.
+- **Held by their rule as it ships: `anti-slop/require-safety-comment-for-type-assertion`,** from
+  the plugin named in Context, registered through `jsPlugins`. We do not write or copy a version
+  of our own (owner, 2026-11-15). The decision "We use the anti-slop lint plugin as it ships",
+  0563 in its own pull request, holds the rules for every rule taken from that plugin.
+- **The marker word is their default, `SAFETY`,** unless the cleanup's plan finds a reason to use
+  ours. What was found on our own `edge:` is under Consequences.
+- **tea's type slot gets one reason line above each `types:` block,** 11 lines in all. No rule of
+  ours knows the slot. This one is plumbing, settled by the lead and not ruled by the owner.
+- **It blocks in the pull request and in the merge line,** as every lint rule does. Nothing counts
+  hits on a schedule.
 
 **Binding constraints**
 
@@ -107,7 +114,7 @@ cannot see (owner, 2026-11-15).**
 
 ## Consequences
 
-- This file records the rule and how it is held. The rule's copy and the cleanup are later pull
+- This file records the rule and how it is held. Installing the plugin and the cleanup are later pull
   requests. The cleanup goes folder by folder, and the rule blocks in a folder when it reaches
   zero (0168). Until then nothing asks a new cast for its reason there.
 - **The cost is large:** 987 casts in 218 files, 890 of them
@@ -118,7 +125,7 @@ cannot see (owner, 2026-11-15).**
   [0523](0523-advice-rules-block-where-clean.md) set five named rules aside from that, and this
   rule is not one of them. The research counted the hits and did not read a sample for this rule.
   For this rule a false alarm is a cast where a reason line adds nothing. Known candidates, from
-  reading the 42 `next/` product hits: tea's type slot (below), and casts that only give an empty
+  reading the 42 `next/` product hits: tea's type slot (below, 11 lines), and casts that only give an empty
   value its type, such as `[] as ReadonlyArray<Dispatched>` in
   `next/packages/libfabrika/src/runtime/Runner.ts`.
 - **Still to measure before the rule blocks anywhere:** a proper sample of the 987, read by hand
@@ -127,35 +134,36 @@ cannot see (owner, 2026-11-15).**
   that sample, and each pull request that turns the rule on in a folder reports its own numbers.
 - **What the rule cannot see:** whether a reason is true, or says anything. Review reads each
   one.
-- **Not decided here.** Two points are plumbing for the cleanup's plan. What was found on each:
-  - **(a) The marker word: `SAFETY:` or the repo's own `edge:`.** The rule takes a list.
-    - `edge:` today is the reason prefix inside an `oxlint-disable-next-line` comment. Counted on
-      `98bcdfa22` with `rg` for `oxlint-disable[a-z-]* ...-- edge:` in code files: 413 comments in
-      105 files (389 in `next/`, 14 in `.agents/`, 10 in `oxlint-plugins/`, none in
-      `.github/ci/`). 350 name only the two edge rules, `fabrika/no-promises` and
-      `fabrika/no-effect-run-outside-edge`. 19 name `fabrika/no-type-assertions`. The other 44
-      name other rules.
-    - What defines it: the rule `fabrika/edge-comment` (`oxlint-plugins/edge-comment.ts`) holds
-      the comments of those two rules to one line and an `edge: <why>` reason.
-      [No Promises](../docs/direction/no-promises.md) and
-      [`oxlint-plugins/README.md`](../oxlint-plugins/README.md) say an edge is the one line a
-      platform demands. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each new
-      one for the owner. 0168 and 0524 use the word wider: one inline `edge:` line for a line that
-      is right where a rule does not fit.
-    - Run with `edge` as the marker, the rule fires 948 times, so 39 casts already sit under an
-      `edge:` comment (28 in `next/` tests, 11 in `next/` product code).
-    - `SAFETY:` appears nowhere in scope as a marker. `edge-comment.ts` and the README name it as
-      the industry's match (clippy's `undocumented_unsafe_blocks`).
-    - A chain cast already has a disable line with a reason. Whether that line can also be the
-      cast's reason, or the cast needs a second comment, follows from the marker.
-  - **(b) tea's type slot.** tea 0.25.0 asks for types as empty values:
-    `types: { model: {} as State, msg: {} as Msg }` in its README. In scope that is 15 casts on 11
-    lines of product code: 9 in `next/` on 8 lines and 6 in `.agents/` on 3, each inside a
-    `Machine.make` call or the lead scripts' own `defineMachine`.
-    By key: `ctx` 8, `sub` 3, `model` 2, `msg` 2. The value is never read. Either each of the 11
-    lines gets one reason line, which the rule accepts for every cast in the statement, or the
-    rule knows that slot.
-  - The rule's name in our plugin and the folder order of the cleanup.
+- **What was found on the marker word,** for the cleanup's plan. The rule takes a list of marker
+  words.
+  - `edge:` today is the reason prefix inside an `oxlint-disable-next-line` comment. Counted on
+    `98bcdfa22` with `rg` for `oxlint-disable[a-z-]* ...-- edge:` in code files: 413 comments in
+    105 files (389 in `next/`, 14 in `.agents/`, 10 in `oxlint-plugins/`, none in `.github/ci/`).
+    350 name only the two edge rules, `fabrika/no-promises` and
+    `fabrika/no-effect-run-outside-edge`. 19 name `fabrika/no-type-assertions`. The other 44 name
+    other rules.
+  - What defines it: the rule `fabrika/edge-comment` (`oxlint-plugins/edge-comment.ts`) holds the
+    comments of those two rules to one line and an `edge: <why>` reason.
+    [No Promises](../docs/direction/no-promises.md) and
+    [`oxlint-plugins/README.md`](../oxlint-plugins/README.md) say an edge is the one line a
+    platform demands. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each new one
+    for the owner. 0168 and 0524 use the word wider: one inline `edge:` line for a line that is
+    right where a rule does not fit.
+  - Run with `edge` as the marker, the rule fires 948 times, so 39 casts already sit under an
+    `edge:` comment (28 in `next/` tests, 11 in `next/` product code).
+  - `SAFETY:` appears nowhere in scope as a marker today. `edge-comment.ts` and the README name it
+    as the industry's match (clippy's `undocumented_unsafe_blocks`).
+  - A chain cast already has a disable line with a reason. With `SAFETY` as the marker, that line
+    counts as the cast's reason only when its own reason starts with `SAFETY:`. The plan says
+    whether a chain cast that stays carries one comment or two.
+- **What was found on tea's type slot.** tea 0.25.0 asks for types as empty values:
+  `types: { model: {} as State, msg: {} as Msg }` in its README. In scope that is 15 casts on 11
+  lines of product code: 9 in `next/` on 8 lines and 6 in `.agents/` on 3, each inside a
+  `Machine.make` call or the lead scripts' own `defineMachine`. By key: `ctx` 8, `sub` 3, `model`
+  2, `msg` 2. The value is never read. One comment above the `types:` line covers every cast in
+  it, as the rule reads comments, so the cost is 11 lines.
+- **Not decided here:**
+  - The folder order of the cleanup.
   - Today's app.
 - Not part of this decision, and not decided: `type X = unknown`, `Reflect.apply`, and the two
   `Match` rules from the same rule set.
