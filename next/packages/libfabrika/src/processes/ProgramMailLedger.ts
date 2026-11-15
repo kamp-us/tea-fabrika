@@ -14,7 +14,7 @@ import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import { short } from "../telemetry/Trace.ts";
-import { granted, mailId, businessRef } from "./internal/programMail.ts";
+import { full, granted, mailId, businessRef, unread } from "./internal/programMail.ts";
 import { inbox, letterBody, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessTable, State } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -101,6 +101,16 @@ const saved = (
   );
 };
 
+/** `full` when the target's inbox holds `cap` unread letters or more, from two index reads: where
+ *  the inbox ends, and how far its reader acked. */
+const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: string, cap: number) => {
+  const end = Option.getOrElse(turn.end(inbox(to)), () => 0);
+  const acked = manager.ackedPos(turn, to);
+  return full(end, acked, cap)
+    ? Option.some(new ProgramMailError({ reason: "full", unread: unread(end, acked) }))
+    : Option.none();
+};
+
 /** The newest lifecycle rev of each name the send depends on: a change means look again. */
 const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
   JSON.stringify([ProcessTable.stream, ...names.map(ProcessTable.events)].map((stream) => turn.head(stream)));
@@ -115,11 +125,17 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
  * the source or the target lands between the checks and the write, the checks run again before
  * anything is written.
  *
+ * `cap` is the most unread letters one inbox holds, the `mail.unread` setting. In the turn that
+ * would save a new letter, an inbox at its cap answers `full` and nothing is written. A repeat of a
+ * saved letter answers its first receipt before the cap is looked at, so a full inbox never hides
+ * a receipt.
+ *
  * @stability unstable
  * @category layers
  */
 export const layer = (config: {
   readonly grants: Grants;
+  readonly cap: number;
 }): Layer.Layer<ProgramMail, never, LedgerTransaction | ProcessManager> =>
   Layer.effect(
     ProgramMail,
@@ -201,6 +217,12 @@ export const layer = (config: {
                 return prior;
               }
 
+              const over = capped(turn, manager, delivery.to, config.cap);
+
+              if (Option.isSome(over)) {
+                return Option.some(Result.fail(over.value));
+              }
+
               const id = mailId(delivery.command);
               turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
               turn.append(
@@ -233,7 +255,11 @@ export const layer = (config: {
           }),
         ),
         Effect.tapError((error) =>
-          Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
+          Effect.annotateCurrentSpan(
+            error.reason === "full"
+              ? { [tag("answer")]: "full", [tag("unread")]: error.unread ?? config.cap, [tag("cap")]: config.cap }
+              : { [tag("answer")]: "refused", [tag("reason")]: error.reason },
+          ),
         ),
       );
       return ProgramMail.of({ deliver });

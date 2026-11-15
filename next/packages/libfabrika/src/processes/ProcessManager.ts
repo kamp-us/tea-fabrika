@@ -10,12 +10,15 @@ import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
-import type { Rev } from "../Rev.ts";
+import { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
 import { processMail } from "./internal/processMail.ts";
 import { type From, inbox, type Letter, letterLine, Mailbox } from "./Mailbox.ts";
 import {
+  Acked,
+  acked,
+  ackedPos,
   type Caller,
   clientInbox,
   Dead,
@@ -109,6 +112,12 @@ export class ProcessManager extends Context.Service<
     ) => Effect.Effect<{ readonly name: string; readonly state: typeof State.Type }, Failure>;
     /** Writes a letter that reached its delivery limit to `<process>/dead`, once per letter. */
     readonly dead: (process: string, dead: typeof DeadInput.Type, from: From) => Effect.Effect<void, Failure>;
+    /**
+     * Records that `process` has read its name's inbox through `pos`, after its checkpoint was
+     * saved. The name is bound from the live process. An ack from a life that is not its name's
+     * live process, or at or behind the newest ack, writes nothing, so the ack only moves forward.
+     */
+    readonly ack: (process: string, pos: Rev, from: From) => Effect.Effect<void, Failure>;
     readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
     /**
      * Watches `process` under the caller's own `ref`. A target that is not live gets its `DOWN`,
@@ -138,6 +147,11 @@ export class ProcessManager extends Context.Service<
      * decides and writes in that turn, as a child's start does.
      */
     readonly table: (turn: LedgerTurn) => ProcessTable;
+    /**
+     * The newest inbox pos `name`'s reader acked, or 0 before any ack, inside one ledger turn and
+     * trusting only the brain's lines. One index read, however many acks the name has.
+     */
+    readonly ackedPos: (turn: LedgerTurn, name: string) => Rev;
   }
 >()("@kampus/libfabrika/processes/ProcessManager") {
   static readonly layer = (
@@ -432,6 +446,23 @@ export class ProcessManager extends Context.Service<
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
+        const ack = Effect.fn("process.ack")(function* (process: string, input: Rev, from: From) {
+          yield* Effect.annotateCurrentSpan({ "fab.process": process });
+          const pos = yield* Schema.decodeUnknownEffect(Rev)(input).pipe(
+            Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
+          );
+          yield* Effect.annotateCurrentSpan({ [tag("pos")]: pos });
+          yield* checked((table, turn) => {
+            const life = table.life(process);
+
+            if (Option.isNone(life) || !table.isLive(process) || pos <= ackedPos(turn, life.value.name, caller.by)) {
+              return Result.succeed(undefined);
+            }
+
+            turn.append(acked(life.value.name), `${process}/acked/${pos}`, line(from, Acked.make({ process, pos })));
+            return Result.succeed(undefined);
+          });
+        }, Effect.tapError(failed));
         const receive = (process: string, after: Rev): Stream.Stream<Letter, Failure> =>
           Stream.unwrap(
             Effect.gen(function* () {
@@ -499,12 +530,14 @@ export class ProcessManager extends Context.Service<
           }),
           start,
           exit,
+          ack,
           monitor,
           demonitor,
           leave,
           down,
           receive,
           table: fold,
+          ackedPos: (turn, name) => ackedPos(turn, name, caller.by),
           info: info(),
           isLive: Effect.fn("process.isLive")(function* (process: string) {
             return yield* tx.transact((turn) => committed(turn).isLive(process));
@@ -531,7 +564,7 @@ export class ProcessManager extends Context.Service<
  */
 export type ProcessCalls = Omit<
   Context.Service.Shape<typeof ProcessManager>,
-  "receive" | "table" | "start" | "leave"
+  "receive" | "table" | "ackedPos" | "start" | "leave"
 > & {
   readonly start: (
     request: Start,
@@ -561,6 +594,7 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
       guard === undefined ? calls.start(request, from, first) : Effect.fail(new ProcessError({ reason: "forbidden" })),
     leave: () => Effect.fail(new LedgerError({ reason: "refused" })),
     table: (turn) => ProcessTable.read(turn.read, by),
+    ackedPos: (turn, name) => ackedPos(turn, name, by),
     receive: (process, after) =>
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),
   });

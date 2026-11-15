@@ -39,14 +39,20 @@ export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sende
  * - `bad_message`: the message is not JSON, or the ledger refused its line.
  * - `id_reused`: the command already sent a different letter.
  *
- * `storage` means the ledger failed, and the same delivery may be tried again.
+ * Two reasons are not final, and the same delivery may be tried again:
+ *
+ * - `full`: the target's inbox holds its cap of unread letters. Nothing was saved, and the letter
+ *   fits once the target reads. `unread` says how many letters it holds unread.
+ * - `storage`: the ledger failed.
  *
  * @stability unstable
  * @category errors
  */
 export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
-  /** A refusal, or `storage`: the ledger failed, and the same delivery may be tried again. */
-  reason: Schema.Union([MailRefusal, Schema.Literal("storage")]),
+  /** A refusal, `full` (the target's inbox is at its cap) or `storage` (the ledger failed). */
+  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage"])]),
+  /** With `full`: the target's unread letters, at least its cap. */
+  unread: Schema.optionalKey(Schema.Int),
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
