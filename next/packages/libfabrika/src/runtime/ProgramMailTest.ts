@@ -1459,7 +1459,6 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             stopped: new Set(),
             stalled: new Map(),
             holds: new Map(),
-            reached: new Set(),
             wakes: new Map(),
             wakeTimes: new Map(),
             fault: { mail: false, ack: false, wake: false },
