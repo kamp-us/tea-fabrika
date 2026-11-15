@@ -46,7 +46,16 @@ started.**
 ## Consequences
 
 - The mockup's "only that tile" answer is dropped.
-- A reader that outlives its source is still a real case, and still needs its words on screen: a
-  source can crash, or be a program that prints its answer and exits.
-- Not decided here: what a tile does on screen once its process has ended, and what Ctrl-C does to
-  a process that was already running before a line piped into it.
+- A reader outlives its source in two cases only: the source crashes, or the source is a small
+  program that sends its answer and exits. A program with a window never ends cleanly by itself.
+- A crashed tile stays and says its word, as the tile guideline already says, and the reader keeps
+  the last whole value it got. No new screen rule comes from this decision.
+- Not decided here: how a small program with no window shows on screen, and what Ctrl-C does to a
+  process that was already running before a line piped into it.
+
+## Amendments
+
+- 2026-11-15: the Consequences were made exact. They said a reader that outlives its source "still
+  needs its words on screen" and left open what an ended tile does. The same day's design talk
+  found that the only such cases are a crash, which the tile guideline covers, and a small program
+  that exits.
