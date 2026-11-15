@@ -5,10 +5,10 @@
  */
 import { Effect, Layer, Option } from "effect";
 import type { Sql } from "../Sql.ts";
-import { committedEntries, ledgerStore } from "./internal/ledgerStore.ts";
+import { committedEntries, ledgerStore, policyFor } from "./internal/ledgerStore.ts";
 import { Doorbell } from "./Ledger.ts";
 import { Referee } from "./Referee.ts";
-import { WritePolicy, RuntimeWrite } from "./WritePolicy.ts";
+import { WritePolicy } from "./WritePolicy.ts";
 
 /**
  * Returns the committed entries in `sql`, oldest first, or none before the ledger's table exists.
@@ -17,13 +17,16 @@ import { WritePolicy, RuntimeWrite } from "./WritePolicy.ts";
  * **Details**
  *
  * `scope.after` keeps only entries past that revision, and `scope.stream` only one stream's, so a
- * reader that knows what it needs does not decode the whole ledger.
+ * reader that knows what it needs does not decode the whole ledger. `scope.at` with a stream
+ * returns the one entry at that position, as an ack names it.
  *
  * @stability unstable
  * @category getters
  */
-export const accountingEntries = (sql: Sql, scope?: { readonly stream?: string; readonly after?: number }) =>
-  committedEntries(sql, scope);
+export const accountingEntries = (
+  sql: Sql,
+  scope?: { readonly stream?: string; readonly after?: number } | { readonly stream: string; readonly at: number },
+) => committedEntries(sql, scope);
 
 /**
  * Layer that provides `Referee` on the given `Sql`. An append is decided and written in one SQL
@@ -48,21 +51,8 @@ export const layer = (sql: Sql): Layer.Layer<Referee, never, Doorbell> =>
       return {
         ...store,
         append: Effect.fnUntraced(function* (stream: string, id: string, line: unknown) {
-          const runtime = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeWrite));
-
-          if (runtime === undefined) {
-            return yield* store.append(stream, id, line);
-          }
-
-          return yield* ledgerStore(
-            sql,
-            bell,
-            policy === undefined
-              ? undefined
-              : {
-                  admit: (entry) => policy.admit(entry, runtime),
-                },
-          ).append(stream, id, line);
+          const asked = yield* policyFor(policy);
+          return yield* (asked === policy ? store : ledgerStore(sql, bell, asked)).append(stream, id, line);
         }),
       };
     }),

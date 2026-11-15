@@ -221,24 +221,36 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             );
             return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
           }),
-          readActivity:
-            options.accounting === undefined && options.storage?.get !== undefined
-              ? options.storage.get("activity").pipe(
-                  Effect.flatMap((raw) =>
-                    raw === undefined
-                      ? Effect.succeed(undefined)
-                      : Effect.try({
-                          try: () => Schema.decodeUnknownSync(Activity)(raw),
-                          catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-                        }),
-                  ),
-                )
-              : read(() => {
-                  const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
-                  return row === undefined
-                    ? undefined
-                    : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
-                }),
+          readActivity: Effect.gen(function* () {
+            const get = options.storage?.get;
+            const kept =
+              get === undefined
+                ? Effect.succeed(undefined)
+                : get("activity").pipe(
+                    Effect.flatMap((raw) =>
+                      raw === undefined
+                        ? Effect.succeed(undefined)
+                        : Effect.try({
+                            try: () => Schema.decodeUnknownSync(Activity)(raw),
+                            catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+                          }),
+                    ),
+                  );
+
+            if (options.accounting === undefined && get !== undefined) {
+              return yield* kept;
+            }
+
+            const marker = yield* read(() => {
+              const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+              return row === undefined
+                ? undefined
+                : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
+            });
+            // With accounting the marker is a SQL row charged with its write. A marker an older build
+            // kept in the object's storage is read only until the first accounted write replaces it.
+            return marker ?? (yield* kept);
+          }),
           activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
             if (options.storage !== undefined && options.accounting === undefined) {
               yield* options.storage.put("activity", value);

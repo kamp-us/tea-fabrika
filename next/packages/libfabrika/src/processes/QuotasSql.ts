@@ -12,9 +12,9 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Entry, encodedBytes, lineFor } from "../ledger/Log.ts";
+import { Entry, encodedBytes, lineFor, type Line } from "../ledger/Log.ts";
 import { accountingEntries } from "../ledger/RefereeSql.ts";
-import { WritePolicy, RuntimeWrite } from "../ledger/WritePolicy.ts";
+import { OwnWrite, WritePolicy, RuntimeWrite } from "../ledger/WritePolicy.ts";
 import type { Sql } from "../Sql.ts";
 import * as Quota from "./internal/quota.ts";
 import { ProcessTable } from "./Process.ts";
@@ -42,7 +42,26 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Model));
 const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Number, build: Schema.String });
 const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Number, build: Schema.String });
 const readStep = Schema.decodeUnknownOption(StepBody);
+const readAck = Schema.decodeUnknownOption(Schema.Struct({ process: Schema.String, pos: Schema.Number }));
+// A place for a letter that has not landed: the largest number with one digit more than the head.
+// The door's record and any concurrent write land first, so the real place is past the head; to
+// pass this one, nine times the ledger's whole length would have to land in between. So the real
+// entry is never longer than the trial's, and the trial errs a few bytes early, never late.
+const placeAfter = (head: number) => 10 ** (String(head).length + 1) - 1;
 type Authority = { readonly channel: "program" | "recovery"; readonly process: string } | "infrastructure" | null;
+
+// The brain's own streams: lifecycle, the door, the hands door's jobs, the instance's starts and
+// access. No program owns them, so a write there with no trusted authority is infrastructure,
+// never a program's charge.
+const infrastructure = (stream: string) =>
+  stream === ProcessTable.stream ||
+  stream.startsWith("processes/") ||
+  stream === "gateway" ||
+  stream.startsWith("gateway/") ||
+  stream.startsWith("job:") ||
+  stream.startsWith("target:") ||
+  stream.startsWith("settings/") ||
+  stream.startsWith("permissions/");
 
 const use = (model: Quota.Model): Use => ({
   writes: model.writes,
@@ -72,11 +91,13 @@ export const layer = (sql: Sql, options: { readonly brain: string; readonly limi
 const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }, clock: Clock.Clock) => {
   let authority: Authority = null;
   const limits = options.limits;
-  const initialize = () => {
-    for (const query of TABLES) {
-      sql.exec(query);
-    }
-  };
+
+  // The tables are made once, when the layer is built and before any transaction, so a first
+  // write that rolls back cannot take them away, and no later write pays for them again.
+  for (const query of TABLES) {
+    sql.exec(query);
+  }
+
   const machine = (account: string) =>
     Quota.make({
       account,
@@ -166,12 +187,29 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         ),
       }),
     );
+  // A reader's ack is the work of whoever paid for the letter it acks, as that letter's step is:
+  // the program that sent it, so mail cannot make its receiver pay. A letter nobody paid for
+  // leaves the ack with the reader's own program.
+  const paidFor = (entry: Entry, reader: string, name: string): string | undefined => {
+    const ack = entry._tag === "acked" ? readAck(entry.body) : Option.none();
+
+    if (Option.isNone(ack) || ack.value.process !== reader) {
+      return undefined;
+    }
+
+    const [letter] = accountingEntries(sql, { stream: `${name}/inbox`, at: ack.value.pos });
+    const [paid] =
+      letter === undefined
+        ? []
+        : sql.exec("SELECT account FROM quota_steps WHERE name=? AND letter=?", name, letter.id);
+    return paid === undefined ? undefined : String(paid.account);
+  };
   const charge = (entry: Entry, trusted: Authority, runtime?: RuntimeWrite["Service"]) => {
     if (runtime !== undefined && runtime.process !== entry.stream) {
       return Result.fail("quota" as const);
     }
 
-    if (trusted === "infrastructure") {
+    if (trusted === "infrastructure" || (trusted === null && runtime === undefined && infrastructure(entry.stream))) {
       return Result.succeed(undefined);
     }
 
@@ -187,7 +225,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       selected !== undefined && trusted !== null
         ? trusted.channel === "recovery"
           ? `${selected.name}/project`
-          : selected.state.code.program
+          : (paidFor(entry, trusted.process, selected.name) ?? selected.state.code.program)
         : target?.program;
 
     if (account === undefined || (target === undefined && trusted === null)) {
@@ -252,7 +290,6 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
   // Charges what was committed before accounting saw it, and nothing else: only entries past the
   // saved revision are read, so a ledger that is already accounted costs one empty query.
   const restore = () => {
-    initialize();
     const through = Number(sql.exec("SELECT rev FROM quota_restored WHERE id=1")[0]?.rev ?? 0);
     const pending = accountingEntries(sql, { after: through });
     const last = pending.at(-1);
@@ -270,14 +307,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
       // Existing lifecycle, door, instance start and access history precede accounting. Ordinary data must
       // have an owner.
-      if (
-        entry.stream === ProcessTable.stream ||
-        entry.stream.startsWith("processes/") ||
-        entry.stream === "gateway" ||
-        entry.stream.startsWith("gateway/") ||
-        entry.stream.startsWith("settings/") ||
-        entry.stream.startsWith("permissions/")
-      ) {
+      if (infrastructure(entry.stream)) {
         continue;
       }
 
@@ -355,20 +385,62 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       authority = before;
     }
   };
+  // The trial runs the admission itself, then rolls it back: the answer is the one an append would
+  // get, and nothing is saved either way.
+  const admits = Effect.fnUntraced(function* (name: string, letter: string, line: Line) {
+    const rollback = new Error("quota trial");
+    let fits = false;
+    const tried = Result.try(() =>
+      sql.transaction(() => {
+        restore();
+
+        if (sql.exec("SELECT 1 FROM quota_steps WHERE name=? AND letter=?", name, letter).length > 0) {
+          fits = true;
+        } else {
+          // The letter's place is not known before it lands, so the trial errs a digit early.
+          const rev = placeAfter(Number(sql.exec("SELECT rev FROM quota_restored WHERE id=1")[0]?.rev ?? 0));
+          const entry = Entry.make({
+            ...line,
+            id: letter,
+            stream: `${name}/inbox`,
+            pos: rev,
+            rev,
+            arrivedAt: clock.currentTimeMillisUnsafe(),
+          });
+          fits = Result.isSuccess(charge(entry, null));
+        }
+
+        throw rollback;
+      }),
+    );
+
+    if (Result.isFailure(tried) && tried.failure !== rollback) {
+      const cause = tried.failure;
+      return yield* cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
+    }
+
+    return fits;
+  });
   const service = Quotas.of({
     program: read,
     recovery: (name) => read(`${name}/project`),
+    admits,
     ordinary: (process, step) => within({ channel: "program", process }, step),
     recovering: (process, step) => within({ channel: "recovery", process }, step),
     infrastructure: (step) => within("infrastructure", step),
     runtime: (process, work) => work.pipe(Effect.provideService(RuntimeWrite, { process })),
+    own: (process, work) => work.pipe(Effect.provideService(OwnWrite, { process })),
   });
   return Layer.mergeAll(
     Layer.succeed(Quotas, service),
     Layer.succeed(WritePolicy, {
-      admit: (entry, runtime) => {
+      admit: (entry, writer) => {
         restore();
-        const result = charge(entry, authority, runtime);
+        // A step's own authority wins; else the writer trusted code named around the call.
+        const own: Authority =
+          writer !== undefined && "own" in writer ? { channel: "program", process: writer.own } : null;
+        const runtime = writer !== undefined && "runtime" in writer ? { process: writer.runtime } : undefined;
+        const result = charge(entry, authority ?? own, runtime);
 
         if (Result.isSuccess(result)) {
           sql.exec(

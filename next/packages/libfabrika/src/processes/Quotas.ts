@@ -9,6 +9,7 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { Line } from "../ledger/Log.ts";
 
 /**
  * Error for a program account's refused charge: the resource that ran out, the use the charge
@@ -161,9 +162,16 @@ export class Quotas extends Context.Service<
   {
     readonly program: (identity: string) => Effect.Effect<Use, QuotasError>;
     readonly recovery: (name: string) => Effect.Effect<Use, QuotasError>;
+    /**
+     * Whether `name`'s inbox would admit the letter `letter` with this line now, the letter and
+     * its step charged together. A letter the inbox already took answers true. Nothing is saved.
+     */
+    readonly admits: (name: string, letter: string, line: Line) => Effect.Effect<boolean, QuotasError>;
     readonly ordinary: <A>(process: string, step: () => A) => A;
     readonly recovering: <A>(process: string, step: () => A) => A;
     readonly infrastructure: <A>(step: () => A) => A;
     readonly runtime: <A, E, R>(process: string, work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+    /** Runs `work` as `process`'s program writing its own entries, as its checked writes are. */
+    readonly own: <A, E, R>(process: string, work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   }
 >()("@kampus/libfabrika/processes/Quotas") {}

@@ -308,6 +308,12 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<void, ProcessError | LedgerError, RDeliver>;
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
   readonly nextProcess: () => Effect.Effect<string, never, RNext>;
+  /**
+   * Whether the program behind `process` has room for this input's letter and its step. The door
+   * asks before it saves anything of the input, and `false` answers `quota` (0147). Left out,
+   * every input has room.
+   */
+  readonly admit?: (process: string, incoming: Incoming) => Effect.Effect<boolean, LedgerError, RDeliver>;
   readonly deliver: (
     process: string,
     envelope: Envelope<A>,
@@ -1125,6 +1131,44 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           );
     return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
   });
+  /**
+   * Whether the target's program has room for one send, asked as its letter would land, with
+   * nothing saved or recorded. A send this cannot read has room: the door's own checks answer it.
+   */
+  const roomFor = Effect.fnUntraced(function* (
+    admit: NonNullable<typeof options.admit>,
+    raw: string,
+    key: string,
+    params: unknown,
+  ) {
+    const request = Schema.decodeUnknownResult(Send)(params);
+    const message = Result.isSuccess(request)
+      ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
+      : Result.fail(null);
+
+    if (Result.isFailure(request) || Result.isFailure(message)) {
+      return true;
+    }
+
+    const sent = request.success;
+    const trial = Effect.gen(function* () {
+      const by = yield* membership(raw, key);
+      const id = yield* ids.next(InputId);
+      const span = yield* Effect.currentSpan;
+      return yield* admit(sent.pid, {
+        id: sent.letter,
+        envelope: { id, by, arrivedAt: yield* clock, input: message.success },
+        sentAt: sent.sentAt,
+        seen: sent.seen,
+        span: { traceId: span.traceId, spanId: span.spanId },
+      });
+    }).pipe(
+      Effect.withSpan("gateway.quota"),
+      // A storage failure fails the call; a writer who is not granted is answered by the door below.
+      Effect.catch((error) => (error instanceof LedgerError ? Effect.fail(error) : Effect.succeed(true))),
+    );
+    return yield* silent(trial).pipe(Effect.provideContext(context));
+  });
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
@@ -1211,6 +1255,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     if (attached.identity.as === "hands") {
       return no("not_allowed");
+    }
+
+    // The program's room is asked before anything of the input is saved or recorded, so a refusal
+    // leaves no record, binding, step or span behind (0147, 0153); the caller counts it (0143).
+    if (
+      method === "process.send" &&
+      options.admit !== undefined &&
+      !(yield* roomFor(options.admit, raw, attached.identity.key, params))
+    ) {
+      return no("quota");
     }
 
     const by = yield* membership(raw, attached.identity.key);

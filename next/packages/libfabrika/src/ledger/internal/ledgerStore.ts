@@ -15,7 +15,7 @@ import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
 import { Appended, Entry, Line, PAGE, Row, ROW_BYTES, Waited } from "../Log.ts";
 import type { Referee } from "../Referee.ts";
-import { QuotaRefused, type WritePolicy } from "../WritePolicy.ts";
+import { OwnWrite, QuotaRefused, RuntimeWrite, type WritePolicy, type Writer } from "../WritePolicy.ts";
 import { STREAM, tag } from "./ledgerTrace.ts";
 
 const TABLES = [
@@ -503,20 +503,43 @@ export const ledgerStore = (
 };
 
 /**
- * Committed entries past `after`, oldest first: every stream's, or one `stream`'s. None before the
- * ledger's table exists.
+ * The policy as this call asks it: with the writer trusted code named around the call, a
+ * process's runtime or its program's own write, or as it is when none is named.
  *
  * @internal
  */
-export const committedEntries = (sql: Sql, scope: { readonly stream?: string; readonly after?: number } = {}) => {
+export const policyFor = Effect.fnUntraced(function* (policy: WritePolicy["Service"] | undefined) {
+  const runtime = yield* Effect.serviceOption(RuntimeWrite);
+  const own = yield* Effect.serviceOption(OwnWrite);
+  const writer: Writer | undefined = Option.isSome(runtime)
+    ? { runtime: runtime.value.process }
+    : Option.isSome(own)
+      ? { own: own.value.process }
+      : undefined;
+  return policy === undefined || writer === undefined
+    ? policy
+    : { admit: (entry: Entry) => policy.admit(entry, writer) };
+});
+
+/**
+ * Committed entries past `after`, oldest first: every stream's, one `stream`'s, or the one entry
+ * at `at` in a stream. None before the ledger's table exists.
+ *
+ * @internal
+ */
+export const committedEntries = (
+  sql: Sql,
+  scope: { readonly stream?: string; readonly after?: number } | { readonly stream: string; readonly at: number } = {},
+) => {
   if (sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0) {
     return [];
   }
 
-  const after = scope.after ?? 0;
   const rows =
-    scope.stream === undefined
-      ? sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", after)
-      : sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", scope.stream, after);
+    "at" in scope
+      ? sql.exec("SELECT * FROM entries WHERE stream = ? AND pos = ?", scope.stream, scope.at)
+      : scope.stream === undefined
+        ? sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", scope.after ?? 0)
+        : sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", scope.stream, scope.after ?? 0);
   return rows.map((row) => decodeRow(row));
 };

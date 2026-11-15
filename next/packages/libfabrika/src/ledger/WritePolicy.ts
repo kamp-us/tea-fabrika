@@ -31,6 +31,26 @@ export class RuntimeWrite extends Context.Service<RuntimeWrite, { readonly proce
 ) {}
 
 /**
+ * Service that names the process whose program is writing its own entry, as a program's checked
+ * write. The trusted assembly provides it around the call, and it is never decoded from a request.
+ *
+ * @stability unstable
+ * @category services
+ */
+export class OwnWrite extends Context.Service<OwnWrite, { readonly process: string }>()(
+  "@kampus/libfabrika/ledger/WritePolicy.OwnWrite",
+) {}
+
+/**
+ * Who trusted code says a write is for: a process's runtime, or a process's program writing its
+ * own entry. Left out, the policy finds the entry's owner itself.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Writer = { readonly runtime: string } | { readonly own: string };
+
+/**
  * Service that admits or refuses one new entry before the ledger inserts it. `admit` runs
  * synchronously in the caller's transaction, so it may save the entry's charge there.
  *
@@ -40,6 +60,6 @@ export class RuntimeWrite extends Context.Service<RuntimeWrite, { readonly proce
 export class WritePolicy extends Context.Service<
   WritePolicy,
   {
-    readonly admit: (entry: Entry, runtime?: RuntimeWrite["Service"]) => Result.Result<void, "quota">;
+    readonly admit: (entry: Entry, writer?: Writer) => Result.Result<void, "quota">;
   }
 >()("@kampus/libfabrika/ledger/WritePolicy") {}
