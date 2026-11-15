@@ -6,11 +6,12 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
-/** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), and where. */
+/** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
 interface Fire {
   readonly code: string;
   readonly file: string;
   readonly line: number;
+  readonly message: string;
 }
 
 const Report = Schema.Struct({
@@ -19,6 +20,7 @@ const Report = Schema.Struct({
     Schema.Struct({
       code: Schema.optional(Schema.String),
       filename: Schema.String,
+      message: Schema.String,
       labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) }))),
     }),
   ),
@@ -26,27 +28,31 @@ const Report = Schema.Struct({
 
 const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
 
+type Files = Readonly<Record<string, string>>;
+type Fires<A> = (code: string, file: string) => readonly A[];
+
 /**
  * Lints the planted files, keyed by path from the top of the repo, and answers the lines one rule
- * (`fabrika(no-of)`) fires on in one of them, in order.
+ * (`fabrika(no-of)`) fires on in one of them, in order. Given `show`, it answers each fire as `show`
+ * gives it, for a law that also reads what a fire says.
  */
-export const plant = (
-  files: Readonly<Record<string, string>>,
-): Promise<(code: string, file: string) => readonly number[]> => {
+export function plant(files: Files): Promise<Fires<number>>;
+export function plant<A>(files: Files, show: (fire: Fire) => A): Promise<Fires<A>>;
+export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.line): Promise<Fires<unknown>> {
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits this test helper's Promise
   return Effect.runPromise(
     lint(files).pipe(
       Effect.map(
-        (fires) => (code: string, file: string) =>
-          fires
+        (all) => (code: string, file: string) =>
+          all
             .filter((f) => f.code === code && f.file === file)
-            .map((f) => f.line)
-            .sort((a, b) => a - b),
+            .sort((a, b) => a.line - b.line)
+            .map(show),
       ),
       Effect.provide(NodeServices.layer),
     ),
   );
-};
+}
 
 const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>>) {
   const fs = yield* FileSystem.FileSystem;
@@ -92,5 +98,6 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     code: d.code ?? "",
     file: d.filename,
     line: d.labels?.[0]?.span.line ?? 0,
+    message: d.message,
   }));
 }, Effect.scoped);
