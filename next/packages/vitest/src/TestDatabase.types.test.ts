@@ -13,7 +13,9 @@ import type { Duration, Effect, Scope } from "effect";
 it("type: make gives DatabaseSync with no error, open gives TestDatabaseError, and the package hands out no Sql", () => {
   expectTypeOf<Parameters<typeof TestDatabase.make>>().toEqualTypeOf<[file: string]>();
   expectTypeOf<ReturnType<typeof TestDatabase.make>>().toEqualTypeOf<Effect.Effect<DatabaseSync, never, Scope.Scope>>();
-  expectTypeOf<Parameters<typeof TestDatabase.open>>().toEqualTypeOf<[file: string, options?: TestDatabase.Options]>();
+  expectTypeOf<Parameters<typeof TestDatabase.open>>().toEqualTypeOf<
+    [file: string, options?: TestDatabase.Options | undefined]
+  >();
   expectTypeOf<ReturnType<typeof TestDatabase.open>>().toEqualTypeOf<
     Effect.Effect<DatabaseSync, TestDatabase.TestDatabaseError, Scope.Scope>
   >();
