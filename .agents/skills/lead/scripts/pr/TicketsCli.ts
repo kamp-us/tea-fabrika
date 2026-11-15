@@ -1,7 +1,7 @@
 // TicketsCli.layer: the Tickets service on today's app's own command line, `cli.ts post`, as
 // agent:lead. Its list shows only open tickets, one line each. A failure keeps the tracker's first
 // ERROR line and never its stack, which names local paths.
-import { Effect, Layer } from "effect";
+import { Effect, FileSystem, Layer, Path } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { run } from "./command.ts";
 import { Tickets, TicketsError } from "./Tickets.ts";
@@ -22,11 +22,13 @@ export const firstError = (said: string): string =>
 export const layer = (
   main: string,
   home: string,
-): Layer.Layer<Tickets, never, ChildProcessSpawner.ChildProcessSpawner> =>
+): Layer.Layer<Tickets, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     Tickets,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
 
       const post = Effect.fn("TicketsCli.post")(
         function* (args: ReadonlyArray<string>, stdin?: string) {
@@ -49,7 +51,21 @@ export const layer = (
 
       return Tickets.of({
         open: Effect.map(post(["list"]), openIn),
-        comment: (number, body) => Effect.asVoid(post(["comment", String(number), "--body-file", "/dev/stdin"], body)),
+        // The tracker opens `--body-file` as a regular file and refuses a pipe, `/dev/stdin` included,
+        // so the text goes to a file of its own for the one call.
+        comment: (number, body) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const dir = yield* fs.makeTempDirectoryScoped({ prefix: "ticket-comment-" });
+              const file = path.join(dir, "body.md");
+              yield* fs.writeFileString(file, body);
+              yield* post(["comment", String(number), "--body-file", file]);
+            }),
+          ).pipe(
+            Effect.catchTag("PlatformError", () =>
+              Effect.fail(new TicketsError({ reason: "the comment file could not be written" })),
+            ),
+          ),
         close: (number) => Effect.asVoid(post(["close", String(number)])),
       });
     }),

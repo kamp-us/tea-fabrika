@@ -219,7 +219,7 @@ only. The package installs no command: since experiment 114 the one `tsh` is `@k
 Settings come from the environment:
 
 - `TSH_HOME`: where job storage, history and the lock live. `~/.tsh` when unset.
-- `TSH_TRACE`: `1` sends each line as a trace to `http://localhost:4318`. A url sends it there. Unset is off.
+- `TSH_TRACE`: `1` sends each line as a trace to `http://localhost:4318`. A url sends it there. Unset is off. Any OTLP collector at that address takes the spans.
 
 ## Commands
 
@@ -229,7 +229,6 @@ Settings come from the environment:
 | Run with the pipeline's programs | `bin/tsh` or `pnpm tsh` (see `packages/pipeline/`) |
 | Typecheck the package | `pnpm --filter @kampus/fabrika typecheck` |
 | Test this part | `pnpm vitest run packages/fabrika/src/shell` |
-| Start or stop a local Jaeger for traces | `pnpm trace:up`, `pnpm trace:down` |
 | Lint (whole repo, with the layer check) | `pnpm lint` |
 
 Tests that drive the pipeline's programs live in `packages/pipeline/src/tsh/`, not here. Two

@@ -1,6 +1,6 @@
 name: host
 
-# P19's law L13 (next/apps/fabrika/e2e/electron-launchd.test.ts) on GitHub's macOS runner: real
+# P19's law L13 (next/apps/fabrika/e2e/electron-launchd.visual.test.ts) on GitHub's macOS runner: real
 # launchd and the real Electron, on a machine nobody uses. On 2026-11-13 that test's cleanup, run on
 # a laptop, signaled process group 1 and ended every process its user had open. Here a wrong signal
 # can only hit a runner that is thrown away after the job.
@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - next/packages/libfabrika/src/node/launchd/**
-      - next/apps/fabrika/e2e/electron-launchd.test.ts
+      - next/apps/fabrika/e2e/electron-launchd.visual.test.ts
       - next/apps/fabrika/e2e/node/P19Launchd.test-support.ts
       - .github/workflows/host.yaml
   workflow_dispatch:
@@ -48,18 +48,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      # pnpm and Node, with no store cache (.github/actions/pnpm says why). This job saves nothing:
+      # a copy per pull request filled the repository's cache.
+      - uses: ./.github/actions/pnpm
 
       # Electron fetches its binary the first time it is asked for its path, into this folder.
-      - uses: actions/cache@v6
+      # Restored from main's, as the store is.
+      - name: restore electron
+        uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/electron
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
