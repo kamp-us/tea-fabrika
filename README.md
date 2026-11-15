@@ -228,9 +228,6 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`packages/pipeline`](./packages/pipeline/README.md), `@kampus/pipeline` (a placeholder name):
   the work pipeline, an app on fabrika's public names. The stages, the services they use, the
   programs it lists in tsh, and the `tsh` that lists them.
-- [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
-  as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
-  code changes and the record does not (experiment 117).
 - [`packages/ledger-server`](./packages/ledger-server/README.md), `@kampus/ledger-server`: one
   shared ledger on Cloudflare for a team, declared with Alchemy, and its twin on the laptop from
   the same Worker.
@@ -277,6 +274,3 @@ Other commands:
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |
-| Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
-| List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
-| Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |
