@@ -2220,7 +2220,6 @@
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/src/*",
