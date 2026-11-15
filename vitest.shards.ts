@@ -667,8 +667,6 @@ export const measured: Record<string, number> = {
   "packages/pipeline/src/tsh/status.test.ts": 0.1,
   "packages/pipeline/src/tsh/trace.test.ts": 0.2,
   "packages/pipeline/src/verdict.test.ts": 0.0,
-  "packages/promises/src/blocks.test.ts": 0.0,
-  "packages/promises/src/judge.test.ts": 0.0,
   "programs/compare/src/compare.test.ts": 0.1,
   "programs/counter/src/counter.test.ts": 0.0,
   "programs/counter/src/index.laws.test.ts": 0.0,
