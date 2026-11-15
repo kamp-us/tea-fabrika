@@ -1,18 +1,18 @@
-// P39 slice 1: the store the jobs module's laws run on, on node:sqlite (0062). This module owns the
+// P39 slice 1: the store the tasks module's laws run on, on node:sqlite (0062). This module owns the
 // driver, so it acquires each store in a scope and the scope gives the folder and the file back
-// (0061). JobsLedger.integration.test.ts and JobsDiscovery.integration.test.ts each run one suite
+// (0061). TasksLedger.integration.test.ts and TasksDiscovery.integration.test.ts each run one suite
 // over it, so CI can run them on different machines.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
-import type * as JobsTest from "../../jobs/JobsTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
+import type * as TasksTest from "../../tasks/TasksTest.ts";
 
 // A durable file across reopens, with no rollback journal and no disk sync on each commit, as
-// next/'s other test stores (the jobs gateway's among them): no law here cuts the power, and a close
+// next/'s other test stores (the tasks gateway's among them): no law here cuts the power, and a close
 // keeps every commit. A5 alone commits about 22,000 requests, and a sync on each was a third of
 // its time (ticket 1028).
 const connect = (path: string) => {
@@ -45,5 +45,5 @@ export const open = Effect.gen(function* () {
     handle.db = connect(path);
     handle.sql = nodeSql(handle.db);
   });
-  return { sql, reopen } satisfies JobsTest.Store;
+  return { sql, reopen } satisfies TasksTest.Store;
 });

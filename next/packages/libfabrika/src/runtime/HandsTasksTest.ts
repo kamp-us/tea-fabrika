@@ -1,39 +1,39 @@
-// P39 slice 3 (ticket 1040), next/, S1 on the Project's half of a hands Cmd: `HandsJobsLive.layer`
-// over a real job store, and no driver (0062). A runner in the module that owns a driver calls
-// `HandsJobsTest.suite(open)`; `open` acquires one store in a scope and gives it back when that scope
+// P39 slice 3 (ticket 1040), next/, S1 on the Project's half of a hands Cmd: `HandsTasksLive.layer`
+// over a real task store, and no driver (0062). A runner in the module that owns a driver calls
+// `HandsTasksTest.suite(open)`; `open` acquires one store in a scope and gives it back when that scope
 // closes.
 //
-// The walk reads the jobs it has saved so far and picks its next move from what is possible there: an
+// The walk reads the tasks it has saved so far and picks its next move from what is possible there: an
 // ask for a Cmd nobody saved or for a saved one, a change of the person's `hands.target` between two
-// asks, the hands finishing a job that is really waiting, or a restart of the Project, which builds
+// asks, the hands finishing a task that is really waiting, or a restart of the Project, which builds
 // the layer again over the same store. The oracle is this file's own record of what each ask was
 // given and answered, never the product's machine.
 //
 // The contract this law pins, from the plan:
-//   HandsJobs.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused` with `no_hands` or `id_reused`),
-//   `HandsJobsError`, `HandsJobs`.
-//   HandsJobsLive.ts: `layer({ target, settings })`, read first, then request or collect, over `Jobs`.
+//   HandsTasks.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused` with `no_hands` or `id_reused`),
+//   `HandsTasksError`, `HandsTasks`.
+//   HandsTasksLive.ts: `layer({ target, settings })`, read first, then request or collect, over `Tasks`.
 //
 // Plants (after build): fall back to the first live hands key when `hands.target` is unset; rebuild
 // the request on a retry, so a changed target answers `id_reused`.
 //
-// S2, added in the fix round: a saved job's id asked by another process is refused `id_reused` in
-// every state the job can be in. The job machine refuses `wrong_process` only for a finished or
-// collected job, so for a requested, assigned or started one the layer's own check is what keeps
-// another process's waiting receipt out of the reply. Plant: drop that check in `HandsJobsLive.ts`.
+// S2, added in the fix round: a saved task's id asked by another process is refused `id_reused` in
+// every state the task can be in. The task machine refuses `wrong_process` only for a finished or
+// collected task, so for a requested, assigned or started one the layer's own check is what keeps
+// another process's waiting receipt out of the reply. Plant: drop that check in `HandsTasksLive.ts`.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope } from "effect";
 import * as fc from "fast-check";
-import { Command, type Job, type Result, State } from "../jobs/Job.ts";
-import { Jobs } from "../jobs/Jobs.ts";
-import { choose, copied, fcFingerprint, fcRecorded, fcRequest, fcResult } from "../jobs/JobsTest.ts";
 import type { From } from "../processes/Mailbox.ts";
-import { type Ask, HandsJobs, Reply } from "./HandsJobs.ts";
-import * as HandsJobsLive from "./HandsJobsLive.ts";
+import { Command, type Task, type Result, State } from "../tasks/Task.ts";
+import { Tasks } from "../tasks/Tasks.ts";
+import { choose, copied, fcFingerprint, fcRecorded, fcRequest, fcResult } from "../tasks/TasksTest.ts";
+import { type Ask, HandsTasks, Reply } from "./HandsTasks.ts";
+import * as HandsTasksLive from "./HandsTasksLive.ts";
 
-/** One real job store, for the life of one walk. `reopen` closes it and opens the same rows again. */
-export type Store = { readonly jobs: Layer.Layer<Jobs>; readonly reopen: Effect.Effect<void> };
+/** One real task store, for the life of one walk. `reopen` closes it and opens the same rows again. */
+export type Store = { readonly tasks: Layer.Layer<Tasks>; readonly reopen: Effect.Effect<void> };
 
 const fcHash = fc.stringMatching(/^[0-9a-f]{16}$/);
 
@@ -69,7 +69,7 @@ type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Move = "ask" | "change" | "finish" | "reopen";
 
-/** What the oracle knows of one ask's job, from its own calls only. */
+/** What the oracle knows of one ask's task, from its own calls only. */
 type Saved = {
   readonly target: string;
   readonly settings: string;
@@ -90,23 +90,23 @@ const answered = <A>(answer: R.Result<A, unknown>, message: string): A => {
 const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>) =>
   Effect.fnUntraced(function* (tape: Tape) {
     const store = yield* open;
-    let jobsLife = yield* Layer.build(store.jobs);
+    let tasksLife = yield* Layer.build(store.tasks);
     let life = 0;
     const saved = new Map<string, Saved>();
     const target = () => choose(tape.targets, life);
     const settings = () => choose(tape.hashes, life);
     const ask = (a: typeof Ask.Type, from: From) =>
-      HandsJobs.use((h) => h.ask(copied(a), from)).pipe(
+      HandsTasks.use((h) => h.ask(copied(a), from)).pipe(
         Effect.provide(
-          HandsJobsLive.layer({ target: target(), settings: settings() }).pipe(
-            Layer.provide(Layer.succeedContext(jobsLife)),
+          HandsTasksLive.layer({ target: target(), settings: settings() }).pipe(
+            Layer.provide(Layer.succeedContext(tasksLife)),
           ),
         ),
         Effect.result,
       );
-    const jobs = <A, E>(call: (j: Jobs["Service"]) => Effect.Effect<A, E>) =>
-      Jobs.use(call).pipe(Effect.provide(jobsLife), Effect.result);
-    const read = (id: string) => jobs((j) => j.read(id));
+    const tasks = <A, E>(call: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
+      Tasks.use(call).pipe(Effect.provide(tasksLife), Effect.result);
+    const read = (id: string) => tasks((j) => j.read(id));
 
     for (const cell of tape.cells) {
       const waiting = [...saved.entries()].filter(([, s]) => s.phase === "requested");
@@ -125,28 +125,30 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
       if (move === "ask") {
         const a = choose(tape.asks, cell.pick);
         const kept = saved.get(a.id);
-        const reply = answered(yield* ask(a, from), "an ask answers, whatever the job's state");
+        const reply = answered(yield* ask(a, from), "an ask answers, whatever the task's state");
 
         if (kept === undefined && target() === null) {
           // S1: no hands key is set: nothing is written, and the answer is a refusal the program reads.
           expect(reply, "S1: an unset hands.target refuses no_hands").toEqual(
             Reply.cases.refused.make({ reason: "no_hands" }),
           );
-          const job = yield* read(a.id);
-          expect(R.isFailure(job) && job.failure.reason, "S1: an unset hands.target writes no job").toBe("not_found");
+          const task = yield* read(a.id);
+          expect(R.isFailure(task) && task.failure.reason, "S1: an unset hands.target writes no task").toBe(
+            "not_found",
+          );
           done.add("refused");
         } else if (kept === undefined) {
-          const job = answered(yield* read(a.id), "a waiting ask saved its job");
-          const first = job.events[0];
+          const task = answered(yield* read(a.id), "a waiting ask saved its task");
+          const first = task.events[0];
           expect(
-            job.events.map((e) => e.event),
+            task.events.map((e) => e.event),
             "one request is saved",
           ).toEqual(["requested"]);
-          expect(reply, "S1: a new job answers waiting with its request's receipt").toEqual(
+          expect(reply, "S1: a new task answers waiting with its request's receipt").toEqual(
             Reply.cases.waiting.make({ rev: first?.rev ?? -1, arrivedAt: first?.arrivedAt ?? -1 }),
           );
           // The request is the Cmd's own facts, the trusted needs of its command, the target and the hash.
-          expect(job.state).toEqual(
+          expect(task.state).toEqual(
             State.cases.requested.make({
               request: { ...a, needs: ["git"], target: target() ?? "", settings: settings() },
             }),
@@ -166,22 +168,22 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
           });
           done.add("waiting:new");
         } else if (kept.phase === "requested") {
-          // A retry reads the saved job, whatever the person changed since: no other bytes under its id.
-          expect(reply, "S1: a retry of a waiting job answers its first receipt").toEqual(
+          // A retry reads the saved task, whatever the person changed since: no other bytes under its id.
+          expect(reply, "S1: a retry of a waiting task answers its first receipt").toEqual(
             Reply.cases.waiting.make(kept.requested),
           );
           done.add(target() === kept.target ? "waiting:again" : target() === null ? "waiting:unset" : "waiting:moved");
         } else {
-          const result = kept.result ?? expect.fail("a finished job has its result");
-          const job = answered(yield* read(a.id), "a finished job reads back");
-          const collected = job.events.filter((e) => e.event === "collected");
+          const result = kept.result ?? expect.fail("a finished task has its result");
+          const task = answered(yield* read(a.id), "a finished task reads back");
+          const collected = task.events.filter((e) => e.event === "collected");
           expect(collected, "one collect is saved, however often the Cmd asks").toHaveLength(1);
           const receipt = { rev: collected[0]?.rev ?? -1, arrivedAt: collected[0]?.arrivedAt ?? -1 };
-          expect(reply, "a finished job answers its result and the collect's receipt").toEqual(
+          expect(reply, "a finished task answers its result and the collect's receipt").toEqual(
             Reply.cases.finished.make({ result, ...receipt }),
           );
-          expect(job.state._tag, "the asking process collected it").toBe("collected");
-          expect(job.state, "into the Cmd's answer letter").toMatchObject({
+          expect(task.state._tag, "the asking process collected it").toBe("collected");
+          expect(task.state, "into the Cmd's answer letter").toMatchObject({
             collection: { process: a.process, letter: `${a.id}/answer` },
           });
           done.add(kept.phase === "finished" ? "finished" : "finished:again");
@@ -208,37 +210,37 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
         life++;
         done.add(target() === null ? "change:unset" : "change:set");
       } else if (move === "finish") {
-        // The hands the person chose take, start and finish the job, as slice 2's methods do.
+        // The hands the person chose take, start and finish the task, as slice 2's methods do.
         const [id, kept] = choose(waiting, cell.pick);
         const executor = { key: kept.target, connection: "hands-law", has: ["git"], build: "hands-build" };
         const by = { ...from, by: kept.target };
-        const taken = answered(yield* jobs((j) => j.take(id, executor, by)), "the target takes its job");
-        answered(yield* jobs((j) => j.started(id, taken.execution, by)), "the target starts its job");
-        answered(yield* jobs((j) => j.finish(id, taken.execution, cell.result, by)), "the target finishes its job");
+        const taken = answered(yield* tasks((j) => j.take(id, executor, by)), "the target takes its task");
+        answered(yield* tasks((j) => j.started(id, taken.execution, by)), "the target starts its task");
+        answered(yield* tasks((j) => j.finish(id, taken.execution, cell.result, by)), "the target finishes its task");
         kept.phase = "finished";
         kept.result = cell.result;
         done.add("finish");
       } else {
         yield* store.reopen;
-        jobsLife = yield* Layer.build(store.jobs);
+        tasksLife = yield* Layer.build(store.tasks);
         done.add("reopen");
       }
 
       // Every ask nobody answered waiting stays unsaved.
       for (const a of tape.asks) {
         if (!saved.has(a.id)) {
-          const job: R.Result<Job, unknown> = yield* read(a.id);
-          expect(R.isFailure(job), "an ask that was refused or never made saves no job").toBe(true);
+          const task: R.Result<Task, unknown> = yield* read(a.id);
+          expect(R.isFailure(task), "an ask that was refused or never made saves no task").toBe(true);
         }
       }
     }
   });
 
-/** The states a saved job can be in when another process asks under its id. */
+/** The states a saved task can be in when another process asks under its id. */
 const STATES = ["requested", "assigned", "started", "finished", "collected"] as const;
 
 /**
- * A tape for S2: the asking process's Cmd, another process, the state its job is brought to, the
+ * A tape for S2: the asking process's Cmd, another process, the state its task is brought to, the
  * hands' result, and what each writer says.
  */
 const Foreign = fc.uniqueArray(fcFingerprint, { minLength: 1, maxLength: 1 }).chain((keys) =>
@@ -257,41 +259,41 @@ const Foreign = fc.uniqueArray(fcFingerprint, { minLength: 1, maxLength: 1 }).ch
 type Foreign = typeof Foreign extends fc.Arbitrary<infer A> ? A : never;
 
 /**
- * S2: a saved job is only ever its own process's. Brings one process's job to a state, then asks
- * under the same id as another process, and reads the job back before and after.
+ * S2: a saved task is only ever its own process's. Brings one process's task to a state, then asks
+ * under the same id as another process, and reads the task back before and after.
  */
 const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>) =>
   Effect.fnUntraced(function* (tape: Foreign) {
     const store = yield* open;
-    const jobsLife = yield* Layer.build(store.jobs);
+    const tasksLife = yield* Layer.build(store.tasks);
     const ask = (a: typeof Ask.Type, from: From) =>
-      HandsJobs.use((h) => h.ask(copied(a), from)).pipe(
+      HandsTasks.use((h) => h.ask(copied(a), from)).pipe(
         Effect.provide(
-          HandsJobsLive.layer({ target: tape.key, settings: "0123456789abcdef" }).pipe(
-            Layer.provide(Layer.succeedContext(jobsLife)),
+          HandsTasksLive.layer({ target: tape.key, settings: "0123456789abcdef" }).pipe(
+            Layer.provide(Layer.succeedContext(tasksLife)),
           ),
         ),
         Effect.result,
       );
-    const jobs = <A, E>(call: (j: Jobs["Service"]) => Effect.Effect<A, E>) =>
-      Jobs.use(call).pipe(Effect.provide(jobsLife), Effect.result);
+    const tasks = <A, E>(call: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
+      Tasks.use(call).pipe(Effect.provide(tasksLife), Effect.result);
     const from: From = { ...tape.said, seen: 0 };
     const id = tape.mine.id;
     const reached = STATES.indexOf(tape.state);
 
-    answered(yield* ask(tape.mine, from), "the asking process saves its job");
+    answered(yield* ask(tape.mine, from), "the asking process saves its task");
 
     if (reached >= 1) {
       const executor = { key: tape.key, connection: "hands-law", has: ["git"], build: "hands-build" };
       const by = { ...from, by: tape.key };
-      const taken = answered(yield* jobs((j) => j.take(id, executor, by)), "the target takes the job");
+      const taken = answered(yield* tasks((j) => j.take(id, executor, by)), "the target takes the task");
 
       if (reached >= 2) {
-        answered(yield* jobs((j) => j.started(id, taken.execution, by)), "the target starts the job");
+        answered(yield* tasks((j) => j.started(id, taken.execution, by)), "the target starts the task");
       }
 
       if (reached >= 3) {
-        answered(yield* jobs((j) => j.finish(id, taken.execution, tape.result, by)), "the target finishes the job");
+        answered(yield* tasks((j) => j.finish(id, taken.execution, tape.result, by)), "the target finishes the task");
       }
 
       if (reached >= 4) {
@@ -299,8 +301,8 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
       }
     }
 
-    const before = answered(yield* jobs((j) => j.read(id)), "the saved job reads back");
-    expect(before.state._tag, `the job is ${tape.state}`).toBe(tape.state);
+    const before = answered(yield* tasks((j) => j.read(id)), "the saved task reads back");
+    expect(before.state._tag, `the task is ${tape.state}`).toBe(tape.state);
 
     // Another process asks under the same id: its own Cmd's facts, the id it does not own.
     const reply = answered(
@@ -313,7 +315,7 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
     );
     expect(Object.keys(reply).sort(), "S2: the refusal carries no receipt or result").toEqual(["_tag", "reason"]);
 
-    const after = answered(yield* jobs((j) => j.read(id)), "the saved job still reads back");
+    const after = answered(yield* tasks((j) => j.read(id)), "the saved task still reads back");
     expect(after, `S2: another process's ask writes nothing (${tape.state})`).toEqual(before);
     done.add(tape.state);
   });
@@ -321,7 +323,7 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P39 slice 3: the Project's half of a hands Cmd", () => {
     it.effect(
-      "S1: an unset hands.target writes no job and answers refused no_hands; a set one is the request's target, and the snapshot hash its settings",
+      "S1: an unset hands.target writes no task and answers refused no_hands; a set one is the request's target, and the snapshot hash its settings",
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();
@@ -352,7 +354,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         }),
     );
     it.effect(
-      "S2: an ask under a saved job's id from another process is refused id_reused in every state of the job, writes nothing, and reveals no receipt or result",
+      "S2: an ask under a saved task's id from another process is refused id_reused in every state of the task, writes nothing, and reveals no receipt or result",
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();
@@ -362,7 +364,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 60 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, options));
-          // An empty walk cannot pass: every state a job can be in when another process asks ran.
+          // An empty walk cannot pass: every state a task can be in when another process asks ran.
           expect([...done].sort()).toEqual([...STATES].sort());
         }),
     );

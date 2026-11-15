@@ -1,16 +1,16 @@
 // One hands Cmd's delivery, next/ (0037, 0046). The runner saves `pending` or `waiting` on the
 // dispatched Cmd and steps this machine with each reply the Project's `ask` gives. Only `pending` is
-// owed, so only it keeps the backoff alarm; a `waiting` job is asked again on a wake or a due. A
+// owed, so only it keeps the backoff alarm; a `waiting` task is asked again on a wake or a due. A
 // `result` is never saved: its answer letter is placed in the same turn, and that letter's fold drops
 // the Cmd, so a cut before it leaves the saved state, and the next ask repeats and settles it again.
 // A failed ask is not a reply: the runner leaves the saved state as it was and never steps this.
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
-import { Result } from "../../jobs/Job.ts";
 import { Rev } from "../../Rev.ts";
-import { Refusal, Reply } from "../HandsJobs.ts";
+import { Result } from "../../tasks/Task.ts";
+import { Refusal, Reply } from "../HandsTasks.ts";
 
-/** What a settled delivery answers the program: the job's result, or the Project's refusal. */
+/** What a settled delivery answers the program: the task's result, or the Project's refusal. */
 const Settled = Schema.TaggedUnion({
   ok: { result: Result },
   err: { reason: Refusal },
@@ -49,7 +49,7 @@ export const handsDelivery = Machine.make({
       }
 
       if (reply._tag === "refused") {
-        // No hands key is only ever the first answer: a saved job is never undone by one. A job
+        // No hands key is only ever the first answer: a saved task is never undone by one. A task
         // that is not this process's is refused whenever it is found.
         return s._tag === "pending" || reply.reason === "id_reused"
           ? settled(Settled.cases.err.make({ reason: reply.reason }))

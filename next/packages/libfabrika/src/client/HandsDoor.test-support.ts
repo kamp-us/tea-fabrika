@@ -1,17 +1,17 @@
-// P39 slice 4a, next/: the brain as the hands client's laws see it, as a script. It keeps jobs the
-// way slice 1's job machine does (requested, assigned, started, finished) and answers the five
-// jobs calls a hands key may make, `jobs.list`, `jobs.wait`, `jobs.take`, `jobs.started` and
-// `jobs.finish`, with the shapes `gateway/Jobs.ts` answers them. It is the laws' oracle of what the
-// brain holds, never the product's: it imports no gateway, and from the jobs module only its
+// P39 slice 4a, next/: the brain as the hands client's laws see it, as a script. It keeps tasks the
+// way slice 1's task machine does (requested, assigned, started, finished) and answers the five
+// tasks calls a hands key may make, `tasks.list`, `tasks.wait`, `tasks.take`, `tasks.started` and
+// `tasks.finish`, with the shapes `gateway/Tasks.ts` answers them. It is the laws' oracle of what the
+// brain holds, never the product's: it imports no gateway, and from the tasks module only its
 // schemas. A law may make it refuse a finish on purpose, to walk the client's recovery.
 import { Schema } from "effect";
-import type { Request } from "../jobs/Job.ts";
-import { Command, Job, Result, State } from "../jobs/Job.ts";
+import type { Request } from "../tasks/Task.ts";
+import { Command, Task, Result, State } from "../tasks/Task.ts";
 
 /**
  * A finish refused before the brain saved anything, as the door or the Worker may answer it: over
  * the key's budget (`gateway/Gateway.ts`'s `refuseRate`), a Worker call that died
- * (`cloudflare/connection.ts`), a failed transaction (`JobsError` `storage`), a key whose grant the
+ * (`cloudflare/connection.ts`), a failed transaction (`TasksError` `storage`), a key whose grant the
  * door could not read again, a need the link did not offer, a call out of order, the client's own
  * params, and a reason no part of the door answers today.
  */
@@ -45,10 +45,10 @@ export const Outcome = Schema.TaggedUnion({
 });
 export type Outcome = typeof Outcome.Type;
 
-/** A take's answer, as `gateway/Jobs.ts` writes it inside an ok. */
+/** A take's answer, as `gateway/Tasks.ts` writes it inside an ok. */
 export const TakeReply = Schema.TaggedUnion({
   idle: {},
-  assigned: { job: Job },
+  assigned: { task: Task },
   refused: { reason: Schema.String },
 });
 
@@ -65,8 +65,8 @@ type Saved = {
 const SENT = "2026-11-15T10:00:00.000Z";
 const isResult = Schema.is(Result);
 
-/** The job as the brain's read answers it, in the jobs module's own schema. */
-const job = (s: Saved): Job => {
+/** The task as the brain's read answers it, in the tasks module's own schema. */
+const task = (s: Saved): Task => {
   const assignment =
     s.execution === undefined || s.executor === undefined
       ? undefined
@@ -85,9 +85,9 @@ const job = (s: Saved): Job => {
   return { state, events: [] };
 };
 
-/** The brain's whole state: its jobs by id, each key's `target:` stream rev, and the log head. */
+/** The brain's whole state: its tasks by id, each key's `target:` stream rev, and the log head. */
 export const brain = () => {
-  const jobs = new Map<string, Saved>();
+  const tasks = new Map<string, Saved>();
   const lines = new Map<string, number>();
   let head = 0;
   let executions = 0;
@@ -101,7 +101,7 @@ export const brain = () => {
   /** A program asked the hands key `target` to run the one command: one line on its `target:` stream. */
   const request = (target: string, process: string, n: number): string => {
     const id = `${process}/${n}/0`;
-    jobs.set(id, {
+    tasks.set(id, {
       request: {
         id,
         process,
@@ -130,14 +130,14 @@ export const brain = () => {
       return typeof value === "string" ? value : "";
     };
 
-    if (method === "jobs.list") {
-      const mine = [...jobs.values()].filter((s) => s.request.target === key && open(s));
+    if (method === "tasks.list") {
+      const mine = [...tasks.values()].filter((s) => s.request.target === key && open(s));
       return Outcome.cases.result.make({
-        result: { jobs: mine.map((s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
+        result: { tasks: mine.map((s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
       });
     }
 
-    if (method === "jobs.wait") {
+    if (method === "tasks.wait") {
       const after = p.get("after");
       const n = typeof after === "number" ? after : 0;
       return rev(key) > n
@@ -145,8 +145,8 @@ export const brain = () => {
         : Outcome.cases.parked.make({ after: n });
     }
 
-    if (method === "jobs.take") {
-      const candidates = [...jobs.values()].filter(
+    if (method === "tasks.take") {
+      const candidates = [...tasks.values()].filter(
         (s) => s.request.process === text("process") && s.request.target === key && open(s),
       );
       const [one] = candidates;
@@ -166,16 +166,16 @@ export const brain = () => {
         head++;
       }
 
-      return Outcome.cases.result.make({ result: TakeReply.cases.assigned.make({ job: job(one) }) });
+      return Outcome.cases.result.make({ result: TakeReply.cases.assigned.make({ task: task(one) }) });
     }
 
-    const s = jobs.get(text("job"));
+    const s = tasks.get(text("task"));
 
     if (s === undefined || s.executor !== key || s.execution !== text("execution")) {
       return refused(s === undefined ? "not_found" : "not_allowed");
     }
 
-    if (method === "jobs.started") {
+    if (method === "tasks.started") {
       if (s.phase === "assigned") {
         s.phase = "started";
         head++;
@@ -184,7 +184,7 @@ export const brain = () => {
       return receipt();
     }
 
-    if (method !== "jobs.finish") {
+    if (method !== "tasks.finish") {
       return refused("unknown_method");
     }
 
@@ -221,17 +221,17 @@ export const brain = () => {
     request,
     call,
     rev,
-    /** The job as the brain holds it now, or undefined for an id it never saved. */
-    read: (id: string) => jobs.get(id),
-    /** Every job, for a law that reads what the brain ended with. */
-    all: () => [...jobs.values()],
+    /** The task as the brain holds it now, or undefined for an id it never saved. */
+    read: (id: string) => tasks.get(id),
+    /** Every task, for a law that reads what the brain ended with. */
+    all: () => [...tasks.values()],
     /** An `assigned` answer for `id` naming the executor `key`, as a take for another key would get it. */
     assignedTo: (id: string, key: string): unknown => {
-      const s = jobs.get(id);
+      const s = tasks.get(id);
       return s === undefined
         ? null
         : TakeReply.cases.assigned.make({
-            job: job({ ...s, phase: "assigned", execution: s.execution ?? `execution_other_${id}`, executor: key }),
+            task: task({ ...s, phase: "assigned", execution: s.execution ?? `execution_other_${id}`, executor: key }),
           });
     },
     sentAt: SENT,

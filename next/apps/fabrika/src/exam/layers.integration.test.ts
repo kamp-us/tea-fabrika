@@ -575,7 +575,7 @@ describe("the real rule file on planted trees", () => {
       "next-tezgah": 5, // Desk S2a: above `processes/`, whose `ProcessName` it takes, and below the client
       "next-processes": 4,
       "next-presence": 4,
-      "next-jobs": 4,
+      "next-tasks": 4,
       "next-packs": 4,
       "next-permissions": 3,
       "next-ledger": 2,
@@ -608,7 +608,7 @@ describe("the real rule file on planted trees", () => {
       "next-access": 4,
       "next-processes": 3,
       "next-presence": 3,
-      "next-jobs": 3,
+      "next-tasks": 3,
       "next-packs": 3,
       "next-ci": 2,
       "next-codehost": 2,

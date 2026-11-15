@@ -1,4 +1,4 @@
-// P39 slice 1: the jobs module's laws on node:sqlite (0062). This module owns the driver, so it
+// P39 slice 1: the tasks module's laws on node:sqlite (0062). This module owns the driver, so it
 // acquires each store in a scope and the scope gives the folder and the file back (0061).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,16 +8,16 @@ import { Effect, Layer } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as ClientManagerLedger from "../../access/ClientManagerLedger.ts";
 import { Gateway } from "../../gateway/Gateway.ts";
-import * as TestSuite from "../../gateway/JobsTest.ts";
 import * as RateLimiterSql from "../../gateway/RateLimiterSql.ts";
+import * as TestSuite from "../../gateway/TasksTest.ts";
 import * as Id from "../../Id.ts";
-import * as JobsLedger from "../../jobs/JobsLedger.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import * as LedgerStreamsSql from "../../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
+import * as TasksLedger from "../../tasks/TasksLedger.ts";
 import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
@@ -58,16 +58,16 @@ const open = Effect.gen(function* () {
   });
   const gateway: TestSuite.Store["gateway"] = (options) => {
     const data = Layer.mergeAll(
-      LedgerSql.layer(sql, { reader: "jobs-gateway-law" }),
+      LedgerSql.layer(sql, { reader: "tasks-gateway-law" }),
       LedgerTransactionSql.layer(sql),
       LedgerStreamsSql.layer(sql),
     ).pipe(Layer.provide(bell));
-    const jobs = JobsLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer));
+    const tasks = TasksLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer));
     const services = Layer.mergeAll(
       data,
-      jobs,
+      tasks,
       ClientManagerLedger.layer(options.founder).pipe(Layer.provide(data)),
-      SpanSink.layer(sql, { object: "jobs-law" }),
+      SpanSink.layer(sql, { object: "tasks-law" }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
       Id.Generator.layer,

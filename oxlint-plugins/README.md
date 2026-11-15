@@ -791,7 +791,7 @@ returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, 
 names would miss.
 
 ```ts
-export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/jobs/Retries") {
+export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/tasks/Retries") {
   static readonly layer = Layer.succeed(Retries, shape); // fires: move it to RetriesMemory.ts
 }
 ```
@@ -833,7 +833,7 @@ All paths are under `next/packages/libfabrika/src/`. Nothing fired in `next/apps
 `next/programs/` or the other libfabrika folders.
 
 **The folder list.** One block in `.oxlintrc.json`, its `files` the 13 folders at zero:
-`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `jobs`,
+`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `tasks`,
 `ledger`, `node`, `packs`, `repositories`, `schedules`, `settings` and `transport`. Its
 `excludeFiles` leaves out tests, shared suites and test support (`*.test.ts`, `*.test.tsx`,
 `*Test.ts`, `*.test-support.ts`): a test may build a stand-in service any way it likes. The top

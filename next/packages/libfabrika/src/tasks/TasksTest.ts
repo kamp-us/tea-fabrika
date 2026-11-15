@@ -1,6 +1,6 @@
 // P39 slice 1, L1 to L8 on a real store (0062): the laws, and no driver. A runner in the module that
-// owns a driver calls `JobsTest.suite(open)`; `open` acquires one store in a scope and gives it back
-// when that scope closes. Each law walks a decision tape (0093): every cell is read against the jobs
+// owns a driver calls `TasksTest.suite(open)`; `open` acquires one store in a scope and gives it back
+// when that scope closes. Each law walks a decision tape (0093): every cell is read against the tasks
 // the fold has saved so far, so a retry names a saved request, a start names a real assignment and a
 // cut lands on a transition that is legal there. The oracle is this file's own record of what each
 // call was given and answered, never the product's machine.
@@ -11,7 +11,7 @@
 //
 // P39 slice 4a, G1 (the stream half): an accepted request writes one line `{ id, process }` to
 // `target:<key>` in its own transaction, and a repeat, a conflict or a cut request writes none;
-// `forTarget(key)` answers exactly the open jobs (requested, assigned or started) whose target is
+// `forTarget(key)` answers exactly the open tasks (requested, assigned or started) whose target is
 // that key, and the stream's last rev, 0 before its first line. The oracle reads the stream through
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
@@ -25,9 +25,9 @@ import { LedgerStreams, LedgerStreamsError, Storage } from "../ledger/LedgerStre
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
-import { Command, type Executor, type Job, Request, Recorded, Result, State } from "./Job.ts";
-import { Jobs, JobsError, targetStream } from "./Jobs.ts";
-import * as JobsLedger from "./JobsLedger.ts";
+import { Command, type Executor, type Task, Request, Recorded, Result, State } from "./Task.ts";
+import { Tasks, TasksError, targetStream } from "./Tasks.ts";
+import * as TasksLedger from "./TasksLedger.ts";
 
 /** One real store. `reopen` closes it and opens the same database again, keeping only its rows. */
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
@@ -244,7 +244,7 @@ export const brokenResult = (result: Result, pick: number): unknown => {
 // ---------------------------------------------------------------------------------------------
 // The walk on a real store.
 
-/** One tape cell: which move, which job, which variant, and fresh values to use if the move needs them. */
+/** One tape cell: which move, which task, which variant, and fresh values to use if the move needs them. */
 const Cell = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
@@ -300,7 +300,7 @@ type Receipt = { readonly rev: number; readonly arrivedAt: number };
 type Event = "requested" | "taken" | "started" | "finished" | "collected";
 type Collection = { readonly process: string; readonly letter: string };
 
-/** What the fold knows of one job, from its own calls and their answers. */
+/** What the fold knows of one task, from its own calls and their answers. */
 type Saved = {
   readonly request: Request;
   phase: Phase;
@@ -313,7 +313,7 @@ type Saved = {
   readonly events: Array<Recorded & Receipt & { readonly event: Event }>;
 };
 
-type World = { readonly jobs: Map<string, Saved>; head: number; next: number };
+type World = { readonly tasks: Map<string, Saved>; head: number; next: number };
 
 const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
@@ -360,10 +360,10 @@ const cutting = (sql: Sql) => {
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 const layer = (sql: Sql) =>
-  JobsLedger.layer.pipe(
+  TasksLedger.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
-        LedgerSql.layer(sql, { reader: "connection:jobs-test" }),
+        LedgerSql.layer(sql, { reader: "connection:tasks-test" }),
         LedgerTransactionSql.layer(sql),
         LedgerStreamsSql.layer(sql),
       ).pipe(Layer.provide(quiet)),
@@ -374,7 +374,7 @@ const layer = (sql: Sql) =>
 const refused = (answer: R.Result<unknown, unknown>, message: string, reason?: string) => {
   expect(R.isFailure(answer), message).toBe(true);
   const failure = R.isFailure(answer) ? answer.failure : undefined;
-  expect(failure, message).toBeInstanceOf(JobsError);
+  expect(failure, message).toBeInstanceOf(TasksError);
   expect(failure, message).toMatchObject(reason === undefined ? {} : { reason });
 };
 
@@ -386,8 +386,8 @@ const success = <A>(answer: R.Result<A, unknown>, message: string): A => {
   return answer.success;
 };
 
-/** The job the oracle expects `read` to answer: its state, and one event per accepted call. */
-const expected = (saved: Saved): Job => {
+/** The task the oracle expects `read` to answer: its state, and one event per accepted call. */
+const expected = (saved: Saved): Task => {
   const { request, executor, execution, result } = saved;
   const assignment = executor === undefined || execution === undefined ? undefined : { execution, executor };
   const state =
@@ -402,15 +402,15 @@ const expected = (saved: Saved): Job => {
             : assignment !== undefined && result !== undefined && saved.collection !== undefined
               ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
               : expect.fail("the fold reached a phase without its facts");
-  return { state, events: saved.events } as Job;
+  return { state, events: saved.events } as Task;
 };
 
 const at = (world: World, phases: ReadonlyArray<Phase>) =>
-  [...world.jobs.values()].filter((j) => phases.includes(j.phase));
+  [...world.tasks.values()].filter((j) => phases.includes(j.phase));
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
-  const any = world.jobs.size > 0;
+  const any = world.tasks.size > 0;
   const fresh = world.next < tape.requests.length;
   const requested = at(world, ["requested"]).length > 0;
   const assigned = at(world, ["assigned"]).length > 0;
@@ -449,7 +449,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
   return moves.filter((move) => can[move]);
 };
 
-/** An executor for `job` that may take it: its target key, holding every capability it needs. */
+/** An executor for `task` that may take it: its target key, holding every capability it needs. */
 const able = (saved: Saved, cell: Cell): Executor => ({
   key: saved.request.target,
   connection: cell.connection,
@@ -461,7 +461,7 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 const otherExecution = (execution: string, variant: number): string =>
   choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
 
-/** A move, or a move in the one phase of the job it was played on. */
+/** A move, or a move in the one phase of the task it was played on. */
 type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";
 
 const walk = (
@@ -473,20 +473,20 @@ const walk = (
   Effect.fnUntraced(function* (tape: Tape) {
     const store = yield* open;
     const { sql, fault } = cutting(store.sql);
-    const world: World = { jobs: new Map(), head: 0, next: 0 };
+    const world: World = { tasks: new Map(), head: 0, next: 0 };
     // One service for the life of the store, built again on reopen as a restarted brain would.
     let life = yield* Layer.build(layer(sql));
-    const jobs = <A>(call: (jobs: Jobs["Service"]) => Effect.Effect<A, JobsError>) =>
-      Jobs.use(call).pipe(Effect.provide(life), Effect.result);
+    const tasks = <A>(call: (tasks: Tasks["Service"]) => Effect.Effect<A, TasksError>) =>
+      Tasks.use(call).pipe(Effect.provide(life), Effect.result);
     /** G1: what each key was asked for, one pointer per accepted request, in the order they were saved. */
     const asked = new Map<string, Array<{ readonly id: string; readonly process: string }>>();
-    // The ledger's own reader, outside the jobs service: it sees the `target:` stream as any reader would.
+    // The ledger's own reader, outside the tasks service: it sees the `target:` stream as any reader would.
     const lines = (key: string) =>
       Ledger.use((ledger) => Stream.runCollect(ledger.read(targetStream(key), 0))).pipe(
-        Effect.provide(LedgerSql.layer(sql, { reader: "connection:jobs-test-targets" }).pipe(Layer.provide(quiet))),
+        Effect.provide(LedgerSql.layer(sql, { reader: "connection:tasks-test-targets" }).pipe(Layer.provide(quiet))),
         Effect.orDie,
       );
-    /** G1: each key's stream holds one line per accepted request, and `forTarget` answers its open jobs and last rev. */
+    /** G1: each key's stream holds one line per accepted request, and `forTarget` answers its open tasks and last rev. */
     const indexed = Effect.fnUntraced(function* (message: string) {
       for (const key of tape.keys) {
         const saved = [...(yield* lines(key))];
@@ -494,21 +494,23 @@ const walk = (
         expect(saved.length, `${message}: one ${targetStream(key)} line per accepted request`).toBe(wanted.length);
         expect(
           saved.map((entry) => entry.body),
-          `${message}: each line points at its job`,
+          `${message}: each line points at its task`,
         ).toMatchObject(wanted);
-        const answer = success(yield* jobs((j) => j.forTarget(key)), `${message}: forTarget`);
-        const open = [...world.jobs.values()].filter(
+        const answer = success(yield* tasks((j) => j.forTarget(key)), `${message}: forTarget`);
+        const open = [...world.tasks.values()].filter(
           (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
         );
-        const ids = (all: ReadonlyArray<Job>) =>
+        const ids = (all: ReadonlyArray<Task>) =>
           all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
-        expect(ids(answer.jobs), `${message}: forTarget answers exactly the key's open jobs`).toEqual(
+        expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
           open.map((s) => s.request.id).sort(),
         );
 
-        for (const job of answer.jobs) {
-          const kept = world.jobs.get(job.state._tag === "absent" ? "" : job.state.request.id);
-          expect(job, `${message}: each listed job reads as saved`).toEqual(kept === undefined ? null : expected(kept));
+        for (const task of answer.tasks) {
+          const kept = world.tasks.get(task.state._tag === "absent" ? "" : task.state.request.id);
+          expect(task, `${message}: each listed task reads as saved`).toEqual(
+            kept === undefined ? null : expected(kept),
+          );
         }
 
         expect(answer.rev, `${message}: the cursor is the stream's last rev`).toBe(saved.at(-1)?.rev ?? 0);
@@ -523,11 +525,11 @@ const walk = (
       saved.receipts.set(event, receipt);
       saved.events.push({ ...recorded, event, rev: receipt.rev, arrivedAt: receipt.arrivedAt });
     };
-    /** Every saved job reads as the oracle kept it, and every request not yet saved reads as absent. */
+    /** Every saved task reads as the oracle kept it, and every request not yet saved reads as absent. */
     const unchanged = Effect.fnUntraced(function* (message: string) {
       for (const request of tape.requests) {
-        const saved = world.jobs.get(request.id);
-        const answer = yield* jobs((j) => j.read(request.id));
+        const saved = world.tasks.get(request.id);
+        const answer = yield* tasks((j) => j.read(request.id));
 
         if (saved === undefined) {
           refused(answer, `${message}: an id nobody saved reads as not found`, "not_found");
@@ -546,7 +548,7 @@ const walk = (
 
       const move = choose(options, cell.move);
       const recorded = said(cell);
-      /** The job a move is played on, and the phase it was in then. */
+      /** The task a move is played on, and the phase it was in then. */
       const on = (phases: ReadonlyArray<Phase>) => {
         const saved = choose(at(world, phases), cell.pick);
         done.add(`${move}@${saved.phase}`);
@@ -556,9 +558,9 @@ const walk = (
       switch (move) {
         case "request_new": {
           const request = choose(tape.requests, world.next++);
-          const receipt = success(yield* jobs((j) => j.request(copied(request), recorded)), "a new request is saved");
+          const receipt = success(yield* tasks((j) => j.request(copied(request), recorded)), "a new request is saved");
           const saved: Saved = { request, phase: "requested", receipts: new Map(), events: [] };
-          world.jobs.set(request.id, saved);
+          world.tasks.set(request.id, saved);
           keep(saved, "requested", recorded, receipt);
           asked.set(request.target, [
             ...(asked.get(request.target) ?? []),
@@ -567,24 +569,24 @@ const walk = (
           break;
         }
         case "request_equal": {
-          const saved = choose([...world.jobs.values()], cell.pick);
-          const answer = yield* jobs((j) => j.request(copied(saved.request), recorded));
+          const saved = choose([...world.tasks.values()], cell.pick);
+          const answer = yield* tasks((j) => j.request(copied(saved.request), recorded));
           expect(success(answer, "an equal request retry succeeds"), "it answers the first receipt").toEqual(
             saved.receipts.get("requested"),
           );
           break;
         }
         case "request_changed": {
-          const saved = choose([...world.jobs.values()], cell.pick);
+          const saved = choose([...world.tasks.values()], cell.pick);
           const other = choose(tape.requests, cell.variant);
           const changed = changedRequest(saved.request, cell.variant, other);
-          refused(yield* jobs((j) => j.request(changed, recorded)), "changed bytes under a saved id", "conflict");
+          refused(yield* tasks((j) => j.request(changed, recorded)), "changed bytes under a saved id", "conflict");
           break;
         }
         case "take_ok": {
           const saved = choose(at(world, ["requested"]), cell.pick);
           const executor = able(saved, cell);
-          const taken = success(yield* jobs((j) => j.take(saved.request.id, copied(executor), recorded)), "a take");
+          const taken = success(yield* tasks((j) => j.take(saved.request.id, copied(executor), recorded)), "a take");
           expect(taken.execution.length, "the take allocates an execution identity").toBeGreaterThan(0);
           saved.phase = "assigned";
           saved.executor = executor;
@@ -595,21 +597,25 @@ const walk = (
         }
         case "take_again": {
           // The take reply was lost: the same key, maybe on a new connection, gets its saved assignment,
-          // whether or not the job has started or finished since.
+          // whether or not the task has started or finished since.
           const saved = on(["assigned", "started", "finished", "collected"]);
           const executor = able(saved, cell);
-          const taken = success(yield* jobs((j) => j.take(saved.request.id, executor, recorded)), "a repeated take");
+          const taken = success(yield* tasks((j) => j.take(saved.request.id, executor, recorded)), "a repeated take");
           expect(taken, "a repeated take answers the first assignment").toEqual(saved.taken);
           break;
         }
         case "take_other": {
-          const saved = choose([...world.jobs.values()], cell.pick);
+          const saved = choose([...world.tasks.values()], cell.pick);
           const key = choose(
             tape.keys.filter((k) => k !== saved.request.target),
             cell.variant,
           );
           const executor = { ...able(saved, cell), key, has: [...CAPABILITIES] };
-          refused(yield* jobs((j) => j.take(saved.request.id, executor, recorded)), "another key's take", "not_target");
+          refused(
+            yield* tasks((j) => j.take(saved.request.id, executor, recorded)),
+            "another key's take",
+            "not_target",
+          );
           break;
         }
         case "take_lacking": {
@@ -617,7 +623,7 @@ const walk = (
           const missing = choose(saved.request.needs, cell.variant);
           const executor = { ...able(saved, cell), has: CAPABILITIES.filter((c) => c !== missing) };
           refused(
-            yield* jobs((j) => j.take(saved.request.id, executor, recorded)),
+            yield* tasks((j) => j.take(saved.request.id, executor, recorded)),
             "a take without a needed capability",
             "lacks_capability",
           );
@@ -625,9 +631,9 @@ const walk = (
         }
         case "start_ok": {
           const saved = choose(at(world, ["assigned"]), cell.pick);
-          const execution = saved.execution ?? expect.fail("an assigned job has an execution");
+          const execution = saved.execution ?? expect.fail("an assigned task has an execution");
           const receipt = success(
-            yield* jobs((j) => j.started(saved.request.id, execution, recorded)),
+            yield* tasks((j) => j.started(saved.request.id, execution, recorded)),
             "a start by the assignment",
           );
           saved.phase = "started";
@@ -635,10 +641,10 @@ const walk = (
           break;
         }
         case "start_again": {
-          // A lost start acknowledgement, retried even after the finish: it never moves the job back.
+          // A lost start acknowledgement, retried even after the finish: it never moves the task back.
           const saved = on(["started", "finished", "collected"]);
-          const execution = saved.execution ?? expect.fail("a started job has an execution");
-          const answer = yield* jobs((j) => j.started(saved.request.id, `${execution}`, recorded));
+          const execution = saved.execution ?? expect.fail("a started task has an execution");
+          const answer = yield* tasks((j) => j.started(saved.request.id, `${execution}`, recorded));
           expect(success(answer, "a repeated start"), "it answers the first start").toEqual(
             saved.receipts.get("started"),
           );
@@ -650,27 +656,27 @@ const walk = (
           const wrong = otherExecution(saved.execution ?? "", cell.variant);
           const answer =
             move === "start_wrong"
-              ? yield* jobs((j) => j.started(saved.request.id, wrong, recorded))
-              : yield* jobs((j) => j.finish(saved.request.id, wrong, cell.result, recorded));
+              ? yield* tasks((j) => j.started(saved.request.id, wrong, recorded))
+              : yield* tasks((j) => j.finish(saved.request.id, wrong, cell.result, recorded));
           refused(answer, "an unrelated execution identity", "wrong_execution");
           break;
         }
         case "out_of_order": {
-          // Before a take nothing may start or finish; an assigned job may not finish, even by its own execution.
+          // Before a take nothing may start or finish; an assigned task may not finish, even by its own execution.
           const saved = on(["requested", "assigned"]);
           const execution = saved.execution ?? "any-execution";
           const answer =
             saved.phase === "requested" && cell.variant % 2 === 0
-              ? yield* jobs((j) => j.started(saved.request.id, execution, recorded))
-              : yield* jobs((j) => j.finish(saved.request.id, execution, cell.result, recorded));
+              ? yield* tasks((j) => j.started(saved.request.id, execution, recorded))
+              : yield* tasks((j) => j.finish(saved.request.id, execution, cell.result, recorded));
           refused(answer, "a start or a finish out of order", "wrong_state");
           break;
         }
         case "finish_ok": {
           const saved = choose(at(world, ["started"]), cell.pick);
-          const execution = saved.execution ?? expect.fail("a started job has an execution");
+          const execution = saved.execution ?? expect.fail("a started task has an execution");
           const receipt = success(
-            yield* jobs((j) => j.finish(saved.request.id, execution, copied(cell.result), recorded)),
+            yield* tasks((j) => j.finish(saved.request.id, execution, copied(cell.result), recorded)),
             "a finish by the assignment",
           );
           saved.phase = "finished";
@@ -680,7 +686,7 @@ const walk = (
         }
         case "finish_equal": {
           const saved = on(["finished", "collected"]);
-          const answer = yield* jobs((j) =>
+          const answer = yield* tasks((j) =>
             j.finish(saved.request.id, saved.execution ?? "", copied(saved.result ?? cell.result), recorded),
           );
           expect(success(answer, "an equal finish retry"), "it answers the first finish").toEqual(
@@ -695,8 +701,8 @@ const walk = (
               ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
               : cell.other;
           refused(
-            yield* jobs((j) => j.finish(saved.request.id, saved.execution ?? "", other, recorded)),
-            "a conflicting result for a finished job",
+            yield* tasks((j) => j.finish(saved.request.id, saved.execution ?? "", other, recorded)),
+            "a conflicting result for a finished task",
             "conflict",
           );
           break;
@@ -710,17 +716,17 @@ const walk = (
             has: [...CAPABILITIES],
             build: cell.build,
           };
-          const calls: ReadonlyArray<() => Effect.Effect<R.Result<unknown, JobsError>>> = [
-            () => jobs((j) => j.read(id)),
-            () => jobs((j) => j.take(id, executor, recorded)),
-            () => jobs((j) => j.started(id, "any-execution", recorded)),
-            () => jobs((j) => j.finish(id, "any-execution", cell.result, recorded)),
+          const calls: ReadonlyArray<() => Effect.Effect<R.Result<unknown, TasksError>>> = [
+            () => tasks((j) => j.read(id)),
+            () => tasks((j) => j.take(id, executor, recorded)),
+            () => tasks((j) => j.started(id, "any-execution", recorded)),
+            () => tasks((j) => j.finish(id, "any-execution", cell.result, recorded)),
           ];
           refused(yield* choose(calls, cell.variant)(), "a call on an id nobody requested", "not_found");
           break;
         }
         case "bad": {
-          const answer = yield* badCall(world, tape, cell, recorded, jobs);
+          const answer = yield* badCall(world, tape, cell, recorded, tasks);
           refused(answer, "a call with one invalid field", "bad_input");
           break;
         }
@@ -728,7 +734,7 @@ const walk = (
         case "cut_after": {
           fault.at = move === "cut_before" ? "before" : "after";
           fault.armed = false;
-          const answer = yield* legalCall(world, tape, cell, recorded, jobs);
+          const answer = yield* legalCall(world, tape, cell, recorded, tasks);
           fault.at = null;
           fault.armed = false;
           refused(answer, "a call whose transaction is cut fails", "storage");
@@ -742,8 +748,8 @@ const walk = (
           const saved = on(["finished"]);
           const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
           const receipt = success(
-            yield* jobs((j) => j.collected(saved.request.id, copied(collection), recorded)),
-            "the requesting process collects a finished job",
+            yield* tasks((j) => j.collected(saved.request.id, copied(collection), recorded)),
+            "the requesting process collects a finished task",
           );
           saved.phase = "collected";
           saved.collection = collection;
@@ -753,8 +759,8 @@ const walk = (
         case "collect_again": {
           // The collect reply was lost: the same process and letter, maybe after a reopen, answer the first receipt.
           const saved = on(["collected"]);
-          const collection = saved.collection ?? expect.fail("a collected job has its collection");
-          const answer = yield* jobs((j) => j.collected(saved.request.id, copied(collection), recorded));
+          const collection = saved.collection ?? expect.fail("a collected task has its collection");
+          const answer = yield* tasks((j) => j.collected(saved.request.id, copied(collection), recorded));
           expect(success(answer, "an equal collect retry"), "it answers the first collect").toEqual(
             saved.receipts.get("collected"),
           );
@@ -765,8 +771,8 @@ const walk = (
           const saved = on(["collected"]);
           const collection = { process: saved.request.process, letter: `${saved.request.id}/answer/${cell.variant}` };
           refused(
-            yield* jobs((j) => j.collected(saved.request.id, collection, recorded)),
-            "a different collection of a collected job",
+            yield* tasks((j) => j.collected(saved.request.id, collection, recorded)),
+            "a different collection of a collected task",
             "conflict",
           );
           break;
@@ -780,7 +786,7 @@ const walk = (
               ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
               : other;
           refused(
-            yield* jobs((j) =>
+            yield* tasks((j) =>
               j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
             ),
             "a collect by another process",
@@ -792,8 +798,8 @@ const walk = (
           const saved = on(["requested", "assigned", "started"]);
           const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
           refused(
-            yield* jobs((j) => j.collected(saved.request.id, collection, recorded)),
-            "a collect before the job finished",
+            yield* tasks((j) => j.collected(saved.request.id, collection, recorded)),
+            "a collect before the task finished",
             "wrong_state",
           );
           break;
@@ -801,7 +807,7 @@ const walk = (
       }
 
       done.add(move);
-      // After every prefix, every saved job reads as the oracle kept it, and nothing else was written.
+      // After every prefix, every saved task reads as the oracle kept it, and nothing else was written.
       yield* unchanged(`after ${move}`);
 
       if (targets) {
@@ -810,28 +816,30 @@ const walk = (
     }
   });
 
-type Call = <A>(call: (jobs: Jobs["Service"]) => Effect.Effect<A, JobsError>) => Effect.Effect<R.Result<A, JobsError>>;
+type Call = <A>(
+  call: (tasks: Tasks["Service"]) => Effect.Effect<A, TasksError>,
+) => Effect.Effect<R.Result<A, TasksError>>;
 
 /** One legal transition the world allows here, called and left uncounted: the cut moves use it. */
-const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, jobs: Call) => {
-  const options: Array<() => Effect.Effect<R.Result<unknown, JobsError>>> = [];
+const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks: Call) => {
+  const options: Array<() => Effect.Effect<R.Result<unknown, TasksError>>> = [];
 
   if (world.next < tape.requests.length) {
     // The request stays fresh: the next request_new still sends it, after the cut.
     const request = choose(tape.requests, world.next);
-    options.push(() => jobs((j) => j.request(request, recorded)));
+    options.push(() => tasks((j) => j.request(request, recorded)));
   }
 
-  for (const saved of world.jobs.values()) {
+  for (const saved of world.tasks.values()) {
     const id = saved.request.id;
     const execution = saved.execution ?? "";
 
     if (saved.phase === "requested") {
-      options.push(() => jobs((j) => j.take(id, able(saved, cell), recorded)));
+      options.push(() => tasks((j) => j.take(id, able(saved, cell), recorded)));
     } else if (saved.phase === "assigned") {
-      options.push(() => jobs((j) => j.started(id, execution, recorded)));
+      options.push(() => tasks((j) => j.started(id, execution, recorded)));
     } else if (saved.phase === "started") {
-      options.push(() => jobs((j) => j.finish(id, execution, cell.result, recorded)));
+      options.push(() => tasks((j) => j.finish(id, execution, cell.result, recorded)));
     }
   }
 
@@ -839,34 +847,34 @@ const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, job
 };
 
 /** A call that would be legal here, with one field of its input or its record made invalid. */
-const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, jobs: Call) => {
-  const saved = [...world.jobs.values()];
+const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks: Call) => {
+  const saved = [...world.tasks.values()];
   const which = cell.variant % 4;
   const badRecord = broken(recorded, cell.pick, BAD_RECORDED) as Recorded;
 
   if (which === 0 || saved.length === 0) {
     const request = choose(tape.requests, world.next < tape.requests.length ? world.next : cell.pick);
     return cell.pick % 3 === 0
-      ? jobs((j) => j.request(request, badRecord))
-      : jobs((j) => j.request(broken(request, cell.pick, BAD_REQUEST) as Request, recorded));
+      ? tasks((j) => j.request(request, badRecord))
+      : tasks((j) => j.request(broken(request, cell.pick, BAD_REQUEST) as Request, recorded));
   }
 
-  const job = choose(saved, cell.pick);
-  const execution = job.execution ?? "any-execution";
+  const task = choose(saved, cell.pick);
+  const execution = task.execution ?? "any-execution";
 
   if (which === 1) {
     return cell.pick % 3 === 0
-      ? jobs((j) => j.take(job.request.id, able(job, cell), badRecord))
-      : jobs((j) => j.take(job.request.id, broken(able(job, cell), cell.pick, BAD_EXECUTOR) as Executor, recorded));
+      ? tasks((j) => j.take(task.request.id, able(task, cell), badRecord))
+      : tasks((j) => j.take(task.request.id, broken(able(task, cell), cell.pick, BAD_EXECUTOR) as Executor, recorded));
   }
 
   if (which === 2) {
-    return jobs((j) => j.started(job.request.id, execution, badRecord));
+    return tasks((j) => j.started(task.request.id, execution, badRecord));
   }
 
   return cell.pick % 3 === 0
-    ? jobs((j) => j.finish(job.request.id, execution, cell.result, badRecord))
-    : jobs((j) => j.finish(job.request.id, execution, brokenResult(cell.result, cell.pick) as Result, recorded));
+    ? tasks((j) => j.finish(task.request.id, execution, cell.result, badRecord))
+    : tasks((j) => j.finish(task.request.id, execution, brokenResult(cell.result, cell.pick) as Result, recorded));
 };
 
 const prop = (
@@ -895,7 +903,7 @@ const prop = (
 const LIFE: ReadonlyArray<Move> = ["request_new", "take_ok", "start_ok", "finish_ok", "reopen"];
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  describe("P39 slice 1: the durable job service on a real store", () => {
+  describe("P39 slice 1: the durable task service on a real store", () => {
     prop(
       "L1: a request keeps every fact it was given, and each event its writer's record and arrival, through reopen",
       open,
@@ -951,13 +959,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["cut_before", "cut_after", "take_ok", "start_ok"],
     );
     prop(
-      "L7: reopening after any committed prefix reads back the same jobs",
+      "L7: reopening after any committed prefix reads back the same tasks",
       open,
       [...LIFE, "request_equal", "take_again", "start_again", "finish_equal"],
       ["reopen", "start_ok", "finish_ok"],
     );
     prop(
-      "L8: a call with one invalid field is refused and changes no job",
+      "L8: a call with one invalid field is refused and changes no task",
       open,
       [...LIFE, "bad"],
       ["bad", "request_new", "take_ok"],
@@ -990,7 +998,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ],
     );
     prop(
-      "G1: an accepted request writes one target: line in its own transaction, a repeat, a conflict or a cut writes none, and forTarget answers exactly the key's open jobs and the stream's last rev",
+      "G1: an accepted request writes one target: line in its own transaction, a repeat, a conflict or a cut writes none, and forTarget answers exactly the key's open tasks and the stream's last rev",
       open,
       [...LIFE, "request_equal", "request_changed", "cut_before", "cut_after", "take_again", "finish_equal"],
       [
@@ -1011,11 +1019,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 // A5: IDs intentionally disagree with request.process; the saved request decides membership.
 export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
   it.effect(
-    "A5: process discovery keeps every saved job through page crossings and reopen",
+    "A5: process discovery keeps every saved task through page crossings and reopen",
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
-        const measured = { scans: 0, queries: 0, rows: 0, jobs: 0 };
+        const measured = { scans: 0, queries: 0, rows: 0, tasks: 0 };
         const tape = Schema.Struct({
           request: Schema.Struct({ ...Request.fields, process: Id.Process }),
           recorded: Recorded,
@@ -1040,11 +1048,12 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           };
           const store = { ...raw, sql };
           let life = yield* Layer.build(layer(store.sql));
-          const call = <A, E>(f: (j: Jobs["Service"]) => Effect.Effect<A, E>) => Jobs.use(f).pipe(Effect.provide(life));
+          const call = <A, E>(f: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
+            Tasks.use(f).pipe(Effect.provide(life));
           const wanted = a.request.process;
           const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
           const said = { ...a.recorded, seen: 0 };
-          const expected = new Map<string, Job>();
+          const expected = new Map<string, Task>();
 
           for (let n = 0; n < a.total; n++) {
             const request = { ...a.request, id: `opaque-${n}`, process: n % 3 === 0 ? other : wanted };
@@ -1087,18 +1096,18 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               measured.scans++;
               measured.queries += work.queries - before.queries;
               measured.rows += work.rows - before.rows;
-              measured.jobs += a.total;
+              measured.tasks += a.total;
               const rows = [...actual];
               const selected = [...expected.values()].filter(
                 (j) => j.state._tag !== "absent" && j.state.request.process === process,
               );
-              const ids = (jobs: ReadonlyArray<Job>) =>
-                jobs.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+              const ids = (tasks: ReadonlyArray<Task>) =>
+                tasks.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);
 
-              for (const job of rows) {
-                expect(job).toEqual(expected.get(job.state._tag === "absent" ? "" : job.state.request.id));
+              for (const task of rows) {
+                expect(task).toEqual(expected.get(task.state._tag === "absent" ? "" : task.state.request.id));
               }
             }
           }
@@ -1119,7 +1128,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
     120_000,
   );
   it.effect.prop(
-    "A13: Jobs discovery keeps its own error and the lower cause",
+    "A13: Tasks discovery keeps its own error and the lower cause",
     { cause: Schema.String },
     ({ cause }) =>
       Effect.gen(function* () {
@@ -1127,17 +1136,17 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
         const lower = new LedgerStreamsError({ reason: new Storage({ cause }) });
         const dependencies = Layer.mergeAll(
           Layer.succeed(LedgerStreams, { list: () => Stream.fail(lower) }),
-          LedgerSql.layer(store.sql, { reader: "jobs-discovery-error" }).pipe(Layer.provide(quiet)),
+          LedgerSql.layer(store.sql, { reader: "tasks-discovery-error" }).pipe(Layer.provide(quiet)),
           LedgerTransactionSql.layer(store.sql).pipe(Layer.provide(quiet)),
           Id.Generator.layer,
         );
-        const result = yield* Jobs.use((jobs) =>
-          Stream.runCollect(jobs.forProcess("process_01m6v5270hetdrt4r8h9vvjwjs")),
-        ).pipe(Effect.provide(JobsLedger.layer.pipe(Layer.provide(dependencies))), Effect.result);
+        const result = yield* Tasks.use((tasks) =>
+          Stream.runCollect(tasks.forProcess("process_01m6v5270hetdrt4r8h9vvjwjs")),
+        ).pipe(Effect.provide(TasksLedger.layer.pipe(Layer.provide(dependencies))), Effect.result);
         expect(R.isFailure(result)).toBe(true);
 
         if (R.isFailure(result)) {
-          expect(result.failure).toBeInstanceOf(JobsError);
+          expect(result.failure).toBeInstanceOf(TasksError);
           expect(result.failure.cause).toBe(lower);
         }
       }).pipe(Effect.scoped),

@@ -1,4 +1,4 @@
-// P39 slice 1, L2 to L5 and L7 on the job machine itself (0037, 0046): its real `init` and its real
+// P39 slice 1, L2 to L5 and L7 on the task machine itself (0037, 0046): its real `init` and its real
 // update, one Msg at a time. Every law walks a decision tape (0093): each cell is read against the
 // phase the fold has reached, so a retry repeats the saved request, a start names the real
 // assignment or a near miss of it, and a finish answers a real start. The expected state is this
@@ -11,7 +11,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as fc from "fast-check";
-import { type Executor, type Request, Result, State } from "../Job.ts";
+import { type Executor, type Request, Result, State } from "../Task.ts";
 import {
   CAPABILITIES,
   changedRequest,
@@ -22,17 +22,17 @@ import {
   fcRequest,
   fcResult,
   fcTypeId,
-} from "../JobsTest.ts";
-import { job } from "./job.ts";
+} from "../TasksTest.ts";
+import { task } from "./task.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
-type Model = (typeof job)["model"]["Type"];
-type Msg = (typeof job)["msg"]["Type"];
+type Model = (typeof task)["model"]["Type"];
+type Msg = (typeof task)["msg"]["Type"];
 type Phase = "absent" | "requested" | "assigned" | "started" | "finished" | "collected";
 
-const init = (): Model => job.init(null, undefined)[0];
-const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
+const init = (): Model => task.init(null, undefined)[0];
+const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
 
 /** What the fold knows, from its own Msgs only. */
 type World = {
@@ -44,7 +44,7 @@ type World = {
   collection?: Collection;
 };
 
-/** Who took a finished job's result, and the answer letter it went in. */
+/** Who took a finished task's result, and the answer letter it went in. */
 type Collection = { readonly process: string; readonly letter: string };
 
 const Cell = fc.record({
@@ -213,7 +213,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
     case "out_of_order": {
-      // Before a take nothing may start or finish; an assigned job may not finish, even by its own execution.
+      // Before a take nothing may start or finish; an assigned task may not finish, even by its own execution.
       const msgs: ReadonlyArray<Msg> =
         world.phase === "assigned"
           ? [{ type: "finish", execution, result: cell.result }]
@@ -287,7 +287,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
         let model = init();
         let world: World = { phase: "absent" };
         const accepted: Array<Msg> = [];
-        expect(model.state, "a job starts absent").toEqual(State.cases.absent.make({}));
+        expect(model.state, "a task starts absent").toEqual(State.cases.absent.make({}));
 
         for (const cell of tape.cells) {
           const options = possible(world, moves);
@@ -316,9 +316,9 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
 
           world = next;
           expect(model.state, `${move}: the state the plan's table gives`).toEqual(expected(world));
-          // L7 on every prefix: folding only the committed events from a fresh init is the same job.
+          // L7 on every prefix: folding only the committed events from a fresh init is the same task.
           const replayed = accepted.reduce(step, init());
-          expect(replayed.state, `${move}: the committed events fold back to the same job`).toEqual(model.state);
+          expect(replayed.state, `${move}: the committed events fold back to the same task`).toEqual(model.state);
         }
       }),
       RUNS,
@@ -337,7 +337,7 @@ const COLLECT: ReadonlyArray<Move> = [
   "collect_early",
 ];
 
-describe("P39 slice 1: the job machine", () => {
+describe("P39 slice 1: the task machine", () => {
   law(
     "L2: an equal request repeats; changed bytes under the same id are refused and the first request stays",
     [...LIFE, "request_equal", "request_changed"],
@@ -376,7 +376,7 @@ describe("P39 slice 1: the job machine", () => {
     ["finish_ok", "finish_equal", "finish_other"],
   );
   law(
-    "L7: folding the committed events from init gives the same job as the whole walk",
+    "L7: folding the committed events from init gives the same task as the whole walk",
     [
       ...LIFE,
       "request_equal",

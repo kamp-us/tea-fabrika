@@ -856,7 +856,7 @@ windowApp.pipe(Effect.provide(layer), runMain);
 - **headless:** none. A test hands in the list it wants. The bridge is an agent, not a host, so its hello says `has: []`.
 - **The list comes from the Layer, and the hello carries it (p66).** Main works out Electron's list at start and hands it over through the preload, and the menu bar's link sends the same list. Nothing reads `has` yet, and `gateway/hellos` records it. In PR A a tab has no Layer until T7, so its hello says `has: []`. No real ledger exists before PR D, so nothing is lost.
 - **A word says "can", never "may".** A client can claim anything. Whether it may do something is a grant.
-- **Not in Tier 1:** a queue, leases, or a tab that runs a job. They are in Tier 4.
+- **Not in Tier 1:** a queue, leases, or a tab that runs a task. They are in Tier 4.
 
 **The Elm answer.** Flags at start and ports: the machine knows `sign` and `send_text` as Cmds and socket and size as Subs. The Layers are the runtime that does them. No new tea abstraction, and tea stays small.
 
@@ -2498,7 +2498,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - The queue, claims and leases. `by` on each letter is kept now; nothing lost.
 - The rest of C2 to C5: supervision trees, sibling strategies, links and trap exit. Work queues and running hands are the first to need them. Tier 1 builds the slice a skateboard needs (owner, 2026-11-06). `by` and `for` are kept now; nothing lost.
 - Mac and VM hands, and hands as a client, as a proposal. `has` is in every hello from Tier 1; nothing lost.
-- A first tab that runs a job, and how a client says it takes jobs. `has` says what a host can do, so it can't also say that. Proposed, not decided, as `brain-hands-window-agent.md` says. Job code beside a window's key needs a sandbox first. Nothing lost.
+- A first tab that runs a task, and how a client says it takes tasks. `has` says what a host can do, so it can't also say that. Proposed, not decided, as `brain-hands-window-agent.md` says. Task code beside a window's key needs a sandbox first. Nothing lost.
 - `kill -9` from chaos through real hands, and `kill_brain` as a button, as a proposal: the button needs hands to do the kill, as biggest call 6 says. The facts have the same shape; nothing lost.
 - Secrets and the terminal tile. They record no fact from Tier 1's time; nothing lost.
 
@@ -2617,7 +2617,7 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q9, where real notes live:** on the Cloudflare copy once it exists. The laptop instance stays for tests and development. The setting's shape is my call, 75%.
 - **Q12, the layout:** real packages under `next/`, in one workspace, with real names from day one. Today's two are `-old` and are deleted later, with no rename. Which names sit on which subpath is my call, 80%.
 - **Q13, where Tuval lives:** fabrika is the logic, and Tuval is the projection of it. `@kampus/tuval` holds all client logic and may import the library, never the other way. The app is only wiring and the deploy stack. The desk is a program in Tier 2, and Tier 1 has no desk process.
-- **Q14, hosts:** a host is a place hands can run: a Mac, a VM or a browser profile. Hands and window are jobs, not places. In Tier 1, `Backend` becomes `Host`, the hello's `has` carries each Layer's list, `saw` records it, and the menu bar shows hosts. The hello's `backend` and `Host`'s field becoming `platform` is my call, 80%. Tiers can be restructured, and size never pushes work out of one.
+- **Q14, hosts:** a host is a place hands can run: a Mac, a VM or a browser profile. Hands and window are roles, not places. In Tier 1, `Backend` becomes `Host`, the hello's `has` carries each Layer's list, `saw` records it, and the menu bar shows hosts. The hello's `backend` and `Host`'s field becoming `platform` is my call, 80%. Tiers can be restructured, and size never pushes work out of one.
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
 - **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
 - **2026-11-05, the brief's questions 9 to 13 and 18, and two clashes:** edges are opt-in comments at the line, not a path list; the first method is `initialize`, and `Hello` stays the schema's name; a key per client, the person key grants in SSHSIG's shape, and GitHub is never a way in ([the note](../direction/a-key-per-client-and-no-github-trust.md)); an entry's clocks are `arrivedAt` and `sentAt` in `next/`, which were `at` and `said`; `cause` on the entry in P6, with laws p67 to p69; a tracker ticket per pull request; P14 imports the design package, which P31 builds first; and a unit of work is a commit: each exam change is the test writer's commit, never the builder's, and CI walks the commits ([the note](../direction/a-unit-of-work-is-a-commit.md)).
