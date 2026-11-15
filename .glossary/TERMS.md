@@ -88,6 +88,7 @@ itself. Both versions. Paths: `docs/`, `experiments/`, `field/`, `replay/`, `sin
 | quota | (decided Nov 7) A provider's usage limit on a subscription, such as Claude's five-hour and seven-day windows, as the run last read it: `id`, `used` (0 to 100), `minutes`, `until`. Google Cloud's word. [The meter on subscriptions](../docs/direction/one-ask-and-one-meter.md#the-meter-on-subscriptions) | Not the meter's own `Limits` (Ledger), which fabrika sets. Not a window (Frame). |
 | tier | One whole slice of `next/` a person can use, built in order. Tier 1 is the first. [The tiers](../docs/plan/tiers.md) | Not a priority level: fabrika has no priority. Not a risk tier (Pipeline). |
 | today's version | Everything outside `next/` (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`): the fabrika in daily use until `next/` takes each job over. Where its words differ, the last section says so. [Clean slate](../docs/direction/clean-slate.md) | Not `@kampus/fabrika`, which is the new app. |
+| trusted repo | (decided Nov 15) A repo on the short named list in [0560](../.decisions/0560-an-order-for-effect-code.md), whose rules for Effect code we follow unless they clash with what the Effect team does. | Not the Effect team's own repo, which comes first. Not any repo we happened to read. |
 
 ## Tracker
 Project management as a person sees it: tickets, plans, asks and the inbox. Programs on layer 4.

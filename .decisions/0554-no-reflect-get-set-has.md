@@ -184,3 +184,5 @@ reads or writes past the types (owner, 2026-11-15).**
   - `Reflect.apply`, `Reflect.construct` and `Reflect.deleteProperty`.
   - What replaces a law that hands a typed function a value its type refuses, which today goes
     through `Reflect.apply(Reflect.get(...))`.
+- [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
+  `anti-slop/no-reflect-get` when the plugin is installed. The ban itself does not change.
