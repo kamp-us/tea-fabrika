@@ -1,4 +1,4 @@
-Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 0d7781b2b466
+Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 3726ce599e7c
 Plancheck-Version: 3
 # Plan: ticket 290, P18 slice 2: a tile monitors its process and follows the restart
 
@@ -379,7 +379,7 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | D2 | Through the door, a monitored process's exit puts one DOWN by the brain into `client:<tab>/inbox` under `signalId(to, ref, 1)`, with the exit reason; a monitor of a gone pid puts a `noproc` DOWN there in the same turn; a `ledger.wait` parked on that inbox is answered | test | scenario: the door laws' one SQLite world, with a started counter | Write the DOWN to the brain's own client inbox (red: the window's inbox stays empty) |
 | D3 | A ref that is empty or over 256 characters is `bad_text`; the same ref on another pid is `bad_ref`; a refusal writes nothing | test | fc.string: refs of length 0 to 300, 100 runs | Skip the ref's decode (red: a 300-character ref is written) |
 | P1 | `ProcessManager.leave(session)` ends exactly the live watches whose recipient is a client with that session, each with `demonitored {reason: "watcher_exited"}`. Another session of the same client, process recipients and canceled watches stay as they were. A later exit writes no DOWN for the ended ones. A second `leave` writes nothing | test | fc.array: generated watches over two clients, three sessions and two processes, 100 runs | Match on the client id, not the session (red: the other session's watch ends). Skip the `demonitored` line (red: a later DOWN is written) |
-| T1 | The door's `monitor` option takes `to` typed as the client case of `Recipient`, and the `process.monitor` params schema's keys are exactly `ref` and `pid` | type | type | Add `to` to the params schema (red) |
+| T1 | The door's `monitor` option takes `to` typed as the client case of `Recipient`, and the `process.monitor` params schema's keys are exactly `ref` and `pid` (the schema is not exported, so D1 holds this clause at run time: any other key is refused) | type | type | Add `to` to the params schema (red) |
 | T2 | `Reach`'s `opening` and `open` require `ref`, and `ended` requires `reason: ExitReason` | type | type | Make `ref` optional (red) |
 | E1 | On a real local instance, in Chromium and in the headless client: the checklist tile is open; the test ends its process as crashed and starts its successor through the control endpoint, as the chaos-revoke suite's `invoke` does. The tile says `Ended (crashed)`, then shows the successor's view, and an `add` lands on the successor pid. `processes` holds one `monitored` per pid, each with `to.client` the tab. After the tab closes, its session's watch is `demonitored` with `watcher_exited` | test | scenario: a real local instance, both backends of slice 1's round-trip suite | Drop the window's DOWN handler (red: the tile stays `Online` on the dead pid and the `add` is refused) |
 
@@ -399,10 +399,11 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 - **Lint, type or test:** S1 to S6, L8, F1, D1 to D3, P1 and E1 hold behavior over runs, so they
   are tests. T1 and T2 are shapes, so they are type laws. No rule here is about how code is
   written, so there is no new lint rule.
-- **No host-only law.** E1 needs workerd and Chromium and runs in CI's end-to-end job on Linux, as
-  slice 1's suite does. Nothing here touches launchd or the owner's Mac.
+- **No host-only law.** E1 needs workerd and Chromium. It is a visual test, so it runs on the
+  3-hour full run on Linux, and on a pull request only with the `visual` label (0536), as slice
+  1's suite does. Nothing here touches launchd or the owner's Mac.
 - **The OTP behaviors already proven** (one DOWN per watch, `noproc`, a stale DOWN never reaching a
-  new life) keep their P33 laws in `ProcessMonitors.test.ts`. D2 proves the door's path into them.
+  new life) keep their P33 laws in `ProcessMonitors.integration.test.ts`. D2 proves the door's path into them.
 
 ## Files
 
@@ -429,13 +430,13 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | `next/packages/libfabrika/src/client/WindowStart.laws.test.ts` | The two new calls on the wire | tests | tests |
 | `next/packages/libfabrika/src/client/WindowStart.test-support.ts` | The fake door answers `process.monitor` and `ledger.wait`, if the laws above need it | tests | tests |
 | `next/packages/libfabrika/src/runtime/Client.laws.test.ts` | F1 | tests | tests |
-| `next/packages/libfabrika/src/processes/ProcessMonitors.test.ts` | P1 | tests | tests |
+| `next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts` | P1 | tests | tests |
 | `next/packages/libfabrika/src/gateway/Gateway.types.test.ts` | T1 | tests | tests |
-| `next/apps/fabrika/src/door.test.ts` | D1 to D3 | tests | tests |
-| `next/apps/fabrika/e2e/client-protocol.test.ts` | E1 in the round-trip suite, both backends | tests | tests |
+| `next/apps/fabrika/src/door.integration.test.ts` | D1 to D3 | tests | tests |
+| `next/apps/fabrika/e2e/client-protocol.visual.test.ts` | E1 in the round-trip suite, both backends | tests | tests |
 | `next/apps/fabrika/e2e/client-protocol.test-support.ts` | E1's crash and restart steps and the tile's state reads | tests | tests |
 | `next/apps/fabrika/e2e/p14.test-support.ts` | The tile helper reads the state slot, if E1 needs it | tests | tests |
-| `next/apps/fabrika/e2e/chaos-revoke.test.ts` | Read only: how a suite calls the control endpoint | 0 | tests |
+| `next/apps/fabrika/e2e/chaos-revoke.integration.test.ts` | Read only: how a suite calls the control endpoint | 0 | tests |
 
 About 395 product lines. The tests step owns every test file; the build owns the product code and
 the docs.
@@ -463,9 +464,11 @@ replaced, with its mapping above, and gets stricter about why a read repeats.
 
 Validation for the tests and build steps:
 
-- `nice -n 15 pnpm exec vitest run --maxWorkers=3 next/packages/libfabrika/src/client next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/processes/ProcessMonitors.test.ts next/apps/fabrika/src/door.test.ts`, and `pnpm lint`.
+- `nice -n 15 pnpm exec vitest run --maxWorkers=3 next/packages/libfabrika/src/client next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts next/apps/fabrika/src/door.integration.test.ts`, and `pnpm lint`.
 - The lead runs `--changed` and the one typecheck.
-- E1 runs in CI's end-to-end job. It needs workerd and Chromium, so no step's box runs it.
+- E1 runs on the 3-hour full run, and on this pull request through its `visual` label (0536). It
+  needs workerd and Chromium, so no step's box runs it. D1 to D3 and P1 are integration tests: the
+  full run runs them, and each step runs their narrow paths.
 - **Shots:** the window changes, so the PR carries shots of `Ended (crashed)` and of the followed
   tile, from the real built page, taken with `page.screenshot` the way E1 drives it. The lead takes
   them by running E1's capture once on the laptop under the caps, or from CI's job if it keeps
