@@ -49,6 +49,7 @@ libfabrika
 | A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
 | A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
 | A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
+| A test opens a SQLite file through `@kampus/vitest/TestDatabase`: `make` for a file it owns, `open` for one another party owns; only `":memory:"` keeps `new DatabaseSync` | `fabrika/test-database` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at
