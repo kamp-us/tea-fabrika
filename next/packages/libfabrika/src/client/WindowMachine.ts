@@ -10,7 +10,6 @@
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Predicate, Result, Schema } from "effect";
-import { PAGE } from "../ledger/Log.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -21,6 +20,7 @@ import { ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
 import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
+import { PAGE } from "../transport/Wire.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
