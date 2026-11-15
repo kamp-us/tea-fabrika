@@ -27,8 +27,8 @@ import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
 
 /**
- * Schema for a mail delivery's answer over Project RPC: `ok` with the delivery's receipt, or `refused`
- * with its `MailRefusal`.
+ * Schema for a mail delivery's answer over Project RPC: `ok` with the delivery's receipt, `refused`
+ * with its `MailRefusal`, or `full` with the target's unread letters and its inbox cap.
  *
  * @stability unstable
  * @category schemas
@@ -50,6 +50,7 @@ export const MailReplies = Schema.TaggedUnion({
     }),
   },
   refused: { reason: MailRefusal },
+  full: { unread: Schema.Int, cap: Schema.Int },
 });
 
 /**
@@ -263,6 +264,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processResolve: ProcessCall<Processes["resolve"]>;
     processDead: ProcessCall<Processes["dead"]>;
     processIsLive: RemoteCall<Processes["isLive"]>;
+    processAck: ProcessCall<Processes["ack"]>;
     processMonitor: ProcessCall<Processes["monitor"]>;
     processDemonitor: ProcessCall<Processes["demonitor"]>;
     processDown: ProcessCall<Processes["down"]>;

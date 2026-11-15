@@ -231,6 +231,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processIsLive(pid)));
   }
 
+  processAck(pid: string, pos: number, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.processAck(pid, pos, from)));
+  }
+
   processMonitor(ref: string, pid: string, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processMonitor(ref, pid, from)));

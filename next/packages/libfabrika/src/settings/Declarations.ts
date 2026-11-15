@@ -1,6 +1,7 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
- * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group of the nine.
+ * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the two mail settings `mail.unread` and
+ * `mail.chunk`, and `all`, the group of the eleven.
  *
  * **Details**
  *
@@ -8,7 +9,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { ByteSize, Schema } from "effect";
 import * as Setting from "./Setting.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -171,13 +172,73 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+const KIB = 1_024;
+const MIB = 1_024 * KIB;
+
+const Unread = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16_384 })).annotate({
+  title: "a letter count",
+  description: "A letter count is a whole number from 1 to 16384.",
+});
+
+const ChunkBytes = Schema.ByteSize.check(
+  Schema.isBetweenBigInt({ minimum: BigInt(KIB), maximum: BigInt(MIB) }),
+).annotate({
+  title: "a chunk size",
+  description: "A chunk size is a byte size from 1 KiB to 1 MiB, as 64 KiB.",
+});
+
+/**
+ * Setting for the most unread letters one inbox holds.
+ *
+ * **Details**
+ *
+ * A send to an inbox at its cap answers `full`, and nothing is saved. The value is a whole number
+ * from 1 to 16,384, the largest count experiment 295 measured, and the default is 256, which
+ * experiment 295 picked: 256 letters of the default chunk size are 16 MiB, what one catch-up may
+ * hold at once. It is set in the repo's file only.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const mailUnread = Setting.make("mail.unread", {
+  schema: Unread,
+  default: 256,
+  doc: "The most unread letters one inbox holds. A send past it answers full, and nothing is saved.",
+  scope: ["repo"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the most bytes in one letter of a chunked send.
+ *
+ * **Details**
+ *
+ * The value is a byte size from 1 KiB to 1 MiB, written as text, as `64 KiB`. 1 MiB is about half
+ * the ledger's row cap, and 1 KiB leaves room for a chunk's own fields. The default is 64 KiB,
+ * which experiment 295 picked. It is set in the repo's file only.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const mailChunk = Setting.make("mail.chunk", {
+  schema: ChunkBytes,
+  format: "text",
+  default: ByteSize.bytes(64 * KIB),
+  doc: "The most bytes in one letter of a chunked send.",
+  scope: ["repo"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 /**
  * Group of every setting fabrika declares, ready to load, validate and print.
  *
  * **Details**
  *
  * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`) and `desktopLinkTtl`.
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`), `desktopLinkTtl`, and
+ * the two mail settings, `mailUnread` and `mailChunk`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -193,4 +254,6 @@ export const all = Setting.group({
   brainStartTimeout,
   brainStopTimeout,
   desktopLinkTtl,
+  mailUnread,
+  mailChunk,
 });

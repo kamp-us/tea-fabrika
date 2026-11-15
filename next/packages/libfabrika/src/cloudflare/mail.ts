@@ -17,6 +17,11 @@ const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
     return yield* new ProgramMailError({ reason: checked.reason });
   }
 
+  if (checked._tag === "full") {
+    yield* Effect.annotateCurrentSpan({ "fab.mail.unread": checked.unread, "fab.mail.cap": checked.cap });
+    return yield* new ProgramMailError({ reason: "full", unread: checked.unread });
+  }
+
   return checked.receipt;
 });
 
