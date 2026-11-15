@@ -70,6 +70,27 @@
       },
       "additionalProperties": false
     },
+    "hands": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^SHA256:[A-Za-z0-9+/]{43}$",
+              "title": "a key fingerprint",
+              "description": "A key fingerprint is SHA256: and 43 base64 characters, as ssh-keygen -l prints it."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "instance": {
       "type": "object",
       "properties": {

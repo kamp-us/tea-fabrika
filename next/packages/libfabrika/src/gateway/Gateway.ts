@@ -39,6 +39,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import type { DraftAnswer } from "../runtime/Execution.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
@@ -363,6 +364,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
   const jobs = yield* Jobs;
+  const wakeups = yield* MailWakeups;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
@@ -1256,17 +1258,21 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     if (method.startsWith("jobs.")) {
-      const answer = yield* Effect.gen(function* () {
+      const { answer, wake } = yield* Effect.gen(function* () {
         const fresh = yield* silent(Effect.result(authenticated(client)));
 
         if (Result.isFailure(fresh)) {
-          return no("not_granted");
+          return { answer: no("not_granted"), wake: null };
         }
 
         return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
       }).pipe(write);
+      // A taken finish answers only once its requester is scheduled, outside the write turn. A wake
+      // that failed answers `unavailable`: the result is saved, and the same finish sent again repeats
+      // and wakes again, as MailDelivery's `queued` comes only after both.
+      const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
       yield* flush;
-      return answer;
+      return Result.isSuccess(woke) ? answer : no("unavailable");
     }
 
     if (attached.identity.as === "hands") {

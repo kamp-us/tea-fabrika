@@ -18,6 +18,7 @@ import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { BuiltProgram } from "../runtime/Built.ts";
 import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import type { Ask, Reply as HandsReply } from "../runtime/HandsJobs.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
@@ -243,6 +244,15 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
       ) => Effect.Effect<typeof CommitReply.Type>
     >;
     mail: RemoteCall<(delivery: Delivery, trace?: { traceId: string; spanId: string }) => Effect.Effect<MailReply>>;
+    /** One hands Cmd's ask: its job saved or read back, and collected once finished. A failure that
+     *  answered nothing rejects the call, and the Process side reads it as `unavailable`. */
+    hands: RemoteCall<
+      (
+        ask: typeof Ask.Type,
+        from: From,
+        trace?: { traceId: string; spanId: string },
+      ) => Effect.Effect<typeof HandsReply.Type>
+    >;
     inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
     own: RemoteCall<
       (

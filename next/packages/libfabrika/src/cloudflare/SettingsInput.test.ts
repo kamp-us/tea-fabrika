@@ -84,6 +84,8 @@ describe("shared Worker settings reader, next/", () => {
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
+              // P39 slice 3: the recipe sets no hands key, so the start reads the default, none.
+              handsTarget: null,
             });
             StartsTest.exclude(exit.value, secret);
           }

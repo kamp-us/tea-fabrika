@@ -91,7 +91,10 @@ import { CodeStore, type CodeStoreError } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
 import { type Declaration, DraftAnswer } from "../runtime/Execution.ts";
+import { type Ask, HandsJobs, type HandsJobsError, type Reply as HandsReply } from "../runtime/HandsJobs.ts";
+import * as HandsJobsLive from "../runtime/HandsJobsLive.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
@@ -126,8 +129,9 @@ import {
   type RecordBinding,
 } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
+import { handsLayer } from "./hands.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
-import { mailLayer } from "./mail.ts";
+import { mailLayer, wakeups } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import * as Publish from "./Publish.ts";
@@ -384,6 +388,7 @@ export interface ProjectOptions {
     | RecordManager
     | Archive
     | Jobs
+    | MailWakeups
     | RecordedStart
   >;
 }
@@ -879,10 +884,23 @@ const projectLogic = Effect.fn("project.init")(function* (
     RelationsLedger.layer({ by }),
     processManager,
   ).pipe(Layer.provideMerge(base));
+  // The door wakes a job's requester after a finish with the same wake mail uses.
   const services = Context.add(
-    yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
-    RecordedStart,
-    checked,
+    Context.add(
+      yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
+      RecordedStart,
+      checked,
+    ),
+    MailWakeups,
+    yield* MailWakeups.pipe(Effect.provide(wakeups(env, name))),
+  );
+  // A program's hands Cmd targets the person's hands key, and its request records this start's settings.
+  const hands = yield* HandsJobs.pipe(
+    Effect.provide(
+      HandsJobsLive.layer({ target: checked.values.handsTarget, settings: checked.snapshot.hash }).pipe(
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
   );
   const mail = yield* ProgramMail.pipe(
     Effect.provide(
@@ -1790,6 +1808,11 @@ const projectLogic = Effect.fn("project.init")(function* (
       );
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
+    hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
+      // Under the shared write turn, as every job call is: a read and its request or collect are one step.
+      const work = write(hands.ask(ask, origin));
+      return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
+    },
     target: door.target,
     register: (client: string, gateway: string, session: string) =>
       Effect.sync(() => {
@@ -1934,6 +1957,12 @@ export class ProjectService extends Context.Service<
       delivery: Delivery,
       trace?: { traceId: string; spanId: string },
     ) => Effect.Effect<MailReply, ProgramMailError | ProjectFailure>;
+    /** One hands Cmd's ask, in the Project's write turn. A failure answers nothing: the Cmd stays dispatched. */
+    readonly hands: (
+      ask: typeof Ask.Type,
+      origin: From,
+      trace?: { traceId: string; spanId: string },
+    ) => Effect.Effect<typeof HandsReply.Type, HandsJobsError | ProjectFailure>;
     readonly target: GatewayCalls["target"];
     readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
     readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
@@ -2241,6 +2270,7 @@ const processLogic = Effect.fnUntraced(function* (
   });
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
+    handsLayer(env, project),
     Layer.succeed(CheckedWriter, {
       sign: (id, parent, kind) =>
         Effect.suspend(() => rpc(p.sign(active, id, parent, kind))).pipe(

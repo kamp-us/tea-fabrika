@@ -1,6 +1,8 @@
 // T714, next/. A6/A7's pure entry points. The gateway suite exercises these rules on saved histories.
 // select(jobs, {process,key}) returns Result<Job|null,"ambiguous">; owns checks all named resource facts.
 // Ambiguity, finished-work and wrong-key plant trials are recorded in the tests-step report.
+// P39 slice 3 (ticket 1040), J1's select half: a collected job is never offered, as a finished one
+// is not. Plant (after build): let select keep `collected` jobs.
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as Id from "../Id.ts";
@@ -17,7 +19,13 @@ const Item = Schema.Struct({
   matching: Schema.Boolean,
 });
 
-const jobFor = (a: typeof Item.Type): Job => {
+/** A job in any phase, a collected one among them: what `select` must sort. */
+const AnyItem = Schema.Struct({
+  ...Item.fields,
+  phase: Schema.Literals(["requested", "assigned", "started", "finished", "collected"]),
+});
+
+const jobFor = (a: typeof AnyItem.Type): Job => {
   const assignment = {
     execution: a.execution,
     executor: { ...a.executor, key: a.matching ? a.request.target : `${a.request.target}x` },
@@ -29,14 +37,24 @@ const jobFor = (a: typeof Item.Type): Job => {
         ? State.cases.assigned.make({ request: a.request, assignment })
         : a.phase === "started"
           ? State.cases.started.make({ request: a.request, assignment })
-          : State.cases.finished.make({ request: a.request, assignment, result: a.result });
+          : a.phase === "finished"
+            ? State.cases.finished.make({ request: a.request, assignment, result: a.result })
+            : State.cases.collected.make({
+                request: a.request,
+                assignment,
+                result: a.result,
+                collection: { process: a.request.process, letter: `${a.request.id}/answer` },
+              });
   return { state, events: [] };
 };
 
+/** The phases a hands key may still work on: a finished or collected job has nothing left to run. */
+const OPEN: ReadonlyArray<string> = ["requested", "assigned", "started"];
+
 it.prop(
-  "A6: candidate selection filters by saved process and target, never by command id",
+  "A6 and J1: candidate selection filters by saved process and target, never by command id, and never offers finished or collected work",
   {
-    items: Schema.Array(Item).check(Schema.isMinLength(1), Schema.isMaxLength(16)),
+    items: Schema.Array(AnyItem).check(Schema.isMinLength(1), Schema.isMaxLength(16)),
     key: Schema.NonEmptyString,
     process: Schema.String,
   },
@@ -51,7 +69,7 @@ it.prop(
         const wanted = values.filter(
           (j) =>
             j.state._tag !== "absent" &&
-            j.state._tag !== "finished" &&
+            OPEN.includes(j.state._tag) &&
             j.state.request.target === subject.key &&
             j.state.request.process === subject.process,
         );
