@@ -1,16 +1,16 @@
 // next/: the page draws the library's window client. React only reads and sends Msgs; the run, its
 // socket and its timers belong to the scope the caller started it in. The page draws the workspace
 // of its person's tezgah (`Layout.tsx`), reads each press for the window's own prefix (0278), and
-// says the prefix, the close ask and a refused split in its two live regions, made at boot. Desk
-// focus follows DOM focus, and DOM focus follows desk focus (0503's lesson): a click or Tab into a
-// tile tells the window, and a move lands DOM focus on the tile's cursor (0165). A focus move says
-// nothing in either live region (the tile guidelines); `aria-current` shows it. The page folds what
-// does not fit at its own size (0277): `fold` of the drawn workspace at the window's size, worked out
-// on each draw and never kept. Tab onto a strip moves no desk focus, since a strip is in no tile;
-// Enter or a click on one focuses its tile, so it opens.
+// says the prefix, the close ask, a refused split and the status messages of one burst (0504) in its
+// two live regions, made at boot. Desk focus follows DOM focus, and DOM focus follows desk focus
+// (0503's lesson): a click or Tab into a tile tells the window, and a move lands DOM focus on the
+// tile's cursor (0165). A focus move says nothing in either live region (the tile guidelines);
+// `aria-current` shows it. The page folds what does not fit at its own size (0277): `fold` of the
+// drawn workspace at the window's size, worked out on each draw and never kept. Tab onto a strip
+// moves no desk focus, since a strip is in no tile; Enter or a click on one focuses its tile, so it
+// opens.
 import type { EffectRun } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
-import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
 import { optimisticState } from "@kampus/libfabrika/client/Tezgah";
 import { lastCursor, type WindowModel, type WindowMsg } from "@kampus/libfabrika/client/WindowMachine";
@@ -19,12 +19,13 @@ import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
-import { type ReactNode, StrictMode, useEffect, useRef } from "react";
+import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
+import { refusalFor, spoken, type TileWindow } from "./spoken.ts";
+import { bodyWord, stateWord } from "./words.ts";
 
 type LiveWindow = EffectRun<WindowModel, WindowMsg>;
-type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
 
 type PageProps = {
   readonly run: LiveWindow;
@@ -47,16 +48,6 @@ const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
 const pickPrefix = (m: WindowModel) => m.prefix;
 const pickPolite = (m: WindowModel) => m.polite;
 const pickSize = (m: WindowModel) => m.size;
-
-const refusalFor = (registration: TileWindow | null, refusal: WindowModel["tiles"][number]["refusal"]) => {
-  if (refusal === null) {
-    return null;
-  }
-
-  // Unknown free text never reaches the frame's fallback.
-  const reason = /^[a-z_]{1,40}$/.test(refusal.reason) ? refusal.reason : "";
-  return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
-};
 
 const Waiting = ({
   code,
@@ -93,19 +84,10 @@ const Waiting = ({
 type Row = WindowModel["tiles"][number];
 
 /** The word a tile's title bar says and whether it takes input, from the link and its reach. */
-const tileState = (link: WindowModel["link"], row: Row | undefined) => {
-  const offline = link._tag !== "online";
-  const word = offline
-    ? link._tag === "retrying"
-      ? "Retrying"
-      : "Connecting"
-    : row?.reach._tag === "missing"
-      ? "Missing"
-      : row?.reach._tag === "open"
-        ? "Online"
-        : "Opening";
-  return { word, live: !offline && row?.reach._tag === "open" };
-};
+const tileState = (link: WindowModel["link"], row: Row | undefined) => ({
+  word: stateWord(link, row?.reach),
+  live: link._tag === "online" && row?.reach._tag === "open",
+});
 
 const TileBody = ({
   run,
@@ -125,8 +107,12 @@ const TileBody = ({
   const data =
     registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
 
-  if (row === undefined || registration === null || data === null) {
-    return <p className="tile-empty">{row?.reach._tag === "missing" ? "Missing" : "Opening"}</p>;
+  // The tile guideline's empty state: one word where the view will start, and on an ended tile in
+  // place of the ended process's last view.
+  const word = bodyWord(row?.reach, registration !== null && data !== null);
+
+  if (row === undefined || word !== null || registration === null || data === null) {
+    return <p className="tile-empty">{word}</p>;
   }
 
   return (
@@ -365,7 +351,6 @@ const Desk = (props: PageProps) => {
 
 const Page = (props: PageProps) => {
   const [link, send] = useRuntime(props.run, pickLink);
-  const [tiles] = useRuntime(props.run, pickTiles);
   const [client] = useRuntime(props.run, pickTezgah);
   const [dials] = useRuntime(props.run, (m) => m.dials);
   const [views] = useRuntime(props.run, (m) => m.client.views);
@@ -373,18 +358,21 @@ const Page = (props: PageProps) => {
   const [prefix] = useRuntime(props.run, pickPrefix);
   const [polite] = useRuntime(props.run, pickPolite);
   const [none] = useRuntime(props.run, pickNoTezgah);
+  const [said] = useRuntime(props.run, (m) => m.said);
   useKeys(props.run, props.keys, send);
   const view = client === null ? null : optimisticState(client);
   const named = (id: string) => view?.tiles.find((t) => t.id === id);
-  const refused = tiles.flatMap((t) => {
-    const program = named(t.id)?.program;
-    const words = refusalFor(program === undefined ? null : props.windowFor(program), t.refusal);
-    return words ? [words] : [];
-  });
+  // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
+  // whose process ended. A refusal's words are those of the program its tile shows.
+  const burst = spoken(
+    { said },
+    (id) => named(id) ?? null,
+    (tile) => props.windowFor(tile.program),
+  );
   const roomless = polite === null ? undefined : named(polite.tile);
   const words = [
     ...(none ? [NO_TEZGAH] : []),
-    ...refused,
+    ...(burst === "" ? [] : [burst]),
     ...(prefix._tag === "armed" ? ["prefix"] : []),
     ...(roomless === undefined ? [] : [noRoom(roomless)]),
   ].join(" ");
@@ -425,7 +413,8 @@ const Page = (props: PageProps) => {
     <>
       {content}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {words}
+        {/* Each append is a new node under the burst's new id, so a reader hears the line again. */}
+        {words === "" ? null : <span key={said.id}>{words}</span>}
       </div>
       <div className="sr-only" role="alert" aria-atomic="true">
         {asked === undefined ? "" : question(asked)}

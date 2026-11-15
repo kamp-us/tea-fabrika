@@ -24,12 +24,24 @@ import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfa
 import type { ReactElement } from "react";
 
 /**
- * Returns a tile's accessible name, the one place it is written: its program's own name after its
- * pack, then `t<n>`, as `checklist, t2` (0503). Focus is never in it, so a name stays put while
- * focus moves; `aria-current` says which tile has it.
+ * Returns the two words every text that names a tile is built from, so they can never disagree: its
+ * program's own name after its pack, as `checklist`, and its handle `t<n>`, the short id other text
+ * uses (the tile guidelines' "Program name" and "Tile id").
  */
-export const tileName = (tile: Pick<Tile, "program" | "n">): string =>
-  `${tile.program.slice(tile.program.lastIndexOf("/") + 1)}, t${tile.n}`;
+export const tileWords = (tile: Pick<Tile, "program" | "n">) => ({
+  program: tile.program.slice(tile.program.lastIndexOf("/") + 1),
+  handle: `t${tile.n}`,
+});
+
+/**
+ * Returns a tile's accessible name, the one place it is written: `tileWords`' program, then its
+ * handle, as `checklist, t2` (0503). Focus is never in it, so a name stays put while focus moves;
+ * `aria-current` says which tile has it.
+ */
+export const tileName = (tile: Pick<Tile, "program" | "n">): string => {
+  const { program, handle } = tileWords(tile);
+  return `${program}, ${handle}`;
+};
 
 /** What a tile's title bar says of it beside its name, and whether a person can use it now. */
 type State = { readonly word: string; readonly live: boolean };

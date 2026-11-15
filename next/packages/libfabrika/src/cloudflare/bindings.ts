@@ -155,7 +155,7 @@ export interface GatewayCalls {
   readonly initialize: (
     client: ConnectionId,
     input: unknown,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
   ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
   readonly target: (
     name: string,

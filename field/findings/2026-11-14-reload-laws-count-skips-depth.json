@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-reload-laws-count-skips-depth",
+  "date": "2026-11-14",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/reload.laws.test.ts",
+    "line": 662
+  },
+  "says": "In next/, the P15 reload laws boot a real Project over node:sqlite in every case, yet each runs a fixed 50 or 100 cases on every pull request, passed as a plain argument to the file's `law` helper, so decision 0535's depth cut never reaches them and runs-from-depth cannot see it.",
+  "proof": "reload.laws.test.ts opens `new DatabaseSync(\":memory:\")` in `instance` (line 145) and its `law(body, runs)` helper hands `runs` to `fc.assert` (line 469); the calls pass 100 at lines 662, 866, 930, 1081 and 1137 and 50 at 794, 1184, 1204 and 1256. oxlint-plugins/runs-from-depth.ts says in its header that it cannot see a count passed as a plain argument to a helper.",
+  "cost": "Each pull request that touches libfabrika runs those laws at their full count, the CI time 0535 set out to cut, and the lint rule reports the file clean.",
+  "head": "37de00a0595df47ccdc17b0e78d9f3714af57eee",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248"
+}

@@ -41,6 +41,8 @@ const sameExit = Schema.toEquivalence(ExitReason);
 const BRAIN_OWNER = Owner.cases.brain.make({});
 const OWNERS = [BRAIN_OWNER, Owner.cases.process.make({ process: A })];
 const CLIENT_TO = Recipient.cases.client.make({ client: "window-a", session: X });
+/** The sessions `held` is asked about: the walk's one client session, and one that holds nothing. */
+const SESSIONS = [X, "session-none"];
 const T0 = 1_762_500_000_000;
 
 type Machine = ReturnType<typeof processTableFor>;
@@ -113,6 +115,19 @@ const Walk = fc.record({
   choices: fc.array(Choice, { minLength: 1, maxLength: 30 }),
   cuts: fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
 });
+
+/**
+ * pinned: ticket 979's bug. A client session watches a process that starts, then exits; `held`
+ * still gave that watch, whose DOWN already went out, so the session's leave ended it a second time.
+ */
+const EXITED_WATCH: typeof Walk extends fc.Arbitrary<infer T> ? T : never = {
+  choices: [
+    { move: 10, pick: 0, other: 1, reason: "normal", gap: 0, crashes: 1, until: 0 },
+    { move: 55, pick: 0, other: 1, reason: "normal", gap: 0, crashes: 1, until: 0 },
+    { move: 35, pick: 0, other: 1, reason: "crashed", gap: 0, crashes: 1, until: 0 },
+  ],
+  cuts: [0],
+};
 
 const at = <T>(list: ReadonlyArray<T>, n: number): T | undefined => list[n % Math.max(list.length, 1)];
 
@@ -387,7 +402,8 @@ const answers = (table: ProcessTable, s: Folded) => {
     }),
     deliver: deliveries(w).map(({ entry, m, receiver }) => table.deliver(entry, m, receiver)),
   }));
-  return { lifecycle, statuses, starts, fresh, watches, info: table.info };
+  const held = SESSIONS.map((session) => table.held(session));
+  return { lifecycle, statuses, starts, fresh, watches, held, info: table.info };
 };
 
 /** The signal letters a query asks about for one watch: rounds, targets, writers and receivers. */
@@ -505,7 +521,12 @@ const expected = (s: Folded) => {
       build: life.state.code.hash,
       restarts: s.restarts.get(life.name)?.length ?? 0,
     }));
-  return { lifecycle, statuses, starts, fresh, watches, info };
+  // A session holds its live watches on processes that still run. A watch on a process that exited,
+  // or is down, already sent its DOWN, and as in OTP a monitor that fired is gone (ticket 979).
+  const held = SESSIONS.map((session) =>
+    liveWatches.filter((w) => w.to._tag === "client" && w.to.session === session && live(w.process)).map(shown),
+  );
+  return { lifecycle, statuses, starts, fresh, watches, held, info };
 };
 
 /** Runs a walk through the machine and the table, step by step, and hands each step to `law`. */
@@ -671,7 +692,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           return record(machine, before, step.entry);
         });
       }),
-      RUNS,
+      { ...RUNS, examples: [[EXITED_WATCH]] },
     ));
 
   it("earlier Models stay unchanged, and replaying a prefix then its suffix equals one replay", () =>

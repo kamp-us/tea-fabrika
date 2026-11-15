@@ -23,13 +23,21 @@ import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import { PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
 import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
+// The door (gateway/Gateway.ts) cuts every read answer by the ledger's `PAGE`, and the window
+// (client/WindowMachine.ts) takes a page as full by the wire's. This platform may import both.
+it("pinned: the page size the door cuts by is the page size the window reads, so a full page means the same on both ends", () => {
+  expect(DOOR_PAGE).toBe(WINDOW_PAGE);
+});
 
 /** The codes a close frame from an endpoint may carry: the WebSocket API's `close(code)` takes 1000 or
  *  3000 to 4999 and throws for any other (WHATWG WebSockets, `close`; RFC 6455, 7.4.2). */
