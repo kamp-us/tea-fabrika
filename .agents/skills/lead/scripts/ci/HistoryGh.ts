@@ -8,7 +8,7 @@
 import { Context, Effect, Layer, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { History, HistoryError, Issues } from "./History.ts";
-import type { Issue, Job, Pull, Run } from "./Speed.ts";
+import { QueueEvent, type Issue, type Job, type Pull, type Run } from "./Speed.ts";
 
 /** Hours per runs query: 6 hours held at most 160 runs on the busiest day measured. */
 export const SLICE = 6;
@@ -76,18 +76,32 @@ export const jobsIn = (body: string): Effect.Effect<ReadonlyArray<Job>, Schema.S
     })),
   );
 
-/** The GraphQL search for merged pull requests, with the times each entered the merge queue. */
+/** The GraphQL search for merged pull requests, with the times each entered and left the merge queue. */
 export const MERGED = `query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 50, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
       number headRefName mergedAt
-      timelineItems(last: 20, itemTypes: [ADDED_TO_MERGE_QUEUE_EVENT]) {
-        nodes { ... on AddedToMergeQueueEvent { createdAt } }
+      timelineItems(last: 20, itemTypes: [ADDED_TO_MERGE_QUEUE_EVENT, REMOVED_FROM_MERGE_QUEUE_EVENT]) {
+        nodes {
+          __typename
+          ... on AddedToMergeQueueEvent { createdAt }
+          ... on RemovedFromMergeQueueEvent { createdAt reason }
+        }
       }
     } }
   }
 }`;
+
+/** One queue event as the search answers it, told apart by GitHub's type name. */
+const QueueNode = Schema.Union([
+  Schema.Struct({ __typename: Schema.Literal("AddedToMergeQueueEvent"), createdAt: Schema.String }),
+  Schema.Struct({
+    __typename: Schema.Literal("RemovedFromMergeQueueEvent"),
+    createdAt: Schema.String,
+    reason: Schema.NullOr(Schema.String),
+  }),
+]);
 
 const MergedBody = Schema.fromJsonString(
   Schema.Struct({
@@ -99,7 +113,7 @@ const MergedBody = Schema.fromJsonString(
             number: Schema.Number,
             headRefName: Schema.String,
             mergedAt: Schema.String,
-            timelineItems: Schema.Struct({ nodes: Schema.Array(Schema.Struct({ createdAt: Schema.String })) }),
+            timelineItems: Schema.Struct({ nodes: Schema.Array(QueueNode) }),
           }),
         ),
       }),
@@ -116,7 +130,11 @@ export const pullsIn = (
       number: n.number,
       branch: n.headRefName,
       merged: n.mergedAt,
-      queued: n.timelineItems.nodes.map((e) => e.createdAt),
+      queue: n.timelineItems.nodes.map((e) =>
+        e.__typename === "AddedToMergeQueueEvent"
+          ? QueueEvent.cases.added.make({ at: e.createdAt })
+          : QueueEvent.cases.removed.make({ at: e.createdAt, reason: e.reason }),
+      ),
     })),
     next: data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null,
   }));
