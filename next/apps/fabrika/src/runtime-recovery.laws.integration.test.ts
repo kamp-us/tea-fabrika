@@ -85,7 +85,7 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
     online: (...args: Parameters<ProjectCalls["online"]>) => run((p) => p.online(...args)),
     exit: (...args: Parameters<ProjectCalls["exit"]>) => run((p) => p.exit(...args)),
     brain: (...args: Parameters<ProjectCalls["brain"]>) => run((p) => p.brain(...args)),
-    // The lane's Project process calls, each the one service call the class makes.
+    // The quest's Project process calls, each the one service call the class makes.
     processObject: (...args: Parameters<ProjectCalls["processObject"]>) => run((p) => p.processObject(...args)),
     processStart: (...args: Parameters<ProjectCalls["processStart"]>) => run((p) => p.processStart(...args)),
     processExit: (...args: Parameters<ProjectCalls["processExit"]>) => run((p) => p.processExit(...args)),

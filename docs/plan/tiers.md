@@ -68,7 +68,7 @@ a flow fabrika runs                Tier 1 P43   Tier 6          (P43: the merge 
 Tier 1 works    ---------------------------------------------->  a checklist a person fills and agents check with a note through MCP, read from any window or a phone, plus the six slices
 Tier 2 programs ---------------------------------------------->  your own tickets: fabsh, tracker | ticket; notes, its first real app
 Tier 3 few      ---------------------------------------------->  a few people share one fabrika, from browsers and phones
-Tier 4 hands    ---------------------------------------------->  hands take jobs: a Cloudflare container, a Mac, a VM, a first tab (proposed split)
+Tier 4 hands    ---------------------------------------------->  hands take tasks: a Cloudflare container, a Mac, a VM, a first tab (proposed split)
 Tier 5 agents   ---------------------------------------------->  an agent does a job, a person watches (proposed split)
 Tier 6 daily    ---------------------------------------------->  real tickets, the full pipeline, today's version retires
 Tier 7 others   ---------------------------------------------->  someone else can install it
@@ -125,7 +125,7 @@ before any builder starts. The size of each, their order and whether Tier 1 spli
 
 | Core idea | Row | What the slice must do | Hardened in |
 |---|---|---|---|
-| Hands | P39 | A program can ask for a command and see it run. A machine that runs jobs dials in with a key granted as `hands` and asks for work with `jobs.take`; the first job is `git --version` on one host a person selects ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). | Tier 4: competing claims, leases and moving a job to another host |
+| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). | Tier 4: competing claims, leases and moving a task to another host |
 | Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0083](../../.decisions/0083-every-program-in-a-pack.md), [0084](../../.decisions/0084-own-pack-listed-by-path.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
 | Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0103](../../.decisions/0103-a-program-may-mail-another-by-name.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
 | A person starting a program | P42 | A person can start a program while the app runs. | Tier 2: `fabsh` |
@@ -242,7 +242,7 @@ This tier builds hands for real. It hardens Tier 1's hands slice, P39, which run
 person selects, with no competing claims or leases
 ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)).
 
-- **Transport:** hands as a client; how a client says it takes jobs.
+- **Transport:** hands as a client; how a client says it takes tasks.
 - **Data:** the queue, claims, leases; every container job records its run seconds and who started
   it, from the first job (owner, 2026-11-08, [experiment 229](../../experiments/229-browser-only-friends.md)
   row 31).
@@ -253,7 +253,7 @@ person selects, with no competing claims or leases
   sibling strategies, links and trap exit, since Tier 1 has no process that starts another (owner,
   2026-11-06). A program that starts another hardens Tier 1's slice of programs working together.
 - **App:** secrets; `kill -9` from chaos through real hands, and `kill_brain` as a chaos button.
-- **Desktop (Tuval):** terminal tile; a first tab that runs a job.
+- **Desktop (Tuval):** terminal tile; a first tab that runs a task.
 
 ### Tier 5: agents (proposed split)
 
@@ -279,7 +279,7 @@ slices: an agent fabrika starts, and programs written outside fabrika's source (
 Decided by the owner, for when agents run as programs:
 
 - **A person's stop is final.** No restart, resume or resend brings that run back. Only a new start
-  does. This is about the run. A lane a person stops is still a saved pause
+  does. This is about the run. A quest a person stops is still a saved pause
   ([pipeline guidelines](../direction/pipeline-guidelines.md), clash 1): it goes on later with a new
   run of the stopped step, never the stopped run. The owner confirmed this reading the same day.
 - **A step's schema check never adds a "fix your answer" turn.** An answer that does not fit ends the

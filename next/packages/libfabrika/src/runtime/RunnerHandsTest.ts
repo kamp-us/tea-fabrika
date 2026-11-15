@@ -1,12 +1,12 @@
-// P39 slice 3 (ticket 1040), next/: a program's `hands` Cmd becomes a saved job, and its result comes
+// P39 slice 3 (ticket 1040), next/: a program's `hands` Cmd becomes a saved task, and its result comes
 // back as one answer letter. The laws, and no driver: a runner in the module that owns a driver calls
 // `RunnerHandsTest.suite(open)`; `open` acquires real stores in a scope and gives them back when that
 // scope closes (0061, 0062).
 //
-// The runner, mailbox, process table, checkpoint store, job store and the Project's `HandsJobsLive`
-// are real. The hands are this file: they take, start and finish a job through `Jobs`, as slice 2's
+// The runner, mailbox, process table, checkpoint store, task store and the Project's `HandsTasksLive`
+// are real. The hands are this file: they take, start and finish a task through `Tasks`, as slice 2's
 // gateway methods do, and the gateway's wake after a finish is the runner's own `mailed`. Every cut
-// lands at a reachable boundary, through a test layer around `HandsJobs` and a planted SQL fault:
+// lands at a reachable boundary, through a test layer around `HandsTasks` and a planted SQL fault:
 //
 //   hold           the Project holds one ask open while the same program is poked
 //   lose_before    the ask fails before it reaches the Project
@@ -15,16 +15,16 @@
 //   cut_letter     the answer letter is saved and the runner fails before it folds it
 //   reopen         the host goes away and comes back on the same stores, with its saved alarms
 //
-// Each walk reads the world it has reached and picks a move possible there: a finish only for a job
+// Each walk reads the world it has reached and picks a move possible there: a finish only for a task
 // that is really waiting, a restart only once a Cmd is out. The oracle is this file's own record of
-// the Cmds it saw dispatched, the jobs it finished and the letters it saw placed; it never calls the
+// the Cmds it saw dispatched, the tasks it finished and the letters it saw placed; it never calls the
 // product's step function.
 //
 // The contract these laws pin, from the plan:
 //   Hands.ts: `hands`, `Cmd.make("hands", { input: { command }, ok: Result, err: ["no_hands",
 //   "id_reused"] })`.
-//   HandsJobs.ts: `Ask`, `Reply`, `HandsJobsError`, `HandsJobs`; HandsJobsLive.ts: `layer`.
-//   Runner.ts: a runner given `HandsJobs` performs `hands` itself, saves `waiting` on the dispatched
+//   HandsTasks.ts: `Ask`, `Reply`, `HandsTasksError`, `HandsTasks`; HandsTasksLive.ts: `layer`.
+//   Runner.ts: a runner given `HandsTasks` performs `hands` itself, saves `waiting` on the dispatched
 //   Cmd, owes it only while `pending`, and asks again on every wake or due.
 //   Entry.ts: `hands` is built in, so `ProgramLoader` never gives a handler for it.
 //
@@ -34,7 +34,7 @@
 // before the letter is placed; B1, take `hands` out of `BUILT_IN`.
 //
 // L21, added in the fix round: an `id_reused` refusal is the program's answer, never a retry. Its
-// `foreign` cut saves another process's job under the Cmd's id through the real Project first.
+// `foreign` cut saves another process's task under the Cmd's id through the real Project first.
 // Plants: treat an id_reused refusal as a failed ask, as the build first did; keep an id_reused-refused
 // delivery pending.
 import { Machine } from "@demlik/tea/effect";
@@ -43,29 +43,29 @@ import { type Runs, runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
-import { Command, type Job, Result as JobResult } from "../jobs/Job.ts";
-import { Jobs } from "../jobs/Jobs.ts";
-import { choose, fcFingerprint, fcResult } from "../jobs/JobsTest.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { data as ledger, ids, PIDS } from "../processes/Process.test-support.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { Command, type Task, Result as TaskResult } from "../tasks/Task.ts";
+import { Tasks } from "../tasks/Tasks.ts";
+import { choose, fcFingerprint, fcResult } from "../tasks/TasksTest.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { hands } from "./Hands.ts";
-import { HandsJobs, HandsJobsError } from "./HandsJobs.ts";
-import * as HandsJobsLive from "./HandsJobsLive.ts";
+import { HandsTasks, HandsTasksError } from "./HandsTasks.ts";
+import * as HandsTasksLive from "./HandsTasksLive.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
 /** Real stores: `sql(part)` is one database per part, `reopen` closes and reopens every part, and
- *  `jobs(sql)` is the durable job store on that part, built by the module that owns the ledger. */
+ *  `tasks(sql)` is the durable task store on that part, built by the module that owns the ledger. */
 export type Store = {
   readonly sql: (part: string) => Sql;
   readonly reopen: Effect.Effect<void>;
-  readonly jobs: (sql: Sql) => Layer.Layer<Jobs>;
+  readonly tasks: (sql: Sql) => Layer.Layer<Tasks>;
 };
 
 const SEED = 119120;
@@ -76,14 +76,14 @@ const SETTINGS = "5e771165a5e771165";
 /** A call that does not answer in this long is held behind something it must never wait on. */
 const LIMIT = "5 seconds";
 const CHECK = "check:1";
-/** A process this walk never runs: the one whose job is found under another Cmd's id. */
+/** A process this walk never runs: the one whose task is found under another Cmd's id. */
 const FOREIGN = PIDS.at(-1) ?? "";
 const OTHER = "other:1";
 
 // ---------------------------------------------------------------------------------------------
 // The program: it asks the hands on `ask`, counts `poke`, and keeps every answer it folds.
 
-const Answer = Schema.Struct({ ok: Schema.optionalKey(JobResult), err: Schema.optionalKey(Schema.String) });
+const Answer = Schema.Struct({ ok: Schema.optionalKey(TaskResult), err: Schema.optionalKey(Schema.String) });
 const Model = Schema.Struct({ asked: Schema.Int, pokes: Schema.Int, answers: Schema.Array(Answer) });
 type Model = typeof Model.Type;
 
@@ -126,7 +126,7 @@ const decodeModel = Schema.decodeUnknownOption(Model);
 const HandsLetter = Schema.Struct({
   type: Schema.Literals(["hands_ok", "hands_err"]),
   cmd: Schema.Struct({ type: Schema.Literal("hands"), command: Command }),
-  value: Schema.optionalKey(JobResult),
+  value: Schema.optionalKey(TaskResult),
   reason: Schema.optionalKey(Schema.String),
 });
 
@@ -169,7 +169,7 @@ type Fault = {
   /** The next answer letter is saved; the statement after it fails. */
   letter: boolean;
   letterArmed: boolean;
-  /** The next ask finds a job another process saved under the Cmd's id first. */
+  /** The next ask finds a task another process saved under the Cmd's id first. */
   foreign: boolean;
 };
 
@@ -178,13 +178,13 @@ type Dispatched = {
   readonly id: string;
   readonly process: string;
   readonly name: string;
-  /** The request as the job first saved it, once it was. */
+  /** The request as the task first saved it, once it was. */
   first?: string;
   /** The result the hands finished it with. */
-  result?: typeof JobResult.Type;
+  result?: typeof TaskResult.Type;
   /** Its process ended before the answer folded: a later life may never take it. */
   orphan: boolean;
-  /** Its job was already collected when its process ended. */
+  /** Its task was already collected when its process ended. */
   collectedAtEnd: boolean;
   /** Its answer letter was already placed when its process ended. */
   letterAtEnd: boolean;
@@ -282,7 +282,7 @@ const checkpointCut = (sql: Sql, world: World): Sql => ({
 });
 
 /**
- * One life of the whole host: the ledger, process table, mailbox, job store, the Project's hands
+ * One life of the whole host: the ledger, process table, mailbox, task store, the Project's hands
  * layer behind the cut layer, and one runner per name, all in `scope`. Closing the scope is the host
  * going away; the stores and the saved alarms keep their rows.
  */
@@ -302,16 +302,18 @@ const host = Effect.fnUntraced(function* (
     },
     next,
   );
-  const jobs = yield* Layer.buildWithScope(store.jobs(store.sql("jobs")), scope);
+  const tasks = yield* Layer.buildWithScope(store.tasks(store.sql("tasks")), scope);
   const live = Context.get(
     yield* Layer.buildWithScope(
-      HandsJobsLive.layer({ target: world.target, settings: SETTINGS }).pipe(Layer.provide(Layer.succeedContext(jobs))),
+      HandsTasksLive.layer({ target: world.target, settings: SETTINGS }).pipe(
+        Layer.provide(Layer.succeedContext(tasks)),
+      ),
       scope,
     ),
-    HandsJobs,
+    HandsTasks,
   );
   // The test layer around the Project's hands: it fails before or after it delegates.
-  const cut = Layer.succeed(HandsJobs, {
+  const cut = Layer.succeed(HandsTasks, {
     ask: (ask, from) =>
       Effect.gen(function* () {
         const gate = world.gate;
@@ -325,11 +327,11 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.before) {
           world.fault.before = false;
           world.done.add("lose_before:fired");
-          return yield* new HandsJobsError({ reason: "unavailable" });
+          return yield* new HandsTasksError({ reason: "unavailable" });
         }
 
         if (world.fault.foreign) {
-          // Another process's job is saved under this Cmd's id first, through the real Project.
+          // Another process's task is saved under this Cmd's id first, through the real Project.
           world.fault.foreign = false;
           yield* live.ask({ ...ask, process: FOREIGN }, from);
           world.done.add("foreign:saved");
@@ -341,7 +343,7 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.after) {
           world.fault.after = false;
           world.done.add(`lose_after:${reply._tag}`);
-          return yield* new HandsJobsError({ reason: "unavailable" });
+          return yield* new HandsTasksError({ reason: "unavailable" });
         }
 
         if (world.fault.checkpoint) {
@@ -354,7 +356,7 @@ const host = Effect.fnUntraced(function* (
       }),
   });
   const shared = manager.pipe(Layer.provideMerge(Mailbox.layer), Layer.provideMerge(data));
-  const context = Context.merge(yield* Layer.buildWithScope(shared, scope), jobs);
+  const context = Context.merge(yield* Layer.buildWithScope(shared, scope), tasks);
   const boot = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.result);
 
@@ -428,7 +430,7 @@ const answers = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
     Effect.result,
     Effect.timeoutOption(LIMIT),
     Effect.map((answer) => {
-      expect(Option.isSome(answer), `${label} answers: nothing holds it behind a job`).toBe(true);
+      expect(Option.isSome(answer), `${label} answers: nothing holds it behind a task`).toBe(true);
       return Option.getOrThrow(answer);
     }),
   );
@@ -456,7 +458,7 @@ type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 /**
  * Folds one tape through real runners for `names`. Each cell reads the world the fold has reached
  * and picks a move possible there; the invariants hold after every move, and once every fault is
- * cleared, every finished job woken and every saved alarm fired, each Cmd has the end the oracle
+ * cleared, every finished task woken and every saved alarm fired, each Cmd has the end the oracle
  * gives it.
  */
 const walk = (
@@ -511,9 +513,9 @@ const walk = (
     const dispatched = (name: string) =>
       Effect.map(checkpoint(name), (saved) => (saved?.cmds ?? []).flatMap((c) => (isHandsCmd(c) ? [c.id] : [])));
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
-    const job = (id: string) => inContext(Jobs.use((j) => j.read(id)).pipe(Effect.result));
+    const task = (id: string) => inContext(Tasks.use((j) => j.read(id)).pipe(Effect.result));
     /** What the hands say about each of their calls. */
-    const said = (cell: Cell): Parameters<Jobs["Service"]["take"]>[2] => ({
+    const said = (cell: Cell): Parameters<Tasks["Service"]["take"]>[2] => ({
       by: world.target ?? "SHA256:none",
       for: PERSON,
       sentAt: "2026-11-15T02:00:00Z",
@@ -543,7 +545,7 @@ const walk = (
       }
     });
     const phase = Effect.fnUntraced(function* (id: string) {
-      const found = yield* job(id);
+      const found = yield* task(id);
       return Result.isSuccess(found) ? found.success.state._tag : "absent";
     });
     /** Fires every saved alarm until none is left, at most `rounds` times. */
@@ -572,19 +574,19 @@ const walk = (
           const placed = all.filter((l) => l.id === `${d.id}/answer`);
           // L13: one answer letter per Cmd, however often it was asked, woken or finished.
           expect(placed.length, `${label}: L13 one answer letter for ${d.id}`).toBeLessThanOrEqual(1);
-          const found = yield* job(d.id);
+          const found = yield* task(d.id);
 
           if (Result.isSuccess(found)) {
-            const j: Job = found.success;
-            // L12: one job under the Cmd's own id, its request saved once, with its first bytes.
+            const j: Task = found.success;
+            // L12: one task under the Cmd's own id, its request saved once, with its first bytes.
             expect(
               j.events.filter((e) => e.event === "requested"),
               `${label}: L12 one request for ${d.id}`,
             ).toHaveLength(1);
-            const request = j.state._tag === "absent" ? expect.fail("a read job has a state") : j.state.request;
-            expect(request.id, `${label}: L12 the job's id is the Cmd's`).toBe(d.id);
-            expect(request.process, `${label}: L12 the job names the process that asked`).toBe(d.process);
-            expect(request.target, `${label}: S1 the job targets the person's hands key`).toBe(world.target);
+            const request = j.state._tag === "absent" ? expect.fail("a read task has a state") : j.state.request;
+            expect(request.id, `${label}: L12 the task's id is the Cmd's`).toBe(d.id);
+            expect(request.process, `${label}: L12 the task names the process that asked`).toBe(d.process);
+            expect(request.target, `${label}: S1 the task targets the person's hands key`).toBe(world.target);
             d.first ??= JSON.stringify(request);
             expect(JSON.stringify(request), `${label}: L12 the request keeps its first bytes`).toBe(d.first);
             expect(j.events.filter((e) => e.event === "collected").length, `${label}: one collect`).toBeLessThanOrEqual(
@@ -601,12 +603,12 @@ const walk = (
 
             if (d.orphan && !d.collectedAtEnd) {
               // L14: an ended process's result stays saved, and no successor takes it.
-              expect(j.state._tag, `${label}: L14 an ended process's job is never collected`).not.toBe("collected");
+              expect(j.state._tag, `${label}: L14 an ended process's task is never collected`).not.toBe("collected");
             }
           }
 
           if (d.orphan && !d.letterAtEnd) {
-            // L14: the successor's inbox stays as if the ended process's job never existed.
+            // L14: the successor's inbox stays as if the ended process's task never existed.
             expect(placed, `${label}: L14 no answer letter for an ended process's Cmd`).toEqual([]);
           }
 
@@ -617,26 +619,26 @@ const walk = (
           const answered = folded.some((l) => l.id === `${d.id}/answer`);
 
           if (owed.has(d.id)) {
-            // R1: until its answer letter folds, the job keeps its result and the Cmd stays dispatched.
+            // R1: until its answer letter folds, the task keeps its result and the Cmd stays dispatched.
             expect(answered, `${label}: R1 a folded answer leaves the dispatched Cmds`).toBe(false);
             const state = yield* phase(d.id);
 
             if (d.result !== undefined) {
-              expect(["finished", "collected"], `${label}: R1 a finished job keeps its result`).toContain(state);
+              expect(["finished", "collected"], `${label}: R1 a finished task keeps its result`).toContain(state);
 
               if (state === "finished" || state === "collected") {
                 done.add("R1:result_kept");
               }
             }
           } else if (world.target !== null) {
-            // R1: once the Cmd is gone, its answer folded and its job is collected by this process.
+            // R1: once the Cmd is gone, its answer folded and its task is collected by this process.
             expect(answered, `${label}: R1 a Cmd leaves only once its answer folded (${d.id})`).toBe(true);
-            expect(yield* phase(d.id), `${label}: R1 a delivered job is collected`).toBe("collected");
+            expect(yield* phase(d.id), `${label}: R1 a delivered task is collected`).toBe("collected");
           }
         }
 
         // L13 and L14: the program folded one answer per folded answer letter of its own life, in order,
-        // each the job's result. A Cmd's id names its process, so a letter for another life's Cmd,
+        // each the task's result. A Cmd's id names its process, so a letter for another life's Cmd,
         // placed before or after this life started, never reaches this model.
         const delivered = folded.flatMap((l) =>
           l.id.startsWith(`${current}/`) && l.id.endsWith("/answer")
@@ -655,7 +657,7 @@ const walk = (
 
           if (body.type === "hands_ok") {
             // The letter carries the typed result the hands saved, and the Cmd it answers.
-            expect(body.value, `${label}: the answer is the job's result`).toEqual(d?.result);
+            expect(body.value, `${label}: the answer is the task's result`).toEqual(d?.result);
             expect(body.cmd.command, `${label}: the answer echoes its Cmd`).toEqual(Command.cases.git_version.make({}));
             done.add("delivered");
           } else {
@@ -690,7 +692,7 @@ const walk = (
         }
       }
 
-      // A job really waiting on the hands, whoever asked for it: an ended process's job too.
+      // A task really waiting on the hands, whoever asked for it: an ended process's task too.
       const waiting = [...world.seen.values()].filter((d) => phases.get(d.id) === "requested");
       const finished = [...world.seen.values()].filter((d) => d.result !== undefined);
       const can: Record<Move, boolean> = {
@@ -735,13 +737,13 @@ const walk = (
           break;
         }
         case "finish": {
-          // The hands the person chose take, start and finish one job that is really waiting.
+          // The hands the person chose take, start and finish one task that is really waiting.
           const d = choose(waiting, cell.pick);
           const by = said(cell);
           const executor = { key: world.target ?? "", connection: `hands-${world.n}`, has: ["git"], build: by.build };
-          const taken = yield* inContext(Jobs.use((j) => j.take(d.id, executor, by)));
-          yield* inContext(Jobs.use((j) => j.started(d.id, taken.execution, by)));
-          yield* inContext(Jobs.use((j) => j.finish(d.id, taken.execution, cell.result, by)));
+          const taken = yield* inContext(Tasks.use((j) => j.take(d.id, executor, by)));
+          yield* inContext(Tasks.use((j) => j.started(d.id, taken.execution, by)));
+          yield* inContext(Tasks.use((j) => j.finish(d.id, taken.execution, cell.result, by)));
           d.result = cell.result;
           done.add(d.orphan ? "orphan_finished" : "finished");
 
@@ -755,12 +757,12 @@ const walk = (
         case "repeat_finish": {
           // The hands lost the finish's answer and send it again: it repeats, and the gateway wakes again.
           const d = choose(finished, cell.pick);
-          const saved = yield* job(d.id);
+          const saved = yield* task(d.id);
           const state = Result.isSuccess(saved) ? saved.success.state : null;
 
           if (state !== null && state._tag !== "absent" && state._tag !== "requested") {
             const by = said(cell);
-            yield* inContext(Jobs.use((j) => j.finish(d.id, state.assignment.execution, d.result ?? cell.result, by)));
+            yield* inContext(Tasks.use((j) => j.finish(d.id, state.assignment.execution, d.result ?? cell.result, by)));
             yield* answers(runner(d.name).mailed, `${d.name}'s repeated wake`);
             done.add((yield* dispatched(d.name)).includes(d.id) ? "repeat_finish:out" : "duplicate_wake");
           }
@@ -841,7 +843,7 @@ const walk = (
           );
           const successor = yield* liveProcess(d.name);
           const stolen = yield* inContext(
-            Jobs.use((j) => j.collected(d.id, { process: successor, letter: `${d.id}/answer` }, said(cell))),
+            Tasks.use((j) => j.collected(d.id, { process: successor, letter: `${d.id}/answer` }, said(cell))),
           ).pipe(Effect.result);
           expect(Result.isFailure(stolen) && stolen.failure.reason, "L14: a collect by the successor is refused").toBe(
             "wrong_process",
@@ -853,7 +855,7 @@ const walk = (
           const cmd = { type: "hands", command: Command.cases.git_version.make({}) };
           const body =
             cell.pick % 2 === 0
-              ? { type: "hands_ok", cmd, value: Schema.encodeSync(JobResult)(cell.other), at: 0 }
+              ? { type: "hands_ok", cmd, value: Schema.encodeSync(TaskResult)(cell.other), at: 0 }
               : {
                   type: "hands_err",
                   cmd,
@@ -902,19 +904,19 @@ const walk = (
         const state = yield* phase(d.id);
 
         if (world.target === null) {
-          expect(state, "S1: an unset hands.target writes no job").toBe("absent");
+          expect(state, "S1: an unset hands.target writes no task").toBe("absent");
           expect(owed.has(d.id), "S1: a refused Cmd is answered").toBe(false);
         } else if (d.result === undefined) {
-          // L12: a lost reply was asked again under the same id; the job waits, and so does its Cmd.
+          // L12: a lost reply was asked again under the same id; the task waits, and so does its Cmd.
           expect(state, `L12: ${d.id} reached the Project once the faults cleared`).not.toBe("absent");
-          expect(owed.has(d.id), `L12: a waiting job's Cmd stays dispatched`).toBe(true);
+          expect(owed.has(d.id), `L12: a waiting task's Cmd stays dispatched`).toBe(true);
         } else {
-          expect(owed.has(d.id), `L13: a finished job's answer folded (${d.id})`).toBe(false);
-          expect(state, "R1: a delivered job is collected").toBe("collected");
+          expect(owed.has(d.id), `L13: a finished task's answer folded (${d.id})`).toBe(false);
+          expect(state, "R1: a delivered task is collected").toBe("collected");
         }
       }
 
-      // L20 and D1: a job that only waits is not owed, so no backoff alarm is left behind.
+      // L20 and D1: a task that only waits is not owed, so no backoff alarm is left behind.
       expect(world.alarms.has(name), `${name}: nothing waiting on the hands keeps an alarm`).toBe(false);
     }
   });
@@ -926,7 +928,7 @@ const After = fc.array(fc.constantFrom("poke" as const, "wake" as const, "due" a
 });
 
 /**
- * L21: a refusal for good is an answer. The real Project finds another process's job under the
+ * L21: a refusal for good is an answer. The real Project finds another process's task under the
  * Cmd's id and refuses `id_reused`; the program folds one `hands_err`, and the Cmd is never asked or
  * retried again, whatever wakes, alarms and inputs come after.
  */
@@ -970,7 +972,7 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
 
     yield* answers(runner.msg(letter(++world.n, { type: "ask" })), "the ask");
     const id = world.asked[0] ?? expect.fail("L21: the program's hands Cmd reached the Project");
-    const foreign = yield* inContext(Jobs.use((j) => j.read(id)));
+    const foreign = yield* inContext(Tasks.use((j) => j.read(id)));
 
     for (const move of tape.after) {
       if (move === "poke") {
@@ -1010,10 +1012,10 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
       placed.map((l) => [l?.type, l?.reason]),
       "L21: one answer letter, hands_err id_reused",
     ).toEqual([["hands_err", "id_reused"]]);
-    expect(yield* inContext(Jobs.use((j) => j.read(id))), "L21: the other process's job is left as it was").toEqual(
+    expect(yield* inContext(Tasks.use((j) => j.read(id))), "L21: the other process's task is left as it was").toEqual(
       foreign,
     );
-    expect(foreign.state._tag !== "absent" && foreign.state.request.process, "the job is the other process's").toBe(
+    expect(foreign.state._tag !== "absent" && foreign.state.request.process, "the task is the other process's").toBe(
       FOREIGN,
     );
   });
@@ -1048,9 +1050,9 @@ const prop = (
   );
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  describe("P39 slice 3: a program's hands Cmd becomes a saved job, and its result one answer", () => {
+  describe("P39 slice 3: a program's hands Cmd becomes a saved task, and its result one answer", () => {
     prop(
-      "L12: request submission survives each runner-to-project cut: one job under the Cmd id, with its first bytes, and the Cmd stays dispatched until answered",
+      "L12: request submission survives each runner-to-project cut: one task under the Cmd id, with its first bytes, and the Cmd stays dispatched until answered",
       open,
       {
         names: [CHECK],
@@ -1086,7 +1088,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       },
     );
     prop(
-      "L14: an old process's result never changes its successor: its model and inbox stay as if the job never existed, the job stays finished, and a collected by the successor is refused",
+      "L14: an old process's result never changes its successor: its model and inbox stay as if the task never existed, the task stays finished, and a collected by the successor is refused",
       open,
       {
         names: [CHECK],
@@ -1107,7 +1109,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       },
     );
     prop(
-      "R1: the result stays until delivery is confirmed: until the answer folds the job keeps its result and the Cmd stays dispatched; after the fold the Cmd is gone and the job is collected by its process",
+      "R1: the result stays until delivery is confirmed: until the answer folds the task keeps its result and the Cmd stays dispatched; after the fold the Cmd is gone and the task is collected by its process",
       open,
       {
         names: [CHECK],
@@ -1117,7 +1119,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       },
     );
     it.effect(
-      "L21: a hands Cmd whose id holds another process's job is answered hands_err id_reused once, and is never asked or retried again",
+      "L21: a hands Cmd whose id holds another process's task is answered hands_err id_reused once, and is never asked or retried again",
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();
@@ -1128,7 +1130,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const check = { seed: SEED, numRuns: runsFor({ fast: 15, full: 40 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, check));
-          // An empty walk cannot pass: the foreign job was really found, and every later move ran.
+          // An empty walk cannot pass: the foreign task was really found, and every later move ran.
           expect([...done].sort()).toEqual(["due", "foreign:saved", "poke", "wake"]);
         }),
     );

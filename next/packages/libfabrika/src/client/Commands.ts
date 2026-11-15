@@ -6,7 +6,7 @@
  */
 import { Context } from "effect";
 import type { Effect } from "effect";
-import type { Command, Result } from "../jobs/Job.ts";
+import type { Command, Result } from "../tasks/Task.ts";
 
 /**
  * Service that runs one closed command on this host.

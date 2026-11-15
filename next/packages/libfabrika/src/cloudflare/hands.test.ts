@@ -1,4 +1,4 @@
-// P39 slice 3 (ticket 1040), next/, C1: the Process-side `HandsJobs` over the Project RPC, at its RPC
+// P39 slice 3 (ticket 1040), next/, C1: the Process-side `HandsTasks` over the Project RPC, at its RPC
 // handles, as `mail.test.ts` exercises mail. A good reply decodes strictly into the same `Reply`; a
 // lost, failed or undecodable reply, or one with a field the contract does not have, is
 // `unavailable`, which leaves the Cmd dispatched for its retry, never a refusal the program would
@@ -7,10 +7,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { Command } from "../jobs/Job.ts";
-import { fcResult } from "../jobs/JobsTest.ts";
 import type { From } from "../processes/Mailbox.ts";
-import { HandsJobs, HandsJobsError, Reply } from "../runtime/HandsJobs.ts";
+import { HandsTasks, HandsTasksError, Reply } from "../runtime/HandsTasks.ts";
+import { Command } from "../tasks/Task.ts";
+import { fcResult } from "../tasks/TasksTest.ts";
 import { handsLayer } from "./hands.ts";
 import type { Env } from "./runtime.ts";
 
@@ -88,7 +88,7 @@ it.effect(
             }),
           },
         } as unknown as Env;
-        const answer = yield* HandsJobs.use((hands) => hands.ask(ask, from)).pipe(
+        const answer = yield* HandsTasks.use((hands) => hands.ask(ask, from)).pipe(
           Effect.provide(handsLayer(env, "hands-test")),
           Effect.result,
         );
@@ -105,7 +105,7 @@ it.effect(
         expect(Result.isFailure(answer), `${choice.shape}: no answer the program would read`).toBe(true);
 
         if (Result.isFailure(answer)) {
-          expect(answer.failure).toBeInstanceOf(HandsJobsError);
+          expect(answer.failure).toBeInstanceOf(HandsTasksError);
           expect(answer.failure.reason, `${choice.shape}: the Cmd stays dispatched for its retry`).toBe("unavailable");
         }
       });

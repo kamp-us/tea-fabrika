@@ -17,8 +17,8 @@ plan (read-only) -> lead approves -> box -> tests -> build -> review
   -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue
 ```
 
-A step's brief is short. It is [the step's template](#step-briefs) filled in: the lane's facts as
-fields, then only what is special about this lane. Each step skill's "Standing rules" section holds
+A step's brief is short. It is [the step's template](#step-briefs) filled in: the quest's facts as
+fields, then only what is special about this quest. Each step skill's "Standing rules" section holds
 the rest (caps, signal tests, fix properly, no subagents, checks, commit and push, the run row, the
 report), and [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) holds finishing the
 whole task. A brief repeats none of them.
@@ -38,7 +38,7 @@ Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one i
 rewrites the main checkout's install state through the link. `pnpm typecheck` removes such a link
 and runs that install itself before it checks; every other command still needs the real install.
 
-For a stacked lane, put the parent and landing facts in the state file and the brief before the
+For a stacked quest, put the parent and landing facts in the state file and the brief before the
 first step:
 
 ```text
@@ -55,15 +55,16 @@ Do not add a marker, key or readable file as proof of session identity.
 ## Step briefs
 
 One template a step, each filled in under a minute. Start each step as a fresh Opus agent at its
-default effort, and record the effort on its run row. The lines are fields, as in phoenix's lane
-brief (`## Task` and `## Ground`): facts and paths, never a summary of the plan or the skill. What
-is special about this lane goes under `This lane:`, one bullet a fact, and nowhere else:
+default effort, and record the effort on its run row. The lines are fields, as in phoenix's
+`fabrika lane brief` (`## Task` and `## Ground`): facts and paths, never a summary of the plan or
+the skill. What is special about this quest goes under `This quest:`, one bullet a fact, and nowhere
+else:
 
 - a call taken after the plan was approved, with its source (an experiment, a finding row);
 - a file or folder to stay out of, a law that waits on the owner, a clash with another open PR;
 - for a review, the points to look hardest at, each a question with its source.
 
-If a `This lane:` bullet restates a rule from a skill or `AGENTS.md`, delete it. If it would change
+If a `This quest:` bullet restates a rule from a skill or `AGENTS.md`, delete it. If it would change
 what the plan says, it is a plan amendment, which the lead signs again
 ([Steps](#steps), step 3), and the bullet only names the amendment.
 
@@ -86,10 +87,10 @@ After two such resumes on the same step, treat it as stuck and read why.
 Use the plan skill for ticket <id or "to be filed">, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>, made with: <the git worktree add command, or "exists">
 Branch: fabrikalfa/<name>, from <origin/main or the parent branch>
-Plan file: docs/plan/lanes/<lane>-PLAN.md
+Plan file: docs/plan/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
 Owner away: <yes or no>
-This lane:
+This quest:
 - <what is decided, what this slice may build, what is out of scope>
 ```
 
@@ -99,9 +100,9 @@ This lane:
 Use the tests skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
-Approved plan: docs/plan/lanes/<lane>-PLAN.md
-Run row: field/runs/<date>-<lane>-tests<n>.json
-This lane:
+Approved plan: docs/plan/quests/<quest>-PLAN.md
+Run row: field/runs/<date>-<quest>-tests<n>.json
+This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
 
@@ -111,10 +112,10 @@ This lane:
 Use the build skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Head: <short SHA>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
-Approved plan: docs/plan/lanes/<lane>-PLAN.md
+Approved plan: docs/plan/quests/<quest>-PLAN.md
 Laws: <the test files the test writer wrote, fast and integration>
-Run row: field/runs/<date>-<lane>-build<n>.json
-This lane:
+Run row: field/runs/<date>-<quest>-build<n>.json
+This quest:
 - <facts settled after the plan, what the test writer found, clashes with open PRs>
 ```
 
@@ -125,15 +126,15 @@ was typed for it ran to 5,145 characters; this one carries the same facts:
 Use the tests skill for ticket 1041, pipe plumbing, next/.
 Worktree: ../tf-pipe-plumbing  Branch: fabrikalfa/pipe-plumbing  PR: https://github.com/kamp-us/tea-fabrika/pull/1310
 Start: merge origin/main (the tile slice and docs landed since the branch was cut).
-Approved plan: docs/plan/lanes/t1041-PLAN.md
+Approved plan: docs/plan/quests/t1041-PLAN.md
 Run row: field/runs/2026-11-15-t1041-tests1.json
-This lane:
+This quest:
 - Settled after the plan by experiment 295 (https://github.com/kamp-us/tea-fabrika/pull/1311), the lead's calls:
   mail.chunk is 64 KiB, mail.unread is 256, the cap's maximum is 16,384. A law that pins a default pins these.
-- L7 also holds that the cap's lookup cost does not grow with the newest letter's size, with its own plant:
-  at 1 MiB letters a full read of the newest letter was 28% of a turn.
+- L7 also holds that the cap's lookup cost does not grow with the newest message's size, with its own plant:
+  at 1 MiB messages a full read of the newest message was 28% of a turn.
 - A ledger read counts the whole stream per page (finding 2026-11-15-ledger-read-counts-the-whole-stream-per-page).
-  Not this lane's: write no law that needs it fixed, and do not touch ledger/.
+  Not this quest's: write no law that needs it fixed, and do not touch ledger/.
 ```
 
 ### Review brief template
@@ -151,7 +152,7 @@ Parent base: <branch and full signed SHA, or origin/main and full SHA>
 Reviewed head: <branch and full SHA>
 Decided notes: <every decided note the PR builds>
 Last fixes: <commit range and report, or none>
-Run row: field/runs/<date>-<lane>-review<n>.json
+Run row: field/runs/<date>-<quest>-review<n>.json
 Waits for the owner: <no, or what he must decide>
 Look hardest at:
 1. <a call the plan did not spell out, or a doubt, as a question, with its source>
@@ -164,29 +165,29 @@ it does not reopen every test's merits.
 
 ## When a review sends back
 
-A fix round is one agent and a recheck, and a lane stops at its second sent-back review
+A fix round is one agent and a recheck, and a quest stops at its second sent-back review
 ([0177](../../../.decisions/0177-fix-round-is-one-agent.md),
 [0176](../../../.decisions/0176-second-send-back-stops-lane.md)).
 
 ```mermaid
 flowchart TD
-  review["a review answers send build or send tests"] --> count{"the lane's second sent-back review?"}
+  review["a review answers send build or send tests"] --> count{"the quest's second sent-back review?"}
   count -- "no" --> fix["start one fix agent"]
   fix --> recheck["resume the same reviewer"]
   recheck --> review
-  count -- "yes" --> stop["stop the lane"]
+  count -- "yes" --> stop["stop the quest"]
   stop --> left{"does what is left break the slice's main job?"}
   left -- "no" --> cut["land what works, file the rest as a ticket"]
   left -- "yes" --> owner["take it to the owner"]
 ```
 
-1. **Count the lane's sent-back reviews.** The lane's state file has each step's outcome. `chain.ts`
+1. **Count the quest's sent-back reviews.** The quest's state file has each step's outcome. `chain.ts`
    does not count them yet, so you do.
 2. **On the first,** start one fix agent with the brief below. It writes the law and the fix
    together: no tests step and no build step. Then resume the same reviewer, with what it already
    read, and send it the recheck message below. Never start a fresh reviewer for a recheck.
-3. **On the second,** stop the lane. Land what works, file the rest as a tracker ticket
-   (`tracker_file`), and write the lane's field note in `field/notes/`. Take it to the owner only
+3. **On the second,** stop the quest. Land what works, file the rest as a tracker ticket
+   (`tracker_file`), and write the quest's field note in `field/notes/`. Take it to the owner only
    if what is left breaks the slice's main job.
 
 A review that answers `send plan` is not a fix round: it goes back to the plan step, as today.
@@ -200,8 +201,8 @@ You do the tests step and the build step together, for the faults below only. Us
 for how a law is written and the build skill for how product code is written; follow both skills'
 standing rules.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Reviewed head: <full SHA>  PR: <full URL>
-Approved plan: <path>  Review row: field/runs/<date>-<lane>-review<n>.json
-Run row: field/runs/<date>-<lane>-fix<n>.json
+Approved plan: <path>  Review row: field/runs/<date>-<quest>-review<n>.json
+Run row: field/runs/<date>-<quest>-fix<n>.json
 
 Faults the review named:
 1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
@@ -232,28 +233,28 @@ Check the fix for these faults and the new law's reach: read each line the fix c
 calls it, and plant a break, by reading or in a scratch copy, to see that the new law reaches the
 fix. If you now think one of your findings was wrong, say so.
 A new fault you notice outside the fix is a finding row or ticket text for the lead. It sends the
-lane back only if it breaks the slice's main job.
+quest back only if it breaks the slice's main job.
 End with exactly one answer: line, as the last line: `answer: done <why>`, or
 `answer: send build <why>` (or `send tests`, `send plan`).
 ```
 
-## Lane brief template
+## Quest brief template
 
-Use this when a lane agent runs a lane's steps for you. Its last act is `land.ts ready`; the lead
+Use this when a quest agent runs a quest's steps for you. Its last act is `land.ts ready`; the lead
 session lands (ticket 652):
 
 ```text
-Run the lane for ticket <id>, <title>, <today's tooling or next/>.
-Lane: <lane>. Branch: fabrikalfa/<name>, in the worktree <path>. State file: BOXES/state/<lane>.md.
-Approved plan: <path, including amendments>. Lane brief: <path>.
+Run the quest for ticket <id>, <title>, <today's tooling or next/>.
+Quest: <quest>. Branch: fabrikalfa/<name>, in the worktree <path>. State file: BOXES/state/<quest>.md.
+Approved plan: <path, including amendments>. Quest brief: <path>.
 Run each step through drive.ts or chain.ts, read its answer, and send fixes to the step that owns the file.
 Commit a lead file (field rows, a plan row, a lockfile) unsigned, with
 `stepcommit.sh --commit-only lead <ticket> <subject> <files>`, and keep its sha.
 When the review says merge-ready: write the PR body file with the pr skill (its first line the title, and a
 `fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output as a
 file, and end with
-`node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path> --body <file> --loosening <file> --plan <path> [--lead <sha>]...`.
-Mid-lane, when only a lead commit must reach the next step (a lockfile, a merge of main), end with the same
+`node .agents/skills/lead/scripts/land.ts ready <quest> --tree <path> --body <file> --loosening <file> --plan <path> [--lead <sha>]...`.
+Mid-quest, when only a lead commit must reach the next step (a lockfile, a merge of main), end with the same
 command without the two PR files. Then stop and say "ready to land" with the state file's path.
 ```
 
@@ -271,18 +272,18 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   network** (owner, 2026-11-09,
   [0045](../../../.decisions/0045-test-steps-run-in-containers.md)), never behind a hole in a
   sandbox row. Mutation's Stryker run is the first: it runs through `mutbox.ts`, now in the hourly
-  run against main (0066); a lane parked inside its mutation step before 0066 still finishes it,
+  run against main (0066); a quest parked inside its mutation step before 0066 still finishes it,
   with `drive.ts` running `mutbox.ts` before that step's Claude agent starts (`drive.ts --agent claude`).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
-  step gets a new agent with a short brief. It reads the lane's state file
-  (`BOXES/state/<lane>.md`), does its one step, and writes the state file back for the next agent:
+  step gets a new agent with a short brief. It reads the quest's state file
+  (`BOXES/state/<quest>.md`), does its one step, and writes the state file back for the next agent:
   the branch, the signed heads, what ran and what is next. Nothing is carried in an agent's
   memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
   one review saying merge-ready), with CI green and the leak grep clean. No step is ever
   skipped. A fix round after a sent-back review is the one exception: one agent does the tests and
   build work, and the same reviewer is resumed ([above](#when-a-review-sends-back)). Only a new design call or an exam read that does not meet the bar (step 9) comes back to
   the lead. `chain.ts` (tracker ticket 341) chains the mechanical steps in code and starts an
-  agent only where judgment is needed ([below](#run-a-whole-lane-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
+  agent only where judgment is needed ([below](#run-a-whole-quest-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
 - **A step agent never writes another step's code or tests** (owner, 2026-11-08), except the fix
   agent of a fix round (0177). The agent
@@ -299,20 +300,20 @@ Read the header before you run one; this table only says what each is for.
 
 | Script | What it is for |
 |---|---|
-| `box.sh new`, `run`, `fetch` | one box's start, Codex run and fetch; a lane's boxes are made by `drive.ts`, never by hand |
+| `box.sh new`, `run`, `fetch` | one box's start, Codex run and fetch; a quest's boxes are made by `drive.ts`, never by hand |
 | `box.sh gc` | remove boxes and landed worktrees whose work is safe elsewhere (`gc.ts` says when); `gcloop.ts` runs it ([below](#box-cleanup-on-a-timer)) |
 | `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, and `status` ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)) |
 | `drive.ts` | one step end to end, with no agent waiting ([below](#use-drivets-for-any-step)) |
-| `chain.ts` | a whole lane end to end, to the merge queue ([below](#run-a-whole-lane-with-chaints)) |
-| `lanes.ts` | what each lane is doing now, read-only |
+| `chain.ts` | a whole quest end to end, to the merge queue ([below](#run-a-whole-quest-with-chaints)) |
+| `quests.ts` | what each quest is doing now, read-only |
 | `flow/run.ts` | run one flow of typed steps with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); `flow/flows/land-decision.ts` lands a docs-only decision PR |
 | `mutbox.ts` | the mutation run's Stryker sample in a container ([0045](../../../.decisions/0045-test-steps-run-in-containers.md), 0066) |
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
 | `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)); `stepcommit.sh` runs it |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
-| `land.ts ready` | a lane agent's last act: record "ready to land" |
-| `land.ts run`, `queue`, `merged` | the lead session only: land a ready lane, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
+| `land.ts ready` | a quest agent's last act: record "ready to land" |
+| `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
 | `governance.sh` | list the `.decisions/` files a diff touches; advice only |
 | `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.py`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
@@ -333,7 +334,7 @@ Claude agent in the lead session only reads its result and makes the judgment ca
 background and read the last line only:
 
 ```sh
-node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|review> <brief.md> &
+node .agents/skills/lead/scripts/drive.ts <quest> <plan|tests|build|mutation|review> <brief.md> &
 ```
 
 Its header says how: the flags, where a step starts, each check, the exit codes, the refusals and
@@ -349,56 +350,56 @@ what the line's `reason` means. What is yours to decide:
   and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
   and still pushes `-wip`. The lead then, outside the box, runs `pnpm install --lockfile-only` on
   `-wip`, checks each new version is exact and named in the approved plan, and commits the lockfile
-  with `stepcommit.sh --commit-only lead`; a lane agent then runs `land.ts ready` without PR files
+  with `stepcommit.sh --commit-only lead`; a quest agent then runs `land.ts ready` without PR files
   and stops, and the lead session runs `land.ts run`, which signs it and pushes it to `-wip`. The
   next step starts at that tip.
 - **A stuck or kept box.** A stuck step keeps its box for you to look at. A check that cannot run
   is `stuck`, never a pass. drive never retries.
-- **A mutation step** is only for a lane parked inside its mutation step before 0066. Its brief
+- **A mutation step** is only for a quest parked inside its mutation step before 0066. Its brief
   names the related tests on one line, `RELATED=<paths>`: tests only, and among them the base's
   test a moved or changed law came from. A `done` whose reason names `no_arm_a:<cause>` or
   `no_reach:old_sampler` has `narrowing: "unknown"`: hand-check the laws as for a loosening hit.
 - **Not in the header yet:** a stop after the time limit takes the agent's whole process group
   with it. A refusal is not a step outcome, so the stuck count holds only steps an agent ran.
 
-## Run a whole lane with chain.ts
+## Run a whole quest with chain.ts
 
-`chain.ts` runs a lane's steps in code, through `drive.ts`'s pieces, and starts a fresh read-only
+`chain.ts` runs a quest's steps in code, through `drive.ts`'s pieces, and starts a fresh read-only
 agent only where judgment is needed. Start it in the background, send its output to
-`BOXES/<lane>-chain.out` and read the last line only:
+`BOXES/<quest>-chain.out` and read the last line only:
 
 ```sh
-node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md > BOXES/<lane>-chain.out &
+node .agents/skills/lead/scripts/chain.ts <quest> BOXES/<quest>-CHAIN.md > BOXES/<quest>-chain.out &
 ```
 
-Its header says how: the flags, each phase and move, the host step and a lane brief's `## host`
+Its header says how: the flags, each phase and move, the host step and a quest brief's `## host`
 section, the retries and limits, the budget, the record and the pinned scripts. What is yours:
 
-- **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
+- **The quest brief** is one Markdown file. Its text before the first `## ` heading goes to every
   step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
   `## tests`, `## build` and `## review`, written as a step brief is written today
   (the review one keeps the template above, minus the two head lines, which the chain fills in),
   and `## pr`: the pull request's description, its first line the title, with the
   `fabrika close ticket <N>` line when the PR finishes the ticket, written as
-  [the pr skill](../pr/SKILL.md#a-lanes-description-is-written-twice) says. Every section is
-  required. A lane has no `## mutation` section (0066).
+  [the pr skill](../pr/SKILL.md#a-quests-description-is-written-twice) says. Every section is
+  required. A quest has no `## mutation` section (0066).
 - **Which steps need Claude:** `--claude` names the steps with Electron or socket work, and
   `--electron` the ones that run the app.
-- **The lane's budget** ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)): when the
+- **The quest's budget** ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)): when the
   chain ends `ask` with the counts, you answer redo, cut scope or drop. Put
-  `Estimate: <n> steps, $<d>` in the plan or the lane brief, so the lane has a backstop. Never put
+  `Estimate: <n> steps, $<d>` in the plan or the quest brief, so the quest has a backstop. Never put
   these numbers in a step's brief.
-  Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a lane stops at its second
+  Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a quest stops at its second
   sent-back review, whatever this window says. The chain does not count that yet, so
   [the lead does](#when-a-review-sends-back).
-- **A parked lane** (`ask`, exit 20) is yours: a loosening hit for your hand check, a lockfile
+- **A parked quest** (`ask`, exit 20) is yours: a loosening hit for your hand check, a lockfile
   ask, a send to plan, or what the judgment agent parked. The why is in the line's `reason`.
 - **Where it ends:** `queued`, not merged. Run `land.ts merged <pr>` later (step 10).
-- **New scripts.** A lane keeps the scripts it started on. To take new ones, stop the lane and
+- **New scripts.** A quest keeps the scripts it started on. To take new ones, stop the quest and
   start it again with `--start <step>`.
-- **Watching:** `node .agents/skills/lead/scripts/lanes.ts` prints one JSON line for each lane that
-  has not landed. A `stuck` line means look at the lane now; a `waits` line is yours to
-  answer. For one lane's moves, `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
+- **Watching:** `node .agents/skills/lead/scripts/quests.ts` prints one JSON line for each quest that
+  has not landed. A `stuck` line means look at the quest now; a `waits` line is yours to
+  answer. For one quest's moves, `tail -f BOXES/state/<quest>.md`. To stop a quest, stop the chain process: the
   running step's process group goes with it, and drive records that step as stuck. Start the chain
   again with `--start <step>` to go on from there: its rounds count on from the ones the chain
   record holds, so no earlier round's record, brief or judgment file is written over. Read the
@@ -416,7 +417,7 @@ means the timer is dead or every sweep was skipped behind a hung one. Fix the ca
 
 Every commit leaves the laptop when it is made
 ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
-runs `publish.ts` itself, and a lane's box commit is pushed by drive's pushing phase, so neither
+runs `publish.ts` itself, and a quest's box commit is pushed by drive's pushing phase, so neither
 step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
 where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
 line the same turn.
@@ -430,7 +431,7 @@ own branch), or its merge of a passing test-only fix or a rows-only PR, the lead
 same command itself, without asking the owner again
 ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md)). Only the script reads the key.
 Report every other refused action to the owner with the exact command and worktree; never route
-around it. A lane agent does not meet this for its landing: it stops at `land.ts ready` (step 8). A rows-only PR lands with `land.ts queue <pr>` on green CI with a clean leak grep; a test-only
+around it. A quest agent does not meet this for its landing: it stops at `land.ts ready` (step 8). A rows-only PR lands with `land.ts queue <pr>` on green CI with a clean leak grep; a test-only
 fix still runs every step first.
 
 `Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
@@ -458,7 +459,7 @@ visible, and never weaken the rules to hide this message.
    A plan that patches or changes a package (tea, demlik, Manti, Effect, Alchemy) names what it
    read of that package's decisions, patterns and source; else send it back
    ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
-4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
+4. **Start the quest** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
@@ -474,10 +475,10 @@ visible, and never weaken the rules to hide this message.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
-   driver included, once it has finished, or drive's `BOXES/<lane>-rows.jsonl`, each saved with
+   driver included, once it has finished, or drive's `BOXES/<quest>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
-   when a review sent the lane back, follow [When a review sends back](#when-a-review-sends-back).
+   when a review sent the quest back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
    Step-commit checks file owners.
@@ -485,17 +486,17 @@ visible, and never weaken the rules to hide this message.
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
-   A host-only law runs here before the first review, never at the end of the lane (0178). Before
+   A host-only law runs here before the first review, never at the end of the quest (0178). Before
    it runs on the owner's Mac, read every line it can reach that signals a process or calls
    launchd, and work out the worst target each could get: a pid or group of 0, 1 or -1 reaches
    every process the owner has, and so does `launchctl bootout` of a whole domain. Then ask the
    owner, and run it only on a yes. On the
    real machine a test touches only its own label, files and processes: its own temp home and its
    own test label under launchd, no focus taken, and nothing left behind.
-8. **Ready to land.** A lane agent never signs as lead, pushes, opens the pull request or adds
-   it to the merge queue: the permission check refuses a subagent the lead key, and the lane stops
+8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
+   it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
-   is `land.ts ready` ([the template](#lane-brief-template)). The PR body file says which parts were
+   is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
    this repo's steps, what ran each one, and the dollars, in the order
    [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
@@ -523,7 +524,7 @@ visible, and never weaken the rules to hide this message.
    `enablePullRequestAutoMerge` on the pull request's node id. GitHub puts it in the merge queue
    when `ci-required` goes green, never when red. If anything is pushed after the final read, run
    `disablePullRequestAutoMerge` and read again. Main takes changes only
-   through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a lane that ended at `land.ts ready`, run `land.ts run <lane> <ticket>`
+   through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
    are green. Both leak-check the change, each commit and the title and description, then add it to
@@ -537,7 +538,7 @@ visible, and never weaken the rules to hide this message.
    ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
    docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the
-   lane merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
+   quest merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
    refused by `gh pr merge`; land it with `gh stack merge <pr> --squash --yes` by hand.
    Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
@@ -550,7 +551,7 @@ visible, and never weaken the rules to hide this message.
    tests.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
-   The sweep removes the lane's boxes and its clean, idle linked worktree. Never remove MAIN itself.
+   The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.
    Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates
    and any box that fails its guard.
    Print one line per retained item and continue.
@@ -575,7 +576,7 @@ Every ticket for this repo goes in the app's own tracker, through its `tracker_f
 `tracker_comment` and `tracker_close` tools. Never open a GitHub issue on this repo. GitHub issues
 are for other people's repos only.
 
-- Every lane gets a ticket before its agent starts. File one if it is missing.
+- Every quest gets a ticket before its agent starts. File one if it is missing.
 - Each brief names the ticket and a short writer name, such as `door-fix`.
 - The agent posts when a real step starts, on a finding that matters, when blocked, when a pull
   request opens or is pushed, and when done. Not after every command.

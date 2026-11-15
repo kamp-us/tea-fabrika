@@ -11,8 +11,8 @@ Decided 2026-10-22. Step 5's gate was built in experiment 117 (the `promises` to
 ```ts
 // A sketch: one promise as data, cut short from experiment 117's record.
 {
-	promise: "A lane never waits forever for a child.",
-	harm: "A child that dies before its outcome row leaves the lane stuck, and nobody is told.",
+	promise: "A quest never waits forever for a child.",
+	harm: "A child that dies before its outcome row leaves the quest stuck, and nobody is told.",
 	tool: "property test",                                    // step 2: the real code
 	plant: "the wait ignores the child's EXIT",                // step 3: a break it must catch
 	covers: ["packages/pipeline/src/hosted/lane.ts#handlers"], // step 5: what it covers
@@ -120,7 +120,7 @@ an unsupported generator with a nearby reason. This rule cannot prove generator 
 
 ## Why
 
-- **Experiment 115:** a check on a hand-written copy of the lane found the
+- **Experiment 115:** a check on a hand-written copy of the quest found the
   hang, but nothing tied the copy to the code. It could go stale and stay
   green.
 - **Experiment 116:** three tools found the same bug. Only the property test
@@ -145,6 +145,6 @@ an unsupported generator with a nearby reason. This rule cannot prove generator 
 ## What would change it
 
 - A bug that property tests on the real code keep missing and TLA+ catches.
-  *2026-10-25: experiment 139 looked for one on the hosted lane and found
+  *2026-10-25: experiment 139 looked for one on the hosted quest and found
   none in 46 planted bugs.*
 - Records that cost more to keep up than the stale checks they catch.

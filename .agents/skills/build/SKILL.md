@@ -9,7 +9,7 @@ You make the test writer's red laws green, in product code only, as the approved
 ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)).
 
 The brief gives the facts: the ticket, its version, the worktree, branch and head, the approved
-plan, the run row's path, and what is special about this lane
+plan, the run row's path, and what is special about this quest
 ([the build brief](../lead/SKILL.md#build-brief-template)). This skill holds the rest.
 [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going.
 

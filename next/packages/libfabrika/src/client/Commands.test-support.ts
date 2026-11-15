@@ -7,7 +7,7 @@
 // fakes keep their own timeline of what really ran and what was really saved, the oracle the laws
 // read; they never read the client's state.
 import { Deferred, Effect, Layer, Schema } from "effect";
-import { Command, Result } from "../jobs/Job.ts";
+import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";
 import { Entry, Journal, JournalError } from "./Journal.ts";
@@ -24,7 +24,7 @@ export type Armed = { readonly op: "execute" | "read" | "write"; readonly at: Cu
 /** One thing that really happened below the client: a command run, an entry saved, or a crash. */
 export const Event = Schema.TaggedUnion({
   ran: { command: Command, result: Result },
-  saved: { job: Schema.String, entry: Schema.Unknown },
+  saved: { task: Schema.String, entry: Schema.Unknown },
   crash: {},
 });
 export type Event = typeof Event.Type;
@@ -153,9 +153,9 @@ export const cutJournal = (s: Seen) =>
           return value;
         });
       return {
-        read: (job: string) => around("read", inner.read(job), () => {}),
-        write: (job: string, entry: Parameters<typeof inner.write>[1]) =>
-          around("write", inner.write(job, entry), () => void s.events.push(Event.cases.saved.make({ job, entry }))),
+        read: (task: string) => around("read", inner.read(task), () => {}),
+        write: (task: string, entry: Parameters<typeof inner.write>[1]) =>
+          around("write", inner.write(task, entry), () => void s.events.push(Event.cases.saved.make({ task, entry }))),
       };
     }),
   );
@@ -164,32 +164,32 @@ const isEntry = Schema.is(Entry);
 const interrupted = Result.cases.unknown.make({ reason: "interrupted" });
 
 /**
- * What the oracle expects each job to end with, read off the timeline: the fake's result when the
+ * What the oracle expects each task to end with, read off the timeline: the fake's result when the
  * command ran and its `result` entry was saved before the next crash, else `unknown interrupted`.
- * It also counts how often each job's command ran: a run belongs to the job whose `executing` entry
+ * It also counts how often each task's command ran: a run belongs to the task whose `executing` entry
  * was saved last before it, and a run with none is counted under the empty id.
  */
 export const expectedResults = (events: ReadonlyArray<Event>) => {
   const runs = new Map<string, number>();
   const results = new Map<string, Result>();
   let executing: string | null = null;
-  let pending: { readonly job: string; readonly result: Result } | null = null;
+  let pending: { readonly task: string; readonly result: Result } | null = null;
 
   for (const e of events) {
     if (e._tag === "crash") {
       pending = null;
       executing = null;
     } else if (e._tag === "ran") {
-      const job = executing ?? "";
-      runs.set(job, (runs.get(job) ?? 0) + 1);
-      pending = { job, result: e.result };
+      const task = executing ?? "";
+      runs.set(task, (runs.get(task) ?? 0) + 1);
+      pending = { task, result: e.result };
     } else {
       const step = isEntry(e.entry) ? e.entry._tag : "";
 
       if (step === "executing") {
-        executing = e.job;
-      } else if (step === "result" && !results.has(e.job)) {
-        results.set(e.job, pending?.job === e.job ? pending.result : interrupted);
+        executing = e.task;
+      } else if (step === "result" && !results.has(e.task)) {
+        results.set(e.task, pending?.task === e.task ? pending.result : interrupted);
       }
     }
   }

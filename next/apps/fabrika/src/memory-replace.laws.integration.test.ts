@@ -1,4 +1,4 @@
-// The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md), next/, L10 and L11. Real workerd
+// The memory restart plan (docs/plan/quests/memory-restart-PLAN.md), next/, L10 and L11. Real workerd
 // through Alchemy, the app's own build and door, and the brain's own facts on `gateway/brain`. Only
 // the memory reading is a stand-in (`rssStandIn`, in rss.fixture.ts): no test can grow workerd to 500 MB on
 // purpose, so `ps -o rss= -p <pid>` answers the limit plus one for the first workerd once the test

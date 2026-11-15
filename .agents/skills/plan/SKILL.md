@@ -10,7 +10,7 @@ approves it, or sends it back. Return it unsigned, including when you review or 
 the lead session fills the blank approval line.
 
 The brief gives the facts: the ticket, its version, the worktree and branch, where the plan goes,
-and what is special about this lane ([the plan brief](../lead/SKILL.md#plan-brief-template)). This
+and what is special about this quest ([the plan brief](../lead/SKILL.md#plan-brief-template)). This
 skill holds the rest. [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says
 when to keep going and how to write for a reader who saw none of the work.
 
@@ -32,7 +32,7 @@ when to keep going and how to write for a reader who saw none of the work.
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
    this project.
 5. **Write the plan** in the shape below, to the path the brief names (by default
-   `docs/plan/lanes/<lane>-PLAN.md` in the worktree). With no path in the brief, your final message
+   `docs/plan/quests/<quest>-PLAN.md` in the worktree). With no path in the brief, your final message
    is the whole plan.
 
 ## The shape
@@ -68,8 +68,8 @@ when to keep going and how to write for a reader who saw none of the work.
   `plancheck.sh --draft` prints the plan's size and names each slice with no estimate. No number
   caps a slice ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)): cut by what
   lands whole, never to fit a count.
-- End the Size section with `Estimate: <n> steps, $<d>`, the lane's budget
-  ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps you expect:
+- End the Size section with `Estimate: <n> steps, $<d>`, the quest's budget: chain.ts stops a quest
+  at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps you expect:
   tests, build, review, plus one per likely send-back. `d` is their list-price dollars, priced from
   similar steps in `field/runs/` and the older rows in `field/runs.jsonl`.
 

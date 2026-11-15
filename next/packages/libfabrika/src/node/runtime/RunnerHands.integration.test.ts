@@ -7,21 +7,21 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect, Layer } from "effect";
 import * as Id from "../../Id.ts";
-import * as JobsLedger from "../../jobs/JobsLedger.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import * as LedgerStreamsSql from "../../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
-import * as HandsJobsTest from "../../runtime/HandsJobsTest.ts";
+import * as HandsTasksTest from "../../runtime/HandsTasksTest.ts";
 import * as RunnerHandsTest from "../../runtime/RunnerHandsTest.ts";
 import type { Sql } from "../../Sql.ts";
+import * as TasksLedger from "../../tasks/TasksLedger.ts";
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
-/** The durable job store on one ledger, as the Project keeps it. */
-const jobs = (sql: Sql) =>
-  JobsLedger.layer.pipe(
+/** The durable task store on one ledger, as the Project keeps it. */
+const tasks = (sql: Sql) =>
+  TasksLedger.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         LedgerSql.layer(sql, { reader: "connection:hands-law" }),
@@ -99,9 +99,9 @@ const databases = Effect.gen(function* () {
 });
 
 RunnerHandsTest.suite(
-  Effect.map(databases, ({ sql, reopen }) => ({ sql, reopen, jobs }) satisfies RunnerHandsTest.Store),
+  Effect.map(databases, ({ sql, reopen }) => ({ sql, reopen, tasks }) satisfies RunnerHandsTest.Store),
 );
 
-HandsJobsTest.suite(
-  Effect.map(databases, ({ sql, reopen }) => ({ jobs: jobs(sql("jobs")), reopen }) satisfies HandsJobsTest.Store),
+HandsTasksTest.suite(
+  Effect.map(databases, ({ sql, reopen }) => ({ tasks: tasks(sql("tasks")), reopen }) satisfies HandsTasksTest.Store),
 );

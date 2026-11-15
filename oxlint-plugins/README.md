@@ -21,7 +21,7 @@ Five rules that only advised now block wherever their folder is at zero ([0523](
 
 A warn line names one folder: a package's `src/<name>/**`, the files right in `src/` as `src/*`, or, outside a `src/`, one folder's own files as `<folder>/*`. So a dirty folder never holds back its clean siblings. `law-shape` and `prefer-schema-arbitrary` lines keep the rule's file kinds (`<folder>/**/*{.test.ts,.test.tsx,Test.ts}`), so a warn line never turns a rule on where its base scope has it off. A warn line goes the moment its folder reaches zero: a whole `pnpm lint` run reads the lines from `oxlint --print-config` and fails on one with no fire left, or one that names a file, and says which line to delete. A run on a path skips that check, since it does not see every fire. A folder that blocks never goes back to a warn line (0523).
 
-`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen (0525): one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0456). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze lane takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
+`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen (0525): one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0456). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze quest takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
 
 Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `59cb6a311`, a docs-only change), outside today's version:
 
@@ -791,7 +791,7 @@ returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, 
 names would miss.
 
 ```ts
-export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/jobs/Retries") {
+export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/tasks/Retries") {
   static readonly layer = Layer.succeed(Retries, shape); // fires: move it to RetriesMemory.ts
 }
 ```
@@ -833,7 +833,7 @@ All paths are under `next/packages/libfabrika/src/`. Nothing fired in `next/apps
 `next/programs/` or the other libfabrika folders.
 
 **The folder list.** One block in `.oxlintrc.json`, its `files` the 13 folders at zero:
-`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `jobs`,
+`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `tasks`,
 `ledger`, `node`, `packs`, `repositories`, `schedules`, `settings` and `transport`. Its
 `excludeFiles` leaves out tests, shared suites and test support (`*.test.ts`, `*.test.tsx`,
 `*Test.ts`, `*.test-support.ts`): a test may build a stand-in service any way it likes. The top

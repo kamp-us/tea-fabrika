@@ -1,7 +1,7 @@
 ---
 date: "2026-11-15"
 scripts: "none; reading, nothing ran but `wc`, `rg`, `jq`, `git` and the `fabrika` CLI's help and read-only verbs"
-summary: "Today's hand-run tooling; $0. Reading, not a measurement. In the two days before 2026-11-15 the lead typed 111 step briefs (plan, tests, build, review, fix, recheck), median 3,752 to 7,669 characters by step, and about 40 to 55% of each was the same standing lines: caps, signal tests, fix properly, no subagents, checks, commit and push, the run row, the report. The proposal moves those lines into each step skill's new Standing rules section and gives the lead one field template per step, so a brief is the lane's facts plus a This lane list: the real tests brief for ticket 1041 goes from 5,145 to 975 characters. What an agent reads stays about the same, since the skill grows by what the brief loses; the gain is a brief typed in under a minute, rules written once and checked once, and three places where skills and practice disagree brought to the owner. phoenix's fabrika plugin and CLI cannot run here as they are (they assume GitHub issues, labels, a Projects board and `.fabrika/` lanes, and the plugin is off); two of its ideas carry over: a brief that is fields and never a summary, and a step that ends in a closed answer. Every run row of those two days has no dollars."
+summary: "Today's hand-run tooling; $0. Reading, not a measurement. In the two days before 2026-11-15 the lead typed 111 step briefs (plan, tests, build, review, fix, recheck), median 3,752 to 7,669 characters by step, and about 40 to 55% of each was the same standing lines: caps, signal tests, fix properly, no subagents, checks, commit and push, the run row, the report. The proposal moves those lines into each step skill's new Standing rules section and gives the lead one field template per step, so a brief is the quest's facts plus a This quest list: the real tests brief for ticket 1041 goes from 5,145 to 975 characters. What an agent reads stays about the same, since the skill grows by what the brief loses; the gain is a brief typed in under a minute, rules written once and checked once, and three places where skills and practice disagree brought to the owner. phoenix's fabrika plugin and CLI cannot run here as they are (they assume GitHub issues, labels, a Projects board and `.fabrika/` lanes, and the plugin is off); two of its ideas carry over: a brief that is fields and never a summary, and a step that ends in a closed answer. Every run row of those two days has no dollars."
 ---
 
 # 296. Quick skills: what a hand-run step brief must carry, and what the skills can carry for it
@@ -16,8 +16,8 @@ lines every brief retyped go into the step skills, once. phoenix's CLI cannot be
 but its brief format is the model for the templates.
 
 ```text
-before: brief = skill name + lane facts + standing lines (typed every time) + lane notes
-after:  brief = template fields (lane facts) + "This lane:" bullets
+before: brief = skill name + quest facts + standing lines (typed every time) + quest notes
+after:  brief = template fields (quest facts) + "This quest:" bullets
         skill = judgment + "Standing rules" (caps, signals, fix properly, checks, commit, row, report)
 ```
 
@@ -75,7 +75,7 @@ No, and that was checked, not assumed.
   on.
 - Every lane verb works on GitHub issues, labels and a Projects board, and keeps state in
   `.fabrika/`. This repo opens no GitHub issue on itself (tickets live in the app's tracker), has no
-  board, and keeps lane state in `BOXES/state/<lane>.md`. The plugin's hooks are what records cost,
+  board, and keeps quest state in `BOXES/state/<quest>.md`. The plugin's hooks are what records cost,
   and this repo adds no Claude Code hooks (AGENTS.md, "Decision discovery").
 
 ## phoenix's pieces beside ours
@@ -84,7 +84,7 @@ No, and that was checked, not assumed.
 |---|---|---|---|---|
 | Start a step | `fabrika lane brief` prints a fixed brief | the lead types a brief | reuse the idea | fields, never a summary, is the right shape; the verb needs issues and `.fabrika/` |
 | Name the step's agent | agent shells preloading one skill | a brief line "use the X skill" | reuse the idea, later | a `.claude/agents/<step>.md` could preload the skill and cut tools; needs the owner (call 5) |
-| Keep a lane's state | `events.jsonl` folded by `lane status` | `BOXES/state/<lane>.md`, run rows, the plan file | leave | ours already lives on disk and in the repo; chain.ts is paused |
+| Keep a quest's state | `events.jsonl` folded by `lane status` | `BOXES/state/<quest>.md`, run rows, the plan file | leave | ours already lives on disk and in the repo; chain.ts is paused |
 | Hand off between steps | closed terminal token, `lane report` | review's `answer:` line; tests and build report in prose | reuse the idea | every step skill now ends on one `answer:` line (0396's verbs) |
 | Commit and push | `build commit`, `build push`, `build pr` | plain `git commit`, `leakgrep.sh`, `botpush.mjs` | leave | ours is decided (0161, 0164) and works |
 | Land | `ship gate`, `ship enqueue` | `land.ts queue`, merge when ready (0530, 0544) | leave | decided here |
@@ -143,7 +143,7 @@ them step briefs:
 How much was standing text, by paragraph, on the two briefs of ticket 1041 (pipe plumbing): the
 tests brief's four closing paragraphs (rules, caps, commit, report) are 2,393 of its 5,145
 characters, and parts of the first two add more, so about 55%. The build brief's are about 40%:
-its "settled after the plan" list is long and is lane-specific. Across the 124 calls whose name starts with Plan, Tests, Build, Review,
+its "settled after the plan" list is long and is quest-specific. Across the 124 calls whose name starts with Plan, Tests, Build, Review,
 Fix or Recheck, "nice -n 19" appears in 107, "Finish the whole" in 52, "Do not start subagents" in 51, `botpush` in 36,
 "never the full suite" in 35, "Fix it properly" in 9.
 
@@ -171,7 +171,7 @@ All of it is in this pull request as real files.
    `runsFor` for case counts; the code wins over the plan on a name; leans at 80%; the owner-away
    rule; the review's data-shape, settings and docs-rows checks; at least three plants of the
    reviewer's own; "For the owner" when a pull request waits on him.
-4. **The lead skill gets one template per step,** fields first and a `This lane:` list, with one
+4. **The lead skill gets one template per step,** fields first and a `This quest:` list, with one
    filled example from ticket 1041's tests round. The fix round's brief loses its caps and finish
    paragraphs, which the skills now hold.
 
@@ -180,7 +180,7 @@ each of those is an owner call below.
 
 ### Ticket-sized items, not built
 
-- **`brief.ts`**, a lead script that prints a step brief from the template and the lane's state
+- **`brief.ts`**, a lead script that prints a step brief from the template and the quest's state
   file, and refuses one with an empty field. phoenix's `lane brief` is the model: fields from data,
   rules from the skill. TypeScript, beside `chain.ts`, about 150 lines with its test.
 - **Run rows keep their cost.** All 89 run rows of 2026-11-14 and 2026-11-15 have `costUsd: null`,
@@ -208,7 +208,7 @@ each of those is an owner call below.
 4. **A reviewer plants a break in a scratch copy, never in the branch.** Kept as the skill says.
    Briefs in the window let the reviewer break product code in the worktree and restore it with
    `git checkout`. Lean: keep the skill, about 70%. Doubt: a scratch copy cannot run a law that
-   needs the whole tree; restoring by checkout worked in every lane read.
+   needs the whole tree; restoring by checkout worked in every quest read.
 5. **Add step agent definitions under `.claude/agents/`.** Lean yes, later, about 65%. It would
    preload the skill and could cut a step's tools. Doubt: the plan writer and the reviewer each
    write one file, so a tool cut does not fit cleanly, and AGENTS.md notes that only `--tools`
@@ -222,7 +222,7 @@ each of those is an owner call below.
 
 - **Keep typing briefs.** Loses nothing today and costs the lead about 4 to 8 KB of typing a step,
   with lines dropped at random (only 9 of those 124 briefs had "Fix it properly").
-- **phoenix's rule: no lane notes at all.** Every lane fact goes into the plan as an amendment, and
+- **phoenix's rule: no quest notes at all.** Every quest fact goes into the plan as an amendment, and
   the brief is only fields. One home for each fact, and the strongest against drift. Loses speed:
   every note after approval needs a re-sign, and review "look hardest at" lists are the lead's
   judgment, not the plan's.
@@ -238,7 +238,7 @@ each of those is an owner call below.
 ## What it cannot tell us
 
 - No agent ran on the new skills. Whether a shorter brief gives the same work is untested; the
-  first real lane on them is the test.
+  first real quest on them is the test.
 - The standing share of a brief was counted by paragraph on two briefs, not all 111.
 - phoenix was read at a two-week-old local checkout. Its newest pieces may differ.
 - The cost per step cannot be given: no run row of the window has dollars.

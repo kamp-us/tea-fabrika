@@ -19,7 +19,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 ## Steps
 
 1. **Read** `AGENTS.md`, `next/AGENTS.md` for `next/` work, then the approved plan whole, then the
-   decided notes it builds, and the tests and build rows in `field/runs/` for this lane (the plants
+   decided notes it builds, and the tests and build rows in `field/runs/` for this quest (the plants
    are there).
 2. **Read every commit** since `origin/main`: `git diff $(git merge-base origin/main HEAD)..HEAD`.
    The branch may be behind main: judge the change, and say if a merge of main would conflict, with
@@ -78,7 +78,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      comment that holds them. A shot committed only to show the pull request running is a defect
      ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md)).
    - Each point the brief lists under "Look hardest at", answered one by one: holds or not, and why.
-     A lane has no mutation step ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)).
+     A quest has no mutation step ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)).
 4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
    n counts blocking classes. Each class lists every affected case. m counts the finding rows in
    this answer.
@@ -115,7 +115,7 @@ whole diff.
   yours is the read that guards it.
 - You may withdraw a finding of yours that was wrong. Say which, and why.
 - A new fault you notice outside the fix is a finding row, or ticket text for the lead. It does
-  not send the lane back unless it breaks the slice's main job.
+  not send the quest back unless it breaks the slice's main job.
 - End with the same `answer:` line, as the last line.
 
 ## Standing rules

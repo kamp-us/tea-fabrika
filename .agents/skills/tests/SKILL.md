@@ -11,7 +11,7 @@ you undo. The builder then makes the laws green and may not touch them
 ([nobody writes their own exam](../../../docs/direction/nobody-writes-their-own-exam.md)).
 
 The brief gives the facts: the ticket, its version, the worktree and branch, the approved plan, the
-run row's path, and what is special about this lane
+run row's path, and what is special about this quest
 ([the tests brief](../lead/SKILL.md#tests-brief-template)). This skill holds the rest.
 [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going.
 
@@ -188,5 +188,5 @@ These hold in every tests round, so the brief does not repeat them.
   the build's file is written and named in the report as "after build", and runs at review.
 - Hold `done` for a part you cannot do here. Work until every part this worktree allows is done. A
   part that needs another step's code, a typecheck or `--changed` is written, named in the report
-  as "after build" or "lead runs it", and does not block `done`. Never send the lane to tests.
+  as "after build" or "lead runs it", and does not block `done`. Never send the quest to tests.
 - Commit a plant test.

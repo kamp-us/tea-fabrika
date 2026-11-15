@@ -43,7 +43,7 @@ Why one command:
 - **It pushes for you.** A signed commit is pushed at once, after the leak grep, and the branch gets
   a draft pull request when it has none (0134). If the push cannot run, it exits 6 with the commit
   made and signed: put the command it prints in your report and go on with your step, and the lead
-  runs it. `--commit-only` and a box's commit push nothing here; the lane's host part pushes them.
+  runs it. `--commit-only` and a box's commit push nothing here; the quest's host part pushes them.
 - The co-author comes from `FABRIKA_COAUTHOR` (`Name <email>`), or your global git config. It never
   reads a box's own git config.
 

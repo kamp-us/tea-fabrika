@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
-// plan (docs/plan/lanes/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
+// plan (docs/plan/quests/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab
 // beside a 1024x700 tab, both on workspace 1. Every resource is acquired in one scope through
 // `p14.test-support.ts`.

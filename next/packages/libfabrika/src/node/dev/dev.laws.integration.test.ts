@@ -1,5 +1,5 @@
 // P12, next/. Real instance, durable outbox and recording; only platform calls are supplied. The
-// memory restart plan (docs/plan/lanes/memory-restart-PLAN.md) adds L7 and L8, the bounded replace.
+// memory restart plan (docs/plan/quests/memory-restart-PLAN.md) adds L7 and L8, the bounded replace.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

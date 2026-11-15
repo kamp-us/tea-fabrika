@@ -1,5 +1,5 @@
 // T953 slice 2, next/: a start checked against the member whose input caused it, laws L10 to L15 and L20 of the
-// approved plan (docs/plan/lanes/t953-PLAN.md), on a real store (0062). A runner in the module that
+// approved plan (docs/plan/quests/t953-PLAN.md), on a real store (0062). A runner in the module that
 // owns a driver calls `ChildrenMemberTest.suite(open)`; `open` acquires one store in a scope (0061).
 //
 // The contract these laws pin, from the plan's "The start check":

@@ -23,7 +23,7 @@ both tools.
 ## How a brief uses them
 
 A brief is the step's template in [the lead skill](./lead/SKILL.md#step-briefs), filled in: the
-ticket's facts as fields, then only what is special about this lane.
+ticket's facts as fields, then only what is special about this quest.
 
 The skill holds what every brief used to repeat, in its "Standing rules" section: what to read
 first, the caps, signal tests, fix properly, the checks, how to commit and push, the run row, and
