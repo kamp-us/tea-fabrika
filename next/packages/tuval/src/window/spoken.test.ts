@@ -1,0 +1,111 @@
+// next/: the polite region's words. The window machine writes each status message into its Model in the
+// step its event happened in (WindowMachine.laws.test.ts, S8), and an end only for a tile that has no
+// focus then (S9, where focus is known); this holds that the page says exactly the current burst as
+// one line, whatever the tiles show, so a tile that stays ended is never said again. An end is said in
+// the tile guideline's words (docs/direction/tile-guidelines.md, "What a screen reader is told",
+// 0543): `tracker in t2 ended`, the program's own name and the tile's short handle, the same two the
+// tile's own name gives, and no exit reason, which the guideline did not study.
+import { describe, expect, it } from "@effect/vitest";
+import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
+import { Arbitrary, Schema } from "effect";
+import { spoken } from "./spoken.ts";
+
+const SEED = 119120;
+// The programs' own names, none inside another, and none a reason's tag.
+const NAMES = ["alpha", "bravo", "charlie", "delta", "echo"] as const;
+const PACKS = ["fabrika", "acme", "x"] as const;
+
+const Tiles = WindowModel.fields.tiles.check(Schema.isMinLength(1), Schema.isMaxLength(NAMES.length));
+const Said = WindowModel.fields.said;
+const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+/**
+ * The generated window rows under distinct ids and process names, each message on one of them, and
+ * the desk tile each row draws: its program after a pack, and its number, which `pick` moves off the
+ * row's place so a handle has one or more digits.
+ */
+const page = (tiles: typeof Tiles.Type, said: typeof Said.Type, pick: number) => {
+  const rows = tiles.map((t, i) => ({ ...t, id: `tile_${i + 1}`, name: `${NAMES[i]!}:1` }));
+  const desk = rows.map((t, i) => ({
+    id: t.id,
+    program: `${PACKS[(pick + i) % PACKS.length]!}/${NAMES[i]!}`,
+    n: i + 1 + (pick % 40),
+  }));
+  const messages = said.messages.map((x, i) => ({ ...x, tile: rows[(pick + i) % rows.length]!.id }));
+  return { m: { tiles: rows, said: { ...said, messages } }, desk };
+};
+
+type Page = ReturnType<typeof page>;
+type DeskTile = Page["desk"][number];
+
+const lookup =
+  (p: Page) =>
+  (id: string): DeskTile | null =>
+    p.desk.find((t) => t.id === id) ?? null;
+
+/** What the test expects an end to be said as: the guideline's words, written out here by hand. */
+const endLine = (t: DeskTile) => `${t.program.slice(t.program.indexOf("/") + 1)} in t${t.n} ended`;
+
+describe("the polite region says the current burst as one line", () => {
+  it.prop(
+    "property: the region's text is the joined line of exactly the current status messages, in order: an end is the tile guideline's `<program> in t<n> ended`, with no exit reason; a refusal says the frame's words and names no tile; it names no other tile, ended or not, and it is empty when the list is",
+    { tiles: Arbitrary.schema(Tiles), said: Arbitrary.schema(Said), pick: Arbitrary.schema(Pick) },
+    ({ tiles, said, pick }) => {
+      const p = page(tiles, said, pick);
+      const words = spoken(p.m, lookup(p), () => null);
+      const ends = new Set(p.m.said.messages.filter((x) => x._tag === "ended").map((x) => x.tile));
+
+      for (const t of p.desk.filter((t) => !ends.has(t.id))) {
+        expect(words.includes(endLine(t)), `${endLine(t)} was said, and no end of it is in the burst`).toBe(false);
+      }
+
+      if (p.m.said.messages.length === 0) {
+        expect(words, "an empty burst, and the region said something").toBe("");
+        return true;
+      }
+
+      // Each message's own words, as the region says it alone, appear in order, one line.
+      const parts = p.m.said.messages.map((x) =>
+        spoken({ ...p.m, said: { id: p.m.said.id, messages: [x] } }, lookup(p), () => null),
+      );
+      expect(words, "the burst as one line, in order").toBe(parts.join(", "));
+      expect(words.includes("\n"), "the burst is one line").toBe(false);
+
+      for (const [x, part] of p.m.said.messages.map((x, i) => [x, parts[i]!] as const)) {
+        const tile = lookup(p)(x.tile)!;
+
+        if (x._tag === "ended") {
+          expect(part, "an end is said in the tile guideline's words").toBe(endLine(tile));
+          expect(part.includes(x.reason._tag) || part.includes("("), "an end says no exit reason").toBe(false);
+        } else {
+          expect(
+            part !== "" && !part.includes(` in t${tile.n} `),
+            "a refusal's words are the frame's, with no tile name",
+          ).toBe(true);
+        }
+      }
+
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 300, size: 30 } },
+  );
+
+  it.prop(
+    "property: some generated pages hold bursts of two or more, ends of more than one reason, handles of two digits, and an ended tile no message names, so the law above can see each",
+    { list: Arbitrary.array(Arbitrary.schema(Schema.Tuple([Tiles, Said, Pick])), { minLength: 30, maxLength: 30 }) },
+    ({ list }) => {
+      const pages = list.map(([tiles, said, pick]) => page(tiles, said, pick));
+      const ends = pages.flatMap((p) => p.m.said.messages.filter((x) => x._tag === "ended"));
+      expect(pages.some((p) => p.m.said.messages.length >= 2)).toBe(true);
+      expect(new Set(ends.map((x) => x.reason._tag)).size, "ends of more than one reason").toBeGreaterThan(1);
+      expect(pages.some((p) => p.desk.some((t) => t.n >= 10))).toBe(true);
+      expect(
+        pages.some((p) =>
+          p.m.tiles.some((t) => t.reach._tag === "ended" && !p.m.said.messages.some((x) => x.tile === t.id)),
+        ),
+      ).toBe(true);
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 3, size: 30 } },
+  );
+});

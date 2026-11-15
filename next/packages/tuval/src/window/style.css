@@ -229,9 +229,11 @@ input {
   overflow: auto;
   padding: var(--s-3);
 }
+/* The tile guideline's empty state: one word where the content will start, also on an ended tile. */
 .tile-empty {
   margin: 0;
-  color: var(--text-faint);
+  color: var(--tile-text);
+  font-size: var(--manti-text-base);
 }
 /*
  * The status bar: more about the focused tile, the prefix line while armed, the close ask. Always one
@@ -333,7 +335,8 @@ input {
     outline-offset: -2px;
   }
   .titlebar,
-  .strip {
+  .strip,
+  .tile-empty {
     color: var(--text-primary);
   }
 }

@@ -695,6 +695,20 @@ export class ProcessTable {
   }
 
   /**
+   * The live watches a client session holds: those whose recipient is a client with `session` and
+   * whose process still runs. A watch whose process exited already fired its DOWN, and in OTP a
+   * monitor that fired is gone, so the session's leave has nothing left to end there.
+   */
+  held(session: string): ReadonlyArray<Watch> {
+    return [...this.#model.watches.values()]
+      .filter(
+        ({ _tag, to, process }) =>
+          _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
+      )
+      .map(shown);
+  }
+
+  /**
    * How fresh delivery treats one letter. A DOWN is a signal only under its signal id, from the
    * brain, with a watch of that recipient, ref and target, live or canceled. A signal reaches only
    * its own recipient, and only while its watch is live. Anything else is plain mail.
