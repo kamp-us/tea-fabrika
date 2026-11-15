@@ -503,6 +503,8 @@ export const supervisor = Machine.make({
   `preferEffectRecord`, `newSchemaClass`, `unstableApiUsage`, `missingPipeableSignature`,
   `strictBooleanExpressions`, `schemaSync`, `schemaClassMissingBrand`: 0 or 1 of 5 sampled hits was
   right, and `schemaSync` would flag 0050's synchronous steps.
+  [0565](../../.decisions/0565-effects-own-checks-block.md) (2026-11-15) replaces this call: all
+  nine go on as errors, and `unstableApiUsage` and `schemaSync` wait there for the owner.
 - **An error's reason is a tagged error.** Decided 2026-11-11 (0119).
 - **The gateway's dispatch** stays the open 72% call in experiment 174. E3's cut makes either
   answer easy.
