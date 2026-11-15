@@ -47,6 +47,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       shown: t.shown,
       dials: () => seen.sockets.length,
       state: t.state,
+      body: t.body,
       // The tab's socket path is `/client/<fingerprint>/<tab>`: its last part is the tab id.
       tab: Effect.sync(() => new URL(seen.sockets[0] ?? "ws://x/").pathname.split("/").at(-1) ?? ""),
       pid: Effect.succeed(null),
@@ -141,6 +142,17 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
             const backend = yield* make(s.dev);
             const walk = yield* followRestart(h, s, backend);
             expect(walk.ended, `${name}'s tile says why its process ended`).toBe("Ended (crashed)");
+
+            // The tile guideline's empty state, which a tile kept after a crash follows: one word where
+            // the content will start, in `--tile-text`, and never the ended process's last view.
+            if (walk.endedBody !== null) {
+              expect(
+                /^\S+$/.test(walk.endedBody.words),
+                `${name}'s ended tile shows one word where its view was, not ${JSON.stringify(walk.endedBody.words)}`,
+              ).toBe(true);
+              expect(walk.endedBody.ink, `${name}'s ended tile's word is in the tile's text token`).toBe(true);
+            }
+
             expect(walk.second, `${name}: the successor is a new pid`).not.toBe(walk.first);
 
             if (walk.shownPid !== null) {

@@ -496,6 +496,23 @@ export const tile = (page: Page, name: string) => {
     /** The words of the tile's state slot as a person reads them: `Online`, `Ended (crashed)` and so on. */
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's innerText is a Promise
     state: Effect.promise(() => region.locator(".tile-state").innerText()),
+    /** The words of the tile's body as a person reads them, and whether its first part is drawn in
+     *  the tile guideline's text token, `--tile-text`, as its empty state's word is. */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's evaluate is a Promise
+    body: Effect.promise(() =>
+      region.locator(".slot").evaluate((slot) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--tile-text)";
+        slot.appendChild(probe);
+        const token = getComputedStyle(probe).color;
+        probe.remove();
+        const first = slot.firstElementChild;
+        return {
+          words: slot instanceof HTMLElement ? slot.innerText.trim() : "",
+          ink: first !== null && getComputedStyle(first).color === token,
+        };
+      }),
+    ),
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>

@@ -54,6 +54,8 @@ describe("the polite region says the current burst as one line", () => {
           expect(part.includes(tile.name) && part.includes(`(${x.reason._tag})`), "an end's tile and reason").toBe(
             true,
           );
+          // The tile guideline's words for an end, `tracker in t2 ended`, name the tile's id too.
+          expect(part.includes(` in ${tile.id} `), "an end names the tile's id").toBe(true);
         } else {
           expect(part !== "" && !part.includes(tile.name), "a refusal's words are the frame's, with no tile name").toBe(
             true,

@@ -54,6 +54,9 @@ export type Backend = {
   readonly last?: Effect.Effect<Last>;
   /** The words of the tile's state slot: `Online`, `Ended (crashed)` and so on. */
   readonly state: Effect.Effect<string>;
+  /** The words of the tile's body and whether they are in the tile's text token. A client that
+   *  draws nothing answers null. */
+  readonly body: Effect.Effect<{ readonly words: string; readonly ink: boolean } | null>;
   /** The tab id the client dials with, the last part of its socket's path. */
   readonly tab: Effect.Effect<string>;
   /** The pid the tile shows, where the client can say: a tab draws none, so it answers null. */
@@ -213,6 +216,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
                 ? "Missing"
                 : "Opening";
       }),
+      body: Effect.succeed(null),
       tab: until(
         "headless: a row naming its tab",
         Effect.sync(() => rows.length > 0),
@@ -360,6 +364,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       backend.last,
     );
     const ended = yield* backend.state;
+    const endedBody = yield* backend.body;
     const started = yield* invoke(s.control, "start", [
       Start.cases.again.make({
         id: "p18-e1-again",
@@ -405,6 +410,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       first,
       second,
       ended,
+      endedBody,
       shownPid,
       restartedAt: restarted?.rev ?? null,
       sent: sent.map((f) => f.rev),
