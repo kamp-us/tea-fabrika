@@ -160,7 +160,8 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     // Alchemy's local Worker provider forks the workerd start, so deploy returns before workerd
     // listens. The control socket's first start opens this latch.
     listening = yield* Deferred.make<void>(),
-    started = yield* Deferred.make<void>();
+    // The first start, or `bad_pid` when it reported no process's pid.
+    started = yield* Deferred.make<void, ControlError>();
   const token = Redacted.make(
     Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
   );

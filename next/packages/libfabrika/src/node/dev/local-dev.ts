@@ -118,6 +118,13 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
 // What `process.kill` throws for a pid that no longer exists.
 const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
 
+// A signal the OS refused: `missing` when the pid has no process (ESRCH), `refused` for any other.
+class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
+  reason: Schema.Literals(["missing", "refused"]),
+  /** The error `process.kill` threw, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 /**
  * Sends one signal to one OS process.
  *
@@ -138,9 +145,12 @@ export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
     try: () => {
       process.kill(pid, name);
     },
-    catch: (cause) => cause,
+    catch: (cause) => new SignalError({ reason: isMissing(cause) ? "missing" : "refused", cause }),
   }).pipe(
-    Effect.catchIf(isMissing, () => Effect.void),
+    Effect.catchIf(
+      (error) => error.reason === "missing",
+      () => Effect.void,
+    ),
     Effect.orDie,
   );
 
