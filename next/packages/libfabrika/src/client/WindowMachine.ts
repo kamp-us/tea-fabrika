@@ -45,14 +45,15 @@ const Inbox = Schema.TaggedUnion({
   reading: { after: Schema.Int, id: Schema.Int },
 });
 
-// What the window's polite region says, written by the step the event happened in: a tile whose
-// process ended, or a tile's refused letter. The region holds the newest news only, so a tile that
-// stays ended is shown by its tile and never said again (0504, WCAG 4.1.3).
-const News = Schema.TaggedUnion({
+// A status message for the window's polite region (WCAG 4.1.3), written by the step its event
+// happened in: a tile whose process ended, or a tile's refused letter. The region says the messages
+// of one burst as one line and never the standing state, so a tile that stays ended is shown by its
+// tile and never said again (0504).
+const StatusMessage = Schema.TaggedUnion({
   ended: { tile: Schema.String, reason: ExitReason },
   refused: { tile: Schema.String, m: Schema.Json, reason: Schema.String },
 });
-type News = typeof News.Type;
+type StatusMessage = typeof StatusMessage.Type;
 
 // A bad recovery answer does not permit another ask. A checked whole or a new dial does.
 const Recovery = Schema.Literals(["ready", "asked"]);
@@ -92,8 +93,8 @@ const Via = Schema.Literals(["button", "key"]);
  *
  * `link` is where the connection is, `handshake` the hello exchange of its dial, and `fingerprint`
  * the key the window dials with, once the key store has answered. `tab` is the window's own tab,
- * and `inbox` reads that tab's inbox for the DOWNs of the watches its tiles hold. `said` is the
- * newest news for the page's polite region. `flight` holds each written call by its id and dial
+ * and `inbox` reads that tab's inbox for the DOWNs of the watches its tiles hold. `said` holds the
+ * status messages of the polite region's current burst. `flight` holds each written call by its id and dial
  * until its answer comes. `client` holds the program client's letters and views.
  *
  * @stability unstable
@@ -109,14 +110,15 @@ export const WindowModel = Schema.Struct({
       recovery: Recovery,
       own: Schema.Json,
       refusal: Schema.NullOr(Schema.Struct({ m: Schema.Json, reason: Schema.String })),
-      // The process whose end this tile's news told, so a re-read that finds it ended again is quiet.
+      // The process whose end this tile's status message told, so a re-read that finds it ended again is quiet.
       told: Schema.NullOr(Schema.String),
     }),
   ),
   tab: Schema.String,
   inbox: Inbox,
-  // The polite region's newest news, null before the first; `id` grows by one with each news.
-  said: Schema.Struct({ id: Count, news: Schema.NullOr(News) }),
+  // The status messages of the polite region's current burst, in order. `id` grows with each one
+  // appended; the resend tick ends the burst and empties the list, keeping `id`.
+  said: Schema.Struct({ id: Count, messages: Schema.Array(StatusMessage) }),
   link: Link,
   handshake: Handshake,
   fingerprint: Schema.NullOr(Schema.String),
@@ -365,8 +367,16 @@ const reached = (s: WindowModel, tile: string, reach: Reach): WindowModel => ({
   tiles: s.tiles.map((t) => (t.id === tile ? { ...t, reach } : t)),
 });
 
-/** The step's news: it replaces what the polite region said before, under the next id. */
-const say = (s: WindowModel, news: News): WindowModel => ({ ...s, said: { id: s.said.id + 1, news } });
+/** Appends one status message to the current burst, under the next id. */
+const say = (s: WindowModel, message: StatusMessage): WindowModel => ({
+  ...s,
+  said: { id: s.said.id + 1, messages: [...s.said.messages, message] },
+});
+
+/** The burst is over: the next status message starts a new line. The id is kept, so the clearing
+ *  itself is no new line. */
+const hushed = (s: WindowModel): WindowModel =>
+  s.said.messages.length === 0 ? s : { ...s, said: { id: s.said.id, messages: [] } };
 
 /** A tile whose process `pid` ended tells it once; finding the same end again tells nothing. */
 const tellEnded = (s: WindowModel, tile: Tile, pid: string, reason: ExitReason): WindowModel =>
@@ -374,7 +384,7 @@ const tellEnded = (s: WindowModel, tile: Tile, pid: string, reason: ExitReason):
     ? s
     : say(
         { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) },
-        News.cases.ended.make({ tile: tile.id, reason }),
+        StatusMessage.cases.ended.make({ tile: tile.id, reason }),
       );
 
 /** Reads each tile in `ids` from rev 0 of its name, as a dial's start does, with a fresh fold. */
@@ -986,10 +996,11 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
 
 /**
  * A saved Model loaded into a tab: its own tab keeps its inbox cursor; another tab's inbox is not
- * this one's, so the cursor starts over there.
+ * this one's, so the cursor starts over there. Either way the region mounts empty (0504): the
+ * saved burst is not said again, and its id is kept.
  */
 const moved = (loaded: WindowModel, tab: string): WindowModel =>
-  loaded.tab === tab ? loaded : { ...loaded, tab, inbox: Inbox.cases.idle.make({ after: 0 }) };
+  hushed(loaded.tab === tab ? loaded : { ...loaded, tab, inbox: Inbox.cases.idle.make({ after: 0 }) });
 
 /**
  * Makes the window parent for one client, from the checks of the programs its tiles show.
@@ -1029,7 +1040,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             })),
             tab: ctx.tab,
             inbox: Inbox.cases.idle.make({ after: 0 }),
-            said: { id: 0, news: null },
+            said: { id: 0, messages: [] },
             link: linkMachine.init(null, {})[0],
             // Dial 1's exchange waits for its challenge; its socket opening times it.
             handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
@@ -1249,7 +1260,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         return [
           refusal === null || owner === undefined
             ? settled
-            : say(settled, News.cases.refused.make({ tile: owner, ...refusal })),
+            : say(settled, StatusMessage.cases.refused.make({ tile: owner, ...refusal })),
           [
             record({
               record: ClientRecord.cases.reply.make({
@@ -1311,11 +1322,14 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
       seen: (s, m): Step => [{ ...s, client: step(s.client, { type: "read", rev: m.rev })[0] }, []],
       resend: (s, m): Step => {
-        if (socketDial(s.link) !== m.dial) {
-          return [s, []];
+        // Every tick ends the polite region's burst, on any dial or none.
+        const quiet = hushed(s);
+
+        if (socketDial(quiet.link) !== m.dial) {
+          return [quiet, []];
         }
 
-        const [flushed, out] = flush({ ...s, redate: [] });
+        const [flushed, out] = flush({ ...quiet, redate: [] });
         const [next, waits] =
           flushed.link._tag === "online" && flushed.inbox._tag === "idle"
             ? waitInbox(flushed, flushed.link.dial, flushed.inbox.after)
@@ -1356,6 +1370,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         type: "timer",
         deps: (s) =>
           s.redate.length > 0 ||
+          s.said.messages.length > 0 ||
           (s.link._tag === "online" &&
             (s.inbox._tag === "idle" || C.sendable(s.client).some((p) => !s.sent.includes(p.letter))))
             ? { ms: 2000, msg: { type: "resend" as const, dial: socketDial(s.link) ?? 0 } }

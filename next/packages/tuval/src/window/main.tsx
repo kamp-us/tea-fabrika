@@ -136,8 +136,8 @@ const Page = (props: PageProps) => {
   const [views] = useRuntime(props.run, (m) => m.client.views);
   const [trouble] = useRuntime(props.run, (m) => m.trouble);
   const [said] = useRuntime(props.run, (m) => m.said);
-  // The polite region says the newest news once: a refusal, or a tile whose process ended. Each news
-  // is a new node under its own id, so the same words said again are a change a reader hears.
+  // The polite region says the status messages of one burst as one line (0504): a refusal, or a tile
+  // whose process ended. Each append is a new node under the new id, so a reader hears the line again.
   const words = spoken({ said, tiles }, props.windowFor);
   const content =
     link._tag === "waiting_grant" ? (
