@@ -126,6 +126,8 @@ type Row = { readonly _tag: string; readonly [key: string]: unknown };
 
 const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<Cmd>] => applyCell(machine, s, m);
 const isWrite = (c: Cmd): c is Write => c.type === "write";
+/** A saved Model as it mounts: the polite region's burst is empty, and its id is kept (0504). */
+const mounted = (s: WindowModel): WindowModel => ({ ...s, said: { id: s.said.id, messages: [] } });
 const recordIn = (c: Cmd): Row | null => (c.type === "record" ? (c["record"] as Row) : null);
 
 const socketDial = (s: WindowModel): number | null =>
@@ -1783,11 +1785,15 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
       const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
       const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(machine.model))(saved);
       let [s] = machine.init(loaded, ctx);
-      expect(s, "the saved Model did not load back as it was").toEqual(events[k]!.next);
+      expect(s, "the saved Model did not load back as it was, with an empty region").toEqual(mounted(events[k]!.next));
+      // The loaded run's region lacks the burst said before the cut, until the uncut run's burst ends.
+      let before = events[k]!.next.said.messages.length;
 
       for (const e of events.slice(k + 1)) {
         const [next, cmds] = step(s, e.m);
-        expect([next, cmds], `${e.m.type} after the cut`).toEqual([e.next, e.cmds]);
+        before = e.next.said.messages.length === 0 ? 0 : before;
+        const want = { ...e.next, said: { id: e.next.said.id, messages: e.next.said.messages.slice(before) } };
+        expect([next, cmds], `${e.m.type} after the cut`).toEqual([want, e.cmds]);
         s = next;
       }
 
@@ -2495,7 +2501,7 @@ const follow = (list: ReadonlyArray<FollowChoice>, each: (e: FollowEvent) => voi
 
         w.cuts++;
         const [loaded] = machine.init(Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(next)), ctx);
-        expect(loaded, "a saved Model did not load back as it was").toEqual(next);
+        expect(loaded, "a saved Model did not load back as it was, with an empty region").toEqual(mounted(next));
         return loaded;
       },
     },
@@ -3042,8 +3048,8 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     expect(seen.ignored, "letters were left alone").toBeGreaterThan(0);
   });
 
-  it("S7 property: a saved Model loaded into another tab carries that tab and an inbox cursor of 0, its next inbox wait names that tab's inbox, and a DOWN there for a tile's watch sends the tile back to read its name; loaded into its own tab it is unchanged", () => {
-    const seen = { moved: 0, waited: 0, downed: 0 };
+  it("S7 property: a saved Model loaded into another tab carries that tab, an inbox cursor of 0 and an empty polite region with its id kept, its next inbox wait names that tab's inbox, and a DOWN there for a tile's watch sends the tile back to read its name; loaded into its own tab only its region empties", () => {
+    const seen = { moved: 0, waited: 0, downed: 0, burst: 0 };
     const save = Schema.fromJsonString(machine.model);
     const there = clientInbox(OTHER_TAB);
     fc.assert(
@@ -3057,15 +3063,18 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const load = () => Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(saved));
 
         const [home] = machine.init(load(), ctx);
-        expect(home, "a Model loaded into its own tab changed").toEqual(saved);
+        seen.burst += saved.said.messages.length > 0 ? 1 : 0;
+        expect(home, "a Model loaded into its own tab changed more than its region").toEqual(mounted(saved));
 
         const [away] = machine.init(load(), { tiles: TILES, tab: OTHER_TAB });
         seen.moved++;
         expect(away.tab, "the loaded Model's tab").toBe(OTHER_TAB);
         expect(inboxIn(away), "the loaded Model's inbox").toEqual({ _tag: "idle", after: 0 });
-        expect({ ...away, tab: saved.tab, inbox: saved.inbox }, "a move changed more than the tab and inbox").toEqual(
-          saved,
-        );
+        expect(away.said, "the moved Model's region").toEqual({ id: saved.said.id, messages: [] });
+        expect(
+          { ...away, tab: saved.tab, inbox: saved.inbox, said: saved.said },
+          "a move changed more than the tab, the inbox and the region",
+        ).toEqual(saved);
 
         const dial = socketDial(away);
 
@@ -3125,19 +3134,21 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     expect(seen.moved, "Models were moved to another tab").toBeGreaterThan(0);
     expect(seen.waited, "moved Models waited on their new inbox").toBeGreaterThan(0);
     expect(seen.downed, "moved Models took a DOWN in their new inbox").toBeGreaterThan(0);
+    expect(seen.burst, "saved Models held a burst").toBeGreaterThan(0);
   });
 
-  it("S8 property: the polite region's news is written by the step its event happens in, once: a tile that turns ended tells its end once per process, a refused letter tells its refusal, each news replaces the one before under the next id, and a step with no such event, a tile that stays ended or is found ended again included, leaves the news as it was", () => {
-    const seen = { ended: 0, again: 0, refused: 0, replaced: 0, quiet: 0, kept: 0 };
+  it("S8 property: the polite region's status messages are written by the steps their events happen in and joined into one burst: each end and each refusal appends one message under the next id, in order; a resend tick with messages empties the list and keeps the id, and one with none changes nothing; a tile tells each process's end once and a successor's end again; a loaded Model's region is empty with its id kept; any other step leaves the region as it was", () => {
+    const seen = { ended: 0, again: 0, refused: 0, burst: 0, cleared: 0, idle: 0, quiet: 0, resaid: 0, cut: 0 };
     fc.assert(
       fc.property(follows, (list) => {
-        const told = new Set<string>(); // `${tile} ${pid}`: each end the news told
+        const told = new Set<string>(); // `${tile} ${pid}`: each end a status message told
         const ends = new Map<string, number>(); // tile → how many ends it told
+        const hushed = new Set<string>(); // the messages of every burst a tick ended
+        let cuts = 0;
         follow(
           list,
-          ({ prev, m, next }) => {
+          ({ prev, m, next, world }) => {
             const was = prev.said;
-            const now = next.said;
             const ended = next.tiles.flatMap((t) => {
               const r = t.reach;
               const before = reachIn(prev, t.id);
@@ -3157,18 +3168,31 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               prev.tiles.some((t) => t.id === owner)
                 ? [{ _tag: "refused", tile: owner, m: slot.m, reason: m.value.reason }]
                 : [];
-            const news = [...ended.map(({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
-            expect(news.length, `${m.type} made more than one news in one step`).toBeLessThanOrEqual(1);
+            const messages = [...ended.map(({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
+            const tick = m.type === "resend";
+            seen.cleared += tick && was.messages.length > 0 ? 1 : 0;
+            seen.idle += tick && was.messages.length === 0 ? 1 : 0;
 
-            if (news.length === 0) {
-              seen.kept += was.news === null ? 0 : 1;
-              expect(now, `${m.type} made no news and changed what the region says`).toEqual(was);
-              return;
+            if (tick) {
+              for (const message of was.messages) {
+                hushed.add(JSON.stringify(message));
+              }
             }
 
-            expect(now, `${m.type}'s news`).toEqual({ id: was.id + 1, news: news[0] });
-            seen.replaced += was.news !== null ? 1 : 0;
+            const start = tick ? { id: was.id, messages: [] } : was;
+            const stepped = {
+              id: start.id + messages.length,
+              messages: [...start.messages, ...messages],
+            };
+            const cut = world.cuts > cuts;
+            cuts = world.cuts;
+            seen.cut += cut && stepped.messages.length > 0 ? 1 : 0;
+            expect(next.said, `the region after ${m.type}${cut ? " and a saved cut" : ""}`).toEqual(
+              cut ? { id: stepped.id, messages: [] } : stepped,
+            );
+            seen.burst += messages.length > 0 && start.messages.length > 0 ? 1 : 0;
             seen.refused += refused.length;
+            seen.resaid += messages.filter((x) => hushed.has(JSON.stringify(x))).length;
 
             for (const e of ended) {
               seen.ended++;
@@ -3184,7 +3208,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     );
 
     for (const [k, n] of Object.entries(seen)) {
-      expect(n, `news steps seen as ${k}`).toBeGreaterThan(0);
+      expect(n, `region steps seen as ${k}`).toBeGreaterThan(0);
     }
   });
 });

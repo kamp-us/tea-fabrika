@@ -1,6 +1,6 @@
-// next/: the polite region's words. The window machine writes the newest news into its Model in the
-// step its event happened in (WindowMachine.laws.test.ts, S8); this holds that the page says only that
-// news, whatever the tiles show, so a tile that stays ended is never said again by a later change.
+// next/: the polite region's words. The window machine writes each status message into its Model in the
+// step its event happened in (WindowMachine.laws.test.ts, S8); this holds that the page says exactly
+// the current burst as one line, whatever the tiles show, so a tile that stays ended is never said again.
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import { Arbitrary, Schema } from "effect";
@@ -13,36 +13,52 @@ const Tiles = WindowModel.fields.tiles.check(Schema.isMinLength(1), Schema.isMax
 const Said = WindowModel.fields.said;
 const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-/** The generated tiles under distinct names, none inside another, and the news on one of them. */
+/** The generated tiles under distinct names, none inside another, and each message on one of them. */
 const page = (tiles: typeof Tiles.Type, said: typeof Said.Type, pick: number) => {
   const named = tiles.map((t, i) => ({ ...t, id: `tile_${i + 1}`, name: NAMES[i]! }));
-  const on = named[pick % named.length]!.id;
-  return { tiles: named, said: { ...said, news: said.news === null ? null : { ...said.news, tile: on } } };
+  const messages = said.messages.map((x, i) => ({ ...x, tile: named[(pick + i) % named.length]!.id }));
+  return { tiles: named, said: { ...said, messages } };
 };
 
-describe("the polite region says the newest news only", () => {
+describe("the polite region says the current burst as one line", () => {
   it.prop(
-    "property: an ended news names its tile and its reason, a refusal says its words and names no tile, no news says nothing, and no other tile is named, ended or not",
+    "property: the region's text is the joined line of exactly the current status messages, in order: an end names its tile and its reason, a refusal says the frame's words and names no tile; it names no other tile, ended or not, and it is empty when the list is",
     { tiles: Arbitrary.schema(Tiles), said: Arbitrary.schema(Said), pick: Arbitrary.schema(Pick) },
     ({ tiles, said, pick }) => {
       const m = page(tiles, said, pick);
       const words = spoken(m, () => null);
-      const news = m.said.news;
-      const own = m.tiles.find((t) => t.id === news?.tile);
-      const others = m.tiles.filter((t) => t !== own);
+      const ends = new Set(m.said.messages.filter((x) => x._tag === "ended").map((x) => x.tile));
 
-      for (const t of others) {
-        expect(words.includes(t.name), `${t.name} (${t.reach._tag}) was said, and it is not the news`).toBe(false);
+      for (const t of m.tiles.filter((t) => !ends.has(t.id))) {
+        expect(words.includes(t.name), `${t.name} (${t.reach._tag}) was said, and no end of it is in the burst`).toBe(
+          false,
+        );
       }
 
-      if (news === null) {
-        expect(words, "no news, and the region said something").toBe("");
-      } else if (news._tag === "ended") {
-        expect(words.includes(own!.name), "the ended tile's name").toBe(true);
-        expect(words.includes(`(${news.reason._tag})`), "the ended tile's reason").toBe(true);
-      } else {
-        expect(words, "a refusal says words").not.toBe("");
-        expect(words.includes(own!.name), "a refusal's words are the frame's, with no tile name").toBe(false);
+      if (m.said.messages.length === 0) {
+        expect(words, "an empty burst, and the region said something").toBe("");
+        return true;
+      }
+
+      // Each message's own words, as the region says it alone, appear in order, one line.
+      const parts = m.said.messages.map((x) =>
+        spoken({ tiles: m.tiles, said: { id: m.said.id, messages: [x] } }, () => null),
+      );
+      expect(words, "the burst as one line, in order").toBe(parts.join(", "));
+      expect(words.includes("\n"), "the burst is one line").toBe(false);
+
+      for (const [x, part] of m.said.messages.map((x, i) => [x, parts[i]!] as const)) {
+        const tile = m.tiles.find((t) => t.id === x.tile)!;
+
+        if (x._tag === "ended") {
+          expect(part.includes(tile.name) && part.includes(`(${x.reason._tag})`), "an end's tile and reason").toBe(
+            true,
+          );
+        } else {
+          expect(part !== "" && !part.includes(tile.name), "a refusal's words are the frame's, with no tile name").toBe(
+            true,
+          );
+        }
       }
 
       return true;
@@ -51,14 +67,16 @@ describe("the polite region says the newest news only", () => {
   );
 
   it.prop(
-    "property: some generated pages hold an ended tile that is not the news, so the law above can see it said",
+    "property: some generated pages hold bursts of two or more and an ended tile no message names, so the law above can see both",
     { list: Arbitrary.array(Arbitrary.schema(Schema.Tuple([Tiles, Said, Pick])), { minLength: 30, maxLength: 30 }) },
     ({ list }) => {
-      const quiet = list.some(([tiles, said, pick]) => {
-        const m = page(tiles, said, pick);
-        return m.tiles.some((t) => t.reach._tag === "ended" && t.id !== m.said.news?.tile);
-      });
-      expect(quiet).toBe(true);
+      const pages = list.map(([tiles, said, pick]) => page(tiles, said, pick));
+      expect(pages.some((m) => m.said.messages.length >= 2)).toBe(true);
+      expect(
+        pages.some((m) =>
+          m.tiles.some((t) => t.reach._tag === "ended" && !m.said.messages.some((x) => x.tile === t.id)),
+        ),
+      ).toBe(true);
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 30 } },
