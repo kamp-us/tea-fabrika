@@ -404,9 +404,9 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
       // An idle, a refusal, or a job assigned to another key: nothing here runs, and the list is
       // asked again. A refusal that cannot change by itself skips the job on this link.
       const mine = reason === null ? assignment(s, result) : Option.none();
-      const why = refusal(reason, result);
+      const refused = refusal(reason, result);
       return Option.match(mine, {
-        onNone: () => (why !== null && STUCK.has(why) ? skip(s, w.id) : relist(s, w.tries)),
+        onNone: () => (refused !== null && STUCK.has(refused) ? skip(s, w.id) : relist(s, w.tries)),
         onSome: ({ job, state }) => [
           { ...s, work: Work.cases.recalling.make({ ...job, state }) },
           [journalRead({ job: job.id })],
