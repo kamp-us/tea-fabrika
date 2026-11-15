@@ -13,6 +13,7 @@ import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Proce
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
@@ -104,7 +105,7 @@ export const suite = (
     const layer = () =>
       ProgramRunner.layer(
         { id: A, name: NAME, program: "counter", build: controls.build, owner: person },
-        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 } },
+        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(
         Layer.provideMerge(
           Layer.mergeAll(

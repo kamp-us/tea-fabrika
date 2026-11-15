@@ -183,7 +183,8 @@ it.live(
       yield* fs.writeFileString(
         entry,
         [
-          `export { default, Connection, Process, RecordPart, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
+          // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
+          `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
           `import { Project as SeededProject } from ${JSON.stringify(path.join(app, "src/jobs-wire.test-support.ts"))};`,
           `export class Project extends SeededProject { static selected = ${JSON.stringify(selected)}; }`,
         ].join("\n"),
@@ -220,6 +221,30 @@ it.live(
       );
       const url = `http://127.0.0.1:${port.port}`;
       expect(running).toBeDefined();
+      // A job's requester is always a started name, since only a running program asks the hands. The
+      // seeded job names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
+      const requester = yield* Effect.tryPromise({
+        try: () =>
+          Reflect.get(running.project("jobs-wire"), "start")(
+            {
+              _tag: "first",
+              id: "start-wire",
+              name: "wire:1",
+              code: { program: "fabrika/counter", hash: built.programs["fabrika/counter"]?.hash ?? "missing" },
+            },
+            {
+              by: root.fingerprint,
+              for: PERSON,
+              sentAt: SENT,
+              seen: 0,
+              parent: null,
+              traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+              build: built.build,
+            },
+          ),
+        catch: (cause: unknown) => new Error("requester start failed", { cause }),
+      });
+      expect(requester).toMatchObject({ process: expect.any(String) });
       const grant = Effect.fnUntraced(function* (key: ReturnType<typeof identity>, id: string) {
         const value = grantText({
           id,

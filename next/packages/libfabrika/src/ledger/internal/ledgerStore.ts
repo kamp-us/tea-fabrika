@@ -50,6 +50,8 @@ const Head = Schema.Struct({ rev: Rev, arrivedAt: Schema.Int });
 const Last = Schema.Struct({ pos: Rev });
 /** A stream's newest rev, 0 when it is empty. */
 const Top = Schema.Struct({ rev: Rev });
+/** A stream's newest pos, null when it is empty. */
+const End = Schema.Struct({ pos: Schema.NullOr(Rev) });
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
 const Lag = Schema.Struct({ head: Rev, lag: Rev });
 
@@ -72,6 +74,7 @@ const decodeRing = Schema.decodeUnknownSync(Ring);
 const decodeHead = Schema.decodeUnknownSync(Head);
 const decodeLast = Schema.decodeUnknownSync(Last);
 const decodeTop = Schema.decodeUnknownSync(Top);
+const decodeEnd = Schema.decodeUnknownSync(End);
 const decodeLag = Schema.decodeUnknownSync(Lag);
 const decodeStream = Schema.decodeUnknownSync(Schema.Struct({ stream: Schema.String }));
 
@@ -416,6 +419,14 @@ export const ledgerStore = (
         return decodeTop(
           Option.getOrThrow(one(`SELECT coalesce(max(rev), 0) AS rev FROM entries WHERE stream = ?`, stream)),
         ).rev;
+      },
+      end: (stream) => {
+        ensureOpen();
+        // A stream's pos only grows, so its newest entry's pos is its largest, which the
+        // UNIQUE (stream, pos) index answers. One row always, empty stream included.
+        return Option.fromNullishOr(
+          decodeEnd(Option.getOrThrow(one(`SELECT max(pos) AS pos FROM entries WHERE stream = ?`, stream))).pos,
+        );
       },
       append: (stream, id, input) => {
         ensureOpen();

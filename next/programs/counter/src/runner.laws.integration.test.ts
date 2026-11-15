@@ -13,6 +13,7 @@ import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransacti
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
@@ -211,7 +212,7 @@ describe("p22 real counter in the runner", () => {
             build: "counter-build",
             owner: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
           },
-          { recovery: { sql: nodeSql(storeDb), name: NAME, capacity: 1024 ** 3 } },
+          { recovery: { sql: nodeSql(storeDb), name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
         ).pipe(
           Layer.provideMerge(
             Layer.mergeAll(
@@ -401,7 +402,7 @@ describe("P40 the counter under its qualified identity", () => {
             build: "counter-build",
             owner: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
           },
-          { recovery: { sql: nodeSql(storeDb), name: NAME, capacity: 1024 ** 3 } },
+          { recovery: { sql: nodeSql(storeDb), name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
         ).pipe(
           Layer.provideMerge(
             Layer.mergeAll(

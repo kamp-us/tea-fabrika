@@ -8,6 +8,25 @@
       "title": "a version",
       "description": "The oldest fabrika this repo works with. It is read before every other setting.",
       "default": "0.0.0"
+    },
+    "mail": {
+      "type": "object",
+      "properties": {
+        "chunk": {
+          "type": "string",
+          "description": "The most bytes in one letter of a chunked send.",
+          "default": "65536 bytes"
+        },
+        "unread": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384,
+          "title": "a letter count",
+          "description": "The most unread letters one inbox holds. A send past it answers full, and nothing is saved.",
+          "default": 256
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

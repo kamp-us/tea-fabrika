@@ -312,11 +312,16 @@ In build order. "Decide first" lists only what no decision answers yet.
   outbox and inbox hold, and the recovery save keeps the rows it last read or wrote, so a save
   after a load reads one row
   ([finding](../../field/findings/2026-11-11-recovery-save-rereads-every-receipt.json)).
-- Not built: the inbox cap and its `full` answer; chunked sends from the writer; the
-  inbox cap and chunk size as settings (P38); the right for two programs on one line to mail each
-  other, which today needs a host grant (`ProgramMailLedger.ts:172`).
+  *Added 2026-11-15 (ticket 1041, https://github.com/kamp-us/tea-fabrika/pull/1310):* an inbox
+  holds at most `mail.unread` unread letters, and a send past it answers `full` with nothing saved;
+  the reader's runner acks how far it read after each checkpoint save; the built-in `send_chunks`
+  cuts a list into letters of at most `mail.chunk` bytes, in order, and waits while the inbox is
+  full. Both settings are repo settings, with defaults from
+  [experiment 295](../../experiments/295-inbox-cap-and-chunk-size.md): 256 letters and 64 KiB.
+- Not built: the right for two programs on one line to mail each other, which today needs a host
+  grant (`ProgramMailLedger.ts`).
 - Decide first: how a pipe carries one program's output to the next one's input (not decided in
-  0159); the inbox cap's default, from a measurement (0109).
+  0159).
 
 **5. Hands, far enough to run a turn.**
 - Designed by: [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)

@@ -27,6 +27,7 @@ import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
@@ -182,7 +183,7 @@ const world = Effect.fnUntraced(function* (harness: Harness, program: typeof lin
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: live.state.process, name: NAME, program: program.name, build: "test", owner },
-        { recovery: { sql, name: NAME, capacity: 1024 ** 3 } },
+        { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
     return Context.get(context, ProgramRunner) as Runner;
