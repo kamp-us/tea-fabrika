@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { agentEnv, hostEnv, runEnv, shellEnv, toolHome } from "./env.ts";
+import { agentEnv, hostEnv, notAsNode, runAsNode, runEnv, shellEnv, toolHome } from "./env.ts";
 
 // The short environments, on a made-up parent: no test here reads a real key.
 // How each place that starts a process uses them is tested beside that place.
@@ -130,5 +131,33 @@ describe("the environment a started process is handed", () => {
       expect(names(env)).not.toContain("TEA_FABRIKA_MARKER");
       expect(names(env)).not.toContain("TYPESAFE_API_KEY");
     }
+  });
+});
+
+// The agent helpers plan (docs/plan/lanes/dock-PLAN.md), law L3. Electron's binary boots its whole
+// app, with a Dock icon on a Mac, unless ELECTRON_RUN_AS_NODE is set and not empty
+// (electron_main_mac.cc at v45.2.1, lines 37 to 40). `runAsNode` is what a Node helper started on
+// that binary needs; `notAsNode` clears it for the commands an agent runs. On plain Node each is
+// nothing.
+//
+//   runAsNode(true)    { ELECTRON_RUN_AS_NODE: "1" }        notAsNode(true)    { ELECTRON_RUN_AS_NODE: "" }
+//   runAsNode(false)   {}                                   notAsNode(false)   {}
+describe("L3: the switch, set or cleared, is the one key and only on Electron", () => {
+  it("answers only ELECTRON_RUN_AS_NODE, 1 to run as Node and empty to clear it, on Electron, and nothing on plain Node", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (electron) => {
+        // `toStrictEqual`: an `undefined` value under the key would not be nothing.
+        expect(runAsNode(electron)).toStrictEqual(electron ? { ELECTRON_RUN_AS_NODE: "1" } : {});
+        expect(notAsNode(electron)).toStrictEqual(electron ? { ELECTRON_RUN_AS_NODE: "" } : {});
+      }),
+      { numRuns: 50 },
+    );
+  });
+
+  it("on plain Node, as these tests run, both default to nothing", () => {
+    // Label: scenario. The default reads `process.versions.electron` at the edge, which plain Node never sets.
+    expect(process.versions.electron).toBeUndefined();
+    expect(Object.keys(runAsNode())).toEqual([]);
+    expect(Object.keys(notAsNode())).toEqual([]);
   });
 });
