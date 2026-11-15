@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
@@ -501,7 +502,7 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
     }),
     {
       seed: 119120,
-      numRuns: 15,
+      numRuns: runsFor({ fast: 3, full: 15 }),
       examples: [
         [
           {
@@ -525,6 +526,6 @@ it("[secrets] the Worker control edge accepts the generated Redacted bearer with
       expect(await response.json()).toEqual({ value: [] });
       clean(outputs, words);
     }),
-    { seed: 119120, numRuns: 10 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
   );
 });

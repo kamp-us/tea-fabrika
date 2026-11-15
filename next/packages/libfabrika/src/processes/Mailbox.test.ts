@@ -14,6 +14,7 @@
 // - No Layer fails when it is built.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -97,7 +98,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
         fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
         {
           seed: SEED,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },
@@ -131,7 +132,7 @@ describe("P33, only the owning runner writes its answers", () => {
 
   // Process ids come from processIds: exact UUIDv7 TypeIDs, not any 26 base32 characters.
   const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
-  const props = { arbitrary: { seed: SEED, runs: 40 } };
+  const props = { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } };
   it.effect.prop(
     "runner permission requires its exact name and process id",
     { suffix: Schema.String, process: processIds, step: Nat, count: Nat, m: Schema.Json },
@@ -443,7 +444,7 @@ describe("p21, receive", () => {
           }).pipe(Effect.provide(mail())),
         ),
       ),
-      { seed: SEED, numRuns: 60 },
+      { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
 });

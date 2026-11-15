@@ -1,5 +1,6 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
@@ -14,7 +15,7 @@ const failStore = (): never => {
 };
 
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)));
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),

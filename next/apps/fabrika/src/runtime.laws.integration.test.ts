@@ -18,6 +18,7 @@ import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -144,7 +145,7 @@ const law = (
   it(name, async ({ signal }) => {
     await fc.assert(
       fc.asyncProperty(generated, (input) => owned((open) => check(input, open), signal)),
-      { seed: 119120, numRuns: 20, examples: [[prepareInput], [approveInput]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[prepareInput], [approveInput]] },
     );
   });
 
@@ -573,7 +574,7 @@ describe("P40 the core counter's identity in the brain", () => {
           { signal },
         ),
       ),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 });
@@ -811,7 +812,7 @@ describe("P12 Project saved and wire readers", () => {
           }
         }, signal),
       ),
-      { seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["{}"], ["null"]] },
     );
   });
 
@@ -846,7 +847,7 @@ describe("P12 Project saved and wire readers", () => {
             }
           }, signal),
         ),
-        { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+        { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
       );
     });
   }
@@ -898,7 +899,7 @@ describe("P12 WebCrypto failures", () => {
             }
           }, signal),
         ),
-        { seed: 119120, numRuns: 20 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
       );
     });
   }
@@ -1058,7 +1059,7 @@ describe("P12 Connection recording", () => {
             expect(sent.join("")).not.toContain(text);
           }, signal),
       ),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 
@@ -1078,7 +1079,7 @@ describe("P12 Connection recording", () => {
           ).toEqual([]);
         }, signal),
       ),
-      { seed: 119120, numRuns: 20 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 });

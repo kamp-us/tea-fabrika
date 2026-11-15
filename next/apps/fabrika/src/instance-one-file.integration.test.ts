@@ -13,6 +13,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
@@ -414,7 +415,7 @@ describe("P16 stack and sealed loader", () => {
         vi.doUnmock("@alchemy.run/cloudflare");
         vi.resetModules();
       }),
-      { ...runs, numRuns: 6 },
+      { ...runs, numRuns: runsFor({ fast: 3, full: 6 }) },
     );
   });
   it("p33 loader: actual config uses recorded bytes/hash and exact process, empty env, null outbound; unknown is typed no_program", async () => {
@@ -583,7 +584,7 @@ describe("P16 copied-file real instance, serial", () => {
 
         expect(closed, "next instance must wait for the real child close event").toBe(true);
       }),
-      { ...runs, numRuns: 8 },
+      { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
     );
   });
   it("isolation plants reach the actual compiled loader policy before a real-instance run", async () => {
@@ -600,7 +601,7 @@ describe("P16 copied-file real instance, serial", () => {
           expect(plantPolicy(source, mode, `P16_${n}`, String(n))).not.toBe(source);
         }
       }),
-      { ...runs, numRuns: 2 },
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
     );
   });
   it("p33 real isolation: a selected program sees no planted binding and cannot reach a controlled HTTP target", async () => {
@@ -750,7 +751,7 @@ describe("P16 copied-file real instance, serial", () => {
           }
         }
       }),
-      { ...runs, numRuns: 2 },
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
     );
   });
   it("p33 complete output and T10 recovery: copied file loads programs; resend after restart retains placing, stamped ID, inbox and both views", async () => {
@@ -921,7 +922,7 @@ describe("P16 copied-file real instance, serial", () => {
           });
         },
       ),
-      { ...runs, numRuns: 2 },
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
     );
   });
   // scenario: a fixed base/head benchmark, because it measures real laptop performance.

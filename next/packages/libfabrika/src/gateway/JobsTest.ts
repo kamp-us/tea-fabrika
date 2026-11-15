@@ -3,6 +3,7 @@
 // A4 and A6-A12 plant trials, including A-Kept's reconnect metadata, are in the tests-step report.
 // Temporary edits are restored after each trial. A14 runs on the lead's host.
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Deferred,
@@ -1025,7 +1026,18 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                 Effect.as(true),
                 Effect.catchCause((cause) => Effect.fail(cause)),
               ),
-            { seed: 119120, runs: focus === "A12" ? 40 : focus === "A8" || focus === "A10" ? 60 : 100, concurrency: 1 },
+            {
+              seed: 119120,
+              // A8 at 15 walks never races a read or a finish at this seed, so A8 and A10 run 30.
+              runs: runsFor(
+                focus === "A12"
+                  ? { fast: 10, full: 40 }
+                  : focus === "A8" || focus === "A10"
+                    ? { fast: 30, full: 60 }
+                    : { fast: 25, full: 100 },
+              ),
+              concurrency: 1,
+            },
           );
           expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
           expect([...done]).toEqual(expect.arrayContaining([...required[focus]]));

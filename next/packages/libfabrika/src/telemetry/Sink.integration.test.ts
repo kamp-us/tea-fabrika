@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -209,7 +210,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
           expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
         }).pipe(Effect.provide(world(sql)));
       }),
-    { arbitrary: { seed: SEED, runs: 40 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } },
   );
 
   // Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
@@ -259,7 +260,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 });
@@ -499,7 +500,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect("flush follows a part's roll and the next batch starts at the new part", () =>
@@ -551,7 +552,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -593,7 +594,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -629,7 +630,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -659,7 +660,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -703,7 +704,7 @@ describe("p98, a span that ends is never dropped", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   it.effect.prop(
@@ -934,7 +935,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
           expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
         }
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
 
   it.effect.prop(
@@ -967,7 +968,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
           }
         }
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
 });
 
@@ -1075,7 +1076,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
         }
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
 
   it.effect.prop(
@@ -1108,7 +1109,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           }
         }
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
 
   it.effect("pinned: ticket 955, a folder with one unmatched parenthesis", () =>
@@ -1306,7 +1307,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           }).pipe(Effect.scoped),
         );
       }),
-      { seed: SEED, numRuns: 60 },
+      { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
 
@@ -1427,7 +1428,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           }).pipe(Effect.scoped),
         );
       }),
-      { seed: SEED, numRuns: 30 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) },
     );
   });
 });
@@ -1573,7 +1574,7 @@ describe("T705, the sink's public calls keep their order through one machine", (
           expect(count(db, "unsent")).toBe(0);
         }).pipe(Effect.provide(world(sql)));
       }).pipe(Effect.scoped),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });
 
@@ -1664,6 +1665,6 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           }
         }).pipe(Effect.provide(world(sql)));
       }).pipe(Effect.scoped),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
 });

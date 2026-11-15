@@ -2,6 +2,7 @@
 // GitLaws: memory git at every depth, and real git too at depth `full` (0535). Split out of
 // RepositoriesGit.test.ts unchanged, since L5 alone takes most of that file's time.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Sink, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -9,7 +10,7 @@ import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
 import { fixture, git, gitCommandBudget, runs, withReader } from "./RepositoriesGit.test-support.ts";
 
-const identityRuns = { ...runs, numRuns: 300 };
+const identityRuns = { ...runs, numRuns: runsFor({ fast: 30, full: 300 }) };
 // Fixture, clone, worktree, initial open, then four opens for each move.
 const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
 

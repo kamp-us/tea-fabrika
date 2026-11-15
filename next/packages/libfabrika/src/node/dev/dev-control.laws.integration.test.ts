@@ -4,6 +4,7 @@
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Clock, Context, Deferred, Duration, Effect, FileSystem, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
@@ -516,7 +517,7 @@ describe("T708 dev control laws", () => {
           }
         }
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.effect.prop(
@@ -532,7 +533,7 @@ describe("T708 dev control laws", () => {
           expect(count).toBeGreaterThanOrEqual(2);
         }
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.effect.prop(
@@ -585,6 +586,6 @@ describe("T708 dev control laws", () => {
           restarts.filter(({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
         ).toHaveLength(world.failed);
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

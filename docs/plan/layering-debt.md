@@ -81,7 +81,7 @@ Every number here is from a command run on 2026-11-13 in one checkout at `48460b
   (`effect@4.1.2`, "Services" and "Creating and handling errors with reasons"): `DatabaseError`
   with `cause: Schema.Defect()`, and a tagged `reason`. 0055 and 0119 follow it.
 - **Effect writes laws as a suite in the lower package and runs them from the platform
-  package.** 0062 cites `SqlEventLogServerUnencryptedStorageTest.ts` in effect-smol. We do the
+  package.** 0062 cites `SqlEventLogServerUnencryptedStorageTest.ts` in Effect's repo. We do the
   same already, see [the test lines](#the-test-lines).
 - **OTP has no such rule.** An OTP application may call any application it depends on. Rule 11
   is ours, by the owner's ruling, and this plan follows the ruling.

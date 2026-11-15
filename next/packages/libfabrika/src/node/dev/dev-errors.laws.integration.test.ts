@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream, Tracer } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
@@ -77,7 +78,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 }
@@ -117,7 +118,7 @@ it("instance reports start_timeout when deployment never opens the control liste
         rmSync(home, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 5 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
   );
 });
 
@@ -206,7 +207,7 @@ for (const mode of ["exit", "spawn"] as const) {
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 5 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
     );
   });
 }

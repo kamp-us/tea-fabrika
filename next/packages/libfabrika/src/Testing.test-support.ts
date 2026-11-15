@@ -6,14 +6,6 @@ import * as fc from "fast-check";
 /** The shared fixed seed every law runs from. */
 const SEED = 119120;
 
-/**
- * The test depth (0535), read here once from `FABRIKA_TEST_DEPTH`: `fast` on a pull request and in
- * the merge queue, `full` on the 3-hour schedule. Any other value fails the run rather than pick one.
- */
-export const depth = Schema.decodeUnknownSync(Schema.Literals(["fast", "full"]))(
-  process.env.FABRIKA_TEST_DEPTH ?? "fast",
-);
-
 /** fast-check's own failure report, with its counterexample, as a law's typed failure. */
 class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
   cause: Schema.Defect(),

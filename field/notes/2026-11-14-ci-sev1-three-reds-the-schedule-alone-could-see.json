@@ -1,0 +1,50 @@
+{
+  "id": "2026-11-14-ci-sev1-three-reds-the-schedule-alone-could-see",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1026",
+    "kamp-us/tea-fabrika#1028",
+    "kamp-us/tea-fabrika#1031",
+    "kamp-us/tea-fabrika#993"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "The first sev1 under decision 0542 was the open ci-scheduled issue 1297, 'Scheduled CI is red on main'. The 3-hour full run's report job opened it at 2026-11-15 04:22 UTC and closed it at 06:16 UTC after a green run, about 1 hour 54 minutes. Nobody called it and nobody closed it by hand. It took four full runs and three different fixes. Run 43676389337 (created 04:21 UTC) was red on the browser install: leg next (e2e-2) landed on a build of the ubuntu-26.04 runner image with no Ubuntu apt source, apt-get update still exited 0, and Playwright then found none of its font packages (ticket 1026, pull request 1299, merged 04:46 UTC). Run 43678841647 (04:55 UTC) had green browser legs and was red on one law, 'A5: process discovery keeps every saved job through page crossings and reopen' in next/packages/libfabrika/src/node/jobs/JobsLedger.integration.test.ts, which timed out at 120 s after passing in 82 s in run 43673342835 (ticket 1028, pull request 1300, merged 05:36 UTC). Run 43681872425 (05:37 UTC) was red on oxlint-plugins/plants.test.ts: the lint rule runs-from-depth had no planted line (ticket 1031, pull request 1302, merged 06:01 UTC). Run 43683627393 (06:02 UTC) was green and its report job closed the issue. Every full run in it was started by hand, because no run has started from a schedule event in this repository yet. The launchd job on the macOS runner (.github/workflows/host.yaml), red since 2026-11-13, was fixed in the same hours by pull request 1222, merged 05:19 UTC (ticket 993); it is not part of the scheduled run. Other work kept landing, as 0542 says it should, and each fix went first on the merge line.",
+  "cause": "Each red had its own cause, and each sat in a check that only the full run does. (1) apt.sh counted an apt-get update that exited 0 as a pass, though no Ubuntu list was fetched. (2) The test store of the jobs ledger law opened SQLite in its default mode, so each of about 22,000 commits synced the disk, and the law ran near its 120 s limit. (3) Pull request 1274, merged at 04:59 UTC inside this sev1, added the lint rule runs-from-depth without a planted line, and tooling tests do not run on a pull request or in the merge queue (0539).",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Pull request 1299: a try passes only if apt fetched Ubuntu's package list for the release, and the script writes the stock source when none names Ubuntu. Pull request 1300: the jobs ledger store and the ledger discovery law's store open with journal_mode=WAL and synchronous=OFF; no assertion, case count or timeout changed, and locally the law went from 33.7 to 41.4 s down to 21.2 to 26.5 s. Pull request 1302: runs-from-depth is planted at next/ test paths. The wider cause, test stores that sync the disk on every commit, is ticket 1029 (about 30 stores; pull request 1301 is building one shared test database module). Two more tickets came from the fixes: 1027 (the launchd guard bundle carries the brain's main) and 1030 (Jobs.forProcess reads every job on each call).",
+  "test": "The green run 43683627393 closed issue 1297, as 0542 says an issue ends. Each cause has its own fix above, and a later green full run on main shows they hold. Ticket 1029 covers the wider cause.",
+  "levels": [
+    "sev1, start: 2026-11-15 04:22:27 UTC, when run 43676389337's report job opened issue 1297.",
+    "sev1, end: 2026-11-15 06:16:40 UTC, when run 43683627393's report job closed it. About 1 hour 54 minutes.",
+    "No sev0 in this window. The owner did nothing; the lead session's agents did the work in three fix rounds."
+  ],
+  "fixes": [
+    "1299, 04:46 UTC: apt.sh fails a try that fetched no Ubuntu list, and writes Ubuntu's source when a runner image has none (ticket 1026).",
+    "1300, 05:36 UTC: the jobs ledger and ledger discovery law stores open SQLite without a disk sync per commit (ticket 1028).",
+    "1302, 06:01 UTC: runs-from-depth gets its planted line at next/ test paths (ticket 1031).",
+    "1222, 05:19 UTC: the launchd job on the macOS runner is fixed (ticket 993). Not part of the scheduled run."
+  ],
+  "cost": "Four full runs, 10 jobs each. Adding each job's start and end times from GitHub gives about 232 machine-minutes for the four (8.5, 84.6, 59.7 and 79.1); the first three stopped early, since the first red job stops a run. Wall time from created to last update was about 1, 12, 7 and 14 minutes. Three fix rounds by agents. No dollar figure was recorded for the agents or the runners.",
+  "learned": [
+    "A fix is proven only by the next full run that is read (0542). Three causes in a row meant four runs in series, so the sev1 could not end faster than the sum of those runs plus the fixes between them.",
+    "All three reds were in checks that only the full run does: a browser install on a fresh image, an integration test at full depth, and a tooling test. One of them, the missing planted line, was made inside the sev1 by a change that passed every pull request check. A change that adds a lint rule gets no run of the tooling test that reads the rule list.",
+    "A law that runs at about two thirds of its time limit on a good day is a red waiting for a slow runner. The time table the full run prints already shows which files are near their limit.",
+    "apt-get update exiting 0 says nothing about which sources answered.",
+    "The level worked as 0542 describes: nobody called it, the issue was the record, other work kept landing, and it ended by itself."
+  ],
+  "unknown": "Whether GitHub will start the run by itself on the 17 */3 * * * schedule: gh run list with the schedule event found no run when this was written, and all five full runs so far were started by hand. The dollar cost and the agent hours. Whether more runner image builds lack an Ubuntu source. Whether other slow laws will time out before ticket 1029 lands.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0542-two-sev-levels-one-skill.md",
+    "https://github.com/kamp-us/tea-fabrika/issues/1297",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43676389337",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43678841647",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43681872425",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43683627393",
+    "https://github.com/kamp-us/tea-fabrika/pull/1299",
+    "https://github.com/kamp-us/tea-fabrika/pull/1300",
+    "https://github.com/kamp-us/tea-fabrika/pull/1302",
+    "https://github.com/kamp-us/tea-fabrika/pull/1222"
+  ]
+}

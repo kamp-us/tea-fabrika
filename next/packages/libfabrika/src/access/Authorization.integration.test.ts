@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -29,7 +30,7 @@ beforeEach(async () => {
   ({ appendAdmitted } = await vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"));
 });
 
-const checks = { seed: 119120, numRuns: 35 };
+const checks = { seed: 119120, numRuns: runsFor({ fast: 4, full: 35 }) };
 
 // Every world is a node:sqlite file in its own temp folder. The scope of one property run closes
 // the connection, then removes the folder (0061).
@@ -317,7 +318,7 @@ describe("P17a, appendAdmitted", () => {
             }).pipe(Effect.scoped),
           ),
       ),
-      { ...checks, numRuns: 20 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", async () => {
@@ -395,7 +396,7 @@ describe("P17a, appendAdmitted", () => {
           }).pipe(Effect.scoped),
         ),
       ),
-      { ...checks, numRuns: 20 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
   it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", async () => {
@@ -449,7 +450,7 @@ describe("P17a, appendAdmitted", () => {
             }).pipe(Effect.scoped),
           ),
       ),
-      { ...checks, numRuns: 24 },
+      { ...checks, numRuns: runsFor({ fast: 3, full: 24 }) },
     );
   });
 });

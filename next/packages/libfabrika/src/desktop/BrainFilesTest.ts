@@ -1,5 +1,6 @@
 // L6, next/. The driver owner supplies real files and the adapter; desktop imports no platform.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
@@ -191,7 +192,7 @@ export const suite = (open: Open) =>
         // 500 runs, so each of the five arms gets about the 100 the one kind had: the 0600 file
         // with other bytes, the only draw before the kinds came, keeps its 100. Each run is real
         // disk work, so the law brings its own time limit instead of leaning on the config's.
-        { arbitrary: { seed: 119120, runs: 500 }, timeout: 180_000 },
+        { arbitrary: { seed: 119120, runs: runsFor({ fast: 50, full: 500 }) }, timeout: 180_000 },
       );
     }
 
