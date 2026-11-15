@@ -11,7 +11,7 @@ tags: [pipes, fabsh, top-bar, tiles, bypass, next]
 ```mermaid
 flowchart LR
   line["the line in the top bar"] --> name["a windowless program's name is a button"]
-  name -->|"click or Enter"| off["off: the name is struck, the fit check runs again"]
+  name -->|"click or Enter"| off["off: the name is struck, the pipe is checked again"]
   off -->|"click or Enter"| name
   name --> state["its state sits beside its name, in one place"]
 ```
@@ -47,9 +47,10 @@ is shown beside that name and in no other place.**
   `Paused (off)`, `Waiting (<why the pipe does not fit>)`. A name that is off is also struck
   through, so color is never the only cue.
 - The state is shown once, on the name. No other tile's title bar and no status bar repeats it.
-- Turning a program off runs the fit check of [0550](0550-a-pipe-fits-on-needed-fields.md) again,
-  between the programs on either side of it. Where it fails, the programs after it wait and say
-  so, and a reader keeps the last whole value it got
+- Turning a program off checks again that the pipe fits
+  ([0550](0550-a-pipe-fits-on-needed-fields.md)), now between the programs on either side of it.
+  Where it does not fit, the programs after it wait and say so, and a reader keeps the last whole
+  value it got
   ([0549](0549-a-pipe-carries-the-whole-value.md)).
 - A crash and an off switch end the same way for the rest of the line, so they look alike: the
   state on the name, the line still on screen.
