@@ -35,6 +35,9 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Entry } from "../ledger/Log.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type Runs, runsFor } from "../TestDepth.test-support.ts";
@@ -252,14 +255,20 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
           }),
         ).pipe(Layer.provide(tx));
   const data = Layer.merge(LedgerSql.layer(sql, { reader: "connection:test" }).pipe(Layer.provide(quiet)), gated);
-  return ChildrenLedger.layer({ grants: GRANTS }).pipe(
+  return ChildrenLedger.layer({ grants: GRANTS, fabrika: Model.ref("fabrika", "p42") }).pipe(
     Layer.provideMerge(
       ProcessManager.layer({ ...brain(), by: BRAIN }, next).pipe(
         Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data))),
       ),
     ),
+    // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
+    Layer.provide(RelationsMemory.layer([])),
+    Layer.provide(noSenders),
   );
 };
+
+/** The gateway's answer for these starts: no member's input was delivered to any requester. */
+const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
 const raw = (tag: string, fields: object): unknown =>

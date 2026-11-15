@@ -14,11 +14,14 @@
 // with no host grant, the right read from the requester on the child's first `started` line. The
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
+import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { runsFor } from "../TestDepth.test-support.ts";
 import { Children } from "./Children.ts";
@@ -700,7 +703,13 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       n: 0,
     };
     const stack = ProgramMailLedger.layer({ grants: HOST }).pipe(
-      Layer.provideMerge(ChildrenLedger.layer({ grants: STARTS })),
+      Layer.provideMerge(
+        ChildrenLedger.layer({ grants: STARTS, fabrika: Model.ref("fabrika", "p41") }).pipe(
+          // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
+          Layer.provide(RelationsMemory.layer([])),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+        ),
+      ),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
           Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),

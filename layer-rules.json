@@ -48,7 +48,7 @@
     },
     {
       "name": "next-node",
-      "layer": 9,
+      "layer": 10,
       "paths": ["next/packages/libfabrika/src/node"],
       "imports": [
         "next-desktop-core",
@@ -59,6 +59,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -70,7 +71,7 @@
     },
     {
       "name": "next-workers",
-      "layer": 8,
+      "layer": 9,
       "paths": ["next/packages/libfabrika/src/cloudflare"],
       "imports": [
         "next-runtime",
@@ -80,6 +81,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -92,7 +94,7 @@
     },
     {
       "name": "next-libfabrika-entry",
-      "layer": 7,
+      "layer": 8,
       "paths": ["next/packages/libfabrika/src/index.ts"],
       "imports": [
         "next-mcp",
@@ -105,6 +107,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -122,7 +125,7 @@
     },
     {
       "name": "next-desktop-core",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/desktop"],
       "imports": [
         "next-runtime",
@@ -132,6 +135,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -143,7 +147,7 @@
     },
     {
       "name": "next-schedules",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/schedules"],
       "imports": [
         "next-runtime",
@@ -153,6 +157,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -165,13 +170,13 @@
     },
     {
       "name": "next-client",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/client"],
       "imports": ["next-runtime", "next-transport", "next-shared"]
     },
     {
       "name": "next-door",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/gateway"],
       "imports": [
         "next-runtime",
@@ -181,6 +186,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -193,7 +199,7 @@
     },
     {
       "name": "next-runtime",
-      "layer": 5,
+      "layer": 6,
       "paths": ["next/packages/libfabrika/src/runtime", "next/packages/libfabrika/src/Testing.ts"],
       "imports": [
         "next-runtime-coordination",
@@ -202,6 +208,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-shared"
       ]
     },
@@ -220,6 +227,7 @@
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -231,13 +239,14 @@
     },
     {
       "name": "next-access",
-      "layer": 4,
+      "layer": 5,
       "paths": ["next/packages/libfabrika/src/access"],
       "imports": [
         "next-processes",
         "next-presence",
         "next-jobs",
         "next-packs",
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -249,9 +258,10 @@
     },
     {
       "name": "next-processes",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/processes"],
       "imports": [
+        "next-permissions",
         "next-ledger",
         "next-codehost",
         "next-ci",
@@ -263,7 +273,7 @@
     },
     {
       "name": "next-presence",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/presence"],
       "imports": [
         "next-ledger",
@@ -277,7 +287,7 @@
     },
     {
       "name": "next-jobs",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/jobs"],
       "imports": [
         "next-ledger",
@@ -291,8 +301,22 @@
     },
     {
       "name": "next-packs",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/packs"],
+      "imports": [
+        "next-ledger",
+        "next-codehost",
+        "next-ci",
+        "next-repositories",
+        "next-settings",
+        "next-telemetry",
+        "next-shared"
+      ]
+    },
+    {
+      "name": "next-permissions",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/permissions"],
       "imports": [
         "next-ledger",
         "next-codehost",
