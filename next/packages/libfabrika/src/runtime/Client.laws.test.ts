@@ -27,7 +27,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
-import type { Client, ClientMsg, Pending } from "./Client.ts";
+import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
 import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
@@ -683,7 +683,7 @@ describe("L5: client views (p3)", () => {
 const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`);
 const F1_NAME = "checklist:1";
 const trusted = (writer: string) => writer === "brain" || writer.startsWith("brain:");
-const FROM_EMPTY = { after: 0, live: null, ended: null };
+const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
 
 const EXITS = [
   { _tag: "normal" },

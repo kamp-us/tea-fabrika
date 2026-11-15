@@ -219,23 +219,34 @@ describe("the real rule file on planted trees", () => {
   );
 
   // scenario: P18 L8, the window client takes the runtime, transport and Id, and transport may not
-  // import it.
-  it.effect("scenario: the client takes runtime, transport and Id, and transport may not import it", () =>
-    Effect.gen(function* () {
-      const { plant } = yield* planter;
-      const tree = plant({
-        [`${LIB}/client/WindowStart.ts`]: lines(
-          'import {Client} from "../runtime/Client.ts";',
-          'import {Link} from "../transport/Link.ts";',
-          'import {Generator} from "../Id.ts";',
-        ),
-        [`${LIB}/transport/Dial.ts`]: lines('import {start} from "../client/WindowStart.ts";'),
-        [`${LIB}/runtime/Client.ts`]: lines("export const Client = 1;"),
-        [`${LIB}/transport/Link.ts`]: lines("export const Link = 1;"),
-        [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
-      });
-      expect(runTool(tree, REAL).edges).toEqual([`${LIB}/transport/Dial.ts -> next-client [upward]`]);
-    }),
+  // import it. P18 slice 2 (ticket 979, its plan's "Where each file lives"): the client also takes
+  // the processes, for `Down`, `inSignalSpace`, `clientInbox` and `ExitReason`. A lower module its
+  // row does not list, such as access, stays refused.
+  it.effect(
+    "scenario: the client takes runtime, processes, transport and Id, refuses a lower module its row does not list, and transport may not import it",
+    () =>
+      Effect.gen(function* () {
+        const { plant } = yield* planter;
+        const tree = plant({
+          [`${LIB}/client/WindowStart.ts`]: lines(
+            'import {Client} from "../runtime/Client.ts";',
+            'import {Down} from "../processes/Process.ts";',
+            'import {Link} from "../transport/Link.ts";',
+            'import {Generator} from "../Id.ts";',
+          ),
+          [`${LIB}/client/Grant.ts`]: lines('import {members} from "../access/Access.ts";'),
+          [`${LIB}/transport/Dial.ts`]: lines('import {start} from "../client/WindowStart.ts";'),
+          [`${LIB}/runtime/Client.ts`]: lines("export const Client = 1;"),
+          [`${LIB}/processes/Process.ts`]: lines("export const Down = 1;"),
+          [`${LIB}/access/Access.ts`]: lines("export const members = 1;"),
+          [`${LIB}/transport/Link.ts`]: lines("export const Link = 1;"),
+          [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
+        });
+        expect(runTool(tree, REAL).edges).toEqual([
+          `${LIB}/client/Grant.ts -> next-access [outside-imports]`,
+          `${LIB}/transport/Dial.ts -> next-client [upward]`,
+        ]);
+      }),
   );
 
   // format: P21 L12, the desktop module takes access and refuses the gateway and the platform

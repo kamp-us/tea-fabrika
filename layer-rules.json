@@ -172,7 +172,7 @@
       "name": "next-client",
       "layer": 7,
       "paths": ["next/packages/libfabrika/src/client"],
-      "imports": ["next-runtime", "next-transport", "next-shared"]
+      "imports": ["next-runtime", "next-processes", "next-transport", "next-shared"]
     },
     {
       "name": "next-door",
