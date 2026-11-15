@@ -154,6 +154,18 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC5: the report is not told the needs", (w) => Reflect.deleteProperty(step(w, "report", "report").env!, "NEEDS")],
   ["SC5: the report takes a secret", (w) => (step(w, "report", "report").env!["GITHUB_TOKEN"] = `\${{ secrets.BOT }}`)],
   ["SC5: a test step gets the token", (w) => (step(w, "next", "vitest").env!["GITHUB_TOKEN"] = `\${{ github.token }}`)],
+  // The report tells a timed-out leg by its job's limit: a missing or stale one reads a time-out as a
+  // leg canceled by hand, and opens no issue (run 43723335863).
+  [
+    "SC5: the report is not told next's limit",
+    (w) => Reflect.deleteProperty(step(w, "report", "report").env!, "LIMIT_NEXT"),
+  ],
+  ["SC5: next's limit is raised, and the report's is not", (w) => (w.jobs["next"]!["timeout-minutes"] = 20)],
+  [
+    "SC5: the report's tooling limit is its own number",
+    (w) => (step(w, "report", "report").env!["LIMIT_TOOLING"] = 25),
+  ],
+  ["SC5: next names its legs, so a leg's name loses its job id", (w) => (w.jobs["next"]!["name"] = "next/ tests")],
   // SC6: at most half the runners.
   [
     "SC6: next runs every leg at once and tooling three",
