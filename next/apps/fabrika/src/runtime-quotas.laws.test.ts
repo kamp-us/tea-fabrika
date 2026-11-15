@@ -457,8 +457,11 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     ),
   );
   yield* project((p) => p.info);
+  // The law's own lookup of a name's process runs with tracing off, so it writes no span rows
+  // itself: a count of the Project's rows then holds only what the instance wrote.
   const pid = Effect.fnUntraced(function* (name: string) {
-    return required((yield* project((p) => p.info)).find((row) => row.name === name)).process;
+    const info = yield* project((p) => p.info).pipe(Effect.withTracerEnabled(false));
+    return required(info.find((row) => row.name === name)).process;
   });
   /** The store of a registered name, found by the descriptor its Process saved. */
   const storeFor = Effect.fnUntraced(function* (name: string) {
