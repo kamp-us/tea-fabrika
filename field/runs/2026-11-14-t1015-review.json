@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t1015-review",
+  "ticket": "kamp-us/tea-fabrika#1015",
+  "pr": "kamp-us/tea-fabrika#1204",
+  "started": "2026-11-14T19:18:00-08:00",
+  "ended": "2026-11-14T19:22:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "the one review of pull request 1204 at 57aee3636 (Tuval's page starts on BrowserRuntime.runMain, in next/), with the closest read on 1dbfad736, the merge bbea56c86 and the rename 57aee3636: merge-ready with one finding row (doc_drift, docs/plan/tier-1-detail.md:890 says the socket half still waits, but the entry already uses Effect's socket from pull request 1208). Ran build.test.ts (L11) only; L2 to L4 need Chromium and have not run at this head, since CI run 43669718060 was canceled after the unrelated resources law failed on e2e-1. started is not known to the reviewer; tokens and tools are left for the lead's transcript row.",
+  "tokens": 134091,
+  "tools": 34,
+  "minutes": 4.2,
+  "note": null,
+  "step": "review"
+}

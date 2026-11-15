@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t953-refusal-not-checked-through-start-child",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/src/start-member.laws.integration.test.ts",
+    "line": 295
+  },
+  "says": "L18 and L13 in the plan say a member's refused start answers err \"forbidden\" through start_child, but L18 calls ProjectService.processChild and checks a ChildrenError, and L13's helper checks only the ChildrenError, so no law of this change answers through the start_child Cmd.",
+  "proof": "docs/plan/lanes/t953-PLAN.md:468 says 'makes the start answer `err: \"forbidden\"` through `start_child`'; start-member.laws.integration.test.ts:295 asks processChild and expects {_tag: \"ChildrenError\", reason: \"forbidden\"}. The runner maps the reason one to one at runtime/Runner.ts:1540, which this change does not touch.",
+  "cost": "Low today: the runner passes the reason straight through. A later change to that mapping would not be caught by the laws that claim to pin 0170's 'answers keep their shape' for member starts.",
+  "head": "c8d72135f05226d9fac13b900342b9fd7321e73b",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1239"
+}

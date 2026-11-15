@@ -34,6 +34,7 @@ import {
   Writer,
   type Session,
 } from "../access/SessionManager.ts";
+import * as SessionSenders from "../access/SessionSenders.ts";
 import * as Id from "../Id.ts";
 import type { Jobs } from "../jobs/Jobs.ts";
 import * as JobsLedger from "../jobs/JobsLedger.ts";
@@ -47,6 +48,11 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
+import { Model } from "../permissions/Model.ts";
+import * as Relation from "../permissions/Relation.ts";
+import { Relations } from "../permissions/Relations.ts";
+import * as RelationsLedger from "../permissions/RelationsLedger.ts";
+import { Senders } from "../permissions/Senders.ts";
 import { Connections } from "../presence/Connections.ts";
 import { type Child, Children, ChildrenError, type StartGrant, type Started } from "../processes/Children.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
@@ -835,10 +841,9 @@ const projectLogic = Effect.fn("project.init")(function* (
   const managers = Layer.mergeAll(
     JobsLedger.layer,
     ClientManagerLedger.layer(founder),
-    // P42: a child start decides in the turns of the manager that writes it.
-    ChildrenLedger.layer({ grants: options.starts ?? checked.input.starts ?? [] }).pipe(
-      Layer.provideMerge(processManager),
-    ),
+    // 0526: the relation rows the brain trusts are its own.
+    RelationsLedger.layer({ by }),
+    processManager,
   ).pipe(Layer.provideMerge(base));
   const services = Context.add(
     yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
@@ -855,8 +860,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
-    processes = Context.get(services, ProcessManager),
-    children = Context.get(services, Children);
+    processes = Context.get(services, ProcessManager);
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
@@ -1135,6 +1139,24 @@ const projectLogic = Effect.fn("project.init")(function* (
       wait: referee.wait,
     })
     .pipe(Effect.provideContext(services));
+  // P42 and 0170: a child start decides in the turns of the manager that writes it, checked against
+  // the member the door says sent its cause. Only `child` below uses it, after the door exists.
+  const children = yield* Children.pipe(
+    Effect.provide(
+      ChildrenLedger.layer({
+        grants: options.starts ?? checked.input.starts ?? [],
+        fabrika: Model.ref("fabrika", name),
+      }).pipe(
+        Layer.provide(
+          Layer.succeed(
+            Senders,
+            SessionSenders.make((parent, process) => door.sender(process, parent)),
+          ),
+        ),
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
   const gateways = yield* Connections.pipe(
     Effect.provide(
       Connections.layer(sql, {
@@ -1162,6 +1184,23 @@ const projectLogic = Effect.fn("project.init")(function* (
     Effect.provideContext(services),
   );
   sql.exec("CREATE TABLE IF NOT EXISTS dev_starts (id TEXT PRIMARY KEY, request TEXT NOT NULL, hash TEXT NOT NULL)");
+  // The founding person owns this fabrika (0290). Every boot writes the same row under one id, so
+  // the referee keeps it once, and a ledger founded before the row existed gets it at its next boot.
+  yield* write(
+    Context.get(services, Relations).write(
+      [
+        {
+          id: "owner",
+          row: Relation.Row.cases.related.make({
+            subject: `person:${config.person}`,
+            relation: "owner",
+            object: Model.ref("fabrika", name),
+          }),
+        },
+      ],
+      yield* from(),
+    ),
+  ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "refused", message: "the owner row", cause })));
   /** Places the process and records its descriptor; a first start's row stays pending until delivered. */
   const place = Effect.fnUntraced(function* (raw: Start, origin: From) {
     const request = yield* Schema.decodeUnknownEffect(Start)(raw).pipe(

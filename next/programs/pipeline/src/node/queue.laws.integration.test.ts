@@ -10,6 +10,9 @@ import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import { Model } from "@kampus/libfabrika/permissions/Model";
+import * as RelationsMemory from "@kampus/libfabrika/permissions/RelationsMemory";
+import { Senders } from "@kampus/libfabrika/permissions/Senders";
 import type { StartGrant } from "@kampus/libfabrika/processes/Children";
 import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
@@ -191,7 +194,11 @@ const life = Effect.fnUntraced(function* (
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ChildrenLedger.layer({ grants }),
+        ChildrenLedger.layer({ grants, fabrika: Model.ref("fabrika", "pipeline") }).pipe(
+          // T953: these laws pin `StartGrant`, so the inputs they send are given no member behind them.
+          Layer.provide(RelationsMemory.layer([])),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+        ),
         ProgramMailLedger.layer({ grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) } }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
