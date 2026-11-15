@@ -320,6 +320,45 @@ const plants: [string, (w: Workflow) => void][] = [
       list.splice(2, 0, upload);
     },
   ],
+  // TT1 and TT2, as in check.yaml: each leg's time table and its timings file. A leg's steps are
+  // copied before a plant, so a plant on one leg leaves the other's alias as it was.
+  ...(["next", "tooling"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    const own = (w: Workflow, name: string) => {
+      const list = w.jobs[job]!.steps;
+      const at = list.indexOf(step(w, job, name));
+      list[at] = structuredClone(list[at]!);
+      return list[at]!;
+    };
+    return [
+      [
+        `TT1: ${job} drops its time table`,
+        (w) => void w.jobs[job]!.steps.splice(w.jobs[job]!.steps.indexOf(step(w, job, "time table")), 1),
+      ],
+      [`TT1: ${job}'s time table skips a red leg`, (w) => (own(w, "time table")["if"] = "success()")],
+      [
+        `TT1: ${job}'s time table reads another report`,
+        (w) => (own(w, "time table").env!["REPORT"] = `\${{ runner.temp }}/next.json`),
+      ],
+      [
+        `TT1: ${job}'s time table can fail the job`,
+        (w) => Reflect.deleteProperty(own(w, "time table"), "continue-on-error"),
+      ],
+      [
+        `TT2: ${job} drops its timings upload`,
+        (w) => void w.jobs[job]!.steps.splice(w.jobs[job]!.steps.indexOf(step(w, job, "timings")), 1),
+      ],
+      [
+        `TT2: ${job}'s timings lose the attempt`,
+        (w) => (own(w, "timings").with!["name"] = `timings-\${{ github.job }}-\${{ matrix.shard }}`),
+      ],
+      [`TT2: ${job}'s timings skip a red leg`, (w) => (own(w, "timings")["if"] = "success()")],
+    ];
+  }),
+  // SC5: the time table's exact step is the one test step but the stop step that gets the token.
+  [
+    "SC5: the results upload gets the token",
+    (w) => (step(w, "tooling", "results").env = { GITHUB_TOKEN: `\${{ github.token }}` }),
+  ],
 ];
 
 it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {

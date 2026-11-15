@@ -43,9 +43,10 @@ concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'labeled' && github.event.label.name == 'visual')) }}
 
-# `actions: write` lets each job's last step, `stop the run` (in changes below), cancel its own run.
-# `contents: read` is the checkout's; no job uses the other scopes the repository's read-only
-# default gave. ci-required takes `actions` back, since it never cancels. workflow-lint.ts holds this.
+# `actions: write` lets each job's last step, `stop the run` (in changes below), cancel its own run,
+# and each test leg's time table read its own job's steps. `contents: read` is the checkout's; no
+# job uses the other scopes the repository's read-only default gave. ci-required takes `actions`
+# back, since it never cancels. workflow-lint.ts holds this.
 permissions:
   actions: write
   contents: read
@@ -91,8 +92,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # The classify step's token reads this workflow's runs, main's caches and commits; no other step
-    # but the stop step is given it. It is the workflow's token: a job's own `permissions` would
-    # replace that whole map, and the stop step at the end needs its `actions: write`.
+    # but the stop steps and the test legs' time tables is given it. It is the workflow's token: a
+    # job's own `permissions` would replace that whole map, and the stop step at the end needs its
+    # `actions: write`.
     outputs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
@@ -471,6 +473,35 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
+      # The leg's time table (time-table.ts): each step's seconds from GitHub's jobs API, read with
+      # the workflow's token (its `actions: write` reads too), and the ten slowest test files of the
+      # leg's next.json, in the job summary. On every result, a red or canceled leg too, and it never
+      # fails the job: a missing input is an unavailable section, and the script exits 0. Last of the
+      # job's commands, so it times every step before it. workflow-lint.ts holds it in every test leg.
+      - name: time table
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ID: ${{ job.check_run_id }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          LEG: ${{ matrix.shard }}
+          REPORT: ${{ runner.temp }}/next.json
+        run: node .github/ci/time-table.ts
+      # The same numbers as one small JSON per leg, to follow each leg's balance over time. The run
+      # attempt is in its name, so a rerun keeps the first attempt's file beside its own. Its own
+      # limit, as the time table's: each upload took about 1 s on run 43657196726.
+      - name: timings
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v7
+        with:
+          name: timings-${{ github.job }}-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 90
       - *stop
 
   # The one check from this workflow that GitHub's ruleset for main requires, so a merge made outside
