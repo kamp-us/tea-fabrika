@@ -3,17 +3,17 @@
 //
 //   publish   leak grep on origin/main..head, fail closed -> push, never forced -> the branch's open
 //             pull request, or a new draft when it has none
-//   ready     publish, then the pull request's title and description from the lane brief, then
-//             marked ready: a lane's steps have passed
+//   ready     publish, then the pull request's title and description from the quest brief, then
+//             marked ready: a quest's steps have passed
 //
-// The commit step runs `publish` after each signed commit; a lane's host part runs it after each
-// step's commit comes out of the box, and `ready` where the lane used to open its pull request.
+// The commit step runs `publish` after each signed commit; a quest's host part runs it after each
+// step's commit comes out of the box, and `ready` where the quest used to open its pull request.
 // Read through its module: `Publish.publish(...)`.
 import { Effect, Schema } from "effect";
 import { PullRequests, type Text } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 
-/** What a draft says when a commit opens it; the lane's ready step gives it the brief's words. */
+/** What a draft says when a commit opens it; the quest's ready step gives it the brief's words. */
 export const DRAFT_BODY =
   "Opened as a draft at this branch's first commit, so no code stays only on a branch (decision " +
   "0134). It is marked ready when its steps have passed.";
@@ -57,7 +57,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   return { pr, opened: true, draft: true } satisfies Published;
 });
 
-/** The lane's steps passed: push its head, give its pull request the brief's words, mark it ready. */
+/** The quest's steps passed: push its head, give its pull request the brief's words, mark it ready. */
 export const ready = Effect.fn("Publish.ready")(function* (a: Ask) {
   const published = yield* publish(a);
   const prs = yield* PullRequests;

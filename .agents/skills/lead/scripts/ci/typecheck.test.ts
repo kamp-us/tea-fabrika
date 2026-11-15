@@ -13,7 +13,7 @@ const dir = fc.array(part, { minLength: 1, maxLength: 3 }).map((ps) => ps.join("
 const file = fc.tuple(fc.array(part, { maxLength: 2 }), part).map(([ps, f]) => [...ps, `${f}.ts`].join("/"));
 const message = fc.stringMatching(/^[A-Za-z][A-Za-z' ]{0,40}[a-z.]$/);
 // A made-up checkout, in the shape a runner lays one out: `.../work/<name>/<name>`.
-const root = "/w/work/lane/lane";
+const root = "/w/work/quest/quest";
 const error = (path: string, text: string) => `${path}(3,7): error TS2322: ${text}`;
 
 const found = (paths: ReadonlyArray<string>): ReadonlyArray<Found> =>
@@ -70,7 +70,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       "packages/p typecheck:   Property 'x' is missing in type 'A'.",
       "packages/p typecheck: Failed",
       "[ELIFECYCLE] Command failed with exit code 1.",
-      '  × "pnpm recursive run" failed in /w/lane-typecheck/packages/p',
+      '  × "pnpm recursive run" failed in /w/quest-typecheck/packages/p',
     ].join("\n");
     expect(errorsIn(out)).toEqual([
       {
@@ -287,15 +287,15 @@ describe("the wait for CI's typecheck job, today's tooling", () => {
       { minutes: 0.002 },
     ));
 
-  it("scenario: a lane with no head reads nothing", () =>
+  it("scenario: a quest with no head reads nothing", () =>
     waited(
       [job("completed", "success")],
-      (v) => expect(v).toEqual({ _tag: "skipped", reason: "the lane has no head to read CI at (none)" }),
+      (v) => expect(v).toEqual({ _tag: "skipped", reason: "the quest has no head to read CI at (none)" }),
       { at: "" },
     ));
 });
 
-describe("CI's typecheck in the lane's log, today's tooling", () => {
+describe("CI's typecheck in the quest's log, today's tooling", () => {
   it("format: green, red with its step and first line, or why it gave no answer", () => {
     expect(summary({ _tag: "green" })).toBe("green");
     expect(summary({ _tag: "red", to: "tests", lines: ["a.ts(1,1): error TS1: x", "b"] })).toBe(

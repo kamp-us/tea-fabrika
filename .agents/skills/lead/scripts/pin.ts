@@ -1,26 +1,26 @@
-// pin.ts: a running lane keeps one version of its scripts from start to end (ticket 835). Today's
+// pin.ts: a running quest keeps one version of its scripts from start to end (ticket 835). Today's
 // lead tooling, run on our own laptop; it is not product.
 //
-// A lane is one long chain process. It holds the chain and drive code in memory, but each step it
+// A quest is one long chain process. It holds the chain and drive code in memory, but each step it
 // runs the lead's other scripts from disk: the box, step-commit and bot-push scripts and
 // more. A pull of main while it ran mixed the old code in memory with the new scripts on disk, and
-// the lanes p41s2 and p42s1 died on ENOENT when one pull moved the boxes (2026-11-11).
+// the quests p41s2 and p42s1 died on ENOENT when one pull moved the boxes (2026-11-11).
 //
 // The known way is a release folder: Capistrano deploys each version into `releases/<stamp>` and a
 // process started there keeps it, whatever is deployed after; a Jenkins pipeline resolves its
 // shared library to one commit when the build starts and logs it; a CI runner checks the repo out
-// at the job's commit for that job alone. So a lane, at start:
+// at the job's commit for that job alone. So a quest, at start:
 //
 //   1. resolves the main checkout's commit                   git rev-parse HEAD
 //   2. writes `.agents/` and `package.json` at that commit   git archive | tar, into
-//      into its own folder                                   BOXES/pins/<lane>.<pid> (pinFolder)
+//      into its own folder                                   BOXES/pins/<quest>.<pid> (pinFolder)
 //   3. links the main checkout's node_modules there          the scripts' imports resolve
 //   4. runs the chain again from that folder, FABRIKA_PIN    every import.meta.dirname, and so
 //      naming the commit and the folder                      every script it spawns, is the pin's
-//   5. removes the folder when the lane ends                 the scope's release (0061)
+//   5. removes the folder when the quest ends                 the scope's release (0061)
 //
 // The pinned chain writes the commit into its chain record (`scripts`) and prints it, with the
-// commit its last process ran on, so a restart is a new choice anyone can see. A lane killed with
+// commit its last process ran on, so a restart is a new choice anyone can see. A quest killed with
 // SIGKILL runs no release: the box cleanup removes a pin no running process names once it is 2 h old
 // (`decidePin`; 0101's timer runs it).
 //
@@ -38,7 +38,7 @@ export const PIN_ENV = "FABRIKA_PIN";
 /** What a pin holds of the main checkout at its commit. */
 export const ARCHIVED = [".agents", "package.json"] as const;
 
-/** One lane's pin: the commit its scripts come from, and the folder they run from. */
+/** One quest's pin: the commit its scripts come from, and the folder they run from. */
 export const Pinned = Schema.Struct({
   commit: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
   folder: Schema.String,
@@ -73,14 +73,14 @@ export const pinnedScript = (folder: string, script: string): string =>
 
 const short = (commit: string) => commit.slice(0, 12);
 
-/** The line the pinned chain prints at start: its commit, and what its lane's last process ran on. */
+/** The line the pinned chain prints at start: its commit, and what its quest's last process ran on. */
 export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
   `scripts pinned at ${short(now.commit)} in ${now.folder}; ${
     before === undefined
-      ? "the lane's first pinned process"
+      ? "the quest's first pinned process"
       : before.commit === now.commit
-        ? "the same commit as the lane's last process"
-        : `the lane's last process ran on ${short(before.commit)}`
+        ? "the same commit as the quest's last process"
+        : `the quest's last process ran on ${short(before.commit)}`
   }`;
 
 // ---------------------------------------------------------------- the world
@@ -101,8 +101,8 @@ const git = (main: string, args: ReadonlyArray<string>) => ran(ChildProcess.make
 const failed = (reason: string) => () => new PinFailed({ reason });
 
 /**
- * The lane's pin, made from the main checkout's commit and removed when the scope closes. Fails
- * when the commit cannot be read or `script`, the lead script the lane runs, is not there after
+ * The quest's pin, made from the main checkout's commit and removed when the scope closes. Fails
+ * when the commit cannot be read or `script`, the lead script the quest runs, is not there after
  * the copy.
  */
 export const acquire = Effect.fn("pin.acquire")(function* (o: {

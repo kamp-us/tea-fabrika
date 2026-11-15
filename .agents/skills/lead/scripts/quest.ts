@@ -1,4 +1,4 @@
-// lane.ts: pure rules about one lane that drive.ts and gc.ts share. Today's lead tooling, run on our
+// quest.ts: pure rules about one quest that drive.ts and gc.ts share. Today's lead tooling, run on our
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
@@ -22,16 +22,16 @@ export const boxView = (boxes: string, box: string): string => `${boxTrees(boxes
 /** Where a box's tree was before `boxTree`. */
 export const oldBoxTree = (boxes: string, box: string): string => `${boxes}/${box}`;
 
-/** Where every lane's pinned scripts live, beside the boxes: chain pins its scripts there. */
+/** Where every quest's pinned scripts live, beside the boxes: chain pins its scripts there. */
 export const pinsFolder = (boxes: string): string => `${boxes}/pins`;
 
-/** One launch's pin: its lane and the launching process, so two launches never share one. */
-export const pinFolder = (boxes: string, lane: string, pid: number): string => `${pinsFolder(boxes)}/${lane}.${pid}`;
+/** One launch's pin: its quest and the launching process, so two launches never share one. */
+export const pinFolder = (boxes: string, quest: string, pid: number): string => `${pinsFolder(boxes)}/${quest}.${pid}`;
 
 /** How long a box or worktree must sit untouched before gc or boxfiles takes anything of it: 2 h. */
 export const IDLE = 2 * 3_600_000;
 
-/** The lane's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
+/** The quest's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
 export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "")}-wip`;
 
 /**
@@ -51,14 +51,14 @@ export const startHead = (
 };
 
 /**
- * The lane's root: where its base left main, so a step's commits check reads every earlier step's
+ * The quest's root: where its base left main, so a step's commits check reads every earlier step's
  * link from here. `fresh` is the merge base of main and the step's base. After a catch-up merges a
  * newer main in, `fresh` moves past the saved root, and main's own squash commits would then sit in
  * the saved root's range and read as unsigned (ci375 tests6, ticket 391). So `fresh` wins whenever
  * it holds the saved root. A saved root the base holds and `fresh` does not is kept; any other saved
- * root came from a step off the lane, and `fresh` is found again.
+ * root came from a step off the quest, and `fresh` is found again.
  */
-export const laneRoot = (
+export const questRoot = (
   saved: string | undefined,
   fresh: string,
   base: string,
@@ -99,16 +99,16 @@ const stuckIn = (out: string) =>
 
 /**
  * The commits check's stuck answers that hold the step back. A missing signature never does: a
- * hand-run commit is plain (0161). A stale link counts only for a step the lane itself has signed:
+ * hand-run commit is plain (0161). A stale link counts only for a step the quest itself has signed:
  * a step it has not reached yet (lead, before catch-up) may hold a newer link from an older pull
  * request on the same ticket, and CI judges that on the pull request (themes tests, 2026-11-09:
  * PR 565's lead link on ticket 343). Lines that are not answers are left to the caller, which
  * reads the exit code too.
  */
-export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[] =>
+export const questStuck = (out: string, questSteps: ReadonlySet<string>): string[] =>
   stuckIn(out)
     .filter(({ reason }) => reason !== "unsigned_commit")
-    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && laneSteps.has(step))))
+    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && questSteps.has(step))))
     .map((a) => a.line);
 
 /**
@@ -116,8 +116,8 @@ export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[]
  * (stale_link, broken_chain, build_touched_exam, ...) and the commit, so the lead can send the step to
  * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
  */
-export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>
-  laneStuck(out, laneSteps).map((line) => {
+export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[] =>
+  questStuck(out, questSteps).map((line) => {
     const a = JSON.parse(line) as {
       reason?: unknown;
       sha?: unknown;
@@ -137,8 +137,8 @@ export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[]
 
 /** Whether the commits check's exit holds the step: 0 never; 1 unless it gave stuck answers and
  * every one was waived; any other exit always. */
-export const checkHolds = (code: number, out: string, laneSteps: ReadonlySet<string>): boolean =>
-  code !== 0 && !(code === 1 && stuckIn(out).length > 0 && laneStuck(out, laneSteps).length === 0);
+export const checkHolds = (code: number, out: string, questSteps: ReadonlySet<string>): boolean =>
+  code !== 0 && !(code === 1 && stuckIn(out).length > 0 && questStuck(out, questSteps).length === 0);
 
 /** The `packages:` globs of a pnpm-workspace.yaml: the block's `- glob` lines, comments dropped. */
 export const workspaceGlobs = (yaml: string): string[] => {
@@ -221,7 +221,7 @@ export type Manifest = {
 /**
  * The manifests a step changed in a way pnpm-lock.yaml must follow, when the step left the lockfile
  * alone. A box has no network, so it cannot refresh the lockfile, and without it nothing installs
- * or type-checks: themes build2 (ticket 343, ticket 385) added a dependency, and the lane looped
+ * or type-checks: themes build2 (ticket 343, ticket 385) added a dependency, and the quest looped
  * build -> tests -> build. Changed: pnpm-workspace.yaml in any way; a workspace package.json
  * added, removed, unreadable, or with a different locked field. A package.json outside the
  * workspace (a fixture's) has no lockfile entry and never counts.

@@ -1,5 +1,5 @@
 {
-  // The lane scripts (0031, ticket 486): `scripts/typecheck.sh` checks them after the packages, so
+  // The quest scripts (0031, ticket 486): `scripts/typecheck.sh` checks them after the packages, so
   // a change to the Agent interface or to tea fails `pnpm typecheck` here first. `.agents/` is no
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
@@ -18,8 +18,8 @@
     "skills/lead/scripts/drive.test.ts",
     "skills/lead/scripts/gc.ts",
     "skills/lead/scripts/gc.test.ts",
-    "skills/lead/scripts/lanes.ts",
-    "skills/lead/scripts/lanes.test.ts",
+    "skills/lead/scripts/quests.ts",
+    "skills/lead/scripts/quests.test.ts",
     "skills/lead/scripts/mutbox.ts",
     "skills/lead/scripts/mutbox.test.ts",
     "skills/lead/scripts/flow/*.ts",
