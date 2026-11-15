@@ -24,11 +24,21 @@ const TakeReply = Schema.TaggedUnion({
 });
 
 const strict = { onExcessProperty: "error" } as const;
-const no = (reason: string) => Answer.cases.refused.make({ reason });
-const ok = (result: Schema.Json) => Answer.cases.ok.make({ result });
+
+/** What one job call answers, and the registered name to wake once the write turn is free: the
+ *  requester's, after a finish was accepted or repeated, so its program collects the result. */
+type Routed = { readonly answer: typeof Answer.Type; readonly wake: string | null };
+
+const no = (reason: string): Routed => ({ answer: Answer.cases.refused.make({ reason }), wake: null });
+
+const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
+  answer: Answer.cases.ok.make({ result }),
+  wake,
+});
 
 /**
- * Routes one job call after fresh authentication inside the Project's shared write turn.
+ * Routes one job call after fresh authentication inside the Project's shared write turn. A taken
+ * finish names its requester to wake; the caller wakes it after the turn and before it answers.
  *
  * @stability unstable
  * @category routing
@@ -137,11 +147,12 @@ export const route = Effect.fn("gateway.jobs")(
       }
 
       const recorded = yield* record(job, params);
-      const receipt =
-        params.result === undefined
-          ? yield* jobs.started(params.job, params.execution, recorded)
-          : yield* jobs.finish(params.job, params.execution, params.result, recorded);
-      return ok(receipt);
+
+      if (params.result === undefined) {
+        return ok(yield* jobs.started(params.job, params.execution, recorded));
+      }
+
+      return ok(yield* jobs.finish(params.job, params.execution, params.result, recorded), job.state.request.name);
     }
 
     return no("unknown_method");

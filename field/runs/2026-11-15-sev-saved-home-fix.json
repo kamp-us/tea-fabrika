@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-sev-saved-home-fix",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1313",
+  "started": "2026-11-15T04:45:00-08:00",
+  "ended": "2026-11-15T04:56:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "builder",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Sev1 fix, one agent, in next/: the 3-hour full run was red on main at 706bac372 on the saved-home law in port-home.laws.integration.test.ts. Proven cause: since the desk program landed, every instance boots the founder's tezgah from the boot list, so the home saved before it opens with a third row, tezgah:<founder>, under a new process id; checklist:1 and counter:1 keep their saved ids. The desk plan (docs/plan/lanes/desk-PLAN.md, the 2026-11-14 amendment) says the founder's tezgah boots like every other entry, so the product is right and the law's whole-table equality was too narrow for a build that adds a program. The law now holds the saved rows exactly (each saved name once, under its saved id) and requires the rows beyond them to be exactly the named list this build adds (the founder's tezgah). A second scheduled-only file had the same cause: start-member.laws.integration.test.ts mocked the program table without fabrika/tezgah, so its boot failed with no_program; it now holds tezgah as start-child's mock does. Ran green, one file at a time: the saved-home file, start-member and 16 other app integration files, bytes.integration, runtime.decode and error-cause, and the instance and reload visual files.",
+  "plants": [
+    {
+      "law": "port-home.laws.integration.test.ts, T502 law 5: the home saved before the slice opens with the same process table",
+      "plant": "saved.json records checklist:1 under another process id",
+      "result": "red"
+    },
+    {
+      "law": "port-home.laws.integration.test.ts, T502 law 5: the home saved before the slice opens with the same process table",
+      "plant": "runtime.ts boots one more entry, counter:2",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Only the next full scheduled run proves the fix. The tracker query for the ticket answered a stale list, so the ticket number is not recorded.",
+  "step": "fix"
+}

@@ -3,7 +3,7 @@
 // `accepted`. A repeat answers `repeated`; a refusal names its reason. Neither changes the state.
 import { Machine } from "@demlik/tea/effect";
 import { Equal, Schema } from "effect";
-import { Executor, Request, Result, State } from "../Job.ts";
+import { Collection, Executor, Request, Result, State } from "../Job.ts";
 
 const Execution = Schema.NonEmptyString;
 
@@ -15,6 +15,7 @@ export const Reason = Schema.Literals([
   "lacks_capability",
   "wrong_execution",
   "wrong_state",
+  "wrong_process",
 ]);
 
 /** What the last Msg did. `none` only before the first. */
@@ -35,6 +36,7 @@ export const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("take"), executor: Executor, execution: Execution }),
   Schema.Struct({ type: Schema.Literal("start"), execution: Execution }),
   Schema.Struct({ type: Schema.Literal("finish"), execution: Execution, result: Result }),
+  Schema.Struct({ type: Schema.Literal("collect"), collection: Collection }),
 ]);
 /** @internal */
 export type Msg = typeof Msg.Type;
@@ -129,6 +131,29 @@ export const job = Machine.make({
       }
 
       return Equal.equals(s.result, result) ? answered(model, REPEATED) : refused(model, "conflict");
+    },
+    collect: (model, { collection }) => {
+      const s = model.state;
+
+      if (s._tag === "absent") {
+        return refused(model, "not_found");
+      }
+
+      if (s._tag !== "finished" && s._tag !== "collected") {
+        return refused(model, "wrong_state");
+      }
+
+      // A result goes only to the exact process generation that asked, never to its successor.
+      if (collection.process !== s.request.process) {
+        return refused(model, "wrong_process");
+      }
+
+      if (s._tag === "finished") {
+        const { request, assignment, result } = s;
+        return moved(State.cases.collected.make({ request, assignment, result, collection }));
+      }
+
+      return Equal.equals(s.collection, collection) ? answered(model, REPEATED) : refused(model, "conflict");
     },
   },
 });

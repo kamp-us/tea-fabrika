@@ -389,8 +389,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-node-imports",
       // libfabrika's modules are planted at their real paths in modules.test.ts.
       "modules",
-      // E6's docs rule is on for listed libfabrika folders only: jsdocs.test.ts generates its files
-      // and plants one per left-out kind at real paths with the real lint config.
+      // E6's docs rule is on for every next/packages folder: jsdocs.test.ts generates its files and
+      // plants one per left-out kind at real paths with the real lint config.
       "jsdocs",
       // A service's written type and its static members are planted at next/ paths with the real
       // lint config in written-service-type.test.ts and no-static-layer.test.ts.
@@ -409,6 +409,13 @@ describe("each rule refuses what it is there to refuse", () => {
       "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
+      // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
+      "package-imports",
+      // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
+      // and a named file under next/ and runs oxlint over them with the real lint config.
+      "integration-test-name",
+      // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
+      "runs-from-depth",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
@@ -435,7 +442,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     "next/packages/libfabrika/src/gateway/Gateway.ts",
     "next/packages/libfabrika/src/ledger/Ledger.ts",
     "next/apps/fabrika/dev.ts",
-    "next/apps/fabrika/src/settings-start.test.ts",
+    "next/apps/fabrika/src/settings-start.integration.test.ts",
     ".agents/skills/lead/scripts/example.ts",
   ];
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
@@ -455,6 +462,28 @@ it("scenario: the isolate-boundary rule refuses a platform type outside cloudfla
   expect(result("fabrika(isolate-boundary)", file)).toEqual([1]);
 });
 
+// scenario: 0535's rule reads only next/'s test files, so its planted lines run there with the real config.
+it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, and a law in memory keeps it", async () => {
+  const io = "next/packages/libfabrika/src/plant/OverIo.test.ts";
+  const memory = "next/packages/libfabrika/src/plant/InMemory.test.ts";
+  const imports = ['import * as fc from "fast-check";', 'import { it } from "vitest";'];
+  const law = (body: string, count: string) =>
+    `it("law", () => { ${body}fc.assert(fc.property(fc.nat(), () => true), { seed: 119120, numRuns: ${count} }); });`;
+  const result = await lintCopies({
+    [io]: [
+      'import { DatabaseSync } from "node:sqlite";',
+      'import { runsFor } from "@kampus/vitest";',
+      ...imports,
+      law('new DatabaseSync(":memory:"); ', "100"),
+      law('new DatabaseSync(":memory:"); ', "runsFor({ fast: 10, full: 100 })"),
+      "",
+    ].join("\n"),
+    [memory]: [...imports, law("", "3000"), ""].join("\n"),
+  });
+  expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
+  expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
+});
+
 describe("lint.ts, the first step of pnpm lint", () => {
   const lint = (path: string) =>
     spawnSync(process.execPath, ["oxlint-plugins/lint.ts", relative(ROOT, path)], {
@@ -462,12 +491,13 @@ describe("lint.ts, the first step of pnpm lint", () => {
       encoding: "utf8",
     });
 
-  const advice = join(plant, "advice.ts");
+  const tried = join(plant, "tried.ts");
   const blocking = join(plant, "blocking.ts");
 
-  it("prints an advice rule's fire and does not fail", () => {
+  // scenario: T930 L6, the plant folder has no warn line, so it is at zero and the old advice rule blocks (0523).
+  it("scenario: T930 L6 a no-raw-try-catch fire in a folder at zero blocks", () => {
     writeFileSync(
-      advice,
+      tried,
       [
         'import {Effect} from "effect";',
         "declare const f: () => void;",
@@ -477,10 +507,10 @@ describe("lint.ts, the first step of pnpm lint", () => {
         "",
       ].join("\n"),
     );
-    const out = lint(advice);
+    const out = lint(tried);
     expect(out.stdout).toContain("fabrika(no-raw-try-catch)");
-    expect(out.stdout).toContain("oxlint: 0 blocking, 1 advice");
-    expect(out.status).toBe(0);
+    expect(out.stdout).toContain("oxlint: 1 blocking, 0 advice");
+    expect(out.status).toBe(1);
   });
 
   it("fails on a warning from a blocking rule", () => {

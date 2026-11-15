@@ -210,12 +210,14 @@ export type Waited = typeof Waited.Type;
  */
 export const ROW_BYTES = 2_000_000;
 
-/**
- * The most entries one page of a read holds. A guess: far under the size of an object call's
- * message for small events. `Ledger.read` hides it by pulling page after page; a page shorter than
- * this is the last.
- *
- * @stability unstable
- * @category constants
- */
-export const PAGE = 256;
+export {
+  /**
+   * The most entries one page of a read holds, re-exported from `Rev.ts`, where the wire reads the
+   * same value. `Ledger.read` hides it by pulling page after page; a page shorter than this is the
+   * last.
+   *
+   * @stability unstable
+   * @category constants
+   */
+  PAGE,
+} from "../Rev.ts";

@@ -2,6 +2,7 @@
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -86,7 +87,7 @@ describe("0140 sums", () => {
           ),
         );
       }),
-    { arbitrary: { seed: 119120, runs: 50 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
   );
   it.effect.prop(
     "tagged spans count in place, off-list values become other, and untagged spans still save",
@@ -137,6 +138,6 @@ describe("0140 sums", () => {
           expect(yield* sink.sums("runtime.rpc", H, H + HOUR)).toEqual([]);
         }).pipe(Effect.provide(world(db)));
       }),
-    { arbitrary: { seed: 119120, runs: 100 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

@@ -18,6 +18,7 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
+import { ExitReason } from "../processes/ExitReason.ts";
 import { apply } from "./Patch.ts";
 import { Sent } from "./Runner.ts";
 
@@ -315,13 +316,79 @@ const Life = { by: Schema.String, body: Schema.Unknown };
 const decodeEntry = Schema.decodeUnknownOption(Schema.TaggedUnion({ started: Life, restarted: Life, exited: Life }));
 
 const decodeLife = Schema.decodeUnknownOption(
-  Schema.Struct({ process: Schema.String, name: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({
+    process: Schema.String,
+    name: Schema.optionalKey(Schema.String),
+    reason: Schema.optionalKey(Schema.Unknown),
+  }),
 );
+
+const decodeRev = Schema.decodeUnknownOption(Schema.Struct({ rev: Schema.Int }));
+
+/**
+ * Schema for what a client knows of a registered name after reading some of its `processes/<name>`
+ * entries: `after`, the last rev folded; `live`, the newest start or restart, unless a later exit
+ * ended it; and `ended`, the newest exit with its reason.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const NameFold = Schema.Struct({
+  after: Schema.Int,
+  live: Schema.NullOr(Schema.String),
+  ended: Schema.NullOr(Schema.Struct({ pid: Schema.String, reason: ExitReason })),
+});
+export type NameFold = typeof NameFold.Type;
+
+/**
+ * The fold of a name before any entry is read.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const emptyFold: NameFold = { after: 0, live: null, ended: null };
+
+/** One entry folded in. Only the brain's own `started`, `restarted` and `exited` count. */
+const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: string) => boolean): NameFold => {
+  const after = Option.match(decodeRev(raw), { onNone: () => fold.after, onSome: ({ rev }) => rev });
+  const entry = Option.getOrNull(decodeEntry(raw));
+  const life = entry === null || !by(entry.by) ? null : Option.getOrNull(decodeLife(entry.body));
+
+  if (entry === null || life === null) {
+    return { ...fold, after };
+  }
+
+  if (entry._tag !== "exited") {
+    const named = life.name === undefined || life.name === name;
+    return { ...fold, after, live: named ? life.process : fold.live };
+  }
+
+  const reason = Schema.decodeUnknownOption(ExitReason)(life.reason);
+  return {
+    after,
+    live: life.process === fold.live ? null : fold.live,
+    ended: Option.match(reason, { onNone: () => fold.ended, onSome: (r) => ({ pid: life.process, reason: r }) }),
+  };
+};
+
+/**
+ * Folds one page of a name's `processes/<name>` entries, as `ledger.read` sent them, into `fold`.
+ * `by` says whether a writer is the brain's own, the one the client trusts for process facts. A
+ * fold over the pages in order is the fold over the whole list.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const foldName = (
+  fold: NameFold,
+  entries: ReadonlyArray<unknown>,
+  name: string,
+  by: (writer: string) => boolean,
+): NameFold => entries.reduce<NameFold>((acc, raw) => foldEntry(acc, raw, name, by), fold);
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:
- * the newest start or restart by the brain's own writer, unless a later exit ended it. `by` says
- * whether a writer is the brain's own, the one the client trusts for process facts. It returns
+ * the newest start or restart by the brain's own writer, unless a later exit ended it. It returns
  * `null` when no such process is live.
  *
  * @stability unstable
@@ -331,30 +398,4 @@ export const resolveName = (
   entries: ReadonlyArray<unknown>,
   name: string,
   by: (writer: string) => boolean,
-): string | null => {
-  let live: string | null = null;
-
-  for (const raw of entries) {
-    const entry = Option.getOrNull(decodeEntry(raw));
-
-    if (entry === null || !by(entry.by)) {
-      continue;
-    }
-
-    const life = Option.getOrNull(decodeLife(entry.body));
-
-    if (life === null) {
-      continue;
-    }
-
-    if (entry._tag === "started" || entry._tag === "restarted") {
-      if (life.name === undefined || life.name === name) {
-        live = life.process;
-      }
-    } else if (entry._tag === "exited" && life.process === live) {
-      live = null;
-    }
-  }
-
-  return live;
-};
+): string | null => foldName(emptyFold, entries, name, by).live;

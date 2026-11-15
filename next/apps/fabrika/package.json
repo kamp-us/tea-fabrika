@@ -37,6 +37,8 @@
     "@kampus/inbox": "workspace:*",
     "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
+    "@kampus/tezgah": "workspace:*",
+    "@kampus/vitest": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",

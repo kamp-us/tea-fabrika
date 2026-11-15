@@ -9,6 +9,7 @@
 // committed. L7 records every row write `Sql.exec` is sent during a save that changes nothing, and
 // there must be none.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -221,7 +222,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${seen.join("; ")}`).toBe(false);
             }),
-          { numRuns: 50 },
+          { numRuns: runsFor({ fast: 5, full: 50 }) },
         ),
       600_000,
     );
@@ -417,7 +418,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 expect(rows(a), `L6: after ${move}, both databases hold the same recovery rows`).toEqual(rows(twin));
               }
             });
-          yield* property(Tape, law, { numRuns: 100 });
+          yield* property(Tape, law, { numRuns: runsFor({ fast: 25, full: 100 }) });
           // An empty walk cannot pass: every move ran, a cut landed inside a transaction, a second store
           // changed only receipts under a journal row it left as it was, and the long-lived store then
           // sent its own last save over that change.
@@ -450,7 +451,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               expect(writes.slice(from), `L7: rows written by a save sent again unchanged, ${again}`).toEqual([]);
               expect(rows(sql), "L7: the rows are as the first save left them").toEqual(before);
             }),
-          { numRuns: 100 },
+          { numRuns: runsFor({ fast: 10, full: 100 }) },
         ),
     );
   });

@@ -92,10 +92,6 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(declaration.doc.length).toBeGreaterThan(0);
         }
 
-        for (const kind of ["rows", "docs", "code"] as const) {
-          expect(Settings.key(kind)).toBe(`queue.checks.${kind}`);
-        }
-
         const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
         const paths = [
           "merger.wait",

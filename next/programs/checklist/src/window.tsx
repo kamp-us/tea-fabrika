@@ -17,7 +17,8 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
       ) : (
         <ul className="checklist-items">
           {data.items.map((item) => (
-            <li className="checklist-row" key={item.name}>
+            // The row's cursor key: a return to the tile lands DOM focus back on this row (0165).
+            <li className="checklist-row" key={item.name} data-cursor={`item:${item.name}`}>
               <Checkbox
                 checked={item.state === "checked"}
                 aria-label={item.name}

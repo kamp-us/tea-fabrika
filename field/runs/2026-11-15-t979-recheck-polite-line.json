@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t979-recheck-polite-line",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-15T02:07:00-08:00",
+  "ended": "2026-11-15T02:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of the fix round a2bf208da on P18 slice 2, in next/: merge-ready, no new findings. The ended tile's polite line is now the tile guideline's words as written (0543): program and t<n> from tileWords, the one source tileName also reads, with no exit reason, and only for a tile that is not the drawn focus when it ends; nothing else builds the old words, and a tile the desk view lacks is not said. The state slot and body still say Ended (crashed) and Ended. spoken.test.ts now asks for the exact line and S9 walks focused and unfocused ends; both would fail on the old code. Dropping the old 'names its reason' law follows the guideline, so it is no loosening. L26's settle now skips only the inbox's own parked wait and asserts the world settled.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Ran spoken.test.ts (2 of 2) and WindowMachine.laws.test.ts (51 of 51), plancheck, field-check --local and loosening.sh. Not run: E1 in Chromium, pnpm typecheck, a real screen reader.",
+  "step": "review"
+}

@@ -112,8 +112,8 @@ it("U10 schemas reject unknown words, negative and nonfinite times", () =>
     { seed: 119120 },
   ));
 
-// format: these exact closed wire types are checked by CI, even if no test executes.
-it("format: U10 Method, Outcome and Usage keep their closed wire types", () => {
+// type: these exact closed wire types are checked by CI's typecheck, even if no test executes.
+it("U10 type: Method, Outcome and Usage keep their closed wire types", () => {
   expectTypeOf<typeof IsolateUsage.Method.Type>().toEqualTypeOf<(typeof methods)[number]>();
   expectTypeOf<typeof IsolateUsage.Outcome.Type>().toEqualTypeOf<(typeof outcomes)[number]>();
   expectTypeOf<typeof IsolateUsage.Usage.Type>().toEqualTypeOf<{

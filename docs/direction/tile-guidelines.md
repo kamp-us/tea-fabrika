@@ -5,8 +5,8 @@ summary: "Today's version, not built yet. Written rules for each part of a tile:
 
 # A tile stays quiet, says every fact in words, and every part is reached by keys
 
-Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` reads it
-as a lesson. It holds the written rules for every part of a tile, each tested against how Linear
+Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` follows its
+rules as written ([0543](../../.decisions/0543-next-follows-approved-guidelines-as-written.md)). It holds the written rules for every part of a tile, each tested against how Linear
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
 
