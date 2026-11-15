@@ -180,7 +180,9 @@ jobs:
   # green scheduled run and the failing tests, or comments on the open one; green closes it; a run
   # stopped by hand does nothing (scheduled.mjs). `always()`, so it runs after a red leg stopped the
   # run, as ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to
-  # find the last green run. No install: the runner's own Node runs scheduled.mjs.
+  # read the run's jobs and steps and find the last green run: a red leg's stop step cancels its own
+  # job too, so `needs` says `cancelled` where a step says `failure`. No install: the runner's own
+  # Node runs scheduled.mjs.
   report:
     needs: [next, tooling]
     if: ${{ always() && github.ref == 'refs/heads/main' }}

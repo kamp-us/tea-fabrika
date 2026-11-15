@@ -11,11 +11,18 @@ import { Effect, Exit, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
+// Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
+const CODE = vi.hoisted(() => ({
+  counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
+  checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+  child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
+}));
+
 vi.mock("virtual:fabrika-built", () => ({
   programs: {
-    "fabrika/counter": { hash: "counter-test", source: "counter" },
-    "fabrika/checklist": { hash: "checklist-test", source: "checklist" },
-    "p42/child": { hash: "child-test", source: "child" },
+    "fabrika/counter": CODE.counter,
+    "fabrika/checklist": CODE.checklist,
+    "p42/child": CODE.child,
   },
   assets: {},
 }));
@@ -288,7 +295,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const child = {
             id: `${boot}/agent-inc/0`,
             name: "child:agent",
-            code: { program: "p42/child", hash: "child-test" },
+            code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
           };
           const answer = yield* call(
