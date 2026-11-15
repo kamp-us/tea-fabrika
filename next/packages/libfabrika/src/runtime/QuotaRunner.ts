@@ -21,16 +21,26 @@ import type { ProgramRunner } from "./Runner.ts";
 export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiting", {}) {}
 
 /**
- * The reserve fault an error names: its own, or the one a lower module kept as its `cause` when
- * it translated the error into its own type, as the ledger does for a throw inside a Project
- * turn. The guard reads it here, so a fault is met by name on every path.
+ * Returns the reserve fault an error names: its own, or the one a lower module kept as its
+ * `cause` when it translated the error into its own type, as the ledger does for a throw inside a
+ * Project turn and the recovery store does for a refused save. The guard and the runner read it
+ * here, so a fault is met by name on every path.
+ *
+ * @stability unstable
+ * @category getters
  */
-const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
+export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
   if (error instanceof QuotasError) {
     return error.reason._tag === "RecoveryReserveExhausted" ? error.reason : undefined;
   }
 
-  return typeof error === "object" && error !== null && "cause" in error ? reserveFault(error.cause) : undefined;
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  // An error with a reason keeps the fault from below under that reason, as the recovery store does.
+  const below = "cause" in error ? reserveFault(error.cause) : undefined;
+  return below ?? ("reason" in error ? reserveFault(error.reason) : undefined);
 };
 
 /**
@@ -39,7 +49,7 @@ const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
  *
  * **Details**
  *
- * On a stopped name `open`, `msg`, `init` and `restart` fail with the fault. `due` and `mailed`
+ * On a stopped name `open`, `msg`, `init`, `restart` and `swap` fail with the fault. `due` and `mailed`
  * end without doing work. A fault that reaches the guard inside another module's error is saved
  * the same way, and the call fails with the fault itself.
  *
@@ -68,6 +78,7 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
     mailed: automatic(runner.mailed),
     init: () => checked(runner.init()),
     restart: (request) => checked(runner.restart(request)),
+    swap: (request) => checked(runner.swap(request)),
   };
 };
 

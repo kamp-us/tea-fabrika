@@ -83,12 +83,12 @@ import { HandsInput } from "./Hands.ts";
 import { HandsJobs } from "./HandsJobs.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { handsDelivery } from "./internal/handsDelivery.ts";
-import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
+import { Failure, Policy, type Receipt, Work } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
-import { QuotaWaiting } from "./QuotaRunner.ts";
+import { QuotaWaiting, reserveFault } from "./QuotaRunner.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
@@ -237,6 +237,9 @@ const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const decodeChunksInput = Schema.decodeUnknownResult(ChunksInput);
 const decodeTarget = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String, to: Schema.String }));
 const isRefusal = Schema.is(MailRefusal);
+
+/** Whether a journal state is program work; the stores charge recovery by the same schema. */
+const isWork = Schema.is(Work);
 
 /** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
@@ -621,9 +624,9 @@ export class ProgramRunner extends Context.Service<
         });
         /** Which delivery limit wins: the program's own, else the wiring's (3 when it sets none). */
         const deliveries = (s: Supervision): number => s.maxDeliveries ?? s.policy.maxDeliveries;
-        /** The journal is replacing its process: no program work runs until it is idle again. */
-        const recovering = (s: Supervision | null): boolean =>
-          s !== null && s.journal._tag !== "idle" && s.journal._tag !== "stepping" && s.journal._tag !== "checking";
+        /** The journal is replacing its process: no program work runs until it is idle again. The
+         *  stores charge their writes to recovery by the same rule. */
+        const recovering = (s: Supervision | null): boolean => s !== null && !isWork(s.journal);
         /** When recovery waits: down's own wait, or a successor's start that is not due yet. */
         const waitUntil = (s: Supervision | null): number | null => {
           const j = s?.journal;
@@ -1177,15 +1180,10 @@ export class ProgramRunner extends Context.Service<
             // reserve fault: that reports the brain's stop, keeping the failed step as its cause.
             yield* observed(msg, attempt.process, { failure, content: original }).pipe(
               Effect.mapError((error) => {
-                const quota =
-                  error instanceof QuotasError
-                    ? error
-                    : error instanceof LedgerError && error.cause instanceof QuotasError
-                      ? error.cause
-                      : undefined;
-                return quota?.reason._tag === "RecoveryReserveExhausted"
-                  ? new QuotasError({ reason: new RecoveryReserveExhausted({ ...quota.reason, cause: wrapped }) })
-                  : wrapped;
+                const fault = reserveFault(error);
+                return fault === undefined
+                  ? wrapped
+                  : new QuotasError({ reason: new RecoveryReserveExhausted({ ...fault, cause: wrapped }) });
               }),
             );
             return yield* wrapped;
