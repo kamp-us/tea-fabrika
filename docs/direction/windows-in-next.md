@@ -45,7 +45,7 @@ already work against the cloud brain,** which is what "a browser is always a cli
   every OS, in place of process groups and signals. 75%: a descendant may outlive its
   leader. The job's kill step settles it.
 - **Agents stay off on native Windows until an experiment says so.** `has` already carries
-  this: a job that needs `agents` never goes to hands without it, and the box must fail
+  this: a task that needs `agents` never goes to hands without it, and the box must fail
   rather than run with no box. WSL2 hands come first, as one more host. 85% on WSL2. 55% on
   native. Running the same law suite there settles it.
 - **Today's version:** fix only what daily use needs. Most of the trial's issues go away
