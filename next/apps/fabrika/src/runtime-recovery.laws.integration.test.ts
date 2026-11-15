@@ -1879,6 +1879,6 @@ describe("P34c live object accounting", () => {
           expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
         }),
       ),
-    { timeout: 120_000, arbitrary: { seed: 119120, runs: 40 } },
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
   );
 });

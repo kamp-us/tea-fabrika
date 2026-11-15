@@ -268,12 +268,15 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         continue;
       }
 
-      // Existing lifecycle and door history precede accounting. Ordinary data must have an owner.
+      // Existing lifecycle, door, instance start and access history precede accounting. Ordinary data must
+      // have an owner.
       if (
         entry.stream === ProcessTable.stream ||
         entry.stream.startsWith("processes/") ||
         entry.stream === "gateway" ||
-        entry.stream.startsWith("gateway/")
+        entry.stream.startsWith("gateway/") ||
+        entry.stream.startsWith("settings/") ||
+        entry.stream.startsWith("permissions/")
       ) {
         continue;
       }
@@ -430,22 +433,28 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
   };
   const error = (cause: unknown) =>
     cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
+  // The step runs inside a synchronous SQL transaction, which rolls back on a throw, so the guard
+  // reads the throw as a Result and throws it again, never swallowing it.
   const protect = <A>(step: () => A): A => {
-    try {
-      return step();
-    } catch (cause) {
-      if (!(cause instanceof Stopped)) {
-        throw cause;
-      }
+    const ran = Result.try(step);
 
-      // This write is after the data transaction rolled back. A storage failure stays loud.
-      sql.exec(
-        "UPDATE quota_fault SET value=? WHERE name=?",
-        faultEncode({ ...cause.pending, fault: cause.fault }),
-        options.name,
-      );
-      throw new QuotasError({ reason: cause.fault });
+    if (Result.isSuccess(ran)) {
+      return ran.success;
     }
+
+    const cause = ran.failure;
+
+    if (!(cause instanceof Stopped)) {
+      throw cause;
+    }
+
+    // This write is after the data transaction rolled back. A storage failure stays loud.
+    sql.exec(
+      "UPDATE quota_fault SET value=? WHERE name=?",
+      faultEncode({ ...cause.pending, fault: cause.fault }),
+      options.name,
+    );
+    throw new QuotasError({ reason: cause.fault });
   };
   return {
     protect,

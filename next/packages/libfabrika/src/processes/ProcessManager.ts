@@ -271,81 +271,86 @@ export class ProcessManager extends Context.Service<
             ? saved.value
             : yield* Effect.gen(function* () {
                 const process = yield* nextId;
-                return yield* checked((table, turn) => {
-                  const current = table.start(request, caller, from);
+                return yield* checked(
+                  (table, turn) => {
+                    const current = table.start(request, caller, from);
 
-                  if (Result.isFailure(current)) {
-                    return Result.fail(current.failure);
-                  }
+                    if (Result.isFailure(current)) {
+                      return Result.fail(current.failure);
+                    }
 
-                  if (Option.isSome(current.success)) {
-                    return Result.succeed(current.success.value);
-                  }
+                    if (Option.isSome(current.success)) {
+                      return Result.succeed(current.success.value);
+                    }
 
-                  if (guard !== undefined && !guard(turn)) {
-                    return Result.fail(new ProcessError({ reason: "forbidden" }));
-                  }
+                    if (guard !== undefined && !guard(turn)) {
+                      return Result.fail(new ProcessError({ reason: "forbidden" }));
+                    }
 
-                  if (table.collision(process)) {
-                    return Result.fail(new ProcessError({ reason: "id_collision" }));
-                  }
+                    if (table.collision(process)) {
+                      return Result.fail(new ProcessError({ reason: "id_collision" }));
+                    }
 
-                  if (request._tag === "first") {
-                    turn.append(
-                      ProcessTable.stream,
-                      id("registered", request.name),
-                      line(
-                        from,
-                        ProcessEvent.cases.registered.make({
-                          name: request.name,
-                          program: request.code.program,
-                          owner: caller.owner,
-                        }),
-                      ),
-                    );
-                  }
+                    if (request._tag === "first") {
+                      turn.append(
+                        ProcessTable.stream,
+                        id("registered", request.name),
+                        line(
+                          from,
+                          ProcessEvent.cases.registered.make({
+                            name: request.name,
+                            program: request.code.program,
+                            owner: caller.owner,
+                          }),
+                        ),
+                      );
+                    }
 
-                  const placed = turn.append(
-                    ProcessTable.events(request.name),
-                    request.id,
-                    line(
-                      from,
-                      ProcessEvent.cases.started.make({
-                        process,
-                        name: request.name,
-                        ...request.code,
-                        ...(request._tag === "first" && request.requester !== undefined
-                          ? { requester: request.requester }
-                          : {}),
-                        ...(request._tag === "first" && request.member !== undefined ? { member: request.member } : {}),
-                      }),
-                    ),
-                  );
-
-                  // The first letter keeps the caller's own `from`: it is the requester's mail, not the brain's.
-                  if (first !== undefined) {
-                    turn.append(inbox(request.name), id("start", request.id), letterLine(from, first.m));
-                  }
-
-                  if (request._tag === "again") {
-                    turn.append(
+                    const placed = turn.append(
                       ProcessTable.events(request.name),
-                      id("restarted", process),
+                      request.id,
                       line(
                         from,
-                        ProcessEvent.cases.restarted.make({
+                        ProcessEvent.cases.started.make({
                           process,
-                          after: request.after,
                           name: request.name,
-                          reason: request.reason,
-                          build: request.code.hash,
+                          ...request.code,
+                          ...(request._tag === "first" && request.requester !== undefined
+                            ? { requester: request.requester }
+                            : {}),
+                          ...(request._tag === "first" && request.member !== undefined
+                            ? { member: request.member }
+                            : {}),
                         }),
                       ),
                     );
-                  }
 
-                  return Result.succeed({ process, rev: placed.rev });
-                }, request._tag === "again" ? request.after : undefined);
+                    // The first letter keeps the caller's own `from`: it is the requester's mail, not the brain's.
+                    if (first !== undefined) {
+                      turn.append(inbox(request.name), id("start", request.id), letterLine(from, first.m));
+                    }
+
+                    if (request._tag === "again") {
+                      turn.append(
+                        ProcessTable.events(request.name),
+                        id("restarted", process),
+                        line(
+                          from,
+                          ProcessEvent.cases.restarted.make({
+                            process,
+                            after: request.after,
+                            name: request.name,
+                            reason: request.reason,
+                            build: request.code.hash,
+                          }),
+                        ),
+                      );
+                    }
+
+                    return Result.succeed({ process, rev: placed.rev });
+                  },
+                  request._tag === "again" ? request.after : undefined,
+                );
               });
           yield* Effect.annotateCurrentSpan({
             "fab.process": answer.process,

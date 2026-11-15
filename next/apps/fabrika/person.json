@@ -127,18 +127,11 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "writes",
-                    "bytes"
-                  ],
+                  "required": ["writes", "bytes"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "writes",
-                "bytes",
-                "letter"
-              ],
+              "required": ["writes", "bytes", "letter"],
               "additionalProperties": false
             },
             "process": {
@@ -164,25 +157,15 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "writes",
-                    "bytes"
-                  ],
+                  "required": ["writes", "bytes"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "writes",
-                "bytes",
-                "letter"
-              ],
+              "required": ["writes", "bytes", "letter"],
               "additionalProperties": false
             }
           },
-          "required": [
-            "project",
-            "process"
-          ],
+          "required": ["project", "process"],
           "additionalProperties": false,
           "description": "Recovery writes and bytes per rolling minute, plus each accepted letter's replay room.",
           "default": {

@@ -179,13 +179,16 @@ export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, dat
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: synchronous Vitest fixture setup needs a plain snapshot value
   Effect.runSync(
     Effect.gen(function* () {
-      const base = yield* input({
-        port: config.port,
-        start: config.start ?? `${config.name}-fixture`,
-        build: config.build ?? "fixture-build",
-        revision: null,
-        origin: "flag",
-      }, config.values);
+      const base = yield* input(
+        {
+          port: config.port,
+          start: config.start ?? `${config.name}-fixture`,
+          build: config.build ?? "fixture-build",
+          revision: null,
+          origin: "flag",
+        },
+        config.values,
+      );
       return {
         ...base,
         name: config.name,

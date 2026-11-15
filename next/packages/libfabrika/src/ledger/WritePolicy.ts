@@ -27,7 +27,7 @@ export class QuotaRefused extends Schema.TaggedError<QuotaRefused>()("QuotaRefus
  * @category services
  */
 export class RuntimeWrite extends Context.Service<RuntimeWrite, { readonly process: string }>()(
-  "@kampus/libfabrika/ledger/RuntimeWrite",
+  "@kampus/libfabrika/ledger/WritePolicy.RuntimeWrite",
 ) {}
 
 /**
