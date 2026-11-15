@@ -158,9 +158,28 @@ const TIMED_LEGS = [
   ["next", "next.json"],
 ] as const;
 
+// A timings upload's `with:`, whole. `retention-days` is a setting (0069), so only its being there is
+// held, as for the record's upload. Its name starts `timings-`, so it can never be taken for a
+// tested-tree record, which `matched` (changes.mjs) finds by its `tested-<tree>-<base>` name (Q1).
 const TIMINGS = {
   name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
   path: `\${{ runner.temp }}/${fileName({ job: `\${{ github.job }}`, leg: `\${{ matrix.shard }}` })}`,
+  "if-no-files-found": "warn",
+};
+
+/** TT2 and Q1: an upload of exactly a leg's timings file, under its own name, and nothing else. */
+const isTimings = (step: Record<string, unknown>): boolean => {
+  const given = map(step["with"]);
+  const kept = given["retention-days"];
+  return (
+    uses(step, "actions/upload-artifact") &&
+    sameEntries(
+      Object.entries(given).filter(([key]) => key !== "retention-days"),
+      Object.entries(TIMINGS),
+    ) &&
+    typeof kept === "number" &&
+    kept >= 1
+  );
 };
 
 /**
@@ -195,7 +214,8 @@ const timed = (name: string, job: Record<string, unknown>, report: string): stri
   if (
     !(
       uploads.length === 1 &&
-      map(upload?.["with"])["name"] === TIMINGS.name &&
+      upload !== undefined &&
+      isTimings(upload) &&
       compact(upload?.["if"]) === "always()" &&
       upload?.["continue-on-error"] === true &&
       upload["timeout-minutes"] === 1 &&
@@ -644,7 +664,8 @@ export const lintWorkflow = (text: string): string[] => {
   // told another `ref` or `repository` (say the branch's head) would test one tree while the record
   // names another, and a group of the named tree would skip tests nobody ran. `matched` trusts any
   // artifact of the record's name from a green run, so the record's upload is the one step in the
-  // workflow that uploads one, whatever action does it.
+  // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
+  // in a test job, with exactly TT2's `with:`, so its name is `timings-...` and never a record's.
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const given = map(step["with"]);
@@ -656,8 +677,12 @@ export const lintWorkflow = (text: string): string[] => {
   const uploaders = Object.values(jobs).flatMap((job) =>
     allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
-  require(uploaders.length === 1 &&
-    uploaders[0] === upload, "Q1: the record's upload is the one step in check.yaml that uploads an artifact");
+  const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));
+  require(upload !== undefined &&
+    uploaders.filter((s) => s === upload).length === 1 &&
+    uploaders.every(
+      (s) => s === upload || timingsUploads.includes(s),
+    ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
