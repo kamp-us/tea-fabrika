@@ -58,6 +58,8 @@
         "next-processes",
         "next-presence",
         "next-jobs",
+        "next-client",
+        "next-transport",
         "next-packs",
         "next-permissions",
         "next-ledger",
