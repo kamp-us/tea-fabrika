@@ -314,6 +314,8 @@ export const canRestart = (times: ReadonlyArray<number>, now: number, period: nu
  * - `ended`: the process is unknown, or no longer live.
  * - `bad_ref`: the monitor reference already watches another process.
  * - `bad_name`, `bad_text`: a name, a reference or another text did not pass its schema.
+ * - `forbidden`: a start's guard said no in the turn that would write it, such as a permission
+ *   whose relation was removed after the start was checked.
  *
  * @stability unstable
  * @category errors
@@ -330,6 +332,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
     "bad_ref",
     "bad_name",
     "bad_text",
+    "forbidden",
   ]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),

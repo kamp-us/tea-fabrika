@@ -1,7 +1,7 @@
 // P12, next/. The settings entry flows (L10, L16): saved and wire values enter the five real
 // entries over in-memory platform handles. Split out of readers.laws.test.ts unchanged so each file
 // stays under about 60 s on a CI leg.
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
@@ -41,6 +41,9 @@ const recordConstructor = vi.hoisted(() => {
   } = {};
   return slot;
 });
+
+// The Project keeps each built-in program by its hash, the SHA-256 of its source (`BuiltProgram`).
+const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), source: "fixture" };
 
 // SQL drivers throw at the synchronous platform boundary, before the service translates them.
 const settingsExec =
@@ -83,6 +86,8 @@ SettingsTest.suite((recipe, secret) =>
   Effect.gen(function* () {
     const Starts = yield* Effect.promise(() => import("../settings/Starts.ts"));
     const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));
+    // Each Process object's descriptor, kept across a reopen as the object's own storage keeps it.
+    const configured = new Map<string, unknown>();
     const captured: Record<SettingsTest.Channel, unknown[]> = {
       transport: [],
       ledger: [],
@@ -289,10 +294,14 @@ SettingsTest.suite((recipe, secret) =>
           }),
         },
         PROCESS: {
-          getByName: () => ({
+          getByName: (object: string) => ({
             configure: async (descriptor: unknown) => {
               captured.descriptors.push(descriptor);
+              configured.set(object, descriptor);
             },
+            // P15: a reopened Project asks each live process which build its object runs.
+            descriptor: async () => configured.get(object),
+            swap: async () => ({ _tag: "same" }),
           }),
         },
         CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 0 }) },
@@ -317,7 +326,7 @@ SettingsTest.suite((recipe, secret) =>
             consumers++;
             return {
               getEntrypoint: () => ({
-                describe: async () => ({ name: "fixture", v: 1, writes: {}, inputs: {}, cmds: [] }),
+                describe: async () => ({ name: "test/fixture", v: 1, writes: {}, inputs: {}, cmds: [] }),
               }),
             };
           },
@@ -378,8 +387,8 @@ SettingsTest.suite((recipe, secret) =>
               ? processRuntime(ctx, env, {})
               : projectRuntime(ctx, env, {
                   config,
-                  programs: { fixture: { hash: "fixture", source: "fixture" } },
-                  bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "fixture" }],
+                  programs: { "test/fixture": FIXTURE },
+                  bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "test/fixture" }],
                   door: () => Effect.succeed({} as GatewayCalls),
                 });
         close = Effect.promise(() => runtime.dispose());
@@ -404,7 +413,7 @@ SettingsTest.suite((recipe, secret) =>
                                 Start.cases.first.make({
                                   id: choice % 2 === 0 ? `birth-${config.start}` : `birth-${config.start}-${choice}`,
                                   name: choice % 2 === 0 ? "child" : `child-${choice}`,
-                                  code: { program: "fixture", hash: "fixture" },
+                                  code: { program: "test/fixture", hash: FIXTURE.hash },
                                 }),
                                 {
                                   by: "fixture-writer",

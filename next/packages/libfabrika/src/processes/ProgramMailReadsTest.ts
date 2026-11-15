@@ -120,6 +120,12 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ).pipe(Effect.provide(context), Effect.orDie);
     }
 
+    // The manager keeps its process table folded through the last rev it saw before a turn
+    // appends, so it has not folded the second start's own lines yet. One read folds them here,
+    // before any count, so every counted delivery starts from the same folded table and the
+    // counts differ only by the mail history.
+    yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(context), Effect.orDie);
+
     const source = { name: REQUESTER, process: PIDS[0] as string };
     let sent = 0;
     const deliver = Effect.fnUntraced(function* (delivery: Delivery) {

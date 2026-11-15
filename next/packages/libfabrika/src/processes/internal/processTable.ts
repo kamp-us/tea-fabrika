@@ -2,6 +2,7 @@ import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
+import { Sender } from "../../permissions/Senders.ts";
 import { ProcessId } from "../../ProcessId.ts";
 import { ExitReason } from "../ExitReason.ts";
 
@@ -28,8 +29,18 @@ export const Recipient = Schema.TaggedUnion({
 
 /** @internal */
 export const Start = Schema.TaggedUnion({
-  /** `requester` is who asked for a child (P42); the boot's start and old rows have none. */
-  first: { id: Text, name: Text, code: Code, requester: Schema.optionalKey(Recipient) },
+  /**
+   * `requester` is who asked for a child (P42); the boot's start and old rows have none. `member`
+   * is the member the start was checked against, its process owner (0172); a start no member's
+   * check was behind, and every row from before, has none.
+   */
+  first: {
+    id: Text,
+    name: Text,
+    code: Code,
+    requester: Schema.optionalKey(Recipient),
+    member: Schema.optionalKey(Sender),
+  },
   again: { id: Text, name: Text, code: Code, after: ProcessId, reason: Text },
 });
 /** @internal */
@@ -45,7 +56,14 @@ export const State = Schema.TaggedUnion({
 /** @internal */
 export const ProcessEvent = Schema.TaggedUnion({
   registered: { name: Text, program: Text, owner: Owner },
-  started: { process: ProcessId, name: Text, program: Text, hash: Text, requester: Schema.optionalKey(Recipient) },
+  started: {
+    process: ProcessId,
+    name: Text,
+    program: Text,
+    hash: Text,
+    requester: Schema.optionalKey(Recipient),
+    member: Schema.optionalKey(Sender),
+  },
   exited: { process: ProcessId, reason: ExitReason },
   restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
   down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
@@ -167,6 +185,7 @@ export const processTableFor = (by: string) =>
               name: event.name,
               code,
               ...(event.requester === undefined ? {} : { requester: event.requester }),
+              ...(event.member === undefined ? {} : { member: event.member }),
             }),
             from: entry,
             rev: entry.rev,
