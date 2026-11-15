@@ -6,7 +6,7 @@ name: host
 # can only hit a runner that is thrown away after the job.
 #
 # It is a trial and no required check: check.yaml's `ci-required` does not know it. It starts only
-# when the launchd code, the test or this file changes, or by hand:
+# when the launchd code, the test, a brain file only this test runs, or this file changes, or by hand:
 #
 #   gh workflow run host.yaml --ref <branch>
 on:
@@ -15,6 +15,8 @@ on:
       - next/packages/libfabrika/src/node/launchd/**
       - next/apps/fabrika/e2e/electron-launchd.visual.test.ts
       - next/apps/fabrika/e2e/node/P19Launchd.test-support.ts
+      - next/apps/fabrika/e2e/node/P19Brain.test-support.ts
+      - fixtures/next/p19-launchd/brain.ts
       - .github/workflows/host.yaml
   workflow_dispatch:
 
