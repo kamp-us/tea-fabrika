@@ -470,7 +470,7 @@ const tested = async (before, head, run, api) => {
 const skipTested = (flags) => ({ ...flags, next: false });
 
 // A merge queue's group whose tree a ready pull request run already tested green passes at once
-// (experiment 292, change 5). GitHub runs a pull request's checks on `refs/pull/<n>/merge`: the pull
+// (experiment 293, change 5). GitHub runs a pull request's checks on `refs/pull/<n>/merge`: the pull
 // request merged onto main as main was then. A group of one entry is the same pull request merged
 // onto main as main is now. When main has not moved, both are one tree, and the group would test
 // byte-identical files. But GitHub lists a pull request run under its branch's head, whose tree is
