@@ -155,8 +155,10 @@ patchedDependencies:
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
   '@manti-ui/styles@0.13.0': patches/@manti-ui__styles@0.13.0.patch
-  # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
-  # drop at the release that has the fix.
+  # demlik#905: a non-exported const beside an exported type of its name is not an unused export.
+  # demlik#913 and #915: a row's `layer`, and a package import read by its subpath. demlik#947 and
+  # #948: `--layers` fails a file under a `roots` folder that no layer claims, and `testFiles` are
+  # judged upward and sideways but not by the `imports` lists. Drop each at the release that has it.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
   # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
   # reports a late event for a folder made just before the watch began, so a Mac replaced the

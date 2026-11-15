@@ -1,15 +1,14 @@
-// T878, next/, L7. Resolve through the public Repository handle, using real tree and disk bytes.
-// The lead runs this file in the isolated Git container after build.
+// T878, next/, L7. Resolve through the public Repository handle, using committed tree and disk bytes.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
 import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import * as GitLaws from "./GitLaws.test-support.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 import * as Sources from "./Sources.ts";
 
@@ -347,11 +346,12 @@ const string = (value: unknown) => {
 const realGitRuns = runsFor({ fast: 3, full: 20 });
 const realGitRunBudget = 30_000;
 
-// Loaded host checks took 695 s for 200 runs, then 138 s for 20 runs (6.9 s/run).
+// Loaded host checks took 695 s for 200 runs, then 138 s for 20 runs (6.9 s/run) on real git.
 // Allow 30 s/run, over four times the slower measured rate; keep 200 injected runs above.
-it(
-  "L7: bases, pinned bytes and outside targets (20 real-Git runs; 200 injected runs cover the same paths)",
-  async () => {
+// It runs on memory git, and on real git too at depth `full` (0535, GitLaws).
+it.each(GitLaws.gits)(
+  "L7: bases, pinned bytes and outside targets on $name git (20 git runs; 200 injected runs cover the same paths)",
+  async ({ services }) => {
     await fc.assert(
       fc.asyncProperty(
         fc.array(
@@ -511,7 +511,7 @@ it(
                   }
                 }).pipe(Effect.provide(RepositoriesGit.layer({ person })));
               }),
-            ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto))),
+            ).pipe(Effect.provide(services)),
           ),
       ),
       { seed: 119120, numRuns: realGitRuns },

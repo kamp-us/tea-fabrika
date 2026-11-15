@@ -1,161 +1,27 @@
-// Today's CI, serving both versions. Static workflow shape belongs in lint.
-import { existsSync, readFileSync, globSync } from "node:fs";
+// Today's CI, serving both versions. Static workflow shape belongs in lint. Each family of laws is
+// its own module under workflow-lint/, with its test beside it; this file runs them all, in the
+// order their messages print, and is what `pnpm lint` calls.
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { gated, sized } from "./required.mjs";
-
-export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
-export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
-export const inLaneStep = (path: string) => path.includes(LANE_FILTER);
-
-const testFiles = globSync("packages/pipeline/**/*.test.ts", {
-  cwd: fileURLToPath(new URL("../../", import.meta.url)),
-});
-
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const map = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
-
-/** Every step of a job, in order, the stop step included. */
-const allSteps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : [];
-
-// Fail fast (ticket 990): every job but ci-required ends with this step. Once an earlier step
-// failed, on a pull request or a merge queue group, it cancels the job's own run, so the jobs still
-// running free their runners and ci-required, which a normal cancel leaves running, answers at once.
-// A push to main runs to the end.
-const STOP = {
-  name: "stop the run",
-  if: "failure()&&github.event_name!='push'",
-  env: { GH_TOKEN: `\${{ github.token }}` },
-  run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
-};
-
-/** The stop step exactly as STOP writes it, its `if` spaced any way, with nothing else on it. */
-const isStop = (step: Record<string, unknown>) =>
-  step["name"] === STOP.name &&
-  compact(step["if"]) === STOP.if &&
-  JSON.stringify(step["env"]) === JSON.stringify(STOP.env) &&
-  step["run"] === STOP.run &&
-  Object.keys(step).length === Object.keys(STOP).length;
-
-/** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
-const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  allSteps(job).filter((step) => !isStop(step));
-
-const commands = (job: Record<string, unknown>) =>
-  steps(job).flatMap((step) =>
-    typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
-  );
-
-const compact = (value: unknown) => {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  const trimmed = value.trim();
-  const expression = trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
-  // Keep quoted strings and names intact. Only operator spacing cannot change meaning.
-  return expression.replace(
-    /'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
-    (match, operator: string | undefined) => operator ?? match,
-  );
-};
-
-const env = {
-  BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}`,
-  HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
-  EVENT: `\${{ github.event_name }}`,
-};
-
-// The classifier also reads whether the pull request is a draft (0134's amendment of 2026-11-11).
-const classifier = { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` };
-
-// A draft's check and ci-required carry their own names, so a draft's green answer on a head never
-// stands in for the ready run's on the same head (catchup.sh reads `check`, the ruleset
-// `ci-required`).
-const DRAFT_NAMES = {
-  check: "github.event.pull_request.draft&&'lint'||'check'",
-  "ci-required": "github.event.pull_request.draft&&'ci-required (draft)'||'ci-required'",
-};
-
-// Marking a draft ready starts the full run; only a new head cancels the run before it.
-const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
-const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
-const BUILD = "needs.changes.outputs.build!='false'";
-// Today's tests run only when a file of today's version changed; else the tooling tests run alone
-// (0175). An unreadable flag is not 'false', so it runs today's tests.
-const TODAY = "needs.changes.outputs.today!='false'";
-const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
-// The test job's machines: six for today's tests, two when only the tooling tests run (check.yaml
-// gives the seconds). An unreadable flag is not 'false', so it gets six.
-const TODAY_LEGS = 6;
-const TOOLING_LEGS = 2;
-const legList = (count: number) => `[${Array.from({ length: count }, (_, i) => i + 1).join(", ")}]`;
-const TEST_LEGS = `fromJSON(needs.changes.outputs.today=='false'&&'${legList(TOOLING_LEGS)}'||'${legList(TODAY_LEGS)}')`;
-// The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
-// queue group's base, or what main held before a push. All zeros (a first push) is no base.
-const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
-const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
-const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
-
-// Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
-const chromium =
-  "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
-
-const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
-
-// The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
-// The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
-// vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is the legs job's `shards`,
-// else its fallback, the full matrix: what a run that is not sized runs (legs.ts).
-const E2E_PREFIX = "e2e-";
-const VITEST_LEGS = ["1", "2", "3", "4", "5"];
-const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
-const SIZED_SHARDS = /^fromJSON\(needs\.legs\.outputs\.shards\|\|'(.*)'\)$/s;
-
-/** The fallback in next's `fromJSON(needs.legs.outputs.shards || '<legs>')`, numbers and strings kept apart. */
-const legs = (job: Record<string, unknown>): unknown[] => {
-  const fallback = SIZED_SHARDS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]))?.[1];
-
-  try {
-    const parsed: unknown = JSON.parse(fallback ?? "");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-/** The legs that run vitest: the ones written as a quoted whole number. */
-const numbered = (all: readonly unknown[]): string[] =>
-  all.filter((leg): leg is string => typeof leg === "string" && /^[1-9]\d*$/.test(leg));
-
-/** The legs that run the end-to-end files: the ones written as `e2e-` and a whole number. */
-const ends = (all: readonly unknown[]): string[] =>
-  all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
-
-// When the legs job sizes next: a pull request that tests all of next/, whose changes passed.
-const SIZED =
-  "needs.changes.result=='success'&&needs.changes.outputs.next!='false'&&github.event_name=='pull_request'&&(needs.changes.outputs.filter||'next/')=='next/'";
-
-// `files` is a sized run's vitest list, the reader tests included (legs.ts).
-const LEGS_OUTPUTS = ["shards", "files", "vitest", "e2e", "next"];
-
-const SIZE_ENV = {
-  EVENT: `\${{ github.event_name }}`,
-  FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-  BASE: `\${{ github.event.pull_request.base.sha }}`,
-};
-
-// A leg's `--shard`: `${{ matrix.shard }}/${{ needs.legs.outputs.<kind> || <full count> }}`, so a sized
-// run divides by its own count of that kind, and every other run by the full matrix's.
-const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
-
-const denominator = (kind: "vitest" | "e2e", full: number) =>
-  String.raw`\$\{\{\s*needs\.legs\.outputs\.${kind}\s*\|\|\s*${full}\s*\}\}`;
-
-const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
+import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
+import { changesJob } from "./workflow-lint/changes.ts";
+import { checkJob } from "./workflow-lint/check-job.ts";
+import { ciRequired } from "./workflow-lint/ci-required.ts";
+import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
+import { classifyStep } from "./workflow-lint/classify.ts";
+import { failFast } from "./workflow-lint/fail-fast.ts";
+import { lintIssues } from "./workflow-lint/issues.ts";
+import { jobLaws } from "./workflow-lint/jobs.ts";
+import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
+import { nextLaws } from "./workflow-lint/next-job.ts";
+import { record } from "./workflow-lint/record.ts";
+import { lintScheduled } from "./workflow-lint/scheduled.ts";
+import { ends, legs, map, nextJob, numbered, type Require, type Rule } from "./workflow-lint/shared.ts";
+import { timeTables } from "./workflow-lint/time-tables.ts";
+import { token } from "./workflow-lint/token.ts";
+import { triggers } from "./workflow-lint/triggers.ts";
+import { typecheckJob } from "./workflow-lint/typecheck-job.ts";
 
 /** The next job's full vitest legs in a workflow's text, for the law on how the table splits. */
 export const vitestLegs = (text: string): string[] => numbered(legs(nextJob(text)));
@@ -166,6 +32,23 @@ export const e2eLegs = (text: string): string[] => ends(legs(nextJob(text)));
 /** The next job's `timeout-minutes` in a workflow's text, for the same law: a leg gets half of it. */
 export const nextMinutes = (text: string): number => Number(nextJob(text)["timeout-minutes"]);
 
+// check.yaml's families of laws, in the order their messages print.
+const CHECK_RULES: readonly Rule[] = [
+  triggers,
+  checkJob,
+  jobLaws,
+  failFast,
+  ciRequired,
+  changesJob,
+  token,
+  record,
+  typecheckJob,
+  classifyStep,
+  mergeLine,
+  nextLaws,
+  timeTables,
+];
+
 export const lintWorkflow = (text: string): string[] => {
   let source: unknown;
 
@@ -175,644 +58,49 @@ export const lintWorkflow = (text: string): string[] => {
     return ["check.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
-    on = map(workflow["on"]),
-    jobs = map(workflow["jobs"]);
+  const workflow = map(source);
   const errors: string[] = [];
-  const require = (holds: boolean, reason: string) => {
+  const require: Require = (holds, reason) => {
     if (!holds) {
       errors.push(`check.yaml: ${reason}`);
     }
   };
-  const push = map(on["push"]),
-    pr = map(on["pull_request"]),
-    queue = map(on["merge_group"]);
-  require("pull_request" in on &&
-    "push" in on &&
-    JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
 
-  for (const trigger of [on, push, pr, queue]) {
-    require(!["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"].some(
-      (key) => key in trigger,
-    ), "no workflow path or branch exclusions");
-  }
-
-  require(!("branches" in pr), "all PR bases remain enabled");
-  // A merge queue takes a required check only from a `merge_group` run, so without this trigger
-  // `ci-required` never reports there and nothing can merge.
-  require(JSON.stringify(queue["types"]) === '["checks_requested"]', "the merge queue's group runs the checks");
-  const types = pr["types"];
-  require(Array.isArray(types) &&
-    types.length === TYPES.length &&
-    TYPES.every((type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
-  require(compact(map(workflow["concurrency"])["cancel-in-progress"]) === CANCEL, "only a new head cancels a run");
-
-  for (const [job, expected] of Object.entries(DRAFT_NAMES)) {
-    require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
-  }
-
-  // A draft's check is lint alone: the promises gate and the build skip on changes' build flag.
-  const checkSteps = steps(map(jobs["check"]));
-
-  for (const step of checkSteps) {
-    const slow = step["name"] === "promises" || step["run"] === "pnpm build";
-    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
-  }
-
-  // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
-  // pass with a grown list; a first push's zeros map to no base, as for the test steps.
-  const ratchets = checkSteps.filter(
-    (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
-  );
-  require(ratchets.length === 1 &&
-    ratchets[0]?.["run"] === RATCHET &&
-    compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&
-    !("if" in (ratchets[0] ?? {})) &&
-    ratchets[0]?.["continue-on-error"] ===
-      undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
-
-  // A sized job (next) also needs its sizer, and skips on that one's false flag too (required.mjs).
-  for (const name of gated) {
-    const job = map(jobs[name]);
-    const needs = job["needs"];
-    const sizer = Object.hasOwn(sized, name) ? sized[name] : undefined;
-    const expected = sizer === undefined ? ["changes"] : ["changes", sizer];
-    require((sizer === undefined && needs === "changes") ||
-      JSON.stringify(needs) === JSON.stringify(expected), `${name} needs ${expected.join(" and ")}`);
-    require(compact(job["if"]) ===
-      compact(
-        `!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${name} != 'false')${
-          sizer === undefined ? "" : ` && needs.${sizer}.outputs.${name} != 'false'`
-        }`,
-      ), `${name} must run after classifier failure and skip only its false flag`);
-  }
-
-  // A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
-  for (const [name, job] of Object.entries(jobs)) {
-    const limit = map(job)["timeout-minutes"];
-    require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
-  }
-
-  // Fail fast (ticket 990). F3: the stop step's token may cancel the run, and reads no more than
-  // the checkout needs. ci-required never cancels, so its own map drops `actions`.
-  require(JSON.stringify(workflow["permissions"]) ===
-    JSON.stringify({
-      actions: "write",
-      contents: "read",
-    }), "F3: the workflow's token grants actions: write and contents: read, nothing more");
-  require(JSON.stringify(map(jobs["ci-required"])["permissions"]) ===
-    JSON.stringify({ contents: "read" }), "F3: ci-required's token reads contents alone");
-
-  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== "ci-required")) {
-    const list = allSteps(map(job));
-    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
-    // F1. Last, so `failure()` has seen every other step of the job. The one step that cancels, so
-    // no second one can stop a push to main.
-    require(list.length > 0 &&
-      isStop(list.at(-1) ?? {}) &&
-      cancels.length === 1, `F1: ${name} ends with the stop step, its one step that cancels the run`);
-    // F2. A job on `always()` survives the cancel and holds its runner to the end. Only ci-required,
-    // which gives the verdict, may.
-    require(!compact(map(job)["if"]).includes(
-      "always()",
-    ), `F2: ${name} stops with its run: only ci-required runs on always()`);
-    // F3. A job's own `permissions` replaces the workflow's whole map, and its stop step needs that one.
-    require(!("permissions" in map(job)), `F3: ${name} keeps the workflow's token, which its stop step needs`);
-  }
-
-  // F4. A checkout keeps the token in .git/config unless told not to, where any test or install
-  // script could read it, and that token may cancel and re-run this workflow. No job pushes, and the
-  // fetches read a public repository, so no checkout needs it.
-  for (const [name, job] of Object.entries(jobs)) {
-    for (const step of allSteps(map(job)).filter(
-      (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"),
-    )) {
-      require(map(step["with"])["persist-credentials"] ===
-        false, `F4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);
-    }
-  }
-
-  // The one required check: it waits on every other job, never skips, and judges them all.
-  const summary = map(jobs["ci-required"]),
-    others = Object.keys(jobs).filter((name) => name !== "ci-required");
-  const needed = Array.isArray(summary["needs"]) ? summary["needs"] : [];
-  require(needed.length === others.length &&
-    others.every((name) => needed.includes(name)), "ci-required needs every other job");
-  require(compact(summary["if"]) === "always()" &&
-    summary["continue-on-error"] === undefined, "ci-required runs after any result and its failure blocks");
-  const judged = steps(summary).filter((s) => "run" in s);
-  require(judged.length === 1 &&
-    judged[0]?.["run"] === "node .github/ci/required.mjs" &&
-    compact(map(judged[0]?.["env"])["NEEDS"]) === "toJSON(needs)" &&
-    !("if" in (judged[0] ?? {})) &&
-    judged[0]?.["continue-on-error"] === undefined, "ci-required judges toJSON(needs) with required.mjs");
-
-  const changes = map(jobs["changes"]),
-    outputs = map(changes["outputs"]);
-  require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
-
-  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today"]) {
-    require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
-  }
-
-  // The plan for CI paths, slice 2: the parser's pass (`--same`) prints `next` and `filter` again
-  // when it proved a next/ file is the same program, and the first pass's stand when it printed
-  // nothing. Its install and its run may fail without failing changes, which would run everything
-  // and turn ci-required red.
-  for (const name of ["next", "filter"]) {
-    require(compact(outputs[name]) ===
-      `steps.same.outputs.${name}||steps.diff.outputs.${name}`, `changes exposes ${name} from the parser's pass, else the first`);
-  }
-
-  const changeSteps = steps(changes);
-  const same = changeSteps.find((s) => s["id"] === "same");
-  require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
-    same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
-
-  for (const [key, expected] of Object.entries(classifier)) {
-    require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
-  }
-
-  for (const step of changeSteps.filter(
-    (s) =>
-      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
-      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
-  )) {
-    require(step["continue-on-error"] === true &&
-      same !== undefined &&
-      changeSteps.indexOf(step) <
-        changeSteps.indexOf(same), "the parser's setup comes before its pass, and its failure fails nothing");
-  }
-
-  require(changeSteps.some(
-    (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
-  ), "changes installs the parser for its pass");
-
-  // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
-  // alone (0133). check runs no second one.
-  require(commands(map(jobs["typecheck"])).includes("pnpm typecheck"), "the typecheck job runs pnpm typecheck");
-  require(!commands(map(jobs["check"])).includes("pnpm typecheck"), "check leaves the typecheck to its own job");
-
-  require(commands(changes).includes("sh .agents/skills/lead/scripts/skillscheck.sh"), "changes runs the skills check");
-  require(commands(changes).includes(
-    "node oxlint-plugins/gitignore.mjs",
-  ), "changes runs the shared tracked-file check");
-
-  for (const command of ["sh .agents/skills/lead/scripts/skillscheck.sh", "node oxlint-plugins/gitignore.mjs"]) {
-    require(steps(changes).some(
-      (s) => s["run"] === command && compact(s["if"]) === "!cancelled()",
-    ), "small scans still run after classifier failure");
-  }
-
-  const field = map(jobs["field"]);
-  require(!("needs" in field) && !("if" in field), "field starts independently on every event");
-  require(field["continue-on-error"] !== true, "field failures block");
-
-  for (const [name, job] of [
-    ["changes", changes],
-    ["field", field],
-  ] as const) {
-    const list = steps(job);
-    require(list.some(
-      (s) =>
-        typeof s["uses"] === "string" &&
-        s["uses"].startsWith("actions/checkout@") &&
-        map(s["with"])["fetch-depth"] === 0 &&
-        !("if" in s),
-    ), `${name} checks out history`);
-    const diff = list.find((s) => s["id"] === "diff");
-    require(diff?.["run"] === "node .github/ci/changes.mjs" && !("if" in (diff ?? {})), `${name} calls the classifier`);
-
-    for (const [key, expected] of Object.entries(classifier)) {
-      require(map(diff?.["env"])[key] === expected, `${name} passes event ${key} through env`);
-    }
-  }
-
-  const fieldSteps = steps(field),
-    flag = compact("steps.diff.outputs.field == 'true'");
-  const install = fieldSteps.find((s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install "));
-  require(typeof install?.["run"] === "string" &&
-    install["run"].includes("--frozen-lockfile") &&
-    install["run"].includes("--filter @tea-fabrika/ci") &&
-    !install["run"].includes("--ignore-workspace"), "field installs the workspace package with its frozen lockfile");
-  const check = fieldSteps.find((s) => s["run"] === "node .github/ci/field-check.ts");
-  require(check !== undefined, "field runs the row checker");
-  require(check?.["continue-on-error"] !== true, "row checker failures block");
-
-  for (const action of ["pnpm/action-setup@", "actions/setup-node@"]) {
-    require(fieldSteps.some(
-      (s) => typeof s["uses"] === "string" && s["uses"].startsWith(action),
-    ), `field includes ${action} setup`);
-  }
-
-  for (const [key, expected] of Object.entries(env)) {
-    require(map(check?.["env"])[key] === expected, `field check passes ${key} through env`);
-  }
-
-  for (const step of fieldSteps.filter(
-    (s) =>
-      s === install ||
-      s === check ||
-      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])),
-  )) {
-    require(compact(step["if"]) === flag, "field setup, install and validation skip without changed JSONL");
-  }
-
-  const test = map(jobs["test"]),
-    scripts = commands(test);
-  require(compact(map(map(test["strategy"])["matrix"])["shard"]) ===
-    TEST_LEGS, "T5: six machines for today's tests, two when only the tooling tests run");
-  const testSteps = steps(test);
-  const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
-  const rest = testSteps.find((s) => s["name"] === "test");
-  const tooling = testSteps.find((s) => s["name"] === "tooling tests");
-  const apt = testSteps.find((s) => s["name"] === "apt packages");
-  // T5. Each step's `--shard k/N` counts the machines of the flag it runs on.
-  require([lane, rest].every((step) => map(step?.["env"])["SHARD"] === `\${{ matrix.shard }}/${TODAY_LEGS}`) &&
-    map(tooling?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${TOOLING_LEGS}`, "T5: each test step's SHARD divides by its flag's machine count");
-  // T6. Without its packages today's tsh and sandbox tests skip, so apt runs on today's flag,
-  // before them; the tooling tests need none of the five.
-  require(apt !== undefined &&
-    compact(apt["if"]) === TODAY &&
-    lane !== undefined &&
-    testSteps.indexOf(apt) < testSteps.indexOf(lane), "T6: apt runs on the today flag, before today's tests");
-  const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
-  require(runs.length === 5, "today has five test commands, including two lane commands");
-  require(compact(lane?.["if"]) === TODAY &&
-    compact(rest?.["if"]) === `!cancelled()&&${TODAY}`, "T1: today's tests run only on the today flag");
-  require(tooling !== undefined &&
-    compact(tooling["if"]) === TOOLING &&
-    rest !== undefined &&
-    testSteps.indexOf(rest) < testSteps.indexOf(tooling), "T2: the tooling tests run when today's do not");
-  require([lane, rest, tooling].every(
-    (step) => compact(map(step?.["env"])["BASE"]) === compact(TEST_BASE),
-  ), "T4: each test step takes its base from the pull request, the merge queue's group or the push");
-  require(toolingRuns.length === 2 &&
-    toolingRuns.every(
-      (line) =>
-        line.includes('--shard "$SHARD"') &&
-        line.includes("--passWithNoTests") &&
-        TOOLING_EXCLUDES.every((glob) => line.includes(`--exclude '${glob}'`)),
-    ) &&
-    toolingRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "T3: the tooling commands leave out today's trees and next/, on a pull request and on main");
-  const times = testSteps.find((s) => s["name"] === "shard times");
-  const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(restRuns.length === 3 &&
-    restRuns.every((line) => line.includes(`--exclude '${LANE_GLOB}'`)), "L1: every rest command excludes lane files");
-  require(laneRuns.length === 2 &&
-    laneRuns.every(
-      (line) =>
-        line.startsWith(`pnpm exec vitest run ${LANE_FILTER} `) &&
-        line.includes('--shard "$SHARD"') &&
-        /--maxWorkers=1(?:\s|$)/.test(line) &&
-        line.includes("--passWithNoTests") &&
-        line.includes("--exclude 'next/**'"),
-    ) &&
-    laneRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "L2: lane commands run one file at a time on PR and main");
-  require(lane !== undefined &&
-    rest !== undefined &&
-    times !== undefined &&
-    testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
-    testSteps.indexOf(rest) < testSteps.indexOf(times) &&
-    compact(rest["if"]).startsWith("!cancelled()") &&
-    compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
-  require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
-
-  for (const line of runs) {
-    require(/--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line), "every today command excludes next/**");
-  }
-
-  const changed = restRuns.find((line) => line.includes("--changed"));
-  require(changed !== undefined &&
-    changed.includes('--changed "$BASE"') &&
-    changed.includes('--shard "$SHARD"') &&
-    forced.every((path) => changed.includes(`--exclude ${path}`)), "changed shards exclude the two forced files");
-  require(runs.some(
-    (line) => !line.includes("--changed") && line.includes('--shard "$SHARD"'),
-  ), "main keeps its full shard command");
-  const forcedLine = scripts.findIndex(
-    (line) =>
-      line.startsWith("pnpm exec vitest run") &&
-      forced.every((path) => line.includes(path)) &&
-      !line.includes("--changed"),
-  );
-  require(forcedLine > 0 &&
-    scripts[forcedLine - 1] === `if [ "\${{ matrix.shard }}" = 1 ]; then`, "forced tests run once on shard 1");
-  require(scripts.includes('if [ -n "$BASE" ]; then') &&
-    scripts.includes("else"), "PR and main branches remain separate");
-  const nextJob = map(jobs["next"]),
-    strategy = map(nextJob["strategy"]),
-    matrix = map(strategy["matrix"]),
-    nextSteps = steps(nextJob);
-  require(!("name" in nextJob), "next keeps the default matrix check names");
-  // E1. The matrix is `fromJSON(needs.legs.outputs.shards || '<full>')`: on a pull request that tests
-  // all of next/ the legs job's sized legs, else the full matrix. The full one is the end-to-end legs
-  // `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all strings. The count N is E4's,
-  // in vitest.shards.test.ts; here only its shape and its `/N`. The sized legs are legs.ts's
-  // `shards`, the same shape cut shorter (legs.test.ts).
-  // Plants (T967), each run once on check.yaml and restored, each exit 1: drop e2e-2 and keep `/2`
-  // (E2's count error); `e2e-2, e2e-1` (E1); a leg named plain `e2e` (E1 and E2); `/3` with two legs
-  // (E2); the end-to-end step's guard dropped (E2); `--shard` dropped (E2's command); shard times back
-  // before the end-to-end step (E3); chromium on every leg (E3); the vitest step on the old
-  // `matrix.shard != 'e2e'` (E3).
-  const allLegs = legs(nextJob),
-    e2eCount = ends(allLegs).length;
-  const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
-  require(e2eCount >= 1 &&
-    JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
-    Object.keys(matrix).length ===
-      1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  require(strategy["fail-fast"] === false, "next lets every shard finish");
-  // The vitest step's paths, unquoted so each path is its own argument. On a sized pull request the
-  // legs job's `files`: what `--changed` picked and every reader test, each once (legs.ts), so the
-  // step takes no `--changed` of its own, which would drop the readers again. Else the plan for CI
-  // paths, slice 2: `filter` from changes, the reader tests or `next/`, and a missing filter runs all
-  // of next/, as the merge queue and main do, the whole suite as the backstop.
-  const nextCommand =
-    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
-  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
-  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
-  // pull request's change reaches, and every one in the queue and on main.
-  const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
-  const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
-  const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
-  // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
-  const allowed = [
-    "pnpm install --frozen-lockfile",
-    nextCommand,
-    adviceCommand,
-    chromium,
-    e2eCommand,
-    'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
-  ];
-  const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
-  require(nextRuns.length === allowed.length &&
-    allowed.every(
-      (command) => nextRuns.filter((run) => run === command).length === 1,
-    ), "next runs exactly its install and five approved commands once each");
-  const testStep = nextSteps.find((s) => s["run"] === nextCommand);
-  require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
-  const shard = map(testStep?.["env"])["SHARD"];
-  // E3. The one `if` the vitest step may carry. Without it an e2e leg asks vitest for `e2e-1/5`.
-  require(compact(testStep?.["if"]) ===
-    compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
-  // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
-  require(typeof shard === "string" &&
-    new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
-      shard,
-    ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
-  // The legs job's list first, so a sized run runs the files it was sized with; changes' filter
-  // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
-  // narrow the list again, past the readers.
-  require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.legs.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes legs's files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
-    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
-  // E2. The same for the end-to-end step, over the count of e2e legs.
-  const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
-  const e2eShard = map(e2eStep?.["env"])["SHARD"];
-  require(typeof e2eShard === "string" &&
-    new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
-      e2eShard,
-    ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
-
-  // The end-to-end step narrows to the changed files on a pull request only. Any other value could
-  // narrow the merge queue or main, where the whole suite is the backstop for what the import graph
-  // misses.
-  require(map(e2eStep?.["env"])["CHANGED"] ===
-    changedOnPullRequests, "next's end-to-end step narrows with --changed on pull requests only");
-
-  // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
-  const advice = nextSteps.find((s) => s["run"] === adviceCommand);
-  require(testStep !== undefined &&
-    e2eStep !== undefined &&
-    advice !== undefined &&
-    nextSteps.indexOf(testStep) < nextSteps.indexOf(advice) &&
-    nextSteps.indexOf(e2eStep) < nextSteps.indexOf(advice) &&
-    compact(advice["if"]) ===
-      "!cancelled()", "next timing advice follows both test steps even after failure, unless cancelled");
-
-  // E2 and E3. Chromium and the end-to-end runner only on the e2e legs, edges only on leg 1.
-  for (const [command, leg, condition] of [
-    [chromium, "the e2e legs", `${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`],
-    [e2eCommand, "the e2e legs", ON_E2E],
-    [
-      'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
-      "leg 1",
-      "matrix.shard == '1' && github.event_name == 'pull_request'",
-    ],
-  ] as const) {
-    const matches = nextSteps.filter((s) => s["run"] === command);
-    require(matches.length === 1 &&
-      compact(matches[0]?.["if"]) ===
-        compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
-  }
-
-  // S1. The legs job (legs.ts) runs after changes on every run that is not canceled, so next always
-  // has its answer. Each of its steps runs only on a pull request that tests all of next/ and whose
-  // changes passed. Everywhere else it prints nothing, so next runs the full matrix: the merge queue
-  // and main always do. Its setup and its sizing may fail without failing it, so a failure there is
-  // the full matrix too, never a skipped next.
-  const sizer = map(jobs["legs"]),
-    sizeSteps = steps(sizer),
-    sizeOutputs = map(sizer["outputs"]);
-  require(sizer["needs"] === "changes" &&
-    compact(sizer["if"]) === "!cancelled()" &&
-    sizer["continue-on-error"] === undefined, "legs runs after changes on every run that is not canceled");
-  require(Object.keys(sizeOutputs).length === LEGS_OUTPUTS.length &&
-    LEGS_OUTPUTS.every(
-      (name) => compact(sizeOutputs[name]) === `steps.size.outputs.${name}`,
-    ), `legs exposes ${LEGS_OUTPUTS.join(", ")} from its size step, and nothing else`);
-  require(sizeSteps.length > 0 &&
-    sizeSteps.every(
-      (s) => compact(s["if"]) === SIZED,
-    ), "every legs step runs only on a pull request that tests all of next/");
-  const sizeRuns = sizeSteps.filter((s) => "run" in s);
-  const size = sizeRuns[1];
-  require(sizeRuns.length === 2 &&
-    sizeRuns[0]?.["run"] === "pnpm install --frozen-lockfile --ignore-scripts" &&
-    size?.["id"] === "size" &&
-    size["run"] === "node .github/ci/legs.ts", "legs installs, then runs legs.ts as its size step");
-  require(sizeSteps.every(
-    (s) =>
-      (typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@")) || s["continue-on-error"] === true,
-  ), "a failed legs setup or sizing fails open to the full matrix");
-
-  for (const [key, expected] of Object.entries(SIZE_ENV)) {
-    require(map(size?.["env"])[key] === expected, `legs's size step gets ${key} through env`);
+  for (const rule of CHECK_RULES) {
+    rule({ workflow, on: map(workflow["on"]), jobs: map(workflow["jobs"]) }, require);
   }
 
   return errors;
 };
-
-/** The files the cache lint reads, each as its text. */
-export interface CacheFiles {
-  /** Each workflow by its path, check.yaml among them. */
-  readonly workflows: Readonly<Record<string, string>>;
-  /** .github/actions/pnpm/action.yml, the one setup every pnpm job uses. */
-  readonly action: string;
-  readonly workspace: string;
-  readonly typecheck: string;
-}
-
-// A cache is saved on main only: a pull request runs on refs/pull/<n>/merge and a merge queue group
-// on gh-readonly-queue/main/..., so only a push to main has this ref here. Any ref can restore
-// main's, and a copy per pull request or group filled the repository's 10 GB
-// (.github/actions/pnpm/action.yml says when).
-const ON_MAIN = "github.ref=='refs/heads/main'";
-// scripts/typecheck.sh's buildinfo path, relative to each package.
-const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
-const TSC_HASH = "git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin";
-const TSC_PREFIX = `tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-`;
-const TSC_SAVED = `\${{ steps.tsc.outputs.cache-primary-key }}`;
-
-const uses = (step: Record<string, unknown>, action: string) =>
-  typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
-
-const lines = (value: unknown) =>
-  typeof value === "string"
-    ? value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "")
-    : [];
-
-export const lintCaches = (files: CacheFiles): string[] => {
-  const errors: string[] = [];
-  const require = (holds: boolean, reason: string) => {
-    if (!holds) {
-      errors.push(reason);
-    }
-  };
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
-
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
-
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
-    return ["cache lint: a file is not valid YAML"];
-  }
-
-  const actionSteps = steps(map(action["runs"]));
-  // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
-  // mutation.yaml runs by hand on main, so its setup-node cache saves on main.
-  const perRef = workflows.filter(([, workflow]) => {
-    const on = workflow["on"];
-    return ["pull_request", "merge_group"].some((event) =>
-      Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
-    );
-  });
-  const everyStep: [string, Record<string, unknown>][] = [
-    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
-    ...perRef.flatMap(([path, workflow]) =>
-      Object.values(map(workflow["jobs"])).flatMap((job) =>
-        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
-      ),
-    ),
-  ];
-
-  // C1. Neither of these can be told to restore only: each saves from whatever ref it runs on.
-  for (const [path, step] of everyStep) {
-    require(!uses(step, "actions/cache"), `${path}: use actions/cache/restore, and actions/cache/save on main only`);
-    require(!(
-      uses(step, "actions/setup-node") && "cache" in map(step["with"])
-    ), `${path}: setup-node's cache saves on every ref; use .github/actions/pnpm`);
-  }
-
-  // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
-  // (action.yml gives the seconds). Each save anywhere is on main.
-  require(!actionSteps.some((step) =>
-    String(step["uses"]).startsWith("actions/cache"),
-  ), "the pnpm action caches nothing: a restored pnpm store cost more than its download");
-
-  for (const [path, step] of everyStep.filter(([, s]) => uses(s, "actions/cache/save"))) {
-    const condition = compact(step["if"]);
-    require(condition === ON_MAIN ||
-      condition.startsWith(`${ON_MAIN}&&`), `${path}: a cache save runs on main only, its if starting ${ON_MAIN}`);
-  }
-
-  const check = map(workflows.find(([path]) => path.endsWith("check.yaml"))?.[1]),
-    jobs = map(check["jobs"]);
-
-  // C3. A full-history checkout fetches every commit and tree, and only the head's files.
-  for (const [name, job] of Object.entries(jobs)) {
-    for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
-      const options = map(step["with"]);
-      require(options["fetch-depth"] !== 0 ||
-        options["filter"] ===
-          "blob:none", `check.yaml: ${name}'s full-history checkout is blobless (filter: blob:none)`);
-    }
-  }
-
-  // C4. The typecheck job's buildinfo cache. Its key and restore prefix both hold the lockfile and
-  // every tsconfig, so a change to the compiler or its settings never starts from old answers; its
-  // paths are where scripts/typecheck.sh writes, one per workspace package glob.
-  const typecheckSteps = steps(map(jobs["typecheck"]));
-  const buildinfo = BUILDINFO.exec(files.typecheck)?.[1];
-  const folder = buildinfo?.slice(0, buildinfo.lastIndexOf("/"));
-  const globs = Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
-  const paths = globs.map((glob) => `${String(glob)}/${folder}`);
-  const keyStep = typecheckSteps.find((s) => s["id"] === "tsc-key");
-  const restore = typecheckSteps.find((s) => s["id"] === "tsc");
-  const save = typecheckSteps.find((s) => uses(s, "actions/cache/save") && map(s["with"])["key"] === TSC_SAVED);
-  const at = (step: Record<string, unknown> | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
-  const install = typecheckSteps.find((s) => s["run"] === "pnpm install --frozen-lockfile");
-  const run = typecheckSteps.find((s) => s["run"] === "pnpm typecheck");
-  require(folder !== undefined && folder !== "", "scripts/typecheck.sh passes --tsBuildInfoFile under a folder");
-  require(keyStep?.["run"] ===
-    `echo "hash=$(${TSC_HASH})" >> "$GITHUB_OUTPUT"`, `check.yaml: the typecheck job's tsc-key step hashes ${TSC_HASH}`);
-  require(restore !== undefined &&
-    uses(restore, "actions/cache/restore") &&
-    map(restore["with"])["key"] === `${TSC_PREFIX}\${{ github.sha }}` &&
-    map(restore["with"])["restore-keys"] ===
-      TSC_PREFIX, `check.yaml: the tsc cache's key is ${TSC_PREFIX}<sha>, and it restores only that prefix`);
-  require(JSON.stringify(lines(map(restore?.["with"])["path"])) === JSON.stringify(paths) &&
-    JSON.stringify(lines(map(save?.["with"])["path"])) ===
-      JSON.stringify(
-        paths,
-      ), `check.yaml: the tsc cache restores and saves ${folder} in each pnpm-workspace.yaml package glob, in its order`);
-  require(at(install) >= 0 &&
-    at(install) < at(keyStep) &&
-    at(keyStep) < at(restore) &&
-    at(restore) < at(run) &&
-    at(run) < at(save), "check.yaml: the typecheck job installs, restores the tsc cache, typechecks, then saves");
-
-  return errors;
-};
-
-/** The checked-in files lintCaches reads, through a reader of repo-relative paths. */
-export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
-  workflows: Object.fromEntries(
-    globSync([".github/workflows/*.yaml", ".github/workflows/*.yml"], {
-      cwd: fileURLToPath(new URL("../../", import.meta.url)),
-    })
-      .toSorted()
-      .map((path) => [path, read(path)]),
-  ),
-  action: read(".github/actions/pnpm/action.yml"),
-  workspace: read("pnpm-workspace.yaml"),
-  typecheck: read("scripts/typecheck.sh"),
-});
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    const errors = [...lintWorkflow(read(".github/workflows/check.yaml")), ...lintCaches(cacheFiles(read))];
+    const check = read(".github/workflows/check.yaml");
+    const files = cacheFiles(read);
+    const errors = [
+      ...lintWorkflow(check),
+      ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
+      // T1 on the other workflows a pull request or the merge queue starts; lintWorkflow holds check.yaml.
+      ...Object.entries(files.workflows)
+        .filter(([path]) => path !== ".github/workflows/check.yaml")
+        .flatMap(([path, text]) => lintNoTooling(path, text)),
+      ...lintIssues(files.workflows),
+      ...lintCaches(files),
+      ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+    ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
-    if (!String(map(map(manifest)["scripts"])["lint"]).includes("node .github/ci/workflow-lint.ts")) {
+    const lint = String(map(map(manifest)["scripts"])["lint"]);
+
+    if (!lint.includes("node .github/ci/workflow-lint.ts")) {
       errors.push("pnpm lint must run workflow-lint.ts");
+    }
+
+    // A pull request of ignored paths starts no run, so its rows are checked only here.
+    if (!lint.includes("node .github/ci/field-check.ts --local")) {
+      errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
     }
 
     if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {

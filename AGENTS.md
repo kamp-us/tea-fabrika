@@ -281,7 +281,7 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips the heavy jobs, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`, which checks the added rows too. CI skips the heavy jobs; a pull request of only plan files and rows starts no CI run (changes.mjs's `ignored`) |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
@@ -305,7 +305,8 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   every law.
 - **A check that can block needs its false alarms measured first:** about 0% to block, up to 10% to
   only advise (Google, CACM 2018). Every number in a rule needs a source or our own data. A tool's
-  default is not a source.
+  default is not a source. [0523](./.decisions/0523-advice-rules-block-where-clean.md) sets the
+  five old advice rules aside from this: they block in every folder at zero.
 - **A flaky test is fixed the day it is seen**
   ([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
 - **Money.** A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything else with

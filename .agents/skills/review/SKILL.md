@@ -39,8 +39,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      Effect's `Arbitrary`). A new law that is an example test with no generator is a defect. A
      pinned example is fine only inside a property's `examples`, naming the past bug it pins
      ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
-     A fixed test is fine only when its name starts with one of four labels and it is that kind:
-     `vector:`, `format:`, `pinned:` or `scenario:`. A hand-picked example checking a general rule,
+     A fixed test is fine only when its name starts with one of five labels and it is that kind:
+     `vector:`, `format:`, `pinned:`, `scenario:` or `type:`. A hand-picked example checking a general rule,
      labeled or not, is a defect. `fabrika/law-shape` in `pnpm lint` flags a test with neither;
      check that each one fits, against the named spec, format, bug or run. Do not reopen each
      test's merits.

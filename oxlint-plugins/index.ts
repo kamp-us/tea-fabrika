@@ -4,6 +4,7 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
@@ -39,6 +40,7 @@ import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
+import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
@@ -54,6 +56,7 @@ const plugin: Plugin = {
     "door-is-library": doorIsLibrary,
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
+    "integration-test-name": integrationTestName,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
     jsdocs,
@@ -90,6 +93,7 @@ const plugin: Plugin = {
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
+    "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
     "runs-from-depth": runsFromDepth,
