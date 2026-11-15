@@ -29,15 +29,21 @@ const Session = Schema.Struct({
   build: Schema.String,
 });
 
+// The last signal a replace sent the old process: SIGTERM first, SIGKILL once its grace ran out.
+const Signal = Schema.Literals(["SIGTERM", "SIGKILL"]);
+
 /**
  * Schema for where the local runtime stands: `starting` and `listening` before its first start,
- * `spawned` and `online` while a process runs, `exited` and `waiting` between an exit and its
- * replacement, `braked` when restarting gave up, and `stopping` then `stopped` on the way out.
+ * `spawned` and `online` while a process runs, `replacing` while a process that grew too big is
+ * ended, `exited` and `waiting` between an exit and its replacement, `braked` when restarting gave
+ * up, and `stopping` then `stopped` on the way out.
  *
  * **Details**
  *
- * A state holds a pid only while a process runs, and it keeps the control socket's port across an
- * exit. `replacement` is `pending` from an exit until a listener is heard again.
+ * A state holds a pid only while a process runs or is being ended, and it keeps the control
+ * socket's port across an exit. `replacement` is `pending` from a replace or an exit until a
+ * listener is heard again; in `replacing` it can only be pending. `replacing` also holds the bytes
+ * the memory sampler saw, when it saw them, and the last signal sent.
  *
  * @stability unstable
  * @category schemas
@@ -47,6 +53,15 @@ export const DevState = Schema.TaggedUnion({
   listening: { last: Schema.NullOr(Schema.String), port: Port },
   spawned: { session: Session, pid: Schema.Number, replacement: Replacement },
   online: { session: Session, pid: Schema.Number, port: Port, replacement: Replacement },
+  replacing: {
+    session: Session,
+    pid: Schema.Number,
+    listener: Listener,
+    replacement: Replacement.cases.pending,
+    bytes: Schema.Int,
+    at: Schema.Number,
+    signal: Signal,
+  },
   exited: { session: Session, listener: Listener, replacement: Replacement },
   waiting: {
     session: Session,
@@ -79,6 +94,13 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("braked"), reason: Schema.String }),
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("stopped") }),
+  Schema.Struct({
+    type: Schema.Literal("replacing"),
+    replacement: Schema.String,
+    bytes: Schema.Int,
+    at: Schema.Number,
+  }),
+  Schema.Struct({ type: Schema.Literal("killed") }),
 ]);
 
 type Ctx = { readonly last: string | null };
@@ -149,6 +171,31 @@ export const pending = (s: DevState): string | null => {
 };
 
 /**
+ * Returns the port a control call may dial: the listener of a live process with no replacement
+ * pending, or null everywhere else.
+ *
+ * **Details**
+ *
+ * It equals `address` in `listening` and in `online` with no replacement pending. A process being
+ * replaced, or a replacement that started before its listener, keeps its old port in `address`, and
+ * that port is never dialed.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const reachable = (s: DevState): number | null =>
+  pending(s) === null && (s._tag === "listening" || s._tag === "online") ? s.port : null;
+
+/**
+ * Returns true while a replacement is pending and may still come up: from a replace or an exit
+ * until its listener, a brake or a stop.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const recovering = (s: DevState): boolean => pending(s) !== null && s._tag !== "stopping";
+
+/**
  * Returns the latest start of this runtime, the one its exit, restart, brake and stop events name.
  * Null before the first start and after the stop.
  *
@@ -181,6 +228,8 @@ const active = (s: DevState) => {
  * It starts in `starting` with the last start an earlier run saved, so this run's first start can
  * name the one it follows. A start is ignored once the machine is `braked`, `stopping` or
  * `stopped`. A replacement counts as up when its listener is heard, not when its process starts.
+ * `replacing` comes only from a running process, and `killed` only marks a replace's SIGKILL; the
+ * replaced process leaves `replacing` by its exit, like any other.
  *
  * @stability unstable
  * @category machines
@@ -223,6 +272,8 @@ export const devLife = Machine.make({
         return [{ ...s, listener }, []];
       }
 
+      // A process being replaced already listened, and its replacement has not started: only its
+      // exit moves the replace on. A stopped runtime keeps nothing.
       return [s, []];
     },
     started: (s, m) => {
@@ -242,7 +293,7 @@ export const devLife = Machine.make({
       ];
     },
     exited: (s, m) => {
-      if (s._tag !== "spawned" && s._tag !== "online") {
+      if (s._tag !== "spawned" && s._tag !== "online" && s._tag !== "replacing") {
         return [s, []];
       }
 
@@ -306,6 +357,32 @@ export const devLife = Machine.make({
       }
 
       return [DevState.cases.stopped.make({ listener: s.listener }), []];
+    },
+    replacing: (s, m) => {
+      // Only a running process is replaced, and only once per start: `target` is null from here on.
+      if (s._tag !== "spawned" && s._tag !== "online") {
+        return [s, []];
+      }
+
+      return [
+        DevState.cases.replacing.make({
+          session: s.session,
+          pid: s.pid,
+          listener: heard(address(s)),
+          replacement: Replacement.cases.pending.make({ id: m.replacement }),
+          bytes: m.bytes,
+          at: m.at,
+          signal: "SIGTERM",
+        }),
+        [],
+      ];
+    },
+    killed: (s) => {
+      if (s._tag !== "replacing") {
+        return [s, []];
+      }
+
+      return [{ ...s, signal: "SIGKILL" }, []];
     },
   },
 });

@@ -8,7 +8,20 @@
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import { applyCell } from "@demlik/tea";
-import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, Scope, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Option,
+  Queue,
+  Redacted,
+  Schema,
+  Scope,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -20,8 +33,8 @@ import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
-import { address, devLife, latest, pending, target } from "./DevLife.ts";
-import { brainOutbox, checkMemory } from "./local-dev.ts";
+import { devLife, latest, pending, reachable, recovering, target } from "./DevLife.ts";
+import { brainOutbox, checkMemory, terminate } from "./local-dev.ts";
 
 /**
  * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
@@ -50,6 +63,9 @@ const consumed = (prev: Life, next: Life) => {
   const id = pending(prev);
   return id !== null && pending(next) !== id ? id : null;
 };
+
+// How long the first start waits for its control listener, and a call for a replacement's, past the grace.
+const START_BOUND = 30_000;
 
 const Response = Schema.Struct({
   value: Schema.optionalKey(Schema.Unknown),
@@ -96,16 +112,23 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  *
  * `deploy` gets a context that holds the runtime's lifecycle hook and the control plugin, and a
  * scope of its own for the runtime. The driver waits for the control socket to listen, for at most
- * 30 seconds, and for the first start. It saves every start, exit, restart wait, brake and stop as
- * a `BrainEvent` in a durable outbox under `home` and sends them to the project, so an event
- * outlives a crash on either side. Once a second it samples the runtime's memory, and at 500 MB or
- * more it ends the process with SIGTERM, so that exit is recorded with the reason `memory`. Closing
- * the caller's scope stops the runtime and records `stopped`.
+ * 30 seconds, and for the first start. It saves every start, replace, kill, exit, restart wait,
+ * brake and stop as a `BrainEvent` in a durable outbox under `home` and sends them to the project,
+ * so an event outlives a crash on either side. Once a second it samples the runtime's memory, and
+ * at `memory` bytes or more it replaces the process once: it records `replacing`, sends SIGTERM,
+ * and if the process has not ended after `grace` milliseconds it records `killed` and sends
+ * SIGKILL. Alchemy then starts a new process on the same ports, and its exit and start are
+ * recorded with the reason `memory`. Closing the caller's scope stops the runtime and records
+ * `stopped`.
  *
  * **Gotchas**
  *
  * The control socket listens on 127.0.0.1 only and takes a random bearer token made for this
- * start. A call made while no port is known fails as `offline`.
+ * start. A call goes only to a listener with no replacement pending. A binding's call made while a
+ * replacement is pending, after a replace or a crash, waits for its listener for at most `grace`
+ * plus 30 seconds, and fails as `offline` if a brake or the stop comes first or the wait runs out.
+ * The brain's own flushes never wait: they fail as `offline` at once and retry on their schedule.
+ * A call made while no port is known fails as `offline`.
  *
  * @stability unstable
  * @category constructors
@@ -116,6 +139,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     readonly port: number;
     readonly build: string;
     readonly home: string;
+    /** The memory limit in bytes, the `desktop.brain-memory` setting. */
+    readonly memory: number;
+    /** The milliseconds between a replace's SIGTERM and its SIGKILL, the `desktop.brain-grace` setting. */
+    readonly grace: number;
   },
   deploy: (local: Context.Context<never>, scope: Scope.Scope) => Effect.Effect<unknown, E, R>,
 ) {
@@ -133,10 +160,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const token = Redacted.make(
     Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
   );
-  const life = yield* Ref.make(devLife.init(null, { last: yield* outbox.last })[0]);
+  // A SubscriptionRef, so a call can wait for the state a replacement brings.
+  const life = yield* SubscriptionRef.make(devLife.init(null, { last: yield* outbox.last })[0]);
   // Each move folds one Msg atomically, and hands back the state before and after it.
   const send = (msg: typeof devLife.msg.Type) =>
-    Ref.modify(life, (prev) => {
+    SubscriptionRef.modify(life, (prev) => {
       const [next] = applyCell(devLife, prev, msg);
       return [[prev, next] as const, next];
     });
@@ -144,15 +172,33 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const replacements = new Map<string, Deferred.Deferred<void, ControlError>>();
   // What the callback saw last, kept for the next event's row.
   let cause: Cause = { reason: "open", bytes: undefined };
-  const call = Effect.fnUntraced(function* (
+  // The first state with no replacement that may still come up, or null once the wait runs out.
+  const settled = Effect.fnUntraced(function* () {
+    // The runtime's callback only queues what it reports, and the event fiber it wakes folds it.
+    // Yielding once lets that fiber run first, so a call never meets an exit not yet folded.
+    yield* Effect.yieldNow;
+    const now = yield* SubscriptionRef.get(life);
+
+    if (!recovering(now)) {
+      return now;
+    }
+
+    const next = yield* SubscriptionRef.changes(life).pipe(
+      Stream.filter((s) => !recovering(s)),
+      Stream.runHead,
+      Effect.timeoutOption(options.grace + START_BOUND),
+    );
+    return Option.getOrNull(Option.flatten(next));
+  });
+  // One control request to one port, or `offline` when there is none to dial.
+  const dial = Effect.fnUntraced(function* (
+    port: number | null,
     target: Target,
     project: string,
     name: string,
     method: string,
     args: ReadonlyArray<unknown>,
   ) {
-    const port = address(yield* Ref.get(life));
-
     if (port === null) {
       return yield* new ControlError({ reason: "offline" });
     }
@@ -183,9 +229,32 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
     return answer.value;
   });
-  const flush = outbox.flush((event) => call("project", config.name, "", "brain", [event]));
+  // A binding's call, from outside the brain: it waits for a pending replacement's listener.
+  const call = Effect.fnUntraced(function* (
+    target: Target,
+    project: string,
+    name: string,
+    method: string,
+    args: ReadonlyArray<unknown>,
+  ) {
+    const s = yield* settled();
+    return yield* dial(s === null ? null : reachable(s), target, project, name, method, args);
+  });
+  // The brain's own call, from a flush that holds its lock: it never waits, so the lock is never
+  // held across a replace. While a replacement is pending it fails as `offline` at once, and the
+  // flush's own schedule sends the rows again.
+  const callNow = Effect.fnUntraced(function* (
+    target: Target,
+    project: string,
+    name: string,
+    method: string,
+    args: ReadonlyArray<unknown>,
+  ) {
+    return yield* dial(reachable(yield* SubscriptionRef.get(life)), target, project, name, method, args);
+  });
+  const flush = outbox.flush((event) => callNow("project", config.name, "", "brain", [event]));
   const recording = yield* devRecording(options.home, `brain:${config.name}`, (target, name, method, args) =>
-    call(target, config.name, name, method, args),
+    callNow(target, config.name, name, method, args),
   );
   const sink = Context.get(recording, SpanSink);
   const flushRecords = sink.flush.pipe(Effect.provideContext(recording));
@@ -278,7 +347,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         event,
         cause: { reason, bytes: rss },
       } = yield* Queue.take(events);
-      const now = yield* Ref.get(life);
+      const now = yield* SubscriptionRef.get(life);
 
       if (now._tag === "stopping" || now._tag === "stopped") {
         return;
@@ -288,6 +357,19 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
       if (event.type === "exit") {
         const at = yield* Clock.currentTimeMillis;
+        // The handle exists before its token, so the listener always finds it.
+        const ready = yield* Deferred.make<void, ControlError>();
+        replacements.set(start, ready);
+        // The exit is folded before its row is written, so no call dials the ended process while
+        // the write is under way.
+        const [prev] = yield* send({ type: "exited", replacement: start });
+        const old = pending(prev);
+
+        // A second exit before any listener replaces the token, as main replaced the wait.
+        if (old !== null && old !== start) {
+          replacements.delete(old);
+        }
+
         yield* outbox.add(
           BrainEvent.cases.exited.make({
             id: `${start}/exited`,
@@ -299,17 +381,6 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             ...(rss === undefined ? {} : { bytes: rss }),
           }),
         );
-        // The handle exists before its token, so the listener always finds it.
-        const ready = yield* Deferred.make<void, ControlError>();
-        replacements.set(start, ready);
-        const [prev] = yield* send({ type: "exited", replacement: start });
-        const old = pending(prev);
-
-        // A second exit before any listener replaces the token, as main replaced the wait.
-        if (old !== null && old !== start) {
-          replacements.delete(old);
-        }
-
         yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
       }
 
@@ -381,7 +452,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     yield* deploy(local, runtimeScope);
     yield* Deferred.await(listening).pipe(
       Effect.timeoutOrElse({
-        duration: "30 seconds",
+        duration: START_BOUND,
         orElse: () => Effect.fail(new ControlError({ reason: "start_timeout" })),
       }),
     );
@@ -390,26 +461,79 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     yield* flush;
   });
   yield* recorded(startRuntime());
+  const signal = (pid: number, signal: "SIGTERM" | "SIGKILL") =>
+    Effect.sync(() => {
+      process.kill(pid, signal);
+    });
+  // The kill is recorded before it is sent, so the outbox reads in the order things happened.
+  const killing = Effect.fnUntraced(function* () {
+    const at = yield* Clock.currentTimeMillis;
+    const [prev, next] = yield* send({ type: "killed" });
+
+    if (prev._tag !== "replacing" || prev.signal !== "SIGTERM" || next._tag !== "replacing") {
+      return;
+    }
+
+    const start = next.session.start;
+    // A full disk must not keep a runtime alive that is past its limit, so a failed write is logged.
+    yield* outbox
+      .add(BrainEvent.cases.killed.make({ id: `${start}/killed`, start, at, pid: next.pid }))
+      .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a kill" }));
+  });
+  // One replace per start: the fold moves only a running process to `replacing`, and `target` is
+  // null from then on, so the sampler cannot ask again until a new process starts.
+  const replace = Effect.fnUntraced(function* (value: { readonly pid: number; readonly bytes: number }) {
+    const at = yield* Clock.currentTimeMillis;
+    const token = latest(yield* SubscriptionRef.get(life)) ?? "";
+    const [prev, next] = yield* send({ type: "replacing", replacement: token, bytes: value.bytes, at });
+
+    if (prev._tag === "replacing" || next._tag !== "replacing") {
+      return;
+    }
+
+    const old = pending(prev);
+
+    // A replace of a process whose own replacement never listened takes that wait's place.
+    if (old !== null && old !== token) {
+      replacements.delete(old);
+    }
+
+    cause = { reason: "memory", bytes: value.bytes };
+    const start = next.session.start;
+    yield* outbox
+      .add(
+        BrainEvent.cases.replacing.make({
+          id: `${start}/replacing`,
+          start,
+          at,
+          reason: "memory",
+          pid: next.pid,
+          bytes: value.bytes,
+          limit: options.memory,
+          grace: options.grace,
+        }),
+      )
+      .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a replace" }));
+    // The process has gone once the state leaves `replacing` for its pid: its exit, or the stop.
+    const gone = SubscriptionRef.changes(life).pipe(
+      Stream.filter((s) => s._tag !== "replacing" || s.pid !== next.pid),
+      Stream.runHead,
+      Effect.asVoid,
+    );
+    yield* Effect.forkIn(terminate({ pid: next.pid, grace: options.grace, signal, gone, killing: killing() }), scope);
+  });
   yield* Effect.forkScoped(
     Effect.forever(
       Effect.gen(function* () {
         yield* Effect.sleep("1 second");
 
-        const pid = target(yield* Ref.get(life));
+        const pid = target(yield* SubscriptionRef.get(life));
 
         if (pid === null) {
           return;
         }
 
-        yield* checkMemory({
-          pid,
-          sample,
-          replace: (value) =>
-            Effect.sync(() => {
-              cause = { reason: "memory", bytes: value.bytes };
-              process.kill(value.pid, "SIGTERM");
-            }),
-        }).pipe(Effect.ignore);
+        yield* checkMemory({ pid, limit: options.memory, sample, replace }).pipe(Effect.ignore);
         yield* flush.pipe(Effect.ignore);
         yield* flushRecords.pipe(
           Effect.catchIf(

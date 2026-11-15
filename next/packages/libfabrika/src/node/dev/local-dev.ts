@@ -1,10 +1,10 @@
 /**
- * The local brain driver's two helpers on Node: the memory check that replaces a brain that grew
- * too big, and the durable outbox for its lifecycle events.
+ * The local brain driver's helpers on Node: the memory check that replaces a brain that grew too
+ * big, the bounded stop that ends it, and the durable outbox for its lifecycle events.
  *
  * @stability unstable
  */
-import { Effect, FileSystem, Path, Result, Schema, Semaphore } from "effect";
+import { type Duration, Effect, FileSystem, Option, Path, Result, Schema, Semaphore } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
@@ -19,27 +19,73 @@ const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof
 );
 
 /**
- * Samples one process's memory and asks for a replacement when it holds 500 MB or more. Below
- * that it does nothing.
+ * Samples one process's memory and asks for a replacement when it holds `limit` bytes or more.
+ * Below that it does nothing.
  *
  * **Details**
  *
  * `sample` answers the bytes a pid holds. `replace` gets the reason, the pid and the bytes, and is
- * the one that ends the process.
+ * the one that ends the process. `limit` is the `desktop.brain-memory` setting, in bytes.
  *
  * @stability unstable
  * @category combinators
  */
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
   readonly pid: number;
+  readonly limit: number;
   readonly sample: (pid: number) => Effect.Effect<number, E, R>;
   readonly replace: (reason: { reason: "memory"; pid: number; bytes: number }) => Effect.Effect<void, E, R>;
 }) {
   const bytes = yield* options.sample(options.pid);
 
-  if (bytes >= 500_000_000) {
+  if (bytes >= options.limit) {
     yield* options.replace({ reason: "memory", pid: options.pid, bytes });
   }
+});
+
+// How a bounded stop ended: the process ended `itself` within its grace, or it was `killed`.
+const Ended = Schema.TaggedUnion({ itself: {}, killed: {} });
+
+// What `process.kill` throws for a pid that no longer exists.
+const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
+
+/**
+ * Ends one process in bounded time, as an OTP supervisor ends a child: SIGTERM once, then SIGKILL
+ * once if the process has not gone when its grace runs out.
+ *
+ * **Details**
+ *
+ * `signal` sends a signal to a pid. `gone` ends when the process is known to have ended. `killing`
+ * runs just before the SIGKILL, so whatever it records comes before the signal. The answer is
+ * `itself` when `gone` ended within the grace, and `killed` otherwise.
+ *
+ * **Gotchas**
+ *
+ * A SIGKILL that finds no process (ESRCH, thrown inside `signal`) means the process ended in the
+ * gap between the grace and the kill: it counts as gone, and the answer is still `killed`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: {
+  readonly pid: number;
+  readonly grace: Duration.Input;
+  readonly signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, E, R>;
+  readonly gone: Effect.Effect<void>;
+  readonly killing: Effect.Effect<void, E, R>;
+}) {
+  yield* options.signal(options.pid, "SIGTERM");
+  const ended = yield* options.gone.pipe(Effect.timeoutOption(options.grace));
+
+  if (Option.isSome(ended)) {
+    return Ended.cases.itself.make({});
+  }
+
+  yield* options.killing;
+  yield* options
+    .signal(options.pid, "SIGKILL")
+    .pipe(Effect.catchDefect((defect) => (isMissing(defect) ? Effect.void : Effect.die(defect))));
+  return Ended.cases.killed.make({});
 });
 
 /**
