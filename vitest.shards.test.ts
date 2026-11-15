@@ -80,7 +80,8 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 //   C: run 43657535864, a merge queue group of PR 1202 at bb299109b.
 // A sample is the sum of the file's test times as the verbose reporter printed them in that
 // run's job log, to one decimal. The job ids are kept because GitHub drops job logs after 90 days.
-// All 158 files have three samples. Three files took over 60 s in these runs and were split
+// All 157 files have three samples. A 158th, ArchiveCryptoFailure.test.ts, was deleted after
+// these runs (ticket 996), and its samples went with it. Three files took over 60 s in these runs and were split
 // after them, every law moved unchanged: runner-contract.test.ts, readers.laws.test.ts and
 // RepositoriesGit.test.ts. Each part's sample is the sum of its own tests' times in the same log.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
@@ -341,8 +342,6 @@ const nextSamples = {
   "next/packages/libfabrika/src/settings/TomlEdit.test.ts": [6.4, 5.6, 5.5],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/settings/TomlParser.test.ts": [0.2, 0.2, 0.2],
-  // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -682,7 +681,7 @@ const e2eSamples = {
   overhead: [76.5, 69.8, 70.2],
 } as const;
 
-it("vector: L5 all 282 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
+it("vector: L5 all 281 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
   // The medians of runs 43656757141, 43657195723 and 43657535864 for the `next` project's files,
   // of 43544589151, 43551626086 and 43556494864 for the integration files, and of 43601966383,
   // 43601964962 and 43605298688 for the end-to-end files, from the samples above.
