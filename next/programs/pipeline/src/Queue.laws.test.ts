@@ -6,7 +6,6 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { runsFor } from "@kampus/vitest";
 import { ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
@@ -435,8 +434,7 @@ for (const law of [
           fc.modelRun(() => ({ model: open(w, seen), real: {} }), commands);
         },
       ),
-      // Q3 must reach all eight reply kinds: 20 walks miss `conflict` at this seed, 50 reach them all.
-      { seed: 119120, numRuns: runsFor({ fast: 50, full: 200 }) },
+      { seed: 119120, numRuns: 200 },
     );
 
     if (law.startsWith("Q3")) {
@@ -516,7 +514,7 @@ for (const [law, reached] of [
           }
         },
       ),
-      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
+      { seed: 119120, numRuns: 200 },
     );
     expect(seen.has(reached), reached).toBe(true);
 

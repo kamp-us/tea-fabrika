@@ -1,7 +1,6 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Effect, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
@@ -255,7 +254,7 @@ describe("P10 JSON-RPC", () => {
             }),
           ),
       ),
-      { seed: SEED, endOnFailure: true, numRuns: runsFor({ fast: 30, full: 300 }) },
+      { seed: SEED, endOnFailure: true, numRuns: 300 },
     );
   });
   // d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it

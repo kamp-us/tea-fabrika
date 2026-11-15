@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -304,7 +303,7 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
             ),
           );
         }),
-        { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
+        { seed: 119120, numRuns: 200 },
       );
     });
   });

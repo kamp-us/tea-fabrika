@@ -12,7 +12,6 @@
 // p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
 // it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import {
@@ -650,7 +649,7 @@ describe("properties", () => {
           }),
         );
       }),
-      { ...runs, numRuns: runsFor({ fast: 15, full: 150 }) },
+      { ...runs, numRuns: 150 },
     );
   });
 
@@ -686,15 +685,15 @@ describe("properties", () => {
       );
     await fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
       ...runs,
-      numRuns: runsFor({ fast: 15, full: 150 }),
+      numRuns: 150,
     });
     await fc.assert(
       fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: runsFor({ fast: 15, full: 150 }) },
+      { ...runs, numRuns: 150 },
     );
     await fc.assert(
       fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: runsFor({ fast: 30, full: 300 }) },
+      { ...runs, numRuns: 300 },
     );
   });
 });

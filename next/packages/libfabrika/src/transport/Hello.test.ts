@@ -4,7 +4,6 @@
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
@@ -423,8 +422,7 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
           `${expected}:${origin === null ? "null" : origin === normalized(origin) ? "canonical" : "other"}:${allow}`,
         );
       }),
-      // Every boundary listed below must be seen: 100 runs miss true:canonical:given at this seed.
-      { seed: 119120, numRuns: runsFor({ fast: 500, full: 2_000 }) },
+      { seed: 119120, numRuns: 2_000 },
     );
 
     // The boundaries the plants need: a canonical allowed origin, a refused non-canonical one whose

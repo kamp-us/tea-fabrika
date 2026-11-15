@@ -30,9 +30,8 @@
     "fabrika/no-data-taggederror": "error",
     "fabrika/no-implicit-effect-concurrency": "error",
     "fabrika/no-numeric-duration": "error",
-    // In next/'s test files, a law over real IO, or a case count over fast-check's default of 100,
-    // reads the test depth (0535). The rule scopes itself to next/; oxlint-plugins/README.md has its
-    // false-alarm count.
+    // In next/'s test files, a law over real IO reads the test depth (0535); a law in memory keeps its
+    // own count. The rule scopes itself to next/; oxlint-plugins/README.md has its false-alarm count.
     "fabrika/runs-from-depth": "error",
     "fabrika/no-throw-in-effect-gen": "error",
     "fabrika/no-type-assertions": "error",
@@ -735,13 +734,21 @@
                 "tests": ["@kampus/vitest"]
               },
               {
-                // Every file of the library package, wherever it sits: of our names, only the test
-                // primitives (0538), which its shared suites read their case counts from. Its tests
-                // name only the library itself and the test primitives, so no file of it imports
-                // tuval, a program or the app.
+                // The library's shared suites and test kits: of our names, only the test primitives
+                // (0538), which they read their case counts from. Its own tests stay as the library's
+                // part has them: macOS matches these globs without case, so a `.test.ts` lands here.
+                "name": "library suites",
+                "files": ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
+                "may": ["@kampus/vitest"],
+                "tests": ["@kampus/libfabrika", "@kampus/vitest"]
+              },
+              {
+                // Every other file of the library package, wherever it sits: none of our names, so
+                // its code never imports the test primitives. Its tests name only the library itself
+                // and the test primitives, so no file of it imports tuval, a program or the app.
                 "name": "library",
                 "files": ["next/packages/libfabrika/**"],
-                "may": ["@kampus/vitest"],
+                "may": [],
                 "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
@@ -815,12 +822,18 @@
                 "may": ["@kampus/libfabrika", "@kampus/tuval"]
               },
               {
+                // A program's shared suites and test kits: what the box may import, and the test
+                // primitives (0538), which they read their case counts from.
+                "name": "program suites",
+                "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
+                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+              },
+              {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
-                // that imports a window file. A program's shared suites (`*Test.ts`) read their case
-                // counts from the test primitives (0538).
+                // that imports a window file.
                 "name": "program",
                 "files": ["next/programs/**"],
-                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+                "may": ["@kampus/libfabrika"]
               }
             ]
           }

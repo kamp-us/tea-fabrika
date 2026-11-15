@@ -40,7 +40,13 @@ const TABLE: { scope: string; parts: Part[] } = {
   scope: "@kampus/",
   parts: [
     { name: "test primitives", files: ["next/packages/vitest/**"], may: [], tests: [VITEST] },
-    { name: "library", files: ["next/packages/libfabrika/**"], may: [VITEST], tests: [LIBRARY, VITEST] },
+    {
+      name: "library suites",
+      files: ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
+      may: [VITEST],
+      tests: [LIBRARY, VITEST],
+    },
+    { name: "library", files: ["next/packages/libfabrika/**"], may: [], tests: [LIBRARY, VITEST] },
     { name: "desktop", files: ["next/packages/tuval/src/desktop/**"], may: [LIBRARY] },
     {
       name: "window",
@@ -64,7 +70,12 @@ const TABLE: { scope: string; parts: Part[] } = {
     },
     { name: "headless", files: ["next/packages/tuval/src/headless/**"], may: [] },
     { name: "program window", files: ["next/programs/*/src/**/*.tsx"], may: [LIBRARY, "@kampus/tuval"] },
-    { name: "program", files: ["next/programs/**"], may: [LIBRARY, VITEST] },
+    {
+      name: "program suites",
+      files: ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
+      may: [LIBRARY, VITEST],
+    },
+    { name: "program", files: ["next/programs/**"], may: [LIBRARY] },
   ],
 };
 
@@ -89,6 +100,12 @@ const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
 
 const base = fc.oneof(fc.constantFrom("Log", "Link", "Main", "View"), fc.stringMatching(/^[A-Z][a-z]{1,6}$/));
 
+/**
+ * A production file's name: never one a suite's glob takes, `Test` or `Latest`, since macOS matches
+ * the globs without case.
+ */
+const production = base.filter((name) => !/test$/i.test(name));
+
 const below = fc
   .array(fc.constantFrom("internal", "build", "node", "a"), { maxLength: 2 })
   .map((folders) => folders.map((folder) => `${folder}/`).join(""));
@@ -110,13 +127,19 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
     fc.tuple(below, base, ext).map(([at, name, end]) => `next/packages/vitest/src/${at}${name}.test.${end}`),
   ],
   [
+    "library suites",
+    fc.oneof(
+      fc.tuple(below, base).map(([at, name]) => `next/packages/libfabrika/src/${at}${name}Test.ts`),
+      fc.tuple(below, base).map(([at, name]) => `next/packages/libfabrika/src/${at}${name}.test-support.ts`),
+    ),
+  ],
+  [
     "library",
     fc.oneof(
-      fc.tuple(below, base).map(([at, name]) => `next/packages/libfabrika/src/${at}${name}.ts`),
-      fc.tuple(below, base).map(([at, name]) => `next/packages/libfabrika/src/${at}${name}.test-support.ts`),
+      fc.tuple(below, production).map(([at, name]) => `next/packages/libfabrika/src/${at}${name}.ts`),
       // Outside `src/`: none exists today, and the wall holds there too.
       fc
-        .tuple(fc.constantFrom("scripts", "bench", "e2e"), below, base)
+        .tuple(fc.constantFrom("scripts", "bench", "e2e"), below, production)
         .map(([top, at, name]) => `next/packages/libfabrika/${top}/${at}${name}.ts`),
     ),
   ],
@@ -148,10 +171,19 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
     fc.tuple(program, below, base).map(([pkg, at, name]) => `next/programs/${pkg}/src/${at}${name}.tsx`),
   ],
   [
+    "program suites",
+    fc.oneof(
+      fc.tuple(program, below, base).map(([pkg, at, name]) => `next/programs/${pkg}/src/${at}${name}Test.ts`),
+      fc.tuple(program, below, base).map(([pkg, at, name]) => `next/programs/${pkg}/src/${at}${name}.test-support.ts`),
+    ),
+  ],
+  [
     "program",
     fc.oneof(
-      fc.tuple(program, below, base).map(([pkg, at, name]) => `next/programs/${pkg}/src/${at}${name}.ts`),
-      fc.tuple(program, base).map(([pkg, name]) => `next/programs/${pkg}/${name}.ts`),
+      fc.tuple(program, below, production).map(([pkg, at, name]) => `next/programs/${pkg}/src/${at}${name}.ts`),
+      fc.tuple(program, production).map(([pkg, name]) => `next/programs/${pkg}/${name}.ts`),
+      // A suite's name outside `src/` is a program's code like any other.
+      fc.tuple(program, base).map(([pkg, name]) => `next/programs/${pkg}/${name}Test.ts`),
     ),
   ],
   [
@@ -252,8 +284,11 @@ const check = (filename: string, { text: code, lines }: Case) => {
   });
 };
 
-/** The path the one oxlint run reads case `n`'s file at: its name gets the number, its folder stays. */
-const numbered = (path: string, n: number) => path.replace(/\/([^/.]+)([^/]*)$/, `/$1N${n}$2`);
+/**
+ * The path the one oxlint run reads case `n`'s file at: its name starts with the number, so its folder
+ * and its ending (`Test.ts`, `.test-support.ts`) stay.
+ */
+const numbered = (path: string, n: number) => path.replace(/\/([^/]+)$/, `/N${n}$1`);
 
 // Plants, each run once and recorded in PR 1251: give the window part's `may` in `.oxlintrc.json`
 // `transport/Connection`; drop the library part's `tests` there; put the library part's glob back
@@ -289,6 +324,52 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
   expect([...places].sort()).toEqual(PLACES.map(([place]) => place).sort());
   expect([...cases.values()].some((one) => one.lines.length > 0)).toBe(true);
   expect([...cases.values()].some((one) => one.lines.length === 0)).toBe(true);
+
+  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
+  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
+    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  );
+});
+
+/** Where production code of ours sits, and where the suites that read the test depth sit. */
+const CODE_PLACES = ["library", "program"] as const;
+const SUITE_PLACES = ["library suites", "program suites"] as const;
+const pathAt = new Map(PLACES);
+
+// Plant, run once and recorded in PR 1274: give the library and program parts' `may` in
+// `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red.
+it("the library's and a program's code may not import the test primitives, and their shared suites may", async () => {
+  let n = 0;
+  const cases = new Map<string, Case>();
+  const seen = new Set<string>();
+  fc.assert(
+    fc.property(
+      fc.oneof(
+        ...[...CODE_PLACES, ...SUITE_PLACES].map((place) =>
+          fc.tuple(fc.constant(place), pathAt.get(place)!, fc.nat({ max: FORMS.length - 1 })),
+        ),
+      ),
+      ([place, path, form]) => {
+        const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
+        const one: Case = { text: `${FORMS[form]!(VITEST, 0)}\n`, lines: refused ? [1] : [] };
+        check(path, one);
+        cases.set(numbered(path, n), one);
+        seen.add(place);
+        n++;
+      },
+    ),
+    {
+      seed: 119120,
+      numRuns: 200,
+      examples: [
+        // pinned: the review of PR 1274 named this file, which lint let import the test package.
+        [["library", "next/packages/libfabrika/src/jobs/Job.ts", 0]],
+        [["library suites", "next/packages/libfabrika/src/jobs/JobsTest.ts", 0]],
+        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0]],
+      ],
+    },
+  );
+  expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
   const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
   expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(

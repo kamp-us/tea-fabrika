@@ -187,7 +187,7 @@ describe("T878 composed repository opening", () => {
           ).pipe(Effect.provide(services)),
         );
       }),
-      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
+      { seed: 119120, numRuns: 200 },
     );
   });
 
@@ -228,7 +228,7 @@ describe("T878 composed repository opening", () => {
           ),
         );
       }),
-      { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
+      { seed: 119120, numRuns: 200 },
     );
   });
 });

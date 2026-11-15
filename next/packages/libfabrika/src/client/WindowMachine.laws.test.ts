@@ -44,7 +44,6 @@ import { applyCell } from "@demlik/tea";
 // tile is stepped through its registration in the checklist's laws (L22, L24).
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
@@ -53,7 +52,7 @@ import { linkTimer } from "../transport/Link.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
-const opts = { seed: SEED, numRuns: runsFor({ fast: 30, full: 300 }) };
+const opts = { seed: SEED, numRuns: 300 };
 const NAMES = ["checklist:1", "tally:1", "plain:1"] as const;
 const TILES = NAMES.map((name, i) => ({ id: `tile_${i + 1}`, name }));
 
@@ -1503,7 +1502,7 @@ const foldFrames = (list: ReadonlyArray<Pick>, each: (e: FrameEvent) => void = (
   return events;
 };
 
-const frameRuns = { arbitrary: { seed: SEED, runs: runsFor({ fast: 30, full: 300 }), size: 200 } };
+const frameRuns = { arbitrary: { seed: SEED, runs: 300, size: 200 } };
 
 /** The id of a JSON-RPC answer, read as the door wrote it. */
 const answerId = Schema.decodeUnknownOption(
@@ -1643,7 +1642,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
 
       return true;
     },
-    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }), size: 200 } },
+    { arbitrary: { seed: SEED, runs: 100, size: 200 } },
   );
 
   it.prop(
@@ -1681,7 +1680,7 @@ describe("P18 L11: the connect row of a closed dial keeps its close code", () =>
       });
       return true;
     },
-    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }), size: 200 } },
+    { arbitrary: { seed: SEED, runs: 100, size: 200 } },
   );
 });
 

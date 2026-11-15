@@ -1,15 +1,14 @@
 // A heavy law reads its case count from the test depth (decision 0535): few cases on a pull request
-// and in the merge queue, the full count on the 3-hour schedule. So in a `next/` test file, a law
-// may not write its case count as a number when it reaches real IO, or when the number is over
-// fast-check's default of 100 (`DEFAULT`), which is a law asking for depth whatever it touches:
+// and in the merge queue, the full count on the 3-hour schedule. 0535 cuts cases only in a law over
+// real IO, so in a `next/` test file a law may not write its case count as a number when it reaches
+// real IO. A law in memory keeps its own count, whatever it is, on every pull request:
 //
 //   fc.assert(property, { seed, numRuns: 100 })                                // refused over real IO
-//   fc.assert(pure, { seed, numRuns: 300 })                                    // refused anywhere
-//   fc.assert(pure, { seed, numRuns: 100 })                                    // passes in memory
+//   fc.assert(pure, { seed, numRuns: 3000 })                                   // passes in memory
 //   fc.assert(property, { seed, numRuns: runsFor({ fast: 10, full: 100 }) })   // passes
 //
-// Real-IO laws leave the merge line entirely once 0536 is built; until then this keeps them few.
-// 100 is fast-check's own default and the count most laws here write (80 sites, experiment 291).
+// Real-IO laws leave the merge line for the schedule's integration files (0536); this holds the ones
+// still written with a bare count, and the depth setting stays for them.
 //
 // A case count is the value of a `numRuns` key (fast-check's and `@demlik/tea/pbt`'s option), or of
 // a `runs` key inside an `arbitrary` object (`@effect/vitest`'s `it.prop` option). A `numRuns` handed
@@ -59,10 +58,7 @@ const EFFECT_WRITES =
 /** A file a law may sit in: a test, a test kit or a shared suite. */
 const TEST_FILE = /(?:\.test\.tsx?|\.test-support\.tsx?|Test\.tsx?)$/;
 
-/** fast-check's own `numRuns` when a property names none: a law that asks for more asks for depth. */
-const DEFAULT = 100;
-
-const MESSAGE = `A law over real IO, or one that asks for more cases than fast-check's default of ${DEFAULT}, reads its case count from the test depth (decision 0535): write \`runsFor({ fast, full })\` from \`@kampus/vitest\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
+const MESSAGE = `A law over real IO reads its case count from the test depth (decision 0535): write \`runsFor({ fast, full })\` from \`@kampus/vitest\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
 
 type Parented = Node & { readonly parent?: Node | null };
 
@@ -364,7 +360,7 @@ export const runsFromDepth: CreateRule = {
 
           const value = count ? written(node.value) : null;
 
-          if (value !== null && (value > DEFAULT || held(node))) {
+          if (value !== null && held(node)) {
             context.report({ node: node.value, message: MESSAGE });
           }
         }

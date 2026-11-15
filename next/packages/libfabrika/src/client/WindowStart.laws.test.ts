@@ -23,7 +23,6 @@
 // The peer is the door as a script: it answers what the walk lets it answer and nothing else, on the
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
@@ -387,7 +386,7 @@ describe("L2: retry jitter in the dial", () => {
       fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
         await Effect.runPromise(retryTiming(list, seed, seen));
       }),
-      { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) },
+      { seed: SEED, numRuns: 100 },
     );
     expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
   });
@@ -655,7 +654,7 @@ describe("L9: failure classes through the real runtime", () => {
             expect(run.getState().link._tag, "row storage cannot stop the window").toBe("online");
           }
         }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-      { arbitrary: { seed: SEED, runs: runsFor({ fast: 30, full: 300 }) } },
+      { arbitrary: { seed: SEED, runs: 300 } },
     );
   }
 });
@@ -1091,7 +1090,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         expect(refused._tag, "a stopped start refuses a press").toBe("Stopped");
       }).pipe(Effect.scoped, Random.withSeed(SEED), Effect.provide(TestClock.layer())),
     // A red walk may leave a Cmd that never ends, and each shrink waits two real seconds on it.
-    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }), maxShrinks: 10 } },
+    { arbitrary: { seed: SEED, runs: 100, maxShrinks: 10 } },
   );
 });
 
@@ -1257,6 +1256,6 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           "the throw wrote its failure row",
         ).toBe(1);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
+    { arbitrary: { seed: SEED, runs: 100 } },
   );
 });

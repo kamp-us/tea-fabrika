@@ -13,7 +13,6 @@
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import type { checklistMachine } from "./program.ts";
@@ -73,7 +72,7 @@ const walk = (
 };
 
 const walks = fc.array(choice, { minLength: 1, maxLength: 40 });
-const opts = { seed: SEED, numRuns: runsFor({ fast: 20, full: 200 }) };
+const opts = { seed: SEED, numRuns: 200 };
 
 describe("L22: the checklist tile", () => {
   it("typed sets the draft, capped at 80, and returns no Cmd", () => {

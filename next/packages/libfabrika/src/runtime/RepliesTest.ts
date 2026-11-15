@@ -3,7 +3,6 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
@@ -12,7 +11,7 @@ import { Replies } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 
 const SEED = 119120;
-const RUNS = runsFor({ fast: 10, full: 100 });
+const RUNS = 100;
 
 /** A real SQLite database: each run of the inner Effect is a new connection to the same file,
  *  closed with its scope. Each run of the outer Effect is a new, empty database. */

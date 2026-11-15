@@ -11,7 +11,6 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
@@ -320,7 +319,7 @@ it.effect.prop(
         expect(() => terminalAnswer(bad)).toThrow();
       }
     }),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 4096, concurrency: 1 } },
+  { arbitrary: { seed: 119120, runs: 20, size: 4096, concurrency: 1 } },
 );
 
 it.effect.prop(

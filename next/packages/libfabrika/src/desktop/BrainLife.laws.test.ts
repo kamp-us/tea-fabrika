@@ -2,7 +2,6 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -12,7 +11,7 @@ import * as BrainLife from "./BrainLife.ts";
 import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
-const options = { seed: 119120, numRuns: runsFor({ fast: 15, full: 150 }) };
+const options = { seed: 119120, numRuns: 150 };
 const ctx = stubCtxThrowingProxy<unknown>();
 const Failure = Schema.TaggedUnion({ Operation: {} });
 const oldId = Schema.decodeUnknownSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
@@ -273,7 +272,7 @@ describe("P19 lifecycle", () => {
 
           return true;
         },
-        { ...options, numRuns: runsFor({ fast: 20, full: 200 }) },
+        { ...options, numRuns: 200 },
       );
       expect(removals).toBeGreaterThan(0);
     }),

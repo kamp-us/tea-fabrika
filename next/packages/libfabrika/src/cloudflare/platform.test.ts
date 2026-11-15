@@ -3,7 +3,6 @@
 // failure text out of tags). The methods come from each client's own keys, so a new method joins the
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { expect } from "vitest";
@@ -69,7 +68,7 @@ it.effect.prop(
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
     }),
-  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );
 
 // Ticket 502 slice S2, next/. ProcessClient calls the object through Alchemy's typed stub inside
@@ -102,7 +101,7 @@ it.effect.prop(
       expect(error).toMatchObject({ reason, message: text });
       expect(Reflect.get(Object(error), "cause")).toBeUndefined();
     }),
-  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );
 
 it.effect.prop(
@@ -123,7 +122,7 @@ it.effect.prop(
       expect(cause).toMatchObject({ method });
       expect(Reflect.get(Object(cause), "cause")).toBe(fault);
     }),
-  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );
 
 // T502 S1, next/. The Connection object is called through Alchemy's typed stub and `reach`
@@ -336,7 +335,7 @@ it.effect.prop(
       RepliesTest.unleaked(captured.text(), [secret]);
     }),
   // 100 runs walked the three Connection calls; 500 keep that reach over all fifteen.
-  { arbitrary: { runs: runsFor({ fast: 50, full: 500 }), seed: 119120 } },
+  { arbitrary: { runs: 500, seed: 119120 } },
 );
 
 // `rejected` turns that message back into the thrown class for a failed span. Plants: rebuild every
@@ -355,7 +354,7 @@ it.effect.prop(
       expect(Reflect.get(Object(thrown), "name")).toBe(name);
       expect(Reflect.get(Object(thrown), "message")).toBe(text);
     }),
-  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );
 
 it.effect.prop(
@@ -378,5 +377,5 @@ it.effect.prop(
         expect(rejected(error)).toBe(error);
       }
     }),
-  { arbitrary: { runs: runsFor({ fast: 20, full: 200 }), seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );

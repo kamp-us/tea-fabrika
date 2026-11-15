@@ -5,7 +5,6 @@
 // cut lands on a transition that is legal there. The oracle is this file's own record of what each
 // call was given and answered, never the product's machine.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -747,9 +746,8 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, checks));
+        yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40, includeErrorInReport: true }));
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),
@@ -930,7 +928,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               Effect.as(true),
               Effect.catchCause((cause) => Effect.fail(cause)),
             ),
-          { seed: 119120, runs: runsFor({ fast: 15, full: 60 }), concurrency: 1 },
+          { seed: 119120, runs: 60, concurrency: 1 },
         );
         expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
         expect(done).toEqual(new Set(["reopen", "taken"]));
@@ -961,6 +959,6 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           expect(result.failure.cause).toBe(lower);
         }
       }).pipe(Effect.scoped),
-    { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
+    { arbitrary: { seed: 119120, runs: 100 } },
   );
 };

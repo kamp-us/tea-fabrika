@@ -16,7 +16,6 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";
@@ -136,7 +135,7 @@ describe("L23: the checklist through the real client", () => {
           expect(s.shown?.view, `after ${JSON.stringify(s.msg)}`).toEqual(s.view);
         });
       }),
-      { seed: SEED, numRuns: runsFor({ fast: 20, full: 200 }) },
+      { seed: SEED, numRuns: 200 },
     );
     expect(seen.refused, "some moves were refused").toBeGreaterThan(0);
     expect(seen.patched).toBeGreaterThan(0);
@@ -155,7 +154,7 @@ describe("L23: the checklist through the real client", () => {
         // The counter's view, `{count}`, is another program's data.
         expect(Exit.isFailure(pass({ count })), "the counter's view passed").toBe(true);
       }),
-      { seed: SEED, numRuns: runsFor({ fast: 20, full: 200 }) },
+      { seed: SEED, numRuns: 200 },
     );
   });
 });

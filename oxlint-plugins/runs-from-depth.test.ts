@@ -1,5 +1,5 @@
-// Decisions 0535 and 0536: a law over real IO, or a case count over fast-check's default of 100, reads
-// the test depth. Each generated count goes through every form at every path in process through
+// Decisions 0535 and 0536: a law over real IO reads the test depth, and a law in memory keeps its own
+// count, whatever it is. Each generated count goes through every form at every path in process through
 // oxlint's RuleTester; one oxlint run over the same files then proves the repo's own .oxlintrc.json
 // turns the rule on.
 import { spawnSync } from "node:child_process";
@@ -43,9 +43,15 @@ const NAMES = [
 
 const PRELUDE = "declare const fc: any, p: any, a: any, it: any, options: any, walk: any, runsFor: any;";
 
-/** The lines a file must fire on, the prelude being line 1. */
-const expected = (n: number, held: boolean): ReadonlyArray<number> =>
-  held && n > 100 ? forms(n).flatMap(([, count], i) => (count ? [i + 2] : [])) : [];
+/** The second line of a form's file: a law over real IO calls `open`, a law in memory has none. */
+const OPENS = `import { DatabaseSync } from "node:sqlite"; const open = () => new DatabaseSync(":memory:");`;
+
+/** Each form inside a test call, over real IO or in memory. */
+const law = (form: string, io: boolean): string => `it("law", () => { ${io ? "open(); " : ""}${form} });`;
+
+/** The lines a file must fire on, the prelude being line 1 and the import line 2. */
+const expected = (n: number, io: boolean, held: boolean): ReadonlyArray<number> =>
+  held && io ? forms(n).flatMap(([, count], i) => (count ? [i + 3] : [])) : [];
 
 const check = (filename: string, code: string, lines: ReadonlyArray<number>) => {
   tester.run("runs-from-depth", runsFromDepth, {
@@ -85,7 +91,7 @@ const IMPORTS = [
 ] as const;
 
 /**
- * A law at or under the default count, in each form, with whether it reaches real IO. Each false one
+ * A law at any count, in each form, with whether it reaches real IO. Each false one
  * is a false alarm the rule had on the tree before it was fixed: a read of the file system, a draw of
  * values, a local that shares a helper's name, a spread whose count is replaced, an Effect read.
  */
@@ -150,13 +156,13 @@ const plant = (count: fc.Arbitrary<Plant>, numRuns: number, examples: Array<[Pla
   }
 };
 
-/** A case count and the file of every count form it makes, with the lines that must fire. */
-const overDefault = (count: number): Plant => [
-  [PRELUDE, ...forms(count).map(([line]) => line), ""].join("\n"),
-  (held) => expected(count, held),
+/** A case count and the file of every count form it makes in a law, with the lines that must fire. */
+const inLaw = (count: number, io: boolean): Plant => [
+  [PRELUDE, OPENS, ...forms(count).map(([line]) => law(line, io)), ""].join("\n"),
+  (held) => expected(count, io, held),
 ];
 
-/** A count at or under the default and an IO import, with the IO laws' lines that must fire. */
+/** A count and an IO import, with the IO laws' lines that must fire. */
 const overIo = (count: number, from: string): Plant => {
   const lines = ioForms(count, from);
   return [
@@ -165,18 +171,20 @@ const overIo = (count: number, from: string): Plant => {
   ];
 };
 
-it("a written case count over 100 is refused in next/'s test files, in every form the rule reads", () => {
-  plant(fc.integer({ min: 1, max: 5000 }).map(overDefault), 6, [
-    [overDefault(100)],
-    [overDefault(101)],
-    [overDefault(300)],
-  ]);
+it("a written count in a law over real IO is refused in every form the rule reads, and a law in memory keeps any count", () => {
+  plant(
+    fc.tuple(fc.integer({ min: 1, max: 5000 }), fc.boolean()).map(([count, io]) => inLaw(count, io)),
+    6,
+    [[inLaw(100, true)], [inLaw(101, false)], [inLaw(300, false)], [inLaw(3000, false)], [inLaw(3000, true)]],
+  );
 });
 
 it("a law that reaches real IO is refused any written count; a law in memory, a draw or a read keeps its own", () => {
   plant(
-    fc.tuple(fc.integer({ min: 1, max: 100 }), fc.constantFrom(...IMPORTS)).map(([count, from]) => overIo(count, from)),
+    fc
+      .tuple(fc.integer({ min: 1, max: 5000 }), fc.constantFrom(...IMPORTS))
+      .map(([count, from]) => overIo(count, from)),
     6,
-    IMPORTS.map((from): [Plant] => [overIo(100, from)]),
+    [...IMPORTS.map((from): [Plant] => [overIo(100, from)]), [overIo(3000, IMPORTS[0])]],
   );
 });

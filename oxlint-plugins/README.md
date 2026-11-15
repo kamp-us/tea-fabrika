@@ -953,12 +953,16 @@ The table is in `.oxlintrc.json`, in its own override for `next/packages/**` and
 so the `next/**` block stays the `.agents/` block's twin: a `scope` (`@kampus/`) and `parts`, each a name, globs and `may`, the exact
 names its files may import. A file's part is the first whose glob matches. The test primitives'
 part is the whole package, `next/packages/vitest/**` (0538), and it may import none of our names.
-The library's part is the whole package, `next/packages/libfabrika/**`, so a file outside `src/` is
-judged too, and it may import only the test primitives, `@kampus/vitest`, which its shared suites
-read their case counts from; desktop, the library's root; a window, the root, transport's eight front files and its bare
+The library's shared suites and test kits (`*Test.ts`, `*.test-support.ts`) come next, and they may
+import only the test primitives, `@kampus/vitest`, which they read their case counts from. The
+library's part is the rest of the package, `next/packages/libfabrika/**`, so a file outside `src/` is
+judged too, and it may import none, so its code never imports the test primitives; desktop, the
+library's root; a window, the root, transport's eight front files and its bare
 name, the window client's three, and the design package's root and `tokens.css`; dom and headless,
 none; browser, transport's; electron, transport's and `coordination`; a program's `.tsx` files, the
-library's root and tuval's; the rest of a program, the library's root and the test primitives.
+library's root and tuval's; a program's shared suites and test kits under `src/`, the library's root
+and the test primitives; the rest of a program, the library's root. macOS matches the globs without
+case, so a library test there falls in the suites' part, which judges tests as the library's does.
 `next/apps` is not judged. A test is judged only where its part has `tests`, the packages its tests
 may import, each with every subpath: the library's tests may name only `@kampus/libfabrika` and
 `@kampus/vitest`, and the test primitives' tests only `@kampus/vitest`. That is the old scan's wall,
@@ -980,27 +984,28 @@ agree. The library's tests joined on 2026-11-14 (PR 1251's review): 0 fires on `
 imports name the library itself. `package-imports.test.ts` is one property: a file at a generated
 path in each part, or in no part, imports names from every part's list, names next to them and
 names no list holds, and the rule fires on exactly the refused ones, in process with the plan's
-table and in one oxlint run with the repo's config.
+table and in one oxlint run with the repo's config. A second property (PR 1274's review) imports
+`@kampus/vitest` in every import form from a generated file of the library's or a program's code,
+which it refuses, and from their shared suites, which it allows.
 
 ## A heavy law reads the test depth, decision 0535
 
 `runs-from-depth` refuses a case count written as a number in a `next/` test file (`*.test.ts`,
-`*.test-support.ts`, a shared suite `*Test.ts`) when the law reaches real IO, or when the number is
-over fast-check's default of 100. The count reads
+`*.test-support.ts`, a shared suite `*Test.ts`) when the law reaches real IO. 0535 cuts cases only
+in such a law, so a law in memory keeps its own count, whatever it is, on every pull request. The
+count over real IO reads
 `runsFor({ fast, full })` from `@kampus/vitest` (`next/packages/vitest/src/Depth.ts`, decision 0538) instead: `fast` on a pull
 request and in the merge queue, `full` when the 3-hour schedule sets `FABRIKA_TEST_DEPTH=full`. The
 rule's header says what real IO is, how a law reaches it, and what the rule cannot see.
 
 ```ts
 fc.assert(property, { seed, numRuns: 40 }); // refused: the law opens SQLite
-fc.assert(pure, { seed, numRuns: 300 }); // refused: over 100, wherever it runs
-fc.assert(pure, { seed, numRuns: 100 }); // passes: in memory, at the default
+fc.assert(pure, { seed, numRuns: 3000 }); // passes: in memory, at its own count
 fc.assert(property, { seed, numRuns: runsFor({ fast: 4, full: 40 }) }); // passes
 ```
 
 False alarms, counted on 2026-11-14 on `next/` at `8a912131b` with one oxlint run and the repo's
-config. The over-100 part fired 97 times in 43 files, every one a real case count. The real-IO part,
-first written per file, fired 370 times. Reading them found five kinds of false alarm, each fixed in
+config. The real-IO part, first written per file, fired 370 times. Reading them found five kinds of false alarm, each fixed in
 the rule and planted in its test: a law that only asks `existsSync` whether a module is built; a
 `numRuns` handed to `fc.sample` or `fc.statistics`, which draws values; an Effect `fs.exists` read
 through the Node services; a spread whose count a later key replaces (`{ ...options, numRuns: 60 }`);
@@ -1008,11 +1013,14 @@ and a parameter or local that shares an IO helper's name (a fake `sql`, a pure m
 `edges.test.ts`). The rule then fired 285 times. Each hit was checked against the IO name it reached,
 and the files where that was in doubt were opened and read: **0 false alarms found**. The pull request
 that adds the rule moves every one of those counts to `runsFor`, so it joins as an error with 0 hits
-and no ledger entry.
+and no ledger entry. Its review found that the over-100 part, which no decision made, cut cases from
+laws in memory, so it left the rule: 74 counts in memory test files and their shared suites got
+main's number back, and the 50 that the real-IO part holds in memory test files kept `runsFor`.
 
 `runs-from-depth.test.ts` holds the laws, each a property at seed 119120 through oxlint's
 `RuleTester` and then one real oxlint run over the planted files with the repo's config. Law 1 plants
-every count form at counts 1 to 5,000 (100, 101 and 300 pinned) in each test-file name, in `next/`
-and in `packages/`, which the rule does not hold. Law 2 plants five IO imports (SQLite, a child
-process, a `node:fs` write, miniflare and the SQLite layer) at counts 1 to 100 beside the five false
-alarm kinds above, which must pass.
+every count form at counts 1 to 5,000 (100, 101, 300 and 3,000 pinned) inside a law that opens SQLite
+and inside one in memory, in each test-file name, in `next/` and in `packages/`, which the rule does
+not hold: only the law over real IO fires. Law 2 plants five IO imports (SQLite, a child process, a
+`node:fs` write, miniflare and the SQLite layer) at counts 1 to 5,000 beside the five false alarm
+kinds above and a law in memory, which must pass.

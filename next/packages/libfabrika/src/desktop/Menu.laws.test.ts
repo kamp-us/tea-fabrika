@@ -1,7 +1,6 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { ConfigProvider, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
@@ -415,7 +414,7 @@ it.effect.prop(
         { seed: Test.seed + draw, numRuns: 1 },
       );
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  { arbitrary: { seed: Test.seed, runs: runsFor({ fast: 20, full: 200 }) } },
+  { arbitrary: { seed: Test.seed, runs: 200 } },
 );
 
 // After build: read a clock in view, drop empty, duplicate keys, or rely on color for state.
@@ -611,7 +610,7 @@ describe("browser link start switch", () => {
       const trace = foldEvents(machine, Test.ctx, null, msgs);
       expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);
     },
-    { arbitrary: { seed: Test.seed, runs: runsFor({ fast: 20, full: 200 }) } },
+    { arbitrary: { seed: Test.seed, runs: 200 } },
   );
 });
 

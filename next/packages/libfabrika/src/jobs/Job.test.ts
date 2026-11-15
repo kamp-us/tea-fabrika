@@ -3,7 +3,6 @@
 // invalid, or left out, is refused at decoding. The values are generated; the database half of both
 // laws is in `JobsTest.ts`.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Result as R, Schema } from "effect";
 import * as fc from "fast-check";
 import { Executor, Recorded, Request, Result } from "./Job.ts";
@@ -20,7 +19,7 @@ import {
   fcResult,
 } from "./JobsTest.ts";
 
-const RUNS = { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) };
+const RUNS = { seed: 119120, numRuns: 100 };
 
 /** Encode, write as JSON text, read it back and decode, as a value crosses a store or a wire. */
 const through = <S extends Schema.Codec<unknown, unknown>>(schema: S, value: S["Type"]) =>

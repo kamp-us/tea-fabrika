@@ -2,7 +2,6 @@
 import { applyCell } from "@demlik/tea";
 import { foldEvents } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
 import { syncTest } from "../../Testing.ts";
 import { nth } from "../RepliesTest.ts";
@@ -68,7 +67,7 @@ describe("saved view membership, next/", () => {
         },
       );
     },
-    { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
+    { arbitrary: { seed: 119120, runs: 200 } },
   );
 
   // Only the fixed fill is shared. Each run keeps the original generated walk,
@@ -118,6 +117,6 @@ describe("saved view membership, next/", () => {
 
       expect(state).toEqual(Model.cases.empty.make({}));
     },
-    { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
+    { arbitrary: { seed: 119120, runs: 100 } },
   );
 });

@@ -1,14 +1,12 @@
 // T878, next/. The git fixture and reader RepositoriesGit.test.ts and
 // RepositoriesGit.identity.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
 // file stays under about 60 s on a CI leg. Each runs on the git layers of GitLaws (0535).
-
-import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
-export const runs = { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) };
+export const runs = { seed: 119120, numRuns: 200 };
 // CI exhausted 60 s for L5 and both L2 properties. Allow 10 ms per real Git command,
 // including scoped setup/cleanup, and count the longest generated tape of four moves.
 // A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,

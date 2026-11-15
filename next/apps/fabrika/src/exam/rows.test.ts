@@ -4,7 +4,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { Schema } from "effect";
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
@@ -25,7 +24,7 @@ const REAL: ReadonlyArray<Row> = Schema.decodeUnknownSync(RuleFile)(
 ).layers;
 
 // Ticket 477, PR 0. Fixed seed, as the lead scripts' laws use.
-const options = { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) };
+const options = { seed: 119120, numRuns: 500 };
 
 describe("the rule file's rows give a file its row", () => {
   // The tool's rule, written a second way, by segments and with no regex over the whole path, so
@@ -121,7 +120,7 @@ describe("the rule file's rows give a file its row", () => {
       }),
       {
         ...options,
-        numRuns: runsFor({ fast: 100, full: 3000 }),
+        numRuns: 3000,
         examples: [
           // pinned: the plan's own case (ticket 477, PR 5). The longer pattern is in the later row.
           [

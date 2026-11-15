@@ -5,7 +5,6 @@
 // file's own reading of the plan's states table, never the machine.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { type Executor, type Request, Result, State } from "../Job.ts";
 import {
@@ -21,7 +20,7 @@ import {
 } from "../JobsTest.ts";
 import { job } from "./job.ts";
 
-const RUNS = { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) };
+const RUNS = { seed: 119120, numRuns: 100 };
 
 type Model = (typeof job)["model"]["Type"];
 type Msg = (typeof job)["msg"]["Type"];

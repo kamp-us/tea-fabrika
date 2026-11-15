@@ -3,7 +3,6 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
 import { Arbitrary, Effect } from "effect";
 import * as fc from "fast-check";
@@ -163,7 +162,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         { seed: 119120, numRuns: 1 },
       );
     }),
-    { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) },
+    { seed: 119120, numRuns: 300 },
   );
 });
 
@@ -352,6 +351,6 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         { seed: 119120, numRuns: 1 },
       );
     }),
-    { seed: 119120, numRuns: runsFor({ fast: 100, full: 1000 }) },
+    { seed: 119120, numRuns: 1000 },
   );
 });

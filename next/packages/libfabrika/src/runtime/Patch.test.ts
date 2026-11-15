@@ -1,6 +1,5 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -196,7 +195,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
         expect(before, "apply changed its view").toEqual(beforeCopy);
         expect(ops, "apply changed its ops").toEqual(opsCopy);
       }),
-      { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) },
+      { seed: 119120, numRuns: 500 },
     );
   });
 
@@ -218,7 +217,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           expect({ before, ops }).toEqual(copy);
         },
       ),
-      { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) },
+      { seed: 119120, numRuns: 500 },
     );
   });
 
@@ -245,7 +244,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           expect(Reflect.get({}, "polluted"), "Object.prototype was written").toBeUndefined();
         },
       ),
-      { seed: 119120, numRuns: runsFor({ fast: 50, full: 500 }) },
+      { seed: 119120, numRuns: 500 },
     );
   });
 });

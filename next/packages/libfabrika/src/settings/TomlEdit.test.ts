@@ -1,7 +1,6 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
@@ -11,7 +10,7 @@ import * as Setting from "./Setting.ts";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
-const check = { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) }, timeout: 30000 };
+const check = { arbitrary: { seed: 119120, runs: 100 }, timeout: 30000 };
 const strict = { onExcessProperty: "error" } as const;
 const Integer = Schema.Int.check(Schema.isBetween({ minimum: -1000000, maximum: 1000000 }));
 // TOML cannot encode lone surrogate code points.

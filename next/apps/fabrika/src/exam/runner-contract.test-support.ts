@@ -30,15 +30,10 @@ import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
-export const opts = {
-  arbitrary: { seed: 119120, runs: runsFor({ fast: 30, full: 300 }), size: 4096, concurrency: 1 },
-  timeout: 60_000,
-};
-
+export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
 export const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
 export const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
 
