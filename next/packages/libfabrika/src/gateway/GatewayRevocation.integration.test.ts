@@ -31,6 +31,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -204,6 +205,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       SpanSink.layer(saved.sql, { object: processes.counter }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
+      Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
       Layer.succeed(Jobs, {
         request: () => Effect.die("unexpected job request in legacy gateway law"),
         take: () => Effect.die("unexpected job take in legacy gateway law"),
@@ -211,6 +213,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         finish: () => Effect.die("unexpected job finish in legacy gateway law"),
         read: () => Effect.die("unexpected job read in legacy gateway law"),
         forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+        collected: () => Effect.die("unexpected job collect in legacy gateway law"),
       }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,

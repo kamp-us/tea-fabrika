@@ -85,6 +85,8 @@ describe("shared Worker settings reader, next/", () => {
               // T1041: the two mail settings; a byte size is saved as its count of bytes in text.
               mailUnread: current.settings.values["mail.unread"],
               mailChunk: ByteSize.bytes(BigInt(String(current.settings.values["mail.chunk"]))),
+              // P39 slice 3: the recipe sets no hands key, so the start reads the default, none.
+              handsTarget: null,
             });
             StartsTest.exclude(exit.value, secret);
           }

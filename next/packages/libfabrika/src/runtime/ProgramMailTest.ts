@@ -2287,10 +2287,21 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 ).toBe(true);
                 yield* view.settle();
                 // Exactly one answer, the one Cmd's: its echo keeps no items, so its row always fits.
+                const answers = yield* view.answers;
+                const mine = answers.filter((a) => a.n === pipe.n);
                 expect(
-                  (yield* view.answers).filter((a) => a.n === pipe.n).map((a) => a.answer),
+                  mine.map((a) => a.answer),
                   `L12: ${label} answers too_big once`,
                 ).toEqual(["too_big"]);
+                // The writer files an answer it cannot tie to a pending send under -1: a stray one.
+                expect(
+                  answers.filter((a) => a.n === -1),
+                  `L12: no stray answer after ${label}'s too_big`,
+                ).toEqual([]);
+                expect(
+                  mine.map((a) => [a.to, a.as]),
+                  `L12: ${label}'s too_big echoes its target and input type`,
+                ).toEqual([[PIPE_READER, "rows"]]);
                 expect(yield* view.owed, `L12: no Cmd stays owed after ${label}'s too_big`).toEqual([]);
                 expect(yield* view.inbox, `L12: no part of ${label}'s too_big send is saved`).toEqual(before);
                 done.add(label);
@@ -2343,6 +2354,10 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 (yield* view.answers).find((a) => a.n === n)?.answer,
                 "L12: the later part's refusal is the answer",
               ).toBe("id_reused");
+              expect(
+                (yield* view.answers).filter((a) => a.n === -1),
+                "L12: no stray answer after the later part's refusal",
+              ).toEqual([]);
               const parts = (yield* view.inbox).flatMap((l) => (l.m?.type === "rows" ? [l.m.part] : []));
               expect(
                 parts.map((p) => p.seq),
@@ -2364,7 +2379,9 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 /**
  * L11, order per pair: a send_chunks waiting on one reader's full inbox holds back the writer's
  * later mail to that reader, and only to it. A letter to another reader lands at once, as OTP keeps
- * order per sender and receiver and no further (`otp.md`, row 19).
+ * order per sender and receiver and no further (`otp.md`, row 19). A later send_chunks to the same
+ * reader whose operands pass INPUT_BYTES waits too: it is saved without its items but keeps its
+ * target, so its `too_big` comes after the earlier send's `queued` and echoes `{to, as}`.
  */
 const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   it.effect(
@@ -2379,8 +2396,10 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             pads: fc.array(fc.integer({ min: 600, max: 900 }), { minLength: 4, maxLength: 7 }),
             // At most the cap, since nothing fires reader:2's alarm before the walk's end.
             asides: fc.nat(),
+            // An oversize send_chunks to the same name: its operands this many bytes past INPUT_BYTES.
+            over: fc.integer({ min: 1, max: 400 }),
           }),
-          ({ cap, pads, asides }) =>
+          ({ cap, pads, asides, over }) =>
             Effect.gen(function* () {
               const pipe: Pipe = {
                 cap,
@@ -2401,6 +2420,16 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               yield* view.input({ type: "letter", n: held });
               expect(yield* answer(held), "L11: a letter to the same name waits behind it").toBeUndefined();
               done.add("held");
+              // A send_chunks to the same name whose operands pass INPUT_BYTES is saved without its
+              // items, and still waits behind the chunked send before it.
+              const huge = nearCap(++pipe.n, over);
+              yield* view.input(huge);
+              expect(yield* answer(rows), "L11: the oversize send does not answer for the waiting one").toBeUndefined();
+              expect(
+                yield* answer(huge.n),
+                "L11: an oversize send_chunks to the same name waits behind it",
+              ).toBeUndefined();
+              done.add("oversize");
 
               for (let k = 0; k < 1 + (asides % cap); k++) {
                 const n = ++pipe.n;
@@ -2415,6 +2444,21 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               // Every alarm fires: reader:1 reads and acks, the chunked send finishes, then the held letter.
               yield* view.settle();
               expect(yield* answer(rows), "the chunked send finished").toBe("queued");
+              const all = yield* view.answers;
+              const tooBig = all.find((a) => a.n === huge.n);
+              expect(tooBig?.answer, "L11: the oversize send answers too_big").toBe("too_big");
+              expect(
+                all.findIndex((a) => a.n === rows) < all.findIndex((a) => a.n === huge.n),
+                "L11: the oversize send's answer comes after the earlier send's, in Cmd order",
+              ).toBe(true);
+              expect(
+                [tooBig?.to, tooBig?.as],
+                "L11: the oversize send's too_big echoes its target and input type",
+              ).toEqual([PIPE_READER, "rows"]);
+              expect(
+                all.filter((a) => a.n === -1),
+                "L11: no stray answer",
+              ).toEqual([]);
               // The held letter goes once the chunked send is done: a plain send, it lands or meets full.
               const last = yield* answer(held);
               expect(["queued", "full"], "the held letter was sent after the chunked send").toContain(last);
@@ -2428,7 +2472,7 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             }),
           { fast: 5, full: 20 },
         );
-        expect([...done].sort()).toEqual(["aside", "held", "waited"]);
+        expect([...done].sort()).toEqual(["aside", "held", "oversize", "waited"]);
       }),
     300_000,
   );

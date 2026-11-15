@@ -27,6 +27,9 @@ export const Answer = Schema.Struct({
   letters: Schema.optionalKey(Schema.Int),
   /** A chunked send's `queued` receipt id, which every one of its letters' `part.id` carries. */
   id: Schema.optionalKey(Schema.String),
+  /** A chunked send's echoed target and input type, when its answer's Cmd names them. */
+  to: Schema.optionalKey(Schema.String),
+  as: Schema.optionalKey(Schema.String),
 });
 
 /** @internal The answers, and the numbers of the chunked sends still unanswered, oldest first. */
@@ -56,6 +59,16 @@ export const madeItems = (n: number, count: number, size: number, tail: number) 
 const numbered = (m: unknown): number => {
   const plain = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) }))(m);
   return plain._tag === "Some" ? plain.value.m.n : -1;
+};
+
+const decodeEcho = Schema.decodeUnknownOption(
+  Schema.Struct({ cmd: Schema.Struct({ to: Schema.String, as: Schema.String }) }),
+);
+
+/** A chunked send's echoed `{to, as}`, read back from its answer's Cmd; nothing when it names none. */
+const address = (m: unknown): Partial<typeof Answer.Type> => {
+  const echo = decodeEcho(m);
+  return echo._tag === "Some" ? { to: echo.value.cmd.to, as: echo.value.cmd.as } : {};
 };
 
 const answered = (s: WriterModel, n: number, answer: string, extra: Partial<typeof Answer.Type> = {}) => ({
@@ -114,8 +127,11 @@ export const chunkWriter = (peer: string, other: string = peer) => {
       ],
       send_ok: (s, m) => [answered(s, numbered(m.cmd), "queued"), []],
       send_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
-      send_chunks_ok: (s, m) => [chunkAnswered(s, "queued", { letters: m.value.letters, id: m.value.id }), []],
-      send_chunks_err: (s, m) => [chunkAnswered(s, m.error._tag), []],
+      send_chunks_ok: (s, m) => [
+        chunkAnswered(s, "queued", { letters: m.value.letters, id: m.value.id, ...address(m) }),
+        [],
+      ],
+      send_chunks_err: (s, m) => [chunkAnswered(s, m.error._tag, address(m)), []],
     },
   });
   return Program.make({

@@ -121,11 +121,13 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
       version: "0.0.0",
       gatewayLimit: rateLimit.limit,
       gatewayWindow: rateLimit.window,
+      // P39 slice 3: no hands key is set, the person's default.
+      handsTarget: null,
     },
     origins: {
+      // Every declared setting this recipe does not name comes from its default.
       ...defaults.origins,
       "instance.port": origin,
-      "fabrika-version": Origin.cases.default.make({}),
       "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
       "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
     },

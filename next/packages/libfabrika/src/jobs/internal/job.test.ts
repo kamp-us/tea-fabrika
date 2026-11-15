@@ -3,6 +3,11 @@
 // phase the fold has reached, so a retry repeats the saved request, a start names the real
 // assignment or a near miss of it, and a finish answers a real start. The expected state is this
 // file's own reading of the plan's states table, never the machine.
+//
+// P39 slice 3 (ticket 1040), J1: `collect` is legal only in `finished`, once, by the requesting
+// process; `collected` never leads back to execution. The walk reaches `collected` and keeps playing
+// every take, start and finish there. Plants (after build): accept `collect` in `started`, or let
+// another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as fc from "fast-check";
@@ -24,7 +29,7 @@ const RUNS = { seed: 119120, numRuns: 100 };
 
 type Model = (typeof job)["model"]["Type"];
 type Msg = (typeof job)["msg"]["Type"];
-type Phase = "absent" | "requested" | "assigned" | "started" | "finished";
+type Phase = "absent" | "requested" | "assigned" | "started" | "finished" | "collected";
 
 const init = (): Model => job.init(null, undefined)[0];
 const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
@@ -36,7 +41,11 @@ type World = {
   executor?: Executor;
   execution?: string;
   result?: Result;
+  collection?: Collection;
 };
+
+/** Who took a finished job's result, and the answer letter it went in. */
+type Collection = { readonly process: string; readonly letter: string };
 
 const Cell = fc.record({
   move: fc.nat(),
@@ -45,6 +54,8 @@ const Cell = fc.record({
   execution: fc.stringMatching(/^[a-z0-9]{1,12}$/),
   connection: fcTypeId("connection"),
   result: fcResult,
+  stranger: fcTypeId("process"),
+  letter: fc.stringMatching(/^[a-z0-9]{1,8}$/),
 });
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
@@ -74,11 +85,17 @@ type Move =
   | "finish_ok"
   | "finish_equal"
   | "finish_other"
-  | "finish_wrong";
+  | "finish_wrong"
+  | "collect_ok"
+  | "collect_again"
+  | "collect_conflict"
+  | "collect_other"
+  | "collect_early";
 
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
   const s = world.phase;
-  const owned = s === "assigned" || s === "started" || s === "finished";
+  const done = s === "finished" || s === "collected";
+  const owned = s === "assigned" || s === "started" || done;
   const can: Record<Move, boolean> = {
     request_new: s === "absent",
     early: s === "absent",
@@ -90,12 +107,17 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     take_lacking: s !== "absent",
     out_of_order: s === "requested" || s === "assigned",
     start_ok: s === "assigned",
-    start_again: s === "started" || s === "finished",
+    start_again: s === "started" || done,
     start_wrong: owned,
     finish_ok: s === "started",
-    finish_equal: s === "finished",
-    finish_other: s === "finished",
+    finish_equal: done,
+    finish_other: done,
     finish_wrong: owned,
+    collect_ok: s === "finished",
+    collect_again: s === "collected",
+    collect_conflict: s === "collected",
+    collect_other: done,
+    collect_early: !done,
   };
   return moves.filter((move) => can[move]);
 };
@@ -122,7 +144,11 @@ const expected = (world: World) => {
     return State.cases.started.make({ request, assignment });
   }
 
-  return State.cases.finished.make({ request, assignment, result });
+  if (world.phase === "finished" || world.collection === undefined) {
+    return State.cases.finished.make({ request, assignment, result });
+  }
+
+  return State.cases.collected.make({ request, assignment, result, collection: world.collection });
 };
 
 /** An executor that may take the request: its target key, holding every capability it needs. */
@@ -222,6 +248,31 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
         world,
         refuse("wrong_execution"),
       ];
+    case "collect_ok": {
+      const collection = { process: request.process, letter: `${request.id}/answer` };
+      const next = { ...world, phase: "collected" as const, collection };
+      return [{ type: "collect", collection: copied(collection) }, next, { answer: "accepted" }];
+    }
+    case "collect_again":
+      return [{ type: "collect", collection: copied(world.collection ?? { process: "", letter: "" }) }, world, same];
+    case "collect_conflict": {
+      // The same process names another letter: one result goes in one answer letter.
+      const collection = { process: request.process, letter: `${request.id}/answer/${cell.letter}` };
+      return [{ type: "collect", collection }, world, refuse("conflict")];
+    }
+    case "collect_other": {
+      // Another process generation, such as the successor of a restart, never takes this result.
+      const process = cell.stranger === request.process ? `${request.process}x` : cell.stranger;
+      return [
+        { type: "collect", collection: { process, letter: `${request.id}/answer` } },
+        world,
+        refuse("wrong_process"),
+      ];
+    }
+    case "collect_early": {
+      const collection = { process: request.process, letter: `${request.id}/answer` };
+      return [{ type: "collect", collection }, world, refuse(world.phase === "absent" ? "not_found" : "wrong_state")];
+    }
   }
 };
 
@@ -278,6 +329,14 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
 
 const LIFE: ReadonlyArray<Move> = ["request_new", "take_ok", "start_ok", "finish_ok"];
 
+const COLLECT: ReadonlyArray<Move> = [
+  "collect_ok",
+  "collect_again",
+  "collect_conflict",
+  "collect_other",
+  "collect_early",
+];
+
 describe("P39 slice 1: the job machine", () => {
   law(
     "L2: an equal request repeats; changed bytes under the same id are refused and the first request stays",
@@ -331,5 +390,26 @@ describe("P39 slice 1: the job machine", () => {
       "finish_other",
     ],
     ["request_new", "take_ok", "start_ok", "finish_ok", "take_again", "finish_equal"],
+  );
+  law(
+    "J1: collect is legal only in finished, once, by the requesting process, and collected never leads back to execution",
+    [...LIFE, ...COLLECT, "take_again", "start_again", "start_wrong", "finish_equal", "finish_other", "finish_wrong"],
+    [
+      "collect_ok@finished",
+      "collect_again@collected",
+      "collect_conflict@collected",
+      "collect_other@finished",
+      "collect_other@collected",
+      "collect_early@absent",
+      "collect_early@requested",
+      "collect_early@assigned",
+      "collect_early@started",
+      "take_again@collected",
+      "start_again@collected",
+      "start_wrong@collected",
+      "finish_equal@collected",
+      "finish_other@collected",
+      "finish_wrong@collected",
+    ],
   );
 });
