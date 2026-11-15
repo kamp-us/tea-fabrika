@@ -1,4 +1,4 @@
-// Ticket 1041, next/: L1 and L2 of the pipe plumbing plan (docs/plan/lanes/t1041-PLAN.md), written
+// Ticket 1041, next/: L1 and L2 of the pipe plumbing plan (docs/plan/quests/t1041-PLAN.md), written
 // before the build. A large output goes to its reader as letters of at most `mail.chunk` bytes.
 //
 // The contract these laws pin, from the plan's "The chunked send":

@@ -566,11 +566,21 @@ it("format: a red run's body names the commit range since the last green run, th
 
 type Call = { method: string; url: string; body: unknown; auth: string | undefined };
 
+/** An open issue as the issues list gives it, cut to the fields the report reads. */
+type Listed = { number: number; title: string };
+
 /**
- * A fake GitHub: the run's jobs as the jobs API answers them, an open issue or none, a last green
- * run or none, and every call recorded.
+ * A fake GitHub: the run's jobs as the jobs API answers them, the report's own open issue or none,
+ * a last green run or none, and every call recorded. `others` are open issues with the same label
+ * that are not the report's, as the daily speed check's (0541), listed before the report's own.
  */
-const fake = (jobs: unknown, open: number | null, last: string | null, failing: readonly string[] = []) => {
+const fake = (
+  jobs: unknown,
+  open: number | null,
+  last: string | null,
+  failing: readonly string[] = [],
+  others: readonly Listed[] = [],
+) => {
   const calls: Call[] = [];
   const send = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
     calls.push({
@@ -584,8 +594,9 @@ const fake = (jobs: unknown, open: number | null, last: string | null, failing: 
     const json = path.startsWith("issues?")
       ? [
           // A pull request with the label is in the issues list too, and is never the report's.
-          { number: 1, pull_request: {} },
-          ...(open === null ? [] : [{ number: open }]),
+          { number: 1, title: scheduled.TITLE, pull_request: {} },
+          ...others,
+          ...(open === null ? [] : [{ number: open, title: scheduled.TITLE }]),
         ]
       : path.startsWith("actions/workflows/")
         ? { workflow_runs: last === null ? [] : [{ head_sha: last }] }
@@ -738,6 +749,78 @@ it("property: an error from GitHub fails the report, so a red run's issue never 
     ),
     options,
   );
+});
+
+// The daily speed check's issue carries the same label (0541), with its own title (`TITLE` in
+// `.agents/skills/lead/scripts/ci/Speed.ts`, written here again so this file reads no lead script).
+const SPEED = "CI speed: a stage is over its goal";
+
+it("property: the report acts only on the open issue with its own title, never on the speed check's, which it leaves untouched", async () => {
+  // Plant: the report takes the first open `ci-scheduled` issue as its own, as before (red: on
+  // 2026-11-15 a red main commented on the speed issue and opened none, and a green run would have
+  // closed the speed issue).
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom("red", "green"),
+      fc.integer({ min: 2, max: 4999 }),
+      fc.option(fc.integer({ min: 5000, max: 9999 }), { nil: null }),
+      async (given, speed, own) => {
+        const { calls, send } = fake(answer([]), own, null, [], [{ number: speed, title: SPEED }]);
+        const api = scheduled.github(env, send)!;
+        const needed = { next: { result: given === "red" ? "failure" : "success" } };
+        const { result, action } = await scheduled.report({ needs: needed, reports: [], env, api });
+        const writes = calls
+          .filter((c) => c.method !== "GET")
+          .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
+
+        expect(result).toBe(given);
+        expect(writes.some((w) => w.split(" ")[1]?.split("/")[1] === String(speed))).toBe(false);
+
+        if (given === "red" && own === null) {
+          expect(action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
+          expect(writes).toEqual(["POST labels", "POST issues"]);
+        } else if (given === "red") {
+          expect(action).toMatchObject({ _tag: "comment", number: own });
+          expect(writes).toEqual([`POST issues/${own}/comments`]);
+        } else if (own === null) {
+          expect(action._tag).toBe("none");
+          expect(writes).toEqual([]);
+        } else {
+          expect(action).toMatchObject({ _tag: "close", number: own });
+          expect(writes).toEqual([`POST issues/${own}/comments`, `PATCH issues/${own}`]);
+        }
+      },
+    ),
+    options,
+  );
+});
+
+it("pinned: 2026-11-15, a red main with only the speed issue open opens its own issue, and a green run then leaves the speed issue open", async () => {
+  // pinned: the run whose red report went onto the speed issue as a comment. Plant: the old reader
+  // (red: a comment on issue 1350, and no new issue; then a close of 1350).
+  const speed = { number: 1350, title: SPEED };
+  const red = fake(answer([]), null, null, [], [speed]);
+  const opened = await scheduled.report({
+    needs: { next: { result: "failure" } },
+    reports: [],
+    env,
+    api: scheduled.github(env, red.send)!,
+  });
+  expect(opened.action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
+  expect(red.calls.find((c) => c.method === "POST" && c.url.endsWith("/issues"))?.body).toMatchObject({
+    title: scheduled.TITLE,
+    labels: [scheduled.LABEL],
+  });
+
+  const green = fake(answer([]), null, null, [], [speed]);
+  const closed = await scheduled.report({
+    needs: { next: { result: "success" } },
+    reports: [],
+    env,
+    api: scheduled.github(env, green.send)!,
+  });
+  expect(closed).toEqual({ result: "green", action: { _tag: "none" } });
+  expect(green.calls.filter((c) => c.method !== "GET")).toEqual([]);
 });
 
 it("scenario: with no token, repository, workflow file or run id, no GitHub reader is made", () => {

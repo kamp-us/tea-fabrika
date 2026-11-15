@@ -57,7 +57,7 @@ test:
   - fabrika's own part is a runner inside the box and the host's side of the
     line format. The program's code is the same in all three.
   - Requirement (owner, 2026-11-09): the `Sandbox` service removes a job's box and its files when
-    the job's lane lands, saving its work first; no person cleans up or frees disk
+    the job's quest lands, saving its work first; no person cleans up or frees disk
     ([0019](../../.decisions/0019-nothing-stale.md)).
   - A program already has a command line's shape
     ([tea-program](./tea-program.md)): flags are argv, inputs are stdin,
@@ -257,5 +257,5 @@ The doubt is the edges nobody has run yet, listed below.
 
 - A program or harness that cannot work when only its inputs, outputs and the
   allowed Cmds cross.
-- A box start that costs too much on a real lane. 128 measured about a third of
+- A box start that costs too much on a real quest. 128 measured about a third of
   a second, about half of it Node loading `@kampus/fabrika`.

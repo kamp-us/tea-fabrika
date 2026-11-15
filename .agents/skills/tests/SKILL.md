@@ -129,5 +129,5 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
   the build's file is written and named in the report as "after build", and runs at review.
 - Hold `done` for a part your box cannot do. Work until every part this box allows is done. A
   part that needs another step's code, a typecheck or `--changed` is written, named in the report
-  as "after build" or "lead runs it", and does not block `done`. Never send the lane to tests.
+  as "after build" or "lead runs it", and does not block `done`. Never send the quest to tests.
 - Commit a plant test.

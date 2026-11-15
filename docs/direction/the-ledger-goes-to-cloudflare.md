@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-10-25: the goal, and no central service; access starts from an invitation; the first version rides out a wifi blip, long offline waits; one Worker per project, its name in the project's fabrika.toml, kept safe by Alchemy's retain and not by a check of our own (2026-10-25); a lease's fence stays good until someone newer claims, Kafka's rule, with the 30 s lease kept (2026-10-25); the rest proposed"
-summary: "Two people share one fabrika, and their agents talk across two machines. No central service: each ledger is one Durable Object, and its members are facts on it. The first version: connect, log in as a GitHub login, invite. Leans: the door stamps every writer; a person proves who they are by signing with an SSH key GitHub publishes; an agent holds a key its person signed and never writes an answer. Each desk stays on its laptop, the tail moves to the WebSocket, agents talk in threads both people can read, in A2A's words over the ledger (not tied to tickets, 2026-11-05), about $1 a month on top of the plan. One object per lane later. The Door is being built."
+summary: "Two people share one fabrika, and their agents talk across two machines. No central service: each ledger is one Durable Object, and its members are facts on it. The first version: connect, log in as a GitHub login, invite. Leans: the door stamps every writer; a person proves who they are by signing with an SSH key GitHub publishes; an agent holds a key its person signed and never writes an answer. Each desk stays on its laptop, the tail moves to the WebSocket, agents talk in threads both people can read, in A2A's words over the ledger (not tied to tickets, 2026-11-05), about $1 a month on top of the plan. One object per quest later. The Door is being built."
 ---
 
 # The ledger goes to Cloudflare, for two people
@@ -113,7 +113,7 @@ app talks to one server. The owner settled on the lines above.
 **Decided 2026-10-25: a ledger server is the whole storage layer, made of many
 Durable Objects, used fully from the start.** One object per project holds the
 shared work. One object per person holds that person's layout, workspaces and
-settings, so two people's desks stay apart on one server. One per lane may
+settings, so two people's desks stay apart on one server. One per quest may
 come too. This replaces section 9's lean of one object first. Experiments 144,
 real Cloudflare measured from a laptop, and 145, the many-objects shape in
 Miniflare, are running to settle the details.
@@ -451,7 +451,7 @@ here. A person's own screen lives in that person's object on the same server.
 // A sketch. One server per project, local or remote; many objects inside it.
 const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 
-//   project/<id>      shared work: tickets, lanes, asks, agents' talk, members
+//   project/<id>      shared work: tickets, quests, asks, agents' talk, members
 //   person/<id>       one person's desk, workspaces, tsh history, settings; open to that person only
 
 // A program is handed one object's ledger and never learns where it lives.
@@ -462,8 +462,8 @@ const server = connected ? layerHttp({url}) : layerLocal({home}); // never both
 |---|---|---|
 | Tickets: filed, edited, commented, closed, reopened | shared | Both people work the same tickets. |
 | Asks and their answers, an approval and the text it covers | shared | Either person may answer; the answer must be stamped. |
-| Lanes, claims (leases), fences, released | shared | The referee must be one place, or two agents take one ticket. |
-| Stage facts and inboxes (`pipeline/ticket/…`) | shared | The ticket's timeline is the lane's one view, for both. |
+| Quests, claims (leases), fences, released | shared | The referee must be one place, or two agents take one ticket. |
+| Stage facts and inboxes (`pipeline/ticket/…`) | shared | The ticket's timeline is the quest's one view, for both. |
 | Agents' names and their talk (section 10) | shared | Agents on two machines talk through the ledger. |
 | A run's beats (`runs/<run>/beats`) | shared | One small row per step: turns, last tool, waits on a person or not. Either person sees what an agent is doing, from any machine, later. The ticket's fold never reads them ([what a ticket shows](./what-a-ticket-shows.md)). |
 | A run's full log | shared, in `Blobs` (R2), by hash | "Open log" works from any machine. A log is MBs; a Durable Object row stops at 2 MB ([limits](https://developers.cloudflare.com/durable-objects/platform/limits/)). The ledger keeps only the hash. |
@@ -530,7 +530,7 @@ Other shapes, weighed:
 - **One ledger per person, shared by sync** → the vision in the sync note. It
   needs signed lines, gossip and a referee elected among computers. Too much for
   the first two people. Kept open, behind the same `Ledger` service.
-- **One Durable Object per ticket or lane** → section 9.
+- **One Durable Object per ticket or quest** → section 9.
 - **A central list of users across ledgers** → no, by the decision above.
 
 **Lean: a project is one Durable Object; created, invited, joined and removed
@@ -575,9 +575,9 @@ type Link =
     deduped by message id, so sending twice lands once. The tracker keeps
     them in its `saving` list today; they go out when the link is back.
   - **No new claim, no new agent.** The sync note's rule for a split: read and
-    plan, start nothing. A running lane whose lease runs out is fenced, as it
-    is today. A lane loses its ticket after about 30 s away (the claim's ttl).
-    That is honest, and costs a restart of that lane.
+    plan, start nothing. A running quest whose lease runs out is fenced, as it
+    is today. A quest loses its ticket after about 30 s away (the claim's ttl).
+    That is honest, and costs a restart of that quest.
   - **The desk stays on screen.** On the laptop's own server it never goes
     away. On a remote one, its changes wait like any other write. Starting
     the app while away is the open question in section 3.
@@ -588,7 +588,7 @@ type Link =
 **Lean: the tail on the WebSocket doorbell, writes held by id, no new work
 while away.** Why: the code exists, it is the industry's shape, and the poll
 is what costs most. Cost: the tracker's poll Sub moves to `tail`. The window
-needs one "away" banner. A lane can lose its ticket on a long drop. **How
+needs one "away" banner. A quest can lose its ticket on a long drop. **How
 sure: 80%.** The doubt is a laptop that sleeps: how often its socket comes back
 broken. The experiment below measures it.
 
@@ -596,7 +596,7 @@ broken. The experiment below measures it.
 stays offline for long waits.**
 
 ```ts
-// A sketch, to be measured in experiment 149. A lane's own view of its lease.
+// A sketch, to be measured in experiment 149. A quest's own view of its lease.
 type Lease =
 	| {state: "held"; until: number} // renewed on time
 	| {state: "jeopardy"; since: number} // a renew failed: keep working, hold outside writes
@@ -604,10 +604,10 @@ type Lease =
 ```
 
 - **Why blips come first.** Every laptop's wifi drops for seconds or minutes.
-  Today that costs a lane its ticket after about 30 s and a restart. Long
+  Today that costs a quest its ticket after about 30 s and a restart. Long
   offline work matters less: an agent needs Anthropic's servers, so a laptop
   with no internet cannot run agent steps anyway.
-- **What "rides out" means.** The lane keeps its ticket and does not restart.
+- **What "rides out" means.** The quest keeps its ticket and does not restart.
   Its writes land once and in order. Nothing outside happens twice. The window
   says plainly what happened.
 - **How it is found.** Experiment 149 measures today's behaviour on drops from
@@ -617,10 +617,10 @@ type Lease =
   ([Burrows, OSDI 2006](https://research.google/pubs/the-chubby-lock-service-for-loosely-coupled-distributed-systems/)).
   It also counts how often this laptop's link really drops.
 - **Hosts can be anywhere either way.** Every host uses the project's one
-  ledger, so a lane on the laptop, one on Cloudflare and one on another
+  ledger, so a quest on the laptop, one on Cloudflare and one on another
   person's laptop are already one record. Offline work is the only thing a
   branch-and-merge ledger would add.
-- **Kept for later: a checked-out lane.** The lane takes its claim online with
+- **Kept for later: a checked-out quest.** The quest takes its claim online with
   a long ttl. Offline, it writes only its own one-writer streams to an outbox.
   It uploads them in order under the same fence: a fast-forward, or nothing.
   A person can free the ticket, and that fences the upload. It is LiveStore's
@@ -636,7 +636,7 @@ the 30 s lease. The ledger's part is Kafka's rule: a fence stays good until
 someone newer claims, and the clock plays no part in it.**
 
 ```ts
-// A sketch. The lane on tracker #18 builds it and measures it as experiment 151.
+// A sketch. The quest on tracker #18 builds it and measures it as experiment 151.
 // The ledger:
 //   a fenced write        taken while its fence is the newest one given out for that lease, at any time
 //   a claim past the end  takes the lease at once, with a bigger fence: a dead host goes as fast as today
@@ -660,7 +660,7 @@ someone newer claims, and the clock plays no part in it.**
   expiry is final change, written by an agent that does not build the fix.
 - **How sure: 70%.** Rule B never ran in experiment 149. The rerun settles it.
 - **Built and measured, 2026-10-26: [experiment 151](../../experiments/151-patient-lease.md).**
-  On the real code, with the expiry job at 1 s, every drop up to 5 minutes kept the lane with
+  On the real code, with the expiry job at 1 s, every drop up to 5 minutes kept the quest with
   no restart while nobody else wanted it (474 of 474), a longer drop with a second host waiting
   went to that host cleanly (236 of 236), a dead host's ticket frees as fast as before, and
   nothing landed twice in 1,090 runs. A late renew writes `lease_resumed`. **How sure now:
@@ -685,8 +685,8 @@ const hash = sha256(rows.map((r) => JSON.stringify([r.pos, r.stream, r.rev, r.wr
 ```
 
 - **Stop, copy, check, switch.** There are no live leases to move if every
-  lane has stopped first.
-  1. The owner stops every lane. The host stops. The laptop's file is now
+  quest has stopped first.
+  1. The owner stops every quest. The host stops. The laptop's file is now
      still.
   2. A script reads `events` in `pos` order, and the other tables
      (`names`, `leases`, `jobs`, `monitors`, `links`, `migrations`) as they
@@ -716,7 +716,7 @@ const hash = sha256(rows.map((r) => JSON.stringify([r.pos, r.stream, r.rev, r.wr
   two people. It must not come from a test made from somewhere else.
 
 **Lean: stop, copy in `pos` order, check by hash, switch.** Why: a still file
-and an exact copy cannot lose a fact. Cost: every lane stops for minutes. One
+and an exact copy cannot lose a fact. Cost: every quest stops for minutes. One
 `import` method, which must be off once the copy is done. **How sure: 85%.**
 The doubt: no row has crossed from node:sqlite to a deployed object yet.
 
@@ -802,7 +802,7 @@ The Workers Paid plan ($5 a month) is already paid for, so the question is
 only what comes on top. Assumed load for two people. Each is a guess until the
 experiment counts it:
 
-- 4 lanes at once per person, 8 hours a day. A lease renews every 10 s (ttl
+- 4 quests at once per person, 8 hours a day. A lease renews every 10 s (ttl
   30 s, `claims.ts`): 23,000 renews a day.
 - 20 agent runs a day in all, about 500 ledger calls each: 10,000 a day.
 - One beat per tool call, at the high end of 50 to 200 per run: 4,000 a day.
@@ -833,7 +833,7 @@ experiment counts it:
 The decision at the top moves this work earlier. The sync note's "Nothing else
 moves early. The real run comes first." no longer holds for it.
 
-- **Lane 2, the host running apart,** is built and in review. This note does not
+- **Quest 2, the host running apart,** is built and in review. This note does not
   touch it. It needs one thing from it: the host is the only process that
   talks to the ledger, so sessions live in one place.
 - **The Door is built and in review.** It is the Door, which stamps writers and
@@ -847,22 +847,22 @@ moves early. The real run comes first." no longer holds for it.
   - `Author` in the app comes from asking the door, not a constant.
   - Tests in Miniflare: a forged writer is stamped over, an agent's answer is
     refused, an unknown or removed login is refused. No deploy, no money.
-- **Lane 3, app state on the ledger and restore.** One ask of it: put the
+- **Quest 3, app state on the ledger and restore.** One ask of it: put the
   app's own state, `desk/`, `tsh/` and `host/`, in the person's object, and
   hand programs the project's object. Then connecting a project in section 3 is a
   Layer change, not a rewrite.
 - **Then, in order:** the deploy experiment (144, the owner approved it), `connect`
   and the invite in the app, one agent message across two laptops (section
   10), the tracker's poll moved to the tail, and the whole-ledger copy.
-- **Lane 4, the jump list,** does not wait on any of it.
+- **Quest 4, the jump list,** does not wait on any of it.
 
-## 9. One object for the whole ledger, or one per lane
+## 9. One object for the whole ledger, or one per quest
 
 *Replaced the same day:* the owner chose many objects from the start (the
 decision at the top). This section is kept as it was argued, with its lean of
 one object first. What it found a split costs still holds.
 
-Section 4 makes a ledger one object. This section asks whether each lane, or
+Section 4 makes a ledger one object. This section asks whether each quest, or
 each ticket, should get its own object with its own ledger, for real data
 isolation. Cloudflare's own rules lean that way: "Create one Durable Object
 per logical unit that needs coordination" and "Do not create a single 'global'
@@ -872,11 +872,11 @@ while children handle their own state independently"
 ([Rules of Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/)).
 
 ```ts
-// A sketch. The split, if it comes: a parent per ledger, a child per lane.
+// A sketch. The split, if it comes: a parent per ledger, a child per quest.
 //
 //   ledger object "acme"          the ticket list and each ticket's top line, ticket numbers,
 //                                 "waits on you" across all tickets, members, spend caps
-//   lane object "acme#t-41"       the lane's facts and inbox, its claim and lease, its beats
+//   quest object "acme#t-41"      the quest's facts and inbox, its claim and lease, its beats
 //
 // The child tells the parent one small line after each write that changes the top line.
 const TopLine = Schema.Struct({
@@ -888,8 +888,8 @@ const TopLine = Schema.Struct({
 });
 ```
 
-- **What lives in a lane's object.**
-  - The lane's facts and inbox (`pipeline/ticket/<t>/facts`, `/inbox`), the
+- **What lives in a quest's object.**
+  - The quest's facts and inbox (`pipeline/ticket/<t>/facts`, `/inbox`), the
     tracker's ticket stream, its claim and lease, its fences, its beats.
   - The lease is one object's job, so the claim's compare-and-set still has
     one referee. Two agents on one ticket still cannot both win.
@@ -906,26 +906,26 @@ const TopLine = Schema.Struct({
     can be passed by the turns in flight.
   - The cost: each write that moves a top line is two requests, not one. The
     parent's index can lag the child by one message.
-- **A fact that spans two lanes.** A duplicate ("same as t-12"), a ruling for
+- **A fact that spans two quests.** A duplicate ("same as t-12"), a ruling for
   two tickets, a plan with child tasks.
-  - **The fact has one home, and the other lane gets a send** → lean. That is
+  - **The fact has one home, and the other quest gets a send** → lean. That is
     today's shape already: every name has an open inbox, deduped by message
-    id. The home writes its fact. The other lane gets a message with the same
+    id. The home writes its fact. The other quest gets a message with the same
     id, sent again until it lands. No transaction spans two objects.
   - **Both writes in one transaction** → not possible across Durable Objects.
     Each object is its own database.
-  - **The parent holds it, the lanes read it** → fits a fact about many
-    tickets at once, such as a project's plan. Not for a lane's own work.
-- **An agent's key scoped to one lane.**
+  - **The parent holds it, the quests read it** → fits a fact about many
+    tickets at once, such as a project's plan. Not for a quest's own work.
+- **An agent's key scoped to one quest.**
   - **Yes, at the door, even with one object.** On a claim, the door gives
-    the lane a short-lived token. It names the lane's prefix and its fence,
+    the quest a short-lived token. It names the quest's prefix and its fence,
     is signed with a secret only the Worker holds, and ends with the lease.
     The agent's writes go with it, and the door refuses any stream outside
     that prefix. It is a capability (a key that says what it opens), the idea
     of Google's macaroons
     ([Google Research](https://research.google/pubs/macaroons-cookies-with-contextual-caveats-for-decentralized-authorization-in-the-cloud/)).
-  - With a split, the door also routes that token to the lane's object only.
-    The agent cannot even name another lane's data.
+  - With a split, the door also routes that token to the quest's object only.
+    The agent cannot even name another quest's data.
 - **Could today's `Ledger` route a stream to its own object, behind the same
   interface? Partly. It is a Layer change for most calls, but not for all.**
   This comes from reading `host/ledger.ts` and `host/rules.ts`.
@@ -957,25 +957,25 @@ const TopLine = Schema.Struct({
 split.** Why: two people and their agents are far under one object's limit.
 The code runs on one object today. The split costs three interface changes,
 and the laws must hold again across objects. Write isolation, the part that
-guards most, comes from lane tokens at the door with no split. **How sure:
+guards most, comes from quest tokens at the door with no split. **How sure:
 75%.** The doubt is data isolation at rest. With one object, a bug in the
-rules could let one lane read or write another's rows. Only a split stops
+rules could let one quest read or write another's rows. Only a split stops
 that.
 
-| | Start with one object | Start split, one per lane |
+| | Start with one object | Start split, one per quest |
 |---|---|---|
 | Build | The Door, nothing more | The Door, plus fences with a home, a parent index, OTP's calls as messages, and the laws again |
 | Requests | One per call | About two per write that moves a top line |
-| Isolation | Writes, by lane tokens at the door. Data, shared in one database | Writes and data, each lane its own database |
+| Isolation | Writes, by quest tokens at the door. Data, shared in one database | Writes and data, each quest its own database |
 | Moving later | One object's rows split out by prefix; `pos` changes, so keep the old one beside it | Nothing to move |
 | Bill at two people | Under $1 on top (section 7) | About the same: more objects, each asleep most of the time |
 
 To keep a later split cheap, three rules now. They cost nearly nothing:
 
-- A lane's facts stay under its own name's prefix. That is already true.
+- A quest's facts stay under its own name's prefix. That is already true.
 - A new read across tickets goes through one place (the tracker's list), so
   that place can become the parent's index.
-- A fact about two lanes has one home and a send to the other, never two
+- A fact about two quests has one home and a send to the other, never two
   writes that must agree.
 
 ## 10. How agents talk to each other across two people
@@ -1051,7 +1051,7 @@ const Talk = Schema.Struct({
   person's reviewer is `agents/gh:5678/reviewer`. Its registration carries a
   small card, A2A's fields cut down: name, what it does, its person. Listing
   `agents/` is the directory. `whereis` says whether it is running now.
-- **By lane: `lane/<ticket>/<stage>`** → good for the agent working one
+- **By quest: `quest/<ticket>/<stage>`** → good for the agent working one
   ticket. It is found from the ticket. It does not cover an agent that serves
   many tickets.
 - **By role only, any person's host may hold it** → that is a work queue, not
@@ -1121,7 +1121,7 @@ const onTalk = (talk: Talk): Cmd =>
 - **A talk is data, never an instruction above the agent's own person.** It
   lands in its thread, marked "agent for X". The model sees it
   inside a quoted block, labelled with who sent it.
-- **Code never starts a lane, a push or any outside write from a talk
+- **Code never starts a quest, a push or any outside write from a talk
   alone.** A person on the receiving side approves first, as an ask in a box
   in the thread. That approval is the supervision Meta's rule asks for.
 - **The step that reads a talk has no [C].** It gets no `CodeHostWrites`, no
@@ -1229,7 +1229,7 @@ None of these is in the first version.
   from day one with who invited whom ([Tier 3's roles](../plan/tiers.md#tier-3s-roles-owner-2026-11-07)).
   Finer roles, such as read-only members, wait for Tier 7, if they come at all.
 - More than one repository on a ledger.
-- One Durable Object per lane (section 9), and lane tokens at the door.
+- One Durable Object per quest (section 9), and quest tokens at the door.
 - Each fact signed by its writer's key, the sync note's signed lines. The SSH
   proof is the first step to it.
 - A fresh proof for each approval (a step-up check), if a host bug ever writes an
@@ -1277,7 +1277,7 @@ None of these is in the first version.
   - Old `pos` numbers change; rev stays.
   - The hash is one digest held in memory, so a project far bigger than
     today's 27 rows is untested.
-- The load in section 7 is guessed: lanes at once, calls per run, beats per
+- The load in section 7 is guessed: quests at once, calls per run, beats per
   run, rows per write and MB per log. The bill is small enough that a guess
   twice too low still costs little.
 - Reaching ssh-agent from a GUI app, and the 1Password case, are guesses.

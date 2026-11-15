@@ -68,7 +68,7 @@ twice. A claim needs "add this only if nothing new came in first", and gossip
 has no single place that can say who was first.
 
 - **Leases, not claims for ever.** A claim lasts some minutes and is renewed
-  while the agent works. A dead lane's claim runs out by itself; nobody has to
+  while the agent works. A dead quest's claim runs out by itself; nobody has to
   adopt it by hand, as today's fabrika needs.
 - **A referee grants leases.** Any always-on host can be it; the team picks
   which one, and another takes over when it is gone (leader election, kept
@@ -231,7 +231,7 @@ them. The desktop has a note of its own. Config for every layer is one
   presence. Its delivery is at-most-once; a ledger send is at-least-once,
   made safe by its id. The doorbell already is one (`durable-object.ts`).
   The rule: **show it, never save it, never decide with it.** A window may
-  draw who is online; no lane, claim or ledger write ever depends on a frame
+  draw who is online; no quest, claim or ledger write ever depends on a frame
   from this lane, so losing one breaks nothing. It is not local state: local
   state stays in one program on one computer, and this lane moves between
   computers. Neither goes in the ledger.

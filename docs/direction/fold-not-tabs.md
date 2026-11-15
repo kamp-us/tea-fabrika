@@ -261,7 +261,7 @@ inputs:  {id: input(TraceId, "A job's trace id ..."), ticket: input(TicketNumber
 
 Each still runs alone: `ticket --ticket 7` and `trace --ticket 7` take the
 ticket as a flag, and with no flag they wait for one on their input. So
-`tracker | ticket | trace` shows the picked ticket's lanes, and a step there
+`tracker | ticket | trace` shows the picked ticket's quests, and a step there
 opens to its job's spans. A ticket's writes name their
 ticket (`{kind: "comment", ticket: 7, body}`), so a comment typed on #7 never
 lands on #3 picked after it.

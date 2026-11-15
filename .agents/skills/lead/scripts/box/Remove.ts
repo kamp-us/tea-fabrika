@@ -699,7 +699,7 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
 
   const checked = Effect.gen(function* () {
     const boxes = yield* loose(normal(path.resolve(folders.boxes)));
-    // The tree is in BOXES/box (lane.ts boxTree); a box made before that layout has it in BOXES.
+    // The tree is in BOXES/box (quest.ts boxTree); a box made before that layout has it in BOXES.
     const current = joined(boxes, "box");
     const old = !(yield* d.lexists(joined(current, name))) && name !== "box" && (yield* d.lexists(joined(boxes, name)));
     const trees = old ? boxes : current;

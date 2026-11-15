@@ -150,7 +150,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
 
   // Plants: ask the merge while the check still runs; wait past the limit; never read again.
   it.effect(
-    "scenario: a lane's wait reads the required check again until it ends, asks only on green, and gives up at its limit with nothing asked",
+    "scenario: a quest's wait reads the required check again until it ends, asks only on green, and gives up at its limit with nothing asked",
     () =>
       Effect.gen(function* () {
         const waited = (polls: ReadonlyArray<ChecksTest.Poll>) =>

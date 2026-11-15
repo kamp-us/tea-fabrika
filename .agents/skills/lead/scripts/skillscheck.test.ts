@@ -53,14 +53,14 @@ const sections: Record<string, Record<string, string[]>> = {
     ],
     "9. **Land it**": [
       "After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.",
-      "The sweep removes the lane's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
+      "The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
       "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
       "Print one line per retained item and continue.",
       "Saved plans, reports, logs and state/ remain.",
       exam[1]!,
       exam[2]!,
     ],
-    "## Lane brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path>`."],
+    "## Quest brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <quest> --tree <path>`."],
   },
 };
 
@@ -339,13 +339,13 @@ describe("skillscheck, today's tooling", () => {
 
 describe("skillscheck brief templates, today's tooling", () => {
   // Ticket 652: the permission check refuses a subagent the lead key, so a brief template that
-  // hands an agent a lead-only step stops the lane. Each lead-only command, in any template, fails;
+  // hands an agent a lead-only step stops the quest. Each lead-only command, in any template, fails;
   // an unsigned lead commit and the ready handover stay allowed.
   it("T652 property: a lead-only step in any brief template fails, and the unsigned lead commit passes", () => {
     fc.assert(
       fc.property(
         fc.record({
-          template: fc.constantFrom("## Review brief template\n", "## Lane brief template\n"),
+          template: fc.constantFrom("## Review brief template\n", "## Quest brief template\n"),
           space: fc.constantFrom(" ", "\n  "),
         }),
         ({ template, space }) => {
@@ -358,7 +358,7 @@ describe("skillscheck brief templates, today's tooling", () => {
               ["node .agents/skills/lead/scripts/botpush.mjs . fabrikalfa/x", 1],
               ["node .agents/skills/lead/scripts/land.ts queue 1", 1],
               ["node .agents/skills/lead/scripts/land.ts merged 1", 1],
-              ["node .agents/skills/lead/scripts/land.ts run lane 1", 1],
+              ["node .agents/skills/lead/scripts/land.ts run quest 1", 1],
               ["stepcommit.sh lead 1 subject file", 1],
               ["stepcommit.sh --commit-only lead 1 subject file", 0],
               ["Say ready to land with the state file.", 0],

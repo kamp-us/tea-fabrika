@@ -22,7 +22,7 @@ case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --o
 [ "$#" = 1 ] || { echo "usage: plancheck.sh [--draft|--approved] <plan.md>" >&2; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-# A lane runs this script from a pin: a copy of `.agents/` at one commit, which is no git checkout
+# A quest runs this script from a pin: a copy of `.agents/` at one commit, which is no git checkout
 # (ticket 835). The plan is checked against the repo, so from a pin the repo is MAIN, the main
 # checkout the pinned process was started with.
 root="$here/../../../.."
@@ -113,7 +113,7 @@ for line in raw:
     lines.append(line)
 bad = []
 # Version 3 adds the Estimate line. A new draft writes the current version; a plan approved at an
-# older one keeps passing, so the lane it started is not stranded.
+# older one keeps passing, so the quest it started is not stranded.
 CURRENT, KNOWN = 3, ("Plancheck-Version: 2", "Plancheck-Version: 3")
 if draft == "approved":
     approval = re.fullmatch(r"Approved by the lead agent, builds (\S(?:.*\S)?); body ([0-9a-f]{12})", raw[0] if raw else "")
@@ -250,8 +250,8 @@ if draft == "owners":
     print(json.dumps(owned)); sys.exit(0)
 FORM = "`Estimate: <n> steps, $<d>`, both above zero"
 def estimate():
-    # Version 3: the Size section ends with one Estimate line, the lane's budget (.decisions/0076).
-    # The lane chain's estimateIn reads the first line anywhere, fences included, that says "estimate",
+    # Version 3: the Size section ends with one Estimate line, the quest's budget (.decisions/0076).
+    # The quest chain's estimateIn reads the first line anywhere, fences included, that says "estimate",
     # "<n> steps" and "$<d>", so any second such line is refused: it could set the backstop.
     reads = lambda l: re.search(r"\bestimate\b.*?\b\d+\s+steps?\b.*?\$\s?\d", l, re.I)
     seen = [i for i, l in enumerate(raw) if reads(l) or re.match(r"\s*estimate\s*:", lines[i], re.I)]

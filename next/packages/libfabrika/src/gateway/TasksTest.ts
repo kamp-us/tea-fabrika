@@ -17,7 +17,8 @@
 // P39 slice 4a, G1 (the list half) and G2. `tasks.list {}` answers a hands key exactly the open
 // tasks whose target is its own key, as pointers `{ id, process }`, and the `target:<key>` stream's
 // last rev; `tasks.wait { after }` answers `{ rev }` when that stream is past `after` and else parks
-// on that stream, which the next request for that key, and only that key, rings. A window or agent
+// on that stream, which the first request for that key, and only that key, whose line lands past
+// `after` rings once, at that line's rev. A window or agent
 // key is refused `not_allowed`, and params with any other field are `bad_input`. The driver keeps
 // every ring its ledger's doorbell was asked for, in `Store.rings`. Plants (after build): leave `tasks.list`
 // answering every open task of every key (G1), and take the stream name from the params (G2).
@@ -1267,7 +1268,12 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
     const saved: Array<Request> = [];
     /** The rev each key's last list answered, and how many requests for it were accepted since. */
     const seen = new Map<string, { rev: number; since: number }>();
-    /** A key whose `tasks.wait` parked after `after`, until a ring for it is seen. */
+    /**
+     * A key whose `tasks.wait` parked after `after`, until a ring for it is seen. The ledger keeps one
+     * ring row per stream, at the lowest `after` parked on it, in the store's own file, so a reopen
+     * keeps it. Revs count every line of the ledger, so a wait parked past the stream's end is rung
+     * only by the first request whose line lands past `after`, never by an earlier one.
+     */
     const parked = new Map<string, number>();
     let sequence = 0;
     const said = (cell: Cell) => ({ sentAt: cell.sentAt, seen: 0 });
@@ -1340,12 +1346,15 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         const after = parked.get(c.key.fingerprint);
         const own = rung.filter((r) => r.stream === targetStream(c.key.fingerprint));
+        // The request's pointer is now the last line of the key's stream.
+        const { rev } = yield* w.j((j) => j.forTarget(c.key.fingerprint));
+        const due = after !== undefined && rev > after;
         expect(
-          after === undefined || (own.length > 0 && own.every((r) => r.rev > after)),
-          "G2: a request for a parked key rings its stream past the parked rev",
-        ).toBe(true);
+          own.map((r) => r.rev),
+          `G2: a request for a parked key rings its stream once, at its new line's rev, when that line is past the parked rev (parked ${after}, line ${rev}); else it rings nothing`,
+        ).toEqual(due ? [rev] : []);
 
-        if (after !== undefined) {
+        if (due) {
           parked.delete(c.key.fingerprint);
           done.add("rung");
         } else {
@@ -1461,9 +1470,8 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         done.add(`role:${s.role}`);
       } else if (move === "reopen") {
+        // The ledger's ring row lives in the store's file and outlives the gateway, so `parked` stays.
         yield* w.reopen;
-        // A reopened gateway keeps no parked wait of a connection that is gone with it.
-        parked.clear();
       }
     }
   });

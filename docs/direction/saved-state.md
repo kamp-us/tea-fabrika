@@ -23,17 +23,17 @@ Its decided rules are in: [0225](../../.decisions/0225-entries-carry-what-writer
 [0230](../../.decisions/0230-replay-reruns-code-only.md).
 
 Built from [experiment 190](../../experiments/190-saved-state.md), which read about twenty makers
-and ran GGPO's sync test on today's lane, and a private page, "Saved state guidelines". Neither is a
+and ran GGPO's sync test on today's quest, and a private page, "Saved state guidelines". Neither is a
 measurement of `next/`; the one probe ran on today's version. Tags such as [g1] and [i3] are
 experiment 190's links.
 
 ```ts
-// A sketch, next/. Ticket 117's lane, kept the way this note proposes.
+// A sketch, next/. Ticket 117's quest, kept the way this note proposes.
 // S1: every entry says the last rev its writer had folded. Code fills it; the referee bounds it.
 {id: "c-3", stream: "ticket:117", pos: 9, rev: 412, arrivedAt: "23:12:04", by: "mac@owner",
  sentAt: "23:10:01", seen: 409, _tag: "commented", body: {text: "also fix the label"}}
 // S2: one law every machine runs. Stop at any step, load, go on: the same run as no stop.
-syncTest(lane, {state: Lane, msgs: laneMsgs, seed: 190});
+syncTest(quest, {state: Quest, msgs: questMsgs, seed: 190});
 // S3, branch A: a saved model carries its shape's number and a chain of named upgrades.
 // S5: the fold and the saved model disagree, so the first place they part is written down.
 {_tag: "diverged", body: {case: "fold_vs_saved", rev: 407, path: "carry.exam", fold: "5d38d582", saved: null}}
@@ -55,7 +55,7 @@ One comment, while build round 2 runs on ticket 117:
   ([Tier 1](../plan/tier-1.md#the-order-of-work), item 6). Nothing from `next/` is on main; PR 223
   has `saw` on window Msgs.
 - **Today's version:** two tryouts are offered for the self-fix plan's PR 5 (below). Today's ledger
-  gets no `seen`: today's lane keeps P5's `during`, and today's ledger goes when `next/` takes over.
+  gets no `seen`: today's quest keeps P5's `during`, and today's ledger goes when `next/` takes over.
 
 ## The shape
 
@@ -152,13 +152,13 @@ export const syncTest = <S, M, C>(machine: Machine<S, M, C>, opts: {state: Schem
 - **Why:** GGPO's sync test "will execute a 1 frame rollback for every frame of your game" and
   "raises an error if they differ" [g1]. Temporal replays a history against new code, and "Replay
   succeeds only if the Workflow Definition is compatible with the provided history" [i5].
-- **Measured, today's version:** today's lane passes it. 300 lists at seed 190, a stop at each of
+- **Measured, today's version:** today's quest passes it. 300 lists at seed 190, a stop at each of
   2,783 steps, every phase reached: 0 breaks, 88 ms. A planted field the schema drops broke 300 of
   300 ([experiment 190](../../experiments/190-saved-state.md#the-probe-ggpos-sync-test-on-todays-lane)).
 - **Where the helper lives:** decided 2026-11-01, 70% (smaller call 4), in tea's `@demlik/tea/pbt` beside `propertyInvariant`,
   taking `encode` and `decode` as plain functions, so tea takes on no convention of ours. Until tea
   ships it, a 40 to 60 line helper in libfabrika's test kit, deleted when tea has it.
-- **Today's lane laws use the same shape:** `propertyInvariant` with a law per `{prev, msg, next,
+- **Today's quest laws use the same shape:** `propertyInvariant` with a law per `{prev, msg, next,
   cmds}` (`machine.laws.test.ts:105`, `:124`), so the probe drops in as one more law file.
 - **Linear:** no Linear answer: this is a test practice, not product behavior.
 - **Elm or OTP:** Erlang's restart hands `init` the saved state; this checks that hand-off. Elm has
@@ -168,7 +168,7 @@ export const syncTest = <S, M, C>(machine: Machine<S, M, C>, opts: {state: Schem
 - **The doubt:** a model that holds a function, a Date or a cache would fail it, rightly. Fixing
   what it finds is the unknown cost. One run over `next/`'s machines after PR 223 lands settles it.
 - **Cost:** the helper, 40 to 60 lines, and one line per machine: under 0.2 agent hours.
-- **Today's ticket 117:** follows. Its lane passes.
+- **Today's ticket 117:** follows. Its quest passes.
 
 ### S3: saved state carries its shape's number and a chain of named upgrades
 
@@ -260,7 +260,7 @@ those recorded reads. An agent step's key stays P7's hand list of what its brief
 - **What holds it:** the types, and P7's property test that changing any read changes the key.
 - **The doubt:** an agent picks its own files, so the agent steps, the costly ones, keep the hand
   list. The gain is only on code steps.
-- **Cost:** 100 to 200 lines in `next/`'s lane, 0.2 to 0.35 agent hours, after that lane is designed.
+- **Cost:** 100 to 200 lines in `next/`'s quest, 0.2 to 0.35 agent hours, after that quest is designed.
 - **Lost if it waits:** nothing, if each Gather's answer is recorded, as record wide already asks.
 - **Today's ticket 117:** breaks. A step's key is its place, `intentOf("lane", number, count, step)`
   (`machine.ts:513`).
@@ -272,14 +272,14 @@ fact that last set that field in the fold.
 
 ```ts
 // A sketch. The fold notes, per field, the rev that last changed it, so the report can name it.
-{_tag: "diverged", body: {case: "fold_vs_saved", lane: "L1", rev: 407, path: "carry.exam", fold: "5d38d582", saved: null}}
+{_tag: "diverged", body: {case: "fold_vs_saved", quest: "L1", rev: 407, path: "carry.exam", fold: "5d38d582", saved: null}}
 ```
 
 - **Why:** Riot logs a value only "on frames where the value changes", because "only the first
   divergence really matters" [g5]. Factorio's report "contains both the player's and server's copy
   of the save game" [g6]. GGPO: "diff the log of the initial frame vs the log of the rollback" [g1].
-- **Tied to P6 and PR 5:** [the self-fix plan's PR 5](../plan/pipeline-self-fix.md#pr-5-a-stuck-lane-restarts-from-the-step-that-broke)
-  has the law "the fold of a lane's facts equals its saved `Held`, at every point a lane can stop",
+- **Tied to P6 and PR 5:** [the self-fix plan's PR 5](../plan/pipeline-self-fix.md#pr-5-a-stuck-quest-restarts-from-the-step-that-broke)
+  has the law "the fold of a quest's facts equals its saved `Held`, at every point a quest can stop",
   and a restart that names a field no fact proves. The report is that law's failure message in a
   test, and the same function at a live restart: write both copies before resuming, since the
   restart replaces the saved one.
@@ -288,7 +288,7 @@ fact that last set that field in the fold.
 - **Linear:** no Linear answer.
 - **Elm or OTP:** none; OTP's `sys:get_state` reads a state, it does not compare two.
 - **What holds it:** a law: on a planted mismatch, the report names the planted path and rev.
-- **The doubt:** how often the fold and the save will part on real lanes. If never, it is
+- **The doubt:** how often the fold and the save will part on real quests. If never, it is
   insurance. PR 5's law will show it.
 - **Cost:** 100 to 200 lines, 0.2 to 0.35 agent hours; about 40 of them fit in PR 5.
 - **Lost if it waits:** the two copies at the moment of a live mismatch, since the restart writes
@@ -311,7 +311,7 @@ replay folds them and re-runs code only.
 - **The doubt:** a draft whose content was deleted on a person's request cannot be replayed; that
   replay stops and says so.
 - **Cost:** the Layer, 30 to 50 lines, under 0.1 agent hours.
-- **Today's ticket 117:** half. The lane's facts keep outcomes, not drafts; a replay of 117 cannot
+- **Today's ticket 117:** half. The quest's facts keep outcomes, not drafts; a replay of 117 cannot
   re-run review on the builder's text.
 
 ## The smaller calls
@@ -353,11 +353,11 @@ All five decided 2026-11-01, each with its lean.
 
 Offered for the self-fix plan's PR 5, not filed:
 
-- **The sync test as one more lane law file:** experiment 190's script, made a law. About 70 lines,
+- **The sync test as one more quest law file:** experiment 190's script, made a law. About 70 lines,
   0.1 agent hours. It already passes.
 - **The fold law's failure names the first field, both values and the rev:** about 40 lines, 0.1
   agent hours.
-- **Not offered:** `seen` in today's ledger. Today's lane keeps `during` (PR 8).
+- **Not offered:** `seen` in today's ledger. Today's quest keeps `during` (PR 8).
 
 ## Where this differs from settled notes
 
@@ -368,7 +368,7 @@ Offered for the self-fix plan's PR 5, not filed:
 - **[Tier 1 detail](../plan/tier-1-detail.md#what-fact-is-lost-forever-if-we-dont-record-it-now):**
   "`saw` on a letter" and "the letter's `by`, `at`, `said` and `saw`" become `seen`.
 - **P5's `during` ([pipeline guidelines](./pipeline-guidelines.md)):** in `next/`, a fold over
-  `seen`. Today's lane keeps it as written.
+  `seen`. Today's quest keeps it as written.
 - **[An old host is named, then restarted](./an-old-host-is-named-then-restarted.md):** S3's
   branch A undoes "No version number on each machine" for state carried forward. That note says
   so in a dated line.
@@ -384,7 +384,7 @@ Offered for the self-fix plan's PR 5, not filed:
 | S1 `seen` | 50 to 80 | 0.1 to 0.15 | before Tier 1's first real note |
 | S2 sync test | 40 to 60, plus a line per machine | under 0.2 | with Tier 1's first machines |
 | S3 branch A | 60 to 100 | about 0.15 | with hot reload |
-| S4 declared reads | 100 to 200 | 0.2 to 0.35 | with `next/`'s lane |
+| S4 declared reads | 100 to 200 | 0.2 to 0.35 | with `next/`'s quest |
 | S5 divergence report | 100 to 200 | 0.2 to 0.35 | 40 lines in PR 5, the rest later |
 | S6 replay Layer | 30 to 50 | under 0.1 | with the first replay |
 
@@ -394,7 +394,7 @@ About 380 to 690 lines in all, under 1.3 agent hours, at experiment 187's 600 li
 
 - **Whether anyone reads `seen`.** The case for it is record wide and the data-shape rule, not a
   reader.
-- **Whether `next/`'s machines pass the sync test.** Only today's lane ran.
+- **Whether `next/`'s machines pass the sync test.** Only today's quest ran.
 - **How often a shape changes,** which is what S3 turns on. Nobody has counted.
 - **What Linear does** for a writer's sync position or a saved store's upgrade: not published.
 - **Lamdera,** the Elm-world tool most likely to back a version chain, could not be read.

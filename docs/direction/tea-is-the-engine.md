@@ -35,7 +35,7 @@ const update = (m: typeof Turn.Type, msg: Msg) =>
 
 ## What was decided
 
-- **tea is the one engine that holds state that moves.** A turn, a lane, a lease, a program: each
+- **tea is the one engine that holds state that moves.** A turn, a quest, a lease, a program: each
   is a tea machine that steps on Msgs. What survives a sleep or a kill is its facts in the ledger,
   folded through the same `update`.
 - **Nothing replaces a tea machine.** If a library would hold the state a machine should hold, or
@@ -74,7 +74,7 @@ const update = (m: typeof Turn.Type, msg: Msg) =>
   ([saved state](./saved-state.md), S6).
 - **Two durable models side by side break the Elm answer.** Experiment 174 ran a whole agent turn
   on Effect's `Workflow` and an alarm engine, and it worked. But a turn would then live in
-  Workflow's tables and replay, and the lane around it would live in tea's facts and fold. Two
+  Workflow's tables and replay, and the quest around it would live in tea's facts and fold. Two
   places hold "where are we", with two upgrade stories and two ways to fail. [Elm first](./elm-first.md)
   asks for a parent written by hand that steps its children. A workflow is a child that steps
   itself.

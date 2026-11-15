@@ -162,7 +162,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 
   // Plants: let an anchored path, a bare anchor or a note word through as an owner key, or refuse
   // a plain path, a root file or a folder. stepcommit matches keys to staged paths exactly
-  // (ticket 425, lane t411: `serve.test.ts:162`, `:537` and `new` became keys).
+  // (ticket 425, quest t411: `serve.test.ts:162`, `:537` and `new` became keys).
   it("property: --draft fails a files-table path that is no repo path, naming its row", () => {
     fc.assert(
       fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
@@ -532,7 +532,7 @@ describe("laws and validation advice, today's tooling", () => {
     expect(advice(check(legacy, "").text)).toEqual([]);
   });
 
-  // Ticket 835 pins a lane's scripts: a copy of `.agents/` outside any checkout. box.sh runs the
+  // Ticket 835 pins a quest's scripts: a copy of `.agents/` outside any checkout. box.sh runs the
   // approval check from that copy, so the check must find the repo through MAIN.
   // Plant: always `cd` to the script's own root, and the pinned run fails on "cannot find repository".
   it("scenario: from a pinned copy outside a checkout, the approval check reads the repo MAIN names", () => {
