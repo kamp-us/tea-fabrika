@@ -38,8 +38,9 @@ concurrency:
   cancel-in-progress: false
 
 # `actions: write` lets each test job's last step, `stop the run`, cancel its own run, as in
-# check.yaml. `contents: read` is the checkout's. The report job alone takes `issues: write`, in its
-# own map. workflow-lint.ts holds all three.
+# check.yaml, and each leg's time table read its own job's steps. `contents: read` is the
+# checkout's. The report job alone takes `issues: write`, in its own map. workflow-lint.ts holds all
+# three.
 permissions:
   actions: write
   contents: read
@@ -97,6 +98,33 @@ jobs:
           path: ${{ runner.temp }}/results.json
           if-no-files-found: ignore
           retention-days: 7
+      # The leg's time table (time-table.ts), as in check.yaml: each step's seconds from GitHub's jobs
+      # API, read with the workflow's token, and the ten slowest test files of the leg's report, in
+      # the job summary. On every result, and it never fails the job. Last of the job's commands.
+      - &time-table
+        name: time table
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_ID: ${{ job.check_run_id }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          LEG: ${{ matrix.shard }}
+          REPORT: ${{ runner.temp }}/results.json
+        run: node .github/ci/time-table.ts
+      # The same numbers as one small JSON per leg, to follow each leg's balance over time. The run
+      # attempt is in its name, so a rerun keeps the first attempt's file beside its own.
+      - &timings
+        name: timings
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: timings-${{ github.job }}-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 90
       # Fail fast, as in check.yaml (ticket 990): the first red leg cancels the run, so the others
       # free their runners. The report job's `always()` keeps it running, and it names the tests the
       # red leg's report holds. workflow-lint.ts holds it last in every job but report.
@@ -141,6 +169,8 @@ jobs:
           path: ${{ runner.temp }}/results.json
           if-no-files-found: ignore
           retention-days: 7
+      - *time-table
+      - *timings
       - *stop
 
   # The verdict, on main only: red opens one `ci-scheduled` issue naming the commits since the last

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { ignored } from "./changes.mjs";
 import { gated, gates } from "./required.mjs";
+import { fileName, STEP } from "./time-table.ts";
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -118,6 +119,72 @@ const TOOLING = [
 ];
 
 const TEST_TIMES = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
+
+// Each test leg's time table (time-table.ts): its steps' seconds from GitHub's jobs API, read with
+// the workflow's token, and its slowest test files from its report, in the job summary. Then the same
+// numbers as one JSON file, uploaded with the run attempt in its name, so a rerun keeps both.
+const TIME_TABLE = "node .github/ci/time-table.ts";
+
+const timeTableEnv = (report: string) => ({
+  GITHUB_TOKEN: TOKEN,
+  JOB_ID: `\${{ job.check_run_id }}`,
+  HEAD: env.HEAD,
+  LEG: `\${{ matrix.shard }}`,
+  REPORT: `\${{ runner.temp }}/${report}`,
+});
+
+const TIMINGS = {
+  name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
+  path: `\${{ runner.temp }}/${fileName({ job: `\${{ github.job }}`, leg: `\${{ matrix.shard }}` })}`,
+};
+
+/**
+ * TT1 and TT2, for one test leg whose Vitest report is `$RUNNER_TEMP/<report>`. The time table is
+ * the job's last command, so it times every step before it; it runs on every result, a red or
+ * canceled leg too, and never fails the job. Its timings file is uploaded after it, the same way.
+ */
+const timed = (name: string, job: Record<string, unknown>, report: string): string[] => {
+  const list = steps(job);
+  const tables = list.filter((s) => s["run"] === TIME_TABLE);
+  const uploads = list.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path);
+  const [table] = tables,
+    [upload] = uploads;
+  const errors: string[] = [];
+
+  if (
+    !(
+      tables.length === 1 &&
+      table?.["name"] === STEP &&
+      compact(table["if"]) === "always()" &&
+      table["continue-on-error"] === true &&
+      table["timeout-minutes"] === 1 &&
+      JSON.stringify(table["env"]) === JSON.stringify(timeTableEnv(report)) &&
+      list.filter((s) => "run" in s).at(-1) === table
+    )
+  ) {
+    errors.push(
+      `TT1: ${name} ends its commands with the ${STEP} step once, on every result, never failing the job, reading ${report}`,
+    );
+  }
+
+  if (
+    !(
+      uploads.length === 1 &&
+      map(upload?.["with"])["name"] === TIMINGS.name &&
+      compact(upload?.["if"]) === "always()" &&
+      upload?.["continue-on-error"] === true &&
+      table !== undefined &&
+      list.indexOf(upload ?? {}) > list.indexOf(table)
+    )
+  ) {
+    errors.push(
+      `TT2: ${name} uploads its timings file once, after the ${STEP} step, on every result, never failing the job`,
+    );
+  }
+
+  return errors;
+};
+
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
 // Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
@@ -487,13 +554,17 @@ export const lintWorkflow = (text: string): string[] => {
 
   // M1. A push that a merge queue run already tested skips next (changes.mjs's
   // `tested`). The classify step asks GitHub with the job's own token, the workflow's (F3 holds
-  // that map to actions and contents, and changes' stop step needs it whole), and it is the one step
-  // in the workflow but the stop steps that gets the token.
+  // that map to actions and contents, and changes' stop step needs it whole). It and the test legs'
+  // time tables, which read their own job's steps (TT1 pins their env), are the steps in the
+  // workflow but the stop steps that get the token.
   const classify = changeSteps.find((s) => s["id"] === "diff");
   require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
   require(Object.entries(jobs).every(([, job]) =>
-    steps(map(job)).every((s) => s === classify || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s))),
-  ), "M1: only changes' classify step gets the token");
+    steps(map(job)).every(
+      (s) =>
+        s === classify || s["run"] === TIME_TABLE || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
+    ),
+  ), "M1: only changes' classify step and the time tables get the token");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -537,12 +608,12 @@ export const lintWorkflow = (text: string): string[] => {
   const times = testSteps.find((s) => s["name"] === "shard times");
   // T1. Only these whole scripts, each once: no step, flag or spelling adds today's tests.
   // Each script as its trimmed lines, so the shell's indenting is no part of it.
-  const testAllowed = ["pnpm install --frozen-lockfile", TOOLING.join("\n"), TEST_TIMES];
+  const testAllowed = ["pnpm install --frozen-lockfile", TOOLING.join("\n"), TEST_TIMES, TIME_TABLE];
   const testRuns = testSteps.filter((s) => "run" in s).map((s) => lines(s["run"]).join("\n"));
   require(testRuns.length === testAllowed.length &&
     testAllowed.every(
       (command) => testRuns.filter((run) => run === command).length === 1,
-    ), "T1: the test job runs exactly its install, the tooling tests and shard times, once each");
+    ), "T1: the test job runs exactly its install, the tooling tests, shard times and its time table, once each");
   require(tooling !== undefined &&
     !("if" in tooling) &&
     map(tooling["env"])["SHARD"] === `\${{ matrix.shard }}/${TOOLING_LEGS.length}` &&
@@ -631,12 +702,13 @@ export const lintWorkflow = (text: string): string[] => {
     chromium,
     e2eCommand,
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+    TIME_TABLE,
   ];
   const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
   require(nextRuns.length === allowed.length &&
     allowed.every(
       (command) => nextRuns.filter((run) => run === command).length === 1,
-    ), "next runs exactly its install and five approved commands once each");
+    ), "next runs exactly its install and six approved commands once each");
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !==
     undefined, "E11: next's vitest step runs the next project alone, with --shard and no exclusions");
@@ -694,6 +766,14 @@ export const lintWorkflow = (text: string): string[] => {
     require(matches.length === 1 &&
       compact(matches[0]?.["if"]) ===
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
+  }
+
+  // TT1 and TT2: every test leg writes its time table and uploads its timings file.
+  for (const [name, report] of [
+    ["test", "tooling.json"],
+    ["next", "next.json"],
+  ] as const) {
+    errors.push(...timed(name, map(jobs[name]), report).map((reason) => `check.yaml: ${reason}`));
   }
 
   return errors;
@@ -825,9 +905,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
     !("if" in (judged[0] ?? {})) &&
     judged[0]?.["continue-on-error"] ===
       undefined, `SC5: the report runs ${REPORT} once, with the needs, the results and the token, and its failure shows`);
+  // The legs' time tables read their own job's steps with it too (TT1 pins their env).
   require(Object.values(jobs).every((job) =>
-    steps(map(job)).every((s) => s === judged[0] || !/github\.token|secrets\./.test(JSON.stringify(s))),
-  ), "SC5: only the report step and the stop steps get the token, and no step a secret");
+    steps(map(job)).every(
+      (s) => s === judged[0] || s["run"] === TIME_TABLE || !/github\.token|secrets\./.test(JSON.stringify(s)),
+    ),
+  ), "SC5: only the report step, the time tables and the stop steps get the token, and no step a secret");
 
   // SC6. At most RUNNERS machines: a matrix job counts its `max-parallel`, any other job one. Each
   // matrix sets it, lets every leg finish, and runs no more at once than it has legs.
@@ -889,11 +972,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const commandsOf = (job: Record<string, unknown>) =>
     steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
   require(JSON.stringify(commandsOf(next).toSorted()) ===
-    JSON.stringify(["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E].toSorted()) &&
+    JSON.stringify(["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, TIME_TABLE].toSorted()) &&
     JSON.stringify(commandsOf(tooling).toSorted()) ===
       JSON.stringify(
-        ["pnpm install --frozen-lockfile", WHOLE_TOOLING].toSorted(),
-      ), "SC9: next and tooling run only their install and their whole-suite commands");
+        ["pnpm install --frozen-lockfile", WHOLE_TOOLING, TIME_TABLE].toSorted(),
+      ), "SC9: next and tooling run only their install, their whole-suite commands and their time table");
 
   // SC10. Each test job keeps its Vitest report after a red step, before its stop step, so the
   // report job can name the failing tests.
@@ -906,6 +989,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     require(kept.length === 1 &&
       compact(kept[0]?.["if"]) === "!cancelled()" &&
       list.indexOf(kept[0] ?? {}) > last, `SC10: ${name} uploads its report after its tests, even after a red one`);
+    // TT1 and TT2, as in check.yaml.
+    errors.push(...timed(name, map(jobs[name]), "results.json").map((reason) => `scheduled.yaml: ${reason}`));
   }
 
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
