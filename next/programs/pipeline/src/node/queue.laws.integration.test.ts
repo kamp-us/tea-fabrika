@@ -32,6 +32,7 @@ import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { Redacted } from "effect";
@@ -271,7 +272,7 @@ const life = Effect.fnUntraced(function* (
     const built = yield* Layer.buildWithScope(
       ProgramRunner.layer(
         { id: pid, name, program: status.state.code.program, build: BUILD, owner },
-        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 } },
+        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provide(own)),
       scope,
     );

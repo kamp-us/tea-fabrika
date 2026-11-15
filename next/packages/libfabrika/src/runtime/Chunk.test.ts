@@ -52,6 +52,9 @@ const Size = fc.integer({ min: 1_024, max: 8_192 });
 
 type Cut = ReadonlyArray<typeof Chunk.Chunk.Type>;
 
+/** Another send id of the same length: its last digit moved on by one. */
+const otherId = (id: string): string => `${id.slice(0, -1)}${(Number(id.at(-1)) + 1) % 10}`;
+
 describe("T1041: a large output is cut into chunk letters", () => {
   it("L1: every chunk fits the size, carries the send's id and type, runs seq 0 to n-1 with last on the final one, and the items come back in order; an item too big alone fails and nothing is cut", () => {
     const reached = new Set<string>();
@@ -124,83 +127,91 @@ describe("T1041: a large output is cut into chunk letters", () => {
     // Every item fits alone, so each cut is whole and the tampers are what varies.
     const Whole = sendWith(Fits);
     fc.assert(
-      fc.property(
-        fc.tuple(Whole, Size),
-        fc.tuple(Whole, Size),
-        Tamper,
-        fc.nat(),
-        fc.nat(),
-        ([send, size], [otherSend, otherSize], tamper, a, b) => {
-          const cut = Chunk.cut(send, size);
-          const otherCut = Chunk.cut(otherSend, otherSize);
-          expect(Result.isSuccess(cut) && Result.isSuccess(otherCut), "items that fit alone always cut").toBe(true);
+      fc.property(fc.tuple(Whole, Size), Tamper, fc.nat(), fc.nat(), ([send, size], tamper, a, b) => {
+        const cut = Chunk.cut(send, size);
+        expect(Result.isSuccess(cut), "items that fit alone always cut").toBe(true);
 
-          if (Result.isFailure(cut) || Result.isFailure(otherCut) || otherSend.id === send.id) {
-            return;
+        if (Result.isFailure(cut)) {
+          return;
+        }
+
+        const chunks: Cut = cut.success;
+        const n = chunks.length;
+        const at = (k: number) => k % n;
+        let list: ReadonlyArray<(typeof chunks)[number]>;
+
+        switch (tamper) {
+          case "whole":
+            list = chunks;
+            break;
+          case "prefix":
+            list = chunks.slice(0, at(a));
+            break;
+          case "gap": {
+            if (n < 2) {
+              return;
+            }
+
+            // A gap leaves the last chunk in place: dropping the last is a prefix.
+            const drop = a % (n - 1);
+            list = chunks.filter((_, k) => k !== drop);
+            break;
           }
-
-          const chunks: Cut = cut.success;
-          const n = chunks.length;
-          const at = (k: number) => k % n;
-          let list: ReadonlyArray<(typeof chunks)[number]>;
-
-          switch (tamper) {
-            case "whole":
-              list = chunks;
-              break;
-            case "prefix":
-              list = chunks.slice(0, at(a));
-              break;
-            case "gap": {
-              if (n < 2) {
-                return;
-              }
-
-              // A gap leaves the last chunk in place: dropping the last is a prefix.
-              const drop = a % (n - 1);
-              list = chunks.filter((_, k) => k !== drop);
-              break;
-            }
-            case "repeat": {
-              const k = at(a);
-              list = [...chunks.slice(0, k + 1), chunks[k] as (typeof chunks)[number], ...chunks.slice(k + 1)];
-              break;
-            }
-            case "swap": {
-              if (n < 2) {
-                return;
-              }
-
-              const i = at(a);
-              const j = (i + 1 + (b % (n - 1))) % n;
-              const swapped = [...chunks];
-              swapped[i] = chunks[j] as (typeof chunks)[number];
-              swapped[j] = chunks[i] as (typeof chunks)[number];
-              list = swapped;
-              break;
-            }
-            case "mix": {
-              const other = otherCut.success;
-              const k = a % (n + 1);
-              // Another send's chunk at the same seq where it has one, else its first, put in among
-              // this send's chunks: both sends are in the list.
-              const stranger = (other[k] ?? other[0]) as (typeof chunks)[number];
-              list = [...chunks.slice(0, k), stranger, ...chunks.slice(k)];
-              break;
-            }
+          case "repeat": {
+            const k = at(a);
+            list = [...chunks.slice(0, k + 1), chunks[k] as (typeof chunks)[number], ...chunks.slice(k + 1)];
+            break;
           }
+          case "swap": {
+            if (n < 2) {
+              return;
+            }
 
-          // A tamper counts as reached only on a send of three chunks or more, where it lands inside.
-          reached.add(n >= 3 ? tamper : `${tamper}_short`);
-          const joined = Chunk.join(list);
-
-          if (tamper === "whole") {
-            expect(Option.getOrUndefined(joined), "a whole cut joins to its items").toEqual(send.items);
-          } else {
-            expect(Option.isNone(joined), `a ${tamper} of a ${n}-chunk send joins to none`).toBe(true);
+            const i = at(a);
+            const j = (i + 1 + (b % (n - 1))) % n;
+            const swapped = [...chunks];
+            swapped[i] = chunks[j] as (typeof chunks)[number];
+            swapped[j] = chunks[i] as (typeof chunks)[number];
+            list = swapped;
+            break;
           }
-        },
-      ),
+          case "mix": {
+            // A second send of the same items under another id of the same length cuts the same
+            // chunks. Its chunk k takes this send's chunk k: same seq, same last, same items, so
+            // only the id tells the two sends apart. A one-chunk send swapped whole is the twin's own
+            // whole send, not a mix, so a mix needs two chunks or more.
+            const twin = Chunk.cut({ ...send, id: otherId(send.id) }, size);
+
+            if (Result.isFailure(twin) || n < 2) {
+              return;
+            }
+
+            const k = at(a);
+            const stranger = twin.success[k];
+            const own = chunks[k];
+            expect(
+              stranger !== undefined &&
+                own !== undefined &&
+                stranger.part.id !== own.part.id &&
+                stranger.part.seq === own.part.seq &&
+                stranger.part.last === own.part.last,
+              "the twin's chunk differs from this send's in its id alone",
+            ).toBe(true);
+            list = chunks.map((chunk, j) => (j === k ? (stranger ?? chunk) : chunk));
+            break;
+          }
+        }
+
+        // A tamper counts as reached only on a send of three chunks or more, where it lands inside.
+        reached.add(n >= 3 ? tamper : `${tamper}_short`);
+        const joined = Chunk.join(list);
+
+        if (tamper === "whole") {
+          expect(Option.getOrUndefined(joined), "a whole cut joins to its items").toEqual(send.items);
+        } else {
+          expect(Option.isNone(joined), `a ${tamper} of a ${n}-chunk send joins to none`).toBe(true);
+        }
+      }),
       { seed: SEED, numRuns: 200, endOnFailure: true },
     );
     expect([...reached]).toEqual(expect.arrayContaining(["gap", "mix", "prefix", "repeat", "swap", "whole"]));

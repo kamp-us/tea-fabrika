@@ -9,6 +9,7 @@
  */
 import { applyCell, type Outcome } from "@demlik/tea";
 import {
+  ByteSize,
   Cause,
   Clock,
   Context,
@@ -222,8 +223,6 @@ const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const decodeChunksInput = Schema.decodeUnknownResult(ChunksInput);
 const decodeTarget = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String, to: Schema.String }));
 const isRefusal = Schema.is(MailRefusal);
-/** The chunk size when the wiring hands none in: `mail.chunk`'s default, 64 KiB. */
-const CHUNK = 64 * 1_024;
 
 /** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
@@ -290,6 +289,20 @@ const withoutInput = (cmd: unknown): unknown => {
 
 const fitsText = (value: string): boolean => value.length <= 256;
 const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?? "").length;
+const decodeAddress = Schema.decodeUnknownOption(Schema.Struct({ to: Schema.String, as: Schema.String }));
+
+/** A send_chunks's operands without its items: what every answer echoes, `{type, to, as}`, so the
+ *  answer's row stays small however close to the input cap the items came. A `to` or `as` that is
+ *  not short text stays out too, as an oversize start_child's long name does. */
+const withoutItems = (cmd: unknown): unknown => {
+  const address = Option.getOrUndefined(decodeAddress(cmd));
+  return {
+    type: SEND_CHUNKS,
+    ...(address !== undefined && fitsText(address.to) ? { to: address.to } : {}),
+    ...(address !== undefined && fitsText(address.as) ? { as: address.as } : {}),
+  };
+};
+
 const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.String }));
 
 /** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
@@ -384,11 +397,10 @@ export type RunnerOptions = {
    */
   readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
   /**
-   * The most bytes in one letter of a chunked send, the `mail.chunk` setting the brain reads at its
-   * edge. A send_chunks keeps the size it was dispatched with. Left out, it is 64 KiB, the
-   * setting's default.
+   * The most bytes in one letter of a chunked send: the `mail.chunk` setting's value, which the
+   * brain reads at its edge. A send_chunks keeps the size it was dispatched with.
    */
-  readonly chunk?: number;
+  readonly chunk: ByteSize.ByteSize;
 };
 
 /**
@@ -528,7 +540,7 @@ export class ProgramRunner extends Context.Service<
         });
 
         const fault = (cut: string) => options.fault?.(cut) ?? Effect.void;
-        const chunkBytes = options.chunk ?? CHUNK;
+        const chunkBytes = Number(ByteSize.toBigInt(options.chunk));
         /** The newest inbox pos this life told the brain it read. Only a saved checkpoint moves it. */
         let acked = 0;
         /**
@@ -1524,9 +1536,16 @@ export class ProgramRunner extends Context.Service<
         const at = Clock.currentTimeMillis;
         /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's, stop_child's
          *  or exit's `err` keeps only its type, since a refused operand may hold anything its program
-         *  put there. */
+         *  put there. A send_chunks keeps `{type, to, as}` and never its items, on `ok` and on `err`:
+         *  operands just under the input cap plus the answer's own fields would pass the row cap, and
+         *  the answer would never be saved. */
         const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
           const type = cmdType(job);
+
+          if (type === SEND_CHUNKS) {
+            return withoutItems(job.cmd);
+          }
+
           return type !== START_CHILD && type !== STOP_CHILD && type !== EXIT
             ? job.cmd
             : outcome === "err"

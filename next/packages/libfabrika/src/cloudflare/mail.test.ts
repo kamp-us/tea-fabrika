@@ -77,7 +77,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
           getByName: () => ({
             mail: async () => {
               if (choice === "storage") {
-                return Promise.reject(new ProgramMailError({ reason: "storage" }));
+                return Promise.reject(ProgramMailError.storage());
               }
 
               if (choice === "transport") {

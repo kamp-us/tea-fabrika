@@ -10,16 +10,16 @@ import { type Env, processStub, projectStub, rpc } from "./runtime.ts";
 const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
   const checked = yield* Schema.decodeUnknownEffect(MailReplies)(reply).pipe(
     // The decode error shows the reply, which may hold mail; the reason alone is kept.
-    Effect.mapError(() => new ProgramMailError({ reason: "storage" })),
+    Effect.mapError(() => ProgramMailError.storage()),
   );
 
   if (checked._tag === "refused") {
-    return yield* new ProgramMailError({ reason: checked.reason });
+    return yield* ProgramMailError.refused(checked.reason);
   }
 
   if (checked._tag === "full") {
     yield* Effect.annotateCurrentSpan({ "fab.mail.unread": checked.unread, "fab.mail.cap": checked.cap });
-    return yield* new ProgramMailError({ reason: "full", unread: checked.unread });
+    return yield* ProgramMailError.full(checked.unread);
   }
 
   return checked.receipt;
@@ -40,7 +40,7 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
                   traceId: span.traceId,
                   spanId: span.spanId,
                 })
-                .pipe(Effect.mapError(() => new ProgramMailError({ reason: "storage" }))),
+                .pipe(Effect.mapError(() => ProgramMailError.storage())),
             );
             return yield* fromMailReply(reply);
           }),

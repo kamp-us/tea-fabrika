@@ -19,6 +19,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
+  ByteSize,
   Cause,
   Clock,
   Console,
@@ -40,6 +41,7 @@ import {
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
+import { INPUT_BYTES } from "../processes/Children.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { data as ledger, ids, PIDS, SHUTDOWN } from "../processes/Process.test-support.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -48,7 +50,8 @@ import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
-import { chunkWriter, pipeReader, pipeWriter, WriterModel } from "./internal/chunkPrograms.test-support.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
+import { chunkWriter, madeItems, pipeReader, pipeWriter, WriterModel } from "./internal/chunkPrograms.test-support.ts";
 import { mailRequester, Model as RequesterModel } from "./internal/mailRequester.test-support.ts";
 import { mailResponder, Model as ResponderModel } from "./internal/mailResponder.test-support.ts";
 import * as MailDeliveryLive from "./MailDeliveryLive.ts";
@@ -57,7 +60,7 @@ import { ProcessStore } from "./ProcessStore.ts";
 import { Program, Write } from "./Program.ts";
 import * as RepliesTest from "./RepliesTest.ts";
 import { ProgramRunner } from "./Runner.ts";
-import { Queued, send, SendInput } from "./Send.ts";
+import { Queued, send, SendInput, sendChunks } from "./Send.ts";
 
 /** One saved alarm: the name it wakes and when. */
 export type Saved = { readonly name: string; readonly at: number };
@@ -564,6 +567,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       {
         ...(world.timers ? { policy: alarmPolicy } : {}),
         recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
+        chunk: ANY_CHUNK,
       },
     ).pipe(Layer.provide(own));
     const built = yield* Layer.buildWithScope(runner, scope);
@@ -1727,7 +1731,10 @@ const pipeHost = Effect.fnUntraced(function* (
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const runner = ProgramRunner.layer(
       { id: pid, name, program, build: BUILD, owner },
-      { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 }, chunk: pipe.chunk },
+      {
+        recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
+        chunk: ByteSize.bytes(pipe.chunk),
+      },
     ).pipe(Layer.provide(own));
     const built = yield* Layer.buildWithScope(runner, scope);
     runners.set(name, Context.get(built, ProgramRunner));
@@ -2097,6 +2104,7 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
       expect(answer.answer, `L11: send ${n} answers queued`).toBe("queued");
       expect(whole, `L11: send ${n} answered only after its last part landed`).toBe(true);
       expect(answer.letters, `L11: send ${n}'s answer counts its letters`).toBe(parts.length);
+      expect(answer.id, `L11: send ${n}'s receipt id is the one its letters carry`).toBe(parts[0]?.part.id);
     }
 
     if (whole) {
@@ -2226,10 +2234,27 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     300_000,
   );
 
+/** The bytes of the send_chunks Cmd a `big` input makes, as the runner measures its operands. */
+const bigBytes = (n: number, count: number, size: number, tail: number) =>
+  new TextEncoder().encode(
+    JSON.stringify(sendChunks({ to: PIPE_READER, as: "rows", items: madeItems(n, count, size, tail) })),
+  ).length;
+
+/** A `big` input whose operands are `INPUT_BYTES + delta` bytes: items of 1,100 bytes, each past
+ *  the 1 KiB chunk, with the last one's padding taking up the rest. */
+const nearCap = (n: number, delta: number) => {
+  const size = 1_100;
+  const count = Math.floor(INPUT_BYTES / (size + 30));
+  const tail = size + INPUT_BYTES + delta - bigBytes(n, count, size, size);
+  return { type: "big" as const, n, count, size, tail };
+};
+
 /**
  * L12: what send_chunks refuses. An item too big alone, or operands over INPUT_BYTES (2,000,000),
- * answer `too_big` with nothing saved. A final refusal on a later part is the Cmd's answer, and what
- * landed holds no last part, so the reader's join says the send is cut.
+ * answer `too_big` with nothing saved. Operands a few hundred bytes either side of INPUT_BYTES get
+ * exactly one answer: under it the item past the chunk is refused, over it the operands are, and
+ * the answer's echo keeps no items, so its row fits either way. A final refusal on a later part is
+ * the Cmd's answer, and what landed holds no last part, so the reader's join says the send is cut.
  */
 const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   it.effect(
@@ -2244,41 +2269,59 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             at: fc.nat(),
             cap: fc.integer({ min: 1, max: 2 }),
             stop: fc.nat(),
+            // Operands this many bytes from INPUT_BYTES, a few hundred either side: the cap itself is under.
+            under: fc.integer({ min: -400, max: 0 }),
+            over: fc.integer({ min: 1, max: 400 }),
           }),
-          ({ kind, count, at, cap, stop }) =>
+          ({ kind, count, at, cap, stop, under, over }) =>
             Effect.gen(function* () {
               const pipe: Pipe = { cap, chunk: KIB, writer: "chunks", fault: { save: false, ack: false }, n: 0 };
               const view = yield* pipeWorld(open, pipe);
-              const n = ++pipe.n;
               const before = yield* view.inbox;
-
-              if (kind === "item" || kind === "operands") {
-                const answer =
-                  kind === "item"
-                    ? // One item past the 1 KiB chunk at a generated index, the rest small.
-                      yield* view.input({
-                        type: "rows",
-                        n,
-                        items: tagged(
-                          n,
-                          Array.from({ length: count }, (_, i) => (i === at % count ? 2 * KIB : 200)),
-                        ),
-                      })
-                    : // Small items whose operands together pass the ledger's 2,000,000-byte row.
-                      yield* view.input({ type: "big", n, count: 2_600 + count, size: 800 });
-                expect(Result.isSuccess(answer), "the writer's turn answers").toBe(true);
-                yield* view.settle();
-                // The one Cmd's answer. An oversize Cmd's echo keeps no operands, as start_child's does,
-                // so the writer cannot read its number back: it is matched as the only answer.
+              /** One too_big send: its turn answers, and the Cmd gets exactly one answer, `too_big`. */
+              const refused = Effect.fnUntraced(function* (input: unknown, label: string) {
+                const answer = yield* view.input(input);
                 expect(
-                  (yield* view.answers).map((a) => a.answer),
-                  `L12: ${kind} answers too_big`,
+                  Result.isSuccess(answer),
+                  `the writer's turn answers${Result.isFailure(answer) ? `: ${String(answer.failure)}` : ""}`,
+                ).toBe(true);
+                yield* view.settle();
+                // Exactly one answer, the one Cmd's: its echo keeps no items, so its row always fits.
+                expect(
+                  (yield* view.answers).filter((a) => a.n === pipe.n).map((a) => a.answer),
+                  `L12: ${label} answers too_big once`,
                 ).toEqual(["too_big"]);
-                expect(yield* view.inbox, "L12: no part of a too_big send is saved").toEqual(before);
-                done.add(kind);
+                expect(yield* view.owed, `L12: no Cmd stays owed after ${label}'s too_big`).toEqual([]);
+                expect(yield* view.inbox, `L12: no part of ${label}'s too_big send is saved`).toEqual(before);
+                done.add(label);
+              });
+
+              if (kind === "item") {
+                const n = ++pipe.n;
+                // One item past the 1 KiB chunk at a generated index, the rest small.
+                const pads = Array.from({ length: count }, (_, i) => (i === at % count ? 2 * KIB : 200));
+                yield* refused({ type: "rows", n, items: tagged(n, pads) }, "item");
                 return;
               }
 
+              if (kind === "operands") {
+                // Operands near the ledger's 2,000,000-byte row, from below and then from above. Under
+                // it the item past the chunk is refused, over it the operands are.
+                for (const { delta, label } of [
+                  { delta: under, label: "under" },
+                  { delta: over, label: "over" },
+                ]) {
+                  const big = nearCap(++pipe.n, delta);
+                  expect(bigBytes(big.n, big.count, big.size, big.tail), `${label}'s operands`).toBe(
+                    INPUT_BYTES + delta,
+                  );
+                  yield* refused(big, label);
+                }
+
+                return;
+              }
+
+              const n = ++pipe.n;
               // Six items of 700 bytes: one per 1 KiB part. `cap` parts land, then the send waits on full.
               const items = tagged(
                 n,
@@ -2313,7 +2356,7 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             }),
           { fast: 10, full: 30 },
         );
-        expect([...done].sort()).toEqual(["item", "midway", "operands"]);
+        expect([...done].sort()).toEqual(["item", "midway", "over", "under"]);
       }),
     300_000,
   );

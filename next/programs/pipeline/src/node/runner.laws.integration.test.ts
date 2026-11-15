@@ -35,6 +35,7 @@ import { Replies } from "@kampus/libfabrika/runtime/Replies";
 import * as RepliesSql from "@kampus/libfabrika/runtime/RepliesSql";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { FileSystem, Path } from "effect";
@@ -173,7 +174,7 @@ const life = Effect.fnUntraced(function* (
   const built = yield* Layer.buildWithScope(
     ProgramRunner.layer(
       { id: PROCESS, name: NAME, program: "pipeline/merger", build: BUILD, owner },
-      { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 } },
+      { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
     ).pipe(Layer.provide(own)),
     scope,
   );

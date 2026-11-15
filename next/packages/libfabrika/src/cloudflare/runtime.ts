@@ -7,7 +7,6 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
 import {
-  ByteSize,
   type Cause,
   Clock,
   Context,
@@ -1772,15 +1771,16 @@ const projectLogic = Effect.fn("project.init")(function* (
       const work: Effect.Effect<MailReply, ProgramMailError> = write(mail.deliver(delivery)).pipe(
         Effect.map((receipt): MailReply => MailReplies.cases.ok.make({ receipt })),
         Effect.catchTag("ProgramMailError", (error): Effect.Effect<MailReply, ProgramMailError> => {
-          if (error.reason === "storage") {
+          const reason = error.reason;
+
+          if (reason._tag === "storage") {
             return Effect.fail(error);
           }
 
-          // A full inbox holds at least its cap unread.
           return Effect.succeed(
-            error.reason === "full"
-              ? MailReplies.cases.full.make({ unread: error.unread ?? cap, cap })
-              : MailReplies.cases.refused.make({ reason: error.reason }),
+            reason._tag === "full"
+              ? MailReplies.cases.full.make({ unread: reason.unread, cap })
+              : MailReplies.cases.refused.make({ reason: reason._tag }),
           );
         }),
       );
@@ -2297,7 +2297,7 @@ const processLogic = Effect.fnUntraced(function* (
       policy: defaultPolicy,
       recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
       // `mail.chunk`, read at the brain's edge with the start's other settings (0086).
-      chunk: Number(ByteSize.toBigInt(checked.values.mailChunk)),
+      chunk: checked.values.mailChunk,
     },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));

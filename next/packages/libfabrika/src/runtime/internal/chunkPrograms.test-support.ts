@@ -2,7 +2,10 @@
 // t1041-PLAN.md). Each is made by a factory, so a law that never runs one never builds it.
 //
 // The writer turns a person's input into the built-in `send` or `send_chunks` and keeps every answer
-// it folds, tagged by the input's own number, so a law reads what the program saw. The reader keeps
+// it folds, tagged by the input's own number, so a law reads what the program saw. A plain send's
+// answer echoes its letter, number included. A chunked send's answer echoes only `{type, to, as}`,
+// so the writer keeps its chunked sends' numbers in Cmd order and takes the oldest for each answer:
+// it sends every chunked send to one name, whose answers come in that order. The reader keeps
 // every letter it folds, in order. Each chunked item carries its send's number `s` and its own
 // index `i`, so a law can tell the sends apart from what landed alone.
 //
@@ -22,32 +25,50 @@ export const Answer = Schema.Struct({
   n: Schema.Int,
   answer: Schema.String,
   letters: Schema.optionalKey(Schema.Int),
+  /** A chunked send's `queued` receipt id, which every one of its letters' `part.id` carries. */
+  id: Schema.optionalKey(Schema.String),
 });
 
-/** @internal */
-export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer) });
+/** @internal The answers, and the numbers of the chunked sends still unanswered, oldest first. */
+export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer), pending: Schema.Array(Schema.Int) });
+type WriterModel = typeof WriterModel.Type;
 
 const Letter = Schema.Struct({ type: Schema.Literal("letter"), n: Schema.Int });
 const Rows = Schema.Struct({ type: Schema.Literal("rows"), n: Schema.Int, items: Schema.Array(Item) });
 /** A plain letter to the writer's second peer, so a law sees whether another name's mail waits. */
 const Aside = Schema.Struct({ type: Schema.Literal("aside"), n: Schema.Int });
-/** A send whose items the writer makes itself: `count` items of `size` padding each. */
-const Big = Schema.Struct({ type: Schema.Literal("big"), n: Schema.Int, count: Schema.Int, size: Schema.Int });
 
+/** A send whose items the writer makes itself: `count` items of `size` padding each, the last of
+ *  `tail` padding, so a law can put the operands at an exact byte count. */
+const Big = Schema.Struct({
+  type: Schema.Literal("big"),
+  n: Schema.Int,
+  count: Schema.Int,
+  size: Schema.Int,
+  tail: Schema.Int,
+});
+
+/** @internal The items a `big` input makes: `count` items of send `n`, the last padded with `tail`. */
+export const madeItems = (n: number, count: number, size: number, tail: number) =>
+  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
+
+/** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {
   const plain = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) }))(m);
-
-  if (plain._tag === "Some") {
-    return plain.value.m.n;
-  }
-
-  const rows = Schema.decodeUnknownOption(Schema.Struct({ items: Schema.NonEmptyArray(Item) }))(m);
-  return rows._tag === "Some" ? rows.value.items[0].s : -1;
+  return plain._tag === "Some" ? plain.value.m.n : -1;
 };
 
-const answered = (s: typeof WriterModel.Type, n: number, answer: string, letters?: number) => ({
-  answers: [...s.answers, { n, answer, ...(letters === undefined ? {} : { letters }) }],
+const answered = (s: WriterModel, n: number, answer: string, extra: Partial<typeof Answer.Type> = {}) => ({
+  ...s,
+  answers: [...s.answers, { ...extra, n, answer }],
 });
+
+/** A chunked send is sent: its number joins the unanswered ones. */
+const chunked = (s: WriterModel, n: number): WriterModel => ({ ...s, pending: [...s.pending, n] });
+
+/** A chunked send is answered: the oldest unanswered number is its own. */
+const chunkAnswered = (s: WriterModel, answer: string, extra: Partial<typeof Answer.Type> = {}) =>
+  answered({ ...s, pending: s.pending.slice(1) }, s.pending[0] ?? -1, answer, extra);
 
 /** @internal A writer whose plain letters go to `peer` with `send` only. */
 export const pipeWriter = (peer: string) => {
@@ -55,7 +76,7 @@ export const pipeWriter = (peer: string) => {
     model: WriterModel,
     msg: Letter,
     cmds: [send],
-    init: (loaded) => [loaded ?? { answers: [] }, []],
+    init: (loaded) => [loaded ?? { answers: [], pending: [] }, []],
     update: {
       letter: (s, m) => [s, [send({ to: peer, m: { type: "letter", n: m.n } })]],
       send_ok: (s, m) => [answered(s, numbered(m.cmd), "queued"), []],
@@ -82,25 +103,19 @@ export const chunkWriter = (peer: string, other: string = peer) => {
     model: WriterModel,
     msg: Schema.Union([Letter, Aside, Rows, Big]),
     cmds: [send, sendChunks],
-    init: (loaded) => [loaded ?? { answers: [] }, []],
+    init: (loaded) => [loaded ?? { answers: [], pending: [] }, []],
     update: {
       letter: (s, m) => [s, [send({ to: peer, m: { type: "letter", n: m.n } })]],
       aside: (s, m) => [s, [send({ to: other, m: { type: "letter", n: m.n } })]],
-      rows: (s, m) => [s, [sendChunks({ to: peer, as: "rows", items: m.items })]],
+      rows: (s, m) => [chunked(s, m.n), [sendChunks({ to: peer, as: "rows", items: m.items })]],
       big: (s, m) => [
-        s,
-        [
-          sendChunks({
-            to: peer,
-            as: "rows",
-            items: Array.from({ length: m.count }, (_, i) => ({ s: m.n, i, pad: "x".repeat(m.size) })),
-          }),
-        ],
+        chunked(s, m.n),
+        [sendChunks({ to: peer, as: "rows", items: madeItems(m.n, m.count, m.size, m.tail) })],
       ],
       send_ok: (s, m) => [answered(s, numbered(m.cmd), "queued"), []],
       send_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
-      send_chunks_ok: (s, m) => [answered(s, numbered(m.cmd), "queued", m.value.letters), []],
-      send_chunks_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
+      send_chunks_ok: (s, m) => [chunkAnswered(s, "queued", { letters: m.value.letters, id: m.value.id }), []],
+      send_chunks_err: (s, m) => [chunkAnswered(s, m.error._tag), []],
     },
   });
   return Program.make({

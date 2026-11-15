@@ -76,10 +76,17 @@ reader tells a whole value from a cut one by each letter's `part` (`id`, `seq`, 
 ```ts
 // processes/ProgramMail.ts. MailRefusal stays "refused for good" (ProgramMail.ts:22); full is not.
 export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
+// The fix round after review made the reason a union, as Effect's errors with reasons are: only
+// `full` carries `unread`, and it always does, so no reader falls back to a guessed count.
+export const MailFailure = Schema.TaggedUnion({
+  no_name: {}, forbidden: {}, stale_sender: {}, bad_message: {}, id_reused: {},
+  full: { unread: Schema.Int },
+  storage: {},
+});
 export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
   /** `full`: the target's inbox holds its cap of unread letters. Nothing was saved, the reader
    *  was pinged, and the same letter may be sent again once the reader reads. */
-  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage"])]),
+  reason: MailFailure,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
@@ -176,6 +183,9 @@ How the runner runs `send_chunks` (a new host Cmd beside `send`, `Runner.ts:224`
 - At dispatch, operands over `INPUT_BYTES` (`processes/Children.ts:24`) are answered `too_big`, as
   `start_child`'s oversize path does (`Runner.ts:266-293`). The dispatched entry keeps the chunk size
   it was cut with, so a restart under a changed `mail.chunk` still cuts the same way.
+- Every answer, `ok` or `err`, echoes `{type, to, as}` and never the items, as `start_child`'s `ok`
+  drops its input: operands just under `INPUT_BYTES` plus the answer's own fields would pass the
+  row cap, and the answer could never be saved (the fix round after review).
 - It cuts first. `TooBig` is answered `too_big` with nothing sent.
 - It delivers part `seq` under the command id `<cmd id>/part/<seq>`, so its mail id is
   `<cmd id>/part/<seq>/mail` (`processes/internal/programMail.ts:9`), outside the runner, signal and
@@ -216,7 +226,9 @@ export const mailChunk = Setting.make("mail.chunk", {
 
 - The brain reads them at its edge and hands them in: `mail.unread` to `ProgramMailLedger.layer`
   (`cloudflare/runtime.ts:878`), and `mail.chunk` to the runner as a new `RunnerOptions.chunk`
-  (`cloudflare/runtime.ts:2234`). No machine reads a file (0086).
+  (`cloudflare/runtime.ts:2234`). No machine reads a file (0086). `RunnerOptions.chunk` is
+  required and is the setting's byte size, as `cap` is required, so the runner keeps no default of
+  its own (the fix round after review).
 - The upper bound of `mail.chunk` is 1 MiB, below the 2,000,000-byte row cap (`ledger/Log.ts:211`)
   with room for a letter's own fields. The lower bound is 1 KiB, so one chunk's `part` and command
   id (about 150 bytes) always fit with room for items.

@@ -27,6 +27,23 @@ export type Grants = Readonly<Record<string, ReadonlyArray<string>>>;
 export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
 
 /**
+ * Schema for why a delivery failed, each case under its own `_tag`: the `MailRefusal` reasons,
+ * `full` with the target's unread letters, at least its cap, and `storage`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const MailFailure = Schema.TaggedUnion({
+  no_name: {},
+  forbidden: {},
+  stale_sender: {},
+  bad_message: {},
+  id_reused: {},
+  full: { unread: Schema.Int },
+  storage: {},
+});
+
+/**
  * Error for a letter between programs that was refused or could not be saved.
  *
  * **Details**
@@ -45,16 +62,35 @@ export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sende
  *   fits once the target reads. `unread` says how many letters it holds unread.
  * - `storage`: the ledger failed.
  *
+ * The reason is a case of `MailFailure`, as Effect's errors with reasons are: only `full` carries
+ * `unread`, and it always does.
+ *
  * @stability unstable
  * @category errors
  */
 export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
   /** A refusal, `full` (the target's inbox is at its cap) or `storage` (the ledger failed). */
-  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage"])]),
-  /** With `full`: the target's unread letters, at least its cap. */
-  unread: Schema.optionalKey(Schema.Int),
+  reason: MailFailure,
   cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+}) {
+  /** A refusal: a `MailRefusal` reason as its `MailFailure` case. */
+  static refused(reason: typeof MailRefusal.Type): ProgramMailError {
+    return new ProgramMailError({ reason: MailFailure.cases[reason].make({}) });
+  }
+
+  /** The target's inbox holds `unread` letters, at least its cap. */
+  static full(unread: number): ProgramMailError {
+    return new ProgramMailError({ reason: MailFailure.cases.full.make({ unread }) });
+  }
+
+  /** The ledger failed; `cause` is its error, where there is one. */
+  static storage(cause?: unknown): ProgramMailError {
+    return new ProgramMailError({
+      reason: MailFailure.cases.storage.make({}),
+      ...(cause === undefined ? {} : { cause }),
+    });
+  }
+}
 
 /**
  * One send, as the host binds it: the dispatched command, and the life that executes it.

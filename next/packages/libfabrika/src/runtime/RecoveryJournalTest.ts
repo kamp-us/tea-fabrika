@@ -19,6 +19,7 @@ import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
@@ -267,6 +268,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
           backoff: { minMs: 1, maxMs: 1, resetAfterMs: 1_000_000 },
         },
         recovery: { sql: stateSql, name: NAME, capacity: 1024 ** 3 },
+        chunk: ANY_CHUNK,
         fault: (cut) =>
           Effect.suspend(() => {
             if (controls.cut !== cut) {

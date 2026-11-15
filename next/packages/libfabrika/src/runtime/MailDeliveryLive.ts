@@ -34,12 +34,19 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
         function* (sent: Mail) {
           const receipt = yield* mail
             .deliver(sent)
-            .pipe(Effect.tapError((error) => (error.reason === "full" ? wakeups.wake(sent.to) : Effect.void)));
+            .pipe(Effect.tapError((error) => (error.reason._tag === "full" ? wakeups.wake(sent.to) : Effect.void)));
           yield* Effect.annotateCurrentSpan({ "fab.mail.receipt": receipt.id, "fab.mail.to": receipt.to.name });
           yield* wakeups.wake(receipt.to.name);
           return Queued.make({ id: receipt.id });
         },
-        Effect.mapError((error) => new MailDeliveryError({ reason: error.reason, cause: error })),
+        Effect.mapError(
+          (error) =>
+            new MailDeliveryError({
+              // A mail failure's reason is its case; a wake's is already a word.
+              reason: error._tag === "ProgramMailError" ? error.reason._tag : error.reason,
+              cause: error,
+            }),
+        ),
       ),
     });
   }),

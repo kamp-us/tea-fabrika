@@ -223,7 +223,7 @@ const refused = (
   expect(Result.isFailure(answer), message).toBe(true);
   const failure = Result.isFailure(answer) ? answer.failure : answer;
   expect(failure, message).toBeInstanceOf(ProgramMailError);
-  expect(failure, message).toMatchObject({ reason });
+  expect(failure instanceof ProgramMailError ? failure.reason._tag : undefined, message).toBe(reason);
 };
 
 /** The item a tape cell's number picks; never called on an empty list. */

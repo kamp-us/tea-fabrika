@@ -43,8 +43,8 @@ const decodeSent = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }))
 
 const outbox = (name: string): string => `${name}/outbox`;
 
-const refuse = (reason: typeof MailRefusal.Type) => new ProgramMailError({ reason });
-const storage = (cause: LedgerError) => new ProgramMailError({ reason: "storage", cause });
+const refuse = (reason: typeof MailRefusal.Type) => ProgramMailError.refused(reason);
+const storage = (cause: LedgerError) => ProgramMailError.storage(cause);
 
 /** The saved receipt for this delivery's ID, or a refusal when the ID was first used otherwise. */
 const saved = (
@@ -106,9 +106,7 @@ const saved = (
 const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: string, cap: number) => {
   const end = Option.getOrElse(turn.end(inbox(to)), () => 0);
   const acked = manager.ackedPos(turn, to);
-  return full(end, acked, cap)
-    ? Option.some(new ProgramMailError({ reason: "full", unread: unread(end, acked) }))
-    : Option.none();
+  return full(end, acked, cap) ? Option.some(ProgramMailError.full(unread(end, acked))) : Option.none();
 };
 
 /** The newest lifecycle rev of each name the send depends on: a change means look again. */
@@ -256,9 +254,9 @@ export const layer = (config: {
         ),
         Effect.tapError((error) =>
           Effect.annotateCurrentSpan(
-            error.reason === "full"
-              ? { [tag("answer")]: "full", [tag("unread")]: error.unread ?? config.cap, [tag("cap")]: config.cap }
-              : { [tag("answer")]: "refused", [tag("reason")]: error.reason },
+            error.reason._tag === "full"
+              ? { [tag("answer")]: "full", [tag("unread")]: error.reason.unread, [tag("cap")]: config.cap }
+              : { [tag("answer")]: "refused", [tag("reason")]: error.reason._tag },
           ),
         ),
       );
