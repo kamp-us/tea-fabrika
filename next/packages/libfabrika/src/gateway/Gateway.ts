@@ -1111,6 +1111,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       .write(MemberEvent.cases.denied.make({ id: random(), key, saw, by: from.by }), from)
       .pipe(write);
   });
+  /** One wait past `after` on `stream`, as `ledger.wait` and `jobs.wait` both park it: ready at once,
+   *  or parked until an append past it rings `reader`. */
+  const parkOn = Effect.fnUntraced(function* (stream: string, after: number, reader: string) {
+    const waited =
+      options.wait === undefined
+        ? yield* ledger.wait(stream, after)
+        : yield* options.wait(stream, after, reader).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} }))),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
+    return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
+  });
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
@@ -1157,6 +1169,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
       return yield* refuse("reserved");
+    }
+
+    // A hands key's wait for new work parks outside the write turn, as `ledger.wait` does, on the
+    // caller's own `target:` stream: the referee rings it when a request for that key lands.
+    if (method === "jobs.wait") {
+      const asked = JobRoutes.waitOn(attached, params);
+      return Result.isFailure(asked)
+        ? no(asked.failure)
+        : yield* parkOn(asked.success.stream, asked.success.after, reader);
     }
 
     if (method.startsWith("jobs.")) {
@@ -1604,16 +1625,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             });
           }
 
-          const waited =
-            options.wait === undefined
-              ? yield* ledger.wait(p.success.stream, p.success.after)
-              : yield* options.wait(p.success.stream, p.success.after, reader).pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} })),
-                  ),
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                );
-          return waited._tag === "parked" ? Answer.cases.parked.make(p.success) : ok({ rev: waited.rev });
+          return yield* parkOn(p.success.stream, p.success.after, reader);
         }
 
         if (method === "spans.read") {

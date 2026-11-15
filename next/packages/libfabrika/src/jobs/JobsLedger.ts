@@ -10,12 +10,12 @@ import { Effect, Layer, Result as R, Schema, Stream } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
-import type { ProcessId } from "../ProcessId.ts";
+import { ProcessId } from "../ProcessId.ts";
 import { job, Msg } from "./internal/job.ts";
 import { Collection, Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
-import { Jobs, JobsError } from "./Jobs.ts";
+import { Jobs, JobsError, targetStream } from "./Jobs.ts";
 
 /** The execution identity a take allocates, once per job. */
 const Execution = Id.make("execution");
@@ -29,6 +29,11 @@ const Stored = Schema.TaggedUnion({
   collected: { collection: Collection, recorded: Schema.optionalKey(Recorded) },
 });
 type Stored = typeof Stored.Type;
+
+/** One line of a `target:` stream: the job a hands key was asked for, as a pointer. */
+const Pointer = Schema.TaggedStruct("requested", { id: Schema.NonEmptyString, process: ProcessId });
+const encodePointer = Schema.encodeSync(Pointer);
+const decodePointer = Schema.decodeUnknownSync(Pointer);
 
 const decodeStored = Schema.decodeUnknownSync(Stored);
 const encodeStored = Schema.encodeSync(Stored);
@@ -80,9 +85,19 @@ const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
 const fold = (events: ReadonlyArray<Stored>): Model =>
   events.reduce((model, event) => step(model, toMsg(event)), job.init(null, undefined)[0]);
 
+/** The jobs a target index names that are still open: requested, assigned or started. */
+const OPEN: ReadonlySet<Job["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
+
 /** A ledger failure as the jobs module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
   new JobsError({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
+
+/** One job as its stream holds it, read inside a turn: its state and its events. */
+const saved = (turn: LedgerTurn, id: string): Job => {
+  const entries = [...turn.read(stream(id), 0)].map((entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
+  const events = entries.map(({ entry, stored }) => decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }));
+  return { state: fold(entries.map(({ stored }) => stored)).state, events };
+};
 
 /**
  * Layer that supplies `Jobs` from the ledger. It needs `LedgerTransaction` and an `Id.Generator`.
@@ -103,18 +118,7 @@ export const layer = Layer.effect(
     const streams = yield* LedgerStreams;
 
     const read = Effect.fn("jobs.read")(function* (id: string) {
-      const found = yield* ledger
-        .transact((turn) => {
-          const saved = [...turn.read(stream(id), 0)].map((entry) => ({
-            entry,
-            stored: decodeStored(valueFor(entry)),
-          }));
-          const events = saved.map(({ entry, stored }) =>
-            decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
-          );
-          return { state: fold(saved.map(({ stored }) => stored)).state, events };
-        })
-        .pipe(Effect.mapError(translated));
+      const found = yield* ledger.transact((turn) => saved(turn, id)).pipe(Effect.mapError(translated));
 
       if (found.state._tag === "absent") {
         return yield* new JobsError({ reason: "not_found" });
@@ -146,6 +150,13 @@ export const layer = Layer.effect(
             // Older events have no saved record and keep reading their ledger metadata.
             const { connection: _connection, has: _has, ...writer } = recorded;
             turn.append(stream(id), `${id}/${stored._tag}`, lineFor(writer, encodeStored({ ...stored, recorded })));
+
+            // An accepted request is also indexed under its target, in the same turn: a repeat or a
+            // refusal never reaches here, so it writes no second line.
+            if (msg.type === "request") {
+              const pointer = encodePointer(Pointer.make({ id, process: msg.request.process }));
+              turn.append(targetStream(msg.request.target), id, lineFor(writer, pointer));
+            }
           }
 
           const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);
@@ -191,6 +202,17 @@ export const layer = Layer.effect(
         return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
       }),
       read,
+      forTarget: Effect.fn("jobs.forTarget")(function* (key: string) {
+        return yield* ledger
+          .transact((turn) => {
+            const index = targetStream(key);
+            const jobs = [...turn.read(index, 0)]
+              .map((entry) => saved(turn, decodePointer(valueFor(entry)).id))
+              .filter((found) => OPEN.has(found.state._tag));
+            return { jobs, rev: turn.head(index) };
+          })
+          .pipe(Effect.mapError(translated));
+      }),
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list("job:").pipe(
           Stream.mapError((cause) => new JobsError({ reason: "storage", cause })),

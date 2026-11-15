@@ -8,11 +8,12 @@ import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
+import { targetStream } from "../jobs/Jobs.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
-import { Answer, Attached } from "../transport/Wire.ts";
+import { Answer, Attached, type Wait } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
@@ -112,6 +113,8 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
   });
   let answer: typeof Answer.Type = Answer.cases.refused.make({ reason: "reserved" });
   const calls: Array<{ method: string; params: unknown }> = [];
+  /** The object each routed call names as the one a parked wait rings, by method. */
+  const readers: Array<{ method: string; reader: string | undefined }> = [];
   const saved: Array<SpanRow> = [];
   const stats = { writes: 0, archives: 0 };
   const env = fake<Env>({
@@ -119,8 +122,9 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     PROJECT: {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
-        route: (_client: string, method: string, params: unknown) => {
+        route: (_client: string, method: string, params: unknown, reader?: string) => {
           calls.push({ method, params });
+          readers.push({ method, reader });
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
         },
@@ -168,6 +172,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       gone = true;
     },
     calls,
+    readers,
     saved,
     stats,
     settingsReads: () => settingsReads,
@@ -641,8 +646,9 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
+/** Enough calls to reach every answer category once, then to fill the waits with one more full one. */
 const AnswerWalk = Schema.Struct({
-  count: Schema.Int.check(Schema.isBetween({ minimum: 4, maximum: 20 })),
+  count: Schema.Int.check(Schema.isBetween({ minimum: 6, maximum: 20 })),
   seed: Schema.Int,
 });
 
@@ -656,11 +662,21 @@ const EarlyFrameWalk = Schema.Struct({
 const answerCases = {
   ok: Answer.cases.ok,
   parked: Answer.cases.parked,
+  parked_full: Answer.cases.parked,
   reserved: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("reserved") })),
   bad_input: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("bad_input") })),
 };
 
-const answerCategories = ["ok", "parked", "reserved", "bad_input"] as const;
+const answerCategories = ["ok", "parked", "parked_full", "reserved", "bad_input"] as const;
+
+/**
+ * The limits a connection keeps waits under, as `transport/Connection.ts` states them: 64 waits,
+ * and 16,384 bytes of saved attachment as UTF-8 JSON. L1 keeps its own count against them.
+ */
+const MAX_WAITS = 64;
+const MAX_BYTES = 16_384;
+/** A parked answer whose stream is this long fits once, and two of them never fit. */
+const FULL = 9_000;
 
 const sample = Effect.fnUntraced(function* <S extends Schema.Constraint>(schema: S, seed: number) {
   return (yield* Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!;
@@ -718,47 +734,88 @@ it.effect.prop(
       yield* TestClock.setTime(H + 1000);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
-        const reached = new Set<keyof typeof answerCases>();
+        const reached = new Set<keyof typeof answerCases | "too_many_waits">();
+        // The law's own model of the waits it parked on this connection, never the product's: the
+        // world's attachment before any call, and each wait L1 expects kept since.
+        const start = readAttachment(w);
+        const kept: Array<typeof Wait.Type> = [];
+        // A wait is saved while the call is out, so the attachment it must fit in is marked busy.
+        const fits = (wait: typeof Wait.Type) =>
+          kept.length + 1 <= MAX_WAITS &&
+          new TextEncoder().encode(JSON.stringify({ ...start, waits: [...kept, wait], busy: true })).length <=
+            MAX_BYTES;
 
         for (let i = 0; i < walk.count; i++) {
           const state = readAttachment(w);
           expect(state._tag).toBe("online");
           const remaining = answerCategories.filter((key) => !reached.has(key));
-          const category = yield* sample(
-            Schema.Literals(remaining.length > 0 ? remaining : answerCategories),
-            walk.seed + i * 3,
-          );
-          const answer = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+          // Every category once, then a full wait until one has no room left.
+          const category: keyof typeof answerCases =
+            remaining.length === 0 && !reached.has("too_many_waits")
+              ? "parked_full"
+              : yield* sample(Schema.Literals(remaining.length > 0 ? remaining : answerCategories), walk.seed + i * 3);
+          const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+          const answer =
+            category === "parked_full" && sampled._tag === "parked"
+              ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
+              : sampled;
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
           const replies = w.frames.length;
+          const before = w.calls.length;
+          const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
+          const keeps = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
-          expect(w.calls).toHaveLength(i + 1);
-          expect(w.calls.at(-1)).toEqual({ method: request.method, params: request.params });
-          expect(spans).toHaveLength(i + 1);
-          const span = spans[i]!;
-          expect(span.name).toBe("runtime.rpc");
-          expect(span.status._tag).toBe("Ended");
-          expect(span.attributes.has(Trace.REFUSED)).toBe(category === "reserved");
-          expect(span.attributes.get(Trace.REFUSED)).toBe(category === "reserved" ? "reserved" : undefined);
+          // Under the limits, a call answered parked is kept as a wait on the stream the answer
+          // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
+          // 4a): one more routed call. At them, it is refused `too_many_waits` and nothing more.
+          const again =
+            wait === null || !keeps
+              ? []
+              : [
+                  wait.stream.startsWith(targetStream(""))
+                    ? { method: "jobs.wait", params: { after: wait.after } }
+                    : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
+                ];
+          expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
+          expect(spans).toHaveLength(w.calls.length);
 
-          if (answer._tag === "parked") {
-            expect(w.frames).toHaveLength(replies);
+          for (const [n, span] of spans.slice(before).entries()) {
+            const refused = n === 0 && category === "reserved";
+            expect(span.name).toBe("runtime.rpc");
+            expect(span.status._tag).toBe("Ended");
+            expect(span.attributes.has(Trace.REFUSED)).toBe(refused);
+            expect(span.attributes.get(Trace.REFUSED)).toBe(refused ? "reserved" : undefined);
+          }
+
+          if (wait !== null && keeps) {
+            kept.push(wait);
+            expect(w.frames, "a parked call with room gets no reply yet").toHaveLength(replies);
           } else {
             expect(w.frames).toHaveLength(replies + 1);
             const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
             expect(reply).toMatchObject(
               answer._tag === "ok"
                 ? { id: request.id, result: answer.result }
-                : { id: request.id, error: { data: { reason: answer.reason } } },
+                : {
+                    id: request.id,
+                    error: { data: { reason: answer._tag === "parked" ? "too_many_waits" : answer.reason } },
+                  },
             );
+
+            if (answer._tag === "parked") {
+              reached.add("too_many_waits");
+            }
           }
 
-          expect(readAttachment(w)._tag).toBe("online");
+          const after = readAttachment(w);
+          expect(after._tag).toBe("online");
+          // The product keeps exactly the waits the law's own count says it must.
+          expect("waits" in after ? after.waits : null, "the waits kept are the ones with room").toEqual(kept);
           reached.add(category);
         }
 
-        expect([...reached].sort()).toEqual(Object.keys(answerCases).sort());
+        expect([...reached].sort()).toEqual([...Object.keys(answerCases), "too_many_waits"].sort());
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -857,4 +914,50 @@ it.effect.prop(
       expect(w.frames, "a close is answered by a close frame, never a message").toEqual([]);
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
+);
+
+const Rev = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }));
+
+it.effect.prop(
+  "P39 4a W2: a hands key's jobs.wait names this connection object as the one its ring reaches, for the first parked wait and for each wait asked again after a ring that does not pass it",
+  { after: Rev, rings: Schema.Array(Rev).check(Schema.isMaxLength(6)) },
+  ({ after, rings }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      const stream = targetStream("test-key");
+      yield* TestClock.setTime(H + 1000);
+      w.answer(Answer.cases.parked.make({ stream, after }));
+      yield* Effect.gen(function* () {
+        const service = yield* ConnectionService;
+        yield* service.message(
+          w.socket,
+          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "jobs.wait", params: { after } }),
+        );
+
+        // Rings at or before `after` do not pass the wait: each asks the door again.
+        for (const rev of rings) {
+          yield* service.ring(stream, Math.min(rev, after));
+        }
+
+        const waits = w.readers.filter((r) => r.method === "jobs.wait");
+        // The frame is routed once, and its parked answer is registered once, then once per ring.
+        expect(waits).toHaveLength(2 + rings.length);
+        // The referee rings the object a wait names (runtime.ts, CONNECTION.getByName), and the
+        // hands' socket lives on this one (fetch.ts, by its URL path).
+        expect(
+          waits.map((r) => r.reader),
+          "every jobs.wait rings this object",
+        ).toEqual(waits.map(() => "test-connection"));
+        expect(w.frames, "a parked wait answers nothing yet").toEqual([]);
+
+        // A ring past `after` answers the parked call on this socket.
+        yield* service.ring(stream, after + 1);
+        expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+          id: "j1.1",
+          result: { rev: after + 1 },
+        });
+      }).pipe(Effect.provide(w.layer));
+    }),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 60 }) } },
 );

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-first-start-latch-unbounded",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/dev.ts",
+    "line": 473
+  },
+  "says": "In next/, the first start waits on its started latch with no bound, so a first start whose start event never folds hangs forever instead of failing.",
+  "proof": "With dev.ts's isPid check disabled, L13 in dev.laws.integration.test.ts timed out at 60019 ms: DevLife refuses the fold, the driver returns without resolving started, and Deferred.await(started) at dev.ts:473 has no timeout, while the listener wait just above has START_BOUND.",
+  "cost": "A start that Alchemy never reports, or one the life state refuses, hangs the app's start with no error.",
+  "head": "fdda8ce97402a5d0b48f6a7905bae0828bf08318",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

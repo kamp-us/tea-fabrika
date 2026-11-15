@@ -307,7 +307,8 @@ const flow = async (sample: Flow) => {
       Effect.scoped(
         Effect.gen(function* () {
           let observe: (event: RuntimeEvent) => void = () => {};
-          const instance = yield* startDev({ ...config, home }, (local) =>
+          let listen: Effect.Effect<unknown> = Effect.void;
+          const instance = yield* startDev({ ...config, home, memory: 500_000_000, grace: 5000 }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
               const plugin = [...local.mapUnsafe.values()].find(
@@ -324,7 +325,9 @@ const flow = async (sample: Flow) => {
                 ),
               ).toEqual({ token: bearer });
               observe({ type: "start", worker: config.name, pid: 27001 });
-              yield* plugin.start({ "fabrika-control": 27002 });
+              // Alchemy pins the ports, so the replacement listens on the first one's port.
+              listen = plugin.start({ "fabrika-control": 27002 });
+              yield* listen;
             }),
           );
           const outbox = yield* brainOutbox(home);
@@ -359,6 +362,8 @@ const flow = async (sample: Flow) => {
               });
               observe({ type: "start", worker: config.name, pid: 27003 });
               yield* awaitEvent((row) => row._tag === "started" && row.after === previous);
+              // A call waits for a replacement until it listens, as the real one does.
+              yield* listen;
             }
 
             // Arbitrary bodies and passes cross real Connection parsing, including refusals and throws.

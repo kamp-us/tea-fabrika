@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-signal-by-pid-races-the-reap",
+  "date": "2026-11-15",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/local-dev.ts",
+    "line": 139
+  },
+  "says": "In next/, the memory replace sends SIGTERM and SIGKILL by pid with process.kill. Each signal now goes out only in the step that moves the life state and only while it holds that pid, so none follows a folded exit, but one gap is left: between Node reaping the child and the driver folding its exit, the pid is free and the OS may give it to another process, which would get the signal. Only a signal through Node's own child handle closes that gap, and Alchemy keeps the handle and exposes only kill(), which sends SIGKILL. What would close it: a local pnpm patch of @alchemy.run/cloudflare-runtime that exposes a signal on the handle (as kill(signal)), used for both signals, with an upstream issue filed the same day (0054). Not patched in this pull request. The signal line was in dev.ts before this pull request; it is now local-dev.ts's signal.",
+  "proof": "In the installed @alchemy.run/cloudflare-runtime, dist/core/node/workerd/Workerd.mjs line 341 is kill: () => child.kill(\"SIGKILL\"), the only signal the handle offers. local-dev.ts line 139 at 9420dfa7b6172d42d2725833fef4cbb9c4c7b4bb sends process.kill(pid, name) by number.",
+  "cost": "A rare signal, SIGTERM or SIGKILL, to an unrelated process on a person's laptop, if the OS reuses the pid inside that gap.",
+  "head": "9420dfa7b6172d42d2725833fef4cbb9c4c7b4bb",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

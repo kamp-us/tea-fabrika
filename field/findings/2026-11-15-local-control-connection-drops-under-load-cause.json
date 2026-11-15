@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-local-control-connection-drops-under-load-cause",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/dev.ts",
+    "line": 410
+  },
+  "says": "In next/, the brain's memory restart sends workerd SIGTERM at 500 MB, but workerd closes its control socket and stays alive while a WebSocket is open, so Alchemy never restarts it and every control call dials the dead port with ECONNREFUSED. This is the cause of the 2026-11-12 refusal finding (field/findings/2026-11-12-local-control-door-refuses-in-long-runs.json) and of L8's failures on the branch `fabrikalfa/tezgah-new`.",
+  "proof": "Three runs of next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts with temporary logging on 2026-11-15, workerd 1.20261026.1. On main it passed with no memory kill. On 83d288f70 workerd grew from 349 MB to 512 MB in about 20 s, the memory kill fired, and the first ECONNREFUSED came 0.28 s and 0.39 s later in two runs. In the second run the killed pid stayed alive 16 s with the control and debug ports closed, the public port listening and one WebSocket open, while the brain sent SIGTERM 9 more times and no exit was reported.",
+  "cost": "Any long or heavy local run that crosses 500 MB with a WebSocket open loses its instance until that socket closes.",
+  "head": "72553f8da8c57970c4f239063c6dd8d0dd7d16bc",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

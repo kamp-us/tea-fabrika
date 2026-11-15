@@ -54,6 +54,15 @@ export type Receipt = { readonly rev: Rev; readonly arrivedAt: number };
 export type Taken = Receipt & { readonly execution: string };
 
 /**
+ * The name of the stream that indexes the jobs one hands key is asked for: one line `{ id, process }`
+ * per accepted request whose target is `key`, written in the request's own transaction.
+ *
+ * @stability unstable
+ * @category names
+ */
+export const targetStream = (key: string): string => `target:${key}`;
+
+/**
  * Service that keeps jobs: `request` records one, `take` assigns it to an executor, `started` and
  * `finish` report its progress, and `read` answers its state and events.
  *
@@ -88,5 +97,8 @@ export class Jobs extends Context.Service<
     ) => Effect.Effect<Receipt, JobsError>;
     /** Jobs whose saved requests name this exact process generation. */
     readonly forProcess: (process: typeof ProcessId.Type) => Stream.Stream<Job, JobsError>;
+    /** The open jobs (requested, assigned or started) whose target is `key`, read through its
+     *  `targetStream`, and that stream's last rev, 0 before its first line. */
+    readonly forTarget: (key: string) => Effect.Effect<{ jobs: ReadonlyArray<Job>; rev: Rev }, JobsError>;
   }
 >()("@kampus/libfabrika/jobs/Jobs") {}

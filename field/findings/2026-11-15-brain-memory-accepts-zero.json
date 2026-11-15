@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-brain-memory-accepts-zero",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/Declarations.ts",
+    "line": 187
+  },
+  "says": "In next/, desktop.brain-memory is declared with a plain Schema.ByteSize, which accepts \"0 B\", and a limit of zero replaces the local runtime at every first sample, a restart loop. Fixed in the same pull request: the setting's schema is a byte size above zero, titled \"a memory limit\" with a description a person reads, so a zero in the person's file fails to load with an invalid settings error that names desktop.brain-memory. A new L9 property in DesktopBrain.test.ts holds it for six spellings of zero.",
+  "proof": "At 490d3f7a9e40c387808db514281f8adbd293f587, Declarations.ts line 187 is schema: Schema.ByteSize, and ByteSize.isByteSize accepts 0n. The new law, run on that code, fails at its first run: parsing \"0 B\" succeeds.",
+  "cost": "A person who writes 0 gets a brain that restarts its runtime every second, with no error at load.",
+  "head": "490d3f7a9e40c387808db514281f8adbd293f587",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}

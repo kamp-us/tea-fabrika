@@ -1,16 +1,19 @@
 // T708, next/. The real instance, walked through its lifecycle callbacks, its control plugin and its calls.
 // Only platform calls, the clock and the pending-file rename are supplied. Each move is chosen from the
 // state the walk has reached (0093), and every check reads calls, saved rows and spans, never a selector.
+// The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md) makes a memory kill a replace, which
+// the old process ends by its exit, and makes a call that meets a pending replacement wait for it.
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Queue, Schema } from "effect";
+import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { ControlPlugin } from "./ControlPlugin.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
@@ -18,6 +21,24 @@ import { brainOutbox } from "./local-dev.ts";
 
 const SEED = 119120;
 const NAME = "control-test";
+// The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
+const BRAIN = { memory: 500_000_000, grace: 5000 };
+
+// The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
+// is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
+// which the driver never gives, so a missing plugin or start is a defect.
+const listenOn = (local: Context.Context<never>, port: number) =>
+  Effect.gen(function* () {
+    const found = Context.getOption(local, ControlPlugin);
+    const plugin = Option.isSome(found) && !Effect.isEffect(found.value) ? found.value : undefined;
+
+    if (plugin?.start === undefined) {
+      return yield* Effect.die(new Error("the driver's control plugin has no start"));
+    }
+
+    return yield* plugin.start({ "fabrika-control": port }).pipe(Effect.scoped, Effect.orDie);
+  });
+
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 const Move = Schema.Struct({
@@ -50,6 +71,7 @@ type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: nu
 // What a row must say, before its start ids are known.
 type Fact =
   | { readonly _tag: "started"; readonly at: number; readonly pid: number; readonly cause: Cause }
+  | { readonly _tag: "replacing"; readonly at: number; readonly pid: number; readonly bytes: number }
   | { readonly _tag: "exited" | "restarting"; readonly at: number; readonly cause: Cause; readonly exit: Exit }
   | { readonly _tag: "braked"; readonly at: number; readonly reason: string; readonly exit: Exit }
   | { readonly _tag: "stopped"; readonly at: number };
@@ -64,7 +86,8 @@ type Call = {
 type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
 type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
 
-type Phase = "up" | "exited" | "waiting" | "braked";
+// `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.
+type Phase = "up" | "replacing" | "exited" | "waiting" | "braked";
 type Kind = "exit" | "restart" | "start" | "brake" | "kill" | "listen" | "call" | "block" | "release";
 
 // The walk's own view of the platform: what Alchemy and workerd did, never the instance's model.
@@ -78,6 +101,8 @@ type World = {
   held: number | null;
   // A replacement waits for its listener.
   waiting: boolean;
+  // A call now waits: from a replace or an exit until a listener, a brake or the stop.
+  pending: boolean;
   completed: number;
   failed: number;
 };
@@ -92,12 +117,18 @@ const legal = (world: World): ReadonlyArray<readonly [Kind, number]> => {
     return [
       ["exit", 4],
       ["call", 2],
+      // A memory kill also comes while a replacement is pending: a new process that grew too big
+      // before its listener was heard.
       ...quiet([
         ["kill", 2],
         ["listen", 2],
       ]),
       ...gate,
     ];
+  }
+
+  if (world.phase === "replacing") {
+    return [["exit", 4], ["call", 2], ...gate];
   }
 
   if (world.phase === "exited") {
@@ -127,6 +158,13 @@ const choose = (world: World, move: Move): Kind => {
   return moves[0]![0];
 };
 
+// What ended a call's wait for a replacement: the listener, at its port and with the process up or
+// not, a brake, or the stop. A call that met no pending replacement has none.
+type Woken =
+  | { readonly by: "listen"; readonly port: number; readonly up: boolean }
+  | { readonly by: "brake" }
+  | { readonly by: "stop" };
+
 type Seen = {
   readonly port: number;
   readonly up: boolean;
@@ -134,6 +172,7 @@ type Seen = {
   readonly name: string;
   readonly sent: ReadonlyArray<Call>;
   readonly got: Answer;
+  readonly woken: Woken | null;
 };
 
 const run = Effect.fnUntraced(function* (walk: Walk) {
@@ -152,6 +191,12 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const restartReads: Array<number> = [];
   const kills: Array<readonly [number, number]> = [];
   const platform = { rss: 0 };
+  // When the sampler's current 1-second sleep ends: the moment a memory sample is taken.
+  const sampler = { due: 0 };
+  // Each call's chosen answer, by its name, so a call answered later still gets its own.
+  const answers = new Map<string, Move["answer"]>();
+  // Calls that met a pending replacement, with their answers still to come.
+  const waiting: Array<{ readonly index: number; readonly answered: Promise<Answer> }> = [];
   const world: World = {
     phase: "up",
     port: walk.port,
@@ -160,6 +205,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     cause: { reason: "open" },
     held: null,
     waiting: false,
+    pending: false,
     completed: 0,
     failed: 0,
   };
@@ -184,6 +230,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       if (key === "sleep") {
         return (duration: Duration.Duration) => {
           if (Duration.toMillis(duration) === 1000) {
+            sampler.due = target.currentTimeMillisUnsafe() + 1000;
             Queue.offerUnsafe(sleeps, undefined);
           }
 
@@ -258,7 +305,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           throw new Error("connection refused");
         }
 
-        const answer = calls.at(-1)?.answer ?? "value";
+        const answer = answers.get(body.name) ?? "value";
         return Response.json(
           answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
         );
@@ -282,7 +329,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const startup = yield* Effect.scoped(
     Effect.gen(function* () {
       yield* TestClock.setTime(walk.base);
-      const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home }, (local) =>
+      const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
           const plugin = [...local.mapUnsafe.values()].find(
@@ -299,6 +346,13 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       world.cause = { reason: "crash" };
       mode = "walk";
       let ready = false;
+      // Every call that waited gets its answer before the walk moves on, so no answer races a move.
+      const wake = Effect.fnUntraced(function* (woken: Woken) {
+        for (const { index, answered } of waiting.splice(0)) {
+          const got = yield* Effect.promise(() => answered);
+          calls[index] = { ...calls[index]!, got, woken };
+        }
+      });
 
       const lifecycle = Effect.fnUntraced(function* (event: RuntimeEvent, move: Move) {
         if (world.held === null) {
@@ -341,6 +395,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           facts.push({ _tag: "exited", at, cause, exit: ended });
           world.phase = "exited";
           world.waiting = true;
+          world.pending = true;
         } else if (kind === "restart") {
           const at = world.now + (world.held === null ? move.tick : 0);
           const cause = yield* lifecycle({ type: "restart", worker: NAME, exit, delay: move.delay }, move);
@@ -363,6 +418,8 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           }
 
           world.waiting = false;
+          world.pending = false;
+          yield* wake({ by: "brake" });
         } else if (kind === "kill") {
           platform.rss = move.rss;
 
@@ -370,14 +427,19 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             yield* Queue.take(sleeps);
           }
 
+          const at = sampler.due;
           yield* TestClock.adjust("1 second");
           world.now += 1000;
           kills.push([yield* Queue.take(killed), world.pid]);
-          // The sampler finished its turn and sleeps again before the walk moves on.
-          yield* Queue.take(sleeps);
-          ready = true;
+          // The replace wrote its fact before the SIGTERM; that write's acknowledgement is not a lifecycle's.
+          yield* Queue.poll(acks);
+          facts.push({ _tag: "replacing", at, pid: world.pid, bytes: move.rss * 1024 });
+          // The sampler's next sleep comes once its turn ends, after the replace for a waiting call.
+          ready = false;
           platform.rss = 0;
           world.cause = { reason: "memory", bytes: move.rss * 1024 };
+          world.phase = "replacing";
+          world.pending = true;
         } else if (kind === "listen") {
           const port = move.zero === 0 ? 0 : move.port;
           yield* listen(port);
@@ -391,9 +453,11 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           }
 
           world.waiting = false;
+          world.pending = false;
+          yield* wake({ by: "listen", port, up: world.phase === "up" });
         } else if (kind === "call") {
-          const before = sent.length;
           const name = `p-${index}`;
+          answers.set(name, move.answer);
           calls.push({
             port: world.port,
             up: world.phase === "up",
@@ -401,15 +465,20 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             name,
             sent: [],
             got: { _tag: "value", value: undefined },
+            woken: null,
           });
-          const got = yield* Effect.tryPromise({
-            try: () => Reflect.get(dev.process(name), "ping")() as Promise<unknown>,
-            catch: (error): Answer => ({ _tag: "error", error }),
-          }).pipe(
-            Effect.map((value): Answer => ({ _tag: "value", value })),
-            Effect.catch((answer) => Effect.succeed(answer)),
+          const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
+            (value): Answer => ({ _tag: "value", value }),
+            (error: unknown): Answer => ({ _tag: "error", error }),
           );
-          calls[calls.length - 1] = { ...calls.at(-1)!, sent: sent.slice(before), got };
+
+          if (world.pending) {
+            // It waits for the replacement; the move that ends the wait collects its answer.
+            waiting.push({ index: calls.length - 1, answered });
+          } else {
+            const got = yield* Effect.promise(() => answered);
+            calls[calls.length - 1] = { ...calls.at(-1)!, got };
+          }
         } else if (kind === "block") {
           gate = yield* Deferred.make<void>();
           world.held = 0;
@@ -448,6 +517,8 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         }
 
         world.waiting = false;
+        world.pending = false;
+        yield* wake({ by: "listen", port: walk.port, up: world.phase === "up" });
       }
 
       world.now += 1;
@@ -460,8 +531,30 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     Effect.provideService(FileSystem.FileSystem, gated),
     Effect.provide(rssLayer(() => platform.rss)),
   );
+
+  // The stop wakes every call still waiting.
+  for (const { index, answered } of waiting.splice(0)) {
+    calls[index] = { ...calls[index]!, got: yield* Effect.promise(() => answered), woken: { by: "stop" } };
+  }
+
   const outbox = yield* brainOutbox(home);
   const rows = yield* outbox.pending;
+  // A braked brain reaches no runtime, so the spans it could not send wait in its home for the next
+  // start, which delivers them on a platform that answers every call.
+  mode = "startup";
+  yield* Effect.scoped(
+    startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
+      Effect.gen(function* () {
+        Context.get(local, RuntimeLifecycle)({ type: "start", worker: NAME, pid: walk.pid + 1000 });
+        yield* listenOn(local, walk.port);
+      }),
+    ),
+  ).pipe(Effect.provide(rssLayer(() => 0)));
+
+  for (const [index, call] of calls.entries()) {
+    calls[index] = { ...call, sent: sent.filter((c) => c.body.target === "process" && c.body.name === call.name) };
+  }
+
   const spans = sent
     .filter((call) => call.body.target === "record" && call.body.method === "write")
     .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
@@ -479,24 +572,30 @@ const walked = (walk: Walk) =>
   );
 
 describe("T708 dev control laws", () => {
+  // Plant (the memory restart plan's L8, crash path): dial `address` in place of `reachable`: a call
+  // after an exit or a brake reaches the old port.
   it.effect.prop(
-    "calls retain main's offline, attempted-address and error behavior",
+    "calls go only to a listener with no pending replacement: they wait for one, and are offline without one",
     { walk: Walk },
     ({ walk }) =>
       Effect.gen(function* () {
         const { calls } = yield* walked(walk);
 
         for (const call of calls) {
-          if (call.port === 0) {
-            // No listener: offline, and nothing is sent.
+          // Where the call was finally sent: the port it met, or the listener that ended its wait.
+          const woken = call.woken;
+          const port = woken === null ? call.port : woken.by === "listen" ? woken.port : 0;
+          const up = woken === null ? call.up : woken.by === "listen" && woken.up;
+
+          if (port === 0 || !up) {
+            // No listener of a live process: offline, and nothing is sent, after an exit or a brake too.
             expect(call.sent).toEqual([]);
             expect(call.got).toMatchObject({ _tag: "error", error: { _tag: "ControlError", reason: "offline" } });
             continue;
           }
 
-          // A known port is attempted even after its process exited or braked.
           expect(call.sent).toHaveLength(1);
-          expect(call.sent[0]!.url).toBe(`http://127.0.0.1:${call.port}/`);
+          expect(call.sent[0]!.url).toBe(`http://127.0.0.1:${port}/`);
           expect(call.sent[0]!.body).toEqual({
             target: "process",
             project: NAME,
@@ -505,9 +604,7 @@ describe("T708 dev control laws", () => {
             args: [],
           });
 
-          if (!call.up) {
-            expect(call.got).toMatchObject({ _tag: "error", error: { _tag: "ControlError", reason: "unreachable" } });
-          } else if (call.answer === "remote") {
+          if (call.answer === "remote") {
             expect(call.got).toMatchObject({
               _tag: "error",
               error: { _tag: "ControlError", reason: `remote-${call.name}` },
@@ -569,6 +666,9 @@ describe("T708 dev control laws", () => {
             expect(row.bytes).toBe(fact.cause.bytes);
           } else if (row._tag === "braked" && fact._tag === "braked") {
             expect(row).toMatchObject({ reason: fact.reason, ...fact.exit });
+          } else if (row._tag === "replacing" && fact._tag === "replacing") {
+            // The replace names the process it signaled and the size the sampler saw.
+            expect(row).toMatchObject({ reason: "memory", pid: fact.pid, bytes: fact.bytes, limit: BRAIN.memory });
           } else {
             expect(row).toMatchObject({ _tag: "stopped", reason: "stop" });
           }

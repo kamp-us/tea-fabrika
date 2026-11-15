@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-recheck2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T08:20:20-08:00",
+  "ended": "2026-11-15T08:22:30-08:00",
+  "parent": "2026-11-15-p39-s4-recheck",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Narrow recheck of P39 slice 4a at 9abc76f3b, in next/, on the two points of the second send-back: both fixed, and the draft is sound for the owner to read. One table, LASTS in client/HandsMachine.ts, now decides both a take and a finish. Each reason that holds a result is a fact the brain keeps or the client's own fixed params, so the same finish cannot pass later: not_allowed (gateway/Jobs.ts refusal and JobAccess.owns), not_target and wrong_process (take and collect only in jobs/internal/job.ts, never a finish), conflict, wrong_execution, wrong_state and not_found (the finish cell in jobs/internal/job.ts), bad_input, reserved (gateway/Gateway.ts:81, keys the client never sends) and unknown_method. rate_limited, unreachable, storage, not_granted, no_hello and any unknown reason are sent again. t863 L1 now keeps its own list of parked waits against 64 waits and 16,384 bytes, and the waits the product keeps must equal it. The pull request body's two sentences are now true.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Plants, each run once and undone with git checkout, git status clean after each: storage added to the held side of LASTS, H3 red; Connection.ts reply refuses every parked call with too_many_waits, t863 L1 and W2 red. Not run: pnpm typecheck, pnpm lint, other law files.",
+  "driver_caused": false,
+  "step": "review",
+  "costUsd": null,
+  "billed": null
+}
