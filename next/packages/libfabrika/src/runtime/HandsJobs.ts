@@ -24,12 +24,12 @@ export const Ask = Request.mapFields(({ needs: _needs, target: _target, settings
 
 /**
  * Schema for why an ask is refused, each for good: `no_hands`, the person set no `hands.target`, so
- * no job was made; `conflict`, the job saved under the Cmd's id is not this process's.
+ * no job was made; `id_reused`, the job saved under the Cmd's id is not this process's.
  *
  * @stability unstable
  * @category schemas
  */
-export const Refusal = Schema.Literals(["no_hands", "conflict"]);
+export const Refusal = Schema.Literals(["no_hands", "id_reused"]);
 
 /**
  * Schema for what an ask answers: `waiting` with the request's receipt while the job has no

@@ -45,7 +45,7 @@ const Case = fc.oneof(
     .record({ result: fcResult, rev, arrivedAt })
     .map((fields) => ({ shape: "good" as const, reply: Reply.cases.finished.make(fields) })),
   fc
-    .constantFrom("no_hands" as const, "conflict" as const)
+    .constantFrom("no_hands" as const, "id_reused" as const)
     .map((reason) => ({ shape: "good" as const, reply: Reply.cases.refused.make({ reason }) })),
   fc.constant({ shape: "transport" as const }),
   fc

@@ -22,7 +22,7 @@ it("type: T1 HandsJobs speaks its own error and shared names only, never JobsErr
   // The answer is one of three cases, each the runner's to read.
   expectTypeOf<(typeof Reply.Type)["_tag"]>().toEqualTypeOf<"waiting" | "finished" | "refused">();
   // A refusal is for good, and an answer: no hands key, or a job under the id that is not this process's.
-  expectTypeOf<Extract<typeof Reply.Type, { _tag: "refused" }>["reason"]>().toEqualTypeOf<"no_hands" | "conflict">();
+  expectTypeOf<Extract<typeof Reply.Type, { _tag: "refused" }>["reason"]>().toEqualTypeOf<"no_hands" | "id_reused">();
   // The layer serves HandsJobs over the jobs service, and fails with nothing of its own while built.
   type Live = ReturnType<typeof HandsJobsLive.layer>;
   expectTypeOf<Layer.Success<Live>>().toEqualTypeOf<HandsJobs>();

@@ -51,7 +51,7 @@ export const handsDelivery = Machine.make({
       if (reply._tag === "refused") {
         // No hands key is only ever the first answer: a saved job is never undone by one. A job
         // that is not this process's is refused whenever it is found.
-        return s._tag === "pending" || reply.reason === "conflict"
+        return s._tag === "pending" || reply.reason === "id_reused"
           ? settled(Settled.cases.err.make({ reason: reply.reason }))
           : same(s);
       }

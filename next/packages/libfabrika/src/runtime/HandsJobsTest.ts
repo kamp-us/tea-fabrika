@@ -10,14 +10,14 @@
 // given and answered, never the product's machine.
 //
 // The contract this law pins, from the plan:
-//   HandsJobs.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused` with `no_hands` or `conflict`),
+//   HandsJobs.ts: `Ask`, `Reply` (`waiting`, `finished`, `refused` with `no_hands` or `id_reused`),
 //   `HandsJobsError`, `HandsJobs`.
 //   HandsJobsLive.ts: `layer({ target, settings })`, read first, then request or collect, over `Jobs`.
 //
 // Plants (after build): fall back to the first live hands key when `hands.target` is unset; rebuild
-// the request on a retry, so a changed target answers `conflict`.
+// the request on a retry, so a changed target answers `id_reused`.
 //
-// S2, added in the fix round: a saved job's id asked by another process is refused `conflict` in
+// S2, added in the fix round: a saved job's id asked by another process is refused `id_reused` in
 // every state the job can be in. The job machine refuses `wrong_process` only for a finished or
 // collected job, so for a requested, assigned or started one the layer's own check is what keeps
 // another process's waiting receipt out of the reply. Plant: drop that check in `HandsJobsLive.ts`.
@@ -308,8 +308,8 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
       "an ask from another process answers",
     );
     // The answer is the bare refusal, for good: no receipt and no result, the asker's to read.
-    expect(reply, `S2: another process's ask is refused conflict and nothing else (${tape.state})`).toEqual(
-      Reply.cases.refused.make({ reason: "conflict" }),
+    expect(reply, `S2: another process's ask is refused id_reused and nothing else (${tape.state})`).toEqual(
+      Reply.cases.refused.make({ reason: "id_reused" }),
     );
     expect(Object.keys(reply).sort(), "S2: the refusal carries no receipt or result").toEqual(["_tag", "reason"]);
 
@@ -352,7 +352,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         }),
     );
     it.effect(
-      "S2: an ask under a saved job's id from another process is refused conflict in every state of the job, writes nothing, and reveals no receipt or result",
+      "S2: an ask under a saved job's id from another process is refused id_reused in every state of the job, writes nothing, and reveals no receipt or result",
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();

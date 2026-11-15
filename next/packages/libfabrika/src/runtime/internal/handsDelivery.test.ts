@@ -6,7 +6,7 @@
 //
 //   pending + replied waiting  -> waiting       pending + replied finished -> result ok
 //   waiting + replied waiting  -> waiting       waiting + replied finished -> result ok
-//   pending + replied refused  -> result err    waiting + replied refused  -> result err, conflict only
+//   pending + replied refused  -> result err    waiting + replied refused  -> result err, id_reused only
 //   result  + anything         -> unchanged
 //
 // So a settled delivery never moves again, a saved job never goes back to pending, and no hands key
@@ -37,7 +37,7 @@ const reply = fc.oneof(
   {
     weight: 2,
     arbitrary: fc
-      .constantFrom("no_hands" as const, "conflict" as const)
+      .constantFrom("no_hands" as const, "id_reused" as const)
       .map((reason) => Reply.cases.refused.make({ reason })),
   },
 );
@@ -104,7 +104,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
           );
         }
 
-        if (prev._tag === "pending" || r.reason === "conflict") {
+        if (prev._tag === "pending" || r.reason === "id_reused") {
           return (
             (next._tag === "result" &&
               next.answer._tag === "err" &&
@@ -124,15 +124,15 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
         "pending+replied:waiting",
         "pending+replied:finished",
         "pending+replied:refused:no_hands",
-        "pending+replied:refused:conflict",
+        "pending+replied:refused:id_reused",
         "waiting+replied:waiting",
         "waiting+replied:finished",
         "waiting+replied:refused:no_hands",
-        "waiting+replied:refused:conflict",
+        "waiting+replied:refused:id_reused",
         "result+replied:waiting",
         "result+replied:finished",
         "result+replied:refused:no_hands",
-        "result+replied:refused:conflict",
+        "result+replied:refused:id_reused",
       ].sort(),
     );
   });

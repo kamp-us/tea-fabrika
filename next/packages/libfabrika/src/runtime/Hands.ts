@@ -22,7 +22,7 @@ export const HandsInput = Schema.Struct({ command: Command });
 
 /**
  * The hands command. The runner performs it itself; a caller-supplied handler never runs it. Its
- * answer is the job's checked `Result`, `no_hands` when no hands key is set, or `conflict` when the
+ * answer is the job's checked `Result`, `no_hands` when no hands key is set, or `id_reused` when the
  * job saved under its id is not its process's.
  *
  * @stability unstable

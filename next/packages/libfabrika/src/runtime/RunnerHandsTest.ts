@@ -22,7 +22,7 @@
 //
 // The contract these laws pin, from the plan:
 //   Hands.ts: `hands`, `Cmd.make("hands", { input: { command }, ok: Result, err: ["no_hands",
-//   "conflict"] })`.
+//   "id_reused"] })`.
 //   HandsJobs.ts: `Ask`, `Reply`, `HandsJobsError`, `HandsJobs`; HandsJobsLive.ts: `layer`.
 //   Runner.ts: a runner given `HandsJobs` performs `hands` itself, saves `waiting` on the dispatched
 //   Cmd, owes it only while `pending`, and asks again on every wake or due.
@@ -33,9 +33,9 @@
 // alone; L20, hold the command permit while waiting; R1, drop the Cmd when `ask` answers finished,
 // before the letter is placed; B1, take `hands` out of `BUILT_IN`.
 //
-// L21, added in the fix round: a `conflict` refusal is the program's answer, never a retry. Its
+// L21, added in the fix round: an `id_reused` refusal is the program's answer, never a retry. Its
 // `foreign` cut saves another process's job under the Cmd's id through the real Project first.
-// Plants: treat a conflict refusal as a failed ask, as the build first did; keep a conflicted
+// Plants: treat an id_reused refusal as a failed ask, as the build first did; keep an id_reused-refused
 // delivery pending.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -926,7 +926,7 @@ const After = fc.array(fc.constantFrom("poke" as const, "wake" as const, "due" a
 
 /**
  * L21: a refusal for good is an answer. The real Project finds another process's job under the
- * Cmd's id and refuses `conflict`; the program folds one `hands_err`, and the Cmd is never asked or
+ * Cmd's id and refuses `id_reused`; the program folds one `hands_err`, and the Cmd is never asked or
  * retried again, whatever wakes, alarms and inputs come after.
  */
 const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>) =>
@@ -995,7 +995,7 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
 
     const checkpoint = yield* saved();
     const m = Option.getOrNull(decodeModel(checkpoint?.saved.model ?? null));
-    expect(m?.answers, "L21: the program folds one hands_err conflict").toEqual([{ err: "conflict" }]);
+    expect(m?.answers, "L21: the program folds one hands_err id_reused").toEqual([{ err: "id_reused" }]);
     expect(m?.pokes, "L21: every later input steps").toBe(tape.after.filter((a) => a === "poke").length);
     expect(
       (checkpoint?.cmds ?? []).filter((c) => isHandsCmd(c)),
@@ -1007,8 +1007,8 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     const placed = inbox.filter((l) => l.id === `${id}/answer`).map((l) => Option.getOrNull(decodeLetter(l.m)));
     expect(
       placed.map((l) => [l?.type, l?.reason]),
-      "L21: one answer letter, hands_err conflict",
-    ).toEqual([["hands_err", "conflict"]]);
+      "L21: one answer letter, hands_err id_reused",
+    ).toEqual([["hands_err", "id_reused"]]);
     expect(yield* inContext(Jobs.use((j) => j.read(id))), "L21: the other process's job is left as it was").toEqual(
       foreign,
     );
@@ -1116,7 +1116,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       },
     );
     it.effect(
-      "L21: a hands Cmd whose id holds another process's job is answered hands_err conflict once, and is never asked or retried again",
+      "L21: a hands Cmd whose id holds another process's job is answered hands_err id_reused once, and is never asked or retried again",
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();

@@ -1691,7 +1691,7 @@ export class ProgramRunner extends Context.Service<
             .pipe(Effect.result);
 
           // A failed ask may pass, so it is no reply and changes nothing the delivery saved. A waiting
-          // Cmd is owed nothing, so this alarm is what asks it again. A refusal for good, a conflict
+          // Cmd is owed nothing, so this alarm is what asks it again. A refusal for good, `id_reused`
           // included, is a reply, and the program reads it.
           if (Result.isFailure(replied)) {
             yield* permit.withPermit(retryLater);
