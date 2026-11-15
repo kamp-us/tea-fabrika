@@ -13,7 +13,6 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
-import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Program } from "@kampus/libfabrika/runtime/Program";
 import { send } from "@kampus/libfabrika/runtime/Send";
@@ -473,8 +472,6 @@ const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
-  // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
-  values: StartsTest.Values = {},
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
@@ -602,7 +599,6 @@ const world = (
         port: 18787,
         build: "brain-test",
         mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-        values,
       }),
     ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
@@ -872,11 +868,6 @@ const world = (
     return found[1];
   };
   return {
-    localUsage: (pid: string) =>
-      QuotasSql.accounting(nodeSql(processFor(pid).db), {
-        name: nameFor(pid)!,
-        limits: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
-      }).status,
     close: async () => {
       const index = closers.indexOf(close);
 
@@ -1808,78 +1799,3 @@ it("scenario: W3, an evicted sender retries its owed Send from its alarm and add
   w.holdAlarm(requester, false);
   await oneExchange(w, requester, responder, "held-sender");
 }, 30_000);
-
-const QuotaCell = Schema.Struct({
-  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
-  reopen: Schema.Boolean,
-});
-
-const QuotaTape = Schema.Array(QuotaCell).check(Schema.isMinLength(3), Schema.isMaxLength(12));
-
-// The Project and Process implementations are real. Only object handles and loader RPC are supplied.
-describe("P34c live object accounting", () => {
-  effect.effect.prop(
-    "Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved",
-    { tape: QuotaTape },
-    ({ tape }) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
-            (w) => Effect.promise(() => w.close()),
-          );
-          yield* Effect.promise(() => w.project.info());
-          const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
-          const client = yield* Effect.promise(() => w.admit());
-          // `letter` is the door's own key for the message id (0547 keeps wire names).
-          const send = (pid: string, id: string) =>
-            Effect.promise(() =>
-              w.project.route(client, "process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
-            );
-          expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
-            view: { count: 1 },
-          });
-          const local = yield* w.localUsage(pid);
-          expect(local.program.writes).toBeGreaterThan(0);
-          expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
-          let baseline: unknown;
-          const counts = (db: DatabaseSync) =>
-            Object.fromEntries(
-              db
-                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-                .all()
-                .map(({ name }) => [
-                  String(name),
-                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
-                ]),
-            );
-
-          for (const [n, c] of tape.entries()) {
-            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
-            const current = { project: counts(w.db), process: counts(w.process(pid).db) };
-
-            if (baseline === undefined) {
-              baseline = current;
-            } else {
-              expect(current).toEqual(baseline);
-            }
-
-            expect(yield* w.localUsage(pid)).toEqual(local);
-            expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
-              view: { count: 1 },
-            });
-
-            if (c.reopen) {
-              yield* Effect.promise(() => w.reopenAll());
-            }
-          }
-
-          // A different checked program has its own room in the same Project.
-          const counterPid = w.attempts.find((d) => d.name === "counter:1")!.id;
-          expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-        }),
-      ),
-    { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
-  );
-});

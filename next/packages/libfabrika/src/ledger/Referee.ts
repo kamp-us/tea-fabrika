@@ -4,32 +4,11 @@
  *
  * @stability unstable
  */
-import { Context, Schema } from "effect";
+import { Context } from "effect";
 import type { Effect } from "effect";
 import type { Rev } from "../Rev.ts";
 import type { LedgerError } from "./Ledger.ts";
 import type { Appended, Entry, Waited } from "./Log.ts";
-
-/**
- * Schema for which committed entries a reader below the service asks for: `all` past a revision,
- * one `stream`'s past a revision, or the one `entry` at a stream's position, as an ack names it.
- *
- * @stability unstable
- * @category schemas
- */
-export const Selection = Schema.TaggedUnion({
-  all: { after: Schema.Int },
-  stream: { stream: Schema.String, after: Schema.Int },
-  entry: { stream: Schema.String, pos: Schema.Int },
-});
-
-/**
- * Which committed entries a reader below the service asks for.
- *
- * @stability unstable
- * @category models
- */
-export type Selection = typeof Selection.Type;
 
 /**
  * Service for the referee: the one place that orders writes, giving each entry its `rev`, its

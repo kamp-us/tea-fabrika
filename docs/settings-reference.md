@@ -203,45 +203,6 @@ The port the local instance listens on.
 | Reload | restart |
 | Since | 0.0.0 |
 
-### `limits.recovery`
-
-Recovery writes and bytes per rolling minute, plus each accepted message's replay room.
-
-| Field | Value |
-|---|---|
-| Scope | person |
-| Environment | `FABRIKA_LIMITS_RECOVERY` |
-| Flag | `--limits.recovery` |
-| Default | `{"project":{"writes":160,"bytes":"74080 bytes","message":{"writes":10,"bytes":"5469 bytes"}},"process":{"writes":290,"bytes":"207410 bytes","message":{"writes":50,"bytes":"18790 bytes"}}}` |
-| Reload | restart |
-| Since | 0.0.0 |
-
-### `limits.storage`
-
-The most encoded ledger bytes one program may keep, at most decimal one GB.
-
-| Field | Value |
-|---|---|
-| Scope | person |
-| Environment | `FABRIKA_LIMITS_STORAGE` |
-| Flag | `--limits.storage` |
-| Default | `"1000000000 bytes"` |
-| Reload | restart |
-| Since | 0.0.0 |
-
-### `limits.writes`
-
-The most ledger writes one program may commit per rolling minute, including admitted steps.
-
-| Field | Value |
-|---|---|
-| Scope | person |
-| Environment | `FABRIKA_LIMITS_WRITES` |
-| Flag | `--limits.writes` |
-| Default | `13760` |
-| Reload | restart |
-| Since | 0.0.0 |
-
 ### `mail.chunk`
 
 The most bytes in one letter of a chunked send.

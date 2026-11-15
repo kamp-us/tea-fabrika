@@ -29,10 +29,6 @@ describe("instance start envelope, next/", () => {
           "gateway.window",
           "hands.target",
           "instance.port",
-          // P34c slice 4: the per-program quotas and the brain's reserved room (0147).
-          "limits.recovery",
-          "limits.storage",
-          "limits.writes",
           // T1041: the inbox cap and the chunk size.
           "mail.chunk",
           "mail.unread",

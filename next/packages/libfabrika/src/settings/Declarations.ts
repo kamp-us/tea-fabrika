@@ -1,8 +1,7 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
  * six local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the two mail settings `mail.unread` and
- * `mail.chunk`, `hands.target`, the three quota settings `limits.writes`, `limits.storage` and
- * `limits.recovery`, and `all`, the group of the seventeen.
+ * `mail.chunk`, `hands.target`, and `all`, the group of the fourteen.
  *
  * **Details**
  *
@@ -309,71 +308,6 @@ export const handsTarget = Setting.make("hands.target", {
   since: "0.0.0",
 });
 
-const Bytes = Schema.ByteSizeFromString.check(
-  Schema.makeFilter((n) => ByteSize.toBigInt(n) > 0n, {
-    expected: "a positive byte size",
-  }),
-);
-
-const RecoveryAllowance = Schema.Struct({
-  writes: Positive,
-  bytes: Bytes,
-  message: Schema.Struct({ writes: Positive, bytes: Bytes }),
-});
-
-/**
- * Setting for the most ledger writes one program may commit per rolling minute.
- *
- * @stability unstable
- * @category settings
- */
-export const writes = Setting.make("limits.writes", {
-  schema: Positive.check(Schema.isLessThanOrEqualTo(13_760)),
-  default: 13_760,
-  doc: "The most ledger writes one program may commit per rolling minute, including admitted steps.",
-  scope: ["person"],
-  reload: "restart",
-  since: "0.0.0",
-});
-
-/**
- * Setting for the most encoded ledger bytes one program may keep.
- *
- * @stability unstable
- * @category settings
- */
-export const storage = Setting.make("limits.storage", {
-  schema: Bytes.check(
-    Schema.makeFilter((n) => ByteSize.toBigInt(n) <= 1_000_000_000n, {
-      expected: "at most 1000000000 B",
-    }),
-  ),
-  default: ByteSize.bytes(1_000_000_000),
-  doc: "The most encoded ledger bytes one program may keep, at most decimal one GB.",
-  scope: ["person"],
-  reload: "restart",
-  since: "0.0.0",
-});
-
-/**
- * Setting for the recovery allowance of each storage location: its writes and bytes per rolling
- * minute, and the room one replayed message may take.
- *
- * @stability unstable
- * @category settings
- */
-export const recovery = Setting.make("limits.recovery", {
-  schema: Schema.Struct({ project: RecoveryAllowance, process: RecoveryAllowance }),
-  default: {
-    project: { writes: 160, bytes: ByteSize.bytes(74_080), message: { writes: 10, bytes: ByteSize.bytes(5_469) } },
-    process: { writes: 290, bytes: ByteSize.bytes(207_410), message: { writes: 50, bytes: ByteSize.bytes(18_790) } },
-  },
-  doc: "Recovery writes and bytes per rolling minute, plus each accepted message's replay room.",
-  scope: ["person"],
-  reload: "restart",
-  since: "0.0.0",
-});
-
 /**
  * Group of every setting fabrika declares, ready to load, validate and print.
  *
@@ -381,8 +315,7 @@ export const recovery = Setting.make("limits.recovery", {
  *
  * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the six local brain settings
  * (`brainThrottle`, `brainPoll`, `brainStartTimeout`, `brainStopTimeout`, `brainMemory` and
- * `brainGrace`), `desktopLinkTtl`, the two mail settings, `mailUnread` and `mailChunk`, `handsTarget`,
- * and the three quota settings, `writes`, `storage` and `recovery`.
+ * `brainGrace`), `desktopLinkTtl`, the two mail settings, `mailUnread` and `mailChunk`, and `handsTarget`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -403,7 +336,4 @@ export const all = Setting.group({
   mailUnread,
   mailChunk,
   handsTarget,
-  writes,
-  storage,
-  recovery,
 });

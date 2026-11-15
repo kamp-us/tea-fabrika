@@ -252,18 +252,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         };
         let text = damaged(good, recipe);
         let reads = 0;
-        // A build asks whether the object holds a checkpoint yet (none here), then sets up the
-        // object's own accounting (P34c): its two tables and its fault slot, and the guard checks
-        // that slot before a call. Each is asked for the object's own name; any other query throws.
-        const allowed = new Set(
-          [
-            ["SELECT name FROM sqlite_master WHERE name='process_state'"],
-            ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-            ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
-            ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", descriptor.name, ""],
-            ["SELECT value FROM quota_fault WHERE name=?", descriptor.name],
-          ].map((call) => JSON.stringify(call)),
-        );
+        // The one query a build makes: whether the object holds a checkpoint yet (none here).
         let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
         const storage = {
@@ -276,8 +265,8 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           setAlarm: unexpected,
           deleteAlarm: unexpected,
           sql: {
-            exec: (query: string, ...args: ReadonlyArray<unknown>) => {
-              if (!allowed.has(JSON.stringify([query, ...args]))) {
+            exec: (query: string) => {
+              if (query !== "SELECT name FROM sqlite_master WHERE name='process_state'") {
                 return unexpected();
               }
 
