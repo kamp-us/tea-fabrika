@@ -59,8 +59,8 @@ describe("instance start envelope, next/", () => {
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
 
-  it("format: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
-    // format: schema field names are the serialized Worker protocol.
+  it("type: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
+    // The schema field names are the serialized Worker protocol.
     expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<typeof import("./Snapshot.ts").Snapshot.Type>();
     expectTypeOf<typeof Start.Input.Type.repo>().toEqualTypeOf<{ readonly revision: string } | null>();
   });

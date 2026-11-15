@@ -3,7 +3,7 @@
 // instance, the headless browser, each profile (a browser context) and each tab (a page), released by
 // the scope in reverse order.
 //
-// `resources.laws.test.ts` (L16) runs `first-window.test.ts` as a child process. It sets
+// `resources.laws.visual.test.ts` (L16) runs `first-window.visual.test.ts` as a child process. It sets
 // `P14_E2E_TRACE` to a file the fixture appends each acquisition (with its pid, port or home) and
 // release to, and `P14_E2E_FAULT` to `{at, kind}`: right after acquiring `at`, fail setup (`setup`),
 // fail the test (`test`), or wait to be interrupted (`hold`). Without them the fixture runs plainly.

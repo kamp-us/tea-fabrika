@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-permission-span-attributes-untested",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/ChildrenLedger.ts",
+    "line": 214
+  },
+  "says": "The start's span records fab.permissions.subject, permission, object and outcome, which the plan's 'What this records' promises and 0202 keeps forever, but no law reads any of them, so a wrong or dropped attribute passes.",
+  "proof": "`rg -n \"fab.permissions\" next` finds the names only in ChildrenLedger.ts and RelationsLedger.ts; no test file names one.",
+  "cost": "A start's who, what and outcome could stop being recorded, or be recorded wrong, with every check green; spans written meanwhile never get the right value back.",
+  "head": "c8d72135f05226d9fac13b900342b9fd7321e73b",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1239"
+}

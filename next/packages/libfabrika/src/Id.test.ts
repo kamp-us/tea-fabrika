@@ -40,7 +40,7 @@ const prefixShapes = fc
   ]);
 
 const badPrefixShapes = fc
-  .tuple(text(1, 63), text(64, 100), fc.constantFrom("0", "-", "/", "é", "\0", " ", "\n"))
+  .tuple(text(1, 63), text(64, 100), fc.constantFrom(..."0123456789", "-", "/", "é", "\0", " ", "\n"))
   .map(([word, long, bad]) => [
     "", // A8 keeps main's nonempty prefix rule.
     "_",
@@ -48,7 +48,10 @@ const badPrefixShapes = fc
     `${word}_`,
     word.toUpperCase(),
     long,
+    // A bad character is refused in the middle and at both ends, so `${word}1` stays refused.
     `${word}${bad}${word}`,
+    `${bad}${word}`,
+    `${word}${bad}`,
     // T518-PREFIX-EXCEPTION: mutation 13 admitted this invalid prefix; UUIDs stay generated.
     "Stryker was here!",
   ]);
@@ -159,17 +162,14 @@ const increasing = (ids: ReadonlyArray<string>): void => {
 
 const compare = (left: string, right: string): -1 | 0 | 1 => (left < right ? -1 : left > right ? 1 : 0);
 
+/** A stand-in for `crypto.getRandomValues` that fails as the platform's does: it throws. */
+const refuses = (marker: string) => (): never => {
+  throw new Error(marker);
+};
+
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock }));
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 128 }));
 const Prefix = Schema.String.check(Schema.isPattern(/^[a-z](?:[a-z_]{0,61}[a-z])?$/));
-const rawBytes = fc.uint8Array({ minLength: 16, maxLength: 16 });
-
-const v7 = (raw: Uint8Array): Uint8Array => {
-  const bytes = raw.slice();
-  bytes[6] = (bytes[6]! & 15) | 0x70;
-  bytes[8] = (bytes[8]! & 63) | 0x80;
-  return bytes;
-};
 
 const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, failureReason: string): void => {
   expect(Exit.isFailure(exit)).toBe(true);
@@ -344,7 +344,8 @@ describe("T518 Id format", () => {
         fc.integer({ min: 8, max: 31 }),
         fc.integer({ min: 0, max: 15 }).filter((version) => version !== 7),
         fc.constantFrom(0, 1, 3),
-        (type, bytes, index, overflow, version, variant) => {
+        fc.integer({ min: 1 }),
+        (type, bytes, index, overflow, version, variant, count) => {
           const raw = wire(type, bytes),
             suffix = referenceEncode(bytes);
           const head = type === "" ? "" : `${type}_`;
@@ -357,11 +358,15 @@ describe("T518 Id format", () => {
             head + suffix.toUpperCase(),
             head + suffix.slice(0, index) + suffix.slice(index + 1),
             `${head + suffix.slice(0, index)}0${suffix.slice(index)}`,
+            `${raw}0`,
+            // A count is never an id: an id is not derived from how many came before it.
+            `${head}${count}`,
+            `${raw}-${count}`,
             head + alphabet[overflow] + suffix.slice(1),
             wire(type, wrongVersion),
             wire(type, wrongVariant),
             ...[" ", "\t", "\n", "\r\n", "\u00a0"].flatMap((space) => [space + raw, raw + space]),
-            ...["i", "l", "o", "u", "-", "_", "é", "\0"].map(
+            ...["i", "l", "o", "u", "A", "-", "_", "é", "\0"].map(
               (char) => head + suffix.slice(0, index) + char + suffix.slice(index + 1),
             ),
             ...(type === "" ? [`_${suffix}`] : [type + suffix, `${type}__${suffix}`]),
@@ -529,240 +534,6 @@ describe("T518 Id format", () => {
         }
       }),
       options,
-    );
-  });
-});
-
-// A8: all six runtime laws from P17a's data/id.test.ts, now exercising the shared module.
-describe("P17a, one valid typed identity", () => {
-  it("decodes generated UUIDv7 bytes exactly; rejects other prefixes, versions and variants", async () => {
-    await fc.assert(
-      fc.asyncProperty(prefix, rawBytes, async (p, raw) => {
-        const schema = await Effect.runPromise(Id.makeEffect(p));
-        const valid = v7(raw),
-          value = wire(p, valid);
-        expect(await Effect.runPromise(Schema.decodeUnknownEffect(schema)(value))).toBe(value);
-        expect(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value))).toBe(value);
-        expect(Schema.is(Id.Input)(wire("input", valid))).toBe(true);
-        expect(Schema.is(Id.make("chaos"))(wire("input", valid))).toBe(false);
-        expect(Schema.is(schema)(wire(`${p}x`, valid))).toBe(false);
-
-        for (const version of Array.from({ length: 16 }, (_, n) => n).filter((n) => n !== 7)) {
-          const bad = valid.slice();
-          bad[6] = (bad[6]! & 15) | (version << 4);
-          expectDecoded(
-            Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(wire(p, bad)))),
-            false,
-            wire(p, bad),
-            Schema.isSchemaError,
-          );
-        }
-
-        for (const variant of [0, 1, 3]) {
-          const bad = valid.slice();
-          bad[8] = (bad[8]! & 63) | (variant << 6);
-          expectDecoded(
-            Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(wire(p, bad)))),
-            false,
-            wire(p, bad),
-            Schema.isSchemaError,
-          );
-        }
-      }),
-      { ...options, numRuns: 60 },
-    );
-  });
-  it("rejects base32 mutations, overflow, nonstrings and count-derived input ids", () => {
-    fc.assert(
-      fc.property(
-        rawBytes,
-        fc.integer({ min: 0, max: 25 }),
-        fc.constantFrom("i", "l", "o", "u", "A", "-", "_"),
-        fc.integer({ min: 1 }),
-        (raw, at, mutation, count) => {
-          const s = referenceEncode(v7(raw));
-
-          for (const bad of [
-            `input_${s.slice(0, at)}${mutation}${s.slice(at + 1)}`,
-            `input_8${s.slice(1)}`,
-            `input_${s.slice(1)}`,
-            `input_${s}0`,
-            `in-process_${s}-${count}`,
-            `input_${count}`,
-            null,
-            count,
-            { id: `input_${s}` },
-          ]) {
-            expectDecoded(
-              Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Input)(bad))),
-              false,
-              bad,
-              Schema.isSchemaError,
-            );
-          }
-        },
-      ),
-      { ...options, numRuns: 60 },
-    );
-  });
-  it("outside prefixes get typed errors, while code declarations may throw", async () => {
-    await fc.assert(
-      fc.asyncProperty(prefix, fc.integer({ min: 64, max: 90 }), rawBytes, async (p, length, raw) => {
-        const valid = await Effect.runPromise(Id.makeEffect(p));
-        expect(Schema.is(valid)(wire(p, v7(raw)))).toBe(true);
-
-        for (const bad of [
-          p.toUpperCase(),
-          `_${p}`,
-          `${p}_`,
-          `${p}1`,
-          `${p}-x`,
-          "a".repeat(length),
-          wire("input", v7(raw)),
-        ]) {
-          expectIdFailure(await Effect.runPromise(Effect.exit(Id.makeEffect(bad))), "prefix");
-          expect(() => Id.make(bad)).toThrow();
-        }
-      }),
-      { ...options, numRuns: 60 },
-    );
-  });
-  it("keeps unique, increasing UUIDv7 ids over equal clocks and rollback; process ids share the format", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.integer({ min: 10_000, max: 2 ** 46 }),
-        fc.array(fc.integer({ min: -1000, max: 1000 }), { minLength: 1, maxLength: 12 }),
-        rawBytes,
-        async (at, changes, raw) => {
-          const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-            if (array instanceof Uint8Array) {
-              array.forEach((_, i) => {
-                array[i] = raw[i % raw.length]!;
-              });
-            }
-
-            return array;
-          });
-
-          try {
-            await Effect.runPromise(
-              Effect.gen(function* () {
-                const gen = yield* Id.Generator,
-                  Input = Id.make("input"),
-                  Chaos = Id.make("chaos");
-                const made: string[] = [];
-                let highest = at;
-
-                for (const now of [at, at, at - 1, ...changes.map((n) => at + n)]) {
-                  yield* TestClock.setTime(now);
-                  highest = Math.max(now, highest);
-                  const input = yield* gen.next(Input),
-                    chaos = yield* gen.next(Chaos);
-
-                  if (made.length === 0) {
-                    const expected =
-                      Array.from({ length: 10 }, (_, i) => raw[i]!).reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) &
-                      ((1n << 74n) - 1n);
-                    const uuid = [...referenceDecode(split(input)[1])].reduce(
-                      (n, byte) => (n << 8n) | BigInt(byte),
-                      0n,
-                    );
-                    const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
-                    expect(actual, "fresh identity uses the supplied entropy, not a count").toBe(expected);
-                  }
-
-                  expect(Schema.is(Input)(input)).toBe(true);
-                  expect(Schema.is(Chaos)(chaos)).toBe(true);
-                  expect(timestamp(input)).toBeGreaterThanOrEqual(highest);
-                  expect(referenceDecode(split(input)[1])[6]! >>> 4).toBe(7);
-                  expect(referenceDecode(split(input)[1])[8]! >>> 6).toBe(2);
-                  made.push(split(input)[1], split(chaos)[1]);
-                }
-
-                expect(made).toEqual([...new Set(made)].sort());
-                const process = yield* gen.next(Id.make("process"));
-                expect(Schema.is(ProcessId)(process)).toBe(true);
-                expect(process).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-                expect(referenceDecode(split(process)[1])[6]! >>> 4).toBe(7);
-                expect(referenceDecode(split(process)[1])[8]! >>> 6).toBe(2);
-              }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
-            );
-          } finally {
-            entropy.mockRestore();
-          }
-        },
-      ),
-      { ...options, numRuns: 30 },
-    );
-  });
-
-  for (const reason of ["clock", "entropy"] as const) {
-    it(`${reason} failures are typed IdErrors, never defects`, async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.oneof(
-            fc.integer({ max: -1 }),
-            fc.integer({ min: 2 ** 48, max: Number.MAX_SAFE_INTEGER }),
-            fc.double({ min: 0, max: maxClock, noNaN: true }).filter((n) => !Number.isInteger(n)),
-            fc.constantFrom(Number.NaN, Infinity),
-          ),
-          fc.string({ minLength: 1, maxLength: 20 }),
-          async (at, marker) => {
-            const run = (time: number) =>
-              Effect.gen(function* () {
-                yield* TestClock.setTime(time);
-                return yield* Id.Generator.use((g) => g.next(Id.Input));
-              }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer()));
-            const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
-              throw new Error(marker);
-            });
-
-            try {
-              expectIdFailure(await Effect.runPromise(Effect.exit(run(reason === "clock" ? at : 1000))), reason);
-            } finally {
-              entropy.mockRestore();
-            }
-          },
-        ),
-        { ...options, numRuns: 20 },
-      );
-    });
-  }
-
-  it("random overflow advances the logical clock; its final millisecond refuses exhaustion", async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 1, max: maxClock - 1 }), async (at) => {
-        const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.fill(255);
-          }
-
-          return array;
-        });
-        const run = (now: number) =>
-          Effect.gen(function* () {
-            yield* TestClock.setTime(now);
-            const gen = yield* Id.Generator,
-              Input = Id.make("input");
-            const first = yield* gen.next(Input);
-            return { first, second: yield* Effect.exit(gen.next(Input)) };
-          }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer()));
-
-        try {
-          const ordinary = await Effect.runPromise(run(at));
-          expect(Exit.isSuccess(ordinary.second)).toBe(true);
-
-          if (Exit.isSuccess(ordinary.second)) {
-            expect(timestamp(ordinary.second.value)).toBe(at + 1);
-          }
-
-          const last = await Effect.runPromise(run(maxClock));
-          expectIdFailure(last.second, "exhausted");
-        } finally {
-          entropy.mockRestore();
-        }
-      }),
-      { ...options, numRuns: 20 },
     );
   });
 });
@@ -990,19 +761,39 @@ describe("T518 Id order and generation", () => {
     effectOptions,
   );
   it.effect.prop(
-    "out-of-range clocks fail with a typed IdError",
-    { extra: Count },
-    ({ extra }) =>
+    "out-of-range, fractional and non-finite clocks fail with a typed IdError, even when entropy fails too",
+    { extra: Count, marker: Schema.String },
+    ({ extra, marker }) =>
       Effect.gen(function* () {
         const Specific = Id.make("process");
 
-        for (const now of [-extra, maxClock + extra, Number.MAX_SAFE_INTEGER + extra]) {
-          yield* TestClock.setTime(now);
-          const exit = yield* Effect.gen(function* () {
-            const generator = yield* Id.Generator;
-            return yield* generator.next(Specific);
-          }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
-          expectIdFailure(exit, "clock");
+        // A bad clock is reported as `clock` whether or not entropy works: the clock is checked first.
+        for (const entropy of ["working", "failing"] as const) {
+          const random =
+            entropy === "failing" ? vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker)) : undefined;
+
+          try {
+            // One past each edge, then generated distances past it.
+            for (const now of [
+              -1,
+              -extra,
+              maxClock + 1,
+              maxClock + extra,
+              Number.MAX_SAFE_INTEGER + extra,
+              extra + 0.5,
+              Number.NaN,
+              Infinity,
+            ]) {
+              yield* TestClock.setTime(now);
+              const exit = yield* Effect.gen(function* () {
+                const generator = yield* Id.Generator;
+                return yield* generator.next(Specific);
+              }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
+              expectIdFailure(exit, "clock");
+            }
+          } finally {
+            random?.mockRestore();
+          }
         }
       }),
     effectOptions,
@@ -1079,6 +870,83 @@ describe("T518 Id order and generation", () => {
           }
         }
       }),
+    effectOptions,
+  );
+  it.effect.prop(
+    "an entropy failure is a typed IdError, never a defect",
+    { at: Time, marker: Schema.String },
+    ({ at, marker }) =>
+      Effect.gen(function* () {
+        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker));
+
+        try {
+          yield* TestClock.setTime(at);
+          const generator = yield* Id.Generator;
+          expectIdFailure(yield* Effect.exit(generator.next(Id.Input)), "entropy");
+        } finally {
+          random.mockRestore();
+        }
+      }).pipe(Effect.provide(Id.Generator.layer)),
+    effectOptions,
+  );
+  it.effect.prop(
+    "a fresh millisecond takes its random bits from entropy, and one writer orders ids across prefixes and long rollbacks",
+    {
+      at: Time,
+      raw: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))).check(
+        Schema.isBetweenLength(10, 10),
+      ),
+      rollback: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000_000 })),
+      deltas: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: -1000, maximum: 1000 }))).check(
+        Schema.isBetweenLength(1, 12),
+      ),
+    },
+    ({ at, raw, rollback, deltas }) =>
+      Effect.gen(function* () {
+        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+          if (array instanceof Uint8Array) {
+            array.forEach((_, i) => {
+              array[i] = raw[i % raw.length]!;
+            });
+          }
+
+          return array;
+        });
+
+        try {
+          const generator = yield* Id.Generator;
+          const Input = Id.make("input"),
+            Chaos = Id.make("chaos");
+          // Leave room above the longest rollback, so all-ones entropy never reaches the last millisecond.
+          const start = Math.min(at, maxClock - 1_000_010_000);
+          const suffixes: Array<string> = [];
+          let highest = 0;
+
+          for (const now of [start, start, start + rollback, start, start - 1, ...deltas.map((n) => start + n)]) {
+            yield* TestClock.setTime(Math.max(0, now));
+            highest = Math.max(highest, Math.max(0, now));
+            const input = yield* generator.next(Input),
+              chaos = yield* generator.next(Chaos);
+
+            if (suffixes.length === 0) {
+              const expected = raw.reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & ((1n << 74n) - 1n);
+              const uuid = [...referenceDecode(split(input)[1])].reduce((n, byte) => (n << 8n) | BigInt(byte), 0n);
+              const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
+              expect(actual, "a fresh id uses the supplied entropy, not a count").toBe(expected);
+            }
+
+            expect(accepts(input, "input")).toBe(true);
+            expect(accepts(chaos, "chaos")).toBe(true);
+            expect(timestamp(input)).toBeGreaterThanOrEqual(highest);
+            suffixes.push(split(input)[1], split(chaos)[1]);
+          }
+
+          // One state serves every prefix: the suffixes alone keep the writer's order.
+          increasing(suffixes);
+        } finally {
+          random.mockRestore();
+        }
+      }).pipe(Effect.provide(Id.Generator.layer)),
     effectOptions,
   );
 });
