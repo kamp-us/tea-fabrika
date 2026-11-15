@@ -51,13 +51,17 @@ const open = Effect.gen(function* () {
     handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
     handle.sql = nodeSql(handle.db);
   });
+  // Every ring the ledger asks its doorbell for, kept for the suite to read (P39 slice 4a, G2).
+  const rings: Array<{ readonly to: string; readonly stream: string; readonly rev: number }> = [];
+  const bell = Layer.succeed(Doorbell, {
+    ring: (to: string, stream: string, rev: number) => Effect.sync(() => void rings.push({ to, stream, rev })),
+  });
   const gateway: TestSuite.Store["gateway"] = (options) => {
-    const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
     const data = Layer.mergeAll(
       LedgerSql.layer(sql, { reader: "jobs-gateway-law" }),
       LedgerTransactionSql.layer(sql),
       LedgerStreamsSql.layer(sql),
-    ).pipe(Layer.provide(quiet));
+    ).pipe(Layer.provide(bell));
     const jobs = JobsLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer));
     const services = Layer.mergeAll(
       data,
@@ -74,7 +78,7 @@ const open = Effect.gen(function* () {
     // The suite's contract names no ledger error: a store that cannot open is a broken test, a defect.
     return Gateway.layer(options).pipe(Layer.provideMerge(services), Layer.orDie);
   };
-  return { sql, reopen, gateway } satisfies TestSuite.Store;
+  return { sql, reopen, gateway, rings } satisfies TestSuite.Store;
 });
 
 TestSuite.suite(open);

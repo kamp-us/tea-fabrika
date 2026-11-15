@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-fix2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T08:05:17-08:00",
+  "ended": "2026-11-15T08:20:00-08:00",
+  "parent": "2026-11-15-p39-s4-recheck",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round 2 of P39 slice 4a (the hands client), in next/, after the recheck's second send-back; the lead restarted the lane for two exact fixes. (1) client/HandsMachine.ts reads one table, LASTS through lasts, for both a take and a finish: never (not_allowed, not_target, conflict, wrong_execution, wrong_state, wrong_process, not_found, bad_input, reserved, unknown_method) holds a finish and skips a take; link (lacks_capability) skips the job on this link with nothing held; list (idle, ambiguous) skips a take; later, every other reason (unavailable, rate_limited, unreachable, storage, not_granted, no_hello, an answer that does not decode, and any reason the table does not know) sends the same result again after a backoff. H3 now answers finishes with each of these and requires that a held entry appears only for the closed list. (2) t863 L1 in cloudflare/connection.test.ts keeps its own list of the waits it parked and decides room from 64 waits and 16,384 bytes of attachment; under them a parked call gets no reply, is kept and is routed a second time, at them it must be refused too_many_waits; a new 9,000-character parked answer makes every run reach the limit. Open finding saved: 2026-11-15-a-held-job-has-no-way-to-end.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "costUsd": null,
+  "billed": null,
+  "note": "The started time is the first clock reading, after the code was read. H3 was seen red on the code before the fix (an answer that does not decode was held as other). The L1 fix changes only the law, so today's code stays green; its plants prove it. Each plant run once and undone with git checkout, git status clean after each. Ran green, each file alone with --maxWorkers=1: HandsMachine.laws, HandsStart.laws, Hands.types, hands-client, transport/Connection.test, cloudflare/connection.test, runtime/Gateway.laws, gateway/JobAccess.test, jobs/Job.test, jobs/internal/job.test, node/ErrorCause.test, node/runtime/RunnerHands.test, cloudflare/hands.test, runtime/internal/handsDelivery.test, and with --project next-integration dev-secrets.laws, presence/Connections, GatewayRevocation, JobsLedger, gateway/Jobs, JobsDiscovery, RunnerHands. pnpm lint red only on lint:layers, the six client/ imports of jobs/Job.ts. ratchet exit 0. pnpm typecheck passed whole. H3's runs went from 60 to 100 so the walk reaches every new answer kind with the fixed seed.",
+  "driver_caused": false,
+  "step": "fix",
+  "plants": [
+    {
+      "law": "client/HandsMachine.laws.test.ts H3",
+      "plant": "client/HandsMachine.ts LASTS: rate_limited is never, so a finish refused rate_limited is held",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/connection.test.ts t863 L1",
+      "plant": "transport/Connection.ts reply: every parked call is refused too_many_waits",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/connection.test.ts t863 L1",
+      "plant": "transport/internal/connection.ts MAX_BYTES raised to 1,000,000, so a call at the limit is kept",
+      "result": "red"
+    }
+  ]
+}
