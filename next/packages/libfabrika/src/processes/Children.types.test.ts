@@ -1,4 +1,4 @@
-// T953 slice 2, next/: law L16 of the approved plan (docs/plan/lanes/t953-PLAN.md). The write step of a
+// T953 slice 2, next/: law L16 of the approved plan (docs/plan/quests/t953-PLAN.md). The write step of a
 // sender's start needs the proof in its context, so a start that skips `Rebac.provide(proof)` does not
 // compile. The lead and CI run the compiler; Vitest does not typecheck, so the body holds type
 // assertions only (0527).

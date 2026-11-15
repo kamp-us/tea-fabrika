@@ -1,5 +1,5 @@
 // T953 slice 1, next/: the permission core's check, laws L1 to L4 of the approved plan
-// (docs/plan/lanes/t953-PLAN.md), on generated relation histories.
+// (docs/plan/quests/t953-PLAN.md), on generated relation histories.
 //
 // The contract these laws pin, from the plan's "The shape":
 //   Rebac.ts: `make(name).type(name, { relations, permissions })` builds one model, and `Model.ref(type, id)`

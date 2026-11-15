@@ -63,7 +63,7 @@ const Founding = Schema.Struct({ person: Schema.String, founder: Schema.String, 
 
 /** The names this build's boot starts that the saved home's build did not, in table order: the
  *  founder's tezgah, which every instance boots since the workspace program landed (ticket 958,
- *  docs/plan/lanes/desk-PLAN.md). A program added to the boot list later is added here by name. */
+ *  docs/plan/quests/desk-PLAN.md). A program added to the boot list later is added here by name. */
 const booted = (founding: typeof Founding.Type) => [tezgahName(founding.person)];
 
 const Row = Schema.Struct({ name: Schema.String, process: Schema.String });

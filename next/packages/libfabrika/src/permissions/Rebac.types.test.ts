@@ -1,4 +1,4 @@
-// T953 slice 1, next/: the permission core's type laws L5 to L7 (docs/plan/lanes/t953-PLAN.md). Compile
+// T953 slice 1, next/: the permission core's type laws L5 to L7 (docs/plan/quests/t953-PLAN.md). Compile
 // the exact bad lines; never execute them. The lead and CI run the compiler (`pnpm typecheck`);
 // Vitest does not typecheck, so these bodies hold type assertions only (0527).
 //

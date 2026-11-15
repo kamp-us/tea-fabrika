@@ -1,4 +1,4 @@
-// Ticket 1041, next/: L4 of the pipe plumbing plan (docs/plan/lanes/t1041-PLAN.md), written before
+// Ticket 1041, next/: L4 of the pipe plumbing plan (docs/plan/quests/t1041-PLAN.md), written before
 // the build. An inbox's cap and a chunked send's letter size are two repo settings.
 //
 // The contract this law pins, from the plan's "The two settings" and the lead's calls after

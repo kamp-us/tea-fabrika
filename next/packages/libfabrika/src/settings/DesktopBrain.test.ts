@@ -1,5 +1,5 @@
 // L14 next/. Only the declarations and lower settings services belong in this law. The memory restart
-// plan (docs/plan/lanes/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
+// plan (docs/plan/quests/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
 import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";

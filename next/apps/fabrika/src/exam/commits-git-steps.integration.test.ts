@@ -516,7 +516,7 @@ describe("0053 historical exam lists", () => {
       runs,
     );
   });
-  // Plant: use the lane's initial list for every build.
+  // Plant: use the quest's initial list for every build.
   it("g2: later tsconfig build uses the restored parent row", () => {
     fc.assert(
       fc.property(name, (folder) => {

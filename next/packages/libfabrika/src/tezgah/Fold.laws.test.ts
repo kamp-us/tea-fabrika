@@ -1,5 +1,5 @@
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L31's fold half,
-// of the approved plan (docs/plan/lanes/desk-PLAN.md), rewritten to its thirteenth amendment (one
+// of the approved plan (docs/plan/quests/desk-PLAN.md), rewritten to its thirteenth amendment (one
 // drawn geometry for the fold). Tuval's `window/Layout.laws.test.ts` holds L31's markup half, and the
 // window machine's laws hold the `fold` client row and L32.
 //
