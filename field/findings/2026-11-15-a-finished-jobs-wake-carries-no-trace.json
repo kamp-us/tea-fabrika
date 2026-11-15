@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-a-finished-jobs-wake-carries-no-trace",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/gateway/Gateway.ts",
+    "line": 1175
+  },
+  "says": "In next/, the gateway wakes a finished job's requester with no span open: route is Effect.fnUntraced and the jobs branch opens none, so after the sev1 fix (kamp-us/tea-fabrika#1318) the wake carries no trace and the runner.mailed span starts a new trace, cut off from the finish whose saved traceId comes from the inner gateway.jobs span. AGENTS.md's data-shape rule: the link exists only at write time. Fix: run the whole jobs branch (route and wake) inside one span, so the saved traceId and the wake share a trace. No hands client sends finishes before slice 4, so nothing is lost if this lands first.",
+  "proof": "Gateway.ts:1114 route = Effect.fnUntraced; Gateway.ts:1175 wakeups.wake(wake) is outside JobRoutes.route's Effect.fn(\"gateway.jobs\") span (Jobs.ts:46); mail.test.ts R2's untraced case asserts the wake's trace is undefined, and it passes at f2ce5eec9.",
+  "cost": "Each hands finish's wake shows up as an orphan trace, so a slow or lost wake cannot be traced back to its finish.",
+  "head": "f2ce5eec9e03c742cc2e5a3823716f3de662e3bc",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1318"
+}

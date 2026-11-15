@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { ProgramMail, ProgramMailError } from "../processes/ProgramMail.ts";
 import type { MailDelivery } from "../runtime/MailDelivery.ts";
 import * as MailDeliveryLive from "../runtime/MailDeliveryLive.ts";
@@ -49,19 +49,21 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
  * Layer that wakes a registered name: its Process object saves the alarm that reads its inbox. Mail
  * and the gateway's wake after a job finish both use it.
  *
+ * **Details**
+ *
+ * The wake carries the caller's current span as its trace, and no trace when the caller has none:
+ * `wake(name)` asks nothing of its caller, and the gateway wakes outside any span.
+ *
  * @stability unstable
  * @category layers
  */
 export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups> =>
   Layer.succeed(MailWakeups, {
     wake: Effect.fnUntraced(function* (name) {
-      const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+      const span = yield* Effect.option(Effect.currentSpan);
       yield* rpc(
         ProcessClient.make(processStub(env, project, name))
-          .mailed({
-            traceId: span.traceId,
-            spanId: span.spanId,
-          })
+          .mailed(Option.isSome(span) ? { traceId: span.value.traceId, spanId: span.value.spanId } : undefined)
           .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
       );
     }),
