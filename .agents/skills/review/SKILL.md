@@ -60,8 +60,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - Shots on the pull request when the plan asks for them, at its layouts: the brief names the
      comment that holds them. A shot committed only to show the pull request running is a defect
      ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md)).
-   - Anything else the brief names for this round. A lane has no mutation step
-     ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)); a lane that finished one
+   - Anything else the brief names for this round. A quest has no mutation step
+     ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)); a quest that finished one
      started before 0066 names its added laws here.
 4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
    n counts blocking classes. Each class lists every affected case. m counts the finding rows in
@@ -96,7 +96,7 @@ whole diff.
   yours is the read that guards it.
 - You may withdraw a finding of yours that was wrong. Say which, and why.
 - A new fault you notice outside the fix is a finding row, or ticket text for the lead. It does
-  not send the lane back unless it breaks the slice's main job.
+  not send the quest back unless it breaks the slice's main job.
 - End with the same `answer:` line, as the last line.
 
 ## Never

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Arbitrary, Effect, Schema } from "effect";
@@ -8,7 +8,8 @@ import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
 
 // Today's field records. Covers field-schema.ts and field-check.ts, including added-row
-// selection, optional facts, advisory drift and annotations. No network or real rows.
+// selection, optional facts, advisory drift and annotations. No network; the only real rows read
+// are a few old notes, whole, to hold that a row written before the rename (0546) still passes.
 // T342 source plants, all caught: set-like selection, checking the whole head,
 // blocking README enums, accepting bad counts, failing on advice, row text in an
 // annotation, and treating failed history reads as empty successful input.
@@ -27,20 +28,23 @@ const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 
 // Independent contract schemas keep the input generator from weakening with a decoder.
-const Note = Schema.Struct({
+const noteCore = {
   id: Schema.String,
   date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
   stage: Schema.String,
   kind: Schema.String,
   what: Schema.String,
-  lanes: Schema.Array(Schema.Unknown),
   fix: Text,
   cause: Schema.optionalKey(Text),
   person: Schema.optionalKey(Schema.Boolean),
   primitive: Schema.optionalKey(Text),
   test: Schema.optionalKey(Text),
   links: Schema.optionalKey(Schema.Array(Schema.String)),
-});
+};
+
+// A new note lists its quests; a note written before the rename (0546) lists them as `lanes`.
+const Note = Schema.Struct({ ...noteCore, quests: Schema.Array(Schema.Unknown) });
+const OldNote = Schema.Struct({ ...noteCore, lanes: Schema.Array(Schema.Unknown) });
 
 const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
 
@@ -76,7 +80,7 @@ const noteFields = [
   "stage",
   "kind",
   "what",
-  "lanes",
+  "quests",
   "fix",
   "cause",
   "person",
@@ -84,6 +88,9 @@ const noteFields = [
   "test",
   "links",
 ];
+
+/** A note's field as a row written before the rename names it: `quests` was `lanes` (0546). */
+const beforeRename = (field: string) => (field === "quests" ? "lanes" : field);
 
 const runFields = [
   "date",
@@ -362,9 +369,24 @@ it("a run row written before the plan change passes without note", () => {
 });
 
 it("valid cores pass, each blocking field rejects bad types, optional facts stay unknown", () => {
-  for (const [schema, file, fields, key] of [
-    [Note, fileOf("notes"), noteFields, "id"],
-    [Run, fileOf("runs"), runFields, "run"],
+  const noteRequired = ["id", "date", "stage", "kind", "what", "quests", "fix"];
+  const runRequired = [
+    "date",
+    "role",
+    "model",
+    "effort",
+    "outcome",
+    // `note` is optional for rows written before the plan change.
+    "why",
+    "tokens",
+    "tools",
+    "minutes",
+  ];
+
+  for (const [schema, file, fields, key, required] of [
+    [Note, fileOf("notes"), noteFields, "id", noteRequired],
+    [OldNote, fileOf("notes"), noteFields.map(beforeRename), "id", noteRequired.map(beforeRename)],
+    [Run, fileOf("runs"), runFields, "run", runRequired],
   ] as const) {
     const result = Effect.runSync(
       Arbitrary.checkEffect(
@@ -376,21 +398,6 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
             const bad = checker.checkFile(file, "", `${JSON.stringify({ ...row, [field]: { bad: true } })}\n`);
             return bad.exitCode !== 0 && bad.findings.some((f) => f._tag === "error" && f.field === field);
           });
-          const required =
-            key === "id"
-              ? ["id", "date", "stage", "kind", "what", "lanes", "fix"]
-              : [
-                  "date",
-                  "role",
-                  "model",
-                  "effort",
-                  "outcome",
-                  // `note` is optional for rows written before the plan change.
-                  "why",
-                  "tokens",
-                  "tools",
-                  "minutes",
-                ];
           const missing = required.every(
             (field) =>
               checker.checkFile(
@@ -495,7 +502,7 @@ it("advice warns with exit zero; errors identify head lines without row content"
         stage: "new-stage",
         kind: "new-kind",
         what: marker,
-        lanes: [42],
+        quests: [42],
         fix: null,
       };
       const report = checker.checkFile(fileOf("notes"), "", JSON.stringify(row));
@@ -750,7 +757,7 @@ it("a row file is never edited or deleted", () => {
     stage: "harness",
     kind: "success",
     what: "w",
-    lanes: [],
+    quests: [],
     fix: null,
   });
   fc.assert(
@@ -763,6 +770,44 @@ it("a row file is never edited or deleted", () => {
     }),
     options,
   );
+});
+
+// 0546: a note written before the rename says `lanes`, a new one says `quests`, and a row is never
+// edited, so the check reads both, and a note holds exactly one of the two.
+it("a note lists its quests under `quests` or the old `lanes`, never both and never neither", () => {
+  const note = { id: named, date: "2026-11-15", stage: "harness", kind: "success", what: "w", fix: null };
+  const errors = (row: object) =>
+    checker
+      .checkFile(fileOf("notes"), "", JSON.stringify(row))
+      .findings.filter((f) => f._tag === "error")
+      .map((f) => f.field);
+  expect(errors({ ...note, quests: ["t1"] })).toEqual([]);
+  expect(errors({ ...note, lanes: ["t1"] })).toEqual([]);
+  expect(errors({ ...note, quests: ["t1"], lanes: ["t1"] })).toEqual(["quests"]);
+  expect(errors(note)).toEqual(["quests"]);
+  expect(errors({ ...note, lanes: "t1" })).toEqual(["lanes"]);
+  const advice = (row: object) =>
+    checker
+      .checkFile(fileOf("notes"), "", JSON.stringify(row))
+      .findings.filter((f) => f.reason === "quest member is not text")
+      .map((f) => f.field);
+  expect(advice({ ...note, quests: [42] })).toEqual(["quests"]);
+  expect(advice({ ...note, lanes: [42] })).toEqual(["lanes"]);
+});
+
+it("real notes written before the rename pass whole, as they are saved", () => {
+  for (const name of [
+    "2026-11-09-projectwin-main-merge-broke-typecheck",
+    "2026-11-14-t502-s1-stops-at-second-send-back",
+    "2026-11-14-t955-sink-cut-one-send-back",
+  ]) {
+    const file = `field/notes/${name}.json`;
+    const text = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+    expect(Object.keys(JSON.parse(text))).toContain("lanes");
+    const report = checker.checkFile(file, "", text);
+    expect(report.findings.filter((f) => f._tag === "error")).toEqual([]);
+    expect(report.exitCode).toBe(0);
+  }
 });
 
 // vector: which changed paths the field job reads. Old direct .jsonl files and anything in a

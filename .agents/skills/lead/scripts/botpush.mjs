@@ -14,7 +14,7 @@ if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/"))) {
 }
 
 // Check only committed additions, before reading credentials or making any network request.
-// A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
+// A quest's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
 // wide, and a failure says which part failed instead of exiting with no word.
 let diff;
 

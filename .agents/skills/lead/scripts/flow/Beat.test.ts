@@ -48,7 +48,7 @@ describe("Beat.enter and Beat.tick", () => {
 });
 
 describe("Beat.says", () => {
-  it("calls any lane stuck once its beat is quiet past the limit, whatever the phase", () => {
+  it("calls any quest stuck once its beat is quiet past the limit, whatever the phase", () => {
     fc.assert(
       fc.property(phase, ms(Beat.QUIET), fc.integer({ min: 1, max: 86_400_000 }), (p, d, over) => {
         const beat = Beat.enter(null, p, at(0));
@@ -88,7 +88,7 @@ describe("Beat.says", () => {
   });
 
   it("scenario: the 2026-11-10 hung cleanup reads as stuck, in words", () => {
-    // Two lanes read "chain step running for 01:50" while each hung in cleanup with no agent.
+    // Two quests read "chain step running for 01:50" while each hung in cleanup with no agent.
     const beat = Beat.enter(null, "cleanup", at(0));
     expect(Beat.says(beat, at(110 * 60_000))).toEqual({
       stuck: true,

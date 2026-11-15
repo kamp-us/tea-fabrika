@@ -3,7 +3,7 @@
 // is not product. Decision 0090: a new field row is its own file, and its id is its file name, the
 // date plus a short kebab-case slug.
 //
-//   node fieldfile.ts runs "$BOXES/<lane>-rows.jsonl"            a lane's step rows
+//   node fieldfile.ts runs "$BOXES/<quest>-rows.jsonl"            a quest's step rows
 //   <a script that prints a row> | node fieldfile.ts runs /dev/stdin   one row a script printed
 //   node fieldfile.ts findings report-rows.jsonl                  the rows a step handed over
 //
@@ -11,7 +11,7 @@
 //   notes                 its `id`, which must already be the date plus a slug
 //   findings, a finding   its `id`, the same
 //   findings, a rating    `<date>-rated-<finding>`: the rating's own date, then the finding it rates
-//   runs                  its `run`. A lane's run id has no date (lane + step + n: `p39s1-tests2`), so
+//   runs                  its `run`. A quest's run id has no date (quest + step + n: `p39s1-tests2`), so
 //                         the row's date goes in front, in the file name and in `run` alike:
 //                         `2026-11-11-p39s1-tests2`. Not decided in 0090; the plain reading.
 //

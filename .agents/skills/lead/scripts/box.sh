@@ -1,7 +1,8 @@
 #!/bin/sh
 # box.sh: a Codex agent's own copy of tea-fabrika, whose git data is outside any folder named .git,
 # so Codex's sandbox lets it commit. The lead never runs git inside a box; it only fetches from it.
-#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path> [--root <lane root>] [--lane <lane>]
+#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path> [--root <quest root>] [--quest <quest>]
+#     (--lane <quest>, the flag's old spelling, still works)
 #   box.sh run   <name> <prompt-file> <out> --step tests|build|mutation|review
 #   box.sh fetch <name> <branch> [--sign <step> --ticket <n>]
 #   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
@@ -33,7 +34,7 @@ if len(args) < 2: refuse("box command and name required")
 cmd, name, *args = args
 if not re.fullmatch(r"[A-Za-z0-9_-]+", name): refuse("invalid box name")
 # The tree sits in BOXES/box, apart from the files kept beside the boxes, so Codex's fence has few
-# names to close beside it (lane.ts boxTree, ticket 659). A box made before that layout keeps its
+# names to close beside it (quest.ts boxTree, ticket 659). A box made before that layout keeps its
 # tree in BOXES until gc removes it; only `new` never looks there.
 work, gitdata = boxes / "box" / name, boxes / (name + "-gitdata")
 if cmd != "new" and name != "box" and not work.exists() and (boxes / name).is_dir(): work = boxes / name
@@ -116,9 +117,10 @@ def fetched_head(branch):
     head = rev(target); git("update-ref", "-d", target)
     return head
 def rows(state=None):
-    # The box's own rows, and the lane's, where drive writes each step's row (BOXES/<lane>-rows.jsonl).
-    lane = (state or {}).get("lane")
-    paths = [state_dir / (name + ".rows.jsonl")] + ([boxes / (lane + "-rows.jsonl")] if lane else [])
+    # The box's own rows, and the quest's, where drive writes each step's row (BOXES/<quest>-rows.jsonl).
+    # A box made before decision 0546 names its quest under `lane:`, so both keys are read.
+    quest = (state or {}).get("quest") or (state or {}).get("lane")
+    paths = [state_dir / (name + ".rows.jsonl")] + ([boxes / (quest + "-rows.jsonl")] if quest else [])
     return [json.loads(l) for p in paths if p.exists() for l in p.read_text().splitlines() if l]
 # One `phase <name> <ms>` line on stderr per start phase, its time since the last one, so drive
 # records where a start's time goes (ticket 673). drive reads them from the box's log.
@@ -127,8 +129,8 @@ def mark(phase):
     now = time.monotonic(); print(f"phase {phase} {round((now - marked[0]) * 1000)}", file=sys.stderr); marked[0] = now
 def new_box():
     if len(args) < 2: refuse("new needs base and branch")
-    base, branch = args[:2]; ticket, plan, root, lane = flag("--ticket"), flag("--plan"), flag("--root"), flag("--lane")
-    if lane is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", lane): refuse("invalid lane name")
+    base, branch = args[:2]; ticket, plan, root, quest = flag("--ticket"), flag("--plan"), flag("--root"), flag("--quest", flag("--lane"))
+    if quest is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", quest): refuse("invalid quest name")
     if not branch.startswith("fabrikalfa/"): refuse("branch prefix must be fabrikalfa/")
     if not ticket or not plan: refuse("plan and ticket required")
     # One name, one tree: an older box's tree in BOXES under this name would make two.
@@ -142,33 +144,33 @@ def new_box():
     head, parent = rev(base), "none"
     root_sha = rev(root) if root else head
     if not ancestor(root_sha, head): refuse_check("root_not_ancestor", "root is not an ancestor of the base")
-    # A lane that starts one box per step continues its own branch: that head is a valid base too.
+    # A quest that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
-    # Any commit main holds is a base: a lane's plan records main as it stood, and main moves on
+    # Any commit main holds is a base: a quest's plan records main as it stood, and main moves on
     # before the next step starts (8 of 9 base_not_signed refusals on 2026-11-09, ticket 428).
     if not ancestor(head, rev("origin/main")) and not own:
         # A lead commit (a merge of main, a lockfile commit) is signed and checked like a step's, so
-        # it is a base too (layers and themes, 2026-11-09: a lead commit left both lanes stuck).
+        # it is a base too (layers and themes, 2026-11-09: a lead commit left both quests stuck).
         if not (verified(head, "build") or verified(head, "lead")): refuse_check("base_not_signed", "verified build or lead head, or a commit origin/main holds, required")
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/", "refs/remotes/origin/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse_check("base_not_signed", "no parent branch at head")
         parent = branches[0] + "@" + head
-    # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
+    # Two live quests must not write one ticket. A branch that shares the ticket blocks only while it
     # is live: an open PR, or a box on disk whose state names it. A branch the base already holds,
-    # or one with no open PR and no box, is history (an old or merged lane) and does not block.
+    # or one with no open PR and no box, is history (an old or merged quest) and does not block.
     open_heads = [None]
     def live(other):
-        lane = other.removeprefix("origin/").removesuffix("-wip")
+        quest = other.removeprefix("origin/").removesuffix("-wip")
         if open_heads[0] is None:
             got = call(["gh", "pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName", "-q", ".[].headRefName"])
             if got.returncode: refuse("shared_ticket " + ticket + " on " + other + ": open PRs cannot be read")
             open_heads[0] = set(got.stdout.decode().split())
-        if lane in open_heads[0]: return True
-        return any(facts(p).get("branch") == lane and any((d / p.stem).is_dir() for d in (boxes / "box", boxes)) for p in state_dir.glob("*.box") if p.stem != name)
-    # A branch whose change is only field rows is the lead logging runs, not a lane writing the
+        if quest in open_heads[0]: return True
+        return any(facts(p).get("branch") == quest and any((d / p.stem).is_dir() for d in (boxes / "box", boxes)) for p in state_dir.glob("*.box") if p.stem != name)
+    # A branch whose change is only field rows is the lead logging runs, not a quest writing the
     # ticket (field-rows PR 601 on ticket 276, 2026-11-09): a field/*.jsonl file, or a row file in
     # field/notes/, field/runs/ or field/findings/ (decision 0090). Judged by its paths, not its name,
-    # from where it left main: a lane base on an older main would count main's newer files as its.
+    # from where it left main: a quest base on an older main would count main's newer files as its.
     def rows_only(other):
         changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
         return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl|field/(?:notes|runs|findings)/[^/]+\.json", p) for p in changed)
@@ -189,8 +191,8 @@ def new_box():
             try: note = json.loads(text)
             except (ValueError, UnicodeError): continue
             if isinstance(note, dict) and note.get("ticket") == ticket: links.append(commit)
-    # Only links this lane's base lacks: an older branch of the same lane, already merged into the
-    # base, is history, not another lane holding the ticket. Exit 1 is "not an ancestor"; any other
+    # Only links this quest's base lacks: an older branch of the same quest, already merged into the
+    # base, is history, not another quest holding the ticket. Exit 1 is "not an ancestor"; any other
     # failure is a note on a commit this checkout lacks, which no branch here can hold.
     fresh = [c for c in links if git("merge-base", "--is-ancestor", c, head).returncode == 1]
     # The branches holding any of those links: one listing, each branch then judged by the commit it
@@ -216,10 +218,10 @@ def new_box():
     if installed.returncode: refuse("box install failed")
     mark("box_install")
     facts_new = {"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest}
-    # The lane's root: where it left main. Order and the commits check read the whole lane from
+    # The quest's root: where it left main. Order and the commits check read the whole quest from
     # here, so a later step's box still sees the earlier steps' links.
     if root: facts_new["root"] = root_sha
-    if lane: facts_new["lane"] = lane
+    if quest: facts_new["quest"] = quest
     save(facts_new)
     if parent != "none":
         for path in state_dir.glob("*.box"):
@@ -357,25 +359,25 @@ def fetch_box():
                     signed = call(["pnpm", "commits", "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)], env=env)
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
-        lane_root = state.get("root", state["base"])
+        quest_root = state.get("root", state["base"])
         # A lead merge of main brings main's own commits into root..head, and the checker calls each
         # one unsigned (layers tests10, 2026-11-09). Start at the merge-base with origin/main when it
-        # holds the root, so only the lane's commits are judged; a root off main keeps its root.
+        # holds the root, so only the quest's commits are judged; a root off main keeps its root.
         joined = must(git("merge-base", head, "origin/main"), "merge-base with origin/main failed")
-        if ancestor(lane_root, joined): lane_root = joined
-        checked = call(["pnpm", "commits", "check", "--base", lane_root, "--head", head])
-        # A stale link is judged here only for a step the lane itself has signed. A step the lane
+        if ancestor(quest_root, joined): quest_root = joined
+        checked = call(["pnpm", "commits", "check", "--base", quest_root, "--head", head])
+        # A stale link is judged here only for a step the quest itself has signed. A step the quest
         # has not reached yet (lead, before catch-up) may hold a newer link from an older PR on the
         # same ticket; CI judges that on the PR (themes tests, 2026-11-09: PR 565's lead link).
-        lane_steps = {n.get("step") for n in map(read_note, commits(lane_root, head)) if isinstance(n, dict)}
+        quest_steps = {n.get("step") for n in map(read_note, commits(quest_root, head)) if isinstance(n, dict)}
         answers, unreadable, waived = [], 0, 0
         for l in checked.stdout.splitlines():
             if not l.strip(): continue
             try: a = json.loads(l)
             except (ValueError, UnicodeError): a = None
             if isinstance(a, dict) and a.get("_tag") in ("done", "stuck", "ask", "send", "skip"):
-                if a["_tag"] == "stuck" and a.get("reason") == "stale_link" and a.get("step") not in lane_steps:
-                    waived += 1; print(json.dumps({**a, "_tag": "skip", "reason": "stale_link_outside_lane"})); continue
+                if a["_tag"] == "stuck" and a.get("reason") == "stale_link" and a.get("step") not in quest_steps:
+                    waived += 1; print(json.dumps({**a, "_tag": "skip", "reason": "stale_link_outside_quest"})); continue
                 answers.append(a); print(json.dumps(a))
             else: unreadable += 1
         # The checker skips paths outside its scope; every run commit still needs a valid link.

@@ -1,7 +1,7 @@
 // T708, next/. The real instance, walked through its lifecycle callbacks, its control plugin and its calls.
 // Only platform calls, the clock and the pending-file rename are supplied. Each move is chosen from the
 // state the walk has reached (0093), and every check reads calls, saved rows and spans, never a selector.
-// The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md) makes a memory kill a replace, which
+// The memory restart plan (docs/plan/quests/memory-restart-PLAN.md) makes a memory kill a replace, which
 // the old process ends by its exit, and makes a call that meets a pending replacement wait for it.
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";

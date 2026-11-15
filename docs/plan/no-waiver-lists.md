@@ -148,7 +148,7 @@ adds it.
   question 1, for the owner. Each slice deletes its rows. With slice 3 of this plan, which empties
   the 13 hook rows, `next-ledger.json` is then empty.
 - **The advice set** empties through decision 0523 (https://github.com/kamp-us/tea-fabrika/pull/1194)
-  and its lane: the five advice rules block folder by folder at zero, and the docs rule turns on the
+  and its quest: the five advice rules block folder by folder at zero, and the docs rule turns on the
   same way. `fabrika/service-id` blocks since
   https://github.com/kamp-us/tea-fabrika/pull/1186, so it is not in the set. When the last folder
   reaches zero, `ADVICE` is empty and no `"warn"` level is left. Slice 13 then deletes the set and
@@ -334,7 +334,7 @@ overrides read as known by the test, which is itself a list.
 | `.agents/skills/lead/scripts/drive.ts` | build | 220 | 6 |
 | `.agents/skills/lead/scripts/drive.test.ts` | tests | tests | 6 |
 | `.agents/skills/lead/scripts/gc.ts` | build | 90 | 6 |
-| `.agents/skills/lead/scripts/lane.ts` | build | 40 | 6 |
+| `.agents/skills/lead/scripts/quest.ts` | build | 40 | 6 |
 | `apps/fabrika/src/editor/cells.probe.ts` | build | 20 | 7 |
 | `apps/fabrika/src/editor/grid.ts` | build | 20 | 7 |
 | `apps/fabrika/src/editor/history.ts` | build | 20 | 7 |
@@ -390,7 +390,7 @@ Read by the laws above, not changed (each an exam path, so the tests step owns i
 
 ## Slices
 
-Ordered by what closes the most holes first. Each slice deletes its rows, runs as its own lane and
+Ordered by what closes the most holes first. Each slice deletes its rows, runs as its own quest and
 pull request, and is fast-tracked under 0168 (it changes no law's assertions or generators).
 
 1. **Stop growth now.** `.github/ci/ledgers-shrink.ts` fails when a pull request adds a row to
@@ -407,8 +407,8 @@ pull request, and is fast-tracked under 0168 (it changes no law's assertions or 
 4. **Lead tooling, mutation scripts** (38 rows of `agents-ledger.json`): `sample.ts` onto Effect's
    platform services and no Promises; `run.test.ts` onto `it.effect`.
 5. **Lead tooling, push and box** (26 rows): `botpush.mjs` and its test, `box.test.ts`.
-6. **Lead tooling, the lane scripts** (45 rows): `chain.ts`, `drive.ts`, `drive.test.ts`, `gc.ts`,
-   `lane.ts`. Then `agents-ledger.json` is empty.
+6. **Lead tooling, the quest scripts** (45 rows): `chain.ts`, `drive.ts`, `drive.test.ts`, `gc.ts`,
+   `quest.ts`. Then `agents-ledger.json` is empty.
 7. **Code-graph's dead-export ledger** (row 4). The 3 exports only tests call (`modelAnswersOf`,
    `gridOf`, `memoryHistory`) move into test support beside their tests, or go with their tests if
    the product never needs them. Delete `unreachable-ledger.json`, its CI step, and the
@@ -451,7 +451,7 @@ Each slice lands whole. No number caps one (0099).
 3. Slice 3: after-hook rows, 450 lines, all tests.
 4. Slice 4: mutation scripts, 400 lines.
 5. Slice 5: push and box, 450 lines.
-6. Slice 6: lane scripts, 600 lines.
+6. Slice 6: quest scripts, 600 lines.
 7. Slice 7: dead-export ledger, 120 lines.
 8. Slice 8: `next/` layer exceptions, 350 lines.
 9. Slice 9: compiler ledger, 120 lines.
@@ -474,7 +474,7 @@ What fact is lost if not recorded now: each exception's reason. The `reason` fie
 `layer-rules.json` and `unreachable-ledger.json`, and the override comments, say why each was taken.
 Git keeps them, but each slice's pull request also lists, per rule, the hits it met, the ones it
 fixed and each new `edge:` line with its reason, as 0523 asks, so the count and the why sit in one
-place. Each slice's lane writes its rows in `field/` the same day.
+place. Each slice's quest writes its rows in `field/` the same day.
 
 ## What this cannot tell
 

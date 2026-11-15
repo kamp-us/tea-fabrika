@@ -1,4 +1,4 @@
-// Ticket 1041's writer and reader, next/: the fixture programs L9 to L12 run (docs/plan/lanes/
+// Ticket 1041's writer and reader, next/: the fixture programs L9 to L12 run (docs/plan/quests/
 // t1041-PLAN.md). Each is made by a factory, so a law that never runs one never builds it.
 //
 // The writer turns a person's input into the built-in `send` or `send_chunks` and keeps every answer

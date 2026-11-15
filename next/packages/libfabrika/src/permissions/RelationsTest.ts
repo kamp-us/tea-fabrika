@@ -1,4 +1,4 @@
-// T953 slice 1, next/: law L8 of the approved plan (docs/plan/lanes/t953-PLAN.md) on a real store (0062).
+// T953 slice 1, next/: law L8 of the approved plan (docs/plan/quests/t953-PLAN.md) on a real store (0062).
 // A runner in the module that owns a driver calls `RelationsTest.suite(open)`; `open` acquires one
 // store in a scope and gives it back when that scope closes (0061).
 //

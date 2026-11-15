@@ -1,4 +1,4 @@
-// T953 slice 2, next/: law L9 of the approved plan (docs/plan/lanes/t953-PLAN.md), on any `Sql`. A suite
+// T953 slice 2, next/: law L9 of the approved plan (docs/plan/quests/t953-PLAN.md), on any `Sql`. A suite
 // read through its module as `SessionSenderTest.suite(open)`: the module that owns the driver runs it,
 // so this file names no driver (0043 rule 11, 0062).
 //

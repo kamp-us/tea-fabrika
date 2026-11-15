@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
 import { expect } from "vitest";
-import { boxTree, boxTrees, oldBoxTree } from "./lane.ts";
+import { boxTree, boxTrees, oldBoxTree } from "./quest.ts";
 
 const script = join(import.meta.dirname, "box.sh");
 
@@ -47,7 +47,7 @@ export const input = fc.record({
   space: fc.boolean(),
   depth: fc.integer({ min: 1, max: 3 }),
   descendant: fc.boolean(),
-  // Where the tree is: BOXES/box (lane.ts boxTree), or BOXES for a box made before that layout.
+  // Where the tree is: BOXES/box (quest.ts boxTree), or BOXES for a box made before that layout.
   old: fc.boolean(),
 });
 
