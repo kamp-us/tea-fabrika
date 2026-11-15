@@ -1,5 +1,5 @@
 /**
- * A job: work a program asks one selected set of hands to do. Its request, the executor that takes
+ * A task: work a program asks one selected set of hands to do. Its request, the executor that takes
  * it, the checked result and each writer's record, as values only (0095).
  *
  * @stability unstable
@@ -100,7 +100,7 @@ export const Request = Schema.Struct({
 export type Request = typeof Request.Type;
 
 /**
- * Schema for the hands that take a job: their key, the connection they came on, what they
+ * Schema for the hands that take a task: their key, the connection they came on, what they
  * advertise and their build.
  *
  * @stability unstable
@@ -113,7 +113,7 @@ export const Executor = Schema.Struct({
   build: Text,
 });
 /**
- * The hands that take a job: their key, the connection they came on, what they advertise and their
+ * The hands that take a task: their key, the connection they came on, what they advertise and their
  * build.
  *
  * @stability unstable
@@ -160,7 +160,7 @@ export type Recorded = typeof Recorded.Type;
 export const Assignment = Schema.Struct({ execution: Text, executor: Executor });
 
 /**
- * Schema for who took a finished job's result: the exact process generation that asked, and the id
+ * Schema for who took a finished task's result: the exact process generation that asked, and the id
  * of the answer letter the result went in.
  *
  * @stability unstable
@@ -169,7 +169,7 @@ export const Assignment = Schema.Struct({ execution: Text, executor: Executor })
 export const Collection = Schema.Struct({ process: ProcessId, letter: Text });
 
 /**
- * Schema for a job's control state: `absent`, `requested`, `assigned`, `started`, `finished` or
+ * Schema for a task's control state: `absent`, `requested`, `assigned`, `started`, `finished` or
  * `collected`. Neither `finished` nor `collected` has a way back to execution.
  *
  * @stability unstable
@@ -184,7 +184,7 @@ export const State = Schema.TaggedUnion({
   collected: { request: Request, assignment: Assignment, result: Result, collection: Collection },
 });
 /**
- * A job's control state: `absent`, `requested`, `assigned`, `started`, `finished` or `collected`.
+ * A task's control state: `absent`, `requested`, `assigned`, `started`, `finished` or `collected`.
  * Neither `finished` nor `collected` has a way back to execution.
  *
  * @stability unstable
@@ -215,16 +215,16 @@ export const Event = Schema.Struct({
 export type Event = typeof Event.Type;
 
 /**
- * Schema for a job as `read` answers it: its state, and every accepted event in order.
+ * Schema for a task as `read` answers it: its state, and every accepted event in order.
  *
  * @stability unstable
  * @category models
  */
-export const Job = Schema.Struct({ state: State, events: Schema.Array(Event) });
+export const Task = Schema.Struct({ state: State, events: Schema.Array(Event) });
 /**
- * A job as `read` answers it: its state, and every accepted event in order.
+ * A task as `read` answers it: its state, and every accepted event in order.
  *
  * @stability unstable
  * @category models
  */
-export type Job = typeof Job.Type;
+export type Task = typeof Task.Type;

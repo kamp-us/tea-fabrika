@@ -118,7 +118,7 @@ export type Key = {
 };
 
 // A test-support file is not a `*.test.ts` file, so its WebCrypto calls are marked Promise edges with
-// a tagged failure, as the shared suites' are (gateway/JobsTest.ts). A failure is a defect here, as
+// a tagged failure, as the shared suites' are (gateway/TasksTest.ts). A failure is a defect here, as
 // it was under `Effect.promise`: no law expects WebCrypto to fail.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
 

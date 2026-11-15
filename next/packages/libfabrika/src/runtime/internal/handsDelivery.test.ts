@@ -9,16 +9,16 @@
 //   pending + replied refused  -> result err    waiting + replied refused  -> result err, id_reused only
 //   result  + anything         -> unchanged
 //
-// So a settled delivery never moves again, a saved job never goes back to pending, and no hands key
-// never undoes a saved job. That only `pending` is owed (a waiting job sets no backoff alarm) is the
+// So a settled delivery never moves again, a saved task never goes back to pending, and no hands key
+// never undoes a saved task. That only `pending` is owed (a waiting task sets no backoff alarm) is the
 // runner's half, in `RunnerHandsTest.ts` (L20). Plants: let a `no_hands` refusal settle a waiting
 // delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
-import { fcResult } from "../../jobs/JobsTest.ts";
-import { Reply } from "../HandsJobs.ts";
+import { fcResult } from "../../tasks/TasksTest.ts";
+import { Reply } from "../HandsTasks.ts";
 import { handsDelivery, State } from "./handsDelivery.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
@@ -68,7 +68,7 @@ const key = (msg: Msg) =>
   msg.reply._tag === "refused" ? `replied:refused:${msg.reply.reason}` : `replied:${msg.reply._tag}`;
 
 describe("P39 slice 3: one hands Cmd's delivery", () => {
-  it("D1: a settled delivery never moves again, a saved job never goes back to pending, and a refusal settles only an unsaved job or one that is another process's", () => {
+  it("D1: a settled delivery never moves again, a saved task never goes back to pending, and a refusal settles only an unsaved task or one that is another process's", () => {
     const reached = new Set<string>();
     expect(handsDelivery.init(null, undefined)[0]._tag, "D1: a Cmd saved as dispatched starts pending").toBe("pending");
     propertyInvariant(
@@ -84,7 +84,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
         }
 
         if (prev._tag === "waiting" && next._tag === "pending") {
-          return "D1: a saved job never goes back to pending";
+          return "D1: a saved task never goes back to pending";
         }
 
         if (r._tag === "waiting") {
@@ -114,7 +114,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
           );
         }
 
-        return same(prev, next) || "D1: no hands key never undoes a saved job";
+        return same(prev, next) || "D1: no hands key never undoes a saved task";
       },
       { ...RUNS, loaded },
     );

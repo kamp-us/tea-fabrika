@@ -1,4 +1,4 @@
-// P39 slice 1: the jobs module's laws on node:sqlite (0062). This module owns the driver, so it
+// P39 slice 1: the tasks module's laws on node:sqlite (0062). This module owns the driver, so it
 // acquires each store in a scope and the scope gives the folder and the file back (0061).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

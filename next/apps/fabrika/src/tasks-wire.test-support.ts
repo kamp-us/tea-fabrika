@@ -1,10 +1,10 @@
-import { Command } from "@kampus/libfabrika/jobs/Job";
-// A14, next/. The fixture seeds the real Project's database through the public Jobs contract.
-// Build supplies projectJobsLayer as allowed by Amendment A-Fixture. No administration route.
-import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
+import { Command } from "@kampus/libfabrika/tasks/Task";
+// A14, next/. The fixture seeds the real Project's database through the public Tasks contract.
+// Build supplies projectTasksLayer as allowed by Amendment A-Fixture. No administration route.
+import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Effect, Schema } from "effect";
 import { Project as RealProject } from "./brain.ts";
-import { projectJobsLayer } from "./runtime.ts";
+import { projectTasksLayer } from "./runtime.ts";
 
 export class Project extends RealProject {
   static selected: string;
@@ -16,10 +16,10 @@ export class Project extends RealProject {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: object startup enters Effect once
       Effect.runPromise(
         Effect.scoped(
-          Jobs.use((jobs) =>
-            jobs.request(
+          Tasks.use((tasks) =>
+            tasks.request(
               {
-                id: "wire-job",
+                id: "wire-task",
                 process: "process_01m6v5270hetdrt4r8h9vvjwjs",
                 name: "wire:1",
                 program: "fabrika/counter",
@@ -41,7 +41,7 @@ export class Project extends RealProject {
                 build: "fixture-build",
               },
             ),
-          ).pipe(Effect.provide(projectJobsLayer(this.ctx, this.env))),
+          ).pipe(Effect.provide(projectTasksLayer(this.ctx, this.env))),
         ),
       ),
     );

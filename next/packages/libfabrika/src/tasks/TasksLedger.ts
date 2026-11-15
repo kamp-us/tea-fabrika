@@ -1,6 +1,6 @@
 /**
- * Jobs on the ledger (0095): each job is its own stream, named from its command id. One call is one
- * transaction: read the stream, fold it through the job machine, step the call, and append it only
+ * Tasks on the ledger (0095): each task is its own stream, named from its command id. One call is one
+ * transaction: read the stream, fold it through the task machine, step the call, and append it only
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
  *
  * @stability unstable
@@ -13,11 +13,11 @@ import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
-import { job, Msg } from "./internal/job.ts";
-import { Collection, Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
-import { Jobs, JobsError, targetStream } from "./Jobs.ts";
+import { task, Msg } from "./internal/task.ts";
+import { Collection, Event, Executor, type Task, Recorded, Request, Result } from "./Task.ts";
+import { Tasks, TasksError, targetStream } from "./Tasks.ts";
 
-/** The execution identity a take allocates, once per job. */
+/** The execution identity a take allocates, once per task. */
 const Execution = Id.make("execution");
 
 /** An accepted call as its entry keeps it: the event's case, and the facts it brought. */
@@ -30,7 +30,7 @@ const Stored = Schema.TaggedUnion({
 });
 type Stored = typeof Stored.Type;
 
-/** One line of a `target:` stream: the job a hands key was asked for, as a pointer. */
+/** One line of a `target:` stream: the task a hands key was asked for, as a pointer. */
 const Pointer = Schema.TaggedStruct("requested", { id: Schema.NonEmptyString, process: ProcessId });
 const encodePointer = Schema.encodeSync(Pointer);
 const decodePointer = Schema.decodeUnknownSync(Pointer);
@@ -40,7 +40,11 @@ const encodeStored = Schema.encodeSync(Stored);
 const decodeEvent = Schema.decodeUnknownSync(Event);
 const decodeCall = Schema.decodeUnknownResult(Schema.Struct({ msg: Msg, recorded: Recorded }));
 
-const stream = (id: string) => `job:${id}`;
+/** A task's stream prefix. It keeps the word it was first written with, `job:`, since a saved
+ *  ledger may hold streams under it (0545). */
+const PREFIX = "job:";
+
+const stream = (id: string) => `${PREFIX}${id}`;
 
 const toMsg = (stored: Stored): Msg => {
   if (stored._tag === "requested") {
@@ -78,29 +82,29 @@ const toStored = (msg: Msg): Stored => {
     : Stored.cases.finished.make({ execution: msg.execution, result: msg.result });
 };
 
-type Model = (typeof job)["model"]["Type"];
+type Model = (typeof task)["model"]["Type"];
 
-const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
+const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
 
 const fold = (events: ReadonlyArray<Stored>): Model =>
-  events.reduce((model, event) => step(model, toMsg(event)), job.init(null, undefined)[0]);
+  events.reduce((model, event) => step(model, toMsg(event)), task.init(null, undefined)[0]);
 
-/** The jobs a target index names that are still open: requested, assigned or started. */
-const OPEN: ReadonlySet<Job["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
+/** The tasks a target index names that are still open: requested, assigned or started. */
+const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
 
-/** A ledger failure as the jobs module's: a line the referee refused is the caller's input. */
+/** A ledger failure as the tasks module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
-  new JobsError({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
+  new TasksError({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
 
-/** One job as its stream holds it, read inside a turn: its state and its events. */
-const saved = (turn: LedgerTurn, id: string): Job => {
+/** One task as its stream holds it, read inside a turn: its state and its events. */
+const saved = (turn: LedgerTurn, id: string): Task => {
   const entries = [...turn.read(stream(id), 0)].map((entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
   const events = entries.map(({ entry, stored }) => decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }));
   return { state: fold(entries.map(({ stored }) => stored)).state, events };
 };
 
 /**
- * Layer that supplies `Jobs` from the ledger. It needs `LedgerTransaction` and an `Id.Generator`.
+ * Layer that supplies `Tasks` from the ledger. It needs `LedgerTransaction` and an `Id.Generator`.
  *
  * **Details**
  *
@@ -111,28 +115,28 @@ const saved = (turn: LedgerTurn, id: string): Job => {
  * @category layers
  */
 export const layer = Layer.effect(
-  Jobs,
+  Tasks,
   Effect.gen(function* () {
     const ledger = yield* LedgerTransaction;
     const ids = yield* Id.Generator;
     const streams = yield* LedgerStreams;
 
-    const read = Effect.fn("jobs.read")(function* (id: string) {
+    const read = Effect.fn("tasks.read")(function* (id: string) {
       const found = yield* ledger.transact((turn) => saved(turn, id)).pipe(Effect.mapError(translated));
 
       if (found.state._tag === "absent") {
-        return yield* new JobsError({ reason: "not_found" });
+        return yield* new TasksError({ reason: "not_found" });
       }
 
-      return found satisfies Job;
+      return found satisfies Task;
     });
 
-    /** One call in one transaction. It answers the receipt of the call's event and the job after it. */
+    /** One call in one transaction. It answers the receipt of the call's event and the task after it. */
     const call = Effect.fnUntraced(function* (id: string, input: Msg, said: Recorded) {
       const decoded = decodeCall({ msg: input, recorded: said });
 
       if (R.isFailure(decoded)) {
-        return yield* new JobsError({ reason: "bad_input", cause: decoded.failure });
+        return yield* new TasksError({ reason: "bad_input", cause: decoded.failure });
       }
 
       const { msg, recorded } = decoded.success;
@@ -169,32 +173,32 @@ export const layer = Layer.effect(
         .pipe(Effect.mapError(translated));
 
       if (R.isFailure(answer)) {
-        return yield* new JobsError({ reason: answer.failure });
+        return yield* new TasksError({ reason: answer.failure });
       }
 
       return answer.success;
     });
 
     return {
-      request: Effect.fn("jobs.request")(function* (request: Request, recorded: Recorded) {
+      request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
         return (yield* call(request.id, { type: "request", request }, recorded)).receipt;
       }),
-      take: Effect.fn("jobs.take")(function* (id: string, executor: Executor, recorded: Recorded) {
+      take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
         const proposed = yield* ids
           .next(Execution)
-          .pipe(Effect.mapError((cause) => new JobsError({ reason: "storage", cause })));
+          .pipe(Effect.mapError((cause) => new TasksError({ reason: "storage", cause })));
         const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
-        // An accepted or repeated take leaves the job owned, so the saved assignment is there.
+        // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
         return { ...receipt, execution };
       }),
-      started: Effect.fn("jobs.started")(function* (id: string, execution: string, recorded: Recorded) {
+      started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
         return (yield* call(id, { type: "start", execution }, recorded)).receipt;
       }),
-      finish: Effect.fn("jobs.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
+      finish: Effect.fn("tasks.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
         return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
       }),
-      collected: Effect.fn("jobs.collected")(function* (
+      collected: Effect.fn("tasks.collected")(function* (
         id: string,
         collection: typeof Collection.Type,
         recorded: Recorded,
@@ -202,22 +206,22 @@ export const layer = Layer.effect(
         return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
       }),
       read,
-      forTarget: Effect.fn("jobs.forTarget")(function* (key: string) {
+      forTarget: Effect.fn("tasks.forTarget")(function* (key: string) {
         return yield* ledger
           .transact((turn) => {
             const index = targetStream(key);
-            const jobs = [...turn.read(index, 0)]
+            const tasks = [...turn.read(index, 0)]
               .map((entry) => saved(turn, decodePointer(valueFor(entry)).id))
               .filter((found) => OPEN.has(found.state._tag));
-            return { jobs, rev: turn.head(index) };
+            return { tasks, rev: turn.head(index) };
           })
           .pipe(Effect.mapError(translated));
       }),
       forProcess: (process: typeof ProcessId.Type) =>
-        streams.list("job:").pipe(
-          Stream.mapError((cause) => new JobsError({ reason: "storage", cause })),
-          Stream.mapEffect((name) => read(name.slice("job:".length))),
-          Stream.filter((job) => job.state._tag !== "absent" && job.state.request.process === process),
+        streams.list(PREFIX).pipe(
+          Stream.mapError((cause) => new TasksError({ reason: "storage", cause })),
+          Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
+          Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),
     };
   }),
