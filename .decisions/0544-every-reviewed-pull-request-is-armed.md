@@ -1,30 +1,24 @@
 ---
 id: 0544
-title: Every pull request whose review passed has merge when ready on, and product code first needs a green full run on its own branch
+title: Every pull request whose review passed has merge when ready on, with no full run first, and a break the 3-hour run finds is fixed there
 status: accepted
 date: 2026-11-15
 tags: [merge-queue, lead, auto-merge, order, ci, scheduled]
 ---
 
-# 0544: Every pull request whose review passed has merge when ready on, and product code first needs a green full run on its own branch
+# 0544: Every pull request whose review passed has merge when ready on, with no full run first, and a break the 3-hour run finds is fixed there
 
 ```mermaid
 flowchart LR
-  review["review passed, lead's final read done"] --> kind{"product code?"}
-  kind -->|"no: docs, tooling"| arm["merge when ready on"]
-  kind -->|"yes"| full["full run on its branch"]
-  full -->|"green"| arm
-  full -->|"red"| fix["fix, then a new full run"]
+  review["review passed, lead's final read done"] --> arm["merge when ready on"]
   arm --> queue["GitHub queues it when ci-required is green"]
+  queue --> main["main"]
+  main --> full["3-hour full run on main"]
+  full -->|"red"| sev["sev1: the fix goes first"]
 ```
 
-```sh
-# the full run, on the pull request's own branch
-gh workflow run scheduled.yaml --ref <branch>
-```
-
-**What this decides:** which pull requests have GitHub's merge when ready on, and what a product
-pull request must show first.
+**What this decides:** which pull requests have GitHub's merge when ready on, and where a break that
+only the full run can see is caught.
 
 ## Context
 
@@ -35,37 +29,34 @@ green 9 times out of 9, and the last six full runs that finished were green. The
 pull requests that were green on their own checks each broke a law that only the 3-hour full run
 checks ([0536](0536-real-resource-tests-run-only-on-the-schedule.md)): a pull request runs only the
 tests its change touches ([0534](0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md)).
-The owner ruled that every reviewed pull request is armed again, with the full run as the condition
-for product code.
+The owner ruled that every reviewed pull request is armed again, and that such a break is the
+3-hour run's to catch.
 
 ## Decision
 
-**The lead turns on merge when ready on every pull request whose review passed, and a pull request
-that changes product code first shows a green full run on its own branch.**
+**The lead turns on merge when ready on every pull request whose review passed, product code
+included, and runs no full run on its branch first.**
 
-- Product code is code under `next/`, `packages/`, `programs/` and `apps/`. Docs, decisions, field
-  rows, skills and CI tooling are armed as soon as the review passed and the lead's final read and
-  leak check are done.
-- The full run is the scheduled workflow started by hand on the pull request's branch. It must be
-  green on the head that is armed. A push after it means a new full run.
 - How merge when ready is turned on, and when it is turned off again, is as
   [0530](0530-lead-turns-on-merge-when-ready.md) says.
 - The landing order is the order the pull requests become ready. The lead no longer keeps an
   ordered merge line.
-- A sev1 fix still goes ahead of other changes
-  ([0542](0542-two-sev-levels-one-skill.md)): the lead turns the others off until it has landed.
-
-**Binding constraints**
-
-- No product pull request has merge when ready on without a green full run on its armed head.
+- A break that only the full run can see is caught by the 3-hour run on main, and fixed as a sev1
+  ([0542](0542-two-sev-levels-one-skill.md)). If that run is too slow or misses a break, the cure
+  is in the run, never a wait in front of a merge.
+- A sev1 fix still goes ahead of other changes: the lead turns the others off until it has landed.
 
 ## Consequences
 
 - 0540 is superseded: more than one pull request may be armed at once, and the order is no longer
   the lead's.
-- Full runs go one at a time, about 12 minutes each, so on a busy day they are the line. If that
-  line gets long, the rule is looked at again with a day's numbers.
-- A full run on a branch does not prove main: two pull requests that are each green can still clash
-  once both land. The 3-hour run on main still catches that, and a red one is a sev1.
-- Not decided here: a program that starts the full run and arms the pull request by itself.
-  Today the lead does both by hand.
+- Main can be red for up to 3 hours after a pull request that was green on its own checks. That is
+  accepted for speed.
+- Not decided here: a shorter schedule, or which tests move from the schedule to a pull request's
+  own checks.
+
+## Amendments
+
+- 2026-11-15: this file first said a product pull request needs a green full run on its own branch
+  before it is armed. That condition was the lead's proposal, not the owner's ruling, and the owner
+  ruled against it the same day. The file was rewritten to say what was ruled.
