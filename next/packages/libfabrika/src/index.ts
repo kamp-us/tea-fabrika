@@ -43,8 +43,11 @@ export {
   type View,
   WatcherManager,
 } from "./runtime/Entry.ts";
-export { diff, type Patch } from "./runtime/Patch.ts";
+export { apply, diff, type Patch } from "./runtime/Patch.ts";
+export * as ProgramClient from "./runtime/Client.ts";
+export { clientMachineFor } from "./runtime/Client.ts";
 export {
+  type Binding,
   EventPolicy,
   Input,
   Program,
@@ -66,17 +69,27 @@ export {
   workerExecution,
 } from "./runtime/Execution.ts";
 export { Gateway, type ConnectionId } from "./gateway/Gateway.ts";
+/**
+ * @stability unstable
+ */
+export * as SettingsStart from "./settings/Start.ts";
+export { RecordedStart } from "./settings/RecordedStart.ts";
+/**
+ * @stability unstable
+ */
+export * as SettingsStarts from "./settings/Starts.ts";
 // A program window's typed contract, and the rows a client records (P14).
 export {
-  ClientRecord,
-  ClientRow,
   commandMsg,
   defineWindow,
+  type AnyTile,
+  type TileProps,
   type WindowData,
   type WindowMsg,
   type WindowProps,
   type WindowRegistration,
 } from "./runtime/Window.ts";
+export { ClientRecord, ClientRow } from "./transport/ClientRows.ts";
 /**
  * @stability unstable
  */
@@ -92,9 +105,25 @@ export * as Send from "./runtime/Send.ts";
 /**
  * @stability unstable
  */
+export * as Chunk from "./runtime/Chunk.ts";
+/**
+ * @stability unstable
+ */
 export * as StartChild from "./runtime/StartChild.ts";
 export { Started } from "./processes/Children.ts";
 /**
  * @stability unstable
  */
 export * as Setting from "./settings/Setting.ts";
+// tezgah's wire contract: its view's shapes and the layout's geometry, pure and browser-safe. A
+// program's box reaches them here; a window may also take each by its own subpath.
+/**
+ * tezgah's view: workspaces, tiles and their ids, and the names of tezgah's processes.
+ * @stability unstable
+ */
+export * as Workspace from "./tezgah/Workspace.ts";
+/**
+ * The layout's pure functions: its tile order, a split, a remove, the rects and the check.
+ * @stability unstable
+ */
+export * as Layout from "./tezgah/Layout.ts";

@@ -67,8 +67,8 @@ not written yet.*
 *2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
 ticket 502) is part of this plan and keeps a slot beside the four primitives
 ([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
-landed on 2026-11-11; `Project`, `Process`, `Connection` and `Control` are still plain classes. The
-plan for what is left is being written.
+landed on 2026-11-11, `Connection` in slice S1 and `Process` in slice S2 of
+[its plan](./ticket-502-alchemy-port.md); `Project` and `Control` are still plain classes.
 
 *2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
 help and 12 wait. The build order is the merge line, the window, a person starting a program and
@@ -85,23 +85,38 @@ on the laptop, which the owner accepts. The merge line is decided
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
 and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
-requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
-(P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
-[1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
-[1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
-[1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
-[1097](https://github.com/usirin/tea-fabrika/pull/1097) (P21),
+requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
 [1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
-[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the lead: pick and restart PR 1028
-and PR 1044, past their budget stop with red laws (0162;
-[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)). → the owner: walk the focus clash
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25, taken back out of
+[PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146)). *Changed 2026-11-15: PRs 1028 (P14),
+1044 (P13), 1054 (P38), 1074 (P39) and 1097 (P21) were closed on 2026-11-13 Pacific because they
+were folded into PR 1146, which merged that day, so their slices are on main. They stood in this
+list, and PR 1028 and PR 1044 had stopped past their budget with red laws (0162;
+[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)).* → the owner: walk the focus clash
 between 0279 and 0274 before the desk is built, then S1 of the
 [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
+([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
+store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
+
+*2026-11-13:* P18's slice 1 (tracker ticket 290) is built in `next/` as
+[PR 1208](https://github.com/kamp-us/tea-fabrika/pull/1208): one window client in the library,
+`@kampus/libfabrika/client/*`, with the hello exchange as its own tea machine. A program with no
+DOM and a browser tab dial, wait, are granted and work through the same machine and start, on
+Effect's socket; CI's end-to-end job runs one round trip against both. This finishes no Tier 1 row:
+P18 has three slices left.
+
+*2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
+review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
+the real launchd and Electron restart and cleanup check remains with the host lead.
+P19 stays open. Slice 2 adds sealed identities and founding storage, then slice 3 builds
+the Electron client and recovery with both windows.
 
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
@@ -116,6 +131,13 @@ Brain letters under `noticeId(...)` reach a program without an input port. Clien
 refuse those ids; a refused or throwing notice is skipped and counted on its span.
 The tile and dismissal on each device are slice 2; the gateway's delivery is slice 3. Those slices
 wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 44.
+
+*2026-11-12:* P21 slice 1, tracker ticket 887, builds `next/`'s menu bar extra machine,
+pure `Menu.view`, `PersonCheck` contract and declared `desktop.link-ttl`. The check keeps
+the row shown at the click, and browser passes expire and work once. It draws nothing and
+starts no Electron or gateway work. P21 stays open for slices 2 to 4; the finished-row count
+stays 21 of 44. *Changed 2026-11-15: slice 1 merged on 2026-11-13 Pacific through
+[PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146); PR 1097 was closed for that reason.*
 
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
@@ -286,6 +308,17 @@ application, so one program past its restart limit stops alone. Isolation gets h
 ([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
+*2026-11-13:* the layering debt has its plan, a draft ([the plan](./layering-debt.md), ticket 921).
+`runtime/`, `access/` and `gateway/` stop importing `ledger/`, as rule 11 of
+[0043](../../.decisions/0043-rooms-on-floors.md) asks, and the 71 import rows of `next-ledger.json`
+go to zero in seven slices ([0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). Nothing of
+it is on main yet. The lead approved slices 1 to 3, which only build 0043,
+[0055](../../.decisions/0055-errors-named-by-their-service.md),
+[0062](../../.decisions/0062-test-files-keep-the-floors.md) and
+[0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md). Slices 4 to 7 wait on the
+plan's open question 1: may `processes/` get one small service for a named stream?
+→ the owner answers question 1; slice 1, stores name their own faults, is in its steps.
+
 *2026-11-10:* P8, the notes small exam, is in (ticket 274): saved notes letters frozen in
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
@@ -315,8 +348,8 @@ added. Today's outcome, field and lane formats keep their keys. → lands once i
 Today's hand-run tooling, ticket 318: review, cleanup and saved waits were decided 2026-11-08,
 and the [review](../../.agents/skills/review/SKILL.md) and [lead](../../.agents/skills/lead/SKILL.md)
 skills hold them. Review sweeps every law and decided note and answers once. Drivers save
-waits and end; lead starts fresh drivers when the saved fact holds. After merge, catch-up keeps
-the checked head in MAIN and removes safe working copies. Only the lead session signs plans.
+waits and end; lead starts fresh drivers when the saved fact holds. After a merge, `land.ts merged` starts
+the box cleanup sweep, which removes safe working copies. Only the lead session signs plans.
 
 Dated 2026-11-05. **Today's pipeline is paused, and `next/` starts now, by hand (owner,
 2026-11-05; [the steps](../direction/next-is-a-pipeline-pre-run.md)).** No merged pull request has been built by the pipeline yet. Since 2026-11-02,
@@ -379,7 +412,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 | Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
 | Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [its rules](../how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run), then [field/](../../field/README.md) for what past runs hit |
-| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
+| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, with its own frontmatter (no index row, 0522). Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
 
 ## Who decides what
@@ -410,8 +443,8 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 ## How a change lands
 
 - **A live run on a target repository:** inside the run, nothing but ship merges. Once a lane is finished and stuck, what is left is a by-hand change, under the next rule.
-- **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent merges, and `catchup.sh` comments on each ticket it closes with the pull request and its merge commit (`.agents/skills/lead/scripts/catchup.sh:86`). No row per merge is written in `field/` yet: that note's M1 is proposed. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead merges product code and exam changes the same way, with `catchup.sh`, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md), owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
-- **Auto-merge on a hand pull request** (owner, 2026-11-08). The repo allows auto-merge and deletes head branches on merge. A hand pull request, never a live run's, gets auto-merge armed once its checks are known to pass, e2e included. `ask owner exam_read` stays a warning, so an agent's pull request that edits the exam can merge before the owner reads it. The owner accepts that, to test the pipeline's own limits. The lead agent never writes "owner read" unless the owner did, and each such merge gets a field note, so what slipped through can be counted.
+- **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent turns on GitHub's merge when ready ([0530](../../.decisions/0530-lead-turns-on-merge-when-ready.md)) after the leak grep on the change and on the title and description, and GitHub adds it to the queue when `ci-required` is green. Main takes changes only through that queue (squash, one pull request per group): GitHub tests the pull request on newest main and merges it, so nobody merges main in or runs the checks again by hand ([0162](../../.decisions/0162-no-friction-before-a-merge.md)). The squash commit's title and message are the pull request's title and description. After the merge, `land.ts merged <pr>` comments on each ticket it closes with the pull request and its merge commit (`.agents/skills/lead/scripts/pr/Queue.ts`). No row per merge is written in `field/` yet: that note's M1 is proposed. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead lands product code and exam changes the same way, through the queue, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md), owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
+- **Merge when ready on a hand pull request** (0530, 2026-11-14, in place of 0162's wait for green). Once the steps passed and the lead's final read is done, the lead turns on GitHub's merge when ready at once (`enablePullRequestAutoMerge`); GitHub queues it when `ci-required` goes green and never when red. A push after the final read means `disablePullRequestAutoMerge` and a new read. No `--admin` without the owner. `ask owner exam_read` stays a warning, so an agent's pull request that edits the exam can merge before the owner reads it. The owner accepts that, to test the pipeline's own limits. The lead agent never writes "owner read" unless the owner did, and each such merge gets a field note, so what slipped through can be counted.
 - **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)). *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
 - **No number caps a pull request's size** (owner, 2026-11-11). Bigger work is a stack of
   slices the plan cuts by what lands whole, each its own pull request through every step, with its

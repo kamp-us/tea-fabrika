@@ -21,7 +21,7 @@ import { type ContentGoes, DEFAULT_SERVICE, type Viewing, view } from "./view.ts
 // with (./agent.ts) is the same provider's, so both land in one trace and go
 // out through one exporter.
 //
-//   tracing("http://localhost:4318")   OTLP over HTTP, batched: Jaeger, or any collector
+//   tracing("http://localhost:4318")   OTLP over HTTP, batched: any collector
 //   memoryTracing()                    kept in memory, for a test to read back
 //   recordTracing(records)             kept in the host's own job records, each as it ends
 //
@@ -37,7 +37,7 @@ import { type ContentGoes, DEFAULT_SERVICE, type Viewing, view } from "./view.ts
 /** The service name a span that names none is exported under: what a viewer lists it by. */
 export const SERVICE = DEFAULT_SERVICE;
 
-/** OTLP's default port for HTTP, on this machine: where `pnpm trace:up` puts Jaeger. */
+/** OTLP's default port for HTTP, on this machine: where an OTLP collector listens. */
 export const DEFAULT_ENDPOINT = "http://localhost:4318";
 
 /** How long a process waits at its end for its last spans to go out. */

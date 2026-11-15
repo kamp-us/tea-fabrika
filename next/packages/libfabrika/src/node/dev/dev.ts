@@ -1,19 +1,36 @@
+/**
+ * The local brain's driver on Node: it starts the local runtime through a deploy the caller
+ * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
+ * call it over a private control socket.
+ *
+ * @stability unstable
+ */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import { applyCell } from "@demlik/tea";
 import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { Installed, type Install } from "../../runtime/Code.ts";
+import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
-class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
+/**
+ * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
+ * `unreachable`, `bad_row`, `start_timeout` or `install`.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -70,6 +87,29 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   };
 });
 
+/**
+ * Starts the local instance's brain and answers its address with stand-ins for its bindings:
+ * `project`, `process`, `record`, `loader` and `bucket`, each a call over the private control
+ * socket.
+ *
+ * **Details**
+ *
+ * `deploy` gets a context that holds the runtime's lifecycle hook and the control plugin, and a
+ * scope of its own for the runtime. The driver waits for the control socket to listen, for at most
+ * 30 seconds, and for the first start. It saves every start, exit, restart wait, brake and stop as
+ * a `BrainEvent` in a durable outbox under `home` and sends them to the project, so an event
+ * outlives a crash on either side. Once a second it samples the runtime's memory, and at 500 MB or
+ * more it ends the process with SIGTERM, so that exit is recorded with the reason `memory`. Closing
+ * the caller's scope stops the runtime and records `stopped`.
+ *
+ * **Gotchas**
+ *
+ * The control socket listens on 127.0.0.1 only and takes a random bearer token made for this
+ * start. A call made while no port is known fails as `offline`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   options: {
     readonly name: string;
@@ -81,7 +121,8 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 ) {
   const config = options,
     scope = yield* Effect.scope,
-    ids = yield* ProcessIdGenerator;
+    ids = yield* ProcessIdGenerator,
+    client = yield* HttpClient.HttpClient;
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
     events = yield* Queue.unbounded<{ readonly event: RuntimeEvent; readonly cause: Cause }>(),
@@ -118,23 +159,20 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
     const url = `http://127.0.0.1:${port}`;
     const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
-    const request = yield* Effect.try({
-      try: () => ({
-        method: "POST",
-        headers: {
-          // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
-          authorization: `Bearer ${Redacted.value(token)}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ target, project, name, method, args }),
-      }),
+    const body = yield* Effect.try({
+      try: () => JSON.stringify({ target, project, name, method, args }),
       catch: fail,
     });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
-    const response = yield* Effect.tryPromise({ try: () => fetch(url, request), catch: fail });
-    const badRow = (cause: unknown) => new ControlError({ reason: "bad_row", cause });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
-    const raw = yield* Effect.tryPromise({ try: () => response.json(), catch: badRow });
+    const response = yield* HttpClientRequest.post(url).pipe(
+      // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
+      HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(token)}`),
+      HttpClientRequest.bodyText(body, "application/json"),
+      client.execute,
+      // No span and no trace header for a control call: the span sink flushes through this call.
+      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+      Effect.mapError(fail),
+    );
+    const raw = yield* response.json.pipe(Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })));
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
       Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
     );
@@ -405,6 +443,17 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
   return {
+    recording,
+    install: (code: Install): Effect.Effect<Installed, ControlError> =>
+      recorded(
+        call("project", config.name, "", "codeInstall", [code]).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
+        ),
+      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
+    failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
+      recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
+        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+      ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>
       proxy((method, args) => call("project", project, "", method === "connect" ? "clientConnect" : method, args), {

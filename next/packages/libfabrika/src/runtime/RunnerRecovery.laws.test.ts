@@ -2,7 +2,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Layer, Option, Schema } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
@@ -12,6 +13,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -62,6 +64,15 @@ describe("P12 saved mail recovery", () => {
                 let down = false;
                 const execution = workerExecution({
                   init: async (saved) => pure.init(saved),
+                  fresh: async (model, msg) => {
+                    if (down && point === "step") {
+                      return Promise.reject(new Error("temporary RPC loss"));
+                    }
+
+                    return Result.getOrThrow(pure.fresh(model, msg));
+                  },
+                  update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
+                  audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
                   admit: async () => {
                     if (down && point === "admit") {
                       return Promise.reject(new Error("temporary RPC loss"));
@@ -162,7 +173,7 @@ describe("P12 saved mail recovery", () => {
                     build: "test",
                     owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                   },
-                  { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 } },
+                  { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                 ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
                 yield* Effect.gen(function* () {
                   const runner = yield* ProgramRunner,
@@ -223,7 +234,7 @@ describe("P12 saved mail recovery", () => {
             }),
           ),
         ),
-        { seed: 119120, numRuns: 25, examples: [[1, "saved-letter"]] },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }), examples: [[1, "saved-letter"]] },
       );
     });
   }
@@ -281,6 +292,12 @@ describe("P34 id reuse at the runner", () => {
                   const execution = workerExecution({
                     init: async (saved) => pure.init(saved),
                     admit: async () => true,
+                    fresh: async (model, msg) => Result.getOrThrow(pure.fresh(model, msg)),
+                    update: async (model, msg) => {
+                      steps++;
+                      return Result.getOrThrow(pure.update(model, msg));
+                    },
+                    audit: async () => ({ _tag: "ok", value: { type: "put" } }),
                     step: async (model, msg) => {
                       steps++;
                       return pure.step(model, msg);
@@ -388,7 +405,7 @@ describe("P34 id reuse at the runner", () => {
                       build: "test",
                       owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                     },
-                    { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 } },
+                    { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                   ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
                   const letter = (type: "inc" | "boom", n: number) => ({
                     id,
@@ -422,7 +439,7 @@ describe("P34 id reuse at the runner", () => {
               }),
             ),
         ),
-        { seed: 119120, numRuns: 25 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
       );
     });
   }

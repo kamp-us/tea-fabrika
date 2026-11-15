@@ -6,6 +6,7 @@
 // and published patches.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
@@ -15,6 +16,7 @@ import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
 import type { RepliesError } from "./Replies.ts";
@@ -22,7 +24,7 @@ import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTe
 import { ProgramRunner, Sent } from "./Runner.ts";
 
 const SEED = 119120;
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 const NAME = "drafts:1";
 const PROGRAM = "drafts";
 const CAPACITY = 1024 ** 3;
@@ -42,8 +44,11 @@ export type Harness = {
   readonly services: (inbox: Sql, manager: Sql) => Layer.Layer<StoreNeeds | Mailbox | ProcessManager>;
 };
 
-/** The tables main's runner, inbox and process table write. Any other table a runner writes here
- *  holds terminal replies. */
+/** The table that keeps terminal replies, by its own name, so the reply fault lands only on a reply write. */
+const REPLIES = "process_replies";
+
+/** The tables main's runner, inbox and process table write. Every other table a runner writes here is
+ *  read for a stored reply and scanned for leaked secrets, so a new table cannot hide one. */
 const KNOWN = new Set([
   "entries",
   "rings",
@@ -149,15 +154,15 @@ const Malformed = Schema.TaggedStruct("refused", { reason: Schema.Struct({ text:
 /** A letter the record answered: the delivery as first sent, and its first terminal answer. */
 type Answered = { readonly letter: Incoming; readonly first: Sent; readonly note: string; readonly base: number };
 
-/** The armed faults: the recording flush, and the next write to a reply table. */
+/** The armed faults: the recording flush, and the next write to the reply table. */
 type Control = { flush: boolean; reply: boolean; hits: number };
 
-/** The recovery connection with one armed fault: its next write to a table main never had. */
+/** The recovery connection with one armed fault: its next write to the reply table, never another's. */
 const faulty = (sql: Sql, control: Control): Sql => ({
   exec: (query, ...params) => {
     const table = WRITE.exec(query)?.[1];
 
-    if (control.reply && table !== undefined && !KNOWN.has(table)) {
+    if (control.reply && table === REPLIES) {
       control.reply = false;
       control.hits++;
       throw new Error("disk I/O error");
@@ -302,7 +307,7 @@ const walk = (
       const context = yield* Layer.build(
         ProgramRunner.layer(
           { id: live.state.process, name: NAME, program: PROGRAM, build: "test", owner },
-          { recovery: { sql: faulty(inbox, control), name: NAME, capacity: CAPACITY } },
+          { recovery: { sql: faulty(inbox, control), name: NAME, capacity: CAPACITY }, chunk: ANY_CHUNK },
         ).pipe(Layer.provide(dependencies)),
       ).pipe(Scope.provide(scope));
       runner = Context.get(context, ProgramRunner);

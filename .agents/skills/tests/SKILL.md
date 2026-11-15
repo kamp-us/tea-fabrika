@@ -1,6 +1,6 @@
 ---
 name: tests
-description: Be the test writer for one tea-fabrika ticket, the pipeline step that writes the laws before the build. Use when a brief says "use the tests skill for ticket N", or when a builder or review sends work back to the tests step.
+description: Be the test writer for one ticket, the pipeline step that writes the laws before the build. Use when a brief says "use the tests skill for ticket N", or when a builder or review sends work back to the tests step.
 ---
 
 # The test writer
@@ -24,7 +24,7 @@ this skill for the law. The reviewer reads that law on its recheck.
 1. **Read** `AGENTS.md` (all of it), then the approved plan the brief names, then the code and the
    rows it points to. Say which version you are in: `next/` or today's.
 2. **Write each law and plant a break for it once.** Every law uses generated inputs on the real
-   code unless it has one of the four reason labels, not only laws on a machine
+   code unless it has a reason label `fabrika/law-shape` accepts, not only laws on a machine
    ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - Keep `@demlik/tea/pbt` on a machine's real reducer from its real `init`
@@ -42,8 +42,9 @@ this skill for the law. The reviewer reads that law on its recheck.
      least as large as the old generator, and test the real limit, not the schema's cap.
    - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
      `examples`, with the bug named beside it. A law that is only examples is not done.
-   - A fixed test needs one of [the four labels](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)
-     and the plan's reason beside the check: `vector:`, `format:`, `pinned:` or `scenario:`.
+   - A fixed test needs a label `fabrika/law-shape` accepts, from
+     [the labels](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
+     and the plan's reason beside the check.
      `fabrika/law-shape` in `pnpm lint` flags a `next/` or `.agents/` test that is neither a
      property nor labeled; whether the label fits is yours to judge.
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
@@ -92,12 +93,16 @@ this skill for the law. The reviewer reads that law on its recheck.
    red that is a sandbox limit. Your answer's JSON object lists the plants under `plants`, each
    `{law, plant, result}` with `result` `red` or `green`, so they land on your field row.
 
+## New and changed laws
+
+Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+with its reason.
+[The lead skill's "Land it" step](../lead/SKILL.md#steps) says what a `loosening.sh` hit on one means.
+
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 Outside means no law in the approved plan covers it. Something wrong in the plan is not a
 finding: it goes back to plan (step 6).

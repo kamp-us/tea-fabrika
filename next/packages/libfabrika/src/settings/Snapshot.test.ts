@@ -17,6 +17,7 @@ import * as Files from "./Files.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
 import * as Sources from "./Sources.ts";
+import * as StartsTest from "./StartsTest.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
@@ -24,6 +25,51 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };
 const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
+
+for (const kind of StartsTest.originKinds) {
+  StartsTest.law(
+    `T753 L3 snapshot rejects forbidden ${kind} origins without a hash change`,
+    fc.tuple(StartsTest.recipe, StartsTest.originFault(kind)),
+    ([recipe, fault]) =>
+      Effect.gen(function* () {
+        const input = yield* StartsTest.input(recipe);
+        const bad = StartsTest.changeOrigin(input, fault);
+        expect(bad.settings.values).toEqual(input.settings.values);
+        expect(bad.settings.hash).toBe(input.settings.hash);
+        const exit = yield* Effect.exit(Snapshot.read(Declarations.all, bad.settings));
+        expect(Exit.isFailure(exit)).toBe(true);
+      }),
+  );
+}
+
+StartsTest.law(
+  "T753 L3 declared sources and safe display paths keep their origins and values-only hash",
+  fc.tuple(StartsTest.recipe, fc.uuid(), fc.nat()),
+  ([recipe, word, choice]) =>
+    Effect.gen(function* () {
+      const input = yield* StartsTest.input(recipe);
+      const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
+      const origins = Object.fromEntries(
+        Declarations.all.declarations.map((declaration, index) => {
+          const source = (choice + index) % 4;
+          return [
+            declaration.path,
+            source === 0
+              ? Sources.Origin.cases.default.make({})
+              : source === 1
+                ? Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })
+                : source === 2
+                  ? Sources.Origin.cases.env.make({ name: declaration.env })
+                  : Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+          ];
+        }),
+      );
+      const settings = { ...input.settings, origins };
+      const checked = yield* Snapshot.read(Declarations.all, settings);
+      expect(checked.snapshot).toEqual(settings);
+      expect(checked.snapshot.hash).toBe(input.settings.hash);
+    }),
+);
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -345,6 +391,13 @@ const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
   .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
 
+/**
+ * A value as searchable text. JSON has no bigint, and a decoded byte size is one, so a bigint prints
+ * as its digits and every other value as JSON does: the search still reads every value.
+ */
+const printed = (value: unknown) =>
+  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
   const tracer = Tracer.make({
@@ -357,10 +410,7 @@ const spans = () => {
   const text = () =>
     ended
       .map((span) =>
-        JSON.stringify(
-          { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
-        ),
+        printed({ name: span.name, attributes: [...span.attributes], events: span.events, status: span.status }),
       )
       .join("\n");
   return { tracer, text };
@@ -419,13 +469,13 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
           if (Exit.isSuccess(exit)) {
             expect(place.named).toBeUndefined();
             outputs.push(JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(exit.value.made)));
-            outputs.push(JSON.stringify(exit.value.resolved));
+            outputs.push(printed(exit.value.resolved));
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
             expect(place.named).toBeDefined();
             const error = exit.cause.reasons.find((r) => r._tag === "Fail");
             expect(error?._tag === "Fail" ? error.error : undefined).toBeInstanceOf(Files.SettingsError);
-            outputs.push(String(exit.cause), JSON.stringify(error?._tag === "Fail" ? error.error : null));
+            outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.
             expect(
               error?._tag === "Fail" && error.error instanceof Files.SettingsError ? error.error.message : "",

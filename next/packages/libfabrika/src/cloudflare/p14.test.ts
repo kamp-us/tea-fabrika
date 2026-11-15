@@ -14,11 +14,12 @@ import { createHash } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
+import * as Route from "./fetch.ts";
+import type { Env } from "./runtime.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 type Assets = Readonly<Record<string, Asset>>;
-type Fetch = (request: Request, env: Env, config: BrainOptions, assets?: Assets) => Effect.Effect<Response, unknown>;
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const HTML = "text/html; charset=utf-8";
@@ -26,20 +27,19 @@ const JS = "text/javascript; charset=utf-8";
 const CSS = "text/css; charset=utf-8";
 const PAGE = "/index.html";
 
-const fetchApi = async (): Promise<Fetch> => ((await import("./fetch.ts")) as { fetch: Fetch }).fetch;
-
-const config = (port: number): BrainOptions => ({
-  name: "p14",
-  port,
-  person: "person-test",
-  founder: "public-test",
-  window: null,
-  build: "test",
-  rateLimit: { limit: 100_000, window: 60_000 },
-});
+const config = (port: number) =>
+  instanceFixture({
+    name: "p14",
+    port,
+    person: "person-test",
+    founder: "public-test",
+    window: null,
+    build: "test",
+  });
 
 /** An environment whose every stub call is written down, so the law can say none was made. */
-const world = () => {
+const world = (port: number) => {
+  const input = config(port);
   const calls: Array<string> = [];
   const stub = (to: string) =>
     new Proxy(
@@ -48,6 +48,10 @@ const world = () => {
         get:
           (_t, method) =>
           (..._args: Array<unknown>) => {
+            if (method === "settingsStart") {
+              return Promise.resolve(StartsTest.reply(input));
+            }
+
             calls.push(`${to}.${String(method)}`);
             return Promise.resolve({ _tag: "ok" });
           },
@@ -55,6 +59,7 @@ const world = () => {
     );
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
+    INSTANCE: JSON.stringify(input),
     PROJECT: { getByName: () => stub("project") },
     CONNECTION: { getByName: () => stub("connection") },
     PROCESS: { getByName: () => stub("process") },
@@ -112,14 +117,14 @@ const REACH = ["page", "plain-root", "asset", "absent", "head", "write", "stale"
 
 describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving rules", () => {
   it("generated walks of rebuilds and requests: GET, HEAD, ETag, missing routes, root fallback and access checks", async () => {
-    const fetch = await fetchApi();
+    const fetch = Route.fetch;
     const reached = new Set<(typeof REACH)[number]>();
     await fc.assert(
       fc.asyncProperty(
         fc.integer({ min: 1024, max: 65_535 }),
         fc.array(step, { minLength: 1, maxLength: 24 }),
         async (port, steps) => {
-          const { env, calls } = world();
+          const { env, calls } = world(port);
           const origin = `http://127.0.0.1:${port}`;
           // The walk's state: the table the brain carries now (none before the first build), and every
           // validator an earlier table served.
@@ -245,3 +250,9 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
     expect([...reached].sort(), "every serving case was reached by the generated walks").toEqual([...REACH].sort());
   });
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

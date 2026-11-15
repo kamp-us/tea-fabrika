@@ -1,6 +1,7 @@
 // P33, p79 atomic exit's storage contract. Each plant is named beside its law.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -124,7 +125,7 @@ describe("p79, LedgerTransaction", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect.prop(
     "plant, drop a string code: a platform error's code rides as a span tag",
@@ -155,7 +156,7 @@ describe("p79, LedgerTransaction", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
   for (const reason of ["id_reused", "seen_ahead", "bad_trace"] as const) {
@@ -192,7 +193,7 @@ describe("p79, LedgerTransaction", () => {
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 
@@ -280,7 +281,7 @@ describe("p79, LedgerTransaction", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
   it.effect("plant, one page is all history: a turn reads past P6's 256-row page", () =>
     Effect.flatMap(memory, (db) => {
@@ -327,6 +328,6 @@ describe("p79, LedgerTransaction", () => {
           }),
         { concurrency: 1, discard: true },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 });

@@ -1,11 +1,30 @@
-import { relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 // How `--shard k/n` splits the test files over the check's machines: each machine gets about the
 // same seconds, not the same count of files. vitest's own split gives each the same count, so two
-// two-minute lane files can land on one machine while another runs only one-second files.
+// two-minute lane files can land on one machine while another runs only one-second files. On each
+// machine the heaviest file starts first, so its workers end near the same time and the split's
+// sums hold; a heavy file that starts late runs alone at the end.
 
 const LANE = "packages/pipeline/src/stages/pipeline/lane";
+
+/** The table at `path`: an object of seconds, each a finite number of zero or more, or it throws. */
+const readTable = (path: string): Record<string, number> => {
+  const table: unknown = JSON.parse(readFileSync(path, "utf8"));
+
+  if (
+    typeof table !== "object" ||
+    table === null ||
+    Array.isArray(table) ||
+    !Object.values(table).every((seconds) => typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0)
+  ) {
+    throw new Error(`${path}: not an object of seconds per test file`);
+  }
+
+  return Object.fromEntries(Object.entries(table));
+};
 
 /**
  * Seconds per file from the repo root: medians of today's test-file times in CI runs
@@ -15,594 +34,70 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * and 42801440878. box, boxrm, loosening and program-package-layout come from PR 757's check
  * run 42874119130, attempts 5 to 14 (a median of 10).
  * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
- * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
- * T871 medians use completed main runs 43239450301 (755d6f4ad), 43235822398 (2d60c9835)
- * and 43234969237 (27011b244), all attempt 1, with jobs and samples beside each row.
- * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
- * The four build files (build.test.ts, build-assets.test.ts, build-one-file.test.ts, exam/bytes.test.ts) are one time each from CI run 42922102030, rounded to one decimal.
- * A file not measured counts 1 s.
+ * The `next` project's rows, the in-memory tests the merge line runs (0536), use attempt 1 of runs
+ * 43656757141 and 43657195723 (pull requests) and 43657535864 (a merge queue group), all after PR
+ * 1278; the `next-integration` rows use attempt 1 of green runs 43544589151 (push to main),
+ * 43551626086 (merge queue group) and 43556494864 (push to main). Each is rounded to one decimal:
+ * the median of the three samples, or the larger of those in hand when a run did not hold the
+ * file. The samples and their jobs are in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
+ * attempt 1 of runs 43601966383 (job 132468657925), 43601964962 (job 132468687674) and 43605298688
+ * (job 132478645693), the median of the three, from Vitest's printed Duration per file.
+ * PR 1252's split files, and the rows of the files it changed, come from one run: scheduled run 43728081584,
+ * attempt 1, started by hand on that branch, read as `shard-times` reads a report. Each is one sample,
+ * so it is that run's seconds, not a median.
+ * A file with no row is placed by the fallback at the median measured time. For a next/ file, the
+ * `shard-times` step of check.yaml's next job prints its real seconds for a later row. No CI step
+ * prints a tooling file's since 0539 took the tooling tests off the merge line: its seconds are in
+ * the Vitest report the schedule's tooling legs upload (`results-tooling-1` and `-2`).
+ *
+ * The rows live in vitest.shards.json and are read from disk, never imported. vitest.config.ts
+ * imports this file, and Vitest selects every test when a file its config imports changes, so a
+ * table imported here made each row edit run the whole suite. A row only orders and splits files.
+ * The config makes the table a watched file of this module, so `--changed` still runs every test
+ * that imports this file when a row changes.
  */
-export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 348.7,
-  ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
-  ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
-  ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
-  ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
-  ".agents/skills/lead/scripts/gc.test.ts": 0.1,
-  ".agents/skills/lead/scripts/redact.test.ts": 7.2,
-  ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,
-  ".agents/skills/mutation/scripts/run.test.ts": 5.8,
-  ".agents/skills/mutation/scripts/sample.test.ts": 0.5,
-  ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
-  ".agents/skills/step-commit/scripts/stepcommit.test.ts": 18.2,
-  "apps/fabrika/src/asks.laws.test.ts": 1.8,
-  "apps/fabrika/src/asks.test.ts": 0.0,
-  "apps/fabrika/src/attach.test.ts": 0.0,
-  "apps/fabrika/src/bundles.test.ts": 3.7,
-  "apps/fabrika/src/desk/desk.laws.test.ts": 14.6,
-  "apps/fabrika/src/desk/desk.test.ts": 0.1,
-  "apps/fabrika/src/desk/hold.laws.test.ts": 1.3,
-  "apps/fabrika/src/desk/hold.test.ts": 0.0,
-  "apps/fabrika/src/desk/keymap.laws.test.ts": 1.4,
-  "apps/fabrika/src/desk/keymap.test.ts": 0.0,
-  "apps/fabrika/src/desk/keys.test.ts": 0.0,
-  "apps/fabrika/src/desk/layout/line.test.ts": 0.1,
-  "apps/fabrika/src/desk/layout/node.test.ts": 0.0,
-  "apps/fabrika/src/desk/layout/properties.test.ts": 0.1,
-  "apps/fabrika/src/desk/layout/tree.test.ts": 0.0,
-  "apps/fabrika/src/editor/cells.test.ts": 11.1,
-  "apps/fabrika/src/editor/editor.laws.test.ts": 8.4,
-  "apps/fabrika/src/editor/editor.test.ts": 0.1,
-  "apps/fabrika/src/editor/grid.test.ts": 0.0,
-  "apps/fabrika/src/editor/keys.test.ts": 0.0,
-  "apps/fabrika/src/editor/screen.test.ts": 0.0,
-  "apps/fabrika/src/files.test.ts": 0.0,
-  "apps/fabrika/src/host/agent-session.test.ts": 1.2,
-  "apps/fabrika/src/host/agents-job.test.ts": 12.7,
-  "apps/fabrika/src/host/agents-line.test.ts": 18.5,
-  "apps/fabrika/src/host/agents-list.test.ts": 0.0,
-  "apps/fabrika/src/host/agents-read-only.test.ts": 0.0,
-  "apps/fabrika/src/host/agents-restart.test.ts": 19.8,
-  "apps/fabrika/src/host/agents-shared.test.ts": 3.2,
-  "apps/fabrika/src/host/agents-stop.test.ts": 12.6,
-  "apps/fabrika/src/host/agents-writer.laws.test.ts": 4.3,
-  "apps/fabrika/src/host/agents.test.ts": 8.7,
-  "apps/fabrika/src/host/host.test.ts": 4.1,
-  "apps/fabrika/src/host/jev.test.ts": 0.0,
-  "apps/fabrika/src/host/keybindings.test.ts": 0.9,
-  "apps/fabrika/src/host/lock.test.ts": 10.6,
-  "apps/fabrika/src/host/log.test.ts": 0.1,
-  "apps/fabrika/src/host/main.test.ts": 0.0,
-  "apps/fabrika/src/host/move.laws.test.ts": 0.7,
-  "apps/fabrika/src/host/move.test.ts": 0.4,
-  "apps/fabrika/src/host/one-host.test.ts": 67.6,
-  "apps/fabrika/src/host/post.test.ts": 6.2,
-  "apps/fabrika/src/host/restart.test.ts": 0.0,
-  "apps/fabrika/src/host/serve.test.ts": 0.0,
-  "apps/fabrika/src/host/settings.test.ts": 0.7,
-  "apps/fabrika/src/host/shared.test.ts": 4.9,
-  "apps/fabrika/src/host/stop.test.ts": 14.3,
-  "apps/fabrika/src/job-lines.test.ts": 0.2,
-  "apps/fabrika/src/keys/machine.laws.test.ts": 0.1,
-  "apps/fabrika/src/keys/machine.test.ts": 0.0,
-  "apps/fabrika/src/keys/program.laws.test.ts": 0.0,
-  "apps/fabrika/src/keys/window.test.ts": 0.2,
-  "apps/fabrika/src/launch.test.ts": 0.0,
-  "apps/fabrika/src/link.laws.test.ts": 0.6,
-  "apps/fabrika/src/link.test.ts": 0.0,
-  "apps/fabrika/src/messages.test.ts": 0.0,
-  "apps/fabrika/src/outside.test.ts": 0.0,
-  "apps/fabrika/src/pipes.test.ts": 0.0,
-  "apps/fabrika/src/reconnect.laws.test.ts": 7.5,
-  "apps/fabrika/src/reconnect.test.ts": 0.0,
-  "apps/fabrika/src/start-host.summon.laws.test.ts": 0.1,
-  "apps/fabrika/src/start-host.test.ts": 0.1,
-  "apps/fabrika/src/tile-jobs.test.ts": 0.0,
-  "apps/fabrika/src/tiles.test.ts": 0.4,
-  "apps/fabrika/src/tsh.test.ts": 2.3,
-  "apps/fabrika/src/window/caret.test.ts": 0.0,
-  "apps/fabrika/src/window/colors.test.ts": 0.1,
-  "apps/fabrika/src/window/frame.laws.test.ts": 0.1,
-  "apps/fabrika/src/window/frame.test.ts": 0.1,
-  "apps/fabrika/src/window/pop.test.ts": 0.0,
-  "apps/fabrika/src/window/scroll.test.ts": 0.0,
-  "apps/fabrika/src/window/terminal.focus.test.ts": 0.5,
-  "apps/fabrika/src/window/terminal.replay.test.ts": 0.5,
-  "apps/fabrika/src/window/terminal.test.ts": 0.4,
-  "apps/fabrika/src/window/tile.test.ts": 0.1,
-  "apps/fabrika/src/window/type-scale.test.ts": 0.0,
-  "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-  "next/apps/fabrika/src/build.test.ts": 39.9,
-  "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
-  "next/apps/fabrika/src/door-spans.test.ts": 2.8,
-  "next/apps/fabrika/src/door.test.ts": 17.2,
-  "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": 11.0,
-  "next/apps/fabrika/src/exam/bytes.test.ts": 4.9,
-  "next/apps/fabrika/src/exam/clock.test.ts": 0.0,
-  // Provisional split estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // Source main runs: 42717511599, 42716453289 and 42715921306.
-  "next/apps/fabrika/src/exam/commits-git-chain.test.ts": 61.9,
-  "next/apps/fabrika/src/exam/commits-git-person.test.ts": 61.9,
-  "next/apps/fabrika/src/exam/commits-git-signatures.test.ts": 61.9,
-  "next/apps/fabrika/src/exam/commits-git-steps.test.ts": 61.9,
-  "next/apps/fabrika/src/exam/commits.test.ts": 0.6,
-  "next/apps/fabrika/src/exam/compiler.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/deps.test.ts": 1.1,
-  "next/apps/fabrika/src/exam/edge-comment.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/edges.test.ts": 3.7,
-  "next/apps/fabrika/src/exam/effect-functions.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/laws-scan.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/layers.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/ledger-sql.test.ts": 4.5,
-  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/no-hand-tag.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/no-of.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/no-promises.test.ts": 34.1,
-  "next/apps/fabrika/src/exam/one-store-hook.test.ts": 0.3,
-  "next/apps/fabrika/src/exam/react-rules.test.ts": 0.0,
-  "next/apps/fabrika/src/exam/secret-types.test.ts": 4.6,
-  "next/apps/fabrika/src/exam/twin.test.ts": 20.0,
-  "next/apps/fabrika/src/file-services.laws.test.ts": 0.5,
-  "next/apps/fabrika/src/grant-readers.laws.test.ts": 1.8,
-  "next/apps/fabrika/src/local-instance.test.ts": 1.6,
-  "next/apps/fabrika/src/runtime-recovery.laws.test.ts": 0.4,
-  "next/apps/fabrika/src/runtime.laws.test.ts": 30.1,
-  "next/apps/fabrika/src/settings.test.ts": 0.0,
-  "next/apps/fabrika/src/instance-records.test.ts": 32.8,
-  "next/apps/fabrika/src/instance-wire.test.ts": 68.6,
-  // Shard 4 jobs 131255816865, 131243028487, 131240031939: 19.6, 15.7, 23.9 s; median 19.6.
-  "next/apps/fabrika/src/worker-mail.test.ts": 19.6,
-  "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts": 0.1,
-  "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts": 4.2,
-  "next/packages/libfabrika/src/runtime/Entry.test.ts": 0.0,
-  "next/packages/libfabrika/src/runtime/Execution.test.ts": 0.2,
-  "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts": 1.3,
-  "next/packages/libfabrika/src/runtime/Patch.test.ts": 0.1,
-  "next/packages/libfabrika/src/runtime/Program.test.ts": 0.5,
-  "next/packages/libfabrika/src/runtime/Program.types.test.ts": 0.1,
-  "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts": 0.9,
-  "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts": 0.7,
-  "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts": 67.5,
-  "next/packages/libfabrika/src/runtime/Runner.test.ts": 41.2,
-  "next/packages/libfabrika/src/runtime/State.test.ts": 0.1,
-  "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": 0.1,
-  "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
-  "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
-  // First split ready run 43255323922: shard 1, job 131312463038, store wrapper 18.5 s.
-  "next/packages/libfabrika/src/node/ProgramMail.test.ts": 18.5,
-  // First split ready run 43255323922: shard 4, job 131312462890, runtime wrapper 290.9 s.
-  "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": 290.9,
-  // Shard 4 jobs 131255816865, 131243028487, 131240031939: 79.2, 71.1, 84.4 s; median 79.2.
-  "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
-  "next/packages/libfabrika/src/access/Authorization.test.ts": 16.4,
-  "next/packages/libfabrika/src/access/ClientManager.test.ts": 13.0,
-  "next/packages/libfabrika/src/presence/Connections.test.ts": 2.5,
-  "next/packages/libfabrika/src/processes/MailboxHistory.test.ts": 0.4,
-  "next/packages/libfabrika/src/processes/Mailbox.test.ts": 36.1,
-  "next/packages/libfabrika/src/access/Access.test.ts": 1.4,
-  "next/packages/libfabrika/src/access/Passkey.test.ts": 0.1,
-  "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts": 1.3,
-  "next/packages/libfabrika/src/processes/ProcessLifecycle.test.ts": 14.8,
-  "next/packages/libfabrika/src/processes/ProcessManager.test.ts": 2.5,
-  "next/packages/libfabrika/src/processes/ProcessMonitors.test.ts": 20.2,
-  "next/packages/libfabrika/src/runtime/internal/recovery.test.ts": 1.9,
-  "next/packages/libfabrika/src/processes/ProcessSpans.test.ts": 6.0,
-  "next/packages/libfabrika/src/runtime/ProcessStore.test.ts": 2.0,
-  "next/packages/libfabrika/src/processes/ProcessStreams.test.ts": 8.5,
-  "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": 14.1,
-  "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": 1.2,
-  "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": 0.1,
-  "next/packages/libfabrika/src/access/SessionManager.test.ts": 8.8,
-  "next/packages/libfabrika/src/access/AccessSpans.test.ts": 4.9,
-  "next/packages/libfabrika/src/access/Text.test.ts": 0.0,
-  "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0.0,
-  "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts": 4.4,
-  "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts": 0.6,
-  "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts": 0.1,
-  "next/packages/libfabrika/src/ledger/Ledger.test.ts": 2.2,
-  "next/packages/libfabrika/src/ledger/Log.test.ts": 1.9,
-  "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.2,
-  "next/packages/libfabrika/src/telemetry/Records.test.ts": 0.6,
-  "next/packages/libfabrika/src/ledger/Rings.test.ts": 0.2,
-  "next/packages/libfabrika/src/telemetry/Sink.test.ts": 1.0,
-  "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts": 1.1,
-  "next/packages/libfabrika/src/ledger/TraceId.test.ts": 0.8,
-  "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts": 19.6,
-  "next/packages/libfabrika/src/Id.test.ts": 3.8,
-  "next/packages/libfabrika/src/Id.types.test.ts": 0.0,
-  "next/packages/libfabrika/src/node/dev/local-dev.test.ts": 2.5,
-  "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": 2.1,
-  "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": 0.1,
-  "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": 4.2,
-  "next/packages/libfabrika/src/node/dev/dev.laws.test.ts": 2.3,
-  "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts": 11.3,
-  "next/packages/libfabrika/src/Testing.test.ts": 0.0,
-  "next/packages/libfabrika/src/transport/Answer.test.ts": 0.2,
-  "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": 0.0,
-  "next/packages/libfabrika/src/transport/Hello.test.ts": 1.1,
-  "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": 0.5,
-  "next/packages/libfabrika/src/transport/Sshsig.test.ts": 1.1,
-  "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": 0.1,
-  "next/packages/libfabrika/src/cloudflare/fetch.test.ts": 0.4,
-  "next/packages/libfabrika/src/cloudflare/index.test.ts": 0.0,
-  "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts": 0.6,
-  "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts": 3.6,
-  "next/packages/libfabrika/src/cloudflare/supervision.laws.test.ts": 11.5,
-  "next/programs/counter/src/program.laws.test.ts": 0.1,
-  "next/programs/counter/src/runner.laws.test.ts": 0.3,
-  "oxlint-plugins/door-is-library.test.ts": 0.0,
-  "oxlint-plugins/exact-versions.test.ts": 7.1,
-  "oxlint-plugins/one-id-module.test.ts": 9.0,
-  "oxlint-plugins/outside-input-constructor.test.ts": 1.1,
-  "oxlint-plugins/plants.test.ts": 48.2,
-  "oxlint-plugins/stylelint.test.ts": 6.9,
-  "packages/fabrika-design/src/build/contrast.test.ts": 0.0,
-  "packages/fabrika-design/src/build/schema.test.ts": 0.1,
-  "packages/fabrika-design/src/build/tokens.test.ts": 22.2,
-  "packages/fabrika-design/src/themes.frame.test.ts": 0.0,
-  "packages/fabrika-design/src/themes.test.ts": 0.1,
-  "packages/fabrika/src/agents/acp/adapter.test.ts": 0.5,
-  "packages/fabrika/src/agents/acp/harness.codex-env.test.ts": 0.0,
-  "packages/fabrika/src/agents/acp/harness.env.laws.test.ts": 0.1,
-  "packages/fabrika/src/agents/acp/harness.test.ts": 0.2,
-  "packages/fabrika/src/agents/acp/harness.write.laws.test.ts": 0.0,
-  "packages/fabrika/src/agents/acp/kill.test.ts": 10.6,
-  "packages/fabrika/src/agents/acp/program.codex-mode.test.ts": 0.0,
-  "packages/fabrika/src/agents/acp/program.laws.test.ts": 0.7,
-  "packages/fabrika/src/agents/acp/program.test.ts": 8.4,
-  "packages/fabrika/src/agents/acp/transcript.test.ts": 0.0,
-  "packages/fabrika/src/agents/agent/adapters.test.ts": 0.3,
-  "packages/fabrika/src/agents/agent/laws.test.ts": 6.8,
-  "packages/fabrika/src/agents/agent/turn.test.ts": 0.0,
-  "packages/fabrika/src/agents/claude/env.test.ts": 0.3,
-  "packages/fabrika/src/agents/claude/rules.test.ts": 0.6,
-  "packages/fabrika/src/agents/claude/sandbox.test.ts": 0.0,
-  "packages/fabrika/src/agents/claude/shell-guard.test.ts": 0.0,
-  "packages/fabrika/src/agents/codex/adapter.test.ts": 0.2,
-  "packages/fabrika/src/agents/summon/manager.contract.test.ts": 2.7,
-  "packages/fabrika/src/agents/summon/manager.dismiss.laws.test.ts": 0.9,
-  "packages/fabrika/src/agents/summon/manager.env.laws.test.ts": 0.3,
-  "packages/fabrika/src/agents/summon/manager.laws.test.ts": 1.7,
-  "packages/fabrika/src/agents/summon/manager.test.ts": 13.0,
-  "packages/fabrika/src/agents/summon/names.laws.test.ts": 0.4,
-  "packages/fabrika/src/agents/summon/restart.laws.test.ts": 4.2,
-  "packages/fabrika/src/agents/summon/turn.ask.laws.test.ts": 0.0,
-  "packages/fabrika/src/agents/summon/turn.laws.test.ts": 0.3,
-  "packages/fabrika/src/agents/summon/turn.prose.laws.test.ts": 0.3,
-  "packages/fabrika/src/agents/summon/turn.test.ts": 0.4,
-  "packages/fabrika/src/agents/trace/agent.test.ts": 0.1,
-  "packages/fabrika/src/agents/trace/heard.test.ts": 0.0,
-  "packages/fabrika/src/host/dead-letters.test.ts": 0.0,
-  "packages/fabrika/src/host/door-wire.laws.test.ts": 2.3,
-  "packages/fabrika/src/host/door-wire.test.ts": 2.1,
-  "packages/fabrika/src/host/door.laws.test.ts": 123.0,
-  "packages/fabrika/src/host/door.test.ts": 0.6,
-  "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
-  "packages/fabrika/src/host/host-machine.laws.test.ts": 47.4,
-  "packages/fabrika/src/host/host.test.ts": 4.3,
-  "packages/fabrika/src/host/http.test.ts": 0.0,
-  "packages/fabrika/src/host/job-content.test.ts": 0.0,
-  "packages/fabrika/src/host/job-rules.test.ts": 0.0,
-  "packages/fabrika/src/host/jobs.laws.test.ts": 8.8,
-  "packages/fabrika/src/host/jobs.test.ts": 0.3,
-  "packages/fabrika/src/host/journal.laws.test.ts": 0.3,
-  "packages/fabrika/src/host/keys-github.test.ts": 0.1,
-  "packages/fabrika/src/host/laws.test.ts": 41.6,
-  "packages/fabrika/src/host/local.test.ts": 2.5,
-  "packages/fabrika/src/host/monitor.test.ts": 1.2,
-  "packages/fabrika/src/host/move.test.ts": 0.3,
-  "packages/fabrika/src/host/otlp.test.ts": 0.0,
-  "packages/fabrika/src/host/records.test.ts": 0.1,
-  "packages/fabrika/src/host/sshsig.test.ts": 0.0,
-  "packages/fabrika/src/host/supervisor-tree.test.ts": 9.2,
-  "packages/fabrika/src/host/supervisor.test.ts": 3.4,
-  "packages/fabrika/src/host/writer.test.ts": 0.0,
-  "packages/fabrika/src/mcp/bridge.test.ts": 4.5,
-  "packages/fabrika/src/mcp/job.test.ts": 0.1,
-  "packages/fabrika/src/mcp/line.test.ts": 0.0,
-  "packages/fabrika/src/mcp/restart.test.ts": 0.0,
-  "packages/fabrika/src/mcp/serve.test.ts": 0.3,
-  "packages/fabrika/src/mcp/stop.test.ts": 0.0,
-  "packages/fabrika/src/mcp/tools.laws.test.ts": 0.2,
-  "packages/fabrika/src/program/defined.test.ts": 0.0,
-  "packages/fabrika/src/program/inputs-over-time.test.ts": 1.1,
-  "packages/fabrika/src/program/json-patch.test.ts": 0.0,
-  "packages/fabrika/src/program/kept.test.ts": 0.4,
-  "packages/fabrika/src/program/listed.test.ts": 0.0,
-  "packages/fabrika/src/program/mailbox.test.ts": 1.1,
-  "packages/fabrika/src/program/person.test.ts": 0.0,
-  "packages/fabrika/src/program/program.test.ts": 0.4,
-  "packages/fabrika/src/program/shape.test.ts": 0.0,
-  "packages/fabrika/src/program/status.test.ts": 0.2,
-  "packages/fabrika/src/program/storage.laws.test.ts": 0.6,
-  "packages/fabrika/src/program/storage.test.ts": 0.1,
-  "packages/fabrika/src/program/unread.test.ts": 0.0,
-  "packages/fabrika/src/program/view.test.ts": 0.0,
-  "packages/fabrika/src/redacted-lint.test.ts": 0.7,
-  "packages/fabrika/src/redacted.test.ts": 0.0,
-  "packages/fabrika/src/sandbox/sandbox.test.ts": 4.7,
-  "packages/fabrika/src/shell/agent.test.ts": 0.3,
-  "packages/fabrika/src/shell/attach-again.test.ts": 0.5,
-  "packages/fabrika/src/shell/bin.test.ts": 0.2,
-  "packages/fabrika/src/shell/check.test.ts": 0.0,
-  "packages/fabrika/src/shell/complete.test.ts": 0.0,
-  "packages/fabrika/src/shell/ctrl-c.test.ts": 0.1,
-  "packages/fabrika/src/shell/decode.test.ts": 0.0,
-  "packages/fabrika/src/shell/execute.laws.test.ts": 0.5,
-  "packages/fabrika/src/shell/execute.test.ts": 0.1,
-  "packages/fabrika/src/shell/full-line.test.ts": 0.2,
-  "packages/fabrika/src/shell/help.test.ts": 0.1,
-  "packages/fabrika/src/shell/job-record.laws.test.ts": 5.4,
-  "packages/fabrika/src/shell/job-record.test.ts": 1.1,
-  "packages/fabrika/src/shell/launch.test.ts": 0.0,
-  "packages/fabrika/src/shell/line-trace.laws.test.ts": 0.3,
-  "packages/fabrika/src/shell/parse.test.ts": 0.0,
-  "packages/fabrika/src/shell/person.test.ts": 0.1,
-  "packages/fabrika/src/shell/programs.laws.test.ts": 0.3,
-  "packages/fabrika/src/shell/said.laws.test.ts": 0.1,
-  "packages/fabrika/src/shell/shell.test.ts": 0.1,
-  "packages/fabrika/src/shell/short.test.ts": 0.0,
-  "packages/fabrika/src/shell/small.laws.test.ts": 0.3,
-  "packages/fabrika/src/shell/small.test.ts": 0.0,
-  "packages/fabrika/src/shell/stop.test.ts": 3.3,
-  "packages/fabrika/src/shell/summon.repo.laws.test.ts": 0.0,
-  "packages/fabrika/src/shell/table.test.ts": 0.0,
-  "packages/fabrika/src/shell/trace/records.test.ts": 0.1,
-  "packages/fabrika/src/shell/trace/view.test.ts": 0.0,
-  "packages/fabrika/src/shell/window.test.ts": 0.1,
-  "packages/ledger-server/src/config.test.ts": 0.0,
-  "packages/pipeline/src/asks/claims.test.ts": 5.1,
-  "packages/pipeline/src/asks/laws.test.ts": 8.6,
-  "packages/pipeline/src/asks/ledger.test.ts": 14.1,
-  "packages/pipeline/src/asks/packs.test.ts": 0.0,
-  "packages/pipeline/src/asks/program.test.ts": 0.1,
-  "packages/pipeline/src/asks/rules.test.ts": 0.1,
-  "packages/pipeline/src/brief.test.ts": 0.0,
-  "packages/pipeline/src/code-host-github-writes.test.ts": 0.3,
-  "packages/pipeline/src/code-host-github.test.ts": 0.2,
-  "packages/pipeline/src/code-host-local.test.ts": 4.2,
-  "packages/pipeline/src/codeowners.test.ts": 0.0,
-  "packages/pipeline/src/combos.test.ts": 0.0,
-  "packages/pipeline/src/controls.test.ts": 0.0,
-  "packages/pipeline/src/criteria/book.test.ts": 0.0,
-  "packages/pipeline/src/criteria/record.test.ts": 0.0,
-  "packages/pipeline/src/draft.test.ts": 0.0,
-  "packages/pipeline/src/entity.test.ts": 0.0,
-  "packages/pipeline/src/experiments/experiments.laws.test.ts": 0.2,
-  "packages/pipeline/src/experiments/experiments.test.ts": 0.1,
-  "packages/pipeline/src/experiments/import.test.ts": 0.0,
-  "packages/pipeline/src/hosted/idempotency.test.ts": 6.7,
-  "packages/pipeline/src/hosted/lane-ends.test.ts": 1.1,
-  "packages/pipeline/src/hosted/lane-trace-id.laws.test.ts": 0.6,
-  "packages/pipeline/src/hosted/lane-trace.test.ts": 0.3,
-  "packages/pipeline/src/hosted/lane-writes.laws.test.ts": 14.7,
-  "packages/pipeline/src/jev-live.test.ts": 0.1,
-  "packages/pipeline/src/laws/explore.test.ts": 0.0,
-  "packages/pipeline/src/laws/first.test.ts": 0.3,
-  "packages/pipeline/src/laws/laws.test.ts": 7.5,
-  "packages/pipeline/src/laws/plan-lane.test.ts": 0.7,
-  "packages/pipeline/src/laws/sample.test.ts": 0.3,
-  "packages/pipeline/src/laws/ship-pbt.test.ts": 11.9,
-  "packages/pipeline/src/laws/sort.test.ts": 0.2,
-  "packages/pipeline/src/laws/standard.test.ts": 3.5,
-  "packages/pipeline/src/laws/tea-host.test.ts": 25.5,
-  "packages/pipeline/src/laws/test-writer.test.ts": 0.2,
-  "packages/pipeline/src/laws/world/hosted.test.ts": 0.5,
-  "packages/pipeline/src/laws/world/world.test.ts": 32.0,
-  "packages/pipeline/src/local-checks.test.ts": 0.9,
-  "packages/pipeline/src/machine-make.test.ts": 0.0,
-  "packages/pipeline/src/poll.test.ts": 0.0,
-  "packages/pipeline/src/rate.test.ts": 0.1,
-  "packages/pipeline/src/refine.test.ts": 0.0,
-  "packages/pipeline/src/schema.test.ts": 0.0,
-  "packages/pipeline/src/settings-source.test.ts": 3.0,
-  "packages/pipeline/src/settings.test.ts": 0.0,
-  "packages/pipeline/src/setup.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/body.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/builder-acp.test.ts": 6.5,
-  "packages/pipeline/src/stages/build/builder.red.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/builder.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/check.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/go.test.ts": 0.0,
-  "packages/pipeline/src/stages/build/guard.test.ts": 11.7,
-  "packages/pipeline/src/stages/build/program.laws.test.ts": 0.6,
-  "packages/pipeline/src/stages/build/program.test.ts": 0.2,
-  "packages/pipeline/src/stages/build/ticket.test.ts": 0.0,
-  "packages/pipeline/src/stages/exam/machine.laws.test.ts": 0.1,
-  "packages/pipeline/src/stages/exam/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/lane/lane.test.ts": 0.0,
-  "packages/pipeline/src/stages/mutation/loop.test.ts": 0.0,
-  "packages/pipeline/src/stages/mutation/machine.laws.test.ts": 0.2,
-  "packages/pipeline/src/stages/mutation/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/mutation/mutant.test.ts": 0.0,
-  "packages/pipeline/src/stages/mutation/scope.test.ts": 0.0,
-  "packages/pipeline/src/stages/mutation/stryker.start.test.ts": 0.1,
-  "packages/pipeline/src/stages/mutation/stryker.test.ts": 12.2,
-  "packages/pipeline/src/stages/operate/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/operate/program.laws.test.ts": 0.6,
-  "packages/pipeline/src/stages/operate/program.test.ts": 11.0,
-  "packages/pipeline/src/stages/operate/stop.test.ts": 0.0,
-  "packages/pipeline/src/stages/operate/writes.test.ts": 0.0,
-  "packages/pipeline/src/stages/outcome.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/agents.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/briefs.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/carry.laws.test.ts": 31.6,
-  "packages/pipeline/src/stages/pipeline/carry.test.ts": 2.5,
-  "packages/pipeline/src/stages/pipeline/checks.test.ts": 6.0,
-  "packages/pipeline/src/stages/pipeline/content.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/exam-pull.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/format.test.ts": 5.8,
-  "packages/pipeline/src/stages/pipeline/found.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/github.test.ts": 17.5,
-  "packages/pipeline/src/stages/pipeline/hosts.test.ts": 3.0,
-  "packages/pipeline/src/stages/pipeline/key.test.ts": 0.1,
-  "packages/pipeline/src/stages/pipeline/lane-fixture.test.ts": 0.7,
-  [`${LANE}.asked.test.ts`]: 114.4,
-  [`${LANE}.decided.let-through.test.ts`]: 92.0,
-  [`${LANE}.decided.test.ts`]: 107.8,
-  [`${LANE}.decided.words.test.ts`]: 53.0,
-  [`${LANE}.exam-pull.person-pushes.test.ts`]: 67.3,
-  [`${LANE}.exam-pull.redo-on-main.test.ts`]: 89.5,
-  [`${LANE}.exam-pull.test.ts`]: 83.0,
-  [`${LANE}.exam-side-tree.test.ts`]: 17.5,
-  [`${LANE}.github.heads.test.ts`]: 99.4,
-  [`${LANE}.github.test.ts`]: 81.9,
-  [`${LANE}.leaves-behind.test.ts`]: 47.3,
-  [`${LANE}.might-answer.test.ts`]: 104.4,
-  [`${LANE}.rubrics.test.ts`]: 40.4,
-  [`${LANE}.test-writer.test.ts`]: 73.8,
-  [`${LANE}.typed-again.merge-and-old-saves.test.ts`]: 84.3,
-  [`${LANE}.typed-again.test.ts`]: 93.1,
-  [`${LANE}.whole.races.test.ts`]: 43.5,
-  [`${LANE}.whole.test.ts`]: 83.4,
-  "packages/pipeline/src/stages/pipeline/machine.laws.test.ts": 0.7,
-  "packages/pipeline/src/stages/pipeline/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/program.format.test.ts": 20.8,
-  "packages/pipeline/src/stages/pipeline/pulls.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/red.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/restart.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/routes.laws.test.ts": 0.1,
-  "packages/pipeline/src/stages/pipeline/routes.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/saved.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/talk.test.ts": 0.0,
-  "packages/pipeline/src/stages/pipeline/tools.checks.test.ts": 6.9,
-  "packages/pipeline/src/stages/pipeline/tools.format.test.ts": 0.5,
-  "packages/pipeline/src/stages/pipeline/tools.test.ts": 9.5,
-  "packages/pipeline/src/stages/pipeline/work.test.ts": 14.9,
-  "packages/pipeline/src/stages/plan/check.test.ts": 0.1,
-  "packages/pipeline/src/stages/plan/ids.test.ts": 0.0,
-  "packages/pipeline/src/stages/plan/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/plan/program.laws.test.ts": 0.5,
-  "packages/pipeline/src/stages/plan/program.test.ts": 0.1,
-  "packages/pipeline/src/stages/push/machine.laws.test.ts": 0.1,
-  "packages/pipeline/src/stages/queue.laws.test.ts": 0.6,
-  "packages/pipeline/src/stages/queue.test.ts": 0.1,
-  "packages/pipeline/src/stages/review/gate.test.ts": 0.0,
-  "packages/pipeline/src/stages/review/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/review/pack.test.ts": 0.1,
-  "packages/pipeline/src/stages/review/program.laws.test.ts": 1.3,
-  "packages/pipeline/src/stages/review/program.test.ts": 5.5,
-  "packages/pipeline/src/stages/review/render.test.ts": 0.0,
-  "packages/pipeline/src/stages/review/reviewer.test.ts": 0.3,
-  "packages/pipeline/src/stages/review/sheet.test.ts": 0.0,
-  "packages/pipeline/src/stages/review/verdict.test.ts": 0.0,
-  "packages/pipeline/src/stages/ship/door.test.ts": 0.0,
-  "packages/pipeline/src/stages/ship/gate.test.ts": 0.4,
-  "packages/pipeline/src/stages/ship/machine.test.ts": 0.2,
-  "packages/pipeline/src/stages/ship/program.laws.test.ts": 0.5,
-  "packages/pipeline/src/stages/ship/program.test.ts": 0.5,
-  "packages/pipeline/src/stages/ship/ready.test.ts": 0.0,
-  "packages/pipeline/src/stages/sort/machine.test.ts": 0.1,
-  "packages/pipeline/src/stages/test-writer/answers.laws.test.ts": 0.2,
-  "packages/pipeline/src/stages/test-writer/brief.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/checked.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/failures.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/machine.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/mutants.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/results.test.ts": 0.0,
-  "packages/pipeline/src/stages/test-writer/written.test.ts": 0.0,
-  "packages/pipeline/src/stages/traced.test.ts": 0.0,
-  "packages/pipeline/src/tickets/approval.laws.test.ts": 0.0,
-  "packages/pipeline/src/tickets/area.test.ts": 0.2,
-  "packages/pipeline/src/tickets/duplicates.test.ts": 0.0,
-  "packages/pipeline/src/tickets/ticket.test.ts": 0.1,
-  "packages/pipeline/src/tickets/tickets.test.ts": 0.0,
-  "packages/pipeline/src/trace/agent.test.ts": 0.0,
-  "packages/pipeline/src/trace/sdk-events.test.ts": 0.2,
-  "packages/pipeline/src/tsh.test.ts": 0.2,
-  "packages/pipeline/src/tsh/check.test.ts": 0.2,
-  "packages/pipeline/src/tsh/complete.test.ts": 0.0,
-  "packages/pipeline/src/tsh/config.test.ts": 0.1,
-  "packages/pipeline/src/tsh/fabrika.test.ts": 0.2,
-  "packages/pipeline/src/tsh/kill.test.ts": 10.1,
-  "packages/pipeline/src/tsh/ledger.test.ts": 3.5,
-  "packages/pipeline/src/tsh/pty.test.ts": 24.9,
-  "packages/pipeline/src/tsh/shell.test.ts": 0.8,
-  "packages/pipeline/src/tsh/status-attach.test.ts": 4.7,
-  "packages/pipeline/src/tsh/status.test.ts": 0.1,
-  "packages/pipeline/src/tsh/trace.test.ts": 0.2,
-  "packages/pipeline/src/verdict.test.ts": 0.0,
-  "packages/promises/src/blocks.test.ts": 0.0,
-  "packages/promises/src/judge.test.ts": 0.0,
-  "programs/compare/src/compare.test.ts": 0.1,
-  "programs/counter/src/counter.test.ts": 0.0,
-  "programs/counter/src/index.laws.test.ts": 0.0,
-  "programs/experiment/src/experiment.test.ts": 0.0,
-  "programs/experiments/src/experiments.test.ts": 0.0,
-  "programs/map/src/map.test.ts": 0.0,
-  "programs/map/src/selection.laws.test.ts": 0.0,
-  "programs/markdown/src/highlight.test.ts": 0.0,
-  "programs/markdown/src/index.laws.test.ts": 1.2,
-  "programs/markdown/src/markdown.test.ts": 0.3,
-  "programs/markdown/src/pipe.test.ts": 0.0,
-  "programs/ticket/src/ticket.test.ts": 0.1,
-  "programs/ticket/src/window.from.test.ts": 0.1,
-  "programs/ticket/src/window.test.ts": 0.0,
-  "programs/trace/src/facts.test.ts": 0.1,
-  "programs/trace/src/machine.laws.test.ts": 1.6,
-  "programs/trace/src/machine.ticket.laws.test.ts": 0.4,
-  "programs/trace/src/machine.ticket.test.ts": 0.0,
-  "programs/trace/src/ruler.laws.test.ts": 0.3,
-  "programs/trace/src/running.laws.test.ts": 0.6,
-  "programs/trace/src/running.test.ts": 0.1,
-  "programs/trace/src/ticket.children.laws.test.ts": 0.0,
-  "programs/trace/src/ticket.children.test.ts": 0.2,
-  "programs/trace/src/ticket.laws.test.ts": 0.4,
-  "programs/trace/src/ticket.running.test.ts": 0.1,
-  "programs/trace/src/ticket.test.ts": 0.0,
-  "programs/trace/src/trace.test.ts": 0.1,
-  "programs/trace/src/tree.test.ts": 0.0,
-  "programs/trace/src/view.children.test.ts": 0.1,
-  "programs/trace/src/view.ticket.test.ts": 0.0,
-  "programs/trace/src/window.ticket.test.ts": 0.1,
-  "programs/trace/src/window.tree.test.ts": 0.0,
-  "programs/tracker/src/areas.lint.test.ts": 0.0,
-  "programs/tracker/src/duplicates.test.ts": 0.1,
-  "programs/tracker/src/filter.laws.test.ts": 0.8,
-  "programs/tracker/src/github.test.ts": 0.0,
-  "programs/tracker/src/head.laws.test.ts": 0.7,
-  "programs/tracker/src/head.test.ts": 0.0,
-  "programs/tracker/src/ledger.areas.test.ts": 0.1,
-  "programs/tracker/src/ledger.test.ts": 0.0,
-  "programs/tracker/src/links.test.ts": 0.1,
-  "programs/tracker/src/machine.areas.test.ts": 0.0,
-  "programs/tracker/src/machine.laws.test.ts": 4.9,
-  "programs/tracker/src/machine.test.ts": 0.0,
-  "programs/tracker/src/rows.test.ts": 0.0,
-  "programs/tracker/src/steps.test.ts": 0.0,
-  "programs/tracker/src/ticket.test.ts": 0.0,
-  "programs/tracker/src/tracker.test.ts": 3.2,
-  "programs/tracker/src/window.test.ts": 0.0,
-  ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
-  ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
-  "scripts/caps.test.ts": 108.5,
-  "oxlint-plugins/padding-line-between-statements.test.ts": 44.7,
-  ".agents/skills/lead/scripts/leakgrep.test.ts": 34.2,
-  ".agents/skills/lead/scripts/mutbox.test.ts": 34.0,
-  "oxlint-plugins/program-package-layout.test.ts": 80.3,
-  "vitest.shards.test.ts": 0.3,
-};
+export const measured: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.json"));
 
 /**
- * Each file's machine, `0` to `count - 1`, in the order the files came. Each file, heaviest first
- * (ties by path), goes to the machine with the least seconds so far (ties: the first). The same
- * files in any order get the same machines, so every machine computes the same split.
+ * The middle of `seconds` once sorted; of an even count, the lower middle, so no two rows are
+ * averaged into a number nobody measured. With no seconds at all there is no middle, so 1 s.
+ */
+export const median = (seconds: readonly number[]): number =>
+  seconds.toSorted((a, b) => a - b)[Math.floor((seconds.length - 1) / 2)] ?? 1;
+
+/** What a file with no row counts as: the median of every row, read once. */
+const guess = median(Object.values(measured));
+
+/**
+ * Each file's machine, `0` to `count - 1`, in the order the files came. Each measured file,
+ * heaviest first (ties by path), goes to the machine with the least seconds so far (ties: the
+ * first). Then each file with no seconds, in path order, goes the same way and counts as
+ * `unmeasured` seconds, the table's median by default, so several new files spread over the
+ * machines. The same files in any order get the same machines, so every machine computes the same
+ * split.
  */
 export const assign = (
-  files: readonly { readonly path: string; readonly seconds: number }[],
+  files: readonly { readonly path: string; readonly seconds?: number | undefined }[],
   count: number,
   start: readonly number[] = [],
+  unmeasured: number = guess,
 ): number[] => {
+  const byPath = (x: { readonly path: string }, y: { readonly path: string }) =>
+    x.path < y.path ? -1 : x.path > y.path ? 1 : 0;
   const order = files
-    .map((file, at) => ({ ...file, at }))
-    .toSorted((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
+    .map((file, at) => ({ path: file.path, seconds: file.seconds, at }))
+    .toSorted((x, y) =>
+      x.seconds === undefined || y.seconds === undefined
+        ? Number(x.seconds === undefined) - Number(y.seconds === undefined) || byPath(x, y)
+        : y.seconds - x.seconds || byPath(x, y),
+    );
   const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 
   for (const file of order) {
     const least = load.indexOf(Math.min(...load));
     machines[file.at] = least;
-    load[least] = (load[least] ?? 0) + file.seconds;
+    load[least] = (load[least] ?? 0) + (file.seconds ?? unmeasured);
   }
 
   return machines;
@@ -614,7 +109,8 @@ export const WORKERS = 3;
 export const wall = (seconds: readonly number[]): number =>
   Math.max(0, ...seconds, seconds.reduce((sum, value) => sum + value, 0) / WORKERS);
 
-const inLaneStep = (path: string) => path.includes(`${LANE}.`);
+/** A lane file of today's pipeline, which the rest step's loads leave out. */
+export const inLaneStep = (path: string) => path.includes(`${LANE}.`);
 
 /** Estimated rest-step wall time, excluding next/ and the separate lane step. */
 export const restLoads = (count: number): number[] => {
@@ -627,7 +123,13 @@ export const restLoads = (count: number): number[] => {
   );
 };
 
-/** vitest's own sequencer, with only `shard` changed: it keeps this machine's files of `assign`. */
+/** A file's row, or undefined when the table has none. */
+const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
+
+/**
+ * vitest's own sequencer with two changes: `shard` keeps this machine's files of `assign`, and
+ * `sort` starts the heaviest file first.
+ */
 export class Shards extends BaseSequencer {
   override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
     const { root, shard } = this.ctx.config;
@@ -640,11 +142,43 @@ export class Shards extends BaseSequencer {
     const machines = assign(
       files.map((spec) => {
         const path = relative(root, spec.moduleId);
-        return { path, seconds: measured[path] ?? 1 };
+        return { path, seconds: rowOf(path) };
       }),
       shard.count,
       files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],
     );
     return files.filter((_, i) => machines[i] === shard.index - 1);
+  }
+
+  /**
+   * vitest's own order, with the table's seconds where vitest's results cache has none. vitest runs
+   * a failed file first, then the longer one, by its cache. CI keeps no cache, so vitest falls back to
+   * file size, and on main run 43618656328 StartChild (531 s) started 284 s in, behind smaller files,
+   * and its machine took 816 s. Here each of vitest's pools runs a failed file first, then the
+   * heaviest row, a file with no row counting the median as in `assign`; equal seconds keep vitest's
+   * order. A pool is what vitest 5's `groupSpecs` makes: one per group order, every project of that
+   * order in it, and one more for the projects that run one isolated file at a time. vitest's own
+   * sort puts projects one after another by name, but they share the pool, so on a leg that runs
+   * `next` and `next-integration` that order only made the heavy integration files start last.
+   */
+  override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    const { root } = this.ctx.config;
+    const sorted = await super.sort(files);
+    const groupOf = ({ project: { config } }: TestSpecification) =>
+      config.isolate === true && config.sequence.groupOrder === 0 && config.maxWorkers === 1
+        ? "one at a time"
+        : `${config.sequence.groupOrder}`;
+    const groups = new Map<string, number>();
+
+    for (const spec of sorted) {
+      groups.set(groupOf(spec), groups.get(groupOf(spec)) ?? groups.size);
+    }
+
+    const rank = (spec: TestSpecification) => groups.get(groupOf(spec)) ?? groups.size;
+    const failed = (spec: TestSpecification) => this.ctx.cache.getTestSpecificationResult(spec)?.failed === true;
+    const seconds = (spec: TestSpecification) => rowOf(relative(root, spec.moduleId)) ?? guess;
+    return sorted.toSorted(
+      (a, b) => rank(a) - rank(b) || Number(failed(b)) - Number(failed(a)) || seconds(b) - seconds(a),
+    );
   }
 }

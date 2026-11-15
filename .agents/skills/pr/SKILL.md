@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Write or rewrite one tea-fabrika pull request's title and description, in the fixed order every pull request here uses, starting with what the change does. Use whenever a step or the lead writes a PR body file, a lane brief's `## pr` section or the words of an open pull request, and on "write the PR description", "fix this PR's title" or "this PR does not say what it does".
+description: Write or rewrite one pull request's title and description, what the change does first. Use whenever a PR body file, a lane brief's `## pr` section or the words of an open pull request are written, and on "write the PR description" or "fix this PR's title".
 ---
 
 # pr
@@ -148,8 +148,8 @@ repo is public". The ones a description breaks most:
 - A pull request or an issue is a full URL. A decision or a note is a full URL too: a relative link
   does not resolve in a description.
 - No personal names, no account names, no machine paths, and nothing a person typed in a chat.
-- No credit line, no "generated with" footer and no session link. The agent never names itself
-  ([0401](../../../.decisions/0401-agents-commit-as-the-fabrikalfa-bot.md)).
+- No session link. A credit line for the agent is fine
+  ([0187](../../../.decisions/0187-a-commit-may-credit-its-agent.md)).
 
 ## Send it
 
@@ -172,12 +172,14 @@ output as its own last section, so do not paste it twice.
   merge. We keep all four. Google writes the first line as an order. Here it is a statement, as
   main's titles already are.
 - Effect: [its template](https://github.com/Effect-TS/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
-  asks for a type, a description and related issues, and its own merged pull requests open with
-  summary bullets and end with the commands that were run
-  ([one of them](https://github.com/Effect-TS/effect-smol/pull/2613)). A change to runtime behavior
-  or an exported type also gets a changeset, a short note for people who use the package
-  ([its AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md#changesets)). Our
-  What this does, Laws and checks and What a reader should know are those three.
+  asks for a type, a description and related issues. Its
+  [pull request skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/pull-requests/SKILL.md)
+  asks for the problem addressed, the notable decisions and the issue it closes, and says not to
+  narrate the diff. Some of its merged pull requests also open with summary bullets and end with the
+  commands that were run ([one of them](https://github.com/Effect-TS/effect/pull/10627)). A change
+  to runtime behavior or an exported type also gets a changeset, a short note for people who use the
+  package ([its changesets skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/changesets/SKILL.md#requirement)).
+  Our What this does, Laws and checks and What a reader should know are those three.
 
 ## Could become a check
 
@@ -188,7 +190,7 @@ Each of these is a rule code could hold. It stays here until its check lands
 - `## What this does` is there, with 3 to 6 bullets, before a lane's pull request is marked ready or
   `land.ts ready` takes a body file.
 - No heading has nothing under it, and the headings keep this order.
-- No relative link, no bare `#<n>`, no credit footer and no session link.
+- No relative link, no bare `#<n>` and no session link.
 - `leakgrep.sh --text` on the title and the description wherever a tool sends them. `land.ts run`
   does it today.
 - Every file path named in the description is in the diff, and every law title is in one of its

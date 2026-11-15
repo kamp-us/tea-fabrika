@@ -4,11 +4,12 @@
 import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
-const arbitrary = { seed: SEED, runs: 25 };
+const arbitrary = { seed: SEED, runs: runsFor({ fast: 5, full: 25 }) };
 const NAME = "chaos:1";
 const TARGET = "checklist:1";
 type Runner = ProgramRunner["Service"];

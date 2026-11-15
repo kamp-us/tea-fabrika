@@ -170,7 +170,7 @@ const caller = fc.oneof(
     .constantFrom(
       "next/apps/fabrika/dev.ts",
       "next/apps/fabrika/cli.ts",
-      "next/apps/fabrika/src/settings-start.test.ts",
+      "next/apps/fabrika/src/settings-start.integration.test.ts",
     )
     .map((file) => ({ file, adapter: true, parser: false })),
   // Every other app file, the generation entry and sibling tests included.
@@ -266,3 +266,28 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
     );
   }, 120_000);
 });
+
+it.prop(
+  "P21 L10: the person editor accepts desktop lifetimes and the repo editor rejects them",
+  {
+    lifetime: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
+  },
+  ({ lifetime }) => {
+    const value = { desktop: { "link-ttl": lifetime } };
+    expect(
+      Result.isSuccess(
+        Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), {
+          onExcessProperty: "error",
+        })(value),
+      ),
+    ).toBe(true);
+    expect(
+      Result.isFailure(
+        Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), {
+          onExcessProperty: "error",
+        })(value),
+      ),
+    ).toBe(true);
+  },
+  { arbitrary: { seed: SEED, runs: 100 } },
+);

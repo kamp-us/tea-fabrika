@@ -36,7 +36,9 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 - **In `next/`:** read [`next/AGENTS.md`](./next/AGENTS.md) before you touch a file there.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner picks, and ideas
   the owner wants to try out there first. What a tryout teaches goes into `next/` as a lesson,
-  rethought and not copied. Nothing else is added (0217). Today's library is `@kampus/fabrika-old`
+  rethought and not copied, except an approved guideline, whose rules `next/` follows as written
+  ([0543](./.decisions/0543-next-follows-approved-guidelines-as-written.md)). Nothing else is added
+  (0217). Today's library is `@kampus/fabrika-old`
   and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
 - **A product foundation decided in a walk starts on today's app at once,** no exception: tokens,
   focus, lint rules for the design, accessibility checks. Its build plan is written the same day
@@ -51,13 +53,13 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) | The plan docs, in the same pull request as the work ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)) |
 | Know what the owner decided | [`.decisions/`](./.decisions/); see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md) ([0001](./.decisions/0001-decisions-live-in-the-repo.md)) |
-| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it |
+| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes; [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list docs/direction` prints one line per note | A note there when a decision needs the long reasoning, with its own frontmatter (`state`, `summary`); no folder keeps an index table ([0522](./.decisions/0522-no-folder-keeps-an-index-table.md)). Mark it **proposed** until it is settled. Its decision file links it |
 | Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md) | The row, in the pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)) |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words by bounded context; its last section translates today's code's words | A row there, in the pull request that coins or renames a word |
-| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)) |
+| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list .patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` with its own frontmatter (`where`, `when`), with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)) |
 | Know a design area's guidelines | `docs/guidelines/<area>.md`, read whole | An edit to the page, in a pull request the owner says yes to ([0136](./.decisions/0136-guidelines-live-in-their-own-pages.md)) |
 | Write guidelines for one design area | [the guidelines skill](./.claude/skills/guidelines/SKILL.md) | What that skill lists, in its shape |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), then the write-up | `experiments/NN-short-title.md` with the next free number, plus its index row. Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/` |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list experiments`, then the write-up | `experiments/NN-short-title.md` with the number `records.ts next experiments` gives, and its own frontmatter (`date`, `scripts`, `summary`). Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/` |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/` | One file per agent run and one per thing that broke, cost too much, needed a person or worked well, the same day ([0090](./.decisions/0090-each-field-row-is-a-file.md)) |
 | Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)) |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too |
@@ -78,7 +80,8 @@ the wrong place: write it here.
 
 ## Decision discovery
 
-List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+List `.decisions/` (or run `records.ts list .decisions`, which reads `origin/main`,
+[0522](./.decisions/0522-no-folder-keeps-an-index-table.md)): filenames identify records, and each record's frontmatter gives its `id`,
 `title` and `status`. Read applicable records when changing the choice they govern or resolving
 conflicting guidance. Record new decisions with `/adr` ([skill](./.agents/skills/adr/SKILL.md)).
 
@@ -133,10 +136,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](./.agents/skills/lead/SKILL.md) says how, and
   [the plan](./docs/plan/README.md#how-a-change-lands) says how a change lands.
-  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
-  output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real
-  loosening waits on the owner.
+  [The tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws) says what a new or changed
+  law must be, and [the lead skill's "Land it" step](./.agents/skills/lead/SKILL.md#steps) what a
+  loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point: mutation runs hourly
   on main, never as a step ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)); one fresh
   agent per step, which reads the lane's state file, does its one step and writes it back, driven by
@@ -197,7 +199,9 @@ is linked; the others have no other home yet.
   means ask why before you call it a false alarm. Before you write Effect code, read
   `node_modules/effect/AGENTS.md` in full: it ships inside the installed package, so it always
   matches the lockfile. Where it and a decision here differ, the decision wins
-  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences).
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Read a
+  package's source in the repo its installed `package.json` names in `repository`: for Effect that is
+  `Effect-TS/effect`, never `effect-smol`, where v4 was only built as a beta.
 - **Judge a design by its properties, never its size.** Never pick between designs by how many lines
   or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails. Size
   a design once it is picked.
@@ -276,12 +280,12 @@ Typecheck, lint and test must all pass before a change is offered. None needs a 
 not wait on a local `pnpm typecheck`: CI runs it, and a pull request merges only when it is green
 ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). Run the narrowest check that
 still covers the change, as
-[Effect's own repo](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md) asks of its
+[Effect's own repo](https://github.com/Effect-TS/effect/blob/main/.agents/AGENTS.md) asks of its
 agents. This table adds no rule, and `pnpm format` comes first in every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips the heavy jobs, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`, which checks the added rows too. CI skips the heavy jobs; a pull request of only plan files and rows starts no CI run (changes.mjs's `ignored`) |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
@@ -298,14 +302,15 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   [0006](./.decisions/0006-no-unused-exports.md)). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
   owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
-  it, and CI fails until that is committed. Adding an entry is the owner's call, in a change of its
-  own ([nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
+  file is deleted ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
 - **A check on the shape of code is a lint rule, never a test:** oxlint's own rule where one exists
   (`no-restricted-imports`), else ours in `oxlint-plugins/`. A plan asks "lint, type or test?" of
   every law.
 - **A check that can block needs its false alarms measured first:** about 0% to block, up to 10% to
   only advise (Google, CACM 2018). Every number in a rule needs a source or our own data. A tool's
-  default is not a source.
+  default is not a source. [0523](./.decisions/0523-advice-rules-block-where-clean.md) sets the
+  five old advice rules aside from this: they block in every folder at zero.
 - **A flaky test is fixed the day it is seen**
   ([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
 - **Money.** A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything else with

@@ -3,6 +3,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -18,6 +19,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -27,7 +29,7 @@ import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManage
 import { ProcessStore } from "./ProcessStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
-const CHECK = { seed: 119120, numRuns: 40 };
+const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) };
 
 const text = fc.string({
   unit: fc.constantFrom("a", "b", "7", ":", "_"),
@@ -1024,7 +1026,7 @@ const runnerWorld = (
       build: a.build,
       owner,
     },
-    { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 } },
+    { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
   ).pipe(Layer.provideMerge(observed));
   const input = (n: number, m: unknown) =>
     decodeIncoming({

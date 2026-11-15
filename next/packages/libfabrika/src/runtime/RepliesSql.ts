@@ -86,7 +86,19 @@ const stored = <A>(f: () => A) =>
     catch: (error) => (error instanceof RepliesError ? error : new RepliesError({ reason: "storage", cause: error })),
   });
 
-/** Replies in the runtime's own recovery SQL, within its storage capacity. */
+/**
+ * Layer that provides `Replies` over the runtime's own recovery SQL, within `capacity` bytes.
+ *
+ * **Details**
+ *
+ * `reply` reads one row. `rememberReply` runs in one transaction, so a failed or full write keeps
+ * nothing; it fails with `storage` when the new row would pass `capacity`, and with `bad_row` when a
+ * stored row does not decode or disagrees with its key. With `accounting`, each saved reply is
+ * charged to the process's recovery room. A quota refusal is never saved as a reply.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (
   sql: Sql,
   limits: { readonly capacity: number; readonly accounting?: Accounting },

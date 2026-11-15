@@ -1,9 +1,30 @@
+/**
+ * Signed, single-use challenge nonces for the gateway. SYN cookies keep an unproved connection out
+ * of storage (RFC 4987, section 3.6).
+ *
+ * @stability unstable
+ */
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { LedgerError } from "../ledger/Ledger.ts";
+import { Crypto, GatewayError, Storage } from "./GatewayError.ts";
 import type { gatewayStore } from "./GatewayStore.ts";
 
-// SYN cookies keep an unproved connection out of storage (RFC 4987, section 3.6).
+/**
+ * Creates the nonce tools for one gateway store: `issue`, `check` and `spend`.
+ *
+ * **Details**
+ *
+ * The 32-byte signing key is made once and saved in the store, so a restart keeps it. `issue`
+ * returns a nonce bound to a client and the current time. `check` returns the time the nonce
+ * expires, or null when it is malformed, from the future, older than `ttl` or signed for another
+ * client. No nonce is stored until `spend`, which a caller runs inside a store transaction after
+ * `check`. It answers false for an expired or already spent nonce, and fails with a
+ * `GatewayError` with reason `Storage` when `cap` live receipts are held. A WebCrypto failure is
+ * reason `Crypto`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   store: ReturnType<typeof gatewayStore>,
   ttl: number,
@@ -23,15 +44,15 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   const bytes = Base64Url.decode(secret);
 
   if (Result.isFailure(bytes)) {
-    return yield* new LedgerError({ reason: "storage", cause: bytes.failure });
+    return yield* new GatewayError({ reason: new Storage({ cause: bytes.failure }) });
   }
 
   // A key of the wrong length decoded fine: no failure to keep.
   if (bytes.success.length !== 32) {
-    return yield* new LedgerError({ reason: "storage" });
+    return yield* new GatewayError({ reason: new Storage({ cause: undefined }) });
   }
 
-  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
+  const fail = (cause: unknown) => new GatewayError({ reason: new Crypto({ cause }) });
   const args: Parameters<SubtleCrypto["importKey"]> = [
     "raw",
     new Uint8Array(bytes.success),
@@ -88,7 +109,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     }
 
     if (Number(store.sql.exec("SELECT count(*) n FROM gateway_spent WHERE until>?", at)[0]?.n ?? 0) >= cap) {
-      return Result.fail(new LedgerError({ reason: "storage" }));
+      return Result.fail(new GatewayError({ reason: new Storage({ cause: undefined }) }));
     }
 
     store.sql.exec("DELETE FROM gateway_spent WHERE until<=?", at);

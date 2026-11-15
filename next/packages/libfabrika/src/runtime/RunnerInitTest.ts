@@ -4,6 +4,7 @@
 // RunnerInitTest.suite(files), acquiring each world's database files in its own scope (0062, 0061).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -12,6 +13,7 @@ import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Proce
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
@@ -103,7 +105,7 @@ export const suite = (
     const layer = () =>
       ProgramRunner.layer(
         { id: A, name: NAME, program: "counter", build: controls.build, owner: person },
-        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 } },
+        { policy, recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
@@ -173,7 +175,7 @@ export const suite = (
               }).pipe(Effect.scoped),
             ),
         ),
-        { seed: SEED, numRuns: 150 },
+        { seed: SEED, numRuns: runsFor({ fast: 15, full: 150 }) },
       );
     });
 

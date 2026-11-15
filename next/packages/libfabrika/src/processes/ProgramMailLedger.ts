@@ -15,7 +15,7 @@ import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import { QuotaRefused } from "../ledger/WritePolicy.ts";
 import { short } from "../telemetry/Trace.ts";
-import { granted, mailId, businessRef } from "./internal/programMail.ts";
+import { full, granted, mailId, businessRef, unread } from "./internal/programMail.ts";
 import { inbox, letterBody, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessTable, State } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -45,8 +45,8 @@ const decodeSent = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }))
 
 const outbox = (name: string): string => `${name}/outbox`;
 
-const refuse = (reason: typeof MailRefusal.Type) => new ProgramMailError({ reason });
-const storage = (cause: LedgerError) => new ProgramMailError({ reason: "storage", cause });
+const refuse = (reason: typeof MailRefusal.Type) => ProgramMailError.refused(reason);
+const storage = (cause: LedgerError) => ProgramMailError.storage(cause);
 
 /** The saved receipt for this delivery's ID, or a refusal when the ID was first used otherwise. */
 const saved = (
@@ -55,16 +55,14 @@ const saved = (
   m: Schema.Json,
 ): Option.Option<Result.Result<Receipt, ProgramMailError>> => {
   const id = mailId(delivery.command);
-  const entry = [...turn.read(outbox(delivery.source.name), 0)].find((e) => e.id === id);
+  const entry = Option.getOrUndefined(turn.get(outbox(delivery.source.name), id));
 
   if (entry === undefined) {
     return Option.none();
   }
 
   const mailed = decodeMailed(valueFor(entry));
-  const letter = Option.flatMap(mailed, ({ to }) =>
-    Option.fromUndefinedOr([...turn.read(inbox(to.name), 0)].find((e) => e.id === id)),
-  );
+  const letter = Option.flatMap(mailed, ({ to }) => turn.get(inbox(to.name), id));
   const body = Option.flatMap(letter, (l) => decodeSent(l.body));
 
   if (
@@ -105,13 +103,17 @@ const saved = (
   );
 };
 
+/** `full` when the target's inbox holds `cap` unread letters or more, from two index reads: where
+ *  the inbox ends, and how far its reader acked. */
+const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: string, cap: number) => {
+  const end = Option.getOrElse(turn.end(inbox(to)), () => 0);
+  const acked = manager.ackedPos(turn, to);
+  return full(end, acked, cap) ? Option.some(ProgramMailError.full(unread(end, acked))) : Option.none();
+};
+
 /** The newest lifecycle rev of each name the send depends on: a change means look again. */
 const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
-  JSON.stringify(
-    [ProcessTable.stream, ...names.map(ProcessTable.events)].map(
-      (stream) => [...turn.read(stream, 0)].at(-1)?.rev ?? 0,
-    ),
-  );
+  JSON.stringify([ProcessTable.stream, ...names.map(ProcessTable.events)].map((stream) => turn.head(stream)));
 
 /**
  * Layer that provides `ProgramMail` on the ledger, through `LedgerTransaction` and `ProcessManager`.
@@ -123,11 +125,17 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
  * the source or the target lands between the checks and the write, the checks run again before
  * anything is written.
  *
+ * `cap` is the most unread letters one inbox holds, the `mail.unread` setting. In the turn that
+ * would save a new letter, an inbox at its cap answers `full` and nothing is written. A repeat of a
+ * saved letter answers its first receipt before the cap is looked at, so a full inbox never hides
+ * a receipt.
+ *
  * @stability unstable
  * @category layers
  */
 export const layer = (config: {
   readonly grants: Grants;
+  readonly cap: number;
 }): Layer.Layer<ProgramMail, never, LedgerTransaction | ProcessManager> =>
   Layer.effect(
     ProgramMail,
@@ -219,6 +227,12 @@ export const layer = (config: {
                   return prior;
                 }
 
+                const over = capped(turn, manager, delivery.to, config.cap);
+
+                if (Option.isSome(over)) {
+                  return Option.some(Result.fail(over.value));
+                }
+
                 const id = mailId(delivery.command);
                 turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
                 turn.append(
@@ -253,7 +267,11 @@ export const layer = (config: {
           }),
         ),
         Effect.tapError((error) =>
-          Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
+          Effect.annotateCurrentSpan(
+            error.reason._tag === "full"
+              ? { [tag("answer")]: "full", [tag("unread")]: error.reason.unread, [tag("cap")]: config.cap }
+              : { [tag("answer")]: "refused", [tag("reason")]: error.reason._tag },
+          ),
         ),
       );
       return ProgramMail.of({ deliver });

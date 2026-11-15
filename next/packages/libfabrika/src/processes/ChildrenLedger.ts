@@ -1,31 +1,68 @@
 /**
- * The `Children` layer that starts a child on the ledger.
+ * The `Children` layer that starts and stops a child on the ledger.
  *
- * The answer is a function of the start id's state and the process table, read in one ledger turn:
- * a saved id answers its `started` forever, and an unsaved one is asked afresh. Only the write turn
- * writes, and it is `ProcessManager.start`'s own: the name's registration, its `started` line at
- * the start's id and its first letter, in one turn. Whatever that turn answers, the start reads
- * again once.
+ * The answer is a function of the start id's state, the process table and the relation rows, read
+ * in one ledger turn: a saved id answers its `started` forever, and an unsaved one is asked afresh.
+ * Only the write turn writes, and it is `ProcessManager.start`'s own: the name's registration, its
+ * `started` line at the start's id and its first letter, in one turn. A start checked against a
+ * member writes only under that check's proof, and its write turn checks the proof again on the
+ * rows of that turn. Whatever that turn answers, the start reads again once. A stop is checked in
+ * one turn and ended in `ProcessManager.exit`'s own.
  *
  * @stability unstable
  */
-import { Cause, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
+import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
+import { StartProgram } from "../permissions/Model.ts";
+import * as Rebac from "../permissions/Rebac.ts";
+import type { Tuples } from "../permissions/Relation.ts";
+import { Relations, type RelationsError } from "../permissions/Relations.ts";
+import { type Sender, Senders, type SendersError } from "../permissions/Senders.ts";
 import { short } from "../telemetry/Trace.ts";
-import { Child, Children, ChildrenError, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
+import { Child, Children, ChildrenError, type ChildStop, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
+import { ExitReason } from "./ExitReason.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
 const tag = (word: string): string => `fab.children.${word}`;
+const permissions = (word: string): string => `fab.permissions.${word}`;
 
 const decodeChild = Schema.decodeUnknownResult(Child);
 const isName = Schema.is(ProcessName);
 const decodeLetter = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
 
 const refuse = (reason: Exclude<ChildrenError["reason"], "storage">) => new ChildrenError({ reason });
-const storage = (cause: LedgerError) => new ChildrenError({ reason: "storage", cause });
+const storage = (cause: LedgerError | RelationsError | SendersError) => new ChildrenError({ reason: "storage", cause });
+
+/** The proof a start's write needs. */
+type Proof = (typeof StartProgram)["Service"];
+
+/**
+ * How the permission step judged a start: `allowed` and `denied` through the model, for the member
+ * checked; `granted` and `ungranted` by the host's `StartGrant`, with no member behind the start.
+ */
+type Judged = Data.TaggedEnum<{
+  allowed: { readonly proof: Proof };
+  /** The check's refusal, or none when the sender's key was removed before it could be checked. */
+  denied: { readonly denied: Option.Option<Rebac.Denied> };
+  granted: Record<never, never>;
+  ungranted: Record<never, never>;
+}>;
+
+const Judged = Data.taggedEnum<Judged>();
+
+/**
+ * What a look turn found: the start's answer now, or a free name the write turn may take. A free
+ * name always comes with the permission step's judgment, which let it through.
+ */
+type Found = Data.TaggedEnum<{
+  answered: { readonly answer: Result.Result<Started, ChildrenError>; readonly judged: Option.Option<Judged> };
+  free: { readonly judged: Judged };
+}>;
+
+const Found = Data.taggedEnum<Found>();
 
 /** The first letter's id in the child's inbox. */
 const letterId = (id: string): string => JSON.stringify(["start", id]);
@@ -44,17 +81,75 @@ const fits = (child: Child, from: From, m: Schema.Json): boolean => {
   );
 };
 
+/** What the permission step reads besides the turn: the host's grants, the rows and this fabrika. */
+type Rules = {
+  readonly granted: (source: string, to: string) => boolean;
+  readonly tuples: (turn: LedgerTurn) => Result.Result<Tuples, RelationsError>;
+  readonly fabrika: Rebac.Ref<"fabrika">;
+};
+
+/**
+ * The permission step (0170, with the owner's answer (c) to its open question). The member checked
+ * is the sender of the input that caused the start, else the requester's recorded member, its
+ * process owner (0172). A member is checked with `StartProgram` on this fabrika, and `StartGrant` is
+ * not read. With no member behind the start, the host's `StartGrant` rule judges it, as before.
+ */
+const judge = (
+  rules: Rules,
+  turn: LedgerTurn,
+  requester: { readonly program: string; readonly member: Sender | undefined },
+  child: Child,
+  sender: Result.Result<Option.Option<Sender>, SendersError>,
+): Result.Result<Judged, Found> => {
+  if (Result.isFailure(sender)) {
+    return sender.failure.reason === "ended"
+      ? Result.fail(Found.answered({ answer: Result.fail(refuse("stale_sender")), judged: Option.none() }))
+      : Result.fail(
+          Found.answered({
+            answer: Result.fail(refuse("forbidden")),
+            judged: Option.some(Judged.denied({ denied: Option.none() })),
+          }),
+        );
+  }
+
+  const member = Option.getOrElse(sender.success, () => requester.member);
+
+  if (member === undefined) {
+    return rules.granted(requester.program, child.code.program)
+      ? Result.succeed(Judged.granted())
+      : Result.fail(
+          Found.answered({ answer: Result.fail(refuse("forbidden")), judged: Option.some(Judged.ungranted()) }),
+        );
+  }
+
+  const tuples = rules.tuples(turn);
+
+  if (Result.isFailure(tuples)) {
+    return Result.fail(Found.answered({ answer: Result.fail(storage(tuples.failure)), judged: Option.none() }));
+  }
+
+  const checked = StartProgram.within(tuples.success, member, rules.fabrika);
+  return Result.isSuccess(checked)
+    ? Result.succeed(Judged.allowed({ proof: checked.success }))
+    : Result.fail(
+        Found.answered({
+          answer: Result.fail(refuse("forbidden")),
+          judged: Option.some(Judged.denied({ denied: Option.some(checked.failure) })),
+        }),
+      );
+};
+
 /**
  * The checks after decoding, in one turn and in this order: a saved start, the requester, the
- * grant, then whereis.
- * `none` is a free name the write turn may take.
+ * permission step, then whereis.
  */
 const answer = (
   table: ProcessTable,
   turn: LedgerTurn,
   child: Child,
-  granted: (source: string, to: string) => boolean,
-): Option.Option<Result.Result<Started, ChildrenError>> => {
+  rules: Rules,
+  sender: Result.Result<Option.Option<Sender>, SendersError>,
+): Found => {
   const saved = Option.getOrUndefined(table.saved(child.id));
 
   if (saved !== undefined) {
@@ -68,63 +163,216 @@ const answer = (
       saved.request.requester?._tag === "process" &&
       saved.request.requester.process === child.requester.process &&
       (child.input === undefined ? Option.isNone(m) : Option.exists(m, (value) => Equal.equals(value, child.input)));
-    return Option.some(
-      same
+    return Found.answered({
+      answer: same
         ? Result.succeed(Started.cases.started.make({ process: saved.state.process, name: saved.name, rev: saved.rev }))
         : Result.fail(refuse("id_reused")),
-    );
+      judged: Option.none(),
+    });
   }
 
   const requester = Option.getOrUndefined(table.life(child.requester.process));
 
   if (requester === undefined || !table.isLive(child.requester.process)) {
-    return Option.some(Result.fail(refuse("stale_sender")));
+    return Found.answered({ answer: Result.fail(refuse("stale_sender")), judged: Option.none() });
   }
 
-  // An ungranted program learns nothing of a name, its own included.
-  if (!granted(requester.state.code.program, child.code.program)) {
-    return Option.some(Result.fail(refuse("forbidden")));
+  // A refused start learns nothing of a name, its own included.
+  const judged = judge(
+    rules,
+    turn,
+    {
+      program: requester.state.code.program,
+      member: requester.request._tag === "first" ? requester.request.member : undefined,
+    },
+    child,
+    sender,
+  );
+
+  if (Result.isFailure(judged)) {
+    return judged.failure;
   }
 
-  return Option.map(table.whereis(child.name), ({ program, state }) => {
-    const life = { process: state.process, name: child.name };
-    return program !== child.code.program
-      ? Result.fail(refuse("name_taken"))
-      : Result.succeed(
-          state._tag === "live" ? Started.cases.already_started.make(life) : Started.cases.already_present.make(life),
-        );
+  return Option.match(table.whereis(child.name), {
+    onNone: () => Found.free({ judged: judged.success }),
+    onSome: ({ program, state }) => {
+      const life = { process: state.process, name: child.name };
+      return Found.answered({
+        answer:
+          program !== child.code.program
+            ? Result.fail(refuse("name_taken"))
+            : Result.succeed(
+                state._tag === "live"
+                  ? Started.cases.already_started.make(life)
+                  : Started.cases.already_present.make(life),
+              ),
+        judged: Option.some(judged.success),
+      });
+    },
   });
 };
 
+/** The span's record of the permission step: who was checked, for what, on which object, and how. */
+const shown = (judged: Judged): Record<string, string> =>
+  Judged.$match(judged, {
+    allowed: ({ proof }) => ({
+      [permissions("subject")]: `person:${proof.sender.for}`,
+      [permissions("permission")]: proof.permission,
+      [permissions("object")]: proof.object,
+      [permissions("outcome")]: "allowed",
+    }),
+    denied: ({ denied }) =>
+      Option.match(denied, {
+        onNone: () => ({ [permissions("outcome")]: "denied" }),
+        onSome: ({ subject, permission, object }) => ({
+          [permissions("subject")]: subject,
+          [permissions("permission")]: permission,
+          [permissions("object")]: object,
+          [permissions("outcome")]: "denied",
+        }),
+      }),
+    granted: () => ({ [permissions("outcome")]: "granted" }),
+    ungranted: () => ({ [permissions("outcome")]: "ungranted" }),
+  });
+
 /**
- * Layer that provides `Children` on the ledger, through `LedgerTransaction` and `ProcessManager`.
+ * A stop's checks, in one turn: the name must be a child the requester's name started, then live.
+ * Answers the child's life to end.
+ */
+const stopped = (table: ProcessTable, stop: ChildStop): Result.Result<string, ChildrenError> => {
+  const requester = Option.getOrUndefined(table.life(stop.requester.process));
+  const own =
+    isName(stop.name) &&
+    requester !== undefined &&
+    Option.exists(table.starter(stop.name), (name) => name === requester.name);
+  const current = own ? Option.getOrUndefined(table.whereis(stop.name)) : undefined;
+
+  if (current === undefined) {
+    return Result.fail(refuse("not_child"));
+  }
+
+  return current.state._tag === "live" ? Result.succeed(current.state.process) : Result.fail(refuse("noproc"));
+};
+
+/** Keeps a storage failure's cause with the caller: every nested span records only the safe reason,
+ *  and a defect is replaced by a plain one with no detail. */
+const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
+  Effect.gen(function* () {
+    const tracer = yield* Tracer.Tracer;
+    const safe = Tracer.make({
+      context: tracer.context,
+      span(options) {
+        const span = tracer.span(options);
+        const attribute = span.attribute.bind(span);
+        span.attribute = (key, value) => {
+          if (key !== "fab.ledger.code") {
+            attribute(key, key === "error.type" ? "ChildrenError" : value);
+          }
+        };
+        const end = span.end.bind(span);
+        span.end = (time, exit) => {
+          const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+          end(
+            time,
+            Exit.isSuccess(exit)
+              ? exit
+              : Exit.fail(
+                  new ChildrenError({
+                    reason:
+                      Option.isSome(error) && error.value instanceof ChildrenError ? error.value.reason : "storage",
+                  }),
+                ),
+          );
+        };
+        return span;
+      },
+    });
+    return yield* work.pipe(
+      Effect.withTracer(safe),
+      Effect.catchCause((cause) => (Cause.hasDies(cause) ? Effect.die(new Error(defect)) : Effect.failCause(cause))),
+    );
+  });
+
+/**
+ * Layer that provides `Children` on the ledger, through `LedgerTransaction`, `ProcessManager`,
+ * `Relations` and `Senders`.
  *
  * **Details**
  *
- * `grants` is the host's closed list of which program may start which. A start is judged in this
- * order: the name, the rest of the request, a saved `id`, a live requester, the grant, then the
- * name's current holder. A requester with no grant is refused `forbidden` before it can learn
- * whether a name exists.
+ * `fabrika` is this fabrika's object in the permission model. `grants` is the host's closed list of
+ * which program may start which, read only for a start with no member behind it. Before any turn,
+ * a start asks `Senders` who sent `from.parent` to the requester; a `storage` failure fails the
+ * start. Then it is judged in this order: the name, the rest of the request, a saved `id`, a live
+ * requester, the permission step, then the name's current holder. The permission step checks the
+ * sender, else the requester's recorded member, with `StartProgram` on `fabrika`: `Denied` and a
+ * removed key are `forbidden`, and a cause delivered to a process that ended is `stale_sender`. With
+ * no member, a requester with no grant is `forbidden`. A refusal comes before the requester can
+ * learn whether a name exists. A member's start writes `member` on its `started` line, and its write
+ * turn checks the proof again on that turn's rows: a relation removed in between refuses it
+ * `forbidden`, with nothing written.
+ *
+ * A stop ends the child with `shutdown` through `ProcessManager.exit`, which writes each watcher's
+ * `DOWN`. A child that ends between the check and the exit is `noproc`.
  *
  * **Gotchas**
  *
  * A storage failure's cause goes to the caller only. The spans of a start record the reason and
- * never the cause, and a defect inside a start is replaced by a plain one with no detail.
+ * the permission step's ids, never the cause, and a defect inside a start is replaced by a plain
+ * one with no detail. A key removed after `Senders` answered is not seen by that start.
  *
  * @stability unstable
  * @category layers
  */
 export const layer = (config: {
   readonly grants: ReadonlyArray<typeof StartGrant.Type>;
-}): Layer.Layer<Children, never, LedgerTransaction | ProcessManager> =>
+  readonly fabrika: Rebac.Ref<"fabrika">;
+}): Layer.Layer<Children, never, LedgerTransaction | ProcessManager | Relations | Senders> =>
   Layer.effect(
     Children,
     Effect.gen(function* () {
       const tx = yield* LedgerTransaction;
       const manager = yield* ProcessManager;
-      const granted = (source: string, to: string) => config.grants.some((g) => g.source === source && g.to === to);
-      const look = (child: Child) =>
-        tx.transact((turn) => answer(manager.table(turn), turn, child, granted)).pipe(Effect.mapError(storage));
+      const relations = yield* Relations;
+      const senders = yield* Senders;
+      const rules: Rules = {
+        granted: (source, to) => config.grants.some((g) => g.source === source && g.to === to),
+        tuples: relations.within,
+        fabrika: config.fabrika,
+      };
+      const look = (child: Child, sender: Result.Result<Option.Option<Sender>, SendersError>) =>
+        tx.transact((turn) => answer(manager.table(turn), turn, child, rules, sender)).pipe(Effect.mapError(storage));
+      const first = (child: Child) => (child.input === undefined ? undefined : { m: child.input });
+
+      /** A member's start: its write needs the proof, names the member, and checks the proof again in its turn. */
+      const place = Effect.fnUntraced(function* (child: Child, from: From) {
+        const proof = yield* StartProgram;
+        return yield* manager.start(
+          Start.cases.first.make({
+            id: child.id,
+            name: child.name,
+            code: child.code,
+            requester: child.requester,
+            member: proof.sender,
+          }),
+          from,
+          first(child),
+          (turn) =>
+            Result.match(relations.within(turn), {
+              onSuccess: (tuples) => Rebac.recheck(proof, tuples),
+              onFailure: () => false,
+            }),
+        );
+      });
+
+      /** The write turn, under the proof when a member was checked, else as the host's grant allows. */
+      const write = (child: Child, from: From, judged: Judged) =>
+        judged._tag === "allowed"
+          ? place(child, from).pipe(Rebac.provide(judged.proof))
+          : manager.start(
+              Start.cases.first.make({ id: child.id, name: child.name, code: child.code, requester: child.requester }),
+              from,
+              first(child),
+            );
 
       const start = Effect.fn("children.start")(
         function* (input: Child, from: From) {
@@ -150,40 +398,50 @@ export const layer = (config: {
               [tag("hash")]: child.code.hash,
             }),
           );
+          // Outside any turn, and kept as it came: it decides nothing before the saved-id check.
+          const sender = yield* senders.sender(from.parent, child.requester.process).pipe(
+            Effect.result,
+            Effect.flatMap((asked) =>
+              Result.isFailure(asked) && asked.failure.reason === "storage"
+                ? Effect.fail(storage(asked.failure))
+                : Effect.succeed(asked),
+            ),
+          );
 
           // Two passes at most: after the write turn the id is saved, the name is taken, or the
           // requester has ended, so the second pass always answers.
           for (let pass = 1; ; pass++) {
-            const found = yield* look(child);
+            const found = yield* look(child, sender);
+            const judged = found._tag === "free" ? Option.some(found.judged) : found.judged;
 
-            if (Option.isSome(found)) {
-              return yield* Effect.fromResult(found.value);
+            if (Option.isSome(judged)) {
+              yield* Effect.annotateCurrentSpan(shown(judged.value));
+            }
+
+            if (found._tag === "answered") {
+              return yield* Effect.fromResult(found.answer);
             }
 
             if (pass > 1) {
               return yield* Effect.die(new Error("a start found its name free after its write turn"));
             }
 
-            // Placed or refused, the next pass reads what the write turn left.
-            yield* manager
-              .start(
-                Start.cases.first.make({
-                  id: child.id,
-                  name: child.name,
-                  code: child.code,
-                  requester: child.requester,
-                }),
-                from,
-                ...(child.input === undefined ? [] : [{ m: child.input }]),
-              )
-              .pipe(
-                Effect.catch((error) =>
-                  error instanceof ProcessError
-                    ? Effect.void
-                    : // The ledger refuses a first letter over its row limit, and the whole turn with it.
-                      Effect.fail(error.reason === "refused" ? refuse("bad_input") : storage(error)),
-                ),
-              );
+            // Placed or refused, the next pass reads what the write turn left; a guard that said no
+            // is the answer now.
+            const refused = yield* write(child, from, found.judged).pipe(
+              Effect.as(false),
+              Effect.catch((error) =>
+                error instanceof ProcessError
+                  ? Effect.succeed(error.reason === "forbidden")
+                  : // The ledger refuses a first letter over its row limit, and the whole turn with it.
+                    Effect.fail(error.reason === "refused" ? refuse("bad_input") : storage(error)),
+              ),
+            );
+
+            if (refused) {
+              yield* Effect.annotateCurrentSpan({ [permissions("outcome")]: "denied" });
+              return yield* refuse("forbidden");
+            }
           }
         },
         Effect.tap((started) =>
@@ -193,47 +451,31 @@ export const layer = (config: {
           Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
         ),
       );
+      const stop = Effect.fn("children.stop")(
+        function* (asked: ChildStop, from: From) {
+          yield* Effect.annotateCurrentSpan(short({ [tag("name")]: asked.name }));
+          const child = yield* tx
+            .transact((turn) => stopped(manager.table(turn), asked))
+            .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));
+          yield* manager
+            .exit(child, ExitReason.cases.shutdown.make({}), from)
+            .pipe(
+              Effect.catch((error) =>
+                error instanceof ProcessError
+                  ? error.reason === "ended"
+                    ? Effect.fail(refuse("noproc"))
+                    : Effect.die(new Error(`a stop's exit was refused: ${error.reason}`))
+                  : Effect.fail(storage(error)),
+              ),
+            );
+        },
+        Effect.tapError((error) =>
+          Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
+        ),
+      );
       return Children.of({
-        start: Effect.fnUntraced(function* (input, from) {
-          const tracer = yield* Tracer.Tracer;
-          // Storage causes stay with the caller. Every nested span records only the safe reason.
-          const safe = Tracer.make({
-            context: tracer.context,
-            span(options) {
-              const span = tracer.span(options);
-              const attribute = span.attribute.bind(span);
-              span.attribute = (key, value) => {
-                if (key !== "fab.ledger.code") {
-                  attribute(key, key === "error.type" ? "ChildrenError" : value);
-                }
-              };
-              const end = span.end.bind(span);
-              span.end = (time, exit) => {
-                const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-                end(
-                  time,
-                  Exit.isSuccess(exit)
-                    ? exit
-                    : Exit.fail(
-                        new ChildrenError({
-                          reason:
-                            Option.isSome(error) && error.value instanceof ChildrenError
-                              ? error.value.reason
-                              : "storage",
-                        }),
-                      ),
-                );
-              };
-              return span;
-            },
-          });
-          return yield* start(input, from).pipe(
-            Effect.withTracer(safe),
-            Effect.catchCause((cause) =>
-              Cause.hasDies(cause) ? Effect.die(new Error("children.start failed")) : Effect.failCause(cause),
-            ),
-          );
-        }),
+        start: (input, from) => guarded(start(input, from), "children.start failed"),
+        stop: (asked, from) => guarded(stop(asked, from), "children.stop failed"),
       });
     }),
   );

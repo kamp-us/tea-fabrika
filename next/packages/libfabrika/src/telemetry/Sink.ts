@@ -1,11 +1,14 @@
-// The span sink: every object installs one Tracer, and a span that ends is in the object's own SQLite
-// before `end` returns. `flush` ships it to its record later, when the runner says. Tier 1, P37
-// (laws p98, p99 and p101).
-//
-// The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
-// is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
-// held in memory and tried again at each later `end`, and the next `flush` fails the step with
-// `storage`: let it crash. The sink's own calls end no span.
+/**
+ * The span sink: every object installs one Tracer, and a span that ends is in the object's own
+ * SQLite before `end` returns. `flush` ships it to its record later, when the runner says.
+ *
+ * The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
+ * is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
+ * held in memory and tried again at each later `end`, and the next `flush` fails the step with
+ * `storage`: let it crash. The sink's own calls end no span.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import {
   Cause,
@@ -38,8 +41,8 @@ import { type Ended, held, machine } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
+  causeClass,
   chainName,
-  errorClass,
   OBJECT,
   PROCESS,
   REFUSED,
@@ -52,7 +55,16 @@ import {
   type Tag,
 } from "./Trace.ts";
 
-export { SinkError } from "./Trace.ts";
+export {
+  /**
+   * Error for a sink, record or archive call that failed: the call never answered, a row or an
+   * answer did not decode, or storage threw.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  SinkError,
+} from "./Trace.ts";
 
 const ERROR = "error.type";
 const DROPPED = "fab.sink.dropped";
@@ -123,15 +135,105 @@ const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   return lags.length === 0 ? null : Math.max(...lags);
 };
 
+/** A reason as a fixed word from code: a string reason itself, or a tagged reason's tag. */
+const reasonWord = (reason: unknown): string =>
+  Predicate.isString(reason)
+    ? reason
+    : Predicate.hasProperty(reason, "_tag") && Predicate.isString(reason._tag)
+      ? reason._tag
+      : "";
+
 /** A typed failure as code wrote it: its tag and reason. Its message and the cause it keeps may hold
- *  input, so they stay in memory and out of stored content. A thrown value keeps its own text. */
+ *  input, so they stay in memory and out of stored content, and so do a tagged reason's own message
+ *  and cause. A thrown value keeps its own text. */
 const summary = (error: unknown): unknown =>
   error instanceof Error && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
     ? {
         name: error._tag,
-        message: Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason) ? error.reason : "",
+        message: Predicate.hasProperty(error, "reason") ? reasonWord(error.reason) : "",
       }
     : error;
+
+/** A location without its folder: the file name with its line and column. A `node:` location is a
+ *  module name and stays whole. A URL's query and fragment come after its file name and can hold a
+ *  folder, so they go with the folder. */
+const place = (location: string): string => {
+  if (location.startsWith("node:")) {
+    return location;
+  }
+
+  const position = /(?::\d+){1,2}$/.exec(location)?.[0] ?? "";
+  const path = location.slice(0, location.length - position.length);
+  const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? (path.split(/[?#]/)[0] ?? path) : path;
+  return `${file.slice(Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")) + 1)}${position}`;
+};
+
+/** Where a location may start: an eval origin, a scheme (`file:`, `http:`, `node:`, a drive such
+ *  as `C:`), a folder separator, or a relative path: a run with no space and no parenthesis, then a
+ *  separator, as in `src/`, `./`, `../`, `~/` and `.\`. A name's own `(definition)`, `(<anonymous>)`
+ *  or `(index 3)` holds no separator before its ")", so it never starts one. */
+const START = /^(?:eval at |[a-z][a-z\d+.-]*:|[^\s()]*[/\\])/is;
+
+/** Where the location group opens in `body`: the leftmost " (" whose rest starts a location, else
+ *  the last " (", or -1 if there is none. Parentheses are not counted, since a folder may hold one
+ *  alone. Leftmost, so a folder's own " (" never ends up in a name: when a name and a folder read
+ *  the same, the folder goes. */
+const opens = (body: string): number => {
+  let last = -1;
+
+  for (let at = body.indexOf(" ("); at !== -1; at = body.indexOf(" (", at + 1)) {
+    if (START.test(body.slice(at + 2))) {
+      return at + 1;
+    }
+
+    last = at + 1;
+  }
+
+  return last;
+};
+
+/** A frame's location without folders. An eval origin, `eval at <name> (<location>), <location>`,
+ *  is split at its last "), ": it keeps its name and loses the folder of each location inside it,
+ *  however deep the origins nest. */
+const located = (location: string): string => {
+  const origin = location.startsWith("eval at ") ? location.lastIndexOf("), ") : -1;
+  const head = origin === -1 ? "" : location.slice(0, origin);
+  const open = origin === -1 ? -1 : opens(head);
+  return open === -1
+    ? place(location)
+    : `${head.slice(0, open)}(${located(head.slice(open + 1))}), ${place(location.slice(origin + 3))}`;
+};
+
+/** One line without its frame's folders: a frame's name stays whole, as do messages and Effect's
+ *  frame markers. A frame that ends in ")" has its location in the group `opens` finds, so a name
+ *  may hold spaces, slashes and its own parentheses, as Effect's `(definition)` does. A frame with
+ *  no such group is a bare location when it reads as one, or else a bare name. The `s` flag lets
+ *  any character a folder may hold, U+2028 included, stay inside the match. */
+const portable = (line: string): string => {
+  const frame = /^(\s*at )(.*?)( \{)?$/s.exec(line);
+
+  if (frame === null) {
+    return line;
+  }
+
+  const [, at = "", body = "", ending = ""] = frame;
+  const open = body.endsWith(")") ? opens(body) : -1;
+
+  if (open > 0) {
+    return `${at}${body.slice(0, open)}(${located(body.slice(open + 1, -1))})${ending}`;
+  }
+
+  const bare = /^(async )?((?:[a-z][a-z\d+.-]*:|[/\\]).*|.*(?::\d+){1,2})$/is.exec(body);
+  return bare === null ? line : `${at}${bare[1] ?? ""}${place(bare[2] ?? "")}${ending}`;
+};
+
+/** `Cause.pretty`'s text with every frame's folders cut. Each line break, `\r\n`, `\r` or `\n`, is
+ *  a separator kept as it was, so a CRLF stack stays CRLF and its `\r {` stays where it was. */
+const cutFolders = (text: string): string =>
+  text
+    .split(/(\r\n|\r|\n)/)
+    .map((piece, index) => (index % 2 === 1 ? piece : portable(piece)))
+    .join("");
 
 const cutContent = (text: string): string =>
   text.length <= MOST_CONTENT ? text : `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
@@ -154,7 +256,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
-    return typeof named === "string" ? named : errorClass(Cause.squash(cause));
+    return typeof named === "string" ? named : causeClass(cause);
   });
   const tags: Record<string, Tag> = {
     ...own.tags,
@@ -198,7 +300,9 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
       onSome: (process) => Chain.cases.job.make({ process }),
     }),
     row,
-    content: Option.getOrNull(Option.map(failure, (cause) => cutContent(Cause.pretty(Cause.map(cause, summary))))),
+    content: Option.getOrNull(
+      Option.map(failure, (cause) => cutContent(cutFolders(Cause.pretty(Cause.map(cause, summary))))),
+    ),
   };
 };
 
@@ -224,6 +328,24 @@ class SinkSpan extends Tracer.NativeSpan {
   }
 }
 
+/**
+ * Service for the span sink: the calls that ship what the object's `Tracer` kept, and that read its
+ * metrics back.
+ *
+ * **Details**
+ *
+ * A span that ends is in the object's own SQLite, with its measurement, before `end` returns, so
+ * an object that sleeps loses nothing. A span that carries the refusal tag is only counted, by
+ * piece and hour: it leaves no span row and no measurement.
+ *
+ * **Gotchas**
+ *
+ * A write that meets a full disk holds its spans in memory and tries again at each later `end`.
+ * The next `flush` then fails with `storage` before it sends anything, so the failure is seen.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class SpanSink extends Context.Service<
   SpanSink,
   {

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t953-review",
+  "ticket": "953",
+  "pr": "kamp-us/tea-fabrika#1239",
+  "started": "2026-11-15T03:27:00+00:00",
+  "ended": "2026-11-15T03:35:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "review of the whole diff at c8d72135f, sent back to tests: L10 and L14 never give a member's input to a requester that already has a recorded member, so a plant that lets the recorded member win over the sender (ChildrenLedger.ts:113) stays green. Two finding rows: the permission span attributes have no law, and L13 and L18 never answer through start_child. Layer rows and the hand-merged exam test checked against main: nothing lost, no law loosened, L19 red on its plant.",
+  "tokens": 239182,
+  "tools": 67,
+  "minutes": 8,
+  "note": null,
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/processes/ChildrenMemberTest.ts L10 and L14 (senderLaw, line 324)",
+      "plant": "next/packages/libfabrika/src/processes/ChildrenLedger.ts:113: the requester's recorded member wins over the sender",
+      "result": "green"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/layers.integration.test.ts L19",
+      "plant": "layer-rules.json: next-access on layer 4, beside next-processes",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}

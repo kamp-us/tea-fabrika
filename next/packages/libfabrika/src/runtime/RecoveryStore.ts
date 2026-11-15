@@ -5,11 +5,41 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
-import { LedgerError } from "../ledger/Ledger.ts";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
-import { Receipt } from "./internal/recovery.ts";
+import { changes, Receipt } from "./internal/recovery.ts";
 import { Supervision } from "./internal/supervisor.ts";
+
+/**
+ * Reason for a journal that could not be read or written: the `Sql` threw, or a save would grow
+ * the database past its capacity. A throw is kept as `cause`; a full database has none.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+
+/**
+ * Reason for a saved journal or receipt that does not decode, or that is stored under another
+ * name or letter. The decoder's failure is kept as `cause`; a misplaced row has none.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+
+/**
+ * Error for a recovery journal that could not be loaded or saved.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class RecoveryStoreError extends Schema.TaggedError<RecoveryStoreError>()("RecoveryStoreError", {
+  reason: Schema.Union([Storage, BadRow]),
+}) {}
+
+/** A saved row this store did not write under that name or letter: there is no lower fault to keep. */
+const misplaced = () => new RecoveryStoreError({ reason: new BadRow({ cause: undefined }) });
 
 /** What the store reads of a saved journal: whose it is, and the receipts it keeps apart. */
 const Kept = Schema.Struct({ name: Schema.String, receipts: Schema.Array(Receipt) });
@@ -23,23 +53,22 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
 
 type Store<S extends Kept> = {
   /** The saved journal with every receipt merged back in, or null before the first save. */
-  readonly load: Effect.Effect<S | null, LedgerError>;
+  readonly load: Effect.Effect<S | null, RecoveryStoreError>;
   /** Checks the whole journal, then writes it and its changed receipts in one transaction. */
-  readonly save: (value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
+  readonly save: (value: unknown) => Effect.Effect<void, RecoveryStoreError | QuotasError>;
   /** The input one letter's receipt kept, or null. */
-  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
+  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, RecoveryStoreError>;
   /** One letter's receipt, or null. */
-  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError>;
+  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, RecoveryStoreError>;
 };
 
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
-const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
 
 const receiptFor = (value: unknown, letter: unknown) => {
   const saved = decodeReceipt(value);
 
   if (saved.letter !== letter) {
-    throw new LedgerError({ reason: "bad_row" });
+    throw misplaced();
   }
 
   return saved;
@@ -48,11 +77,37 @@ const receiptFor = (value: unknown, letter: unknown) => {
 const TABLES = [
   "CREATE TABLE IF NOT EXISTS process_recovery (name TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS process_receipts (name TEXT NOT NULL, letter TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, letter))",
+  // Every save that writes a row, by any store, bumps its name's generation, so a store sees another's
+  // save in the one row it reads.
+  "CREATE TABLE IF NOT EXISTS process_recovery_generation (name TEXT PRIMARY KEY, generation INTEGER NOT NULL)",
 ];
+
+/** The journal row, with its name's generation beside it: one row, or none before the first save. */
+const JOURNAL =
+  "SELECT r.value, g.generation FROM process_recovery r LEFT JOIN process_recovery_generation g ON g.name = r.name WHERE r.name=?";
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
-/** One name's saved journal in `sql`, checked whole against its caller's schema on every load and save. */
+/** A row's text column, or null when there is no row. */
+const textIn = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+/** A row's generation, or null when there is no row or no save has counted one yet. */
+const generationIn = (value: unknown): number | null => (typeof value === "number" ? value : null);
+
+/**
+ * Makes the store for one name's saved journal in `sql`, checked whole against its caller's schema
+ * on every load and save.
+ *
+ * **Details**
+ *
+ * The journal row and its receipts live in separate rows; `load` merges them back, and `save`
+ * writes only the receipts that changed, in one transaction. A save that would grow the database
+ * past `capacity` fails with `storage` and keeps the old rows. A row that does not decode, or is
+ * stored under another name, fails with `bad_row`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const recoveryStore = <S extends Kept>(
   sql: Sql,
   options: {
@@ -76,11 +131,14 @@ export const recoveryStore = <S extends Kept>(
       sql.exec(query);
     }
   };
+  // The store's own error, thrown in the step, passes through; anything else is kept under a reason.
   const failed = (error: unknown) =>
-    error instanceof LedgerError
+    Schema.is(RecoveryStoreError)(error)
       ? error
-      : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error });
-  // A read changes no row, so it is charged nothing and fails only as the ledger does.
+      : new RecoveryStoreError({
+          reason: Schema.isSchemaError(error) ? new BadRow({ cause: error }) : new Storage({ cause: error }),
+        });
+  // A read changes no row, so it is charged nothing and fails only with the store's own error.
   const read = <A>(f: () => A) =>
     Effect.try({
       try: () => {
@@ -89,6 +147,7 @@ export const recoveryStore = <S extends Kept>(
       },
       catch: failed,
     });
+  // A write runs under the account's guard, so a recovery charge that does not fit fails by name.
   const stored = <A>(f: () => A) =>
     Effect.try({
       try: () => {
@@ -97,9 +156,27 @@ export const recoveryStore = <S extends Kept>(
       },
       catch: (error) => (error instanceof QuotasError ? error : failed(error)),
     });
-  const snapshot = () => {
-    const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name);
-
+  /**
+   * What this store last read or wrote for its name: the generation it saw, null before any save
+   * counted one, and each receipt row's text.
+   */
+  type Known = { readonly generation: number | null; readonly receipts: ReadonlyMap<string, string> };
+  // A copy of committed rows, never control state: it only decides how many rows a save reads.
+  let known: Known | null = null;
+  /**
+   * The known receipt rows, or one read of the name's receipt rows when none are known or any save
+   * that wrote a row since, this store's or another's, moved the generation.
+   */
+  const rows = (generation: number | null): ReadonlyMap<string, string> =>
+    known !== null && known.generation === generation
+      ? known.receipts
+      : new Map(
+          sql
+            .exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name)
+            .map((row) => [String(row.letter), String(row.value)]),
+        );
+  const readJournal = () => sql.exec(JOURNAL, options.name)[0];
+  const snapshot = (row = readJournal()) => {
     if (row === undefined) {
       return null;
     }
@@ -107,19 +184,21 @@ export const recoveryStore = <S extends Kept>(
     const saved = decode(row.value);
 
     if (saved.name !== options.name) {
-      throw new LedgerError({ reason: "bad_row" });
+      throw misplaced();
     }
 
     return saved;
   };
   const load = read(() => {
-    const saved = snapshot();
+    const journalRow = readJournal();
+    const saved = snapshot(journalRow);
 
     if (saved === null) {
       return null;
     }
 
     const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
+    const texts = new Map<string, string>();
 
     for (const row of sql.exec(
       "SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid",
@@ -127,9 +206,12 @@ export const recoveryStore = <S extends Kept>(
     )) {
       const receipt = receiptFor(row.value, row.letter);
       receipts.set(receipt.letter, receipt);
+      texts.set(receipt.letter, String(row.value));
     }
 
-    return check({ ...saved, receipts: [...receipts.values()] });
+    const loaded = check({ ...saved, receipts: [...receipts.values()] });
+    known = { generation: generationIn(journalRow?.generation), receipts: texts };
+    return loaded;
   });
   const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
     return yield* read(() => {
@@ -146,77 +228,81 @@ export const recoveryStore = <S extends Kept>(
   const save = (value: unknown) =>
     Effect.clockWith((clock) =>
       stored(() => {
-        const saved = check(value);
+      const saved = check(value);
 
-        if (saved.name !== options.name) {
-          throw new LedgerError({ reason: "bad_row" });
+      if (saved.name !== options.name) {
+        throw misplaced();
+      }
+
+      const text = encode({ ...saved, receipts: [] });
+      const committed = sql.transaction(() => {
+        const old = readJournal();
+        const journal = textIn(old?.value);
+        const generation = generationIn(old?.generation);
+        // Omitted receipts are retained, including during migration from the old snapshot.
+        const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
+
+        for (const receipt of saved.receipts) {
+          receipts.set(receipt.letter, receipt);
         }
 
-        const text = encode({ ...saved, receipts: [] });
-        sql.transaction(() => {
-          const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name)[0];
-          let growth = bytes(text) - (typeof old?.value === "string" ? bytes(old.value) : 0);
-          const changed: Array<{ letter: string; text: string }> = [];
-          // Omitted receipts are retained, including during migration from the old snapshot.
-          const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
+        const prior = rows(generation);
+        const { changed, growth: added } = changes(options.name, prior, receipts.values());
+        // A save that writes no row leaves the generation as it was, so it writes nothing at all.
+        const writes = changed.length > 0 || journal !== text;
+        // The first save that writes adds its generation row: the name, and an integer of up to 8 bytes.
+        const counted = writes && generation === null ? bytes(options.name) + 8 : 0;
+        const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added + counted;
+        const next: Known = {
+          generation: writes ? (generation ?? 0) + 1 : generation,
+          receipts: new Map([...prior, ...changed.map((c) => [c.letter, c.text] as const)]),
+        };
 
-          for (const receipt of saved.receipts) {
-            receipts.set(receipt.letter, receipt);
-          }
+        if (sql.size() + growth > options.capacity) {
+          throw new RecoveryStoreError({ reason: new Storage({ cause: undefined }) });
+        }
 
-          for (const receipt of receipts.values()) {
-            const next = encodeReceipt(receipt);
-            const [prior] = sql.exec(
-              "SELECT value FROM process_receipts WHERE name=? AND letter=?",
-              options.name,
-              receipt.letter,
-            );
+        // The journal's own rows are charged, its receipts and the journal row. The generation row
+        // is bookkeeping: its bytes are in `growth`, and it adds no write of its own.
+        const previous = old === undefined ? null : decode(old.value);
+        options.accounting?.change(
+          "journal",
+          changed.length + (journal === text ? 0 : 1),
+          growth,
+          clock.currentTimeMillisUnsafe(),
+          recoveryState(saved) || recoveryState(previous),
+        );
 
-            if (prior?.value === next) {
-              continue;
-            }
-
-            growth += bytes(next) - (typeof prior?.value === "string" ? bytes(prior.value) : 0);
-
-            if (prior === undefined) {
-              growth += bytes(options.name) + bytes(receipt.letter);
-            }
-
-            changed.push({ letter: receipt.letter, text: next });
-          }
-
-          if (sql.size() + growth > options.capacity) {
-            throw new LedgerError({ reason: "storage" });
-          }
-
-          const previous = old === undefined ? null : decode(old.value);
-          const isRecovery = recoveryState(saved) || recoveryState(previous);
-          options.accounting?.change(
-            "journal",
-            changed.length + (old?.value === text ? 0 : 1),
-            growth,
-            clock.currentTimeMillisUnsafe(),
-            isRecovery,
+        for (const receipt of changed) {
+          sql.exec(
+            "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
+            options.name,
+            receipt.letter,
+            receipt.text,
           );
+        }
 
-          for (const receipt of changed) {
-            sql.exec(
-              "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
-              options.name,
-              receipt.letter,
-              receipt.text,
-            );
-          }
+        if (journal !== text) {
+          sql.exec(
+            "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+            options.name,
+            text,
+          );
+        }
 
-          if (old?.value !== text) {
-            sql.exec(
-              "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
-              options.name,
-              text,
-            );
-          }
-        });
-      }),
+        if (writes) {
+          sql.exec(
+            "INSERT INTO process_recovery_generation (name,generation) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET generation=excluded.generation",
+            options.name,
+            next.generation,
+          );
+        }
+
+        return next;
+      });
+      // Only rows that committed are kept, so a refused or cut save leaves `known` as it was.
+      known = committed;
+    }),
     );
   return {
     load,
@@ -239,8 +325,10 @@ export const recoveryStore = <S extends Kept>(
  *
  * **Gotchas**
  *
- * A save that would grow the database past `capacity` fails with `storage` and keeps the old rows.
- * A row that does not decode, or that is stored under another name, fails with `bad_row`.
+ * It fails with `RecoveryStoreError`. A save that would grow the database past `capacity` fails
+ * with reason `Storage` and keeps the old rows. A row that does not decode, or that is stored
+ * under another name, fails with reason `BadRow`. With `accounting`, a save whose charge does not
+ * fit fails with `QuotasError` and keeps the old rows; a read is never charged.
  *
  * @stability unstable
  * @category services

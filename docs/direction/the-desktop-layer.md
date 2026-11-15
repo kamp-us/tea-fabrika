@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; focus per window waits until two windows on one workspace annoy; 2026-11-01: for `next/`, `@kampus/tuval`, `fabsh`, the desk as a Tier 2 program, and the menu bar in the first slice"
+summary: "Layer 5, codename Tuval; users see \"fabrika\". It places tiles, owns focus and routes keys, on the app layer's window protocol. One platform-free core with electron, browser and headless backends, its state a process in the brain like a tmux server (W1). tsh is a regular program with speculative local echo (W2). A tile shows one process and follows its `keep` when it ends (W3). Size belongs to the viewer: layouts in percent, focus per workspace (W4). Each window runs the Ctrl-B prefix itself, and a binding on a key its backend cannot have fails at load (W5)."
+---
+
 # The desktop layer
 
 **Decided 2026-10-31 by the owner,** in the walk of
@@ -95,10 +100,16 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
 ### W3: a tile shows one process
 
 ```ts
-// The desktop monitors the process the tile shows (OTP's monitor, from coordination).
-{_tag: "DOWN", ref: "m-3", process: "process_01jc9q4w7z3m8n5r2t6v0xkb4f", why: "crashed",
- to: {_tag: "client", client: "c-1", session: "process_01jc9q5b2k..."}} // lands in client:c-1/inbox
-// then the tile follows its keep:
+// The window monitors the pid its tile shows (OTP's monitor, from coordination), under a ref it
+// never used before. The door fills `to` from the checked connection: the hello's tab and the
+// socket's session.
+{_tag: "DOWN", ref: "w9", process: "process_01jc9q4w7z3m8n5r2t6v0xkb4f",
+ reason: {_tag: "crashed", phase: "step", error: "TypeError"},
+ to: {_tag: "client", client: "tab_01jc9q5a…", session: "process_01jc9q5b2k…"}}
+// lands in client:tab_01jc9q5a…/inbox, which the window reads with ledger.wait and ledger.read
+// then the tile reads processes/<name> again: a live successor is monitored as "w16" and opened;
+// none shows "Ended (crashed)" and waits on the name. Until slice 4 every such tile stays, with
+// its reason. From slice 4 the tile then follows its keep:
 //   "never"   close it, as a tmux pane closes when its command exits
 //   "failed"  keep it only after a crash, with the final view and the reason (the default)
 //   "always"  keep it, for test runs
@@ -108,10 +119,14 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
 - *As built 2026-11-09 (P33 and P34, `next/`):* each start or restart is a new
   process with its own id, `process_<26 chars>`, and `build:7` is only its
   registered name. A monitor watches one process id and never follows the name,
-  so after a restart the old monitor is done. Whether a tile watches the name or
-  monitors the successor again is open, on P18's row in
-  [Tier 1](../plan/tier-1.md). *It said: `DOWN {pid: "build:7#2"}`, and a tile
-  monitors "its process".*
+  so after a restart the old monitor is done. *It said: `DOWN {pid: "build:7#2"}`,
+  and a tile monitors "its process".*
+- *As built 2026-11-14 (P18 slice 2, `next/`):* a tile monitors the successor
+  again, the OTP way: after a DOWN it looks the name up in `processes/<name>`, as
+  `whereis/1`, and monitors the pid it finds with a fresh ref. A window's watch
+  names its tab and its socket's session, and a closed socket ends that session's
+  watches with `watcher_exited`. `keep` and closing a tile are slice 4; until then
+  every tile whose process ended stays, with its reason.
 - tmux's `remain-on-exit` has the same three. The word `keep` reads as a
   sentence: `{keep: "failed"}`.
 - A crash's reason is already recorded (C1) and goes to the desk too.

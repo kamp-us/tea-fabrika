@@ -14,16 +14,21 @@
 // with no host grant, the right read from the requester on the child's first `started` line. The
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
-import { Doorbell } from "../ledger/Ledger.ts";
+import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { valueFor } from "../ledger/Log.ts";
+import { Model } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { Children } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
-import { Owner, Recipient, Start } from "./Process.ts";
+import { brainOnly, Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, type MailRefusal, ProgramMail, ProgramMailError, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
@@ -87,6 +92,8 @@ const data = (sql: Sql) =>
   );
 
 const SEED = 119120;
+/** T1041: `mail.unread`'s largest value, the cap for laws about anything but the cap. */
+const OPEN = 16_384;
 const REQUESTER = "requester:1";
 const RESPONDER = "responder:1";
 /** Granted to the requester, registered only by a move. */
@@ -198,7 +205,8 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
-  ProgramMailLedger.layer({ grants: GRANTS }).pipe(
+  // T1041: the largest cap, so no walk here meets a full inbox; the cap's own laws are below.
+  ProgramMailLedger.layer({ grants: GRANTS, cap: OPEN }).pipe(
     Layer.provideMerge(
       ProcessManager.layer({ ...brain(), by: BRAIN }, next).pipe(
         Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(sql)))),
@@ -209,13 +217,13 @@ const layer = (sql: Sql, next: Effect.Effect<string>) =>
 /** A typed refusal: a ProgramMailError with this reason. */
 const refused = (
   answer: Result.Result<unknown, unknown>,
-  reason: typeof MailRefusal.Type | "storage",
+  reason: typeof MailRefusal.Type | "storage" | "full",
   message: string,
 ) => {
   expect(Result.isFailure(answer), message).toBe(true);
   const failure = Result.isFailure(answer) ? answer.failure : answer;
   expect(failure, message).toBeInstanceOf(ProgramMailError);
-  expect(failure, message).toMatchObject({ reason });
+  expect(failure instanceof ProgramMailError ? failure.reason._tag : undefined, message).toBe(reason);
 };
 
 /** The item a tape cell's number picks; never called on an empty list. */
@@ -543,7 +551,12 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
+        const checks = {
+          seed: SEED,
+          numRuns: runsFor({ fast: 10, full: 40 }),
+          includeErrorInReport: true,
+          endOnFailure: true,
+        };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -693,8 +706,14 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       restarted: new Set(),
       n: 0,
     };
-    const stack = ProgramMailLedger.layer({ grants: HOST }).pipe(
-      Layer.provideMerge(ChildrenLedger.layer({ grants: STARTS })),
+    const stack = ProgramMailLedger.layer({ grants: HOST, cap: OPEN }).pipe(
+      Layer.provideMerge(
+        ChildrenLedger.layer({ grants: STARTS, fabrika: Model.ref("fabrika", "p41") }).pipe(
+          // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
+          Layer.provide(RelationsMemory.layer([])),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+        ),
+      ),
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
           Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
@@ -910,8 +929,268 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
 
+// --- T1041 L6 and L8: the inbox cap and the reader's ack -----------------------------------------
+//
+// Written before the build (docs/plan/lanes/t1041-PLAN.md). The contract these laws pin:
+//   ProgramMailLedger.ts: `layer({ grants, cap })`; in the commit turn, after the saved receipt, a
+//     send answers `ProgramMailError { reason: "full" }` and appends nothing when the inbox's newest
+//     pos minus the reader's acked pos is at least `cap`.
+//   ProcessManager.ts: `ack(process, pos, from)`, written by the brain on `processes/<name>/acked`
+//     (Process.ts `acked(name)`) as `{ _tag: "acked", process, pos }`. The name is bound from the
+//     live process; a stale life's ack, or a pos at or behind the newest, changes nothing.
+
+const WRITER = "writer:1";
+const READER = "reader:1";
+/** The brain-only stream the plan names for a reader's acks. */
+const acked = (name: string) => `processes/${name}/acked`;
+
+const CapCell = fc.record({
+  move: fc.nat(),
+  pick: fc.nat(),
+  m: fc.jsonValue({ maxDepth: 1 }).map((m) => copied({ type: "letter", body: m })),
+});
+type CapCell = typeof CapCell extends fc.Arbitrary<infer A> ? A : never;
+type CapWalk = { readonly step: (cell: CapCell) => Effect.Effect<void, unknown> };
+
+const CapTape = fc
+  .commands(
+    [
+      CapCell.map((cell): fc.AsyncCommand<object, CapWalk> => ({
+        check: () => true,
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits one real service move
+        run: (_model, real) => Effect.runPromise(real.step(cell)),
+        toString: () => JSON.stringify(cell),
+      })),
+    ],
+    { maxCommands: 40, size: "max" },
+  )
+  .filter((commands) => [...commands].length >= 12);
+
+/** A cap of 1 to 4 letters: small enough that a walk meets it often. */
+const Caps = fc.integer({ min: 1, max: 4 });
+
+type CapMove = "send" | "resend" | "ack" | "ack_behind" | "ack_stale" | "restart" | "forge";
+
+/** An ack line's own fields, as this file reads it back, and as a forger would write it. */
+const AckedPos = Schema.TaggedStruct("acked", { pos: Schema.Int });
+
+const ackedPos = (entries: ReadonlyArray<unknown>) =>
+  entries.reduce<number>((top, entry) => {
+    const pos = Schema.decodeUnknownOption(AckedPos)(entry);
+    return Option.isSome(pos) ? Math.max(top, pos.value.pos) : top;
+  }, 0);
+
+/**
+ * Folds one generated walk through the real ledger with a cap of 1 to 4. The fold keeps its own
+ * newest pos and acked pos from its own moves, never read back from the product, and predicts each
+ * answer from them.
+ */
+const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<CapMove>, done: Set<string>) =>
+  Effect.fnUntraced(function* (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) {
+    const store = yield* open;
+    const next = ids(...PIDS);
+    const stack = ProgramMailLedger.layer({ grants: { [WRITER]: [READER] }, cap }).pipe(
+      Layer.provideMerge(
+        ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
+          Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql)))),
+        ),
+      ),
+    );
+    const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox | Ledger>) =>
+      effect.pipe(Effect.provide(stack), Effect.result);
+    const lives = new Map<string, string>();
+    const stale: Array<string> = [];
+
+    for (const name of [WRITER, READER]) {
+      const placed = yield* run(
+        ProcessManager.use((p) => p.start(Start.cases.first.make({ id: `start:${name}`, name, code: CODE }), from())),
+      );
+      expect(Result.isSuccess(placed), `${name} starts`).toBe(true);
+      lives.set(name, Result.getOrThrow(placed).process);
+    }
+
+    // The fold: the reader's inbox's newest pos, the newest acked pos, and each accepted send.
+    const world = { newest: 0, acked: 0, n: 0 };
+    const sent: Array<{ readonly delivery: Delivery; readonly receipt: Receipt }> = [];
+    const acks = () =>
+      run(
+        Ledger.use((ledger) =>
+          Stream.runCollect(ledger.read(acked(READER), 0)).pipe(Effect.map((all) => all.map(valueFor))),
+        ),
+      ).pipe(Effect.map((answer) => (Result.isSuccess(answer) ? answer.success : [])));
+
+    const step = Effect.fnUntraced(function* (cell: CapCell) {
+      const unread = world.newest - world.acked;
+      const can: Record<CapMove, boolean> = {
+        send: true,
+        resend: sent.length > 0,
+        ack: world.newest > world.acked,
+        ack_behind: world.acked > 0,
+        ack_stale: stale.length > 0,
+        restart: next.calls() < PIDS.length - 1,
+        forge: true,
+      };
+      const options = moves.filter((move) => can[move]);
+
+      if (options.length === 0) {
+        return;
+      }
+
+      const move = choose(options, cell.move);
+      const before = snapshot(store.sql);
+      const unchanged = (message: string) => expect(snapshot(store.sql), message).toEqual(before);
+      const writer = { name: WRITER, process: lives.get(WRITER) as string };
+
+      switch (move) {
+        case "send": {
+          const delivery: Delivery = {
+            command: `${writer.process}/${++world.n}/0`,
+            source: writer,
+            to: READER,
+            m: cell.m,
+            from: from({ by: "SHA256:program-writer" }),
+          };
+          const answer = yield* run(ProgramMail.use((mail) => mail.deliver(delivery)));
+
+          if (unread >= cap) {
+            refused(answer, "full", `L6: ${unread} unread at cap ${cap} answers full`);
+            unchanged("L6: full appends nothing to the inbox or the outbox");
+            done.add("full");
+          } else {
+            expect(Result.isSuccess(answer), `L6: ${unread} unread under cap ${cap} is saved`).toBe(true);
+            sent.push({ delivery, receipt: Result.getOrThrow(answer) as Receipt });
+            world.newest++;
+            done.add(unread === cap - 1 ? "fills" : "send");
+          }
+
+          break;
+        }
+        case "resend": {
+          const { delivery, receipt } = choose(sent, cell.pick);
+          const answer = yield* run(ProgramMail.use((mail) => mail.deliver(delivery)));
+          expect(Result.isSuccess(answer), "L6: a repeat of a saved send answers its first receipt").toBe(true);
+          expect(Result.getOrThrow(answer)).toEqual(receipt);
+          unchanged("L6: a repeat appends nothing");
+          done.add(unread >= cap ? "resend_full" : "resend");
+          break;
+        }
+        case "ack":
+        case "ack_behind": {
+          const pos =
+            move === "ack"
+              ? world.acked + 1 + (cell.pick % (world.newest - world.acked))
+              : 1 + (cell.pick % world.acked);
+          const answer = yield* run(ProcessManager.use((p) => p.ack(lives.get(READER) as string, pos, from())));
+          expect(Result.isSuccess(answer), `L8: the live reader acks pos ${pos}`).toBe(true);
+
+          if (move === "ack") {
+            world.acked = pos;
+          } else {
+            unchanged(`L8: an ack at ${pos}, at or behind ${world.acked}, changes nothing`);
+          }
+
+          done.add(move);
+          break;
+        }
+        case "ack_stale": {
+          const old = choose(stale, cell.pick);
+          yield* run(ProcessManager.use((p) => p.ack(old, world.newest + 1, from())));
+          unchanged("L8: a stale life's ack changes nothing");
+          done.add(move);
+          break;
+        }
+        case "restart": {
+          const process = lives.get(READER) as string;
+          const exited = yield* run(ProcessManager.use((p) => p.exit(process, SHUTDOWN, from())));
+          expect(Result.isSuccess(exited), "the reader stops").toBe(true);
+          const placed = yield* run(
+            ProcessManager.use((p) =>
+              p.start(
+                Start.cases.again.make({
+                  id: `restart:${process}`,
+                  name: READER,
+                  after: process,
+                  reason: "shutdown",
+                  code: CODE,
+                }),
+                from(),
+              ),
+            ),
+          );
+          expect(Result.isSuccess(placed), "the reader starts again").toBe(true);
+          lives.set(READER, Result.getOrThrow(placed).process);
+          stale.push(process);
+          done.add(move);
+          break;
+        }
+        case "forge": {
+          // A program writes through the runner's checked write, which refuses every stream the
+          // brain alone writes, and mail goes through Mailbox, which refuses the same.
+          expect(brainOnly({ stream: acked(READER), id: `forged-${++world.n}`, tag: "acked" })).toBe(true);
+          const answer = yield* run(
+            Mailbox.use((mail) =>
+              mail.send(`processes/${READER}`, `forged-${world.n}`, AckedPos.make({ pos: world.newest + 9 }), from()),
+            ),
+          );
+          expect(Result.isSuccess(answer) && Result.getOrThrow(answer)._tag, "L8: a forged ack is refused").toBe(
+            "refused",
+          );
+          unchanged("L8: a forged ack writes nothing");
+          done.add(move);
+          break;
+        }
+      }
+
+      expect(world.newest - world.acked, "L6: unread never passes the cap").toBeLessThanOrEqual(cap);
+      expect(ackedPos(yield* acks()), "L8: the acked pos is the newest forward ack").toBe(world.acked);
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
+  });
+
+const capLaw = (
+  name: string,
+  open: Effect.Effect<Store, never, Scope.Scope>,
+  moves: ReadonlyArray<CapMove>,
+  required: ReadonlyArray<string>,
+) =>
+  it.effect(
+    name,
+    () =>
+      Effect.gen(function* () {
+        const done = new Set<string>();
+        const law = capWalk(open, moves, done);
+        const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
+        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => Effect.runPromise(scoped(cap, tape)));
+        const checks = {
+          seed: SEED,
+          numRuns: runsFor({ fast: 10, full: 50 }),
+          includeErrorInReport: true,
+          endOnFailure: true,
+        };
+        // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
+        yield* Effect.promise(() => fc.assert(property, checks));
+        // An empty walk cannot pass: every case the law is about was reached.
+        expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
+      }),
+    120_000,
+  );
+
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P41 slice 1: program mail on a real store", () => {
+    capLaw(
+      "T1041 L6: over sends, acks and reader restarts, unread never passes the cap, a send answers full exactly at the cap and appends nothing, and a repeat answers its first receipt even when full",
+      open,
+      ["send", "send", "send", "resend", "ack", "restart"],
+      ["send", "fills", "full", "resend_full", "ack", "restart"],
+    );
+    capLaw(
+      "T1041 L8: the acked pos only moves forward, only the name's live process moves it, and a forged write to the acked stream is refused",
+      open,
+      ["send", "send", "ack", "ack_behind", "ack_stale", "restart", "forge"],
+      ["ack", "ack_behind", "ack_stale", "restart", "forge"],
+    );
     prop(
       "L3: a repeat delivery answers its first receipt and appends nothing; a conflicting reuse is refused",
       open,
@@ -957,7 +1236,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-          const checks = { seed: SEED, numRuns: 200, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            // Every relation the law names must be mailed across: 60 walks miss some at this seed.
+            numRuns: runsFor({ fast: 120, full: 200 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           // An empty walk cannot pass: every move ran, and every relation the law names was mailed across.

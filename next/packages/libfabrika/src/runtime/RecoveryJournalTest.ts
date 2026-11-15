@@ -9,6 +9,7 @@
 // own account, never against the runner's saved model.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -18,6 +19,7 @@ import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
@@ -43,7 +45,7 @@ export type Rig = {
 const NAME = "counter:1";
 const BUILD = "build-a";
 const SEED = 119120;
-const RUNS = 40;
+const RUNS = runsFor({ fast: 10, full: 40 });
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 
@@ -234,6 +236,14 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.step(model, msg),
+                fresh: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.fresh(model, msg),
+                update: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.update(model, msg),
               },
             })),
         };
@@ -258,6 +268,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
           backoff: { minMs: 1, maxMs: 1, resetAfterMs: 1_000_000 },
         },
         recovery: { sql: stateSql, name: NAME, capacity: 1024 ** 3 },
+        chunk: ANY_CHUNK,
         fault: (cut) =>
           Effect.suspend(() => {
             if (controls.cut !== cut) {

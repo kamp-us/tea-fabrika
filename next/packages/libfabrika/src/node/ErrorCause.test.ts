@@ -3,6 +3,7 @@
 // driver too, so they sit here: `telemetry/Sink.ts:393`, and C7 on every stored span output.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
@@ -20,7 +21,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
+const RUNS = runsFor({ fast: 10, full: 100 });
 const PROCESS = "process_0000000000e008000000000000";
 
 const opened: Array<DatabaseSync> = [];
@@ -67,7 +68,7 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, { fresh, LedgerError });
+GatewayCauseTest.suite(law, { fresh });
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),

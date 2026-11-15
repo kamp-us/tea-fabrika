@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
-import { workerLoader } from "./index.ts";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
+import { fetch, serveAsset, workerLoader } from "./index.ts";
+import type { Env } from "./runtime.ts";
 
 const unexpected = () => {
   throw new Error("unknown program reached Worker Loader");
@@ -28,25 +29,6 @@ it("an unknown program is refused before the Worker Loader is called", async () 
 
 // P16. Builder contract: `workers/index.ts` exports `serveAsset(assets, request)`, and `fetch`
 // takes the embedded asset table as its fourth argument. Nothing is read from disk.
-type Asset = { readonly hash: string; readonly type: string; readonly body: string };
-type Assets = Readonly<Record<string, Asset>>;
-
-type Api = {
-  readonly serveAsset?: (assets: Assets, request: Request) => Effect.Effect<Response, unknown>;
-  readonly fetch: (
-    request: Request,
-    env: Env,
-    config: BrainOptions,
-    assets?: Assets,
-  ) => Effect.Effect<Response, unknown>;
-};
-
-const load = async () => {
-  const api: Api = await import("./index.ts");
-  expect(api.serveAsset, "P16 not built: libfabrika/workers serves no embedded asset").toBeTypeOf("function");
-  return { ...api, serveAsset: api.serveAsset! };
-};
-
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
 const assets = fc.record({
@@ -56,7 +38,6 @@ const assets = fc.record({
 });
 
 it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore inherited routes", async () => {
-  const { serveAsset } = await load();
   await fc.assert(
     fc.asyncProperty(assets, async ({ id, body, type }) => {
       const route = `/asset${id}.js`;
@@ -98,7 +79,6 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
 });
 
 it("fetch serves the embedded table on GET and HEAD only after its host and origin checks; an unknown window path is 404", async () => {
-  const { fetch } = await load();
   await fc.assert(
     fc.asyncProperty(
       assets,
@@ -107,22 +87,25 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
       async ({ id, body, type }, port, missing) => {
         const route = `/window${id}.js`;
         const table = { [route]: { hash: sha(body), type, body } };
-        const config: BrainOptions = {
+        const config = instanceFixture({
           name: "project-test",
           port,
           person: "person-test",
           founder: "public-test",
           window: null,
           build: "build-test",
-          rateLimit: { limit: 100_000, window: 60_000 },
-        };
+        });
         // An asset request calls no binding: each double fails the law if one is called.
         const refuse = () => {
           throw new Error("an asset request reached a binding");
         };
-        const stub = new Proxy({}, { get: () => refuse });
+        const stub = new Proxy(
+          {},
+          { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(config) : refuse) },
+        );
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
+          INSTANCE: JSON.stringify(config),
           CONNECTION: { getByName: () => stub },
           PROJECT: { getByName: () => stub },
         } as unknown as Env;
@@ -154,3 +137,9 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
     { seed: 119120, numRuns: 30 },
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

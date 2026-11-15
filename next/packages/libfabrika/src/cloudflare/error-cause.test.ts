@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
@@ -11,6 +13,7 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
 import { programBox } from "./box.ts";
 import { connectionLayer } from "./connection.ts";
@@ -65,6 +68,23 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
   Object.keys(made).map((method) => ({ client, method })),
 );
 
+// Ticket 502 slices S1 and S2: a ProcessClient call and a Connection call other than `fetch` go
+// through Alchemy's typed stub inside `reach`, so the cause is the stub's RpcCallError, and that
+// error holds the rejection. A typed stub serves `fetch` through Alchemy's fetcher, not as a call:
+// the fetcher fails typed with the rejection as its cause. Plant: `unreachable(error.cause)`.
+const throughStub = (client: string, method: string) =>
+  client === "process" || (client === "gateway" && method !== "fetch");
+
+/** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
+const kept = (client: string, method: string, cause: unknown) => {
+  if (!throughStub(client, method)) {
+    return cause;
+  }
+
+  expect(cause, `${client}.${method} keeps Alchemy's RpcCallError`).toBeInstanceOf(RpcCallError);
+  return cause instanceof RpcCallError ? cause.cause : undefined;
+};
+
 describe("T695, the platform clients keep what the platform rejected with", () => {
   // C5, platform.ts:12, every `catch: unreachable` in that file. Plant: the zero-argument callback.
   it("vector: the shared callback serves at least every client method the adapters call", () => {
@@ -73,7 +93,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
   });
 
   law(
-    "C5: a generated rejection on any client call is `unreachable` with that very value as its cause",
+    "C5: a generated rejection on any client call is `unreachable` and keeps that very value, as its cause or in the one RpcCallError a Connection call wraps it in",
     fc.record({
       steps: fc.array(fc.record({ call: fc.constantFrom(...calls), failure: failures }), {
         minLength: 1,
@@ -85,10 +105,17 @@ describe("T695, the platform clients keep what the platform rejected with", () =
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
-          const error = yield* Effect.flip((method as () => Effect.Effect<unknown, LedgerError>)());
+          // A real Request, so a client that hands `fetch` to a typed stub has one to read.
+          const error = yield* Effect.flip(
+            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
+              new Request("http://127.0.0.1:8787/client/a/b"),
+            ),
+          );
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
-          expect(error.cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
+          expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
+            failure,
+          );
         }
       }),
   );
@@ -98,7 +125,12 @@ describe("T695, the platform clients keep what the platform rejected with", () =
 const loader = (describe: () => Promise<unknown>): WorkerLoader =>
   fake({ get: () => ({ getEntrypoint: () => ({ describe }) }) });
 
-const programs = { counter: { hash: "h-1", source: "export default {}" } };
+const programs = {
+  counter: {
+    hash: "9aeb8d59b4d483ca6298e9a450fbf37dfd2b4c63990135ab1d040d76314087ec",
+    source: "export default {}",
+  },
+};
 
 describe("T695, the worker loader keeps why a program did not load", () => {
   // C1, index.ts:30. Plant: `const fail = () => new ProgramDown({ reason: "load" })`.
@@ -167,7 +199,16 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
   });
 
 const env: Env = fake({
-  PROJECT: { getByName: () => rejecting(new Error("no project in this law")) },
+  INSTANCE: JSON.stringify(instanceFixture({ name: "p", port: 8787 })),
+  PROJECT: {
+    getByName: () =>
+      new Proxy(rejecting<object>(new Error("no project in this law")), {
+        get: (target, key) =>
+          key === "settingsStart"
+            ? async () => StartsTest.reply(instanceFixture({ name: "p", port: 8787 }))
+            : Reflect.get(target, key),
+      }),
+  },
   RECORD: { getByName: () => rejecting(new Error("no record in this law")) },
   CONNECTION: { getByName: () => rejecting(new Error("no connection in this law")) },
   PROCESS: { getByName: () => rejecting(new Error("no process in this law")) },
@@ -175,7 +216,7 @@ const env: Env = fake({
   LOADER: loader(() => Promise.resolve(null)),
 });
 
-const config: BrainOptions = fake({ name: "p", port: 8787 });
+const config: BrainOptions = fake(instanceFixture({ name: "p", port: 8787 }));
 
 describe("T695, the object adapters keep what failed", () => {
   // C3, record.ts:22. Plant: `Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 }))`.
@@ -294,8 +335,8 @@ describe("T695, the public route keeps what failed", () => {
     fc.record({ head: fc.stringMatching(/^[a-z0-9]{0,8}$/), broken: fc.constantFrom("%E0%A4%A", "%", "%zz", "%C3") }),
     ({ head, broken }) =>
       Effect.gen(function* () {
-        const request = new Request(`http://127.0.0.1:${config.port}/grant/client/${head}${broken}`, {
-          headers: { host: `127.0.0.1:${config.port}` },
+        const request = new Request(`http://127.0.0.1:${8787}/grant/client/${head}${broken}`, {
+          headers: { host: `127.0.0.1:${8787}` },
         });
         const error = yield* Effect.flip(fetch(request, env, config));
         expect(error).toBeInstanceOf(LedgerError);
@@ -304,3 +345,9 @@ describe("T695, the public route keeps what failed", () => {
       }),
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

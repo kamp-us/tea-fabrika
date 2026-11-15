@@ -4,11 +4,14 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { integrationTestName } from "./integration-test-name.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
+import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
+import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
 import { noDataTaggederror } from "./no-data-taggederror.ts";
@@ -29,6 +32,7 @@ import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
+import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
@@ -36,11 +40,15 @@ import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
+import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
+import { runsFromDepth } from "./runs-from-depth.ts";
+import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
+import { writtenServiceType } from "./written-service-type.ts";
 
 const plugin: Plugin = {
   meta: { name: "fabrika" },
@@ -48,11 +56,14 @@ const plugin: Plugin = {
     "door-is-library": doorIsLibrary,
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
+    "integration-test-name": integrationTestName,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
+    jsdocs,
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
+    "no-cause-squash": noCauseSquash,
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
     "no-data-taggederror": noDataTaggederror,
@@ -73,6 +84,7 @@ const plugin: Plugin = {
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
     "no-stage-word": noStageWord,
+    "no-static-layer": noStaticLayer,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
     "no-wall-clock": noWallClock,
@@ -81,10 +93,14 @@ const plugin: Plugin = {
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
+    "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
+    "runs-from-depth": runsFromDepth,
     "service-id": serviceId,
+    "service-contract": serviceContract,
     "use-import-extensions": useImportExtensions,
+    "written-service-type": writtenServiceType,
   },
 };
 

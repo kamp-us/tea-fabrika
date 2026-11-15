@@ -30,8 +30,8 @@
 //                      phase's time goes on the step's entry in state/<lane>.json as `phases`
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
-//   reading    Gather  collect the tree and sign it, then the commits, their step notes, exam
-//                      paths, leaks and the report
+//   reading    Gather  collect the tree and sign it, then the commits, the commits check's held
+//                      rules, exam paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
 //                      is an ask: a box has no network, so the lead refreshes it outside)
@@ -59,6 +59,26 @@
 // before it is stopped and the step is stuck. A stuck line, row and state entry carry its `fault`,
 // `tool` or `work`, read from the stuck reason (`faultFrom`, decision 0076); the line also carries
 // the turn's list-price dollars, which the chain's backstop counts.
+//
+// Where a step starts: at --from; else at the newest pushed tip of the branch or of its -wip
+// backup, unless the lane's saved head (state/<lane>.json) has moved past it (lane.ts
+// `startHead`); else origin/main. So a lead commit pushed to -wip (a merge of main, a lockfile) is
+// where the next step starts. A plan reads the main checkout and takes no --from. A step in a box
+// gets the approved plan's text, whole, in its prompt, since its box reads nothing outside itself.
+// A tests, build or mutation step waits while `pgrep -x tsgo` finds one; where pgrep cannot list
+// processes, that wait and the agent cap are skipped with one line each (./pgrep.ts).
+//
+// What the outcome line's `reason` says. The step's word is its typed answer, or, for a report with
+// none, its one `answer:` line outside a code fence: none, two or more, or one that names no verb is
+// stuck:no_answer, and so is a review's done without a merge-ready first line, or with a
+// `changes: <n>` line, n above 0. A build's done with no commit needs a `laws: green <paths>` line,
+// and a tests step's needs plant records in its typed answer and no changed file; else it is
+// stuck:no_commit. When the commits check holds a step, the reason names each rule and commit, five
+// at most. A refused push or draft is stuck:push_failed. A mutation brief with no `RELATED=` line
+// is a usage error, and a container run that is stuck gives a reason that starts `mutbox:`. A kept
+// box ends the reason with `(box kept: ...)`, saying what is left in it.
+// A review that leaves a changed file or moves the head is stuck:review_committed, and a plan that
+// fails `plancheck.sh --draft` is sent back to plan, with what the check said.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -85,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -183,7 +203,7 @@ type StuckReason = Extract<Outcome, { kind: "stuck" }>["why"];
 
 /**
  * Each stuck reason drive names, sorted once. A new reason fails the type check until it is sorted
- * here. A box, an agent harness, a fetch, a read, a push, a signature or a report without an answer
+ * here. A box, an agent harness, a fetch, a read, a push, a failed sign or a report without an answer
  * failing is the tooling. A review that changed files, a leak, a done with no commit, a commit that
  * breaks the commits check and a step that ran out of its minutes are the work. `unsigned` and
  * `step_said` read their reason too (`faultFrom`).
@@ -327,6 +347,7 @@ const Read = Schema.Struct({
   /** `null`: the fetch failed, with why in `problem`. */
   head: Schema.NullOr(Schema.String),
   commits: Schema.Number,
+  /** What the commits check held the step on (`heldBy`). A missing signature is never in it (0161). */
   unsigned: Schema.Array(Schema.String),
   exam: Schema.Array(Schema.String),
   /** `file:line` of each added line that leaks; never the text. */
@@ -906,37 +927,6 @@ const leaksIn = (diff: string, repo: string): string[] => {
   return hits;
 };
 
-const unsignedIn = (env: Env, ask: Ask, head: string): string[] => {
-  // stepcommit signs mutation as tests for now.
-  const expect = ask.step === "mutation" ? "tests" : ask.step;
-  const shas = sh("git", ["-C", env.MAIN, "rev-list", `${ask.base}..${head}`])
-    .out.split("\n")
-    .filter(Boolean);
-  return shas.flatMap((sha) => {
-    const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
-
-    if (r.code !== 0) {
-      return [`${sha.slice(0, 8)} has no step note`];
-    }
-
-    const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };
-
-    if (note._tag !== "attested") {
-      return [`${sha.slice(0, 8)} note is not attested`];
-    }
-
-    if (note.step !== expect) {
-      return [`${sha.slice(0, 8)} signed ${note.step}, not ${expect}`];
-    }
-
-    if (String(note.ticket) !== ask.ticket) {
-      return [`${sha.slice(0, 8)} signed for ticket ${note.ticket}, not ${ask.ticket}`];
-    }
-
-    return [];
-  });
-};
-
 /** The steps signed on the lane's own commits, from where it left main. */
 const stepsIn = (env: Env, root: string, head: string): Set<string> =>
   new Set(
@@ -1196,6 +1186,11 @@ export const commitsSaid = (
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
 };
 
+/** What the commits check holds the step on: nothing, or one line that names each rule it held.
+ * Exit 1 holds unless every stuck answer it gave was waived. */
+export const heldBy = (check: { code: number; out: string; err: string }, laneSteps: ReadonlySet<string>): string[] =>
+  checkHolds(check.code, check.out, laneSteps) ? [commitsSaid(check, laneSteps)] : [];
+
 /**
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
  * check's no; any other failure, or a line naming no known check, is the box failing.
@@ -1366,7 +1361,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("git log -p", diff);
         }
 
-        // The repo's own commit check verifies the signatures; this step's name is checked here.
+        // The repo's own commit check. A commit with no signature never holds a step (0161); the
+        // rules it still gives for signed commits do (`laneStuck`).
         const check =
           commits === 0
             ? { code: 0, out: "", err: "" }
@@ -1380,14 +1376,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("commits check", check);
         }
 
-        // Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
-        const laneSteps = stepsIn(env, ask.root, head);
-        const holds = checkHolds(check.code, check.out, laneSteps);
-        const unsigned = [...(holds ? [commitsSaid(check, laneSteps)] : []), ...unsignedIn(env, ask, head)];
         return {
           head,
           commits,
-          unsigned,
+          unsigned: heldBy(check, stepsIn(env, ask.root, head)),
           exam,
           leaks: leaksIn(diff.out, env.GH_REPO),
           left: empty.left,
@@ -1860,15 +1852,15 @@ export const dockerHolder = (lock: string | null, alive: (pid: number) => boolea
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
 };
 
-const isAlive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM: the process exists and is someone else's.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
+const isAlive = (pid: number) =>
+  Result.match(
+    Result.try(() => process.kill(pid, 0)),
+    {
+      onSuccess: () => true,
+      // EPERM: the process exists and is someone else's.
+      onFailure: (error) => (error as NodeJS.ErrnoException).code === "EPERM",
+    },
+  );
 
 /**
  * Whether drive holds `BOXES/state/electron.lock` for the whole step. The box cannot write the
@@ -1889,24 +1881,11 @@ const flag = (args: string[], name: string) => {
   return i === -1 ? undefined : args[i + 1];
 };
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const alive = (pid: number) => Result.isSuccess(Result.try(() => process.kill(pid, 0)));
 
 /** Takes the lock file for this pid; `false` when another process holds it. */
-const lockTaken = (lock: string): boolean => {
-  try {
-    writeFileSync(lock, String(process.pid), { flag: "wx" });
-    return true;
-  } catch {
-    return false;
-  }
-};
+const lockTaken = (lock: string): boolean =>
+  Result.isSuccess(Result.try(() => writeFileSync(lock, String(process.pid), { flag: "wx" })));
 
 /**
  * A pid lock file, the one kind the lead's tools keep: `null` once this process holds it (taken

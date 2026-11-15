@@ -1,3 +1,8 @@
+/**
+ * One Rolldown bundle as an Effect, and the program bundles built on it.
+ *
+ * @stability unstable
+ */
 import { Cause, Effect, Exit, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
@@ -13,9 +18,31 @@ import {
 import { BuildError, hash } from "../../runtime/Built.ts";
 import type { ProgramSource } from "../../runtime/Execution.ts";
 
-export { BuildError, hash } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  BuildError,
+  /**
+   * Computes the SHA-256 of a text's UTF-8 bytes as lowercase hex, re-exported from the runtime's
+   * build tables.
+   *
+   * @stability unstable
+   * @category combinators
+   */
+  hash,
+} from "../../runtime/Built.ts";
 
-/** Which bundle of a build this is. Recorded on its span, with no path or content. */
+/**
+ * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,
+ * and it decides which imports the bundle leaves external.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Phase = "program" | "window" | "tab" | "brain";
 
 type Options = {
@@ -43,11 +70,38 @@ const emitted = (output: RolldownOutput) =>
     0,
   );
 
+/**
+ * Runs one Rolldown bundle and answers its output: ES modules for the browser platform, generated
+ * in memory and never written to disk.
+ *
+ * **Details**
+ *
+ * `options.phase` decides which imports stay external: `cloudflare:workers` by default, that and
+ * every `node:` module for a brain, and none for a tab. The span records the phase, the Rolldown
+ * and Effect versions that ran, and how many files and bytes came out. A failure is a `BuildError`
+ * with `reason: "bundle"`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const bundle = Effect.fn("build.bundle")(function* (
   input: InputOption,
   plugins: Array<Plugin>,
   options: Options = {},
 ) {
+  const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  const root = options.cwd ?? path.resolve();
+  const relative = (file: string) => {
+    const url = URL.parse(file);
+    let local = file;
+
+    if (url?.protocol === "file:") {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
+      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.catch(() => Effect.succeed(url.pathname))));
+    }
+
+    return path.isAbsolute(local) ? path.relative(root, local) : local;
+  };
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
@@ -61,7 +115,20 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // Rolldown notes each "use client" it drops; a bundle here has no server half.
     onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
       if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
-        handler(level, log);
+        let message = log.message;
+
+        // Rolldown has already embedded file names in the message before calling onLog.
+        for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
+          if (file !== undefined) {
+            message = message.replaceAll(file, relative(file));
+          }
+        }
+
+        handler(level, {
+          ...log,
+          message,
+          ...(log.loc?.file === undefined ? {} : { loc: { ...log.loc, file: relative(log.loc.file) } }),
+        });
       }
     },
     platform: "browser" as const,
@@ -102,7 +169,14 @@ export const bundle = Effect.fn("build.bundle")(function* (
   );
 });
 
-/** Each program's sealed Worker Loader module: its declaration wrapped in libfabrika's box. */
+/**
+ * Bundles each selected program as one sealed Worker Loader module: its declaration wrapped in
+ * libfabrika's program box. It answers, by program name, each module's source with the SHA-256 of
+ * that source.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (options: {
   /** The folder the generated entry sits in, so package names resolve from there. */
   readonly root: string;

@@ -7,7 +7,7 @@
 //   node gcloop.ts plist                                the timer's launchd unit, filled in for this laptop
 //
 // No step's start runs or waits for `box.sh gc` any more. A launchd timer starts a sweep every
-// period (`GC_MINUTES`, default 30), and the catch-up script kicks one after each merge. Like the kubelet's
+// period (`GC_MINUTES`, default 30), and `land.ts merged` kicks one after each merge. Like the kubelet's
 // garbage collection, which runs on its own loop and never inside "start a pod".
 //
 //   a sweep starts       it takes BOXES/state/gc.lock; one is held by a live process: it records
@@ -19,6 +19,18 @@
 //                        before and after; then the lock goes
 //   status               the newest sweep that ran (not a skipped one), and `LATE` when it started
 //                        more than two periods ago, or none is recorded
+//
+// The timer is installed once per laptop, from the main checkout (the unit's template is ../gc.plist):
+//
+//   install     node .agents/skills/lead/scripts/gcloop.ts plist > ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//               launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//   uninstall   launchctl bootout gui/$(id -u)/local.tea-fabrika.gc
+//               rm ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+//
+// `launchctl list local.tea-fabrika.gc` lists it: its pid while a sweep runs, and the last exit
+// status. The `bootout` line alone stops it. `plist` writes this laptop's Node path and the period
+// into the unit, so a new `GC_MINUTES` or a new Node needs both install lines again. The timer's own
+// output goes to BOXES/state/gc-timer.log.
 //
 // Existing tools looked at for the timer (decision 0040):
 //   - launchd, a user LaunchAgent with StartInterval

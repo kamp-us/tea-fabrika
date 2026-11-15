@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11"
+summary: "Step 1 to 3 of decision 0059's order, before `next/`'s pipeline is designed, redone on the teams where agents do most of the work (0059's ticket 645 amendment); today's version is the evidence. The loop in plain words (decide, shape, do, check, ship, learn), then in fabrika's words, then seven principles: a person's attention is the scarce budget (F1); a ticket with intent, run to one pull request with proof (F2); check in layers and place people by risk (F3); every miss becomes a check the same day, and stale rules leave (F4); the repo is the memory and the top file a map (F5); one writer per change (F6); code holds the edges, the agent the path inside a step (F7). The first draft's W1 to W6 are mapped onto them. Ticket 574 traced through it. From experiment 250."
+---
+
 # How we get work done
 
 **Decided 2026-11-11.** Redone on the teams where agents do most of the work, as 0059's amendment
@@ -39,7 +44,7 @@ cost     $19.47 at list price, 70 agent minutes; $8.81 went to rounds that stall
 ## Which version
 
 - **Today's version:** all the evidence. Ticket 574, the lead's tooling (`drive.ts`, `chain.ts`,
-  `catchup.sh`) and today's paused lane (`packages/pipeline`).
+  `land.ts`) and today's paused lane (`packages/pipeline`).
 - **`next/`:** what the principles are for. Its pipeline is designed on them, last, as 0059 says.
   None of the loop is built in `next/` yet.
 
@@ -108,7 +113,7 @@ is **event** in `next/` (renamed 2026-11-08); today's code says fact.
 | Shape | a plan file approved on its line 1, by the lead when it builds a decided note | a `plan` with criteria and properties, approved by version and hash |
 | Do | `test_writer` and `build`, run by `drive.ts`, chained by `chain.ts` (a tea machine) | steps are tea machines that answer in five verbs; an `attested` link per commit, checked by `next/`'s exam |
 | Check | `mutation`, `review`, CI, `leakgrep.sh`, `loosening.sh`, the lead's hand check | `mutation`, `review`, the `exam`; a person only for a `judgment` |
-| Ship | `catchup.sh` under the lead (0014) | `ship`, the one merge authority |
+| Ship | `land.ts queue` under the lead, into GitHub's merge queue (0014, 0162) | `ship`, the one merge authority |
 | Learn | `field/` rows and notes, findings a person rates, `.decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
 
 The full table, with a source for each name, is in experiment 250, part 8.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -119,7 +120,7 @@ const cell = fc.record({
 
 type Cell = typeof cell extends fc.Arbitrary<infer A> ? A : never;
 
-const q5Runs = 200;
+const q5Runs = runsFor({ fast: 20, full: 200 });
 const s2Runs = 40;
 
 // Effect Arbitrary has no command-list generator. A generated seed draws fast-check's tape.
@@ -272,7 +273,7 @@ export const suite = (driver: Driver) =>
           expect(replies(s, change)[0]).toHaveProperty("ref", ref);
           allNormal(s);
         }).pipe(Effect.scoped),
-      { arbitrary: { seed: 119120, runs: 30 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 30 }) } },
     );
     it.effect("scenario: QR1 three real children land in arrival order and end normally", () =>
       Effect.gen(function* () {
@@ -446,6 +447,7 @@ export const suite = (driver: Driver) =>
                   ],
                   [value.text, value.token],
                 );
+                return s;
               });
               // These faults are consumed before random moves may abandon the first child.
               yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
@@ -455,12 +457,13 @@ export const suite = (driver: Driver) =>
               yield* h.enqueue(1, "initial");
               yield* inspect;
               yield* finish(h);
-              yield* inspect;
+              // Each look's snapshot is the state the next move reads: nothing runs in between.
+              let seen = yield* inspect;
               const cells: Array<Cell> = [];
               fc.modelRun(() => ({ model: { cells }, real: {} }), commands);
 
               for (const cell of cells) {
-                const state = (yield* h.snapshot).model;
+                const state = seen.model;
                 const current = state?._tag === "landing" || state?._tag === "starting" ? state.current.change : null;
                 const moves = ["enqueue", "drop", "tick", "fault", "green", "reopen"];
 
@@ -506,10 +509,10 @@ export const suite = (driver: Driver) =>
                   }
                 }
 
-                yield* inspect;
+                seen = yield* inspect;
               }
 
-              const s = yield* h.snapshot;
+              const s = seen;
               expect(s.letters.some((l) => l.name === "queue:1")).toBe(true);
               expect(s.letters.some((l) => l.name === "lane:1")).toBe(true);
               expect(started(s).length).toBeGreaterThan(0);
@@ -521,7 +524,8 @@ export const suite = (driver: Driver) =>
           }),
         ),
       // Each world finishes a faulted landing, then walks up to 24 moves, including store reopens.
-      // Measured 35.3 s for 40 worlds locally; 3 s per world covers that counted work.
+      // Measured 14.6 s for 40 worlds locally, 35.3 s before the leak check asserted once for each
+      // look; 3 s per world covers that counted work.
       { timeout: s2Runs * 3_000, arbitrary: { seed: 119120, runs: s2Runs, size: 24 } },
     );
   });

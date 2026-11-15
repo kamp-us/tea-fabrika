@@ -1,7 +1,7 @@
 ---
 id: 0217
 title: The new version grows in next/ beside today's, imports nothing from it, and the pull request that switches a job over deletes the old part once its tests are ported
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md), [0543](0543-next-follows-approved-guidelines-as-written.md)
 date: 2026-10-31
 tags: [clean-slate, next, todays-version, strangler-fig, deletion]
 ---
@@ -36,6 +36,9 @@ fig. See [clean slate](../docs/direction/clean-slate.md). AGENTS.md says the sam
 - Today's version takes only fixes that daily use or CI needs, the UX work the owner picks
   ([0063](0063-todays-app-lanes-share-the-slots.md)), and tryouts the owner asks for. What a
   tryout teaches goes into `next/` as a lesson, rethought, never copied.
+
+An approved guideline's rules are not rethought: `next/` follows them as written
+([0543](0543-next-follows-approved-guidelines-as-written.md)); the rest of this rule still holds.
 
 ## Consequences
 

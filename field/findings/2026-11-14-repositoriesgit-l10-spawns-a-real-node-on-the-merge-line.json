@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-repositoriesgit-l10-spawns-a-real-node-on-the-merge-line",
+  "date": "2026-11-14",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts",
+    "line": 330
+  },
+  "says": "next/: RepositoriesGit.test.ts's L10 (\"success, refusal and interruption release every acquired Git child and temporary directory\") runs in the `next` project, which pull requests and the merge queue run, and on every third tape cell it starts a real Node child (`ChildProcess.make(process.execPath, [\"-e\", \"setInterval(() => {}, 1000)\"])`), a spawned process, which 0536 keeps off the merge line. Its git commands do run on memory git; only this stand-in child is real.",
+  "proof": "GitLaws.test-support.ts builds memory git over the platform's spawner, which runs every command that is not git. On 2026-11-14 a scratch script in the worktree (deleted after) provided `GitLaws.gits`' memory services and ran `process.execPath -e \"console.log(process.pid)\"` through `ChildProcessSpawner.string`: it printed `layers: memory this pid: 54233 child pid: 54953`, a second real process. The lint rule `fabrika/integration-test-name` does not fire, since it reads `node:child_process` calls only, not Effect's `ChildProcess.make`.",
+  "cost": "Every pull request that reaches RepositoriesGit.test.ts starts dozens of real Node processes (100 runs of tapes of 1 to 4 cells, a child for every cell whose number is 2 mod 3), against 0536's binding constraint, and the integration-name rule cannot see it. Moving L10 to an `*.integration.test.ts` file would take the law off the merge line; an in-memory child handle that never ends would keep it there.",
+  "head": "22eef08a570b02063de7097cb899da493b48972e",
+  "ticket": "kamp-us/tea-fabrika#997",
+  "pr": null
+}
