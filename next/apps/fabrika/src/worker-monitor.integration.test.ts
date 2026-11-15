@@ -1,9 +1,11 @@
-// Program watch (docs/plan/quests/watch-PLAN.md, amendment A-Workerd), next/: law M13 on real workerd,
-// sockets, object storage and the private local instance capability, set up the way
-// worker-mail.integration.test.ts sets up its two Process objects. A program in one Process object
-// monitors a program in another by its registered name, the other exits, and the first folds
-// `monitor_ok` and then one `DOWN`. Host-only: it starts a real instance, so it runs in CI's full run
-// only, never on the laptop (0536, 0178).
+// Program watch (docs/plan/quests/watch-PLAN.md, amendment A-Workerd), next/: laws M13 and M16 on real
+// workerd, sockets, object storage and the private local instance capability, set up the way
+// worker-mail.integration.test.ts sets up its two Process objects. M13: a program in one Process
+// object monitors a program in another by its registered name, is refused for a name nobody
+// registered, ends one of its watches, and when the other exits folds one `DOWN`, for the watch it
+// kept. M16: that `DOWN` folds with no call into the watcher's object after its watch is set.
+// Host-only: it starts a real instance, so it runs in CI's full run only, never on the laptop
+// (0536, 0178).
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,29 +71,34 @@ const identity = () => {
 
 type Key = ReturnType<typeof identity>;
 
-// The two programs, as source the real app build bundles. The reader watches the name it is told and
-// keeps every answer and DOWN it folds, in order; the writer ends itself with the built-in `exit`.
+// The two programs, as source the real app build bundles. The reader watches the name it is told,
+// ends the watch it is told to forget, and keeps every answer and DOWN it folds, in order; the writer
+// ends itself with the built-in `exit`.
 const READER = `
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
-import {monitor} from "@kampus/libfabrika/runtime/Monitor";
+import {demonitor, monitor} from "@kampus/libfabrika/runtime/Monitor";
 const Model = Schema.Struct({log: Schema.Array(Schema.Json)});
 const Msg = Schema.Union([
  Schema.Struct({type: Schema.Literal("watch"), name: Schema.String}),
+ Schema.Struct({type: Schema.Literal("forget"), ref: Schema.String}),
  Schema.Struct({type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String, name: Schema.optionalKey(Schema.String), reason: Schema.Json})
 ]);
 const logged = (s, entry) => ({log: [...s.log, entry]});
-const machine = Machine.make({model: Model, msg: Msg, cmds: [monitor],
+const machine = Machine.make({model: Model, msg: Msg, cmds: [monitor, demonitor],
  init: (loaded) => [loaded ?? {log: []}, []],
  update: {
   watch: (s, m) => [s, [monitor({name: m.name})]],
   monitor_ok: (s, m) => [logged(s, {type: "monitor_ok", ref: m.value.ref, process: m.value.process, name: m.value.name}), []],
   monitor_err: (s, m) => [logged(s, {type: "monitor_err", reason: m.error._tag}), []],
+  forget: (s, m) => [s, [demonitor({ref: m.ref})]],
+  demonitor_ok: (s) => [logged(s, {type: "demonitor_ok"}), []],
+  demonitor_err: (s) => [logged(s, {type: "demonitor_err"}), []],
   DOWN: (s, m) => [logged(s, {type: "DOWN", ref: m.ref, process: m.process, name: m.name ?? null, reason: m.reason}), []]
  }});
 export const program = Program.make({name: "m13/reader", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
- inputs: {watch: "Watch a registered name", DOWN: "A process this program monitors has ended"},
+ inputs: {watch: "Watch a registered name", forget: "End a watch", DOWN: "A process this program monitors has ended"},
  outputs: {}, writes: {}, wake: () => null});
 `;
 
@@ -197,7 +204,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
       })
     ).error,
   ).toBeUndefined();
-  return { call };
+  return { call, next };
 };
 
 type Fixture = {
@@ -313,34 +320,112 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 /** One letter from the door's client to a process. */
 const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
 
+/** Whether a pushed view update carries a log row of this type, however the update is cut. */
+const carries = (value: unknown, type: string): boolean =>
+  Array.isArray(value)
+    ? value.some((item) => carries(item, type))
+    : typeof value === "object" &&
+      value !== null &&
+      (Reflect.get(value, "type") === type || Object.values(value).some((item) => carries(item, type)));
+
+/** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
+const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>
+  client.next(
+    (frame) =>
+      (frame.method === "view.patch" || frame.method === "view.whole") &&
+      frame.params?.pid === pid &&
+      carries(frame.params, type),
+  );
+
 // scenario: only workerd runs two Process objects whose watch crosses the Project's real RPC.
-it("scenario: M13, a program in one Process object monitors a program in another by name, the other exits, and the first folds monitor_ok then one DOWN", async () => {
+it("scenario: M13, a program in one Process object is refused a watch on a name nobody registered, monitors a program in another by name twice, ends the first watch, and when the other exits folds one DOWN, for the watch it kept", async () => {
   await world(async (_instance, fixture) => {
     const reader = await fixture.start("reader:1");
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
+    const send = async (pid: string, id: string, m: unknown) =>
+      expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
+
+    // The refusal is reply data across the Project's RPC, and the reader folds it as the Cmd's error.
+    await send(reader, "watch-0", { type: "watch", name: "absent:1" });
+    const refused = await until("the reader folds its refusal", log, (rows) => rows.length > 0);
+    expect(refused, "M13: a name nobody registered is refused no_name").toEqual([
+      { type: "monitor_err", reason: "no_name" },
+    ]);
+
+    await send(reader, "watch-1", { type: "watch", name: "writer:1" });
+    await send(reader, "watch-2", { type: "watch", name: "writer:1" });
+    const answered = await until("the reader folds both monitor answers", log, (rows) => rows.length > 2);
+    const watched = (ref: unknown) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
+    expect(answered, "M13: each watch is answered monitor_ok, bound to the writer's life").toEqual([
+      ...refused,
+      watched(expect.stringMatching(new RegExp(`^${reader}/`))),
+      watched(expect.stringMatching(new RegExp(`^${reader}/`))),
+    ]);
+    const [dropped, kept] = [answered[1].ref, answered[2].ref];
+    expect(kept, "M13: each watch has its own ref").not.toBe(dropped);
+
+    // The demonitor crosses the same RPC: the first watch ends before the writer does.
+    await send(reader, "forget-1", { type: "forget", ref: dropped });
+    const forgotten = await until("the reader folds its demonitor answer", log, (rows) => rows.length > 3);
+    expect(forgotten, "M13: the demonitor is answered").toEqual([...answered, { type: "demonitor_ok" }]);
+
+    // The writer's own step ends it with the built-in exit; the law reads only what the reader folds.
+    // The exit's turn writes each live watch's DOWN in the order the watches were made, so a DOWN
+    // for the dropped watch would fold before the kept one's.
+    await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
+    const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
+      rows.some((r) => r.type === "DOWN" && r.ref === kept),
+    );
+    expect(
+      folded,
+      "M13: exactly one DOWN, for the kept ref, the writer's life, its name and normal; none for the dropped ref",
+    ).toEqual([
+      ...forgotten,
+      { type: "DOWN", ref: kept, process: writer, name: "writer:1", reason: { _tag: "normal" } },
+    ]);
+  });
+}, 180_000);
+
+// scenario: only workerd has a Process object that stays asleep until something calls it or its alarm fires.
+it("scenario: M16, a watcher that only waits folds the DOWN with no call into its object after the watch is set", async () => {
+  await world(async (_instance, fixture) => {
+    const reader = await fixture.start("reader:1");
+    const writer = await fixture.start("writer:1");
+    const client = await fixture.connect("asleep");
+    // The one open: from here the brain pushes the reader's view, and the law only listens.
+    expect((await client.call("view.open", { pid: reader })).result?.view, "M16: the reader starts empty").toEqual({
+      log: [],
+    });
 
     expect(
       await client.call("process.send", letter(reader, "watch-1", { type: "watch", name: "writer:1" })),
     ).toMatchObject({ result: { _tag: "accepted" } });
-    const answered = await until("the reader folds its monitor answer", log, (rows) => rows.length > 0);
-    expect(answered, "M13: the watch is answered monitor_ok, bound to the writer's life").toEqual([
-      { type: "monitor_ok", ref: expect.stringMatching(new RegExp(`^${reader}/`)), process: writer, name: "writer:1" },
-    ]);
-    const ref = answered[0].ref;
+    await pushed(client, reader, "monitor_ok");
 
-    // The writer's own step ends it with the built-in exit; the law reads only what the reader folds.
+    // Nothing below calls the reader's object: the quit goes to the writer's, and the reader has no
+    // timer. Polling view.open here would itself catch the reader's inbox up and hide a missing wake.
     await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
-    const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
-      rows.some((r) => r.type === "DOWN"),
-    );
+    await pushed(client, reader, "DOWN");
+
     expect(
-      folded,
-      "M13: monitor_ok, then exactly one DOWN for the same ref, the writer's life, its name and normal",
+      (await client.call("view.open", { pid: reader })).result?.view?.log,
+      "M16: monitor_ok, then exactly one DOWN for the same ref, the writer's life, its name and normal",
     ).toEqual([
-      { type: "monitor_ok", ref, process: writer, name: "writer:1" },
-      { type: "DOWN", ref, process: writer, name: "writer:1", reason: { _tag: "normal" } },
+      {
+        type: "monitor_ok",
+        ref: expect.stringMatching(new RegExp(`^${reader}/`)),
+        process: writer,
+        name: "writer:1",
+      },
+      {
+        type: "DOWN",
+        ref: expect.stringMatching(new RegExp(`^${reader}/`)),
+        process: writer,
+        name: "writer:1",
+        reason: { _tag: "normal" },
+      },
     ]);
   });
 }, 180_000);
