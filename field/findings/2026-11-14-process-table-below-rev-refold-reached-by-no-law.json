@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-process-table-below-rev-refold-reached-by-no-law",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/ProcessManager.ts",
+    "line": 186
+  },
+  "says": "In next/, the refold from rev 0 when a newly registered name's stream reaches below the saved rev, and the read of that stream from 0 in ProcessTable.after (Process.ts:485), are reached by no law: switching either off leaves both ProcessManagerMemo laws green.",
+  "proof": "Scratch worktree at caa79fedc: `if (oldest.rev <= rev)` replaced by `if (false)` printed `Tests 2 passed (2)`; in Process.ts the fresh names' `read(eventStream(name), 0)` replaced by `read(eventStream(name), rev)` printed `Tests 2 passed (2)`.",
+  "cost": "If a name's events can ever sit below the saved rev, a wrong forward fold there would pass every law.",
+  "head": "caa79fedc4fd8a4334c1aa8079c130867e3f6297",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1226"
+}
