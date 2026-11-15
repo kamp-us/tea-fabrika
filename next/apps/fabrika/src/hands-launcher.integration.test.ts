@@ -35,13 +35,17 @@ import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
-import { PROCESS, TASK, type Project as LauncherProject } from "./hands-launcher.test-support.ts";
+import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
 
+// The brain fixture loads only in workerd, so this file imports its type alone, as
+// `tasks-wire.integration.test.ts` does, and names the task the fixture asks here.
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+const TASK = "hands-task";
+const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const SENT = "2026-11-15T10:00:00.000Z";
 const NAME = "hands-launcher";
 

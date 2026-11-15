@@ -9,9 +9,12 @@ import { Effect, Schema } from "effect";
 import { Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
-/** The one task E2 asks, and the started program that asks it. */
-export const TASK = "hands-task";
-export const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+/**
+ * The one task E2 asks, and the started program that asks it. This file loads only in workerd, so
+ * the Node test names the same two values itself and imports only this file's type.
+ */
+const TASK = "hands-task";
+const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
