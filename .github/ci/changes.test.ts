@@ -1076,13 +1076,23 @@ type Fake = {
   fails?: "runs" | "commit";
 };
 
-/** A fake GitHub: the queue's runs, its head's tree and parent, and that parent's tree. */
+/**
+ * A fake GitHub: the queue's runs, its head's tree and parent, and that parent's tree. It holds no
+ * pull request run's record, so a merge queue group that asks finds none.
+ */
 const fakeApi = ({ runs = [passed], baseTree = tree.base, fails }: Fake) => {
   const calls: string[] = [];
   const reject = (what: string) => Promise.reject(new Error(`${what}: 502`));
   return {
     calls,
     api: {
+      workflow: "check.yaml",
+      artifacts: (name: string) => {
+        calls.push(`artifacts ${name}`);
+        return Promise.resolve([]);
+      },
+      run: (id: number) => reject(`no run ${id}`),
+      jobs: (id: number) => reject(`no jobs of ${id}`),
       runs: () => {
         calls.push("runs");
         return fails === "runs" ? reject("runs") : Promise.resolve(runs);
@@ -1271,7 +1281,7 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
   expect(calls).toEqual([]);
 });
 
-it("property: a pull request or a merge queue's group never asks GitHub, and runs what jobs says", async () => {
+it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", async () => {
   await fc.assert(
     fc.asyncProperty(
       changedPaths,
@@ -1282,11 +1292,330 @@ it("property: a pull request or a merge queue's group never asks GitHub, and run
         const printed = await ci.outputs({ same: false, env: envOf(event, draft), run: pushGit(paths), api });
         prints(printed, ci.jobs(paths, event, draft));
         expect(printed["tested"]).toBe("");
-        expect(calls).toEqual([]);
+        expect(calls).toEqual(event === "merge_group" ? [`artifacts ${ci.recordName(tree.head, tree.base)}`] : []);
       },
     ),
     options,
   );
+});
+
+// Experiment 292, change 5: a merge queue group passes at once when a ready pull request run already
+// tested its tree green. The pull request run's changes job records the tree it tested (the merge
+// commit's) and its base's tree, only when what it selected covers what a group of the same two trees
+// needs (`record`). The group finds the record of its own two trees and passes when the run that
+// left it vouches: a pull request run of check.yaml from this repository that ended `success` with
+// `ci-required` green (`vouches`). Any one thing wrong runs the group's tests.
+//
+// Plants in changes.mjs, each run once, each red here, then restored: `covers` passes on any
+// selection; `covers` ignores the scope; `record` records a draft run; `record` takes the base
+// tree from the head; `vouches` takes any conclusion, any workflow, a fork, `ci-required (draft)`
+// (which survived until the "draft's ci-required" fault and the scenario below), or reads no jobs;
+// `matched` reads an expired record; a matched group keeps check on; a group never asks.
+const pr = { merge: "f".repeat(40), base: "9".repeat(40) };
+
+/** A selection as changes prints it: each flag "true" or "false", and the filter of its scope. */
+const printedOf = (selection: ci.Selection): Record<string, string> => ({
+  CHECK: String(selection.check),
+  TYPECHECK: String(selection.typecheck),
+  TEST: String(selection.test),
+  FIELD: String(selection.field),
+  BUILD: String(selection.build),
+  NEXT: String(selection.next),
+  FILTER: selection.scope === "none" ? "" : filterOf(selection.scope),
+});
+
+/** What a merge queue group of these paths needs, as `record` computes it. */
+const neededOf = (paths: readonly string[]): ci.Selection => ({
+  ...ci.jobs(paths, "merge_group", false),
+  scope: ci.scope(paths, "merge_group"),
+});
+
+/** The pull request run's git: its merge commit and base have `trees`, and the paths between them. */
+const prGit =
+  (paths: readonly string[], trees: { merge: string; base: string }): Runner =>
+  (args) => {
+    if (args[0] === "rev-parse") {
+      const target = args.at(-1);
+      const found = target === `${pr.merge}^{tree}` ? trees.merge : target === `${pr.base}^{tree}` ? trees.base : null;
+      return found === null ? { status: 128, stdout: "" } : { status: 0, stdout: `${found}\n` };
+    }
+
+    return git(paths, "")(args);
+  };
+
+/** A ready pull request run's env for the record step, with what its changes job printed. */
+const recordEnv = (selection: ci.Selection, draft = false) => ({
+  EVENT: "pull_request",
+  DRAFT: String(draft),
+  BASE: pr.base,
+  HEAD: "8".repeat(40),
+  TESTED: pr.merge,
+  ...printedOf(selection),
+});
+
+type Fault =
+  | "none"
+  | "tree"
+  | "base"
+  | "conclusion"
+  | "unfinished"
+  | "draft"
+  | "narrower"
+  | "fork"
+  | "red ci-required"
+  | "draft's ci-required"
+  | "expired"
+  | "workflow";
+
+const faults: Fault[] = [
+  "none",
+  "tree",
+  "base",
+  "conclusion",
+  "unfinished",
+  "draft",
+  "narrower",
+  "fork",
+  "red ci-required",
+  "draft's ci-required",
+  "expired",
+  "workflow",
+];
+
+/** `needed` with one job it runs turned off, or its next/ scope lowered; `null` when it runs nothing. */
+const narrowed = (needed: ci.Selection, pick: number): ci.Selection | null => {
+  const cuts: ci.Selection[] = [
+    ...(["check", "typecheck", "test", "field", "build", "next"] as const)
+      .filter((job) => needed[job])
+      .map((job) => ({ ...needed, [job]: false })),
+    ...(needed.next && needed.scope === "all" ? [{ ...needed, scope: "readers" as const }] : []),
+  ];
+  return cuts.length === 0 ? null : cuts[pick % cuts.length]!;
+};
+
+/** `needed` and more: any job turned on, next/ widened to all of it. */
+const widened = (needed: ci.Selection, more: ci.Selection): ci.Selection => ({
+  check: needed.check || more.check,
+  typecheck: needed.typecheck || more.typecheck,
+  test: needed.test || more.test,
+  field: needed.field || more.field,
+  build: needed.build || more.build,
+  next: needed.next || more.next,
+  scope: more.scope === "all" ? "all" : needed.scope,
+});
+
+const selection = fc.record({
+  check: fc.boolean(),
+  typecheck: fc.boolean(),
+  test: fc.boolean(),
+  field: fc.boolean(),
+  build: fc.boolean(),
+  next: fc.boolean(),
+  scope: fc.constantFrom<ci.Selection["scope"]>("none", "readers", "all"),
+});
+
+/**
+ * One pull request run and the GitHub that holds what it left, with at most one thing wrong: its
+ * record, if `record` wrote one, under its name, and the run and its jobs. `ran` is what its changes
+ * job selected.
+ */
+const world = (paths: readonly string[], ran: ci.Selection, fault: Fault) => {
+  const trees = {
+    merge: fault === "tree" ? tree.other : tree.head,
+    base: fault === "base" ? tree.other : tree.base,
+  };
+  const made = ci.record(recordEnv(ran, fault === "draft"), prGit(paths, trees));
+  const draft = fault === "draft";
+  const run = {
+    event: "pull_request",
+    status: fault === "unfinished" ? "in_progress" : "completed",
+    conclusion: fault === "conclusion" ? "failure" : fault === "unfinished" ? null : "success",
+    path: fault === "workflow" ? ".github/workflows/host.yaml" : ".github/workflows/check.yaml",
+    html_url: "https://github.com/owner/repo/actions/runs/11",
+    repository: { id: 1 },
+    head_repository: { id: fault === "fork" ? 2 : 1 },
+  };
+  // A draft run's required check has its own name. "draft's ci-required" is a run with a record
+  // whose only green required check is the draft's, as a run that left a record and was then
+  // re-run as a draft would be.
+  const required = {
+    name: draft || fault === "draft's ci-required" ? "ci-required (draft)" : "ci-required",
+    conclusion: "success",
+  };
+  const list = [
+    { name: "changes", conclusion: "success" },
+    fault === "red ci-required" ? { ...required, conclusion: "failure" } : required,
+  ];
+  const api = {
+    workflow: "check.yaml",
+    runs: () => Promise.reject(new Error("a group lists no queue runs")),
+    commit: () => Promise.reject(new Error("a group reads no commit")),
+    artifacts: (name: string) =>
+      Promise.resolve(made.name === name ? [{ name, expired: fault === "expired", workflow_run: { id: 11 } }] : []),
+    run: (id: number) => (id === 11 ? Promise.resolve(run) : Promise.reject(new Error(`no run ${id}`))),
+    jobs: (id: number) => (id === 11 ? Promise.resolve(list) : Promise.reject(new Error(`no run ${id}`))),
+  };
+  return { api, made };
+};
+
+/** What the group prints, through `outputs`, against `api`, with the notes it wrote. */
+const grouped = async (paths: readonly string[], api: ci.Api) => {
+  const notes: string[] = [];
+  const printed = await ci.outputs({
+    same: false,
+    env: envOf("merge_group", false),
+    run: pushGit(paths),
+    api,
+    note: (line) => notes.push(line),
+  });
+  return { printed, notes };
+};
+
+const noJob = { check: false, typecheck: false, test: false, next: false, field: false, build: false };
+
+it("scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run", async () => {
+  // scenario: the common merge, a next/ file and today's app, so the group would run check,
+  // typecheck, next and the build.
+  const paths = ["next/packages/libfabrika/src/b.ts", "apps/fabrika/src/a.ts"];
+  const needed = neededOf(paths);
+  expect(needed).toMatchObject({ check: true, typecheck: true, next: true, build: true, scope: "all" });
+  const { api, made } = world(paths, needed, "none");
+  expect(made.name).toBe(`tested-${tree.head}-${tree.base}`);
+  const { printed, notes } = await grouped(paths, api);
+  prints(printed, noJob);
+  expect(printed["tested"]).toBe("11");
+  expect(printed["probe"]).toBe("false");
+  expect(notes.join("\n")).toContain("https://github.com/owner/repo/actions/runs/11");
+  expect(notes.join("\n")).toContain(tree.head);
+});
+
+it("scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests", async () => {
+  // scenario: the run tested its merge onto an older main. Its record names that main's tree, and
+  // the group, built on the newer main, asks for the record of its own.
+  const paths = ["next/packages/libfabrika/src/b.ts"];
+  const { api, made } = world(paths, neededOf(paths), "base");
+  expect(made.name).toBe(`tested-${tree.head}-${tree.other}`);
+  const { printed } = await grouped(paths, api);
+  prints(printed, ci.jobs(paths, "merge_group", false));
+  expect(printed).toMatchObject({ check: "true", next: "true", tested: "" });
+});
+
+it("scenario: a draft run, a run whose next ran only the reader tests, and a run whose check did not run record nothing", () => {
+  const paths = ["next/packages/libfabrika/src/b.ts"];
+  const needed = neededOf(paths);
+  const trees = { merge: tree.head, base: tree.base };
+  const at = (env: Record<string, string>) => ci.record(env, prGit(paths, trees)).name;
+  expect(at(recordEnv(needed))).toBe(ci.recordName(tree.head, tree.base));
+  expect(at(recordEnv(needed, true))).toBeNull();
+  expect(at({ ...recordEnv(needed), DRAFT: "" })).toBeNull();
+  expect(at({ ...recordEnv(needed), EVENT: "merge_group" })).toBeNull();
+  expect(at({ ...recordEnv(needed), FILTER: filterOf("readers") })).toBeNull();
+  expect(at({ ...recordEnv(needed), CHECK: "false" })).toBeNull();
+  // An empty flag is a job that did not run, never one that did.
+  expect(at({ ...recordEnv(needed), TYPECHECK: "" })).toBeNull();
+  expect(at({ ...recordEnv(needed), NEXT: "" })).toBeNull();
+  // git cannot read the merge commit.
+  expect(at({ ...recordEnv(needed), TESTED: "0".repeat(40) })).toBeNull();
+});
+
+it("property: covers holds for the same selection and any wider one, and fails when one needed job is off or next/ is narrower", () => {
+  fc.assert(
+    fc.property(selection, selection, fc.nat(), (needed, more, pick) => {
+      expect(ci.covers(needed, needed)).toBe(true);
+      expect(ci.covers(widened(needed, more), needed)).toBe(true);
+      const less = narrowed(needed, pick);
+
+      if (less !== null) {
+        expect(ci.covers(less, needed)).toBe(false);
+      }
+    }),
+    options,
+  );
+});
+
+it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      changedPaths,
+      fc.constantFrom(...faults),
+      selection,
+      fc.nat(),
+      async (paths, fault, more, pick) => {
+        const needed = neededOf(paths);
+        const ran = fault === "narrower" ? narrowed(needed, pick) : widened(needed, more);
+        fc.pre(ran !== null);
+        const { api } = world(paths, ran, fault);
+        const { printed } = await grouped(paths, api);
+        const vouched = fault === "none";
+        prints(printed, vouched ? noJob : ci.jobs(paths, "merge_group", false));
+        expect(printed["tested"]).toBe(vouched ? "11" : "");
+      },
+    ),
+    {
+      ...options,
+      // pinned: each fault once, on a next/ file, with the pull request run selecting exactly what
+      // the group needs.
+      examples: faults.map((fault): [string[], Fault, ci.Selection, number] => [
+        ["next/packages/libfabrika/src/b.ts"],
+        fault,
+        { ...noJob, scope: "none" },
+        0,
+      ]),
+    },
+  );
+});
+
+it("scenario: which pull request runs vouch for a group's tree, one thing changed at a time", () => {
+  const green: ci.WorkflowRun = {
+    event: "pull_request",
+    status: "completed",
+    conclusion: "success",
+    path: ".github/workflows/check.yaml",
+    html_url: "https://github.com/owner/repo/actions/runs/11",
+    repository: { id: 1 },
+    head_repository: { id: 1 },
+  };
+  const required: ci.Job[] = [{ name: "ci-required", conclusion: "success" }];
+  const cases: [string, ci.WorkflowRun, ci.Job[], boolean][] = [
+    ["a green ready run of check.yaml from this repository", green, required, true],
+    ["a merge queue run", { ...green, event: "merge_group" }, required, false],
+    ["a push run", { ...green, event: "push" }, required, false],
+    ["a run that failed", { ...green, conclusion: "failure" }, required, false],
+    ["a run that was canceled", { ...green, conclusion: "cancelled" }, required, false],
+    ["a run still going", { ...green, status: "in_progress", conclusion: null }, required, false],
+    ["another workflow's run", { ...green, path: ".github/workflows/host.yaml" }, required, false],
+    ["a fork's run", { ...green, head_repository: { id: 2 } }, required, false],
+    ["a run with no head repository", { ...green, head_repository: null }, required, false],
+    ["a draft run", green, [{ name: "ci-required (draft)", conclusion: "success" }], false],
+    ["a run whose ci-required failed", green, [{ name: "ci-required", conclusion: "failure" }], false],
+    ["a run whose ci-required was skipped", green, [{ name: "ci-required", conclusion: "skipped" }], false],
+    ["a run with no ci-required", green, [{ name: "check", conclusion: "success" }], false],
+  ];
+
+  for (const [label, found, list, expected] of cases) {
+    expect(ci.vouches(found, list, "check.yaml"), label).toBe(expected);
+  }
+});
+
+it("scenario: a group's error asking GitHub, or a malformed answer, runs what jobs says", async () => {
+  const paths = ["next/packages/libfabrika/src/b.ts"];
+  const { api } = world(paths, neededOf(paths), "none");
+  const broken: ci.Api[] = [
+    { ...api, artifacts: () => Promise.reject(new Error("502")) },
+    { ...api, run: () => Promise.reject(new Error("502")) },
+    { ...api, jobs: () => Promise.reject(new Error("502")) },
+    { ...api, artifacts: () => Promise.resolve(null as never) },
+    { ...api, artifacts: (name) => Promise.resolve([{ name, expired: false, workflow_run: null }]) },
+    { ...api, artifacts: () => Promise.resolve([{ name: "tested", expired: false, workflow_run: { id: 11 } }]) },
+    { ...api, jobs: () => Promise.resolve(null as never) },
+    { ...api, run: () => Promise.resolve({} as never) },
+  ];
+
+  for (const asked of broken) {
+    const { printed } = await grouped(paths, asked);
+    prints(printed, ci.jobs(paths, "merge_group", false));
+    expect(printed["tested"]).toBe("");
+  }
 });
 
 it("scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer", async () => {
@@ -1302,7 +1631,13 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   }
 
   const asked: { url: string; auth: string | undefined }[] = [];
+  const artifact = { name: ci.recordName(tree.head, tree.base), expired: false, workflow_run: { id: 11 } };
+  const job = { name: "ci-required", conclusion: "success" };
+  // Most specific first: a run's jobs, a run, then the rest.
   const answers: Record<string, unknown> = {
+    "runs/11/jobs": { jobs: [job] },
+    "runs/11": { event: "pull_request" },
+    artifacts: { artifacts: [artifact] },
     runs: { workflow_runs: [passed] },
     commits: { tree: { sha: tree.head }, parents: [{ sha: queue.base }] },
   };
@@ -1319,9 +1654,16 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   expect(api).not.toBeNull();
   expect(await api?.runs()).toEqual([passed]);
   expect(await api?.commit(queue.head)).toEqual({ tree: tree.head, parents: [queue.base] });
+  expect(api?.workflow).toBe("check.yaml");
+  expect(await api?.artifacts(artifact.name)).toEqual([artifact]);
+  expect(await api?.run(11)).toEqual({ event: "pull_request" });
+  expect(await api?.jobs(11)).toEqual([job]);
   expect(asked.map((a) => a.url)).toEqual([
     "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
     `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
+    `https://api.example/repos/owner/repo/actions/artifacts?name=${artifact.name}&per_page=20`,
+    "https://api.example/repos/owner/repo/actions/runs/11",
+    "https://api.example/repos/owner/repo/actions/runs/11/jobs?per_page=100",
   ]);
   expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
 
