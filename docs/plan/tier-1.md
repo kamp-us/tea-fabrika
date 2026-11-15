@@ -208,10 +208,17 @@ In build order. "Decide first" lists only what no decision answers yet.
   [0267](../../.decisions/0267-commands-and-one-mode-field.md), 0279 as 0159 amends it, and P42's row.
 - In code now ([PR 1231](https://github.com/kamp-us/tea-fabrika/pull/1231), the desk lane, slices
   S1 to S4; its plan is [`lanes/desk-PLAN.md`](./lanes/desk-PLAN.md)):
-  - **The start check (S1).** A start a member's letter caused is checked against that member
-    (0170), as the done line above says. This is where the start check meets the one permission
-    system ([0526](../../.decisions/0526-one-rebac-permission-system.md)): ticket 953 moves the
-    check onto it.
+  - **The start check (S1).** A start a window's letter caused is checked against that letter's
+    sender, never the program that asked (0170). It is main's check, on the one permission system
+    ([0526](../../.decisions/0526-one-rebac-permission-system.md)): the brain checks
+    `StartProgram` on this fabrika (`processes/ChildrenLedger.ts`, `judge`). A sender with an
+    owner, admin or member row may start any program, and no start grant is read. A sender with no
+    row is refused `forbidden`. The desk holds no start right of its own, and its laws drive the
+    check through the runner's `start_child`.
+  - **A start carries its member down (S1, from ticket 953).** A start with no member's letter
+    behind it is checked as the member its requester was checked against, down the whole chain of
+    starts ([0531](../../.decisions/0531-a-start-carries-its-member-down.md)). The child's
+    `started` line records that member.
   - **`stop_child` (S1).** A program may end its own child, as OTP's `terminate_child`: the child
     ends with `shutdown` and each watcher gets a `DOWN`. Another program's child is `not_child`,
     and a child already ended is `noproc`. It works on the real instance too.
@@ -241,13 +248,11 @@ In build order. "Decide first" lists only what no decision answers yet.
   - P42 past slice 1.
   - The Electron app (S5): the same suite and shots in Electron, after P19 slice 3. The row counts
     as done only after S5 (0159's third amendment).
-  - A start with no member's letter behind it acting as the member its requester was checked
-    against, down the whole chain of starts
-    ([0531](../../.decisions/0531-a-start-carries-its-member-down.md)). Ticket 953 builds it.
   - Owed by a person: the screen reader run of the cursor (0165), VoiceOver on the Mac.
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
   two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program when a start right names
-  one exact pair (open; no decision found). Whether the desk's commands need the palette now: 0278 says every command also
+  one exact pair: *2026-11-14: settled by 0170 and 0526. A start is checked against the member
+  whose line caused it, and no program, `fabsh` included, holds a start right of its own.* Whether the desk's commands need the palette now: 0278 says every command also
   has a shell word and a palette entry (`.decisions/0278-each-window-runs-its-own-prefix.md:33`), and the palette is in Tier 6 (open).
 
 **3. `fabsh`, a program in a tile.**

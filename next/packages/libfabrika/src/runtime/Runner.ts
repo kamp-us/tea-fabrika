@@ -24,7 +24,6 @@ import {
   Tracer,
 } from "effect";
 import { type SessionManagerError } from "../access/SessionManager.ts";
-import { mayStart } from "../access/StartRule.ts";
 import {
   Activity,
   Checkpoint,
@@ -1615,38 +1614,6 @@ export class ProgramRunner extends Context.Service<
           });
         });
 
-        /**
-         * 0170: a start is checked against the member whose letter caused it, never the program that
-         * asked. The sender is read as a write's signer is, under this Cmd's own id and a kind of its
-         * own, so each start of one letter has its own receipt. A sender that is no member is
-         * refused; with no letter of this life behind the start, or no signer, it answers nothing and
-         * the host's grants decide. A storage failure is not an answer, so the Cmd stays dispatched.
-         */
-        const permission = Effect.fnUntraced(function* (job: Dispatched, program: string) {
-          if (job.parent === null || (checked.sign === undefined && Option.isNone(sessions))) {
-            return undefined;
-          }
-
-          const kind = `${START_CHILD}:${job.id}`;
-          return yield* (
-            checked.sign !== undefined
-              ? checked.sign(job.id, job.parent, kind)
-              : Option.getOrThrow(sessions)
-                  .signer(job.parent, process.id, kind)
-                  .pipe(Effect.provideService(SignRequest, { id: job.id }))
-          ).pipe(
-            Effect.map((session): boolean | undefined => {
-              const { by } = session;
-              // An agent is checked as itself, never as the person it works for (0170, 0261).
-              return mayStart(by._tag === "person" ? by.for : by.key, program);
-            }),
-            Effect.catchIf(
-              (e): e is SigningRefused | NotGranted => e instanceof SigningRefused || e instanceof NotGranted,
-              (e) => Effect.succeed(e instanceof NotGranted ? false : undefined),
-            ),
-          );
-        });
-
         /** The built-in start_child: the loader names the program and its hash, this life is the
          *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
          *  Cmd stays dispatched, and its failure carries the reason only. */
@@ -1688,7 +1655,6 @@ export class ProgramRunner extends Context.Service<
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.
           const hash =
             "hash" in code.success && typeof code.success.hash === "string" ? code.success.hash : process.build;
-          const permitted = yield* permission(job, program.value);
           const started = yield* children.value
             .start(
               {
@@ -1697,7 +1663,6 @@ export class ProgramRunner extends Context.Service<
                 code: { program: program.value, hash },
                 requester: Recipient.cases.process.make({ process: process.id }),
                 ...(first === undefined ? {} : { input: first }),
-                ...(permitted === undefined ? {} : { permitted }),
               },
               yield* from(job.parent, job.traceId),
             )

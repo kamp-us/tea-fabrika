@@ -49,12 +49,6 @@ export const Child = Schema.Struct({
   requester: Recipient.cases.process,
   /** The child's first letter, written in the start's own turn. */
   input: Schema.optionalKey(Schema.Json),
-  /**
-   * The verdict of 0170's check on the member whose letter caused the start, which the host binds,
-   * never the program. Left out when no member's letter is behind the start: the host's grants
-   * decide then.
-   */
-  permitted: Schema.optionalKey(Schema.Boolean),
 });
 /**
  * One request to start a child, as `Child` decodes it.
