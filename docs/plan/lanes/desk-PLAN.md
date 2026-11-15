@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0159, 0274, 0277, 0167, 0278, 0272, 0165, 0276, 0170; body 6120d0e1738a
+Approved by the lead agent, builds 0159, 0274, 0277, 0167, 0278, 0272, 0165, 0276, 0170, 0526, 0531; body bd7fc90ffecb
 Plancheck-Version: 3
 
 # Plan: The desk program fabrika/tezgah: split, close, move between tiles with the prefix key, in next/
@@ -153,8 +153,8 @@ const Model = Schema.Struct({
 ```ts
 // next/packages/libfabrika/src/runtime/StartChild.ts gains OTP's terminate_child (S1).
 export const stopChild = Cmd.make("stop_child", { input: Schema.Struct({ name: ProcessName }), ok: Schema.Null, err: ["not_child", "noproc"] });
-// next/packages/libfabrika/src/access/StartRule.ts (S1): 0170's first rule, one line to change later.
-export const mayStart = (_member: PersonId, _program: string): boolean => true;
+// The start check is main's, not the desk's (amendment 15): processes/ChildrenLedger.ts's `judge`
+// checks the sender of `from.parent` with `StartProgram` on the fabrika (permissions/Model.ts).
 ```
 
 ```ts
@@ -194,7 +194,7 @@ tezgah.focus_left ...   <prefix>h j k l, arrows     word "focus left" ... (S3)
 
 **Placement:**
 
-- `next/packages/libfabrika/src/tezgah/` is a new module at layer 4. It imports `Id.ts`, and `processes/` for `ProcessName`. `client/`, at layer 6, imports it. A from-scratch client needs these shapes and this geometry, so they go in libfabrika (`next/AGENTS.md`).
+- `next/packages/libfabrika/src/tezgah/` is a new module at layer 5 (amendment 15). It imports `Id.ts`, and `processes/` for `ProcessName`. `client/`, at layer 7, imports it. A from-scratch client needs these shapes and this geometry, so they go in libfabrika (`next/AGENTS.md`).
 - The brain program is `next/programs/tezgah`.
 - Tuval only draws, in its `window/` and `dom/` folders.
 
@@ -206,7 +206,7 @@ tezgah.focus_left ...   <prefix>h j k l, arrows     word "focus left" ... (S3)
 2. **"%" resolves to a command.** `Keys.route` matches step 2 of 0272, the prefix, and gives `tezgah.split_right`. `Prefix` goes back to `idle`. `Layout.rects` says each half of t1 would be 720x868, so the 220x120 floor holds. The window mints `tile_01j...` with `Id.Generator`, the same way it mints letter ids.
 3. **The press goes out.** This is the press path built in P18 slice 1. `now` stamps the letter `letter_01j...` and its `sentAt`. Then `process.send` carries `{type: "did", does: "tezgah.split_right", from: <t1 id>, tile: <new id>, via: {_tag: "key", keys: "ctrl+b %"}}` to tezgah's pid. The tab writes client rows `press {command: "tezgah.split_right", via: "key", letter}` and `prefix {does, ms}`.
 4. **tezgah takes the letter.** The door stamps the sender. `refuse` sees a fresh id on a known workspace and answers null. The update adds the split to `starting` and returns `start_child {program: "fabrika/checklist", name: "checklist:tile_01j..."}`.
-5. **The runner checks and starts.** The 0170 check reads the letter's sender through `SessionManager.signer`: the founder. `mayStart` allows it. `Children.start` writes `started`, and tezgah gets `start_child_ok {started}`.
+5. **The runner asks, and main's core checks.** The runner calls `Children.start` with `from.parent`, the window letter's id. `ChildrenLedger`'s `judge` asks `Senders` who sent that letter: the founder. `StartProgram` finds the founder's `owner` row on the fabrika, which the boot writes, and lets it through (0170, 0526). `Children.start` writes `started` with `member` set to the founder, and tezgah gets `start_child_ok {started}`.
 6. **tezgah changes the layout.** `start_child_ok` runs `Layout.split`: a row with t1 at 50 and t2 at 50, where t2 is `{n: 2, child: true, keep: "failed", cursor: null}`. Focus moves to t2, and `recent` is `[t2, t1]`. A view patch goes to every window on workspace 1.
 7. **The window follows.** The window's `Tezgah` child takes the new server state, and the window works out its tiles from it. t2 is new, so the window reads `processes/checklist:tile_01j...` and opens that pid's view.
 8. **Tuval draws.** Two regions, `checklist, t1` and `checklist, t2, focused`, with the 4px divider between them. DOM focus goes to t2's body, since its cursor is null. The tab writes the reply row `reply {letter, result: "accepted"}`.
@@ -286,7 +286,7 @@ The settled notes were checked first for each item. The lane goes on with each l
 - A split's new tile takes half the focused tile's share, after it, and takes focus (program guidelines G3 R3 and G4).
 - The last tile of a workspace never closes: `last_tile` (0506's rule, read through 0277).
 - Layout changes wait for the server; focus and cursor do not (0167).
-- A start from a tezgah letter is checked against the member, and tezgah holds no grant of its own (0170). A start with no member behind it keeps today's pair list, which 0170 leaves open.
+- A start from a tezgah letter is checked by main's permission core: the window letter's sender, with `StartProgram` on the fabrika. tezgah holds no start permission of its own (0170, 0526). A start with no person's letter behind it acts as the member its requester was checked against (0531), and only a start with no member at all falls back to `StartGrant` (amendment 15).
 - The prefix arms only the window it was pressed in, and only the finished command travels (0278).
 - A default on a key the backend cannot have is never shipped to that backend. A person's binding on such a key fails at load (0278).
 - The router follows 0272's order for steps 1, 2 and 6. No program has a mode yet.
@@ -309,9 +309,9 @@ The settled notes were checked first for each item. The lane goes on with each l
 - Electron 45.2.1 is in the lockfile and in the app's dependencies, but its binary was never downloaded: `node_modules/electron` has no `dist/` and no `path.txt`.
 - `xvfb-run` and `Xvfb` are on the PATH. So Electron could run here only after its binary is fetched (its `install.js`, through the agent proxy) and run under `xvfb-run`. Neither was tried.
 - macOS window rules cannot be checked on Linux.
-- CI's `next` job runs the app's e2e runner on Ubuntu with Chromium. Its comment says CI gets Electron "once xvfb and the keychain are tried".
+- CI runs the visual tests (`*.visual.test.ts`, the `next-visual` Vitest project) on the 3-hour full run, and on a pull request only when it carries the `visual` label. Integration tests (`*.integration.test.ts`, the `next-integration` project) run only on the 3-hour full run (0536, amendment 15).
 
-**How the shots are taken.** Browser shots come from the app's e2e runner, run from `next/apps/fabrika` as `SHOTS=<a temp folder under runs/> node e2e.ts <file>`, on the real `dev.ts` with its own temp `FABRIKA_HOME`. No slice changes the runner: it already picks up every e2e test file. Shots come from `page.screenshot`, are attached and are never committed (0160). Each one covers the five layouts, plus 0471's eight in both looks (200% zoom on the 2x2, the smallest tile, 400% reflow).
+**How the shots are taken.** Browser shots come from the visual tests, run from the repo root as `SHOTS=<a temp folder under runs/> nice -n 15 pnpm exec vitest run --project next-visual <file>`, on the real `dev.ts` with its own temp `FABRIKA_HOME`. The app's old e2e runner script is gone on main; the `next-visual` project picks up every visual file (amendment 15). Shots come from `page.screenshot`, are attached and are never committed (0160). Each one covers the five layouts, plus 0471's eight in both looks (200% zoom on the 2x2, the smallest tile, 400% reflow).
 
 **Shots per slice:**
 - **S2b** (`next/apps/fabrika/e2e/tezgah-frame.visual.test.ts`): one tile; after `C-b %`; after `C-b "`; the 2x2; 1024x700; the close ask; the refused split; the prefix line armed.
@@ -325,11 +325,12 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 | File | Owner | Slice | Product lines expected |
 |---|---|---|---|
-| next/packages/libfabrika/src/access/StartRule.ts | build | S1 | 25 |
-| next/packages/libfabrika/src/access/StartRule.laws.test.ts | tests | S1 | tests |
+| next/packages/libfabrika/src/access/StartRule.ts | build | S1 (deleted by amendment 15) | deleted |
+| next/packages/libfabrika/src/access/StartRule.laws.test.ts | tests | S1 (deleted by amendment 15) | tests |
 | next/packages/libfabrika/src/runtime/StartChild.ts | build | S1 | 35 |
 | next/packages/libfabrika/src/runtime/Runner.ts | build | S1 | 90 |
 | next/packages/libfabrika/src/runtime/StartChildTest.ts | tests | S1 | tests |
+| next/packages/libfabrika/src/node/StartChild.integration.test.ts | tests | S1 (amendment 15) | tests |
 | next/packages/libfabrika/src/processes/Children.ts | build | S1 | 20 |
 | next/packages/libfabrika/src/processes/ChildrenLedger.ts | build | S1 | 40 |
 | next/packages/libfabrika/src/processes/ChildrenTest.ts | tests | S1 | tests |
@@ -406,8 +407,8 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 | # | Law | Kind | Generator | Plant | Slice |
 |---|---|---|---|---|---|
-| L1 | A start caused by a member's letter is allowed for any member and any program, and its answer keeps `Started`'s shape | test | fc.record: member, program and name, 200 runs | `mayStart` answers false for one member | S1 |
-| L2 | The member checked is the sender of the start's `parent`, never the program that asked; tezgah has no grant in `starts` | test | fc.array: letters from two senders, 200 runs | read `by` of the requester's process in place of the parent's sender | S1 |
+| L1 | (amendment 15) On real runners, a start a letter caused is started for any program when the letter's sender holds `owner`, `admin` or `member` on the fabrika, and refused `forbidden` with nothing written when it holds no row; no `StartGrant` is read either way, the answer keeps `Started`'s shape, and the `started` line names the sender as `member` | test | fc.commands: senders with a role drawn from owner, admin, member or none, any program, 200 runs | `Model`'s `start` drops `member`; `judge` lets a `Denied` through | S1 |
+| L2 | (amendment 15) The member checked is the sender of the start's `parent`, never the program that asked and never the requester's own recorded member: a sender with no row, or whose key was removed, is `forbidden` even for a program the requester's grant names, or when the requester's member holds `start` | test | fc.commands: letters from related, unrelated and removed senders, to boot requesters and to children a related sender started, 200 runs | `judge` reads the requester's member before the sender; `judge` reads `StartGrant` when the sender holds no row | S1 |
 | L3 | `stop_child` ends only the requester's own child, with `shutdown`, and writes `DOWN` to its watchers; another's name is `not_child`, an ended one `noproc` | test | fc.commands: starts and stops by three programs, 100 runs | skip the parent check | S1 |
 | L4 | `stop_child`'s refusals and `StartRefusal` decode by name in any client | type | type | widen a refusal to `string` | S1 |
 | L5 | After any sequence of splits and closes, `Layout.check` finds nothing: each tile once, parts sum to 100, no one-part split, directions alternate, focus and `recent` name only live tiles | test | fc.commands: split_right, split_down and close on random tiles, 300 runs | drop the settle after `remove` | S2a |
@@ -444,7 +445,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 ## Host-only laws
 
-- **L12, L21, L28, L30 and L33** start a real `dev.ts` brain (workerd through Alchemy), real sockets and Chromium. This container and CI's `next` job can both run them. They run before the first review of their slice.
+- **L12, L21, L28, L30 and L33** start a real `dev.ts` brain (workerd through Alchemy), real sockets and Chromium. A step's container can run them, and they run before the first review of their slice. In CI, L12 (an integration test) runs only on the 3-hour full run; L21, L28, L30 and L33 (visual tests) run there too, and on a pull request only with the `visual` label (0536, amendment 15).
 - **L35** needs the real Electron app.
   - On the owner's Mac, it waits for the lead's read of its signal and the owner's yes (0178).
   - In this container, it could run only once Electron's binary is fetched and run under `xvfb-run`, which is untried. A skipped run is not evidence.
@@ -463,7 +464,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 - New: `prefix {does, ms}`, `focus {letter, result, ms}` (S3) and `fold {strips, width, height}` on change (S4).
 - What is lost if these are not recorded now: whether a move was overridden, which only the window sees, and the prefix latency, which settles 0278's 70%.
 
-**The start's member.** It is read from `parent` through the signer. It is already on record, so no new field is needed (0170).
+**The start's member.** Main's core reads it from `parent` through `Senders` and writes it on the child's `started` line as `member` (0531). The desk adds no field (amendment 15).
 
 **A stop.** It ends with `shutdown`, never `normal` or `crashed`. Without that, a closed tile could not be told from a crash.
 
@@ -511,19 +512,78 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 - 2026-11-14 (lead, after S4's tests to amendment 13): (1) "what the container has" is its length minus its own gaps and strips, so the focused tile is held at `min(floor, that)`. (2) When a container's strips alone are longer than the container, its strips share its length equally; that window is too small for the layout, and nothing else is promised there (the lead's lean, 70%). (3) A band's strips share the band's length equally, and each strip's text runs along it, drawn whole where the band allows.
 
+- 2026-11-14 (plan, after main's permission core, ticket 953, [pull request 1239](https://github.com/kamp-us/tea-fabrika/pull/1239), was merged into the lane at `90409b69a`): S1's start check moves off its stand-in and onto main's core. Main now checks every start a letter caused with `StartProgram` on the fabrika, against that letter's sender, in `next/packages/libfabrika/src/processes/ChildrenLedger.ts`'s `judge`, and carries the member down the chain of starts (0170, 0526, 0531). Nothing reads the stand-in's verdict since the merge, and two of its laws went red, because they say any admitted key may start any program and main refuses a sender with no relation row.
+
+  (1) **The stand-in goes.** Each piece, and the step that deletes it:
+  - Build: `next/packages/libfabrika/src/access/StartRule.ts`, the whole file (`mayStart`, always true).
+  - Build: in `next/packages/libfabrika/src/runtime/Runner.ts`, the `mayStart` import (line 27), the `permission` step and its doc comment (lines 1618 to 1648), which signs a receipt of kind `start_child:<id>`, and in `startChild` the `permitted` value and its spread into `children.value.start` (lines 1691 and 1700). The runner signs no start receipt after this. The `SigningRefused`, `NotGranted` and `SignRequest` imports stay, since the write path uses them.
+  - Build: in `next/packages/libfabrika/src/processes/Children.ts`, the `permitted` field of `Child` and its doc comment (line 57). `Child` is then main's shape again.
+  - Tests: `next/packages/libfabrika/src/access/StartRule.laws.test.ts`, the whole file.
+  - Tests: in `next/packages/libfabrika/src/runtime/StartChildTest.ts`, the moves `member_start` and `outsider_start`, the props "Desk S1 L1" and "Desk S1 L2", and the header lines that describe `mayStart`. The writers `memberWriter` and `outsider` and the door's `SessionManager` stay: the new moves in (2) use them.
+  - Tests: in `next/apps/fabrika/src/start-child.laws.integration.test.ts`, the scenario "Desk S1 L1, L2" and its comment; (2) restates it.
+  - The stand-in also checked an agent as its own key. Main's `Senders` checks an agent as `person:<for>`, capped by its person (0526), so that rule leaves with the stand-in, and no desk law asserted it.
+  - Nothing else in the lane reads `mayStart` or `permitted` (searched under `next/`).
+
+  (2) **L1 and L2, in the real check's terms** (the Laws table rows above are rewritten to match). They still run on real runners, the real ledger and the door's real `SessionManager`, through the runner's `start_child` Cmd. That is what main's own laws in the processes module's `ChildrenMemberTest` suite do not cover: they call `Children.start` directly, so only the desk's laws prove that the runner hands main's core the letter's id as `from.parent`.
+  - **The test world.** `next/packages/libfabrika/src/node/StartChild.integration.test.ts` gives `ChildrenLedger.layer` the world's relation rows through `RelationsMemory.layer`, and a `Senders` made with `SessionSenders.make` from the door's own `SessionManager.sender`, the same way `cloudflare/runtime.ts` makes the real one. Today that driver gives every start "no sender", which is why the stand-in's laws went red. So `StartChildTest.Store["shared"]` takes the rows and the `Senders`, and the host builds the door's `SessionManager` before `shared`.
+  - **What the generator plants.** Each run draws three people, each with a role from `owner`, `admin`, `member` or none, and one `related` row per role on `fabrika:p42`. A fourth sender's key is removed (the existing outsider, whose key the `SessionManager` refuses). The moves are `related_start`, `unrelated_start` and `removed_start`, a letter from one of those senders to a starter that asks for any program in `ANY_PROGRAM`. L2 also sends letters to a child that a related sender's start made, so the requester has a member of its own (0531). Seed 119120, 200 runs each.
+  - **L1 asserts:** a sender with any of the three roles gets `start_child_ok` with a fresh `started`, decoded by `Started`, for a program no `StartGrant` names (`plain`, `starter`) as well as for one it does (`merger`). The child runs the program asked for, and its `started` line carries `member: {_tag: "person", key, for: <the sender>}`. A sender with no role gets `{type: "start_child_err", outcome: "forbidden"}`, writes no process row and registers no name. The plants: `permissions/Model.ts`'s `start` drops `member` (`p.union("owner", "admin")`), and the member draws go red; `judge` lets a `Denied` through, and the no-role draws go red.
+  - **L2 asserts:** the member checked is the letter's sender, never the program that asked and never the requester's own member. A sender with no row, or with a removed key, is `forbidden` even for `merger`, which the starter's own grant names, and even when the requester is a child whose member holds `start`. Each refusal writes nothing. The plants: `judge` reads the requester's member before the sender (the child draws go red); `judge` falls back to `StartGrant` when the sender holds no row (the `merger` draws go red).
+  - **The real door's scenario** in `next/apps/fabrika/src/start-child.laws.integration.test.ts` keeps its two programs, with no start grant on the instance. It now asserts that each start is allowed because the boot's `owner` row names the founder, and that each `started` line names the founder as `member`. Its plant: `cloudflare/runtime.ts` writes no owner row, and both starts answer `forbidden`. Only the founder can be admitted on a real instance today, so its refusal half stays with L1 and L2 here and with main's L18, the app's start-member scenario, which this lane does not change.
+  - **Strength.** No assertion is dropped without a stronger one in its place. The old L1 said "any admitted key may start any program". That is replaced because 0170 says the desk holds no start permission of its own, and 0526 makes membership a relation row: a key with no row is no member. The new L1 keeps "any program, with no grant, in `Started`'s shape" for every member, and adds the `member` on the `started` line and the refusal half. The old L2's outsider case stays as `removed_start`, and the new L2 adds the case of a requester that has its own member. The old `StartRule.laws.test.ts` law tested one constant; 0170's first rule now lives in `Model`, and main's "L10 and L13" pins it.
+
+  ```ts
+  // A sketch, next/: the test world after amendment 15, in StartChildTest.ts and its Node driver.
+  const FABRIKA = Model.ref("fabrika", "p42");
+  const rows = (people: ReadonlyArray<{ person: string; role: "owner" | "admin" | "member" | null }>) =>
+    people.flatMap(({ person, role }, n): ReadonlyArray<Relation.Change> =>
+      role === null
+        ? []
+        : [{ id: `role-${n}`, row: Relation.Row.cases.related.make({ subject: `person:${person}`, relation: role, object: FABRIKA }) }],
+    );
+
+  ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: FABRIKA }).pipe(
+    Layer.provide(RelationsMemory.layer(rows(world.people))),
+    Layer.provide(Layer.succeed(Senders, SessionSenders.make(sessions.sender))), // the door's own record
+  );
+
+  // One related_start: a member's letter asks a starter for `plain`, which no StartGrant names.
+  yield* door(name, { type: "start", ask: { program: "plain", name: target } }, memberWriter(person));
+  // role "member": { type: "start_child_ok", outcome: { _tag: "started", ... } }, and the started line
+  //   carries member: { _tag: "person", key: `SHA256:${person}`, for: person }
+  // role null:     { type: "start_child_err", outcome: "forbidden" }, no process row, no name
+  ```
+
+  | Removed | Replacement |
+  |---|---|
+  | Desk S1 L1: a start caused by any member's letter is allowed for any program, with no grant, and answers in Started's shape | Desk S1 L1: a start a letter caused is started for any program when its sender holds owner, admin or member on the fabrika, and refused forbidden with nothing written when it holds none; no start grant is read, and the started line names the sender as member |
+  | Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked | Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked nor the requester's own member; a sender with no row or a removed key is forbidden even where the requester's grant or member would allow it |
+  | L1: any member may start any program (0170's first rule) | L10 and L13: a member's start is started exactly when the member holds start, whatever StartGrant says |
+  | scenario: Desk S1 L1, L2: the founder's letter starts any program with no start grant at all | scenario: Desk S1 L1, L2: the founder's letter starts two programs with no start grant, as the fabrika's owner, and each started line names the founder as member |
+
+  (3) **Lint, type or test.** L1, L2 and the scenario are tests, since each needs real runners or a real instance; they are integration tests, run on the 3-hour full run. The deletion needs no law of its own: the type check fails on a leftover import of `StartRule.ts` or a leftover `permitted`, and `pnpm lint:dead` fails on a leftover export (0006).
+
+  (4) **Stale text, brought up to date.** In this plan: the "Decided in one line" start line, the shape's `StartRule` sketch, step 5 of the trace, "What it records" on the start's member, the Laws table's L1 and L2, the Files table (the deleted stand-in files and the Node driver, each with its owner), Validation's commands, and where each test runs (integration tests on the 3-hour full run only; visual tests there too, and on a pull request only with the `visual` label; 0536). The test files already carry main's names (`tezgah-runner.laws.integration.test.ts`, and `tezgah-frame`, `tezgah-focus` and `tezgah-fold` as `*.visual.test.ts`), and the app's old e2e runner script is gone, so "Show it running" and Validation now use the `next-visual` project. In `docs/plan/tier-1.md` (a build row, 0013), the build step: rewrites piece 2's S1 bullet to say the start check is main's `StartProgram` check against the window letter's sender, with no "ticket 953 moves the check" left; moves the "Not built" line about 0531 ("Ticket 953 builds it") into what is built, since main records and checks the requester's member; and marks the "Decide first" item on how `fabsh` may start any program when a start right names one exact pair as settled by 0170 and 0526, since a member is checked and no program holds a start right.
+
+  (5) **`next-tezgah` is on layer 5,** with imports `next-processes` and `next-shared`, in `layer-rules.json` (the merge commit set it). The permission core put `next-permissions` on layer 3, under `next-processes`, so every module from `next-processes` up moved up one: processes 3 to 4, tezgah 4 to 5, runtime 5 to 6, client 6 to 7. tezgah keeps its place one above `next-processes`, whose `ProcessName` it takes, and it imports nothing new. The scenario "Desk S2a tezgah takes processes and Id; only the client, the entry and the window reach it" in the app's exam layer law keeps its edges, and that file does not change.
+
+  (6) **Two old asks are closed.** May tezgah hold a start grant until the core lands: no. 0170 says the desk and `fabsh` hold no start permission of their own, and the ask is moot now, since the check reads the window letter's sender. Where focus lands after a close: the next open tile in reading order, on that tile's cursor, and at the top only for a tile that never had focus (`docs/direction/tile-guidelines.md`, "Where focus lands"; 0165).
+
+  (7) **No new open question.** Searched `.decisions/` (0170, 0172, 0526, 0531, 0536, 0165), `.glossary/TERMS.md` (`permission`, `grant`, `tezgah`), `docs/direction/` (`tile-guidelines.md`, `the-desktop-layer.md`) and the plan docs (`docs/plan/tier-1.md`, `docs/plan/lanes/t953-PLAN.md`) for the start check, the test world's rows and the layer move. Each choice here builds a decided note. Open question 1 stands as it was.
+
 ## Open questions
 
 1. **The person's `keybindings.toml`.** Once that file is read, unbinding a tezgah command clashes with 0278, which says "every command also has a shell word and a palette entry, so losing a key never loses a command". K1 of the keybindings note lets a person unbind any key, and today `next/` has no `fabsh` and no palette. This binds the later slice that reads the person's file, which is P14's owed keys slice, not this lane: here every command keeps its default key, and no slice reads a person's file. The three ways out are (a) the palette before Tier 6, (b) the load refuses an unbind that leaves a command with no other way in, or (c) a short gap until `fabsh`'s words land in piece 3. The lean is (b), 60%: it keeps 0278's promise at the one place it can break, and it narrows K1 only until piece 3 ships the words. The doubt is that it is still a narrowing of K1, so the owner picks. Each command already declares its word and its label now, so whichever the owner picks, nothing is undone.
 
 ## Validation
 
-- Each step runs only its slice's narrow files, with `nice -n 15 pnpm exec vitest run --maxWorkers=3 <files>`:
-  - **S1:** `next/packages/libfabrika/src/access/StartRule.laws.test.ts` and `next/apps/fabrika/src/start-child.laws.integration.test.ts`.
-  - **S2a:** `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts`, `next/programs/tezgah/src/program.laws.test.ts`, `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts`, `next/packages/libfabrika/src/transport/Handshake.laws.test.ts` and `next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts`.
-  - **S2b:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`, `next/packages/libfabrika/src/client/Prefix.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then the e2e runner from `next/apps/fabrika` on `tezgah-frame.test.ts` and `first-window.test.ts`.
-  - **S3:** `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts` and `next/programs/tezgah/src/program.laws.test.ts`. Then the e2e runner on `tezgah-focus.test.ts`.
-  - **S4:** `next/packages/libfabrika/src/tezgah/Fold.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then the e2e runner on `tezgah-fold.visual.test.ts`.
-  - **S5:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`. Then the e2e runner on `tezgah-electron.visual.test.ts`, on the host.
+- Each step runs only its slice's narrow files from the repo root, with `nice -n 15 pnpm exec vitest run --maxWorkers=3 <files>` for memory tests, the same with `--project next-integration` for an `*.integration.test.ts` file, and `nice -n 15 pnpm exec vitest run --project next-visual <file>` for a `*.visual.test.ts` file (one file at a time, as that project runs). In CI, integration tests run only on the 3-hour full run, and visual tests run there and on a pull request with the `visual` label (0536, amendment 15).
+  - **S1:** `next/packages/libfabrika/src/node/StartChild.integration.test.ts` and `next/apps/fabrika/src/start-child.laws.integration.test.ts`, both integration.
+  - **S2a:** `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts`, `next/programs/tezgah/src/program.laws.test.ts`, `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts`, `next/packages/libfabrika/src/transport/Handshake.laws.test.ts`, then `next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts` as integration.
+  - **S2b:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`, `next/packages/libfabrika/src/client/Prefix.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then, as visual, `next/apps/fabrika/e2e/tezgah-frame.visual.test.ts` and `next/apps/fabrika/e2e/first-window.visual.test.ts`.
+  - **S3:** `next/packages/libfabrika/src/client/Tezgah.laws.test.ts`, `next/packages/libfabrika/src/tezgah/Layout.laws.test.ts` and `next/programs/tezgah/src/program.laws.test.ts`. Then, as visual, `next/apps/fabrika/e2e/tezgah-focus.visual.test.ts`.
+  - **S4:** `next/packages/libfabrika/src/tezgah/Fold.laws.test.ts` and `next/packages/tuval/src/window/Layout.laws.test.ts`. Then, as visual, `next/apps/fabrika/e2e/tezgah-fold.visual.test.ts`.
+  - **S5:** `next/packages/libfabrika/src/client/Keys.laws.test.ts`. Then, as visual, `next/apps/fabrika/e2e/tezgah-electron.visual.test.ts`, on the host.
 - The lead, not a boxed step, runs the type check and the changed-tests run once per slice, and reads CI. S2a changes the lockfile, so the lead lists narrow paths only.
 - Commits are plain `git commit`, with the subject `Desk <slice> <step>: <what>`. For example: `Desk S2a tests: tezgah's layout stays tidy after any split and close`. Each slice runs as tests, build, and one review, each by its own agent. `pnpm format` comes first, and `pnpm lint` runs before each commit.
 
@@ -544,14 +604,15 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 4. S3, optimistic focus moves and each tile's cursor: 520 lines.
 5. S4, a smaller window folds what does not fit: 280 lines.
 6. S5, the same suite and shots in the Electron app, after P19 slice 3: 40 lines.
+7. S1 moved onto main's permission core (amendment 15): 5 lines added, and about 60 product lines of the stand-in deleted.
 
-**Steps:** 18, plus about 4 likely send-backs.
+**Steps:** 21, plus about 4 likely send-backs. Amendment 15 adds its own tests, build and review steps.
 
 **Price:** the `field/runs.jsonl` medians are about $1.1 for tests, $1.2 for build and $1.2 for review. The large slices are priced at about 2 to 3 times those medians.
 
 **How sure:** about 55%. The doubt is S2a's size and S2b's look, which are the likeliest send-backs. S5's cost also depends on P19 slice 3.
 
-Estimate: 22 steps, $56
+Estimate: 25 steps, $60
 
 ## Findings
 
