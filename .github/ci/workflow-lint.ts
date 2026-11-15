@@ -118,27 +118,11 @@ const sameEntries = (left: readonly [string, unknown][], right: readonly [string
   left.length === right.length &&
   right.every(([key, value]) => left.some(([other, held]) => other === key && held === value));
 
-// The test job's two machines, for the tooling tests alone (check.yaml gives the seconds).
-const TOOLING_LEGS = [1, 2];
-// Today's version is frozen (0525, 0533), so every vitest call of the tooling tests, in the test job
-// and on the schedule, runs the `tooling` project alone: next/ and the three trees of today's tests
-// are projects of their own, and a project ignores `--exclude` (vitest.config.ts;
-// workflow-lint.test.ts holds the tooling project's globs).
+// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
+// a project ignores `--exclude` (vitest.config.ts; workflow-lint.test.ts holds the tooling project's
+// globs). No call in check.yaml runs it (0539).
 const TOOLING_PROJECT = "--project tooling";
-const TOOLING_REPORT = '--reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"';
-
-// The test job's one test step, whole: the tests that reach the change with a base, all of them
-// without one, each on its machine's share. It runs on a pull request alone (0534).
-const TOOLING = [
-  'if [ -n "$BASE" ]; then',
-  `pnpm exec vitest run ${TOOLING_PROJECT} --changed "$BASE" --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
-  "else",
-  `pnpm exec vitest run ${TOOLING_PROJECT} --shard "$SHARD" --passWithNoTests ${TOOLING_REPORT}`,
-  "fi",
-];
-
-const TEST_TIMES = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"';
-
 // Each test leg's time table (time-table.ts): its steps' seconds from GitHub's jobs API, read with
 // the workflow's token, and its slowest test files from its report, in the job summary. Then the same
 // numbers as one JSON file, uploaded with the run attempt in its name, so a rerun keeps both.
@@ -152,11 +136,9 @@ const timeTableEnv = (report: string) => ({
   REPORT: `\${{ runner.temp }}/${report}`,
 });
 
-// check.yaml's test jobs, each with the Vitest report its time table reads.
-const TIMED_LEGS = [
-  ["test", "tooling.json"],
-  ["next", "next.json"],
-] as const;
+// check.yaml's test jobs, each with the Vitest report its time table reads: next alone, since 0539
+// took the tooling tests' job off the merge line.
+const TIMED_LEGS = [["next", "next.json"]] as const;
 
 // A timings upload's `with:`, whole. `retention-days` is a setting (0069), so only its being there is
 // held, as for the record's upload. Its name starts `timings-`, so it can never be taken for a
@@ -315,8 +297,9 @@ const SIZE_ENV = {
 // when only rows changed.
 const CHECK = "needs.changes.outputs.check!='false'";
 // changes' flags from its first pass, each a job's or a step's.
-// No flag starts today's tests or its app end to end, which run on no event (0525, 0533).
-const FLAGS = ["check", "typecheck", "test", "field", "build"];
+// No flag starts today's tests or its app end to end, which run on no event (0525, 0533), and none
+// starts the tooling tests, which only the schedule runs (0539).
+const FLAGS = ["check", "typecheck", "field", "build"];
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
@@ -325,8 +308,96 @@ const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --i
 // run divides by its own count of that kind, and every other run by the full matrix's.
 const SHARD_OF = String.raw`\$\{\{\s*matrix\.shard\s*\}\}`;
 
-const denominator = (kind: "vitest" | "e2e", full: number) =>
+const denominator = (kind: "vitest" | "e2e", full: number | string) =>
   String.raw`\$\{\{\s*needs\.changes\.outputs\.${kind}-legs\s*\|\|\s*${full}\s*\}\}`;
+
+// T1 (0539). A shell command that starts vitest: the binary, however reached (`pnpm exec`, `npx`,
+// `pnpm dlx`, a path into node_modules), but not a file named `vitest.*`; or a package manager's
+// test script, by any of its names (`t`, `tst`, `test`, `test:…`) and after any flags with their
+// values: the root `test` script is `vitest run`.
+const VITEST_CALL =
+  /\bvitest\b(?!\.)|\b(?:pnpm|npm|yarn|bun)\b(?:\s+-{1,2}[\w-]+(?:[=\s]+[^\s-]\S*)?)*\s+(?:run(?:-script)?\s+)?(?:t|tst|test)(?=[\s:]|$)/;
+
+// The end-to-end step's narrowing, from changes' `base` alone (the E-laws below hold its use).
+const CHANGED_FROM_BASE = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
+
+// The variables a vitest call may read, each only as the step's own env sets it: next's leg shard and
+// changes' outputs. Any other value could carry a `--project` the lint cannot see.
+const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
+  SHARD: (value) =>
+    typeof value === "string" &&
+    new RegExp(
+      `^${SHARD_OF}/(?:${denominator("vitest", String.raw`\d+`)}|${denominator("e2e", String.raw`\d+`)})$`,
+    ).test(value),
+  FILTER: (value) => compact(value) === "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'",
+  CHANGED: (value) => compact(value) === compact(CHANGED_FROM_BASE),
+};
+
+// A vitest flag that picks another config or root, which could hold projects of any name.
+const ELSEWHERE = /(?:^|\s)(?:--config|-c|--root|-r|--dir|--workspace)(?:[=\s]|$)/;
+
+/** A step's script as shell commands: `\`-continued lines joined, then cut at every separator. */
+const shellCommands = (script: string) =>
+  script
+    .replace(/\\\r?\n/g, " ")
+    .split(/\n|&&|\|\||[;&|]/)
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+
+/**
+ * T1 (0539): the jobs of a pull request or merge queue workflow that run a tooling test. A vitest
+ * call passes in one of two ways. Either it names its projects, each one of next/'s, and no other
+ * config or root: a call with no `--project` runs every project, the tooling one and today's among
+ * them. Or its step runs it inside next/ (`working-directory`, with no `..` and no `cd`), and no
+ * argument leaves that folder. Either way it reads no shell value but RUNNER_TEMP, untouched, and
+ * the step's own pinned `VITEST_VARS`, and no `${{ }}` or command substitution.
+ */
+const toolingJobs = (workflow: Record<string, unknown>): string[] => {
+  const outer = { ...map(workflow["env"]) };
+  return Object.entries(map(workflow["jobs"]))
+    .filter(([, job]) =>
+      steps(map(job)).some((step) => {
+        if (typeof step["run"] !== "string") {
+          return false;
+        }
+
+        const env = map(step["env"]);
+        const set = { ...outer, ...map(map(job)["env"]), ...env };
+        const parts = shellCommands(step["run"]);
+        const folder = typeof step["working-directory"] === "string" ? step["working-directory"] : "";
+        const inside =
+          /^next\//.test(folder) &&
+          !folder.split("/").includes("..") &&
+          !parts.some((part) => /^(?:cd|pushd)\b/.test(part));
+        return parts
+          .filter((part) => VITEST_CALL.test(part))
+          .some((part) => {
+            const bare = part.replace(/\$\{(\w+)(?:#e2e-)?\}|\$(\w+)\b/g, (whole, braced?: string, plain?: string) => {
+              const name = braced ?? plain ?? "";
+              const pinned = VITEST_VARS[name];
+              const runner = name === "RUNNER_TEMP" && !(name in set);
+              return runner || (pinned !== undefined && pinned(env[name])) ? "" : whole;
+            });
+            const projects = [...part.matchAll(/--project(?:=|\s+)(\S+)/g)].map((found) => found[1] ?? "");
+            const named =
+              projects.length > 0 && projects.every((project) => /^next(?:-|$)/.test(project)) && !ELSEWHERE.test(part);
+            const kept = inside && !part.split(/\s+/).some((word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
+            return /[$`]/.test(bare) || !(named || kept);
+          });
+      }),
+    )
+    .map(([name]) => name);
+};
+
+/** T1 for one more workflow: a pull request or merge queue one; any other runs no merge line. */
+export const lintNoTooling = (path: string, text: string): string[] => {
+  const workflow = map(parse(text));
+  const on = workflow["on"];
+  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  return events.includes("pull_request") || events.includes("merge_group")
+    ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
+    : [];
+};
 
 const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 
@@ -670,7 +741,8 @@ export const lintWorkflow = (text: string): string[] => {
   // names another, and a group of the named tree would skip tests nobody ran. `matched` trusts any
   // artifact of the record's name from a green run, so the record's upload is the one step in the
   // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
-  // in a test job, with exactly TT2's `with:`, so its name is `timings-...` and never a record's.
+  // in a job of TIMED_LEGS (next alone since 0539), with exactly TT2's `with:`, so its name is
+  // `timings-...` and never a record's.
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const given = map(step["with"]);
@@ -720,36 +792,12 @@ export const lintWorkflow = (text: string): string[] => {
     require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
 
-  // The test job runs the tooling tests alone, on two machines, on a pull request alone (0534).
-  // Today's version is frozen (0525, 0533), so its tests run on no event: T1, with the outputs law
-  // above and the app law below.
-  const test = map(jobs["test"]),
-    testSteps = steps(test);
-  require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) ===
-    JSON.stringify(TOOLING_LEGS), `T5: the test job runs on ${TOOLING_LEGS.length} machines, a plain list`);
-  const tooling = testSteps.find((s) => s["name"] === "tooling tests");
-  const times = testSteps.find((s) => s["name"] === "shard times");
-  // T1. Only these whole scripts, each once: no step, flag or spelling adds today's tests.
-  // Each script as its trimmed lines, so the shell's indenting is no part of it.
-  const testAllowed = ["pnpm install --frozen-lockfile", TOOLING.join("\n"), TEST_TIMES, TIME_TABLE];
-  const testRuns = testSteps.filter((s) => "run" in s).map((s) => lines(s["run"]).join("\n"));
-  require(testRuns.length === testAllowed.length &&
-    testAllowed.every(
-      (command) => testRuns.filter((run) => run === command).length === 1,
-    ), "T1: the test job runs exactly its install, the tooling tests, shard times and its time table, once each");
-  require(tooling !== undefined &&
-    !("if" in tooling) &&
-    map(tooling["env"])["SHARD"] === `\${{ matrix.shard }}/${TOOLING_LEGS.length}` &&
-    compact(map(tooling["env"])["BASE"]) ===
-      compact(
-        TEST_BASE,
-      ), "T4: the tooling tests run on every test run, their shard of two, on the pull request's, the group's or the push's base");
-  require(times !== undefined &&
-    times["run"] === TEST_TIMES &&
-    compact(times["if"]) === "!cancelled()" &&
-    tooling !== undefined &&
-    testSteps.indexOf(tooling) <
-      testSteps.indexOf(times), "T3: shard times follow the tooling tests, even after a failure");
+  // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
+  // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
+  // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
+  for (const name of toolingJobs(workflow)) {
+    require(false, `T1: ${name} runs no tooling test (0539)`);
+  }
 
   // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
   // today's promise checks.
@@ -815,7 +863,6 @@ export const lintWorkflow = (text: string): string[] => {
   // `next-visual` project. It takes no filter, so under the reader filter the e2e legs still run every
   // visual file the change reaches.
   const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
-  const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -863,7 +910,7 @@ export const lintWorkflow = (text: string): string[] => {
   // sized these legs from, and from nothing else: a run the size step did not size has no `base` and
   // runs every end-to-end file, so a failed sizing never narrows. The schedule runs them all.
   require(map(e2eStep?.["env"])["CHANGED"] ===
-    changedFromBase, "next's end-to-end step narrows with --changed from changes' base alone");
+    CHANGED_FROM_BASE, "next's end-to-end step narrows with --changed from changes' base alone");
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
@@ -1308,6 +1355,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const errors = [
       ...lintWorkflow(check),
       ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
+      // T1 on the other workflows a pull request or the merge queue starts; lintWorkflow holds check.yaml.
+      ...Object.entries(files.workflows)
+        .filter(([path]) => path !== ".github/workflows/check.yaml")
+        .flatMap(([path, text]) => lintNoTooling(path, text)),
       ...lintIssues(files.workflows),
       ...lintCaches(files),
     ];

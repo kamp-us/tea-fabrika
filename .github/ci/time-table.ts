@@ -4,7 +4,7 @@
 // run and can be followed over time. Advice only: a missing or broken input gives an unavailable
 // section and the rest still prints, and the program exits 0 whatever it read.
 //
-//   check.yaml       next legs and test legs     report $RUNNER_TEMP/next.json or tooling.json
+//   check.yaml       next legs                   report $RUNNER_TEMP/next.json
 //   scheduled.yaml   next legs and tooling legs  report $RUNNER_TEMP/results.json
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

@@ -17,13 +17,13 @@
 // 6. `failure`, `cancelled`, an empty or unknown result: fails, whatever the output says.
 // 7. A gated job, or changes, absent from `needs`: fails.
 // 8. `needs` that is not an object, or JSON that does not parse: fails.
-// 9. A matrix job (test, next) is one `needs` entry; GitHub folds its shards into one result.
+// 9. A matrix job (next) is one `needs` entry; GitHub folds its shards into one result.
 // 10. A job with two outputs (check, which also holds the field row check) skips only when both
 //     are exactly "false": field rows alone start it.
 import { fileURLToPath } from "node:url";
 
 /** The jobs that may skip, each a key of `gates`. */
-export const gated = /** @type {const} */ (["check", "typecheck", "test", "next"]);
+export const gated = /** @type {const} */ (["check", "typecheck", "next"]);
 
 /**
  * Each job that may skip, and the changes outputs it runs on: its `if:` starts it when any of them
@@ -35,7 +35,6 @@ export const gated = /** @type {const} */ (["check", "typecheck", "test", "next"
 export const gates = {
   check: ["check", "field"],
   typecheck: ["typecheck"],
-  test: ["test"],
   next: ["next"],
 };
 

@@ -19,11 +19,7 @@ const options = { seed: 119120, numRuns: 100 };
 // T375 plants caught: skill readTrees and shared scripts at the red baseline;
 // script Markdown counted as prose, scripts skipping test, all Markdown safe,
 // prose masking shared paths, and every skill-tree path counted as prose.
-const heavy = { check: true, typecheck: true, test: true, next: true };
-// 0534: the test job (the tooling tests) runs on a pull request alone. A merge queue's group and a
-// push to main never start it, whatever their paths or history, and the schedule runs every
-// tooling test. Every other event keeps what classify says.
-const testsOn = (event: string) => event !== "merge_group" && event !== "push";
+const heavy = { check: true, typecheck: true, next: true };
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
@@ -136,7 +132,7 @@ it("property: a merge queue's group and a push get the flags a pull request gets
         [[".decisions/0174-a-queue-run-follows-its-paths.md"], "merge_group"],
         // pinned: the same decision file as a push to main, which started every job after its merge.
         [[".decisions/0174-a-queue-run-follows-its-paths.md"], "push"],
-        // pinned: next/ alone, where a pull request skips test and the build.
+        // pinned: next/ alone, where a pull request skips the build.
         [["next/packages/libfabrika/src/a.ts"], "push"],
       ],
     },
@@ -146,12 +142,11 @@ it("property: a merge queue's group and a push get the flags a pull request gets
 it("scenario: a merge queue's group of Markdown skips the heavy jobs, and one of next/ files runs check and next", () => {
   // scenario: the two cases named in 0174, written out so the flags are read here and not only
   // compared with a pull request's.
-  const quiet = { check: false, typecheck: false, test: false, next: false, field: false, build: false };
+  const quiet = { check: false, typecheck: false, next: false, field: false, build: false };
   expect(ci.jobs(["docs/a.md"], "merge_group", false)).toEqual(quiet);
   // 0175: the build is today's library, so a group of next/ files alone no longer builds.
   expect(ci.jobs(["next/packages/libfabrika/src/a.ts"], "merge_group", false)).toEqual({
     ...heavy,
-    test: false,
     field: false,
     build: false,
   });
@@ -163,7 +158,6 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
       expect(ci.classify(paths, "pull_request")).toEqual({
         check: false,
         typecheck: false,
-        test: false,
         next: false,
         field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p) || /^field\/(?:notes|runs|findings)\//.test(p)),
         build: false,
@@ -173,7 +167,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
   );
 });
 
-it("skill scripts run check and test; other version flags follow their readers", () => {
+it("skill scripts run check and typecheck; other version flags follow their readers", () => {
   fc.assert(
     fc.property(
       fc.array(script, { minLength: 1, maxLength: 12 }),
@@ -196,7 +190,6 @@ it("skill scripts run check and test; other version flags follow their readers",
         expect(flags).toEqual({
           check: true,
           typecheck: true,
-          test: true,
           next: others.some((p) => p.startsWith("next/")),
           field: false,
           build: others.some((p) => !p.startsWith("next/")),
@@ -212,13 +205,12 @@ it("skill scripts run check and test; other version flags follow their readers",
 // under .agents/skills/ no longer starts next, since no next/ test reads one, so this law says
 // nothing of next for a list of those alone (the case 4 law below does). Next still starts when a
 // .claude/skills/<name>/ file is in the list.
-it("other skill-tree paths still run check, typecheck and test, next only for .claude/skills/, and none of today's checks", () => {
+it("other skill-tree paths still run check and typecheck, next only for .claude/skills/, and none of today's checks", () => {
   fc.assert(
     fc.property(fc.array(otherSkill, { minLength: 1, maxLength: 12 }), (paths) => {
       expect(ci.classify(paths, "pull_request")).toMatchObject({
         check: true,
         typecheck: true,
-        test: true,
         ...(paths.some((p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
         build: false,
       });
@@ -243,7 +235,7 @@ const readMarkdown = fc.oneof(
 );
 
 // 0175 narrowed this law: today's build starts only when the Markdown is under today's trees.
-it("Markdown a check reads runs check, typecheck, test and next, alone or beside safe paths, and today's build by its tree", () => {
+it("Markdown a check reads runs check, typecheck and next, alone or beside safe paths, and today's build by its tree", () => {
   fc.assert(
     fc.property(readMarkdown, fc.array(safe, { maxLength: 6 }), (read, paths) => {
       const expected = { ...heavy, build: todays(read) };
@@ -269,7 +261,7 @@ it("Markdown a check reads runs check, typecheck, test and next, alone or beside
 // so next runs only the next/ tests that lint, read or bundle source, and the lint rule files law
 // below says so. This law keeps its generators, which hold no lint rule file; its `next` means
 // every next/ test only for the paths those generators make.
-it("shared paths run check, typecheck, test and next, and today's build by the paths; adding paths never disables a job", () => {
+it("shared paths run check, typecheck and next, and today's build by the paths; adding paths never disables a job", () => {
   fc.assert(
     fc.property(fc.array(path, { minLength: 1, maxLength: 10 }), list, shared, (paths, more, unknown) => {
       expect(ci.classify([unknown], "pull_request")).toMatchObject({ ...heavy, build: todays(unknown) });
@@ -278,7 +270,7 @@ it("shared paths run check, typecheck, test and next, and today's build by the p
       const before = ci.classify(paths, "pull_request");
       const after = ci.classify([...paths, ...more], "pull_request");
 
-      for (const key of ["check", "typecheck", "test", "next", "field", "build"] as const) {
+      for (const key of ["check", "typecheck", "next", "field", "build"] as const) {
         expect(!before[key] || after[key]).toBe(true);
       }
 
@@ -289,35 +281,23 @@ it("shared paths run check, typecheck, test and next, and today's build by the p
   );
 });
 
-it("today, next, mixed and the shared plant helper have separate version flags", () => {
+// 0539: the exam's plant helper and signer, which started the tooling tests, are next/ paths like
+// any other now that no event runs a tooling test.
+it("today, next and mixed paths have separate version flags", () => {
   fc.assert(
     fc.property(
       fc.array(today, { minLength: 1, maxLength: 12 }),
       fc.array(next, { minLength: 1, maxLength: 12 }),
       (old, fresh) => {
         expect(ci.classify(old, "pull_request")).toMatchObject({ ...heavy, next: false, build: true });
-        expect(ci.classify(fresh, "pull_request")).toMatchObject({ ...heavy, test: false, build: false });
+        expect(ci.classify(fresh, "pull_request")).toMatchObject({ ...heavy, build: false });
         expect(ci.classify([...old, ...fresh], "pull_request")).toMatchObject({ ...heavy, build: true });
-        expect(ci.classify([...fresh, "next/apps/fabrika/src/exam/plant.ts"], "pull_request")).toMatchObject({
-          test: true,
-          build: false,
-        });
+
+        for (const exam of ["next/apps/fabrika/src/exam/plant.ts", "next/apps/fabrika/src/exam/commits.ts"]) {
+          expect(ci.classify([...fresh, exam], "pull_request")).toEqual(ci.classify(fresh, "pull_request"));
+        }
       },
     ),
-    options,
-  );
-});
-
-it("next's exam signer runs the test job, alone or beside other paths", () => {
-  // T375 Amendment 1: box, plancheck and stepcommit tests read the signer.
-  // Plant caught: let commits.ts skip test like any other next/ path.
-  const commits = "next/apps/fabrika/src/exam/commits.ts";
-  const helper = "next/apps/fabrika/src/exam/plant.ts";
-  fc.assert(
-    fc.property(list, (paths) => {
-      expect(ci.classify([commits], "pull_request")).toEqual({ ...heavy, field: false, build: false });
-      expect(ci.classify([...paths, commits], "pull_request")).toEqual(ci.classify([...paths, helper], "pull_request"));
-    }),
     options,
   );
 });
@@ -424,7 +404,6 @@ it("skill script and prose rules apply only at the repo root", () => {
       const prefix = ["next", ...dirs].join("/");
       expect(ci.classify([`${prefix}/${script}`], "pull_request")).toEqual({
         ...heavy,
-        test: false,
         field: false,
         build: false,
       });
@@ -432,7 +411,6 @@ it("skill script and prose rules apply only at the repo root", () => {
       for (const root of ["next", "docs"]) {
         expect(ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request")).toEqual({
           ...heavy,
-          test: root !== "next",
           field: false,
           // 0175: neither root is today's version, so the build stays off for both.
           build: false,
@@ -451,22 +429,22 @@ const events = fc.constantFrom("pull_request", "push", "merge_group", "workflow_
 const paths = fc.option(list, { nil: null });
 
 // 0175 narrowed this law: the build is today's library, so it follows today's files, no longer
-// `check`. Since 0533 that rule is classify's own `build` flag. 0534 narrowed it again: the merge
-// queue's group and a push never start the test job.
-it("property: a ready pull request and every other event run what classify says, and the test job only off the merge line", () => {
+// `check`. Since 0533 that rule is classify's own `build` flag. 0534 kept the test job to a pull
+// request alone, and 0539 took it off every event, so the law is classify's flags again.
+it("property: a ready pull request and every other event run what classify says", () => {
   fc.assert(
     fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
       const flags = ci.classify(paths, event);
       const ready = event !== "pull_request" || !draft;
       fc.pre(ready);
-      expect(ci.jobs(paths, event, draft)).toEqual({ ...flags, test: flags.test && testsOn(event) });
+      expect(ci.jobs(paths, event, draft)).toEqual(flags);
     }),
     // Lists where check is off are rare in `list`, so one is pinned: a docs-only ready PR builds nothing.
     { ...options, examples: [[["docs/a.md"], "pull_request", false]] },
   );
 });
 
-it("property: a draft keeps lint, typecheck and field as ready, and skips build, test and next", () => {
+it("property: a draft keeps lint, typecheck and field as ready, and skips build and next", () => {
   fc.assert(
     fc.property(paths, (paths) => {
       const ready = ci.jobs(paths, "pull_request", false);
@@ -475,7 +453,6 @@ it("property: a draft keeps lint, typecheck and field as ready, and skips build,
         typecheck: ready.typecheck,
         field: ready.field,
         build: false,
-        test: false,
         next: false,
       });
     }),
@@ -484,23 +461,23 @@ it("property: a draft keeps lint, typecheck and field as ready, and skips build,
 });
 
 // 0175 narrowed this law: main no longer runs every job. A push is still never a draft. 0534
-// narrowed it again: a push never starts the test job, whatever a pull request would.
-it("property: a push runs what a ready pull request runs for the same paths, less the test job, and ignores the draft flag", () => {
+// narrowed it again, to less the test job, and 0539 took that job off every event.
+it("property: a push runs what a ready pull request runs for the same paths, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
-      expect(ci.jobs(paths, "push", draft)).toEqual({ ...ci.jobs(paths, "pull_request", false), test: false });
+      expect(ci.jobs(paths, "push", draft)).toEqual(ci.jobs(paths, "pull_request", false));
     }),
     {
       ...options,
-      // pinned: a push of today's code with the draft flag set, where a draft would skip test.
+      // pinned: a push of today's code with the draft flag set, where a draft would skip the build.
       examples: [[["apps/fabrika/src/a.ts"], true]],
     },
   );
 });
 
-// 0175: the fallbacks. A run that cannot say what changed runs everything. 0534 narrowed it: on
-// the merge queue's group and a push, everything but the test job, which only a pull request runs.
-it("property: unreadable history, no path at all, or an event with no paths of its own runs every job, less the test job on the merge line", () => {
+// 0175: the fallbacks. A run that cannot say what changed runs everything. Since 0539 that holds
+// no tooling test: no job of the merge line runs one.
+it("property: unreadable history, no path at all, or an event with no paths of its own runs every job", () => {
   fc.assert(
     fc.property(
       fc.constantFrom("pull_request", "merge_group", "push"),
@@ -509,9 +486,7 @@ it("property: unreadable history, no path at all, or an event with no paths of i
       fc.constantFrom("workflow_dispatch", "schedule", ""),
       fc.boolean(),
       (event, none, paths, other, draft) => {
-        const { test, ...rest } = ci.jobs(none, event, false);
-        expect(Object.values(rest).every(Boolean)).toBe(true);
-        expect(test).toBe(testsOn(event));
+        expect(Object.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
         expect(Object.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
       },
     ),
@@ -519,7 +494,7 @@ it("property: unreadable history, no path at all, or an event with no paths of i
   );
 });
 
-it("scenario: a push with no commit before it reads no paths, so it runs every job but the test job", () => {
+it("scenario: a push with no commit before it reads no paths, so it runs every job", () => {
   // scenario: a first push has an all-zero `before`, and a hand-started run has none. No git runs.
   const run: Runner = () => {
     throw new Error("git must not run");
@@ -528,9 +503,7 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
   for (const base of ["0".repeat(40), ""]) {
     const read = ci.readPaths(base, "c".repeat(40), "push", run);
     expect(read).toBeNull();
-    const { test, ...rest } = ci.jobs(read, "push", false);
-    expect(Object.values(rest).every(Boolean)).toBe(true);
-    expect(test).toBe(false);
+    expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
   }
 });
 
@@ -561,7 +534,7 @@ const elsewhere = fc.oneof(safe, next, prose, tooling, otherSkill, rerun);
 const todaysFile = fc.oneof(today, fc.constantFrom("packages/fabrika-design/src/colors.ts", "fixtures/toy/src/a.ts"));
 const off = { build: false };
 const scopedEvent = fc.constantFrom("pull_request", "merge_group", "push");
-const quietJobs = { check: false, typecheck: false, test: false, next: false, build: false };
+const quietJobs = { check: false, typecheck: false, next: false, build: false };
 
 it("property: a run that touches no file of today's version does not build it, on a pull request, a merge queue's group and a push", () => {
   fc.assert(
@@ -580,13 +553,12 @@ it("property: a run that touches no file of today's version does not build it, o
   );
 });
 
-it("property: a run that touches a file of today's version runs check, typecheck, test and its build, on a pull request, a merge queue's group and a push", () => {
+it("property: a run that touches a file of today's version runs check, typecheck and its build, on a pull request, a merge queue's group and a push", () => {
   fc.assert(
     fc.property(fc.array(elsewhere, { maxLength: 12 }), todaysFile, scopedEvent, (paths, file, event) => {
       expect(ci.jobs([...paths, file], event, false)).toMatchObject({
         check: true,
         typecheck: true,
-        test: testsOn(event),
         build: true,
       });
     }),
@@ -597,27 +569,26 @@ it("property: a run that touches a file of today's version runs check, typecheck
 it("property: a pull request, a merge queue's group or a push of next/ files alone runs check, typecheck and next, and not today's build", () => {
   fc.assert(
     fc.property(fc.array(next, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
-      expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, test: false, field: false, ...off });
+      expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, field: false, ...off });
     }),
     options,
   );
 });
 
-// 0534 narrowed this law: the tooling tests leave the merge queue and main. A tooling file starts
-// the test job on a pull request alone; the schedule runs every tooling test.
-it("property: a tooling file starts the test job with today's tests off on a pull request, and no test job in a merge queue's group or a push", () => {
+// 0534 narrowed this law: the tooling tests left the merge queue and main. 0539 took them off pull
+// requests too: no flag starts one, and the schedule runs them all. The flag law at the end holds
+// that for every path; this one pins the tooling files themselves.
+it("property: a tooling file starts no tooling test and not today's build, on a pull request, a merge queue's group and a push", () => {
   fc.assert(
-    fc.property(
-      fc.array(tooling, { minLength: 1, maxLength: 12 }),
-      fc.constantFrom("pull_request", "merge_group", "push"),
-      (paths, event) => {
-        expect(ci.jobs(paths, event, false)).toMatchObject({ test: event === "pull_request", ...off });
-      },
-    ),
+    fc.property(fc.array(tooling, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
+      const flags = ci.jobs(paths, event, false);
+      expect(flags).toMatchObject(off);
+      expect(flags).not.toHaveProperty("test");
+    }),
     {
       ...options,
-      // pinned: a change to check.yaml alone, which ran every tooling test in each queue group.
-      examples: [[[".github/workflows/check.yaml"], "merge_group"]],
+      // pinned: a change to check.yaml alone, whose tooling legs ran out of time on pull request 1276.
+      examples: [[[".github/workflows/check.yaml"], "pull_request"]],
     },
   );
 });
@@ -632,13 +603,12 @@ const ciFile = fc.oneof(
   fc.constantFrom(".github/actions/pnpm/action.yml", ".github/CODEOWNERS", ".github/ci/changes.mjs"),
 );
 
-it("property: CI's own files alone run check, typecheck and the pull request's test job, and none of next/", () => {
+it("property: CI's own files alone run check and typecheck, and none of next/", () => {
   fc.assert(
     fc.property(fc.array(ciFile, { minLength: 1, maxLength: 12 }), scopedEvent, (paths, event) => {
       expect(ci.scope(paths, event)).toBe("none");
       expect(ci.jobs(paths, event, false)).toEqual({
         ...heavy,
-        test: event === "pull_request",
         next: false,
         field: false,
         ...off,
@@ -663,22 +633,22 @@ it("property: a CI file beside other paths never changes what next/ they need", 
 });
 
 it("scenario: plain Markdown under today's trees is no file of today's version", () => {
-  // scenario: an app's README is read by no check, so it starts no test and no build, on any event.
-  expect(ci.jobs(["apps/fabrika/README.md"], "pull_request", false)).toMatchObject({ test: false, ...off });
-  expect(ci.jobs(["apps/fabrika/README.md"], "push", false)).toMatchObject({ test: false, ...off });
+  // scenario: an app's README is read by no check, so it starts no build, on any event.
+  expect(ci.jobs(["apps/fabrika/README.md"], "pull_request", false)).toMatchObject(off);
+  expect(ci.jobs(["apps/fabrika/README.md"], "push", false)).toMatchObject(off);
 });
 
 // 0174 narrowed this law: the group no longer runs every job, and it is still never a draft. 0534
-// narrowed it again: the group never starts the test job.
-it("property: a merge queue's group runs what a ready pull request runs, less the test job, and ignores the draft flag", () => {
+// narrowed it again, to less the test job, and 0539 took that job off every event.
+it("property: a merge queue's group runs what a ready pull request runs, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
-      expect(ci.jobs(paths, "merge_group", draft)).toEqual({ ...ci.jobs(paths, "pull_request", false), test: false });
+      expect(ci.jobs(paths, "merge_group", draft)).toEqual(ci.jobs(paths, "pull_request", false));
     }),
     {
       ...options,
       examples: [
-        // pinned: a code group with the draft flag set, where a draft pull request would skip test.
+        // pinned: a code group with the draft flag set, where a draft pull request would skip the build.
         [["apps/fabrika/src/a.ts"], true],
         // pinned: a group of Markdown alone builds nothing, as a ready docs-only pull request.
         [["docs/a.md"], true],
@@ -698,19 +668,18 @@ it("scenario: a merge queue's group reads its paths from its base, as a push doe
 });
 
 // The plan for CI paths, case 4: no next/ test reads a file under .agents/skills/. Today's only
-// such file, the lead's gc.plist, is read by the lead's tooling tests, so test stays on.
-it("property: a skill file under .agents/skills/ that is no script and no prose runs check, typecheck and test, and no next", () => {
+// such file, the lead's gc.plist, is read by the lead's tooling tests, which the schedule runs.
+it("property: a skill file under .agents/skills/ that is no script and no prose runs check and typecheck, and no next", () => {
   fc.assert(
     fc.property(
       fc.array(agentsSkill, { minLength: 1, maxLength: 12 }),
       claudeSkill,
       scopedEvent,
       (paths, claude, event) => {
-        const test = testsOn(event);
-        expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, test, next: false, field: false, ...off });
+        expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, next: false, field: false, ...off });
         // A file under .claude/skills/<name>/ still runs everything, alone or beside them.
-        expect(ci.jobs([claude], event, false)).toEqual({ ...heavy, test, field: false, ...off });
-        expect(ci.jobs([...paths, claude], event, false)).toEqual({ ...heavy, test, field: false, ...off });
+        expect(ci.jobs([claude], event, false)).toEqual({ ...heavy, field: false, ...off });
+        expect(ci.jobs([...paths, claude], event, false)).toEqual({ ...heavy, field: false, ...off });
       },
     ),
     {
@@ -733,7 +702,7 @@ const experimentFile = fc
   .map(([dirs, name, ext]) => ["experiments", ...dirs, `${name}.${ext}`].join("/"))
   .filter((p) => !p.startsWith("experiments/177-themes/schemes/"));
 
-it("property: experiments files alone run check, and no typecheck, test or next", () => {
+it("property: experiments files alone run check, and no typecheck or next", () => {
   fc.assert(
     fc.property(
       fc.array(experimentFile, { minLength: 1, maxLength: 12 }),
@@ -743,7 +712,6 @@ it("property: experiments files alone run check, and no typecheck, test or next"
         expect(ci.jobs(paths, event, false)).toEqual({
           check: true,
           typecheck: false,
-          test: false,
           next: false,
           field: false,
           ...off,
@@ -819,7 +787,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
         const flags = ci.classify(paths, event, same);
         const grown = ci.classify([...paths, ...more], event, same);
 
-        for (const key of ["check", "typecheck", "test", "next", "field", "build"] as const) {
+        for (const key of ["check", "typecheck", "next", "field", "build"] as const) {
           expect(!flags[key] || grown[key]).toBe(true);
         }
 
@@ -868,11 +836,11 @@ it("property: proven counts only for a next/ path that is in paths", () => {
   );
 });
 
-it("property: next/ files all proven run check and typecheck, no test, and scope readers; one not proven gives scope all", () => {
+it("property: next/ files all proven run check and typecheck, and scope readers; one not proven gives scope all", () => {
   fc.assert(
     fc.property(fc.uniqueArray(next, { minLength: 1, maxLength: 12 }), next, scopedEvent, (paths, other, event) => {
       expect(ci.scope(paths, event, paths)).toBe("readers");
-      expect(ci.classify(paths, event, paths)).toMatchObject({ check: true, typecheck: true, test: false, next: true });
+      expect(ci.classify(paths, event, paths)).toMatchObject({ check: true, typecheck: true, next: true });
       fc.pre(!paths.includes(other));
       expect(ci.scope([...paths, other], event, paths)).toBe("all");
       expect(ci.scope(paths, event)).toBe("all");
@@ -881,11 +849,11 @@ it("property: next/ files all proven run check and typecheck, no test, and scope
   );
 });
 
-it("property: lint rule files alone run check, typecheck and test, with scope readers", () => {
+it("property: lint rule files alone run check and typecheck, with scope readers", () => {
   fc.assert(
     fc.property(fc.array(lintFile, { minLength: 1, maxLength: 8 }), proven, scopedEvent, (paths, same, event) => {
       expect(ci.scope(paths, event, same)).toBe("readers");
-      expect(ci.classify(paths, event, same)).toMatchObject({ check: true, typecheck: true, test: true, next: true });
+      expect(ci.classify(paths, event, same)).toMatchObject({ check: true, typecheck: true, next: true });
     }),
     {
       ...options,
@@ -1037,7 +1005,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
 
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
 // main to the commit it tested, so a push and its queue run share their tree and their base tree;
-// then test and next would repeat that run, and skip. Every other case runs what `jobs` says.
+// then next would repeat that run, and skips. Every other case runs what `jobs` says.
 const tree = { base: "1".repeat(40), head: "2".repeat(40), other: "3".repeat(40) };
 const queue = { head: "d".repeat(40), base: "e".repeat(40) };
 
@@ -1137,12 +1105,12 @@ const prints = (printed: Record<string, string>, expected: Record<string, boolea
 // not ended counts, any head tree counts, any base tree counts, an API error counts as tested, every
 // event asks, a tested push skips check too, the reader ignores a refused answer, the reader asks
 // with no token, and a tree git cannot read is ignored.
-it("property: a push whose tree and base tree a passed queue run tested skips test and next, and nothing else", async () => {
+it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", async () => {
   await fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, {});
       const expected = ci.jobs(paths, "push", false);
-      prints(printed, { ...expected, test: false, next: false });
+      prints(printed, { ...expected, next: false });
       expect(printed["tested"]).toBe("7");
       expect(printed["probe"]).toBe("false");
     }),
@@ -1156,7 +1124,6 @@ it("scenario: a tested push of today's and next/ files keeps check, typecheck, b
   expect(printed).toMatchObject({
     check: "true",
     typecheck: "true",
-    test: "false",
     next: "false",
     build: "true",
     tested: "7",
@@ -1317,7 +1284,6 @@ const pr = { merge: "f".repeat(40), base: "9".repeat(40) };
 const printedOf = (selection: ci.Selection): Record<string, string> => ({
   CHECK: String(selection.check),
   TYPECHECK: String(selection.typecheck),
-  TEST: String(selection.test),
   FIELD: String(selection.field),
   BUILD: String(selection.build),
   NEXT: String(selection.next),
@@ -1391,7 +1357,7 @@ const scopes: readonly ci.Selection["scope"][] = ["none", "readers", "all"];
  */
 const narrowed = (needed: ci.Selection, pick: number): ci.Selection | null => {
   const cuts: ci.Selection[] = [
-    ...(["check", "typecheck", "test", "field", "build", "next"] as const)
+    ...(["check", "typecheck", "field", "build", "next"] as const)
       .filter((job) => needed[job])
       .map((job) => ({ ...needed, [job]: false })),
     ...(needed.next ? scopes.slice(0, scopes.indexOf(needed.scope)).map((scope) => ({ ...needed, scope })) : []),
@@ -1403,7 +1369,6 @@ const narrowed = (needed: ci.Selection, pick: number): ci.Selection | null => {
 const widened = (needed: ci.Selection, more: ci.Selection): ci.Selection => ({
   check: needed.check || more.check,
   typecheck: needed.typecheck || more.typecheck,
-  test: needed.test || more.test,
   field: needed.field || more.field,
   build: needed.build || more.build,
   next: needed.next || more.next,
@@ -1413,7 +1378,6 @@ const widened = (needed: ci.Selection, more: ci.Selection): ci.Selection => ({
 const selection = fc.record({
   check: fc.boolean(),
   typecheck: fc.boolean(),
-  test: fc.boolean(),
   field: fc.boolean(),
   build: fc.boolean(),
   next: fc.boolean(),
@@ -1477,7 +1441,7 @@ const grouped = async (paths: readonly string[], api: ci.Api) => {
   return { printed, notes };
 };
 
-const noJob = { check: false, typecheck: false, test: false, next: false, field: false, build: false };
+const noJob = { check: false, typecheck: false, next: false, field: false, build: false };
 
 it("scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run", async () => {
   // scenario: the common merge, a next/ file and today's app, so the group would run check,
@@ -1529,7 +1493,6 @@ const filterText = fc.oneof(
 const printedText = fc.record({
   check: flagText,
   typecheck: flagText,
-  test: flagText,
   next: flagText,
   field: flagText,
   build: flagText,
@@ -1541,7 +1504,7 @@ it("property: a printed flag counts as a job that ran only when it is exactly tr
     fc.property(printedText, (printed) => {
       const read = ci.selectionOf(printed);
 
-      for (const job of ["check", "typecheck", "test", "next", "field", "build"] as const) {
+      for (const job of ["check", "typecheck", "next", "field", "build"] as const) {
         expect(read[job], job).toBe(printed[job] === "true");
       }
 
@@ -1563,7 +1526,6 @@ it("property: a run records its trees only on a ready pull request whose printed
   const textOf = (s: ci.Selection) => ({
     check: String(s.check),
     typecheck: String(s.typecheck),
-    test: String(s.test),
     next: String(s.next),
     field: String(s.field),
     build: String(s.build),
@@ -1592,7 +1554,6 @@ it("property: a run records its trees only on a ready pull request whose printed
           TESTED: readable ? pr.merge : "0".repeat(40),
           CHECK: shown.check,
           TYPECHECK: shown.typecheck,
-          TEST: shown.test,
           NEXT: shown.next,
           FIELD: shown.field,
           BUILD: shown.build,
@@ -1957,15 +1918,16 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   await expect(refused?.runs()).rejects.toThrow("403");
 });
 
-// 0533: CI runs none of the tests of today's version. No event, path list or draft flag
-// turns its tests or its app end to end back on: there is no flag for them, in the flags or in what
-// the script prints for check.yaml. workflow-lint.ts holds the other half: no job runs them.
+// 0533: CI runs none of the tests of today's version, and 0539: the merge line runs no tooling test.
+// No event, path list or draft flag turns today's tests, its app end to end or the tooling tests
+// back on: there is no flag for them, in the flags or in what the script prints for check.yaml.
+// workflow-lint.ts holds the other half: no job runs them (T1).
 // Plants, each run once on changes.mjs and restored, each red: `today: touched` back in classify's
 // flags; `e2e: true` back in the fallback `all`; `e2e: false` back in a draft's override.
-const flagNames = ["build", "check", "field", "next", "test", "typecheck"];
+const flagNames = ["build", "check", "field", "next", "typecheck"];
 const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflow_dispatch", "schedule", "");
 
-it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests or e2e", async () => {
+it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", async () => {
   await fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
       expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
