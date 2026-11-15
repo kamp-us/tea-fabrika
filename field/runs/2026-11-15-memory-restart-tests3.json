@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-memory-restart-tests3",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316",
+  "started": null,
+  "ended": "2026-11-15T07:32:25-08:00",
+  "parent": "2026-11-15-memory-restart-tests2",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "tests step, third round for the memory restart in next/: the builder declared desktop.brain-memory with format text, so its editor default is the file's spelling, 500000000 bytes. The vector law in settings/JsonSchema.test.ts now picks the expected spelling by the setting's declared format, the string-tree codec for a text setting and the JSON codec otherwise, written without calling Codec.file. Its lines are the same as on fabrikalfa/pipe-plumbing, so the two branches merge cleanly. Every settings test file ran alone and passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "note": "started is null: this round's start time was not recorded.",
+  "step": "tests",
+  "plants": [
+    { "law": "vector: the shipped declarations (settings/JsonSchema.test.ts)", "plant": "settings/Codec.ts file's default uses the JSON form for a text setting", "result": "red" }
+  ]
+}
