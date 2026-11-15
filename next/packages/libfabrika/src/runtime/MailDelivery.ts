@@ -16,6 +16,8 @@ import { type Queued } from "./Send.ts";
  * **Details**
  *
  * A `MailRefusal` reason is final: the runner gives it to the program as the Send's answer.
+ * `full` means the recipient's inbox holds its cap of unread letters and nothing was saved; the
+ * recipient was woken to read. A plain Send answers it, and a chunked send waits and tries again.
  * `storage` (the letter was not saved) and `unavailable` (its recipient was not scheduled) answer
  * nothing: the Send stays dispatched, and the runner tries it again.
  *
@@ -23,7 +25,7 @@ import { type Queued } from "./Send.ts";
  * @category errors
  */
 export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError>()("MailDeliveryError", {
-  reason: Schema.Union([MailRefusal, Schema.Literals(["storage", "unavailable"])]),
+  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage", "unavailable"])]),
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
