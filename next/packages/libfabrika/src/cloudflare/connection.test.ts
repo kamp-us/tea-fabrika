@@ -764,13 +764,13 @@ it.effect.prop(
           const replies = w.frames.length;
           const before = w.calls.length;
           const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
-          const room = wait !== null && fits(wait);
+          const keeps = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
           // Under the limits, a call answered parked is kept as a wait on the stream the answer
           // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
           // 4a): one more routed call. At them, it is refused `too_many_waits` and nothing more.
           const again =
-            wait === null || !room
+            wait === null || !keeps
               ? []
               : [
                   wait.stream.startsWith(targetStream(""))
@@ -788,7 +788,7 @@ it.effect.prop(
             expect(span.attributes.get(Trace.REFUSED)).toBe(refused ? "reserved" : undefined);
           }
 
-          if (wait !== null && room) {
+          if (wait !== null && keeps) {
             kept.push(wait);
             expect(w.frames, "a parked call with room gets no reply yet").toHaveLength(replies);
           } else {
