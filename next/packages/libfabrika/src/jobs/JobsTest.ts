@@ -8,18 +8,25 @@
 // P39 slice 3 (ticket 1040), J2: a `collected` event survives reopen, an equal retry answers the
 // first receipt, and a different collection is refused and writes nothing. Plant (after build):
 // append `collected` without folding first, so a retry writes a second event.
+//
+// P39 slice 4a, G1 (the stream half): an accepted request writes one line `{ id, process }` to
+// `target:<key>` in its own transaction, and a repeat, a conflict or a cut request writes none;
+// `forTarget(key)` answers exactly the open jobs (requested, assigned or started) whose target is
+// that key, and the stream's last rev, 0 before its first line. The oracle reads the stream through
+// the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
+// build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
-import { Doorbell } from "../ledger/Ledger.ts";
+import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerStreams, LedgerStreamsError, Storage } from "../ledger/LedgerStreams.ts";
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
 import { Command, type Executor, type Job, Request, Recorded, Result, State } from "./Job.ts";
-import { Jobs, JobsError } from "./Jobs.ts";
+import { Jobs, JobsError, targetStream } from "./Jobs.ts";
 import * as JobsLedger from "./JobsLedger.ts";
 
 /** One real store. `reopen` closes it and opens the same database again, keeping only its rows. */
@@ -455,9 +462,14 @@ const otherExecution = (execution: string, variant: number): string =>
   choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
 
 /** A move, or a move in the one phase of the job it was played on. */
-type Done = Move | `${Move}@${Phase}`;
+type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";
 
-const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<Move>, done: Set<Done>) =>
+const walk = (
+  open: Effect.Effect<Store, never, Scope.Scope>,
+  moves: ReadonlyArray<Move>,
+  done: Set<Done>,
+  targets = false,
+) =>
   Effect.fnUntraced(function* (tape: Tape) {
     const store = yield* open;
     const { sql, fault } = cutting(store.sql);
@@ -466,6 +478,43 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
     let life = yield* Layer.build(layer(sql));
     const jobs = <A>(call: (jobs: Jobs["Service"]) => Effect.Effect<A, JobsError>) =>
       Jobs.use(call).pipe(Effect.provide(life), Effect.result);
+    /** G1: what each key was asked for, one pointer per accepted request, in the order they were saved. */
+    const asked = new Map<string, Array<{ readonly id: string; readonly process: string }>>();
+    // The ledger's own reader, outside the jobs service: it sees the `target:` stream as any reader would.
+    const lines = (key: string) =>
+      Ledger.use((ledger) => Stream.runCollect(ledger.read(targetStream(key), 0))).pipe(
+        Effect.provide(LedgerSql.layer(sql, { reader: "connection:jobs-test-targets" }).pipe(Layer.provide(quiet))),
+        Effect.orDie,
+      );
+    /** G1: each key's stream holds one line per accepted request, and `forTarget` answers its open jobs and last rev. */
+    const indexed = Effect.fnUntraced(function* (message: string) {
+      for (const key of tape.keys) {
+        const saved = [...(yield* lines(key))];
+        const wanted = asked.get(key) ?? [];
+        expect(saved.length, `${message}: one ${targetStream(key)} line per accepted request`).toBe(wanted.length);
+        expect(
+          saved.map((entry) => entry.body),
+          `${message}: each line points at its job`,
+        ).toMatchObject(wanted);
+        const answer = success(yield* jobs((j) => j.forTarget(key)), `${message}: forTarget`);
+        const open = [...world.jobs.values()].filter(
+          (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
+        );
+        const ids = (all: ReadonlyArray<Job>) =>
+          all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+        expect(ids(answer.jobs), `${message}: forTarget answers exactly the key's open jobs`).toEqual(
+          open.map((s) => s.request.id).sort(),
+        );
+
+        for (const job of answer.jobs) {
+          const kept = world.jobs.get(job.state._tag === "absent" ? "" : job.state.request.id);
+          expect(job, `${message}: each listed job reads as saved`).toEqual(kept === undefined ? null : expected(kept));
+        }
+
+        expect(answer.rev, `${message}: the cursor is the stream's last rev`).toBe(saved.at(-1)?.rev ?? 0);
+        done.add(open.length > 0 ? "listed" : "listed_empty");
+      }
+    });
     const said = (cell: Cell): Recorded => ({ ...cell.said, seen: cell.seen % (world.head + 1) });
     /** Keep an accepted call's receipt as the oracle's next event, and move the log head. */
     const keep = (saved: Saved, event: Event, recorded: Recorded, receipt: Receipt) => {
@@ -511,6 +560,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           const saved: Saved = { request, phase: "requested", receipts: new Map(), events: [] };
           world.jobs.set(request.id, saved);
           keep(saved, "requested", recorded, receipt);
+          asked.set(request.target, [
+            ...(asked.get(request.target) ?? []),
+            { id: request.id, process: request.process },
+          ]);
           break;
         }
         case "request_equal": {
@@ -750,6 +803,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       done.add(move);
       // After every prefix, every saved job reads as the oracle kept it, and nothing else was written.
       yield* unchanged(`after ${move}`);
+
+      if (targets) {
+        yield* indexed(`G1 after ${move}`);
+      }
     }
   });
 
@@ -817,13 +874,14 @@ const prop = (
   open: Effect.Effect<Store, never, Scope.Scope>,
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Done>,
+  targets = false,
 ) =>
   it.effect(
     name,
     () =>
       Effect.gen(function* () {
         const done = new Set<Done>();
-        const law = walk(open, moves, done);
+        const law = walk(open, moves, done, targets);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
@@ -930,6 +988,23 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         "take_again@collected",
         "reopen",
       ],
+    );
+    prop(
+      "G1: an accepted request writes one target: line in its own transaction, a repeat, a conflict or a cut writes none, and forTarget answers exactly the key's open jobs and the stream's last rev",
+      open,
+      [...LIFE, "request_equal", "request_changed", "cut_before", "cut_after", "take_again", "finish_equal"],
+      [
+        "request_new",
+        "request_equal",
+        "request_changed",
+        "cut_before",
+        "cut_after",
+        "finish_ok",
+        "reopen",
+        "listed",
+        "listed_empty",
+      ],
+      true,
     );
   });
 

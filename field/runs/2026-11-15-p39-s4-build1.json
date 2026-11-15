@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T06:13:33-08:00",
+  "ended": "2026-11-15T06:48:02-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "build step, first round for P39 slice 4a (the hands client) in next/. Built: jobs.list and jobs.wait for a hands key, the target:<key> index written in the request's transaction, the transport driver keeping a parked jobs.wait as a wait, the hands machine, its start, the journal over Effect's KeyValueStore, the Commands contract, and the dial Sub moved to client/internal/dial.ts. Green: G1 and G2 (jobs and gateway drivers), H3, H4, S1, W1 (window start and window machine laws), the transport driver's laws. Red for the tests step, because no build can make them green: H1's coverage, H2, H5 and E1 request jobs over 2 to 6 processes in turn, so one process soon has two open jobs and jobs.take answers ambiguous for good (finding 2026-11-15-jobs-take-ambiguous-wedges); local copies with one process per request, never committed, pass H1, H3, H4, H5 and E1. H2 also arms its write and command cuts only when it sees saving, executing or recalling at a cell boundary, and with the in-memory journal those states never last to one (0 of about 3,700 boundaries in 100 walks). Typecheck: no product file has an error; seven test stubs of Jobs lack forTarget and hands-client.test.ts has its own type errors. pnpm lint is red only on lint:layers, the six client/ imports of jobs/Job.ts that wait for the owner's yes on layer-rules.json.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 35,
+  "note": "Calls taken while the owner was away: (1) gap 1, the driver keeps any call answered parked as a wait on the stream the answer names and registers it again, as a parked ledger.wait is, and the Worker twin asks a target: stream again as jobs.wait (85%); (2) a held result is held per link, as H3 says; (3) gap 3 is a finding row, not cured; (4) the client takes only a job whose process is listed once, trying the next on each failed take, and waits for new work when it can take none (80%). An empty Schema.Struct({}) lets any field through even with onExcessProperty error in Effect 4.1.2, so jobs.list's params are a record of nothing. The started time is the first test run's clock; the reading before it has no clock reading.",
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

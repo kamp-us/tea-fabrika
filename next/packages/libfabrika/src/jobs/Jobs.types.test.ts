@@ -3,9 +3,13 @@
 // its module. No ledger name (`LedgerTurn`, `LedgerError`, `Line`) is part of the contract. CI's
 // typecheck is this law's runner. P39 slice 3 (ticket 1040) adds `collected`, which takes the
 // collection in the jobs module's own `Collection` type, and the `wrong_process` reason.
+// P39 slice 4a, G1 (contract half): `forTarget` answers the open jobs one hands key is asked for and
+// the `target:` stream's last rev, in the jobs module's own types and error; `targetStream` names
+// that stream from a key. Plant (after build): give `forTarget` a `LedgerError` in its error channel.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Context, Effect, Layer, Stream } from "effect";
 import type { ProcessId } from "../ProcessId.ts";
+import type { Rev } from "../Rev.ts";
 import type { Collection, Executor, Job, Recorded, Request, Result } from "./Job.ts";
 import type * as JobsFront from "./Jobs.ts";
 import type { Jobs, JobsError } from "./Jobs.ts";
@@ -18,6 +22,7 @@ it("type: L9 the contract speaks only the jobs module's types and errors, and th
   // The five calls, as the contract writes them. A ledger type or error in any of them fails here.
   expectTypeOf<Context.Service.Shape<typeof Jobs>>().toEqualTypeOf<{
     readonly forProcess: (process: typeof ProcessId.Type) => Stream.Stream<Job, JobsError>;
+    readonly forTarget: (key: string) => Effect.Effect<{ jobs: ReadonlyArray<Job>; rev: Rev }, JobsError>;
     readonly request: (request: Request, recorded: Recorded) => Effect.Effect<JobsFront.Receipt, JobsError>;
     readonly take: (id: string, executor: Executor, recorded: Recorded) => Effect.Effect<JobsFront.Taken, JobsError>;
     readonly started: (
@@ -61,4 +66,6 @@ it("type: L9 the contract speaks only the jobs module's types and errors, and th
   >();
   // The error is a schema value of its own, so a refusal crosses a wire as the module wrote it.
   expectTypeOf<typeof JobsError.Type>().toEqualTypeOf<JobsError>();
+  // G1: the index stream's name comes from a key alone, a protocol fact, never a setting.
+  expectTypeOf<typeof JobsFront.targetStream>().toEqualTypeOf<(key: string) => string>();
 });

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-jobs-list-reads-a-keys-whole-history",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/jobs/JobsLedger.ts",
+    "line": 205
+  },
+  "says": "In next/, every jobs.list reads every target: line the key ever got and then each named job's whole stream, finished ones included, so one list grows with the key's lifetime, not with its open work.",
+  "proof": "JobsLedger.ts:205-212, forTarget reads turn.read(index, 0) from rev 0 and calls saved(turn, id) for each pointer before it filters to open jobs.",
+  "cost": "A key that ran thousands of jobs pays thousands of stream reads on every list, inside the write turn, and the client lists after every job and every wake.",
+  "head": "c2ce4f498d29785d4b81c7fc5ec44a6b0451a567",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}

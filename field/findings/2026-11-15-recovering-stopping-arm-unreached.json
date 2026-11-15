@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-recovering-stopping-arm-unreached",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/DevLife.ts",
+    "line": 196
+  },
+  "says": "In next/, recovering returns false in stopping, so a call waiting for a replacement ends as soon as a stop begins, but no law reaches a state where that arm alone decides: a normal stop folds stopped at once, which clears the replacement, so the plant that drops the stopping arm stays green. Fixed in the same pull request: L8 in dev.laws.integration.test.ts now generates a stop whose own fact write fails (a folder where the outbox's temporary file goes), so the brain stays in stopping and never reaches stopped, and it requires each waiting call to end at the stop's moment as offline. The plant that drops the stopping arm now fails L8 at fast and at full depth.",
+  "proof": "At 490d3f7a9e40c387808db514281f8adbd293f587, the plant 'recovering ignores the stopping state', recovering = pending(s) !== null, left every law green. At the fix's head, the same plant fails L8: a call ends at 30001 ms, its bound, in place of 1 ms, the stop.",
+  "cost": "A stop whose write fails would hold every waiting call to its bound, the grace plus 30 s, with nothing to catch it.",
+  "head": "490d3f7a9e40c387808db514281f8adbd293f587",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}
