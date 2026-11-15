@@ -1,0 +1,39 @@
+{
+  "id": "2026-11-15-quotas-merged-on-a-red-branch-run-and-came-back-out",
+  "date": "2026-11-15",
+  "lanes": [
+    "kamp-us/tea-fabrika#1092",
+    "kamp-us/tea-fabrika#1353",
+    "kamp-us/tea-fabrika#1331"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "P34c slice 4 (per-program quotas, in next/) merged to main at 14:50 Pacific as a3dc79551 with two real-instance laws red, and was taken back out by a revert that merged at about 15:27 Pacific as 3ed35d4c5. The full run on the slice's branch, 43770060999, had gone red at 14:46 Pacific, before the merge: law L11 in next/apps/fabrika/src/start-child.laws.integration.test.ts (the text of the quota tables' eight CREATE TABLE statements reaches outputs when a storage call is cut) and the slice's own law Q13 in next/apps/fabrika/src/worker-quotas.integration.test.ts (a healthy program's send is refused with quota on the real Worker path). The lead session had armed the pull request at 14:41 Pacific under decision 0544, with the run still going, and read the finished run's `cancelled` as a run cut off by a newer run in the same group. It also told another session, wrongly, that an earlier `cancelled` run on the hands slice had no failed job. The same misread was found about 35 minutes later, when the hands slice's run ended the same way and the lead read its jobs' steps. No full run on main ran with the slice in, so no ci-scheduled issue opened: by the letter of decision 0542 this was never a sev1, though main held two red laws for about 37 minutes.",
+  "cause": "Three things together. One: a pull request's own checks and the merge queue run no real-instance law (decisions 0534 and 0536), so a green pull request says nothing about them. Two: decision 0544 arms a reviewed pull request with no full run first, and the review had not run the slice's three `.integration.` files. Three, the lead's slip: in the scheduled workflow a red leg's last step, `stop the run`, cancels its own run, so a red full run ends `cancelled` with every other leg `cancelled` too; `gh run list` and the run's `conclusion` then show only `cancelled`, the same word as a run a person or a newer run stopped. The lead's waiter printed the conclusion and the jobs that were not `success`, and the lead did not open a job's steps, where the failed `vitest` step is plain to see.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Pull request 1353: a plain git revert of a3dc79551, plus one commit that puts back the slice's seven finding rows, since lint refuses a deleted row file (the revert's first lint run failed on that). The slice's fix is made on its own branch and is offered again only after a green full run on that branch.",
+  "test": "None yet. The next full run on main is the proof that main is green again. Code that would have caught it: the report job, or the `stop the run` step, could set the run's conclusion to failure (or post the failed law's name on the pull request) so a red full run never reads as `cancelled`; and `land.ts queue` and the lead's arming could refuse a pull request whose head has a full run that ended with a failed step.",
+  "levels": [
+    "Not a sev1 by the rule: no ci-scheduled issue opened. Main held the two red laws from 14:50 to about 15:27 Pacific."
+  ],
+  "fixes": [
+    "1353, about 15:27 Pacific: quotas slice 4 taken back out of main."
+  ],
+  "cost": "Runner minutes: the red branch run 43770060999 about 8 minutes on each of 10 legs before it stopped; the revert's two check runs. Agent work: the slice's description agent (about 233 thousand tokens) wrote words for a merge that was undone. About 40 minutes of the lead's time. Dollars not computed.",
+  "learned": [
+    "A full run that ends `cancelled` is read job by job, step by step, before anyone says why it ended. `gh api repos/<repo>/actions/runs/<id>/jobs` with the steps' conclusions shows a failed `vitest` step at once.",
+    "A pull request whose own branch has a full run that ended with a failed step is never armed, whatever decision 0544 says about not waiting for one: 0544 is about not starting a run, not about ignoring one that failed.",
+    "A pull request that adds or changes an `.integration.` law needs that law seen green in a full run on its branch before it is armed. The lead holds this until the owner rules on it.",
+    "A revert of a pull request that added field rows must keep the rows: lint refuses a deleted row file.",
+    "When another session reads a run as red and the lead reads it as canceled, the lead checks the steps before contradicting it."
+  ],
+  "unknown": "Whether L11 and Q13 are product faults or law faults; a read-only diagnosis is running. Whether any other merged pull request has a red full run that was read as canceled; the lead has not swept past runs.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1092",
+    "https://github.com/kamp-us/tea-fabrika/pull/1353",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43770060999",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43770426308",
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0544-every-reviewed-pull-request-is-armed.md"
+  ]
+}
