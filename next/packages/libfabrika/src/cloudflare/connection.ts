@@ -76,9 +76,10 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       wait: Effect.fnUntraced(function* (stream, after, reader) {
         const client = (yield* attached(ws)).client as ConnectionId;
         // A hands key's own `target:` stream is asked again as its `jobs.wait`: it may not call
-        // `ledger.wait`, and the gateway names that stream from its key alone.
+        // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring
+        // goes to `reader`, this object, where the socket is.
         const asked = stream.startsWith(targetStream(""))
-          ? p.route(client, "jobs.wait", { after })
+          ? p.route(client, "jobs.wait", { after }, reader)
           : p.route(client, "ledger.wait", { stream, after }, reader);
         const answer = yield* rpc(routed(asked));
 
@@ -164,7 +165,9 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             return result;
           }
 
-          return yield* rpc(routed(p.route(client, method, params)));
+          // A call the door parks, such as a hands key's first `jobs.wait`, is rung at this object,
+          // the one the socket lives on, never at an object named by the connection id.
+          return yield* rpc(routed(p.route(client, method, params, gateway)));
         },
         // A failed or defective call still answers its request without exposing error details. It is
         // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and

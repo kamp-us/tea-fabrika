@@ -25,6 +25,8 @@ import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerStreamsSql from "@kampus/libfabrika/ledger/LedgerStreamsSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { Waited } from "@kampus/libfabrika/ledger/Log";
+import { Referee } from "@kampus/libfabrika/ledger/Referee";
+import * as RefereeSql from "@kampus/libfabrika/ledger/RefereeSql";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
@@ -44,8 +46,9 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 //
 // The door's glue here is the test's own, as `cloudflare/connection.ts` is the Worker's: each socket
 // gets a connection id and a challenge from the gateway, `initialize` saves the online attachment,
-// every other call goes to `Gateway.route`, and each ring the ledger asks for is handed to every
-// connection's `ring`. A parked wait on a `target:` stream is asked again as the hands' own
+// every other call goes to `Gateway.route` naming this one object as the reader its rings reach,
+// and each ring the ledger asks for this object is handed to every connection's `ring`; a ring for
+// any other name reaches nobody, as on the Worker. A parked wait on a `target:` stream is asked again as the hands' own
 // `jobs.wait`, since a hands key may not call `ledger.wait`.
 //
 // E1: a requested job ends finished with the fake's result, or `unknown interrupted` where a crash
@@ -68,6 +71,8 @@ const SEED = 119120;
 const ORIGIN = "http://127.0.0.1:18787";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-15T10:00:00.000Z";
+/** The one connection object every socket of the door lives on, and the name its rings reach. */
+const READER = "hands-e1";
 
 const text = (s: string) => new TextEncoder().encode(s);
 
@@ -158,11 +163,14 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     (held) => Effect.sync(() => held.isOpen && held.close()),
   );
   const sql = nodeSql(db);
-  const rings = yield* Queue.unbounded<{ readonly stream: string; readonly rev: number }>();
+  const rings = yield* Queue.unbounded<{ readonly to: string; readonly stream: string; readonly rev: number }>();
   const bell = Layer.succeed(Doorbell, {
-    ring: (_to: string, stream: string, rev: number) =>
-      Effect.sync(() => void Queue.offerUnsafe(rings, { stream, rev })),
+    ring: (to: string, stream: string, rev: number) =>
+      Effect.sync(() => void Queue.offerUnsafe(rings, { to, stream, rev })),
   });
+  // The referee the Worker's Project gives the gateway as its `wait`, so a parked wait is rung at
+  // the reader the call names, as on the Worker (runtime.ts), never at this object by default.
+  const referee = yield* Referee.pipe(Effect.provide(RefereeSql.layer(sql).pipe(Layer.provide(bell))));
   const data = Layer.mergeAll(
     LedgerSql.layer(sql, { reader: "hands-e1" }),
     LedgerTransactionSql.layer(sql),
@@ -210,6 +218,7 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     open: () => Effect.succeed(null),
     deliver: () => Effect.void,
     notify: () => Effect.void,
+    wait: referee.wait,
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   }).pipe(Layer.provideMerge(services), Layer.orDie);
@@ -240,14 +249,21 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
   const drivers = new Set<ReturnType<typeof connection>>();
   const sockets: Array<MemorySocket> = [];
   const lose = { next: 0 };
+  /** Each ring the referee sent, by the name it was sent to: only `READER` reaches a socket. */
+  const rung: Array<{ readonly to: string; readonly stream: string }> = [];
   // One fiber runs the door's work in order: each socket's setup, each frame, each ring.
   yield* Effect.forkScoped(Effect.forever(Queue.take(work).pipe(Effect.flatten, Effect.ignore)));
   yield* Effect.forkScoped(
     Effect.forever(
       Queue.take(b.rings).pipe(
-        Effect.flatMap(({ stream, rev }) =>
-          Effect.forEach([...drivers], (c) => Effect.ignore(c.ring(stream, rev)), { discard: true, concurrency: 1 }),
-        ),
+        // A ring reaches only the object its `to` names, as `CONNECTION.getByName(to)` does on the
+        // Worker: every socket here lives on the one object named `READER`.
+        Effect.flatMap(({ to, stream, rev }) => {
+          rung.push({ to, stream });
+          return to === READER
+            ? Effect.forEach([...drivers], (c) => Effect.ignore(c.ring(stream, rev)), { discard: true, concurrency: 1 })
+            : Effect.void;
+        }),
       ),
     ),
   );
@@ -266,7 +282,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
     sockets.push(made);
     let attached: typeof Attached.Type = Attached.cases.new.make({ client: "", nonce: "" });
     const c = connection({
-      reader: "hands-e1",
+      reader: READER,
       session: url,
       ping: () => 30_000,
       read: () => attached,
@@ -286,7 +302,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         Effect.gen(function* () {
           const id = yield* connected;
           const answer = stream.startsWith("target:")
-            ? yield* b.d.route(id, "jobs.wait", { after })
+            ? yield* b.d.route(id, "jobs.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
           if (answer._tag === "parked") {
@@ -326,7 +342,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
               }),
               Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
             )
-          : Effect.flatMap(connected, (id) => b.d.route(id, method, params)).pipe(
+          : Effect.flatMap(connected, (id) => b.d.route(id, method, params, READER)).pipe(
               Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
             ),
     });
@@ -348,6 +364,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
     socket: Layer.succeed(Socket.WebSocketConstructor, make),
     sockets,
     lose,
+    rung,
     /** The door closes the socket open now, as a network or a restart of the brain would. */
     drop: () => sockets.at(-1)?.drop(1006),
   };
@@ -510,6 +527,17 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       done.add(result?._tag === "unknown" ? "ended:unknown" : "ended:result");
     }
 
+    // E1: every parked wait was rung at the object its socket lives on. A wait that names another
+    // reader is never answered on the Worker, so the hands would sleep through new work.
+    expect(
+      d.rung.filter((r) => r.to !== READER),
+      "E1: every ring names the object the sockets live on",
+    ).toEqual([]);
+
+    if (d.rung.some((r) => r.stream.startsWith("target:"))) {
+      done.add("ring:target");
+    }
+
     // S1: every output a leak could reach, read whole, and every encoding of the private key.
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
@@ -559,9 +587,9 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
 
 describe("P39 slice 4a: the hands client end to end", () => {
   law(
-    "E1: a requested job ends finished with the fake's result through the real client start, the in-memory socket, the real Gateway and Jobs on :memory:, with sockets dropped and answers lost; execute runs once",
+    "E1: a requested job ends finished with the fake's result through the real client start, the in-memory socket, the real Gateway and Jobs on :memory:, with sockets dropped and answers lost; execute runs once; every parked wait is rung at the object its socket lives on",
     "E1",
-    ["request", "drop", "lose", "restart", "ended:result"],
+    ["request", "drop", "lose", "restart", "ended:result", "ring:target"],
     60,
   );
   law(

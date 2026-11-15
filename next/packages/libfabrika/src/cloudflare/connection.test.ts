@@ -8,6 +8,7 @@ import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
+import { targetStream } from "../jobs/Jobs.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
@@ -112,6 +113,8 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
   });
   let answer: typeof Answer.Type = Answer.cases.refused.make({ reason: "reserved" });
   const calls: Array<{ method: string; params: unknown }> = [];
+  /** The object each routed call names as the one a parked wait rings, by method. */
+  const readers: Array<{ method: string; reader: string | undefined }> = [];
   const saved: Array<SpanRow> = [];
   const stats = { writes: 0, archives: 0 };
   const env = fake<Env>({
@@ -119,8 +122,9 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     PROJECT: {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
-        route: (_client: string, method: string, params: unknown) => {
+        route: (_client: string, method: string, params: unknown, reader?: string) => {
           calls.push({ method, params });
+          readers.push({ method, reader });
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
         },
@@ -168,6 +172,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       gone = true;
     },
     calls,
+    readers,
     saved,
     stats,
     settingsReads: () => settingsReads,
@@ -732,18 +737,35 @@ it.effect.prop(
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
           const replies = w.frames.length;
+          const before = w.calls.length;
           yield* service.message(w.socket, JSON.stringify(request));
-          expect(w.calls).toHaveLength(i + 1);
-          expect(w.calls.at(-1)).toEqual({ method: request.method, params: request.params });
-          expect(spans).toHaveLength(i + 1);
-          const span = spans[i]!;
-          expect(span.name).toBe("runtime.rpc");
-          expect(span.status._tag).toBe("Ended");
-          expect(span.attributes.has(Trace.REFUSED)).toBe(category === "reserved");
-          expect(span.attributes.get(Trace.REFUSED)).toBe(category === "reserved" ? "reserved" : undefined);
+          const after = readAttachment(w);
+          // A call answered parked is kept as a wait on the stream the answer names and registered
+          // again through the wait path, as a parked ledger.wait is (P39 slice 4a): one more call.
+          const held = answer._tag === "parked" && "waits" in after && after.waits.some((x) => x.id === request.id);
+          const again =
+            answer._tag === "parked" && answer.stream.startsWith(targetStream(""))
+              ? { method: "jobs.wait", params: { after: answer.after } }
+              : answer._tag === "parked"
+                ? { method: "ledger.wait", params: { stream: answer.stream, after: answer.after } }
+                : null;
+          expect(w.calls.slice(before)).toEqual([
+            { method: request.method, params: request.params },
+            ...(held && again !== null ? [again] : []),
+          ]);
+          expect(spans).toHaveLength(w.calls.length);
+
+          for (const [n, span] of spans.slice(before).entries()) {
+            const refused = n === 0 && category === "reserved";
+            expect(span.name).toBe("runtime.rpc");
+            expect(span.status._tag).toBe("Ended");
+            expect(span.attributes.has(Trace.REFUSED)).toBe(refused);
+            expect(span.attributes.get(Trace.REFUSED)).toBe(refused ? "reserved" : undefined);
+          }
 
           if (answer._tag === "parked") {
-            expect(w.frames).toHaveLength(replies);
+            // A wait the attachment has no room for is refused at once, as a ledger.wait is.
+            expect(w.frames).toHaveLength(held ? replies : replies + 1);
           } else {
             expect(w.frames).toHaveLength(replies + 1);
             const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
@@ -857,4 +879,50 @@ it.effect.prop(
       expect(w.frames, "a close is answered by a close frame, never a message").toEqual([]);
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
+);
+
+const Rev = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }));
+
+it.effect.prop(
+  "P39 4a W2: a hands key's jobs.wait names this connection object as the one its ring reaches, for the first parked wait and for each wait asked again after a ring that does not pass it",
+  { after: Rev, rings: Schema.Array(Rev).check(Schema.isMaxLength(6)) },
+  ({ after, rings }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      const stream = targetStream("test-key");
+      yield* TestClock.setTime(H + 1000);
+      w.answer(Answer.cases.parked.make({ stream, after }));
+      yield* Effect.gen(function* () {
+        const service = yield* ConnectionService;
+        yield* service.message(
+          w.socket,
+          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "jobs.wait", params: { after } }),
+        );
+
+        // Rings at or before `after` do not pass the wait: each asks the door again.
+        for (const rev of rings) {
+          yield* service.ring(stream, Math.min(rev, after));
+        }
+
+        const waits = w.readers.filter((r) => r.method === "jobs.wait");
+        // The frame is routed once, and its parked answer is registered once, then once per ring.
+        expect(waits).toHaveLength(2 + rings.length);
+        // The referee rings the object a wait names (runtime.ts, CONNECTION.getByName), and the
+        // hands' socket lives on this one (fetch.ts, by its URL path).
+        expect(
+          waits.map((r) => r.reader),
+          "every jobs.wait rings this object",
+        ).toEqual(waits.map(() => "test-connection"));
+        expect(w.frames, "a parked wait answers nothing yet").toEqual([]);
+
+        // A ring past `after` answers the parked call on this socket.
+        yield* service.ring(stream, after + 1);
+        expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+          id: "j1.1",
+          result: { rev: after + 1 },
+        });
+      }).pipe(Effect.provide(w.layer));
+    }),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 60 }) } },
 );
