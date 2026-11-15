@@ -6,8 +6,9 @@
 //   (`transport/Handshake.ts`) and `work`, the plan's work state, tagged `offline`, `listing`,
 //   `watching`, `taking`, `recalling`, `saving`, `starting`, `executing` or `reporting`; a work
 //   state about a job names it `id`, with its `execution`, and `reporting` keeps the `result`; a
-//   state with a call out keeps its JSON-RPC id as `call`. A finish refused for good is saved as a
-//   `held` journal entry with the brain's `reason`, and the client goes back to listing.
+//   state with a call out keeps its JSON-RPC id as `call`. A finish refused for a reason on H3's
+//   closed list is saved as a `held` journal entry with the brain's `reason`, and the client goes
+//   back to listing; a finish refused for any other reason is sent again.
 // - It takes the socket Msgs of the dial Sub the window shares (`socket_opened {dial, at}`,
 //   `frame {dial, text, at}`, `socket_closed {dial, code, at}`), its own timers' Msgs, and tea's
 //   `<cmd>_ok` and `<cmd>_err` for its Cmds. Its `subs` hold a `socket` Sub whose deps carry the
@@ -29,7 +30,7 @@
 // as the window's frame laws do (0093): each cell is read against the state it reached.
 //
 // Plants (after build): H1, call `execute` before the `executing` write lands. H3, count a finish
-// refused `unavailable` as done and save `acknowledged`. H4, execute the job in any `assigned`
+// refused `unavailable` as done and save `acknowledged`; or hold a finish refused `rate_limited`. H4, execute the job in any `assigned`
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
@@ -54,6 +55,25 @@ const OTHER = "SHA256:hands-other-key-00000000000000000000000000";
 
 /** The Cmds the plan names for the machine; any other is a broken contract. */
 const KNOWN = new Set(["write", "hello", "knock", "ping", "journal_read", "journal_write", "execute"]);
+
+/**
+ * H3's closed list: the finish refusals that say what the brain holds, or the client's own params,
+ * which the same finish can never change. Only these hold a result. `lacks_capability` waits for a
+ * new link, and every other reason, an answer that does not decode and a reason nobody answers yet
+ * included, sends the same result again.
+ */
+const HELD: ReadonlySet<string> = new Set([
+  "not_allowed",
+  "not_target",
+  "conflict",
+  "wrong_execution",
+  "wrong_state",
+  "wrong_process",
+  "not_found",
+  "bad_input",
+  "reserved",
+  "unknown_method",
+]);
 
 type Model = typeof handsMachine.model.Type;
 /** A Msg as the walk builds it: the machine reads it by its `type`. */
@@ -120,6 +140,8 @@ type World = {
   held: Set<string>;
   /** The dial each job was held on: work after it on the same dial shows the hold blocks nothing. */
   heldOn: Map<string, number>;
+  /** H3: jobs whose finish was refused for a reason that may pass, by that reason: its result is owed again. */
+  readonly owed: Map<string, string>;
   /** H4: processes that asked this key twice, whose jobs no take can get. */
   readonly twins: Set<string>;
   /** H4: jobs whose take was refused for a reason that cannot change by itself, by the list rev
@@ -174,6 +196,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     acked: new Set(),
     held: new Set(),
     heldOn: new Map(),
+    owed: new Map(),
     twins: new Set(),
     refused: new Map(),
     listRev: null,
@@ -244,6 +267,15 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         if (same && (tag === "acknowledged" || tag === "held") && before.get("_tag") === "result") {
           expect(entry.get("startedAt"), `${tag} keeps when its command started`).toBe(before.get("startedAt"));
         }
+
+        // H3: a result is held only for a reason on the closed list, never for one that may pass.
+        if (tag === "held") {
+          expect(
+            HELD.has(text(entry.get("reason"))),
+            `H3: held only for the closed list, not ${text(entry.get("reason"))}`,
+          ).toBe(true);
+          done.add("held:closed");
+        }
       }
 
       if (c.type === "write" && record(c).get("method") === "jobs.finish") {
@@ -258,6 +290,14 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         w.results.set(job, sent);
         expect(sent.size, `H3: one result for ${job}, never a second, different one`).toBe(1);
         done.add("finish_sent");
+
+        // A finish refused for a reason that may pass goes again, with the one result above.
+        const owed = w.owed.get(job);
+
+        if (owed !== undefined) {
+          w.owed.delete(job);
+          done.add(owed === "lacks_capability" ? "finish:resent:lacks_capability" : "finish:resent");
+        }
       }
 
       if (c.type === "journal_write" && tagIn(record(c).get("entry")) === "acknowledged") {
@@ -615,17 +655,19 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // `acknowledged` in the same step.
     const reply = m.type === "frame" ? record(Option.getOrNull(parse(text(m.text)))) : new Map<string, unknown>();
     const reason = text(record(record(reply.get("error")).get("data")).get("reason"));
+    const answered = record(reply.get("result"));
+    const rev = typeof answered.get("rev") === "number" ? Number(answered.get("rev")) : null;
     const onLive = chosen.label === "door:jobs.finish" && live.tag === "reporting" && reply.get("id") === live.call;
+    // An ok is a receipt: a result with no rev says nothing the client can trust.
+    const receipt = reason === "" && rev !== null;
 
-    if (onLive && reason === "") {
+    if (onLive && receipt) {
       w.acked.add(live.id ?? "");
     }
 
     // The list the machine hears on its live call sets the rev a refusal for good is kept against,
     // before the machine acts on it.
     const listing = chosen.label === "door:jobs.list" && live.tag === "listing" && reply.get("id") === live.call;
-    const answered = record(reply.get("result"));
-    const rev = typeof answered.get("rev") === "number" ? Number(answered.get("rev")) : null;
 
     if (listing) {
       w.listRev = rev;
@@ -635,18 +677,27 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     if (onLive) {
       const job = live.id ?? "";
+      const writes = cmds.filter((c) => c.type === "journal_write");
 
-      if (reason === "unavailable") {
-        expect(next.work._tag, "H3: a finish refused unavailable is sent again").toBe("reporting");
+      if (reason === "lacks_capability") {
+        // A need this link did not offer: nothing is held, and nothing goes again on this link.
+        expect(writes, "H3: lacks_capability holds nothing").toEqual([]);
+        expect(next.work._tag === "reporting" && about(next).id === job, "H3: and waits for a new link").toBe(false);
+        w.owed.set(job, reason);
+        done.add("finish:lacks_capability");
+      } else if (!receipt && !HELD.has(reason)) {
+        // A reason that may pass, an answer that does not decode, or one nobody answers yet.
+        expect(next.work._tag, `H3: a finish refused ${reason || "garbled"} is sent again`).toBe("reporting");
         expect(about(next).id, "H3: for the same job").toBe(job);
         expect("result" in next.work ? next.work.result : null, "H3: with the same result").toEqual(
           "result" in prev.work ? prev.work.result : undefined,
         );
-        done.add("finish:unavailable");
+        expect(writes, `H3: a finish refused ${reason || "garbled"} writes no held entry`).toEqual([]);
+        w.owed.set(job, reason);
+        done.add(`finish:again:${reason || "garbled"}`);
       } else if (reason !== "") {
         // Why it was refused for good is saved before anything else: a `held` entry in the journal,
         // with the same execution and result, so no process sends it again.
-        const writes = cmds.filter((c) => c.type === "journal_write");
         const entry = record(record(writes[0]).get("entry"));
         expect(next.work._tag, `H3: a finish refused ${reason} saves why first`).toBe("saving");
         expect(
@@ -748,19 +799,48 @@ describe("P39 slice 4a: the hands machine", () => {
     100,
   );
   law(
-    "H3: a finish refused unavailable is sent again with the same result until ok; any other refusal saves a held entry with the brain's reason, and that job is never sent or taken again while other work goes on; a second, different result is never sent for one job",
-    { forge: false, finish: ["ok", "lost", "unavailable", "not_allowed", "conflict"], restart: "held" },
+    "H3: a finish refused for a reason that may pass (unavailable, rate_limited, unreachable, storage, not_granted, a reason nobody answers yet, an answer that does not decode) is sent again with the same result and never held; lacks_capability holds nothing and is sent again on a new link; only a refusal on the closed list saves a held entry with the brain's reason, and that job is never sent or taken again while other work goes on; a second, different result is never sent for one job",
+    {
+      forge: false,
+      finish: [
+        "ok",
+        "lost",
+        "unavailable",
+        "garbled",
+        "rate_limited",
+        "unreachable",
+        "storage",
+        "not_granted",
+        "reason_nobody_answers_yet",
+        "lacks_capability",
+        "not_allowed",
+        "conflict",
+        "wrong_state",
+        "bad_input",
+      ],
+      restart: "held",
+    },
     [
       "finish_sent",
       "finish:ok",
-      "finish:unavailable",
+      "finish:again:unavailable",
+      "finish:again:garbled",
+      "finish:again:rate_limited",
+      "finish:again:unreachable",
+      "finish:again:storage",
+      "finish:again:not_granted",
+      "finish:again:reason_nobody_answers_yet",
+      "finish:lacks_capability",
+      "finish:resent",
+      "finish:resent:lacks_capability",
       "finish:held",
+      "held:closed",
       "finish:lost",
       "take_after_held",
       "restart@held",
       "recall:held",
     ],
-    60,
+    100,
   );
   law(
     "H4: the client runs only work assigned to its own key: an idle, a refusal, another key's assignment or an answer to a stale call id changes nothing it would execute; a job whose take was refused for a reason that cannot change by itself is not taken again on that link until the list's rev moves, and with nothing a take can get the client waits for new work",

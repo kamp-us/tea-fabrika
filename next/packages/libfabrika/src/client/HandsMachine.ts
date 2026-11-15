@@ -317,23 +317,44 @@ const takeable = (s: HandsModel, jobs: ReadonlyArray<(typeof Listed.Type.jobs)[n
 };
 
 /**
- * Take refusals that cannot change by themselves while the list stays at one rev, so the job is
- * skipped on this link until the list's rev moves (`gateway/Jobs.ts`'s `jobs.take`):
+ * What could let a refused take or finish pass if it were sent again: nothing (`never`), a new
+ * link (`link`), a list at another rev (`list`), or time alone (`later`). One table for both calls,
+ * by the reasons `gateway/Gateway.ts`, `gateway/Jobs.ts`, `jobs/Jobs.ts`'s `JobsError` and the
+ * Worker answer:
  *
- * - `idle`: no open job for the process, so the list was behind; only a new request moves it.
- * - `ambiguous`: the process has two open jobs for this key (`JobAccess.select`); only a new
- *   request or an outside finish changes that.
- * - `not_allowed`: the job is not this key's to take, as is an assignment that names another key
- *   or a job no longer open; a job's target never changes.
- * - `lacks_capability`: the job needs what this link's hello did not offer; `has` is fixed for the
- *   link.
- * - `bad_input`: the client's own params, which it would send the same again.
- *
- * Every other refusal (`rate_limited`, `unreachable`, `unavailable`, a storage failure, or an
- * answer that does not decode) can pass by itself, so the list and take are tried again after a
- * backoff. A journal entry that reads as no entry (`bad_entry`) also cannot change by itself.
+ * - `never`: `not_allowed` (the job is not this key's, or not open), `not_target`, `conflict`,
+ *   `wrong_execution`, `wrong_state`, `wrong_process` and `not_found` say what the brain holds,
+ *   which the same call cannot change; `bad_input`, `reserved` and `unknown_method` are the
+ *   client's own params or method, which it would send the same again.
+ * - `link`: `lacks_capability`, a need this link's hello did not offer; `has` is fixed for the link.
+ * - `list`: a take's `idle` (the list was behind) and `ambiguous` (two open jobs for one process,
+ *   `JobAccess.select`): only a new request or an outside finish changes either.
+ * - `later`, every other reason: `unavailable`, `rate_limited`, `unreachable`, `storage`,
+ *   `not_granted`, `no_hello`, an answer that does not decode (null), and a reason this table does
+ *   not know. A result held wrongly is lost for good, and one sent again wrongly costs one call, so
+ *   what the table cannot place is sent again.
  */
-const STUCK: ReadonlySet<string> = new Set(["idle", "ambiguous", "not_allowed", "lacks_capability", "bad_input"]);
+const LASTS: ReadonlyMap<string, "never" | "link" | "list"> = new Map([
+  ...[
+    "not_allowed",
+    "not_target",
+    "conflict",
+    "wrong_execution",
+    "wrong_state",
+    "wrong_process",
+    "not_found",
+    "bad_input",
+    "reserved",
+    "unknown_method",
+  ].map((reason) => [reason, "never"] as const),
+  ["lacks_capability", "link"],
+  ["idle", "list"],
+  ["ambiguous", "list"],
+]);
+
+/** What could let a call refused for `reason` pass, or `later` for an answer that does not decode. */
+const lasts = (reason: string | null): "never" | "link" | "list" | "later" =>
+  (reason === null ? undefined : LASTS.get(reason)) ?? "later";
 
 /** Why a take that assigned nothing to this client was refused, or null when its answer does not decode. */
 const refusal = (reason: string | null, result: unknown): string | null =>
@@ -402,11 +423,10 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
       return woke === null ? relist(s, 0) : list(heard);
     case "taking": {
       // An idle, a refusal, or a job assigned to another key: nothing here runs, and the list is
-      // asked again. A refusal that cannot change by itself skips the job on this link.
+      // asked again. A refusal that time alone cannot change skips the job on this link.
       const mine = reason === null ? assignment(s, result) : Option.none();
-      const refused = refusal(reason, result);
       return Option.match(mine, {
-        onNone: () => (refused !== null && STUCK.has(refused) ? skip(s, w.id) : relist(s, w.tries)),
+        onNone: () => (lasts(refusal(reason, result)) === "later" ? relist(s, w.tries) : skip(s, w.id)),
         onSome: ({ job, state }) => [
           { ...s, work: Work.cases.recalling.make({ ...job, state }) },
           [journalRead({ job: job.id })],
@@ -422,33 +442,36 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
 
       const started = since(w.startedAt);
 
-      if (reason === "unavailable") {
-        // The result is saved at the brain and its requester's wake failed: send the same one again.
-        return [
-          { ...s, work: Work.cases.reporting.make({ ...job, result: w.result, ...started, tries: w.tries + 1 }) },
-          [],
-        ];
+      if (reason === null && woke !== null) {
+        return save(
+          heard,
+          job,
+          Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, ...started, at }),
+        );
       }
 
-      // Refused for good: why is saved first, so no process sends this result again, then the
-      // client lists again and the rest of the work goes on.
-      return reason !== null || woke === null
-        ? save(
-            s,
-            job,
-            Entry.cases.held.make({
-              execution: w.execution,
-              result: w.result,
-              reason: reason ?? "other",
-              ...started,
-              at,
-            }),
-          )
-        : save(
-            heard,
-            job,
-            Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, ...started, at }),
-          );
+      if (reason !== null && lasts(reason) === "never") {
+        // Refused for good: why is saved first, so no process sends this result again, then the
+        // client lists again and the rest of the work goes on.
+        return save(
+          s,
+          job,
+          Entry.cases.held.make({ execution: w.execution, result: w.result, reason, ...started, at }),
+        );
+      }
+
+      // The journal still holds the result: a take on a new link, or at a list of another rev,
+      // reports it again.
+      if (lasts(reason) !== "later") {
+        return skip(s, w.id);
+      }
+
+      // Time alone may let it pass, as a failed wake, a full budget or a dead Worker call may: the
+      // same result goes again after a backoff.
+      return [
+        { ...s, work: Work.cases.reporting.make({ ...job, result: w.result, ...started, tries: w.tries + 1 }) },
+        [],
+      ];
     }
     default:
       return stay(s);

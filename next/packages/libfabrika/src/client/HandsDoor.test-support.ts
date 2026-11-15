@@ -8,8 +8,34 @@ import { Schema } from "effect";
 import type { Request } from "../jobs/Job.ts";
 import { Command, Job, Result, State } from "../jobs/Job.ts";
 
-/** How the brain answers one finish the walk lets through: as the gateway would, or refused on purpose. */
-export type FinishMode = "ok" | "unavailable" | "not_allowed" | "conflict";
+/**
+ * A finish refused before the brain saved anything, as the door or the Worker may answer it: over
+ * the key's budget (`gateway/Gateway.ts`'s `refuseRate`), a Worker call that died
+ * (`cloudflare/connection.ts`), a failed transaction (`JobsError` `storage`), a key whose grant the
+ * door could not read again, a need the link did not offer, a call out of order, the client's own
+ * params, and a reason no part of the door answers today.
+ */
+const REFUSED_FIRST = [
+  "rate_limited",
+  "unreachable",
+  "storage",
+  "not_granted",
+  "lacks_capability",
+  "not_allowed",
+  "conflict",
+  "wrong_state",
+  "bad_input",
+  "reason_nobody_answers_yet",
+] as const;
+
+/**
+ * How the brain answers one finish the walk lets through: as the gateway would, refused on
+ * purpose, or saved with an answer that does not decode (`garbled`).
+ */
+export type FinishMode = "ok" | "unavailable" | "garbled" | (typeof REFUSED_FIRST)[number];
+
+const refusedFirst = (mode: FinishMode): mode is (typeof REFUSED_FIRST)[number] =>
+  REFUSED_FIRST.some((reason) => reason === mode);
 
 /** One call's outcome at the door: a result, a refusal, or a wait that parks on `target:<key>`. */
 export const Outcome = Schema.TaggedUnion({
@@ -162,19 +188,23 @@ export const brain = () => {
       return refused("unknown_method");
     }
 
-    if (finish === "not_allowed" || finish === "conflict") {
+    if (refusedFirst(finish)) {
       return refused(finish);
     }
 
     const result = p.get("result");
+    // A failed wake answers `unavailable` after the finish was saved (slice 3's W1), and a garbled
+    // answer comes after it was saved too.
+    const answer = (): Outcome =>
+      finish === "unavailable"
+        ? refused("unavailable")
+        : finish === "garbled"
+          ? Outcome.cases.result.make({ result: { saved: "maybe" } })
+          : receipt();
 
     if (s.phase === "finished") {
-      // A repeat with the same result answers the first receipt, or `unavailable` while the wake fails.
-      return JSON.stringify(s.result) !== JSON.stringify(result)
-        ? refused("conflict")
-        : finish === "unavailable"
-          ? refused("unavailable")
-          : receipt();
+      // A repeat with the same result answers the first receipt, or as the mode says.
+      return JSON.stringify(s.result) !== JSON.stringify(result) ? refused("conflict") : answer();
     }
 
     if (s.phase !== "started" || !isResult(result)) {
@@ -184,8 +214,7 @@ export const brain = () => {
     s.phase = "finished";
     s.result = result;
     head++;
-    // A failed wake answers `unavailable` after the finish was saved (slice 3's W1).
-    return finish === "unavailable" ? refused("unavailable") : receipt();
+    return answer();
   };
 
   return {
