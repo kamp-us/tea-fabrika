@@ -6,12 +6,11 @@ import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
   cancel: { id: Schema.Number },
-  rerun: { id: Schema.Number },
 });
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
-export type Failing = Partial<Record<"unfinished" | "at" | "cancel" | "rerun", string>>;
+export type Failing = Partial<Record<"unfinished" | "cancel", string>>;
 
 export type World = { readonly runs: Array<Run>; readonly calls: Array<Call> };
 
@@ -41,17 +40,10 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
     WorkflowRuns,
     WorkflowRuns.of({
       unfinished: Effect.map(fails("unfinished"), () => w.runs.filter((r) => r.status !== "completed")),
-      at: (sha) => Effect.map(fails("at"), () => w.runs.filter((r) => r.sha === sha)),
       cancel: (id) =>
         fails("cancel").pipe(
           Effect.andThen(change(id, { status: "completed", conclusion: "cancelled" })),
           Effect.andThen(Effect.sync(() => w.calls.push(Call.cases.cancel.make({ id })))),
-          Effect.asVoid,
-        ),
-      rerun: (id) =>
-        fails("rerun").pipe(
-          Effect.andThen(change(id, { status: "queued", conclusion: null })),
-          Effect.andThen(Effect.sync(() => w.calls.push(Call.cases.rerun.make({ id })))),
           Effect.asVoid,
         ),
     }),

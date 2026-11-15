@@ -34,6 +34,6 @@
     "skills/lead/scripts/records.test.ts",
     "skills/mutation/scripts/scope.ts",
     "skills/mutation/scripts/scope.test.ts",
-    "skills/sev0/scripts/*.ts"
+    "skills/sev/scripts/*.ts"
   ]
 }

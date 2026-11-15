@@ -1,7 +1,10 @@
-// WorkflowRuns: what a sev0 asks GitHub Actions about its workflow runs, and the two writes it makes,
-// a cancel and a rerun. This file is the contract only (0095): `WorkflowRunsGh.layer` asks GitHub
-// through `gh`, `WorkflowRunsTest.layer` answers from a list in memory. Today's lead tooling, run on
-// our own laptop; it is not product.
+// WorkflowRuns: what a sev0 asks GitHub Actions about its workflow runs, and the one write it makes,
+// a cancel. It holds no rerun on purpose: a run the freeze canceled and a red run that stopped
+// itself both end `cancelled`, and a rerun tests old code, so leaving a sev0 asks for none.
+//
+// This file is the contract only (0095): `WorkflowRunsGh.layer` asks GitHub through `gh`,
+// `WorkflowRunsTest.layer` answers from a list in memory. Today's lead tooling, run on our own
+// laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
@@ -12,8 +15,8 @@ export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError>()("
 
 /** One workflow run, as GitHub lists it. */
 export const Run = Schema.Struct({
-  /** GitHub's run id, the one `gh run cancel` and `gh run rerun` take. */
-  id: Schema.Number,
+  /** GitHub's run id, the one `gh run cancel` takes. */
+  id: Schema.Int,
   /** The workflow's name, such as `check`. */
   workflow: Schema.String,
   /** What started it: `pull_request`, `merge_group`, `push`, `workflow_dispatch` and the rest. */
@@ -36,11 +39,7 @@ export class WorkflowRuns extends Context.Service<
   {
     /** Every run of the repo that has not completed yet. */
     readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
-    /** Every run at commit `sha`, finished or not. */
-    readonly at: (sha: string) => Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
     /** Asks GitHub to cancel run `id`. */
     readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError>;
-    /** Asks GitHub to run every job of run `id` again, as a new attempt of the same run. */
-    readonly rerun: (id: number) => Effect.Effect<void, WorkflowRunsError>;
   }
->()("sev0/WorkflowRuns") {}
+>()("sev/WorkflowRuns") {}

@@ -1,4 +1,4 @@
-// WorkflowRunsGh.layer: the WorkflowRuns service on `gh run`, the one way the lead tooling reaches
+// WorkflowRunsGh.layer: the WorkflowRuns service on `gh run`, the one way the sev script reaches
 // GitHub Actions. Every call names the repo, so the checkout it runs in does not pick it.
 //
 // `unfinished` asks once per status that is not `completed`. One list of the newest runs would
@@ -97,12 +97,8 @@ export const layer = (
         (lists) => lists.flat(),
       );
 
-      const at = (sha: string) => list(["--commit", sha]);
-
       const cancel = (id: number) => Effect.asVoid(gh(["run", "cancel", String(id), "-R", repo]));
 
-      const rerun = (id: number) => Effect.asVoid(gh(["run", "rerun", String(id), "-R", repo]));
-
-      return WorkflowRuns.of({ unfinished, at, cancel, rerun });
+      return WorkflowRuns.of({ unfinished, cancel });
     }),
   );

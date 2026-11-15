@@ -446,7 +446,10 @@ visible, and never weaken the rules to hide this message.
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
    pass `--admin` or `--auto`, and never run the merge on a head whose `ci-required` is not green:
-   with a queue on, that arms auto-merge. A pull request the queue puts back out stays open: the
+   with a queue on, that arms auto-merge. Two exceptions take `--admin`: a sev0 fix
+   ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
+   docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
+   A pull request the queue puts back out stays open: the
    lane merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
    refused by `gh pr merge`; land it with `gh stack merge <pr> --squash --yes` by hand.
    Every PR squash-merges, a stacked

@@ -18,7 +18,7 @@ both tools.
 | [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
 | [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
-| [sev0](./sev0/SKILL.md) | on the owner's sev0 call, freeze CI, land the fixes one at a time by admin merge, then unfreeze |
+| [sev](./sev/SKILL.md) | CI as the emergency: on the owner's sev0, freeze CI and land the fixes one at a time; while a `ci-scheduled` issue is open (a sev1), fixes go first |
 
 ## How a brief uses them
 
