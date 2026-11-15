@@ -36,7 +36,9 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 - **In `next/`:** read [`next/AGENTS.md`](./next/AGENTS.md) before you touch a file there.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner picks, and ideas
   the owner wants to try out there first. What a tryout teaches goes into `next/` as a lesson,
-  rethought and not copied. Nothing else is added (0217). Today's library is `@kampus/fabrika-old`
+  rethought and not copied, except an approved guideline, whose rules `next/` follows as written
+  ([0543](./.decisions/0543-next-follows-approved-guidelines-as-written.md)). Nothing else is added
+  (0217). Today's library is `@kampus/fabrika-old`
   and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
 - **A product foundation decided in a walk starts on today's app at once,** no exception: tokens,
   focus, lint rules for the design, accessibility checks. Its build plan is written the same day
