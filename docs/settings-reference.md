@@ -68,6 +68,8 @@ The memory the local runtime may hold before the brain replaces it, a byte size 
 | Environment | `FABRIKA_DESKTOP_BRAIN_MEMORY` |
 | Flag | `--desktop.brain-memory` |
 | Default | `"500000000"` |
+| File default | `"500000000 bytes"` |
+| File input | Text, using the spelling shown by the file default. Recorded values use JSON. |
 | Reload | restart |
 | Since | 0.0.0 |
 

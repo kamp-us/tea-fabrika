@@ -14,9 +14,8 @@
         },
         "brain-memory": {
           "type": "string",
-          "pattern": "^-?\\d+$",
           "description": "The memory the local runtime may hold before the brain replaces it, a byte size such as \"500 MB\".",
-          "default": "500000000"
+          "default": "500000000 bytes"
         },
         "brain-poll": {
           "type": "integer",

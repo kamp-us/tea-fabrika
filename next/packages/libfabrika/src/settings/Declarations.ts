@@ -185,6 +185,7 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
  */
 export const brainMemory = Setting.make("desktop.brain-memory", {
   schema: Schema.ByteSize,
+  format: "text",
   default: ByteSize.bytes(500_000_000),
   doc: 'The memory the local runtime may hold before the brain replaces it, a byte size such as "500 MB".',
   scope: ["person"],
