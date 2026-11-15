@@ -144,12 +144,22 @@ export const lintScheduled = (text: string, check: string): string[] => {
     compact(report["if"]) ===
       REPORT_IF, "SC5: the report needs every other job, and runs after any result, on main alone");
   const judged = steps(report).filter((s) => "run" in s);
+  // Each test job's limit, as `LIMIT_<ID>`, equal to its own `timeout-minutes`: scheduled.mjs tells
+  // a timed-out leg from a canceled one by it, and reads a leg's job id from its name, so no job
+  // sets a `name` of its own.
+  const env = {
+    ...REPORT_ENV,
+    ...Object.fromEntries(others.map((name) => [`LIMIT_${name.toUpperCase()}`, map(jobs[name])["timeout-minutes"]])),
+  };
+  require(Object.values(jobs).every(
+    (job) => !("name" in map(job)),
+  ), "SC5: no job sets a name, so a leg's name starts with its job's id");
   require(judged.length === 1 &&
     judged[0]?.["run"] === REPORT &&
-    JSON.stringify(judged[0]?.["env"]) === JSON.stringify(REPORT_ENV) &&
+    JSON.stringify(judged[0]?.["env"]) === JSON.stringify(env) &&
     !("if" in (judged[0] ?? {})) &&
     judged[0]?.["continue-on-error"] ===
-      undefined, `SC5: the report runs ${REPORT} once, with the needs, the results and the token, and its failure shows`);
+      undefined, `SC5: the report runs ${REPORT} once, with the needs, the results, the token and each test job's time limit, and its failure shows`);
   // The legs' time tables read their own job's steps with it too (TT1 pins their env).
   require(Object.values(jobs).every((job) =>
     steps(map(job)).every(

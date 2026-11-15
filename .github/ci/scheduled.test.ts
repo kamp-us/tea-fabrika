@@ -20,18 +20,45 @@ const needs = fc.dictionary(
   { minKeys: 1, maxKeys: 4 },
 );
 
+// Each test job's time limit, as the report step's env gives it (`LIMIT_NEXT: *next-limit`).
+const LIMITS = { next: 17, tooling: 30 };
+const MINUTE = 60_000;
+const BASE = Date.parse("2026-11-15T14:15:17Z");
+/** A time `ms` after the run started, as the jobs API writes one. */
+const at = (ms: number) => new Date(BASE + ms).toISOString();
+
 // A job of the run as the jobs API lists it, with no failure anywhere in it: what a leg canceled by
-// another leg's stop step, or by a person, leaves, and the report job still running.
+// another leg's stop step, or by a person, leaves, and the report job still running. A canceled leg
+// here ran less than its limit, or its times are unknown, so it is never a time-out.
 const quiet = fc.constantFrom("success", "cancelled", "skipped", null);
 const stepName = fc.constantFrom("vitest", "end to end", "tooling tests", "results", "time table", "stop the run");
-const steps = fc.array(fc.record({ name: stepName, conclusion: quiet }), { maxLength: 6 });
+const stepEnd = fc.option(fc.nat({ max: 40 * MINUTE }).map(at), { nil: null });
+const steps = fc.array(fc.record({ name: stepName, conclusion: quiet, end: stepEnd }), { maxLength: 6 });
 
-const calm = fc.record({
-  name: jobName,
-  status: fc.constantFrom("completed", "in_progress", "queued"),
-  conclusion: quiet,
-  steps,
-});
+const legName = fc.oneof(
+  jobName,
+  fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `next (${shard})`),
+  fc.constantFrom("1", "2").map((shard) => `tooling (${shard})`),
+);
+
+/** A job's start and end, ending before `under` minutes, or unknown. */
+const shortTimes = (under: number) =>
+  fc.oneof(
+    fc.constant({ start: null, end: null }),
+    fc.nat({ max: under * MINUTE - 1 }).map((ms) => ({ start: at(0), end: at(ms) })),
+  );
+
+const calm = fc
+  .tuple(
+    legName,
+    fc.oneof(
+      fc.record({ status: fc.constant("completed"), conclusion: fc.constantFrom("success", "cancelled", "skipped") }),
+      fc.record({ status: fc.constantFrom("in_progress", "queued"), conclusion: fc.constant(null) }),
+    ),
+    shortTimes(17),
+    steps,
+  )
+  .map(([name, end, times, list]) => ({ name, ...end, ...times, steps: list }));
 
 const calmJobs = fc.array(calm, { maxLength: 5 });
 
@@ -39,10 +66,17 @@ const calmJobs = fc.array(calm, { maxLength: 5 });
 // (a red leg's stop step cancels it too), or a failing test named in a leg's report.
 const proof = fc.oneof(
   fc
-    .tuple(steps, steps, stepName, fc.constantFrom("cancelled", "failure", "success", null), jobName)
-    .map(([before, after, name, conclusion, job]) => ({
+    .tuple(steps, steps, stepName, fc.constantFrom("cancelled", "failure", "success", null), legName, stepEnd)
+    .map(([before, after, name, conclusion, job, end]) => ({
       jobs: [
-        { name: job, status: "completed", conclusion, steps: [...before, { name, conclusion: "failure" }, ...after] },
+        {
+          name: job,
+          status: "completed",
+          conclusion,
+          start: null,
+          end: null,
+          steps: [...before, { name, conclusion: "failure", end }, ...after],
+        },
       ],
       failed: [] as string[],
     })),
@@ -59,29 +93,227 @@ it("property: a run with a failed step or a failing test is red, whatever its jo
     fc.property(needs, calmJobs, proof, fc.nat(), (given, jobs, red, at) => {
       const place = jobs.length === 0 ? 0 : at % (jobs.length + 1);
       const all = [...jobs.slice(0, place), ...red.jobs, ...jobs.slice(place)];
-      expect(scheduled.verdict({ needs: given, jobs: all, failed: red.failed })).toBe("red");
+      expect(scheduled.verdict({ needs: given, jobs: all, failed: red.failed, limits: LIMITS })).toBe("red");
     }),
     options,
   );
 });
 
-it("property: with no failed step, job or test, needs decides: red on a failed job, green when all passed, else stopped", () => {
+it("property: with no failed step, job, test or time-out: red on a failed need, stopped after a cancel, green when all passed", () => {
   // Plants: a canceled step counts as failed (red: a run stopped by hand opened an issue); a
-  // finished job not `success` counts as failed (red: a leg canceled by hand opened one); green
-  // with no job in needs (red: unreadable needs closed the issue).
+  // finished job canceled before its limit counts as failed (red: a run a person or a sev0's
+  // freeze stopped opened one); green with no job in needs (red: unreadable needs closed the
+  // issue); green past a canceled leg (red: a run stopped by hand closed the issue).
   fc.assert(
     fc.property(fc.option(needs, { nil: null }), calmJobs, (given, jobs) => {
       const results = given === null ? [] : Object.values(given).map((job) => job.result);
+      const canceled = jobs.some((job) => job.status === "completed" && job.conclusion === "cancelled");
       const expected = results.includes("failure")
         ? "red"
-        : results.length > 0 && results.every((r) => r === "success")
+        : !canceled && results.length > 0 && results.every((r) => r === "success")
           ? "green"
           : "stopped";
-      expect(scheduled.verdict({ needs: given, jobs, failed: [] })).toBe(expected);
+      expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe(expected);
     }),
     options,
   );
-  expect(scheduled.verdict({ needs: {}, jobs: [], failed: [] })).toBe("stopped");
+  expect(scheduled.verdict({ needs: {}, jobs: [], failed: [], limits: LIMITS })).toBe("stopped");
+});
+
+// A finished leg that ended any way but a pass or a cancel before its limit: failed, timed out (by
+// GitHub's word or by its run time), or a conclusion that proves no pass.
+const notPassed = fc
+  .tuple(
+    fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `next (${shard})`),
+    fc.oneof(
+      fc.constantFrom("failure", "timed_out", "neutral", "action_required", "stale", null).map((conclusion) => ({
+        conclusion,
+        start: null,
+        end: null,
+      })),
+      // Canceled at or past next's 17 minutes: what a time-out leaves (run 43723335863: 17 min 20 s).
+      fc.nat({ max: 5 * MINUTE }).map((over) => ({
+        conclusion: "cancelled",
+        start: at(0),
+        end: at(LIMITS.next * MINUTE + over),
+      })),
+    ),
+    steps,
+  )
+  .map(([name, end, list]) => ({ name, status: "completed", ...end, steps: list }));
+
+it("property: any set of legs with one that neither passed, was skipped nor was canceled before its limit is red", () => {
+  // Plants: only a `failure` is red, as before (red: a timed-out leg read as stopped, run
+  // 43723335863's hole); a time-out needs more than its limit (red: a leg canceled at exactly 17
+  // minutes read as stopped); an odd conclusion reads as a pass (red: `neutral` read as stopped).
+  fc.assert(
+    fc.property(fc.option(needs, { nil: null }), calmJobs, notPassed, fc.nat(), (given, jobs, bad, place) => {
+      const all: Jobs = (jobs as Jobs).toSpliced(place % (jobs.length + 1), 0, bad);
+      expect(scheduled.verdict({ needs: given, jobs: all, failed: [], limits: LIMITS })).toBe("red");
+      expect(scheduled.causes(all, LIMITS).map((c) => c.leg)).toContain(bad.name);
+    }),
+    options,
+  );
+  // pinned: the edge. A leg canceled at exactly its limit timed out; one canceled a millisecond
+  // before it was canceled by something else.
+  const leg = (ms: number) => ({
+    name: "next (4)",
+    status: "completed",
+    conclusion: "cancelled",
+    start: at(0),
+    end: at(ms),
+    steps: [],
+  });
+  expect(scheduled.ending(leg(17 * MINUTE), LIMITS)).toBe("timed out");
+  expect(scheduled.ending(leg(17 * MINUTE - 1), LIMITS)).toBe("canceled");
+  // A leg whose job has no known limit cannot be told a time-out.
+  expect(scheduled.ending(leg(60 * MINUTE), {})).toBe("canceled");
+});
+
+// Legs that passed or were skipped, as the jobs API lists them once each has finished.
+const passed = fc.array(
+  fc.record({
+    name: legName,
+    status: fc.constant("completed"),
+    conclusion: fc.constantFrom("success", "skipped"),
+    start: fc.constant(at(0)),
+    end: fc.nat({ max: 60 * MINUTE }).map(at),
+    steps: fc.array(fc.record({ name: stepName, conclusion: fc.constantFrom("success", "skipped"), end: stepEnd }), {
+      maxLength: 6,
+    }),
+  }),
+  { maxLength: 9 },
+);
+
+const allPassed = fc.dictionary(jobName, fc.constant({ result: "success", outputs: {} }), { minKeys: 1, maxKeys: 4 });
+
+it("property: when every leg passed or was skipped and every need passed, the run is green with no cause", () => {
+  // Plant: a skipped leg reads as odd (red: a skipped step's leg turned the run red).
+  fc.assert(
+    fc.property(allPassed, passed, (given, jobs) => {
+      expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe("green");
+      expect(scheduled.causes(jobs, LIMITS)).toEqual([]);
+    }),
+    options,
+  );
+});
+
+it("property: a leg canceled at or past its limit is a time-out, named by its leg and its limit in the issue", () => {
+  // Plants: the limit read from the wrong job (red: tooling's 30 minutes judged a next leg); the
+  // issue names the leg as failed (red: no "timed out" line); the limit left out of the line.
+  fc.assert(
+    fc.property(
+      passed,
+      fc.constantFrom(["next", "e2e-1"], ["next", "4"], ["tooling", "2"]),
+      fc.nat({ max: 5 * MINUTE }),
+      steps,
+      run,
+      (others, [id, shard], over, list, r) => {
+        const minutes = LIMITS[id as keyof typeof LIMITS];
+        const leg = {
+          name: `${id} (${shard})`,
+          status: "completed",
+          conclusion: "cancelled",
+          start: at(0),
+          end: at(minutes * MINUTE + over),
+          steps: list,
+        };
+        const jobs = [...others, leg];
+        const found = scheduled.causes(jobs, LIMITS);
+        expect(found).toEqual([{ _tag: "timed out", leg: leg.name, minutes }]);
+        const text = scheduled.body({ ...r, causes: found });
+        expect(text).toContain(`- \`${leg.name}\` timed out: it ran into its ${minutes}-minute limit`);
+      },
+    ),
+    options,
+  );
+});
+
+it("property: a run a red leg stopped names the legs that failed, the first first, and none of the legs it canceled", () => {
+  // Plants: a canceled leg is a cause too (red: every canceled leg listed); the failed legs in the
+  // jobs API's order (red: a later failure listed first).
+  fc.assert(
+    fc.property(
+      fc.uniqueArray(fc.nat({ max: 16 * MINUTE }), { minLength: 1, maxLength: 3 }),
+      fc.array(fc.nat({ max: 17 * MINUTE - 1 }), { maxLength: 6 }),
+      passed,
+      fc.nat(),
+      run,
+      (fails, cancels, others, seed, r) => {
+        const red = fails.map((ms, i) => ({
+          name: `next (${i + 1})`,
+          status: "completed",
+          // A red leg's stop step cancels its own job too (run 43703058643), or the cancel misses it.
+          conclusion: seed % 2 === 0 ? "cancelled" : "failure",
+          start: at(0),
+          end: at(ms + 20_000),
+          steps: [
+            { name: "vitest", conclusion: "failure", end: at(ms) },
+            { name: "stop the run", conclusion: seed % 3 === 0 ? "cancelled" : "success", end: at(ms + 10_000) },
+          ],
+        }));
+        const stopped = cancels.map((ms, i) => ({
+          name: `next (e2e-${i + 1})`,
+          status: "completed",
+          conclusion: "cancelled",
+          start: at(0),
+          end: at(ms),
+          steps: [{ name: "end to end", conclusion: "cancelled", end: at(ms) }],
+        }));
+        // Every order the jobs API may list them in.
+        const jobs = fc.sample(
+          fc.shuffledSubarray([...red, ...stopped, ...others], {
+            minLength: red.length + stopped.length + others.length,
+          }),
+          {
+            seed,
+            numRuns: 1,
+          },
+        )[0]!;
+        const first = red.toSorted((a, b) => Date.parse(a.steps[0]!.end) - Date.parse(b.steps[0]!.end));
+        const found = scheduled.causes(jobs, LIMITS);
+        expect(found).toEqual(first.map((job) => ({ _tag: "failed", leg: job.name })));
+        expect(scheduled.verdict({ needs: { next: { result: "cancelled" } }, jobs, failed: [], limits: LIMITS })).toBe(
+          "red",
+        );
+        const text = scheduled.body({ ...r, causes: found });
+
+        for (const job of stopped) {
+          expect(text).not.toContain(`\`${job.name}\``);
+        }
+
+        expect(text).toContain(`- \`${first[0]!.name}\` failed.`);
+      },
+    ),
+    options,
+  );
+});
+
+it("property: the limits are each LIMIT_ variable's positive number, by its job id in lower case, and nothing else", () => {
+  // Plants: keep the prefix in the key (red: `limit_next`); keep a zero limit (red: every cancel a
+  // time-out).
+  fc.assert(
+    fc.property(
+      fc.dictionary(
+        fc.stringMatching(/^[A-Z]{1,8}$/),
+        fc.oneof(fc.integer({ min: 1, max: 360 }).map(String), fc.constantFrom("0", "", "x", "-3")),
+      ),
+      fc.dictionary(fc.stringMatching(/^[A-Z_]{1,8}$/), fc.string()),
+      (given, other) => {
+        const env = {
+          ...Object.fromEntries(Object.entries(other).filter(([key]) => !key.startsWith("LIMIT_"))),
+          ...Object.fromEntries(Object.entries(given).map(([id, value]) => [`LIMIT_${id}`, value])),
+        };
+        const expected = Object.fromEntries(
+          Object.entries(given).flatMap(([id, value]) =>
+            Number(value) > 0 ? [[id.toLowerCase(), Number(value)]] : [],
+          ),
+        );
+        expect(scheduled.limits(env)).toEqual(expected);
+      },
+    ),
+    options,
+  );
 });
 
 // Run 43673342835 on main: leg `next (2)` failed its vitest step, its stop step canceled the run and
@@ -98,24 +330,107 @@ it("pinned: run 43673342835, a red leg that stopped its own run, is red from its
   expect(failed).toEqual([
     "next/packages/libfabrika/src/node/ProgramMailReads.integration.test.ts > T936 slice 1: a delivery reads the same rows whatever the history L1: a new delivery returns as many rows after h earlier letters to the same target as after none",
   ]);
-  expect(scheduled.verdict({ needs: run43673342835.needs, jobs, failed })).toBe("red");
+  expect(scheduled.verdict({ needs: run43673342835.needs, jobs, failed, limits: LIMITS })).toBe("red");
   // Each source alone: the steps, for a leg that broke before it wrote a report; the report, for a
   // jobs list that holds no failed step.
-  expect(scheduled.verdict({ needs: run43673342835.needs, jobs, failed: [] })).toBe("red");
-  expect(scheduled.verdict({ needs: run43673342835.needs, jobs: [], failed })).toBe("red");
+  expect(scheduled.verdict({ needs: run43673342835.needs, jobs, failed: [], limits: LIMITS })).toBe("red");
+  expect(scheduled.verdict({ needs: run43673342835.needs, jobs: [], failed, limits: LIMITS })).toBe("red");
 });
 
-it("property: the jobs API's answer reads as each job's name, status, conclusion and steps, and any other shape as none", () => {
+// The real runs of 2026-11-15, from `gh run view <id> --json jobs`, trimmed to the fields the report
+// reads and written in the REST jobs API's own keys (`started_at`, `completed_at`). The report job is
+// as it would see itself, running. `needs` is folded from the legs' conclusions as GitHub folds a
+// matrix: failure if a leg failed, else cancelled if one was. 43723346561 and 43721881250 ran on
+// branches, where the report does not run; here they are judged as if on main.
+const fixture = (id: string) =>
+  JSON.parse(readFileSync(new URL(`./fixtures/scheduled-run-${id}.json`, import.meta.url), "utf8")) as {
+    needs: unknown;
+    jobs: unknown;
+  };
+
+it.each([
+  // On main by hand: next (4) and next (e2e-1) ran into the 17-minute limit (17 min 20 s and 17 min
+  // 17 s); the report read the run as stopped and opened no issue. The hole this fixes.
+  [
+    "43723335863",
+    "red",
+    [
+      { _tag: "timed out", leg: "next (4)", minutes: 17 },
+      { _tag: "timed out", leg: "next (e2e-1)", minutes: 17 },
+    ],
+  ],
+  // On main, green: next (4) at 13 min 38 s of its 17.
+  ["43726565395", "green", []],
+  // A branch: next (3) failed and its stop step canceled five legs, at about 10 minutes each.
+  ["43723346561", "red", [{ _tag: "failed", leg: "next (3)" }]],
+  // A branch: next (4) failed, and the cancel caught its own stop step.
+  ["43721881250", "red", [{ _tag: "failed", leg: "next (4)" }]],
+  // On main: next (1) failed and stopped three legs; it opened issue 1308, a path that must hold.
+  ["43703058643", "red", [{ _tag: "failed", leg: "next (1)" }]],
+] as const)("pinned: run %s is %s, and its causes are its failed or timed-out legs alone", (id, expected, legs) => {
+  // Plants: the old verdict (red: 43723335863 "stopped"); a canceled leg is a cause (red: five legs
+  // named on 43723346561); a time-out without the limit (red: 43723335863 "stopped").
+  const run = fixture(id);
+  const jobs = scheduled.jobsOf(run.jobs);
+  expect(scheduled.verdict({ needs: run.needs, jobs, failed: [], limits: LIMITS })).toBe(expected);
+  expect(scheduled.causes(jobs, LIMITS)).toEqual(legs);
+});
+
+it("pinned: run 43723335863's report opens the issue and names both legs as time-outs; with no limits it cannot", async () => {
+  // pinned: the run that opened no issue. Plant: the report reads no limit from its env (red: no
+  // issue). Without LIMIT_ the two time-outs read as cancels, which is why workflow-lint.ts's SC5
+  // holds each test job's limit in the report step's env.
+  const run = fixture("43723335863");
+  const { calls, send } = fake(run.jobs, null, null);
+  const { result, action } = await scheduled.report({
+    needs: run.needs,
+    reports: [],
+    env,
+    api: scheduled.github(env, send)!,
+  });
+  expect(result).toBe("red");
+  expect(action._tag).toBe("open");
+  expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
+    "labels",
+    "issues",
+  ]);
+
+  if (action._tag === "open") {
+    expect(action.body).toContain("- `next (4)` timed out: it ran into its 17-minute limit");
+    expect(action.body).toContain("- `next (e2e-1)` timed out: it ran into its 17-minute limit");
+  }
+
+  const { LIMIT_NEXT: _next, LIMIT_TOOLING: _tooling, ...bare } = env;
+  const blind = await scheduled.report({
+    needs: run.needs,
+    reports: [],
+    env: bare,
+    api: scheduled.github(bare, fake(run.jobs, null, null).send)!,
+  });
+  expect(blind.result).toBe("stopped");
+});
+
+it("property: the jobs API's answer reads as each job's name, status, conclusion, times and steps, and any other shape as none", () => {
   // Plants: keep only finished jobs (red: the running one dropped); drop a step's null conclusion to
-  // "" (red: a running step read as a result).
+  // "" (red: a running step read as a result); read the job's start from `created_at` (red: every
+  // start null).
   fc.assert(
     fc.property(calmJobs, fc.nat(), (jobs, id) => {
       const answer = {
         total_count: jobs.length,
-        jobs: jobs.map((job, i) => ({
+        jobs: jobs.map(({ start, end, steps: list, ...job }, i) => ({
           id: id + i,
           ...job,
-          steps: job.steps.map((step, n) => ({ number: n + 1, status: "completed", ...step })),
+          created_at: at(-1000),
+          started_at: start,
+          completed_at: end,
+          steps: list.map(({ end: done, ...step }, n) => ({
+            number: n + 1,
+            status: "completed",
+            ...step,
+            started_at: at(0),
+            completed_at: done,
+          })),
         })),
       };
       expect(scheduled.jobsOf(answer)).toEqual(jobs);
@@ -126,7 +441,14 @@ it("property: the jobs API's answer reads as each job's name, status, conclusion
   expect(scheduled.jobsOf(null)).toEqual([]);
   expect(scheduled.jobsOf({ jobs: "x" })).toEqual([]);
   expect(scheduled.jobsOf({ jobs: [null, { steps: [null, {}] }] })).toEqual([
-    { name: "", status: "", conclusion: null, steps: [{ name: "", conclusion: null }] },
+    {
+      name: "",
+      status: "",
+      conclusion: null,
+      start: null,
+      end: null,
+      steps: [{ name: "", conclusion: null, end: null }],
+    },
   ]);
 });
 
@@ -180,6 +502,7 @@ const run = fc.record({
   server: fc.constant("https://github.example"),
   run: fc.constant("https://github.example/owner/repo/actions/runs/7"),
   failed: fc.array(fc.stringMatching(/^[a-z]{1,8}\.test\.ts > [a-z]{1,8}$/), { maxLength: 70 }),
+  causes: fc.constant([]),
 });
 
 it("property: red opens an issue or comments on the open one, green closes the open one, and nothing else acts", () => {
@@ -284,15 +607,27 @@ const env = {
   GITHUB_SHA: "c".repeat(40),
   GITHUB_RUN_ID: "7",
   GITHUB_WORKSPACE: "/work/repo",
+  // The report step's limits, as scheduled.yaml's aliases give them.
+  LIMIT_NEXT: "17",
+  LIMIT_TOOLING: "30",
 };
 
-/** The jobs API's answer for this run's jobs. */
-const answer = (jobs: Jobs) => ({ total_count: jobs.length, jobs });
+/** The jobs API's answer for this run's jobs, in its own keys. */
+const answer = (jobs: Jobs) => ({
+  total_count: jobs.length,
+  jobs: jobs.map(({ start, end, steps: list, ...job }) => ({
+    ...job,
+    started_at: start,
+    completed_at: end,
+    steps: list.map(({ end: done, ...step }) => ({ ...step, completed_at: done })),
+  })),
+});
 
-/** The run's jobs, some with a failed step, as `proof` makes them. */
+/** The run's jobs, some with a failed step as `proof` makes them, or a leg that did not pass. */
 const runJobs = fc.oneof(
   calmJobs,
   fc.tuple(calmJobs, proof).map(([jobs, red]) => [...jobs, ...red.jobs]),
+  fc.tuple(calmJobs, notPassed).map(([jobs, bad]) => [...jobs, bad]),
 );
 
 const JOBS_CALL = "GET actions/runs/7/jobs?filter=latest&per_page=100";
@@ -317,7 +652,7 @@ it("property: the report reads the run's jobs first, then makes exactly the call
           .filter((c) => c.method !== "GET")
           .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
 
-        expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed }));
+        expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS }));
         expect(calls.every((c) => c.auth === "Bearer token-made-up")).toBe(true);
         expect(calls.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)[0]).toBe(JOBS_CALL);
 
@@ -350,6 +685,11 @@ it("property: the report reads the run's jobs first, then makes exactly the call
         if (action._tag === "open" || action._tag === "comment") {
           for (const test of failed.slice(0, scheduled.SHOWN)) {
             expect(action.body).toContain(test);
+          }
+
+          // Each leg that made it red is named in the issue.
+          for (const cause of scheduled.causes(jobs, LIMITS)) {
+            expect(action.body).toContain(`- \`${cause.leg}\` `);
           }
 
           if (last !== null && last !== env.GITHUB_SHA) {
