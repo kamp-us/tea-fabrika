@@ -7,7 +7,7 @@ repo's own review stage. That piece runs alone, only reads, and has been run
 on three real commits. There is still no machine with phases.
 
 **Everything in the step list is today's fabrika**: the reviewer agent, its
-skill, its verbs, the verdict comments and the lane ledger. Two things are
+skill, its verbs, the verdict comments and the quest ledger. Two things are
 this repo's, and each is named where it matters. The six logged runs were
 started by this repo's operator machine (`src/operator.ts`), not by fabrika's
 operator agent. And the last section is this repo's code. This repo also has
@@ -62,7 +62,7 @@ think   12  read more of the code than the diff shows         reader
 
 say     19  write the verdict                                 reader
         20  post one verdict per kind                         code
-        21  write the ending in the lane ledger               code
+        21  write the ending in the quest ledger              code
         22  tell the person what happened                     not sure
 
 22 steps: 12 code, 6 reader, 4 not sure
@@ -261,8 +261,8 @@ fabrika review ci <pr> --sha <head> --wait --budget-seconds 480
 
 - **Logged:** 6 of 6. 2 to 16 s. Never a real wait.
 - **Why so short here.** This repo's operator had already waited for the
-  checks before it started the reviewer: about 5.5 minutes in lane 625 and 7.4
-  in lane 561. Under fabrika alone the reviewer does the waiting. On phoenix,
+  checks before it started the reviewer: about 5.5 minutes in quest 625 and 7.4
+  in quest 561. Under fabrika alone the reviewer does the waiting. On phoenix,
   92 failed reviews had the red check arrive while the reviewer ran, and those
   took 10.9 minutes at the median
   ([experiment 54](../experiments/54-why-reviews-fail.md)).
@@ -271,7 +271,7 @@ fabrika review ci <pr> --sha <head> --wait --budget-seconds 480
   review runs again what CI enforces. In the logs, 0 of 6 reviewers ran a
   test, a type check or a fixture. They read CI's answer, and two verdicts
   say so in words: "Not re-run locally."
-- **Move and tag:** Listen. `code can do this`. In the logged lanes this
+- **Move and tag:** Listen. `code can do this`. In the logged quests this
   repo's operator did this very wait in code.
 
 ### 10. A red required check fails the review
@@ -418,7 +418,7 @@ writes: nothing yet
 - **Logged:** a deviations block in a verdict of all six runs, one row or line
   per entry. On phoenix this line fails in about 5% of failed reviews
   (experiment 54).
-- **Move and tag:** Draft. `needs a reader`. Each row in lane 625 is an
+- **Move and tag:** Draft. `needs a reader`. Each row in quest 625 is an
   argument: one file "is untouched", one function "has nothing left to drop",
   so the entry is "Sound".
 
@@ -474,7 +474,7 @@ fabrika review post <pr> --namespace <kind> --polarity PASS|FAIL --sha <head> --
 - **Move and tag:** Act. `code can do this`. The verb does all of it. The
   reviewer supplies only the text and one short clause.
 
-### 21. Write the ending in the lane ledger
+### 21. Write the ending in the quest ledger
 
 Records how the run ended, as one of six words: `PASS`, `FAIL`, `UNKNOWN`,
 `STALE`, `UNBINDABLE` or `ROUTED`. Before it accepts a `PASS`, the verb checks
@@ -498,7 +498,7 @@ Ends with a short message. The skill asks for two plain lines: what happened,
 and what the person does next.
 
 ```text
-What happened: the review passed and the lane moved from review to ship.
+What happened: the review passed and the quest moved from review to ship.
 What you do next: nothing — the operator can ship it.
 ```
 
@@ -511,7 +511,7 @@ What you do next: nothing — the operator can ship it.
 ## What comes out
 
 Three things leave a review today: comments on the pull request, one line in
-the lane ledger, and a short closing message.
+the quest ledger, and a short closing message.
 
 **The verdict comment.** One per kind, per head commit. Only its first line
 has a fixed format:
@@ -567,7 +567,7 @@ has other headings: `## What has to change`, `## Per criterion`,
 `## Standing checks`, `## Deviations`. Six of the nine PASS verdicts carry
 the same clause, `merge-ready`.
 
-**The lane ledger.** One line, with the word and the kinds of file. No
+**The quest ledger.** One line, with the word and the kinds of file. No
 finding, no head commit, no round number:
 
 ```json
@@ -575,7 +575,7 @@ finding, no head commit, no round number:
 ```
 
 **What a later round is given.** The same brief as the first round. It has
-three parts: which lane and task, two or three links (the ticket, the pull
+three parts: which quest and task, two or three links (the ticket, the pull
 request, sometimes the owner's comments), and fixed rules that say to work
 from the links and never from a summary. It carries no round number, no list
 of earlier findings and no earlier head commit. The builder that repairs a
@@ -612,7 +612,7 @@ type Standing = "standing" | "superseded";
 /** How a reviewer run ends. One word per run. */
 type Terminal = "PASS" | "FAIL" | "UNKNOWN" | "STALE" | "UNBINDABLE" | "ROUTED";
 
-/** The one line the lane ledger gets. */
+/** The one line the quest ledger gets. */
 type LedgerLine = {
   task: string;               // "issue" in all six runs
   event: string;              // seen: "ISSUE.PASS", "ISSUE.FAIL"
@@ -634,12 +634,12 @@ none of them exists outside the comment's prose.
 
 ## Round 2 and later
 
-One later round is on record: run F, the second review of lane 625.
+One later round is on record: run F, the second review of quest 625.
 
 **What the skill says.** Nothing in it makes a later round smaller. Every
 round owes every kind again, governance too. A verdict is good for one head
 commit. The round number is the reviewer's own count; no verb hands it over.
-The budget is three repair rounds, then the lane stops for a person.
+The budget is three repair rounds, then the quest stops for a person.
 
 **What round 1 left.** One blocking finding: the required check was red,
 because a new test saw two lines where the ticket asked for one. `review-doc`

@@ -33,11 +33,11 @@ guidelines", a private page with the six principles you can press.
 ## Which version
 
 - **`next/`:** true from Tier 1, under `dev.ts`. Tier 1 has programs in the brain and windows, so
-  both reload there. Hands arrive in Tier 4 and a lane in `next/` later, and their rules here are
+  both reload there. Hands arrive in Tier 4 and a quest in `next/` later, and their rules here are
   recorded now so the facts are right from the first entry.
 - **Today's version (`apps/fabrika`):** not changed by this note. To get new code today, a person
   quits, rebuilds, and presses "Stop the old host and start this one", which stops every job. A
-  fix to one program restarts everything, even mid-lane. Tracker ticket 67 is today's ticket for that;
+  fix to one program restarts everything, even mid-quest. Tracker ticket 67 is today's ticket for that;
   see [a tryout in today's version](#a-tryout-in-todays-version).
 
 ## What was decided
@@ -213,11 +213,11 @@ decodes it. A mode in that model stays with its window, or goes to null with a l
   Durable Object's code update for up to 300 s and keeps its storage and hibernated sockets
   ([changelog](https://developers.cloudflare.com/changelog/post/2026-10-30-durable-objects-deferred-code-updates/)),
   so a core deploy loses nothing either. 80%.
-- **A live lane pins its own stage programs.** A lane's steps keep the build they started with,
-  for the lane's life. Other programs, such as `trace`, still reload. Why: a lane's result must say
+- **A live quest pins its own stage programs.** A quest's steps keep the build they started with,
+  for the quest's life. Other programs, such as `trace`, still reload. Why: a quest's result must say
   which code judged it. `build` on every record (H6) is what makes this possible later. 70%: the
-  doubt is a person who just fixed a stage and expects the lane to take it. Not in Tier 1, which
-  has no lane in `next/`.
+  doubt is a person who just fixed a stage and expects the quest to take it. Not in Tier 1, which
+  has no quest in `next/`.
 
 ## Protocol first
 
@@ -260,7 +260,7 @@ with fixed seeds, as fast-check properties:
 - Code that failed to load never runs a step.
 - Every `build` on a record has an earlier `code.loaded` for that hash.
 - Only the saved program's processes swap.
-- A pinned lane never changes build (when lanes exist).
+- A pinned quest never changes build (when quests exist).
 
 ## The proposals in one table
 
@@ -274,7 +274,7 @@ with fixed seeds, as fast-check properties:
 | A window | swap the view by hash from the brain; keep its model if it decodes, modes as in [M6](./modes.md#m6-a-mode-stays-where-it-lives) | 60% |
 | Hands | a restart, with terminals in their own process | 60% |
 | What a person sees | a quiet word and icon on the tile; a refusal stays with Restart | 65% |
-| Where it is off | the cloud takes code by deploy only; a lane pins its stage programs | 70% |
+| Where it is off | the cloud takes code by deploy only; a quest pins its stage programs | 70% |
 | The fact to record now | `build` on every record, and the `code.*` facts | 90% |
 
 ## Where this differs from settled notes
@@ -308,8 +308,8 @@ at 70%, does not apply to `next/`.
 
 ## What it cannot tell us
 
-- No window was reloaded, no hands ran, and no lane ran. Those leans rest on docs and reasoning.
+- No window was reloaded, no hands ran, and no quest ran. Those leans rest on docs and reasoning.
 - A pure step only. Cmds and Subs across a swap were not run.
 - Local only. Cloudflare's eviction of loaded isolates is undocumented.
 - Whether people want refusals to restart by themselves in dev.
-- Whether pinning a lane surprises the person who just fixed a stage.
+- Whether pinning a quest surprises the person who just fixed a stage.

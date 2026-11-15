@@ -1,6 +1,6 @@
 ---
 state: "decided in pieces, see the note"
-summary: "Both versions. A review's verdict, a person's yes and the lane's stand-in carry to a new head by one rule: `kept` on the same head, a clean replay of the reviewed diff onto the base branch (Gerrit's trivial rebase), or a format-only change; `glance` when only the `-U0 --verbatim` patch-id matches; `stale` otherwise. Diffs are read against the pull request's base branch. Checks always run again at the final head. 13 places in today's code bind to a sha or to no head. From experiment 165."
+summary: "Both versions. A review's verdict, a person's yes and the quest's stand-in carry to a new head by one rule: `kept` on the same head, a clean replay of the reviewed diff onto the base branch (Gerrit's trivial rebase), or a format-only change; `glance` when only the `-U0 --verbatim` patch-id matches; `stale` otherwise. Diffs are read against the pull request's base branch. Checks always run again at the final head. 13 places in today's code bind to a sha or to no head. From experiment 165."
 ---
 
 # A yes binds to the diff, not the commit
@@ -20,7 +20,7 @@ as a decision until now.
 
 ```ts
 // A sketch. One rule for every yes the pipeline keeps and later checks against a head:
-// a review's verdict, a person's yes, and the lane's own stand-in approval.
+// a review's verdict, a person's yes, and the quest's own stand-in approval.
 const Carry = Schema.Union([
 	Schema.TaggedStruct("kept", {why: Schema.Literals(["same_head", "replayed", "formatted"])}),
 	Schema.TaggedStruct("glance", {range: Schema.String}), // git range-diff: the few lines to look at
@@ -54,9 +54,9 @@ const carry = (given: Given, now: Now): Carry => {
 Ticket 117 on 2026-11-02, as it would have gone (a sketch):
 
 ```text
-exam/117 reviewed and said yes at   A   (the lane's stand-in row, and the person's merge)
+exam/117 reviewed and said yes at   A   (the quest's stand-in row, and the person's merge)
 a person pushes a format-only commit B
-today      ship: other_head -> send:reviewer:no_review, the lane stops
+today      ship: other_head -> send:reviewer:no_review, the quest stops
 this rule  replay of A's diff onto main: tree of A; the formatter on it: tree of B
            carry -> {_tag: "kept", why: "formatted"}; checks run again at B; merge
 ```
@@ -101,9 +101,9 @@ to it as `kept`, or through a glance that said yes".
   4 of the 13 real pushes, where only the row above the pull request's own row in
   `experiments/README.md` changed. It also said "same" on 31 of 54 generated moved lines, such as
   a `requireAdmin()` moved from one function to another. So it earns a glance, never a silent yes.
-- **It broke a live lane today.** On ticket 117's exam pull request, a format-only commit moved the
-  head. The lane's stand-in approval and the ship gate's rows were tied to the old sha, so ship
-  ended `send:reviewer:no_review` and the lane stopped. The meaning had not changed.
+- **It broke a live quest today.** On ticket 117's exam pull request, a format-only commit moved the
+  head. The quest's stand-in approval and the ship gate's rows were tied to the old sha, so ship
+  ended `send:reviewer:no_review` and the quest stopped. The meaning had not changed.
 
 ## The known way
 
@@ -129,7 +129,7 @@ to it as `kept`, or through a glance that said yes".
 A glance is one short look at a few lines, not a full review. The range-diff shows the old diff
 beside the new one; on this repo's 4 real cases it was one moved context row.
 
-- **For a review's verdict, the lane's review step looks, in a short mode.** One narrow question
+- **For a review's verdict, the quest's review step looks, in a short mode.** One narrow question
   over the range-diff: "did only the lines around the change move, and do its own lines still do
   what was reviewed?" It is the Judge move. A yes writes `carried` with `why: "glanced"`. A no, or
   any doubt, is `stale` and a full review. **Lean, 65% sure**, 165's own number. The doubt: 4 real
@@ -148,8 +148,8 @@ All of this is today's version, read on 2026-11-02 at `origin/main`. Paths are u
 |---|---|
 | `stages/ship/ready.ts:74-87` (`rowFor`) and `:148` (`isReady`) | A verdict row counts only at `v.head === p.head`; any other head is `other_head`. |
 | `stages/ship/gate.ts:33-34`, `:84`, `:88` | `other_head` is `unjudged`, and a missing review is too: both end `send:reviewer:no_review`, the stop on ticket 117. |
-| `stages/pipeline/github.ts:35-50` (`laneFactsOver`) | When GitHub's head is not the head the lane pushed, every review row reads `missing`. |
-| `stages/pipeline/pulls.ts:211-221` (`reviewsFrom`) | An exam pull reads `governance: passed` at any head. A lane pull's verdicts carry no head, and `open` at `:137-146` moves the row's head and keeps them: a silent carry with no check. |
+| `stages/pipeline/github.ts:35-50` (`laneFactsOver`) | When GitHub's head is not the head the quest pushed, every review row reads `missing`. |
+| `stages/pipeline/pulls.ts:211-221` (`reviewsFrom`) | An exam pull reads `governance: passed` at any head. A quest pull's verdicts carry no head, and `open` at `:137-146` moves the row's head and keeps them: a silent carry with no check. |
 | `stages/pipeline/pulls.ts:179-208` (`said`, `mergeAnswered`) | A person's `merge` binds to the newest ask, and to no head at all. |
 | `stages/pipeline/pulls.ts:410-449` (`laneRecord`) | The exam's stand-in criterion passes at the side tree's head when it is read. |
 | `criteria/book.ts:264-270` (`standingAt`) | A criterion is met only by a verdict at `v.head === head`. |
@@ -158,7 +158,7 @@ All of this is today's version, read on 2026-11-02 at `origin/main`. Paths are u
 | `code-host-github.ts:315-332` (`verdictsAt`) | A GitHub verdict marker counts only at the head; its `content:<digest>` is dropped. |
 | `code-host-github.ts:368`, `:397-413` (`approvedBy`) | A GitHub approval, or an owner's `control-plane-self-approval @ <sha>` comment, counts only at that sha. |
 | `stages/operate/stop.ts:176-190` (`afterReview`) | The operate loop ships only when the review passed the very head the round built. |
-| `stages/pipeline/machine.ts:1256-1259` | After main is merged into a pushed branch, the lane always goes back to review. |
+| `stages/pipeline/machine.ts:1256-1259` | After main is merged into a pushed branch, the quest always goes back to review. |
 
 13 places. Two of them (`pulls.ts:137-146` and `:179-208`) are holes the other way: a yes that
 carries over anything. Giving every yes a head and running `carry` closes both.
