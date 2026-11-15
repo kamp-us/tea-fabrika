@@ -7,7 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Queue, Schema } from "effect";
+import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -23,6 +23,22 @@ const SEED = 119120;
 const NAME = "control-test";
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
+
+// The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
+// is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
+// which the driver never gives, so a missing plugin or start is a defect.
+const listenOn = (local: Context.Context<never>, port: number) =>
+  Effect.gen(function* () {
+    const found = Context.getOption(local, ControlPlugin);
+    const plugin = Option.isSome(found) && !Effect.isEffect(found.value) ? found.value : undefined;
+
+    if (plugin?.start === undefined) {
+      return yield* Effect.die(new Error("the driver's control plugin has no start"));
+    }
+
+    return yield* plugin.start({ "fabrika-control": port }).pipe(Effect.scoped, Effect.orDie);
+  });
+
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 const Move = Schema.Struct({
@@ -533,7 +549,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
       Effect.gen(function* () {
         Context.get(local, RuntimeLifecycle)({ type: "start", worker: NAME, pid: walk.pid + 1000 });
-        yield* Context.get(local, ControlPlugin).start({ "fabrika-control": walk.port }).pipe(Effect.orDie);
+        yield* listenOn(local, walk.port);
       }),
     ),
   ).pipe(Effect.provide(rssLayer(() => 0)));

@@ -7,7 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Predicate, Schema, Scope } from "effect";
+import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Option, Predicate, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -23,6 +23,21 @@ import { brainOutbox } from "./local-dev.ts";
 
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
+
+// The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
+// is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
+// which the driver never gives, so a missing plugin or start is a defect.
+const listenOn = (local: Context.Context<never>, port: number) =>
+  Effect.gen(function* () {
+    const found = Context.getOption(local, ControlPlugin);
+    const plugin = Option.isSome(found) && !Effect.isEffect(found.value) ? found.value : undefined;
+
+    if (plugin?.start === undefined) {
+      return yield* Effect.die(new Error("the driver's control plugin has no start"));
+    }
+
+    return yield* plugin.start({ "fabrika-control": port }).pipe(Effect.scoped, Effect.orDie);
+  });
 
 const step = fc.record({
   // A crash has no RSS; a memory kill carries the measured bytes, including the cap.
@@ -125,7 +140,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                 Effect.gen(function* () {
                   observe = Context.get(local, RuntimeLifecycle);
                   // Alchemy pins the ports, so every replacement listens on the first one's port.
-                  listen = Context.get(local, ControlPlugin).start({ "fabrika-control": 27002 }).pipe(Effect.orDie);
+                  listen = listenOn(local, 27002);
                   observe({ type: "start", worker: "life-test", pid: 27001 });
                   yield* listen;
                 }),
@@ -277,7 +292,7 @@ it("every observed exit is durable once across restart or brake, with its reason
             startDev({ name: "life-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
               Effect.gen(function* () {
                 Context.get(local, RuntimeLifecycle)({ type: "start", worker: "life-test", pid: 28001 });
-                yield* Context.get(local, ControlPlugin).start({ "fabrika-control": 28002 });
+                yield* listenOn(local, 28002);
               }),
             ),
           ).pipe(
@@ -357,6 +372,9 @@ const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.is
 const install: Install = { id: "install-1", program: "p/replace", hash: "a".repeat(64), source: "", from: "watch" };
 
 const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
+
+// How the runtime reports a process's end, as Alchemy's exit event carries it.
+type Ended = Extract<RuntimeEvent, { readonly type: "exit" }>["exit"];
 
 type Sent = { readonly pid: number; readonly signal: string; readonly at: number };
 type Request = { readonly port: number; readonly method: string; readonly at: number };
@@ -444,8 +462,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     (local) =>
       Effect.gen(function* () {
         observe = Context.get(local, RuntimeLifecycle);
-        const plugin = Context.get(local, ControlPlugin);
-        listen = (port) => plugin.start({ "fabrika-control": port }).pipe(Effect.orDie);
+        listen = (port) => listenOn(local, port);
         observe({ type: "start", worker: REPLACE, pid: OLD.pid });
         yield* listen(OLD.port);
       }),
@@ -467,8 +484,8 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   const rows = outbox.pending.pipe(Effect.orDie);
   // The stand-in ends, Alchemy reports it, waits its backoff and starts the replacement.
   // A process that drains on SIGTERM exits by itself, as workerd does, so its exit names no signal.
-  const replaced = Effect.fnUntraced(function* (signal: string) {
-    const exit =
+  const replaced = Effect.fnUntraced(function* (signal: "SIGTERM" | "SIGKILL") {
+    const exit: Ended =
       signal === "SIGKILL" ? { exitCode: null, signal, stderr: "" } : { exitCode: 0, signal: null, stderr: "" };
     observe({ type: "exit", worker: REPLACE, exit });
     observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
@@ -497,7 +514,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   return { dev, life, signals, requests, world, first, rows, replaced, term, listen };
 });
 
-const replaced = <A, E>(work: Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem | Clock.Clock>) =>
+const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   work.pipe(
     Effect.scoped,
     Effect.provide(fetchClient),
@@ -600,7 +617,7 @@ effectIt.effect.prop(
         });
       }),
     ),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }), endOnFailure: true } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }) } },
 );
 
 type Called = { readonly at: number; readonly fiber: Fiber.Fiber<unknown, unknown> };
@@ -731,5 +748,5 @@ effectIt.effect.prop(
         expect(w.signals.filter((s) => s.signal === "SIGKILL")).toHaveLength(kills ? 1 : 0);
       }),
     ),
-  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }), endOnFailure: true } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }) } },
 );

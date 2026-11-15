@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-brain-memory-schema-refuses-unit",
+  "date": "2026-11-15",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/person.json",
+    "line": 17
+  },
+  "says": "In next/, the generated person.json gives desktop.brain-memory the pattern for digits only and the default \"500000000\", the byte size's JSON codec, while the settings note says a byte size has one spelling, a string with its unit, and the loader reads \"500 MB\". An editor using this schema marks the documented spelling as wrong. The two byte-size settings are not declared the same way: on the branch fabrikalfa/pipe-plumbing, mail.chunk is declared with format: \"text\", and its generated repo.json entry is a plain string with the default \"65536 bytes\" and no digit pattern; desktop.brain-memory in Declarations.ts has no format, so it takes the default json format.",
+  "proof": "`pnpm settings:generate` at 6bc41cab8 wrote that pattern. DesktopBrain.test.ts L9 reads a size with its unit through a provider and a flag. On origin/fabrikalfa/pipe-plumbing (17ca44766), next/packages/libfabrika/src/settings/Declarations.ts line 224 declares mailChunk with format: \"text\", and next/apps/fabrika/repo.json lines 15 to 18 give it type string and default \"65536 bytes\".",
+  "cost": "A person who writes the documented value sees an editor error on a valid setting.",
+  "head": "49b01c72f99cbd79d90bc2f74dbcd20908311e7f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316"
+}
