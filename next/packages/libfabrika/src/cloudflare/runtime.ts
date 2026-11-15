@@ -1491,6 +1491,24 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return answer;
   });
+  /** Wakes each process that watches `pid`, after the turn that ended it: the exit wrote a `DOWN`
+   *  into each watcher's inbox, and a name's object reads its inbox only once woken, as for mail. A
+   *  watch stays live after its `DOWN`, so a repeated exit wakes again, and a wake that failed fails
+   *  the exit, which may be asked again. A watcher that ended holds no watch, and a window needs no
+   *  wake: the append itself rings its parked wait. */
+  const wakeWatchers = Effect.fnUntraced(function* (pid: string) {
+    const names = yield* Context.get(services, LedgerTransaction).transact((turn) => {
+      const table = processes.table(turn);
+      return table
+        .inbound(pid)
+        .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
+        .map((life) => life.name);
+    });
+    const wakeups = Context.get(services, MailWakeups);
+    yield* Effect.forEach(new Set(names), (name) => wakeups.wake(name), { concurrency: 1, discard: true }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
+    );
+  });
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
@@ -1500,18 +1518,25 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
     }).pipe(write);
+    yield* wakeWatchers(pid);
   });
   /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
    *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
   const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
-    yield* Effect.gen(function* () {
+    const child = yield* Effect.gen(function* () {
       const child = (yield* processes.info).find((row) => row.name === input.name);
       yield* children.stop(input, origin);
 
       if (child !== undefined) {
         yield* door.retire(child.process);
       }
+
+      return child;
     }).pipe(write);
+
+    if (child !== undefined) {
+      yield* wakeWatchers(child.process);
+    }
   });
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
     const fields = yield* Schema.decodeUnknownEffect(

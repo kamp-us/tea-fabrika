@@ -13,6 +13,7 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
+import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
@@ -26,10 +27,15 @@ import { projectRuntime, type Env } from "./runtime.ts";
  * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
  * `settingsStart` and `settingsRead` run on the runtime's settings calls.
  *
+ * **Details**
+ *
+ * It implements `ProjectBinding`, the type every caller's stub has, so a call the binding names and
+ * this class does not forward is a type error here, never a rejected call at run time.
+ *
  * @stability unstable
  * @category objects
  */
-export class Project extends DurableObject<Env> {
+export class Project extends DurableObject<Env> implements ProjectBinding {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
 
