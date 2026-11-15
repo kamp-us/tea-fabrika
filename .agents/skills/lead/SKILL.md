@@ -165,20 +165,28 @@ it does not reopen every test's merits.
 
 ## When a review sends back
 
-A fix round is one agent and a recheck, and a quest stops at its second sent-back review
-([0177](../../../.decisions/0177-fix-round-is-one-agent.md),
-[0176](../../../.decisions/0176-second-send-back-stops-lane.md)).
+A fix round is one agent and a recheck
+([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). From a quest's second sent-back review
+on, you read the faults: you decide one more fix round yourself when every fault is named, located
+and inside the plan, and the quest stops when one is not
+([0176](../../../.decisions/0176-second-send-back-stops-lane.md),
+[0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)).
 
 ```mermaid
 flowchart TD
-  review["a review answers send build or send tests"] --> count{"the quest's second sent-back review?"}
+  review["a review answers send build or send tests"] --> count{"the quest's second sent-back review, or a later one?"}
   count -- "no" --> fix["start one fix agent"]
   fix --> recheck["resume the same reviewer"]
   recheck --> review
-  count -- "yes" --> stop["stop the quest"]
+  count -- "yes" --> faults{"is every fault named, located and inside the plan?"}
+  faults -- "no" --> stop["stop the quest"]
   stop --> left{"does what is left break the slice's main job?"}
   left -- "no" --> cut["land what works, file the rest as a ticket"]
   left -- "yes" --> owner["take it to the owner"]
+  faults -- "yes" --> hold{"a new design call, a loosened law, or the same fault a third time?"}
+  hold -- "yes" --> owner
+  hold -- "no" --> note["put one line on your status page"]
+  note --> fix
 ```
 
 1. **Count the quest's sent-back reviews.** The quest's state file has each step's outcome. `chain.ts`
@@ -186,9 +194,21 @@ flowchart TD
 2. **On the first,** start one fix agent with the brief below. It writes the law and the fix
    together: no tests step and no build step. Then resume the same reviewer, with what it already
    read, and send it the recheck message below. Never start a fresh reviewer for a recheck.
-3. **On the second,** stop the quest. Land what works, file the rest as a tracker ticket
-   (`tracker_file`), and write the quest's field note in `field/notes/`. Take it to the owner only
-   if what is left breaks the slice's main job.
+3. **On the second, and on each later one,** read the faults the review named. A fault is named
+   when the review says what is wrong, located when it gives the file and line, and inside the plan
+   when its fix builds what the approved plan already says.
+4. **Every fault is named, located and inside the plan:** start one more fix round yourself, as in
+   step 2, and put one line on your status page: the quest, which sent-back review it was, and the
+   faults. Never ask the owner for this yes. Take it to the owner only when the fix needs a new
+   design call, the fix loosens a law, or the same fault has come back a third time.
+5. **A fault is not named and located, or not inside the plan:** stop the quest. Land what works,
+   file the rest as a tracker ticket (`tracker_file`), and write the quest's field note in
+   `field/notes/`. Take it to the owner only if what is left breaks the slice's main job.
+
+The same test holds for any approval you would ask the owner for ([0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)):
+when the answer is surely yes, and nothing in it is a new design call, a loosened law, something a
+person sees or presses, or a decision walked back, act and put one line on your status page. A
+decision that keeps an act or a call for the owner still holds.
 
 A review that answers `send plan` is not a fix round: it goes back to the plan step, as today.
 The first pass is unchanged: plan, tests, build and one review, each by its own fresh agent.
@@ -390,8 +410,9 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
   `Estimate: <n> steps, $<d>` in the plan or the quest brief, so the quest has a backstop. Never put
   these numbers in a step's brief.
   Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a quest stops at its second
-  sent-back review, whatever this window says. The chain does not count that yet, so
-  [the lead does](#when-a-review-sends-back).
+  sent-back review, whatever this window says, unless you decide one more fix round
+  ([0562](../../../.decisions/0562-lead-decides-further-fix-rounds.md)). The chain does not count that
+  yet, so [the lead does](#when-a-review-sends-back).
 - **A parked quest** (`ask`, exit 20) is yours: a loosening hit for your hand check, a lockfile
   ask, a send to plan, or what the judgment agent parked. The why is in the line's `reason`.
 - **Where it ends:** `queued`, not merged. Run `land.ts merged <pr>` later (step 10).
