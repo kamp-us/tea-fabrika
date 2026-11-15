@@ -26,14 +26,19 @@ const Send = Schema.TaggedStruct("send", { m: Schema.Json });
 /**
  * Layer that provides `Quotas` and the ledger's `WritePolicy` over the Project's own store, with
  * the limits of the start's checked settings. Provide it beneath the Project's ledger layers, so
- * every append and transaction is admitted.
+ * every append and transaction is admitted. A store that refuses the accounting tables fails the
+ * build with the ledger's `storage` error, which carries no storage text.
  *
  * @stability unstable
  * @category layers
  */
 export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ readonly values: Values }, E>) =>
-  Layer.unwrap(
-    Effect.map(settings, ({ values }) => QuotasSql.layer(sql, { brain, limits: QuotaSettings.limits(values) })),
+  Layer.effectContext(
+    Effect.flatMap(settings, ({ values }) =>
+      Layer.build(QuotasSql.layer(sql, { brain, limits: QuotaSettings.limits(values) })).pipe(
+        Effect.mapError(() => new LedgerError({ reason: "storage" })),
+      ),
+    ),
   );
 
 /**

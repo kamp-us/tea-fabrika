@@ -46,7 +46,6 @@ const readAccount = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Account
 const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Number, build: Schema.String });
 const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Number, build: Schema.String });
 const readStep = Schema.decodeUnknownOption(StepBody);
-const readAck = Schema.decodeUnknownOption(Schema.Struct({ process: Schema.String, pos: Schema.Number }));
 const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Number, settled: Schema.Number });
 const readHeld = Schema.decodeUnknownSync(Held);
 
@@ -91,6 +90,10 @@ const none = { writes: 0, bytes: 0 };
 const free = Result.succeed(undefined);
 const refuse = Result.fail("quota" as const);
 
+// A store failure met while accounting rows are read or written, as the error every call fails with.
+const failed = (cause: unknown) =>
+  cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
+
 const use = (model: Quota.Model): Use => ({
   writes: model.writes,
   bytes: model.account._tag === "program" ? model.bytes - model.ahead.bytes : model.bytes,
@@ -110,11 +113,16 @@ const use = (model: Quota.Model): Use => ({
  * its message. Infrastructure writes are not charged. Entries committed before accounting existed
  * are charged to their owners first, whatever the limits.
  *
+ * The accounting tables are made when the layer is built. A store that refuses them fails the
+ * build with `QuotasError`, its reason `Storage`.
+ *
  * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }) =>
-  Layer.unwrap(Effect.map(Clock.Clock, (clock) => make(sql, options, clock)));
+  Layer.unwrap(
+    Effect.flatMap(Clock.Clock, (clock) => Effect.try({ try: () => make(sql, options, clock), catch: failed })),
+  );
 
 const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }, clock: Clock.Clock) => {
   // The authority a synchronous step runs under, set by `within` around it and nowhere else.
@@ -218,26 +226,6 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         ),
       }),
     );
-  // A reader's ack is the work of whoever paid for the message it acks, as that message's step
-  // is: the program that sent it, so mail cannot make its receiver pay. A message nobody paid for
-  // leaves the ack with the reader's own program.
-  const paidFor = (entry: Entry, reader: string, name: string): Quota.Account | undefined => {
-    const ack = entry._tag === "acked" ? readAck(entry.body) : Option.none();
-
-    if (Option.isNone(ack) || ack.value.process !== reader) {
-      return undefined;
-    }
-
-    const [message] = accountingEntries(
-      sql,
-      Selection.cases.entry.make({ stream: `${name}/inbox`, pos: ack.value.pos }),
-    );
-    const [paid] =
-      message === undefined
-        ? []
-        : sql.exec("SELECT account FROM quota_steps WHERE name=? AND message=?", name, message.id);
-    return paid === undefined ? undefined : readAccount(paid.account);
-  };
   // The charge a step record's message took ahead, if the entry is one: who paid it, its bytes and
   // whether a step record already settled it.
   const held = (entry: Entry, target: Owner) => {
@@ -307,11 +295,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     const life = Option.getOrUndefined(registry.life(process));
     return life === undefined
       ? refuse
-      : asPayer(
-          entry,
-          owner(entry, registry),
-          paidFor(entry, process, life.name) ?? programAccount(life.state.code.program),
-        );
+      : asPayer(entry, owner(entry, registry), programAccount(life.state.code.program));
   };
   // A recovery write is paid from the recovering name's own reserved room.
   const asRecovery = (entry: Entry, process: string) => {
@@ -437,7 +421,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
             applyCell(machine(account), load(account), { type: "advance", at: clock.currentTimeMillisUnsafe() })[0],
           );
         }),
-      catch: (cause) => (cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) })),
+      catch: failed,
     });
   });
   const within = <A>(next: Authority, step: () => A): A => {
@@ -484,7 +468,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     if (Result.isFailure(tried) && tried.failure !== rollback) {
       const cause = tried.failure;
-      return yield* cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
+      return yield* failed(cause);
     }
 
     return fits;
@@ -568,8 +552,6 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
     const [row] = sql.exec("SELECT value FROM quota_fault WHERE name=?", options.name);
     return row?.value === "" || row === undefined ? null : faultDecode(row.value);
   };
-  const error = (cause: unknown) =>
-    cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
   // The step runs inside a synchronous SQL transaction, which rolls back on a throw, so the guard
   // reads the throw as a Result and throws it again, never swallowing it.
   const protect = <A>(step: () => A): A => {
@@ -613,7 +595,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
             options.name,
           );
         },
-        catch: error,
+        catch: failed,
       }),
     check: Effect.try({
       try: () => {
@@ -623,7 +605,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
           throw new QuotasError({ reason: stopped.fault });
         }
       },
-      catch: error,
+      catch: failed,
     }),
     change: (operation, writes, bytes, at, inRecovery = false) => {
       const account = inRecovery ? recovery : local;
@@ -662,7 +644,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
           })[0];
           return { program: load(local).total, recovery: use(reserve), fault: fault()?.fault ?? null };
         },
-        catch: error,
+        catch: failed,
       }),
     ),
     resume: Effect.clockWith((clock) =>
@@ -691,7 +673,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
             save(ready);
             sql.exec("UPDATE quota_fault SET value='' WHERE name=?", options.name);
           }),
-        catch: error,
+        catch: failed,
       }),
     ),
   };

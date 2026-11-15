@@ -955,16 +955,6 @@ const projectLogic = Effect.fn("project.init")(function* (
       }
     }
   };
-  // A reader's ack is its own work, so it is asked through a manager that speaks for that process,
-  // and its write is charged as the process's own (0147).
-  const readerAck = Effect.fnUntraced(function* (pid: string, pos: number, origin: From) {
-    const caller = { by, owner: Owner.cases.brain.make({}), recipient: Recipient.cases.process.make({ process: pid }) };
-    const reader = yield* ProcessManager.pipe(
-      Effect.provide(ProcessManager.layer(caller, ids.next)),
-      Effect.provideContext(services),
-    );
-    return yield* reader.ack(pid, pos, origin);
-  });
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
@@ -1935,7 +1925,8 @@ const projectLogic = Effect.fn("project.init")(function* (
       wrapped(processReply(write(processes.dead(pid, dead, origin)))),
     processIsLive: (pid: string) => wrapped(processes.isLive(pid)),
     // The brain binds the reader's name from its live process, never from the call.
-    processAck: (pid: string, pos: number, origin: From) => wrapped(processReply(write(readerAck(pid, pos, origin)))),
+    processAck: (pid: string, pos: number, origin: From) =>
+      wrapped(processReply(write(processes.ack(pid, pos, origin)))),
     processMonitor: (ref: string, pid: string, origin: From) =>
       wrapped(processReply(write(processes.monitor(ref, pid, origin)))),
     processDemonitor: (ref: string, origin: From) => wrapped(processReply(write(processes.demonitor(ref, origin)))),
