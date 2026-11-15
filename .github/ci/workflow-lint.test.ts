@@ -543,6 +543,47 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.changes.steps.splice(place(w, "changes", "upload the record") + 1, 0, upload);
     },
   ],
+  // Q1: every job tests the tree the record names, `github.sha`'s, so no checkout is told another
+  // commit or repository; and the record's upload is the only upload, since `matched` trusts any
+  // artifact of the record's name.
+  ...(
+    [
+      ["changes", "ref", `\${{ github.event.pull_request.head.sha }}`],
+      ["check", "ref", `\${{ github.event.pull_request.head.ref }}`],
+      ["check", "repository", `\${{ github.event.pull_request.head.repo.full_name }}`],
+      ["ci-required", "ref", "main"],
+    ] as const
+  ).map(([job, key, value]): [string, (w: Workflow) => void] => [
+    `Q1: ${job}'s checkout is told its ${key}`,
+    (w) => {
+      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      (checkout["with"] as Record<string, unknown>)[key] = value;
+    },
+  ]),
+  ...(["typecheck", "test", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+    `Q1: ${job} checks out the branch's head`,
+    (w) => {
+      stepsOf(w, job).unshift({
+        name: "checkout",
+        uses: "actions/checkout@v7",
+        with: { ref: `\${{ github.event.pull_request.head.sha }}`, "persist-credentials": false },
+      });
+    },
+  ]),
+  [
+    "Q1: next uploads an artifact too",
+    (w) => {
+      const upload = { name: "results", uses: "actions/upload-artifact@v7", with: { name: "next", path: "next.json" } };
+      stepsOf(w, "next").splice(place(w, "next", "shard times"), 0, upload);
+    },
+  ],
+  [
+    "Q1: check uploads an artifact with another owner's action",
+    (w) => {
+      const upload = { name: "upload", uses: "someone/upload-artifact@v1", with: { name: "tested-a-b", path: "x" } };
+      stepsOf(w, "check").splice(place(w, "check", "field rows"), 0, upload);
+    },
+  ],
   // M1: a push the merge queue already tested asks GitHub from changes' classify step alone. The
   // token is the workflow's (F3's plants hold its map), since changes' stop step needs it whole.
   [

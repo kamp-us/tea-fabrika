@@ -557,6 +557,25 @@ export const lintWorkflow = (text: string): string[] => {
     kept >=
       1, "Q1: changes uploads the record once, after the record step, under the name it printed, and its failure fails nothing");
 
+  // Q1. The record names the tree of `github.sha`, so every job must test that tree: a checkout
+  // told another `ref` or `repository` (say the branch's head) would test one tree while the record
+  // names another, and a group of the named tree would skip tests nobody ran. `matched` trusts any
+  // artifact of the record's name from a green run, so the record's upload is the one step in the
+  // workflow that uploads one, whatever action does it.
+  for (const [name, job] of Object.entries(jobs)) {
+    for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+      const given = map(step["with"]);
+      require(!("ref" in given) &&
+        !("repository" in given), `Q1: ${name}'s checkout takes the run's own commit: no ref or repository`);
+    }
+  }
+
+  const uploaders = Object.values(jobs).flatMap((job) =>
+    allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
+  );
+  require(uploaders.length === 1 &&
+    uploaders[0] === upload, "Q1: the record's upload is the one step in check.yaml that uploads an artifact");
+
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
   require(commands(map(jobs["typecheck"])).includes("pnpm typecheck"), "the typecheck job runs pnpm typecheck");
