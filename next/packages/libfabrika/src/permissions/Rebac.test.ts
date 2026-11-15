@@ -16,7 +16,7 @@
 // tuples are the brain's rows folded in the referee's order, and a permission's holders are the least
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -246,6 +246,8 @@ const toEntries = (history: ReadonlyArray<Written>): ReadonlyArray<Entry> =>
 /** A turn that holds only these entries; a check reads it and never appends. */
 const turnHolding = (entries: ReadonlyArray<Entry>): LedgerTurn => ({
   read: (stream, after) => entries.filter((e) => e.stream === stream && e.rev > after),
+  get: (stream, id) => Option.fromNullishOr(entries.find((e) => e.stream === stream && e.id === id)),
+  head: (stream) => entries.reduce((rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev), 0),
   append: () => {
     throw new Error("a check never appends");
   },
