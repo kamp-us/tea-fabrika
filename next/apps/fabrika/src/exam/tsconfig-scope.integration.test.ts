@@ -1,9 +1,10 @@
 // e2e typecheck, next/. Every TypeScript file of a next/ package is in the program its `typecheck`
 // script checks. The app's tsconfig once named its files by hand, and `e2e/` and `e2e.ts` were never
 // on the list, so 19 type errors stood there unseen from 2026-11-06 (0524: no list lets broken code
-// pass). These laws read each package's real program through the tsgo API, as `secret-types.test.ts`
-// does, and plant files in temp folders that are acquired in a scope (0061). Nothing is written inside
-// the repo.
+// pass). These laws read each package's real program through the tsgo API, as
+// `secret-types.integration.test.ts` does, and plant files in temp folders that are acquired in a
+// scope (0061). Nothing is written inside the repo. They spawn git and tsgo, real resources, so the
+// file runs on the 3-hour schedule (0536).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
@@ -153,7 +154,16 @@ const Planted = fc.record({
     word.map((w) => `e2e/${w}`),
   ),
   name: word,
-  suffix: fc.constantFrom(".test.ts", ".test-support.ts", ".laws.test.ts", ".ts"),
+  // 0536's names too: the e2e files are `*.integration.test.ts` and `*.visual.test.ts` now.
+  suffix: fc.constantFrom(
+    ".test.ts",
+    ".test-support.ts",
+    ".laws.test.ts",
+    ".integration.test.ts",
+    ".visual.test.ts",
+    ".laws.visual.test.ts",
+    ".ts",
+  ),
   word,
 });
 
