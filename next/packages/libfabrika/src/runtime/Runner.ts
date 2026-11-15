@@ -23,6 +23,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
   DeadInput,
@@ -78,7 +79,7 @@ import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./in
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
-import { recoveryStore } from "./RecoveryStore.ts";
+import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
@@ -196,6 +197,8 @@ const EXIT = "exit";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, START_CHILD, EXIT]);
+/** This life still owes a host Cmd (a send, a start_child or an exit): the next alarm tries it again. */
+const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -365,7 +368,7 @@ export class ProgramRunner extends Context.Service<
      */
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
   /** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
   static readonly layer = (
     initial: Descriptor,
@@ -499,7 +502,7 @@ export class ProgramRunner extends Context.Service<
 
           const running = !recovering(supervision) && (supervision === null || (yield* manager.isLive(process.id)));
           const waited = waitUntil(supervision);
-          const owes = running && (live?.cmds.some((cmd) => cmd.mail === true) ?? false);
+          const owes = running && live !== null && owesHostCmd(live.cmds);
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
@@ -907,7 +910,7 @@ export class ProgramRunner extends Context.Service<
             // A throw is the step's own crash and keeps its class. Any other typed failure is the host's.
             const wrapped = Result.isSuccess(failed)
               ? failed.success
-              : new ProgramDown({ reason, cause: Cause.squash(result.cause) });
+              : new ProgramDown({ reason, cause: Result.getOrUndefined(Cause.findDefect(result.cause)) });
 
             if (!Schema.is(ProgramDown)(wrapped)) {
               return yield* Effect.failCause(result.cause);
@@ -1247,6 +1250,13 @@ export class ProgramRunner extends Context.Service<
           };
           yield* store.save(checkpoint(next, null), placed);
           drained = [...drained, ...drain];
+
+          // 0528: the mail wake clears once nothing is left behind it. The permit is held, and a
+          // ping or a failed send after this sets it again.
+          if (stop === letters.length && nothingLeftBehind(cmds)) {
+            mailRetry = null;
+          }
+
           live = next;
           yield* publish(state, next);
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
@@ -1306,6 +1316,10 @@ export class ProgramRunner extends Context.Service<
           drained = [];
           return taken;
         };
+        /** Nothing waits behind the mail wake: no host Cmd is owed, and takeRetry has nothing left to
+         *  run, neither an earlier life's writes and sends nor the Cmds a drain of ordinary mail made. */
+        const nothingLeftBehind = (cmds: ReadonlyArray<Dispatched>): boolean =>
+          !owesHostCmd(cmds) && retry.length === 0 && drained.length === 0;
 
         // --- Cmds ---------------------------------------------------------------------------
 
@@ -1386,7 +1400,7 @@ export class ProgramRunner extends Context.Service<
             })(function* <E>(appended: Effect.Effect<Appended, E>) {
               return yield* appended;
             });
-          const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> = Effect.gen(function* () {
+          const attempt: Effect.Effect<Appended, WriteFailure> = Effect.gen(function* () {
             if (asked._tag === "own") {
               if (policy.personOnly) {
                 return yield* new SigningRefused({ reason: "person_only" });
@@ -1893,7 +1907,10 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  Cause.squash(exit.cause) instanceof LedgerError &&
+                  Option.exists(
+                    Cause.findErrorOption(exit.cause),
+                    (error) => Schema.is(LedgerError)(error) || Schema.is(RecoveryStoreError)(error),
+                  ) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,
@@ -2166,6 +2183,8 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 
 type RunnerFailure =
   | LedgerError
+  | RecoveryStoreError
+  | SessionManagerError
   | ProgramDown
   | RunnerError
   | SinkError
@@ -2173,6 +2192,9 @@ type RunnerFailure =
   | NotGranted
   | RepliesError
   | WatchersError;
+
+/** Why a checked write did not land: a refusal, or a fault in the ledger or the session table. */
+type WriteFailure = LedgerError | SessionManagerError | SigningRefused | NotGranted;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

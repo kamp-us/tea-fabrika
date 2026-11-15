@@ -289,6 +289,12 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
   });
 });
 
+const trackedFiles = (folder: string) => {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", folder], { cwd: ROOT, encoding: "utf8" });
+  expect(listed.status, listed.stderr).toBe(0);
+  return listed.stdout.split("\0").filter((file) => file !== "");
+};
+
 // The runner gets a real git index and its own root config. It imports the actual config and
 // plugins, clearing only the existing debt so a tiny planted repo can be clean.
 const runnerRepo = (knownRule?: string, known: unknown = []) => {
@@ -303,10 +309,15 @@ const runnerRepo = (knownRule?: string, known: unknown = []) => {
   expect(initialized.status, initialized.stderr).toBe(0);
   write(repo, "package.json", '{"type":"module"}\n');
   symlinkSync(join(ROOT, "node_modules"), join(repo, "node_modules"), "dir");
-  cpSync(join(ROOT, "oxlint-plugins"), join(repo, "oxlint-plugins"), {
-    recursive: true,
-    filter: (path) => !path.includes("/node_modules"),
-  });
+
+  // Only the tracked files: other test files plant scratch folders, git repos included, in the live
+  // oxlint-plugins/ while this runs. A recursive copy walked into one as git removed its index.lock
+  // (PR 1235's run 43619801064, ticket 976).
+  for (const file of trackedFiles("oxlint-plugins")) {
+    mkdirSync(dirname(join(repo, file)), { recursive: true });
+    cpSync(join(ROOT, file), join(repo, file));
+  }
+
   symlinkSync(join(ROOT, "oxlint-plugins/node_modules"), join(repo, "oxlint-plugins/node_modules"), "dir");
 
   for (const path of ["packages/fabrika-design/src/token-names.json", "packages/fabrika-design/tokens/parts.toml"]) {

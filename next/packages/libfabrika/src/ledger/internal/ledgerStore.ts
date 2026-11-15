@@ -6,10 +6,10 @@
 // the write. A wait answers at once: `ready`, or a ring row that the next append past it takes out
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
-import { Cause, Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import { Effect, Equal, Exit, Option, Result, Schema } from "effect";
 import { ParentText, Rev } from "../../Rev.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";
-import { errorClass, short } from "../../telemetry/Trace.ts";
+import { causeClass, errorClass, short } from "../../telemetry/Trace.ts";
 import type { Doorbell } from "../Ledger.ts";
 import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
@@ -48,6 +48,8 @@ type Placing = typeof Placing.Type;
 
 const Head = Schema.Struct({ rev: Rev, arrivedAt: Schema.Int });
 const Last = Schema.Struct({ pos: Rev });
+/** A stream's newest rev, 0 when it is empty. */
+const Top = Schema.Struct({ rev: Rev });
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
 const Lag = Schema.Struct({ head: Rev, lag: Rev });
 
@@ -69,6 +71,7 @@ const decodeRow = Schema.decodeUnknownSync(Row);
 const decodeRing = Schema.decodeUnknownSync(Ring);
 const decodeHead = Schema.decodeUnknownSync(Head);
 const decodeLast = Schema.decodeUnknownSync(Last);
+const decodeTop = Schema.decodeUnknownSync(Top);
 const decodeLag = Schema.decodeUnknownSync(Lag);
 const decodeStream = Schema.decodeUnknownSync(Schema.Struct({ stream: Schema.String }));
 
@@ -216,10 +219,12 @@ export const ledgerStore = (
       ),
     );
 
+  /** The stream's entry under `id`, by the UNIQUE (stream, id) index. */
+  const byId = (stream: string, id: string): Option.Option<Entry> =>
+    Option.map(one(`SELECT * FROM entries WHERE stream = ? AND id = ?`, stream, id), (row) => decodeRow(row));
+
   const place = (stream: string, id: string, line: Line, now: () => number): Placing => {
-    const first = Option.map(one(`SELECT * FROM entries WHERE stream = ? AND id = ?`, stream, id), (row) =>
-      decodeRow(row),
-    );
+    const first = byId(stream, id);
     const last = Option.map(one(`SELECT rev, "arrivedAt" FROM entries ORDER BY rev DESC LIMIT 1`), (row) =>
       decodeHead(row),
     );
@@ -272,7 +277,7 @@ export const ledgerStore = (
         Effect.annotateCurrentSpan(
           Exit.match(exit, {
             onSuccess: () => ({ [tag("ok")]: true }),
-            onFailure: (cause) => ({ [tag("ok")]: false, [ERROR]: errorClass(Cause.squash(cause)) }),
+            onFailure: (cause) => ({ [tag("ok")]: false, [ERROR]: causeClass(cause) }),
           }),
         ),
       ),
@@ -401,6 +406,16 @@ export const ledgerStore = (
         return sql
           .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
           .map((row) => decodeRow(row));
+      },
+      get: (stream, id) => {
+        ensureOpen();
+        return byId(stream, id);
+      },
+      head: (stream) => {
+        ensureOpen();
+        return decodeTop(
+          Option.getOrThrow(one(`SELECT coalesce(max(rev), 0) AS rev FROM entries WHERE stream = ?`, stream)),
+        ).rev;
       },
       append: (stream, id, input) => {
         ensureOpen();

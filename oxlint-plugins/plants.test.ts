@@ -389,6 +389,15 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-node-imports",
       // libfabrika's modules are planted at their real paths in modules.test.ts.
       "modules",
+      // E6's docs rule is on for listed libfabrika folders only: jsdocs.test.ts generates its files
+      // and plants one per left-out kind at real paths with the real lint config.
+      "jsdocs",
+      // A service's written type and its static members are planted at next/ paths with the real
+      // lint config in written-service-type.test.ts and no-static-layer.test.ts.
+      "written-service-type",
+      "no-static-layer",
+      // Generated no-cause-squash.test.ts plants run at next/ and .agents/ paths with the real lint config.
+      "no-cause-squash",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
@@ -400,6 +409,9 @@ describe("each rule refuses what it is there to refuse", () => {
       "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
+      // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
+      // and a named file under next/ and runs oxlint over them with the real lint config.
+      "integration-test-name",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
@@ -426,7 +438,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     "next/packages/libfabrika/src/gateway/Gateway.ts",
     "next/packages/libfabrika/src/ledger/Ledger.ts",
     "next/apps/fabrika/dev.ts",
-    "next/apps/fabrika/src/settings-start.test.ts",
+    "next/apps/fabrika/src/settings-start.integration.test.ts",
     ".agents/skills/lead/scripts/example.ts",
   ];
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
