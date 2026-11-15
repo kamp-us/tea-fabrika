@@ -13,7 +13,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
-import { Answer, Attached } from "../transport/Wire.ts";
+import { Answer, Attached, type Wait } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
@@ -646,8 +646,9 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
+/** Enough calls to reach every answer category once, then to fill the waits with one more full one. */
 const AnswerWalk = Schema.Struct({
-  count: Schema.Int.check(Schema.isBetween({ minimum: 4, maximum: 20 })),
+  count: Schema.Int.check(Schema.isBetween({ minimum: 6, maximum: 20 })),
   seed: Schema.Int,
 });
 
@@ -661,11 +662,21 @@ const EarlyFrameWalk = Schema.Struct({
 const answerCases = {
   ok: Answer.cases.ok,
   parked: Answer.cases.parked,
+  parked_full: Answer.cases.parked,
   reserved: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("reserved") })),
   bad_input: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("bad_input") })),
 };
 
-const answerCategories = ["ok", "parked", "reserved", "bad_input"] as const;
+const answerCategories = ["ok", "parked", "parked_full", "reserved", "bad_input"] as const;
+
+/**
+ * The limits a connection keeps waits under, as `transport/Connection.ts` states them: 64 waits,
+ * and 16,384 bytes of saved attachment as UTF-8 JSON. L1 keeps its own count against them.
+ */
+const MAX_WAITS = 64;
+const MAX_BYTES = 16_384;
+/** A parked answer whose stream is this long fits once, and two of them never fit. */
+const FULL = 9_000;
 
 const sample = Effect.fnUntraced(function* <S extends Schema.Constraint>(schema: S, seed: number) {
   return (yield* Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!;
@@ -723,36 +734,50 @@ it.effect.prop(
       yield* TestClock.setTime(H + 1000);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
-        const reached = new Set<keyof typeof answerCases>();
+        const reached = new Set<keyof typeof answerCases | "too_many_waits">();
+        // The law's own model of the waits it parked on this connection, never the product's: the
+        // world's attachment before any call, and each wait L1 expects kept since.
+        const start = readAttachment(w);
+        const kept: Array<typeof Wait.Type> = [];
+        // A wait is saved while the call is out, so the attachment it must fit in is marked busy.
+        const fits = (wait: typeof Wait.Type) =>
+          kept.length + 1 <= MAX_WAITS &&
+          new TextEncoder().encode(JSON.stringify({ ...start, waits: [...kept, wait], busy: true })).length <=
+            MAX_BYTES;
 
         for (let i = 0; i < walk.count; i++) {
           const state = readAttachment(w);
           expect(state._tag).toBe("online");
           const remaining = answerCategories.filter((key) => !reached.has(key));
-          const category = yield* sample(
-            Schema.Literals(remaining.length > 0 ? remaining : answerCategories),
-            walk.seed + i * 3,
-          );
-          const answer = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+          // Every category once, then a full wait until one has no room left.
+          const category: keyof typeof answerCases =
+            remaining.length === 0 && !reached.has("too_many_waits")
+              ? "parked_full"
+              : yield* sample(Schema.Literals(remaining.length > 0 ? remaining : answerCategories), walk.seed + i * 3);
+          const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+          const answer =
+            category === "parked_full" && sampled._tag === "parked"
+              ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
+              : sampled;
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
           const replies = w.frames.length;
           const before = w.calls.length;
+          const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
+          const room = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
-          const after = readAttachment(w);
-          // A call answered parked is kept as a wait on the stream the answer names and registered
-          // again through the wait path, as a parked ledger.wait is (P39 slice 4a): one more call.
-          const held = answer._tag === "parked" && "waits" in after && after.waits.some((x) => x.id === request.id);
+          // Under the limits, a call answered parked is kept as a wait on the stream the answer
+          // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
+          // 4a): one more routed call. At them, it is refused `too_many_waits` and nothing more.
           const again =
-            answer._tag === "parked" && answer.stream.startsWith(targetStream(""))
-              ? { method: "jobs.wait", params: { after: answer.after } }
-              : answer._tag === "parked"
-                ? { method: "ledger.wait", params: { stream: answer.stream, after: answer.after } }
-                : null;
-          expect(w.calls.slice(before)).toEqual([
-            { method: request.method, params: request.params },
-            ...(held && again !== null ? [again] : []),
-          ]);
+            wait === null || !room
+              ? []
+              : [
+                  wait.stream.startsWith(targetStream(""))
+                    ? { method: "jobs.wait", params: { after: wait.after } }
+                    : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
+                ];
+          expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
           expect(spans).toHaveLength(w.calls.length);
 
           for (const [n, span] of spans.slice(before).entries()) {
@@ -763,24 +788,34 @@ it.effect.prop(
             expect(span.attributes.get(Trace.REFUSED)).toBe(refused ? "reserved" : undefined);
           }
 
-          if (answer._tag === "parked") {
-            // A wait the attachment has no room for is refused at once, as a ledger.wait is.
-            expect(w.frames).toHaveLength(held ? replies : replies + 1);
+          if (wait !== null && room) {
+            kept.push(wait);
+            expect(w.frames, "a parked call with room gets no reply yet").toHaveLength(replies);
           } else {
             expect(w.frames).toHaveLength(replies + 1);
             const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
             expect(reply).toMatchObject(
               answer._tag === "ok"
                 ? { id: request.id, result: answer.result }
-                : { id: request.id, error: { data: { reason: answer.reason } } },
+                : {
+                    id: request.id,
+                    error: { data: { reason: answer._tag === "parked" ? "too_many_waits" : answer.reason } },
+                  },
             );
+
+            if (answer._tag === "parked") {
+              reached.add("too_many_waits");
+            }
           }
 
-          expect(readAttachment(w)._tag).toBe("online");
+          const after = readAttachment(w);
+          expect(after._tag).toBe("online");
+          // The product keeps exactly the waits the law's own count says it must.
+          expect("waits" in after ? after.waits : null, "the waits kept are the ones with room").toEqual(kept);
           reached.add(category);
         }
 
-        expect([...reached].sort()).toEqual(Object.keys(answerCases).sort());
+        expect([...reached].sort()).toEqual([...Object.keys(answerCases), "too_many_waits"].sort());
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
