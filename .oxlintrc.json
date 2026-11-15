@@ -1180,6 +1180,7 @@
       "files": [
         "next/apps/fabrika/dev.ts",
         "next/apps/fabrika/cli.ts",
+        "next/apps/fabrika/hands.ts",
         "next/apps/fabrika/src/settings-start.integration.test.ts"
       ],
       "rules": {
