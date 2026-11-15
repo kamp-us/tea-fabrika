@@ -1,6 +1,6 @@
 ---
-state: "proposed 2026-10-27; filing starts the lane and a person's agent is the ticket's delegate, decided 2026-11-06; its model name is from before `gpt-6-astra`"
-summary: "The plan for v1: a filed tracker ticket starts a lane on its assignee's host, claimed on the ledger. A new hand-written parent, `lane`, steps triage, plan, the owner's approval, the test writer, build with quick checks per task, the mutation step, one review per plan, push and merge, writing its facts onto the ticket and asking through its box. Push is a new small program; merge is today's ship code. Every stage runs in a box; stage agents run on GPT sol through Codex, triage on opus. The `pr` fact is the PR watcher's. The cloud host is in v1. Sixteen slices, fakes first at $0; the first real ticket is a tea-fabrika one. The core sweep waits."
+state: "proposed 2026-10-27; filing starts the quest and a person's agent is the ticket's delegate, decided 2026-11-06; its model name is from before `gpt-6-astra`"
+summary: "The plan for v1: a filed tracker ticket starts a quest on its assignee's host, claimed on the ledger. A new hand-written parent, `quest`, steps triage, plan, the owner's approval, the test writer, build with quick checks per task, the mutation step, one review per plan, push and merge, writing its facts onto the ticket and asking through its box. Push is a new small program; merge is today's ship code. Every stage runs in a box; stage agents run on GPT sol through Codex, triage on opus. The `pr` fact is the PR watcher's. The cloud host is in v1. Sixteen slices, fakes first at $0; the first real ticket is a tea-fabrika one. The core sweep waits."
 ---
 
 # A ticket runs from the app
@@ -11,19 +11,19 @@ v1, stage agents on Codex, and every stage in a box. Nothing here is built.
 
 **Two parts decided 2026-11-06:**
 
-- **Filing a ticket starts its lane.** There is no start button. The owner's yes on the plan is the
+- **Filing a ticket starts its quest.** There is no start button. The owner's yes on the plan is the
   first stop, so a person comes back to work that is already triaged and planned, not to a pile of
   triaged tickets to pick from.
 - **A person is the assignee, and their agent is the delegate,** the way Linear does it
   ([Linear](https://linear.app/developers/agent-interaction)). The person stays responsible and
   pays for the agent. Filing a ticket delegates it to the assignee's agent, which is what starts the
-  lane. This brings back a `delegated` fact, which section 4 below had dropped. Whose turn it is
+  quest. This brings back a `delegated` fact, which section 4 below had dropped. Whose turn it is
   (the agent's, or the person's while an ask waits) is a fold of the asks and answers, never a field
   someone writes, so an agent cannot forget to hand a ticket back.
 
 The rest stays proposed.
 
-Keys renamed 2026-11-03 (short words keep one meaning): the lane's `at` became `state`, and its
+Keys renamed 2026-11-03 (short words keep one meaning): the quest's `at` became `state`, and its
 schema `At` became `State`.
 
 A person files a ticket in the app. Our own pipeline takes it all the way to a
@@ -34,17 +34,17 @@ watch it go.
 // A sketch. The whole idea, from one filed ticket to a merge.
 //
 //   the window   [ file ]                  -> {type: "filed", to: "github:7"} by user:owner   (to: the assignee)
-//   github:7's host   `lanes` sees a ticket assigned to its person, claims lane/ticket/3, starts `lane 3`
-//   lane 3       triage: accept, to plan   (in its box, on opus)
+//   github:7's host   `quests` sees a ticket assigned to its person, claims quest/ticket/3, starts `quest 3`
+//   quest 3      triage: accept, to plan   (in its box, on opus)
 //                plan: planned v1 · asked "approve plan v1"
 //   the window   [ approve ] [ no ]        -> {type: "answered"} by user:owner
-//   lane 3       test writer: 3 tests, red and green on the base as the plan says
+//   quest 3      test writer: 3 tests, red and green on the base as the plan says
 //                build t-1, t-2: quick checks green · mutation step: 0 lived · one review: 3 of 3 met
 //                push: leak check clean, pushed a1b2c3d, PR #12 opened, link fact written
 //                merge: CI green, merged by the repo's own rules
-//   the watcher  PR #12 open · PR #12 merged   (read from GitHub, never written by the lane)
+//   the watcher  PR #12 open · PR #12 merged   (read from GitHub, never written by the quest)
 //   top line     "done: PR #12 merged"         (a fold of facts; no agent wrote "done")
-const lane = (ticket: TicketNumber) =>
+const quest = (ticket: TicketNumber) =>
 	parent({
 		read: Tickets.read(ticket),
 		children: [triage, plan, testWriter, build, mutation, review, push, merge],
@@ -53,7 +53,7 @@ const lane = (ticket: TicketNumber) =>
 
 ## The short version
 
-- **One new program, `lane`, written by hand.** It runs the stages as its
+- **One new program, `quest`, written by hand.** It runs the stages as its
   children, one at a time: triage, plan, the owner's approval, test writer, build,
   mutation step, review, push, merge.
 - **Filing a ticket starts it.** There is no start button. Triage is the front
@@ -94,7 +94,7 @@ const lane = (ticket: TicketNumber) =>
   [property tests](./property-tests-not-our-own-search.md),
   [push after review](../../.decisions/0392-push-is-a-step-after-review.md),
   [ship stage rules](./ship-stage-rules.md),
-  [the ticket is the lane view](./the-ticket-is-the-lane-view.md),
+  [the ticket is the quest view](./the-ticket-is-the-lane-view.md),
   [what a ticket shows](./what-a-ticket-shows.md),
   [tickets start in our tracker](./tickets-start-in-our-tracker.md),
   [scheduled jobs on the host](./scheduled-jobs-on-the-host.md),
@@ -117,7 +117,7 @@ const lane = (ticket: TicketNumber) =>
 | Piece | Where | What it lacks for this step |
 |---|---|---|
 | The app's host | `apps/fabrika/src/host/` | Runs only the programs tsh lists (`apps/fabrika/src/tsh.ts`: counter and tracker). Starts nothing by itself. |
-| The tracker | `programs/tracker/src/` | Shows the nine lane facts, the top line and the ask box. Only tests write lane facts. A comment has no "request changes", and an approval keeps no hash of the text it saw. |
+| The tracker | `programs/tracker/src/` | Shows the nine quest facts, the top line and the ask box. Only tests write quest facts. A comment has no "request changes", and an approval keeps no hash of the text it saw. |
 | The stage machines | `packages/pipeline/src/stages/` | `sort` (triage's code, not renamed yet), `plan`, `test-writer`, `task`, `catchup`, `review`, `ship`. They read GitHub issues (`TicketUrl` in `build/ticket.ts`, `PlanHost` in `plan/services.ts`, `SortHost` in `sort/services.ts`), not tracker tickets. |
 | The test writer | `stages/test-writer/` ([PR 79](https://github.com/usirin/tea-fabrika/pull/79)) | The machine, its laws, a scripted drive and the code side of its mutants job are built. Its handlers (read the base, commit, run the tests) are not, and neither Draft is on `Agents`. |
 | The plan's Properties | `stages/plan/` | The plan hands back criteria. The Property shape of [the plan stage](./the-plan-stage.md) is not built, and the test writer needs it. |
@@ -132,7 +132,7 @@ const lane = (ticket: TicketNumber) =>
 
 Three places take part: the person's window, the assignee's host, and GitHub.
 
-- **The lane stops at the owner's box and waits.** Nothing after plan runs
+- **The quest stops at the owner's box and waits.** Nothing after plan runs
   until a person approves.
 - **Two loops are normal.** A mutant that lived sends the test writer back,
   and review can send build back.
@@ -141,28 +141,28 @@ Three places take part: the person's window, the assignee's host, and GitHub.
 - **Review runs once,** over the whole diff, after the mutation step. Nothing
   leaves the machine before it passes.
 - **Then push opens the PR, and merge takes it from there.** If CI goes red,
-  merge sends the lane back to build, and review reads the new commit.
+  merge sends the quest back to build, and review reads the new commit.
 - **Any step can end stuck.** The person gets a box with two picks: try
   again, or stop.
 
-## 2. The lane, one parent written by hand
+## 2. The quest, one parent written by hand
 
 **Elm's answer:** a parent holds one child at a time, steps it with the
 child's own `update`, and hears its result as a typed message (nested TEA,
 with the OutMsg the five verbs already are). There is no pipeline language.
-As a program, it is a tea-program the host runs, like the tracker. The lane
+As a program, it is a tea-program the host runs, like the tracker. The quest
 has four states.
 
 ```ts
-// A sketch, in Effect Schema. The lane's state: where it is, and the one child running now.
+// A sketch, in Effect Schema. The quest's state: where it is, and the one child running now.
 const Child = Schema.Literals(["triage", "plan", "test_writer", "build", "mutation", "review", "push", "merge"]);
 const State = Schema.Union([
 	Schema.TaggedStruct("reading", {}),
 	Schema.TaggedStruct("running", {child: Child, run: RunId}), // a Sub hears the child's end
 	Schema.TaggedStruct("asking", {ask: AskId}), // a Listen on the ticket: a person's `answered` only
-	Schema.TaggedStruct("over", {outcome: LaneOutcome}),
+	Schema.TaggedStruct("over", {outcome: QuestOutcome}),
 ]);
-const Lane = Schema.Struct({
+const Quest = Schema.Struct({
 	ticket: TicketNumber,
 	state: State,
 	plan: Schema.NullOr(PlanRef), // the version the owner approved, and the hash of the text that approval saw
@@ -174,7 +174,7 @@ const Lane = Schema.Struct({
 const next = (t: Ticket, f: Facts): Go => {
 	if (t.closed) return over("skip:closed"); // stop in v1 is a close
 	const open = openAsk(f);
-	if (open) return wait(open); // only a person's answer moves the lane on
+	if (open) return wait(open); // only a person's answer moves the quest on
 	if (!triaged(f)) return run("triage");
 	if (!planned(f) || changesRequested(f)) return run("plan"); // "request changes" after an approval: plan again
 	if (!approvalCovers(f, t)) return ask(approve(latestPlan(f))); // the approval names the text it saw
@@ -189,7 +189,7 @@ const next = (t: Ticket, f: Facts): Go => {
 };
 
 // A sketch. The step function around it.
-const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
+const update = (s: Quest, m: QuestMsg): [Quest, Cmd[]] => {
 	switch (m.type) {
 		case "read": {
 			const go = next(m.ticket, m.facts);
@@ -208,7 +208,7 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
 - **`next` names one step, and the top rule that matches wins.** Since it is
   pure, slice 3 can test it with laws and no agents: any set of facts gives
   exactly one step.
-- **Every way back goes through "reading".** The lane drops its guess and
+- **Every way back goes through "reading".** The quest drops its guess and
   reads the ticket again. So a restarted host just starts at "reading".
 - **Which old code each step takes in:**
 
@@ -217,7 +217,7 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
 | triage | `stages/sort` | No. Renamed to triage, its answers renamed, fold and `carried` taken out, reads and writes on `Tickets`, in its box | 3 with a scripted sorter, 8 real |
 | plan | `stages/plan` | The machine, yes. `PlanHost` reads from `Tickets`, and the plan must hand back Properties | 3 scripted, 9 real |
 | test writer | `stages/test-writer` | The machine, yes: `scripted.ts` drives it in slice 3. Its handlers and both agent calls are new | 3 scripted, 10 real |
-| build | `stages/task`, `stages/catchup` | Yes, as the hosted lane steps them, pushing only to the local code host, with quick checks per task | 3 scripted, 11 real |
+| build | `stages/task`, `stages/catchup` | Yes, as the hosted quest steps them, pushing only to the local code host, with quick checks per task | 3 scripted, 11 real |
 | mutation step | none | New machine, code only, no agent | a stand-in in 3, built in 5 |
 | review | `stages/review` | Yes, on the local code host (`review/local.ts`), once per plan | 3 scripted, 11 real |
 | push | none | New. A small program: leak check, push, open the PR, write the link fact and `pushed` | 3 on the local code host, 12 real |
@@ -225,12 +225,12 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
 | the parent | `stages/lane` (experiment 105) | Its `next` rules, yes. Its hosted children and its fold branch, no | 3 |
 
 - **The branches, child by child.** Each is an outcome in the five verbs, and
-  `next` turns it into the lane's next step.
+  `next` turns it into the quest's next step.
   - **triage** reads the ticket whole, comments included
-    ([the ticket is the lane view](./the-ticket-is-the-lane-view.md)), and
+    ([the ticket is the quest view](./the-ticket-is-the-lane-view.md)), and
     answers one of four ([triage's answers](./sort-answers-yes-or-no.md)):
     - `accept`, to plan: plan starts at once.
-    - `accept`, to research: no research stage exists. The lane ends there as
+    - `accept`, to research: no research stage exists. The quest ends there as
       `send:research`, and the top line says so. A research stage comes after
       v1. A lean, 70%.
     - `decline`: code closes the ticket with its one-line reason, written as
@@ -269,7 +269,7 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
   - **push**: the leak check, then the push of the very commit review read,
     then the PR. It writes the link fact and `pushed`.
   - **merge**: waits on CI and comments, then merges by the repo's own rules.
-    A red CI sends the lane back to build. Done is read off the watcher's
+    A red CI sends the quest back to build. Done is read off the watcher's
     `pr` fact.
   - **any `stuck`**: a box with "try again" and "stop".
 - **Do survivors block? What the notes say:**
@@ -289,8 +289,8 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
     [Property tests](./property-tests-not-our-own-search.md): the grader
     stays StrykerJS with the repo's own tests, with no spec arm.
   - This plan builds it as written. It decides nothing new here.
-- **Where the code lives:** a new folder, `packages/pipeline/src/lanes/` (a
-  working name), with two programs, `lane` and `lanes`. No `hosted/` part. The
+- **Where the code lives:** a new folder, `packages/pipeline/src/quests/` (a
+  working name), with two programs, `quest` and `quests`. No `hosted/` part. The
   stage machines are taken in as libraries, as `operate` takes them
   (`stages/operate/program.ts`). Each child's state is kept under its intent
   in the run's storage, on the host's one ledger, so a restart starts no child
@@ -311,18 +311,18 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
 
 **Elm's answer:** a write is a Cmd (the Act move). A wait for a person is a
 Sub (the Listen move). The person's click is a Msg in the tracker, whose Cmd
-writes `answered`. The lane hears it on its Sub. Nobody calls anybody.
+writes `answered`. The quest hears it on its Sub. Nobody calls anybody.
 
 ```ts
 // A sketch. The service the pipeline reads and writes tickets through. Its Layer is on the Ledger.
 class Tickets extends Context.Service<Tickets, {
 	readonly read: (n: TicketNumber) => Effect.Effect<{ticket: Ticket; facts: readonly Entry[]}, TicketsFailed>;
-	readonly write: (n: TicketNumber, fact: LaneFact) => Effect.Effect<void, TicketsFailed>; // as the host's writer
+	readonly write: (n: TicketNumber, fact: LaneFact) => Effect.Effect<void, TicketsFailed>; // as the host's writer; `LaneFact` is today's code's name
 	readonly answers: (n: TicketNumber, ask: AskId) => Stream.Stream<Answered>; // a person's only
-	readonly tail: Stream.Stream<Entry>; // every new fact on every ticket, for `lanes` (section 4)
+	readonly tail: Stream.Stream<Entry>; // every new fact on every ticket, for `quests` (section 4)
 }>()("Tickets") {}
 
-// The ask, as the lane writes it, and the answer, as the window writes it.
+// The ask, as the quest writes it, and the answer, as the window writes it.
 yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", picks: ["approve", "no"]});
 // tracker/ticket/3/inbox  {type: "answered", ask: "a-1", pick: "approve", note: "", text: "sha256:9c1f…"}  by a person
 
@@ -332,7 +332,7 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
 
 - **Everything lands on one stream per ticket,** `tracker/ticket/<n>/inbox`.
   The tracker already reads that stream once a second, so the window needs
-  almost no new code. The lane writes as an agent writer (`agent:lane`, or
+  almost no new code. The quest writes as an agent writer (`agent:quest`, or
   the stage's name), on the host that holds the ticket's claim. The door
   stamps it ([PR 130](https://github.com/usirin/tea-fabrika/pull/130)).
 
@@ -343,8 +343,8 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
 | `asked` | the parent, from any child's `ask`, and on a `stuck` |
 | `reviewed` | the parent, from review's outcome |
 | `pushed`, the link fact | push, after the leak check, the push and the PR open |
-| `pr` | the PR watcher, on a change only. Never the lane, push, merge or an agent |
-| `answered`, `rated`, `commented` | a person, in the window. Never the lane |
+| `pr` | the PR watcher, on a change only. Never the quest, push, merge or an agent |
+| `answered`, `rated`, `commented` | a person, in the window. Never the quest |
 
 - **Only a person answers a box** (decided,
   [tickets start in our tracker](./tickets-start-in-our-tracker.md)). The
@@ -366,12 +366,12 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
   [tickets start in our tracker](./tickets-start-in-our-tracker.md). How
   sure: 70%. The doubt: people may also want to link PRs by hand, and one
   writer for both would be simpler.
-- **The lane facts move into the pipeline.** Programs sit above the pipeline
+- **The quest facts move into the pipeline.** Programs sit above the pipeline
   in `layer-rules.json`, so the pipeline cannot import the tracker. The nine
-  lane facts move from `programs/tracker/src/ticket.ts` into the pipeline, and
+  quest facts move from `programs/tracker/src/ticket.ts` into the pipeline, and
   the tracker imports them back. The tracker keeps its own four.
-- **One ask system for the new lane.** The pipeline also has `asks/` and the
-  owner's desk. The new lane asks only through the ticket's box, as decided.
+- **One ask system for the new quest.** The pipeline also has `asks/` and the
+  owner's desk. The new quest asks only through the ticket's box, as decided.
   The desk stays with the old pipeline.
 - **The ask box itself needs no change.** It takes any list of picks: plan's
   two, the test writer's three, a ruling's options, a `stuck`'s two.
@@ -380,22 +380,22 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
   issue itself ([Linear](https://linear.app/developers/agent-interaction)).
   GitHub's deployment reviewers answer in a box on the run's own page
   ([GitHub](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments)).
-- **Why:** the ticket is already the lane's one view. Writing there means the
+- **Why:** the ticket is already the quest's one view. Writing there means the
   window works with almost no new code.
 - **Cost:** one service with two Layers (ledger, memory), the move of nine
   schemas, a "request changes" button on the comment form, and the hash on an
   approval. PR 130 has merged, so nothing waits.
 - **How sure: 80%.** The doubt is from
   [what a ticket shows](./what-a-ticket-shows.md): whether `planned`,
-  `pushed` and `reviewed` stay facts of their own. The first lane written
+  `pushed` and `reviewed` stay facts of their own. The first quest written
   both ways settles it.
 
-## 4. Who runs a lane
+## 4. Who runs a quest
 
 **The owner ruled it on 2026-10-27: the assignee's host.** Every host runs a
-small `lanes` program from boot. It hears every new ticket and keeps only its
+small `quests` program from boot. It hears every new ticket and keeps only its
 own person's. **Elm's answer:** a filed ticket is a fact on the ledger, and
-`lanes` hears it on a Sub. On the host side it is OTP's: an application
+`quests` hears it on a Sub. On the host side it is OTP's: an application
 starts its supervisor's children at boot (tea-host).
 
 ```ts
@@ -403,23 +403,23 @@ starts its supervisor's children at boot (tea-host).
 Schema.Struct({type: Schema.Literal("filed"), title: Schema.String, body: Schema.String, to: PersonId});
 Schema.Struct({type: Schema.Literal("assigned"), to: PersonId}); // a person's fact only, like `answered`
 
-// A sketch. `lanes`: one per host, started by the host at boot. It hears only its own person's tickets.
+// A sketch. `quests`: one per host, started by the host at boot. It hears only its own person's tickets.
 const mine = (e: Entry) => assigneeOf(e.ticket) === me.person; // the fold of `filed` and `assigned`
 const starts = Stream.filter(
 	Tickets.tail,
 	(e) => ["filed", "reopened", "assigned"].includes(e.fact.type) && mine(e),
 );
-const lanes = starts.pipe(
+const quests = starts.pipe(
 	Stream.runForEach((e) =>
-		claim(`lane/ticket/${e.ticket}`, {who: me, can: myProviders}).pipe( // one lane a ticket
-			Effect.flatMap((held) => (held ? startJob(`lane ${e.ticket}`) : Effect.void)), // lost: another host has it
+		claim(`quest/ticket/${e.ticket}`, {who: me, can: myProviders}).pipe( // one quest a ticket
+			Effect.flatMap((held) => (held ? startJob(`quest ${e.ticket}`) : Effect.void)), // lost: another host has it
 		),
 	),
 );
-// At boot it also reads open tickets whose last lane never ended, and claims them the same way.
+// At boot it also reads open tickets whose last quest never ended, and claims them the same way.
 ```
 
-- **One lane per ticket, held by a claim on the ledger.** It is the same 30 s
+- **One quest per ticket, held by a claim on the ledger.** It is the same 30 s
   lease the pipeline already uses (`asks/claims.ts`), renewed every 10 s. The
   fence rule is from
   [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md): a
@@ -432,20 +432,20 @@ const lanes = starts.pipe(
 - **A host goes away.** After about 30 s, another host of the same person can
   claim the ticket, read fresh and carry on. Each child keeps its state under
   its intent, so no child runs twice.
-- **Reassigning.** A person writes `assigned`. The running lane sees it before
+- **Reassigning.** A person writes `assigned`. The running quest sees it before
   its next child and ends with `skip:reassigned`. The new assignee's host
   picks it up.
-- **Stopping, in v1, means closing.** A closed ticket ends the lane as
+- **Stopping, in v1, means closing.** A closed ticket ends the quest as
   `skip:closed`, and `Agents` stops whatever agent is running. A stop button
   waits until a real run needs one.
-- **Every laptop is off.** Then the cloud host runs the lane. That is in v1
+- **Every laptop is off.** Then the cloud host runs the quest. That is in v1
   now, as slices 6c and 4c, with the laptop as its twin
   (section 8, and [the cloud is one more host](./the-cloud-is-one-more-host.md)).
-- **A filed ticket starts a lane, and nothing past triage needs a start of
+- **A filed ticket starts a quest, and nothing past triage needs a start of
   its own.** Any ledger member may file one: a person, or a scheduled job as
   an agent writer ([scheduled jobs on the host](./scheduled-jobs-on-the-host.md)).
   Triage's accept starts plan, and the owner's approval starts the test writer and
-  build. A reopen starts a new lane, and the old PR stays in the timeline
+  build. A reopen starts a new quest, and the old PR stays in the timeline
   ([what a ticket shows](./what-a-ticket-shows.md), section 5).
 - **There is no start button and no `delegated` fact** (the second half was walked back on
   2026-11-06: see the top). An earlier draft of
@@ -640,20 +640,20 @@ program, host, shell, agents, ledger.
 Sixteen pull requests. Four slices start together. Slice 7 waits on the first
 step of [PR 142](https://github.com/usirin/tea-fabrika/pull/142)'s host shape,
 which starts only once the owner accepts that draft. Two new cloud slices, 6c
-and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
+and 4c, put quests on the cloud host inside v1. Agent money starts at slice 8.
 
 | Slice | Needs | Can start in round | Cost |
 |---|---|---|---|
-| 1 Tickets and the lane facts | none | 1 | $0 |
+| 1 Tickets and the quest facts | none | 1 | $0 |
 | 2 A system prompt on the Turn | none | 1 | $0 |
 | 5 The mutation step | none | 1 | $0 |
 | 6 The box | none | 1 | $0 |
 | 3 The walking skeleton | 1 | 2 | $0 |
 | PR 142's first step: host Durable Object and timer | the owner's approval of 142 | 1 | $0 |
-| 4 A filed ticket starts a lane | 1, 3 | 3 | $0 |
+| 4 A filed ticket starts a quest | 1, 3 | 3 | $0 |
 | 7 The PR watcher, on the cloud first | 1, PR 142's first step | 2 | $0 |
 | 6c The box on Cloudflare | 6 | 2 | box time |
-| 4c Lanes on the cloud host | 4, 6c | 4 | box time |
+| 4c Quests on the cloud host | 4, 6c | 4 | box time |
 | 8 Triage goes real | 2, 3, 6 | 3 | about $1 |
 | 9 Plan goes real | 8 | 4 | $1 to $3 |
 | 10 The test writer goes real | 5, 9 | 5 | $1 to $2 |
@@ -662,7 +662,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
 | 13 First real ticket: a tea-fabrika ticket | 4, 12 | 8 | a few $ |
 | 14 Two people | 13 | 9 | a few $ |
 
-1. **Tickets and the lane facts.** The nine fact schemas move into the
+1. **Tickets and the quest facts.** The nine fact schemas move into the
    pipeline; the tracker imports them. A `Tickets` service, with a ledger
    Layer and a memory one. "Request changes" on comments, and a hash on each
    approval. Done when a pipeline program writes `started` and the window shows
@@ -670,7 +670,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
 2. **A system prompt on the `Turn`.** The two-case `System` field, three
    adapters, and a fake that records what it got. Done when each provider
    gets exactly what it was given, and no turn goes out without a prompt. $0.
-3. **The walking skeleton.** `lane 3` in the app's tsh, the new parent, every
+3. **The walking skeleton.** `quest 3` in the app's tsh, the new parent, every
    child faked: triage on `sort` with a scripted sorter, plan scripted, the
    test writer through its `scripted.ts`, `task` and `catchup` scripted with
    their quick checks, a stand-in mutation step, one scripted review, push
@@ -683,10 +683,10 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
    build that runs end to end through the main parts; the page was not read
    for this note. If it gets too big, it splits, with the owner's approval: triage
    to the approval first, then the rest.
-4. **A filed ticket starts a lane on its assignee's host.** The `to` field on
+4. **A filed ticket starts a quest on its assignee's host.** The `to` field on
    `filed`, the `assigned` fact and its door line, the picker in the form,
-   `lanes`, the claim, and a host that starts `lanes` at boot. Done when, on
-   the laptop twin, one lane runs across a person's two hosts and none on the
+   `quests`, the claim, and a host that starts `quests` at boot. Done when, on
+   the laptop twin, one quest runs across a person's two hosts and none on the
    other person's, a reassign ends it `skip:reassigned` and the new
    assignee's host goes on with no child run twice, and no agent can write
    `assigned`. $0.
@@ -708,16 +708,16 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
    something changes ([tickets start in our tracker](./tickets-start-in-our-tracker.md)).
    It goes to Cloudflare first, with its Miniflare twin on the laptop. It
    needs no box, only GitHub reads. Done when a merged PR on a sandbox repo
-   makes its ticket "done" without any lane writing it. $0.
+   makes its ticket "done" without any quest writing it. $0.
    - 6c. **The box on Cloudflare.** New. The same `Sandbox` service with a
      Cloudflare container version: one container a job, open internet, the
      login the GitHub Actions way, as ruled on 2026-10-26. Experiment 148
      started such a box on Cloudflare. Done when the fake agent runs in a
      cloud box and the planted `env | curl` line finds no GitHub key. Box
      time.
-   - 4c. **Lanes on the cloud host.** New. `lanes` runs on the cloud host
+   - 4c. **Quests on the cloud host.** New. `quests` runs on the cloud host
      too, with the same claim. Done when a ticket whose assignee has every
-     laptop off still gets its lane, and a laptop that wakes up doesn't run
+     laptop off still gets its quest, and a laptop that wakes up doesn't run
      it again. Box time.
 8. **Triage goes real.** Renamed from sort, its answers renamed, fold and
    `carried` taken out. It reads tickets from the tracker, with its own
@@ -747,7 +747,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
     piece of itself. A few dollars.
 14. **Two people.** On the shared ledger of PR 130. One person files a ticket
     and assigns it to the other, who comments. The assignee's host runs the
-    lane on their own login. Done when that works, which is the v1 goal. A
+    quest on their own login. Done when that works, which is the v1 goal. A
     few dollars.
 
 After v1: a research stage for `accept` to research, a decision record for
@@ -760,7 +760,7 @@ evaluation ([Canarying Releases](https://sre.google/workbook/canarying-releases/
 - **Why this order:** fakes first, so the wiring is proven at $0 and its tests
   stay in CI with no key. The box and the watcher come before any paid run,
   so no real agent ever runs outside a box and done is never an agent's word.
-  Then the real pieces go in the order of the lane itself, so each paid run
+  Then the real pieces go in the order of the quest itself, so each paid run
   stands on a proven one.
 - **Cost:** sixteen pull requests, about $6 to $12 of agent runs before the
   first real ticket, plus box time on Cloudflare.
@@ -819,7 +819,7 @@ run(push, {
 
 ### The cloud host is in v1
 
-- **What:** a lane shouldn't wait because a laptop lid is shut. Since the
+- **What:** a quest shouldn't wait because a laptop lid is shut. Since the
   owner's ruling of 2026-10-26, the box can hold the login the way GitHub
   Actions does, so nothing blocks a box on Cloudflare. Written up in PR 145.
 - **Cost:** two new slices, 6c and 4c, and box time on Cloudflare. The laptop
@@ -840,7 +840,7 @@ run(push, {
   the repo's own rules" would mean merging with nobody's approval. The fix is one
   GitHub rule on main that needs a person's approval, set before slice 13.
 - **Cost:** one repo rule and one line in the plan.
-- **How sure: 75%.** The doubt: a lane editing the pipeline's own code. It
+- **How sure: 75%.** The doubt: a quest editing the pipeline's own code. It
   works in a box on a copy, and the running app is a built copy, so it can't
   break itself mid-run. Slice 13 confirms it.
 
@@ -886,9 +886,9 @@ Merge PR 131 and PR 145 with the six changes in section 8, and start slices
   come up. Experiments 119 to 124 ran it on only a few.
 - Whether GPT sol through Codex does each stage as well as opus did. No stage
   has run on it yet; slices 9 to 11 are the first runs.
-- How the window reads for a long lane with many rounds. No real lane has
+- How the window reads for a long quest with many rounds. No real quest has
   written facts yet.
-- What a lane costs end to end from the app. The estimates come from scripts
+- What a quest costs end to end from the app. The estimates come from scripts
   in experiments 85, 105, 107, 124 and 135, mostly on Claude.
 - The dead-code count is a text search, not `code-graph`'s reachability walk,
   and may miss a name used only by a type.
