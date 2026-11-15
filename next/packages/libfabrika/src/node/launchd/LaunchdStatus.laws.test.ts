@@ -1,8 +1,8 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as Status from "./LaunchdStatus.ts";
 
 const target = "gui/501/test.p19.brain";

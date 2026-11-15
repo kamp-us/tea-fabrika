@@ -6,6 +6,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions are the ledger's driver contract
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
 import { Arbitrary, Effect, Exit, FileSystem, Layer, Path } from "effect";
 import { Digest } from "effect/crypto";
@@ -16,7 +17,6 @@ import { Doorbell } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import * as RepositoryTrustLedger from "../../packs/RepositoryTrustLedger.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";

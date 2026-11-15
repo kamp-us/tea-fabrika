@@ -4,7 +4,7 @@
 import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 

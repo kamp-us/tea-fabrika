@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions ar
 import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable diagnostic fields
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Effect,
@@ -38,7 +39,6 @@ import {
 import * as Declarations from "../../settings/Declarations.ts";
 import * as SettingsSnapshot from "../../settings/Snapshot.ts";
 import { Toml } from "../../settings/Toml.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";

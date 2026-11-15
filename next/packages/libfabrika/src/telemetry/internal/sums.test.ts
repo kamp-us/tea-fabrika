@@ -2,11 +2,11 @@
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
 import { TestClock } from "effect/testing";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { Archive } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SpanSink } from "../Sink.ts";

@@ -1,12 +1,12 @@
 // T878, next/, L7. Resolve through the public Repository handle, using committed tree and disk bytes.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";

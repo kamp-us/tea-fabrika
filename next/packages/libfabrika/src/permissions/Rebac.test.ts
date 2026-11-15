@@ -16,6 +16,7 @@
 // tuples are the brain's rows folded in the referee's order, and a permission's holders are the least
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Result } from "effect";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -308,7 +309,7 @@ describe("T953 the permission core's check", () => {
         }),
         {
           seed: SEED,
-          numRuns: 200,
+          numRuns: runsFor({ fast: 20, full: 200 }),
           examples: [
             // pinned: the plant's own case, a row by another key that would make the founder an owner.
             [[{ move: "foreign", person: 0, thing: 0, relation: 0, pick: 0 }], "person"],

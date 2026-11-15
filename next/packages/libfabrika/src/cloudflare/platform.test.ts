@@ -3,6 +3,7 @@
 // failure text out of tags). The methods come from each client's own keys, so a new method joins the
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { expect } from "vitest";
@@ -10,7 +11,6 @@ import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
 class WireFault extends Error {

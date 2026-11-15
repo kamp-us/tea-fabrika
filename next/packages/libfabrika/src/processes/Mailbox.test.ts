@@ -14,6 +14,7 @@
 // - No Layer fails when it is built.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -22,7 +23,6 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import type { Line } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { type From, type Letter, Mailbox, RunnerMail } from "./Mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 

@@ -5,6 +5,7 @@
 // cut lands on a transition that is legal there. The oracle is this file's own record of what each
 // call was given and answered, never the product's machine.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -14,7 +15,6 @@ import { LedgerStreams, LedgerStreamsError, Storage } from "../ledger/LedgerStre
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Command, type Executor, type Job, Request, Recorded, Result, State } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
 import * as JobsLedger from "./JobsLedger.ts";

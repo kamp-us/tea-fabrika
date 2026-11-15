@@ -7,7 +7,7 @@
 // file runs on the 3-hour schedule (0536).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";

@@ -14,7 +14,7 @@ import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 

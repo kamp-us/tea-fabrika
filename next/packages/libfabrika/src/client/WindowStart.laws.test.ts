@@ -23,13 +23,13 @@
 // The peer is the door as a script: it answers what the walk lets it answer and nothing else, on the
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
 import { ClientRow, ClientRows, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
 import { backoff, CAP, linkTimer, ping } from "../transport/Link.ts";

@@ -9,10 +9,10 @@
 // committed. L7 records every row write `Sql.exec` is sent during a save that changes nothing, and
 // there must be none.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { property } from "../Testing.test-support.ts";
 import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";

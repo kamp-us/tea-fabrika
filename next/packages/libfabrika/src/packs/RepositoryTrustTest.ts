@@ -1,6 +1,7 @@
 // T878, next/, L5/L6. Shared laws take a scoped real SQL driver (0062).
 // No second trust reducer lives here: the opening machine consumes these saved events.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, type Scope, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
@@ -12,7 +13,6 @@ import * as Declarations from "../settings/Declarations.ts";
 import * as LoadSnapshot from "../settings/Snapshot.ts";
 import * as Sources from "../settings/Sources.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import * as Open from "./Open.ts";
 import { Event, RepositoryTrust, TrustDecision } from "./RepositoryTrust.ts";
 import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";

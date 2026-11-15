@@ -1,10 +1,10 @@
 import { applyCell, type CmdOf } from "@demlik/tea";
 import { Cmd } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
+import { runsFor } from "@kampus/vitest";
 import { Result, Schema } from "effect";
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { runsFor } from "../TestDepth.test-support.ts";
 import * as ScheduledJob from "./ScheduledJob.ts";
 
 const write = Cmd.make("write", {

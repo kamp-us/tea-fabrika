@@ -7,9 +7,9 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { PIDS } from "../Process.test-support.ts";
 import { brainOnly, inRunnerSpace, inSignalSpace } from "../Process.ts";
 import { type Grants, MailRefusal, ProgramMailError } from "../ProgramMail.ts";

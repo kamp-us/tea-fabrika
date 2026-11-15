@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Checks } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import picomatch from "picomatch/posix.js";

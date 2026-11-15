@@ -16,7 +16,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";

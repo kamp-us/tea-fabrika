@@ -1,5 +1,6 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -13,7 +14,6 @@ import { Declaration, workerExecution } from "../runtime/Execution.ts";
 import { Program, ProgramDown } from "../runtime/Program.ts";
 import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
 import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.

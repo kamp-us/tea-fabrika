@@ -7,11 +7,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Effect, type FileSystem, type Path, Tracer } from "effect";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runsFor } from "../../TestDepth.test-support.ts";
 
 type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
 

@@ -3,9 +3,9 @@
 // the memory layer is held to real git by the same laws. A law that only real git can prove reads
 // `realOnly` and runs on the schedule alone.
 import { NodeServices } from "@effect/platform-node";
+import { depth } from "@kampus/vitest";
 import { Layer } from "effect";
 import { Digest } from "effect/crypto";
-import { depth } from "../../TestDepth.test-support.ts";
 import * as Git from "./Git.ts";
 
 const platform = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);

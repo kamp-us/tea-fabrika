@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
 const SEED = 119120;

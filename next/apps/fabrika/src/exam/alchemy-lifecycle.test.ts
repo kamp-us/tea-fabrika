@@ -6,7 +6,7 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";

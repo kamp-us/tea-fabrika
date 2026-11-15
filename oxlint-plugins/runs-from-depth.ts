@@ -62,7 +62,7 @@ const TEST_FILE = /(?:\.test\.tsx?|\.test-support\.tsx?|Test\.tsx?)$/;
 /** fast-check's own `numRuns` when a property names none: a law that asks for more asks for depth. */
 const DEFAULT = 100;
 
-const MESSAGE = `A law over real IO, or one that asks for more cases than fast-check's default of ${DEFAULT}, reads its case count from the test depth (decision 0535): write \`runsFor({ fast, full })\` from \`@kampus/libfabrika/TestDepth.test-support\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
+const MESSAGE = `A law over real IO, or one that asks for more cases than fast-check's default of ${DEFAULT}, reads its case count from the test depth (decision 0535): write \`runsFor({ fast, full })\` from \`@kampus/vitest\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
 
 type Parented = Node & { readonly parent?: Node | null };
 

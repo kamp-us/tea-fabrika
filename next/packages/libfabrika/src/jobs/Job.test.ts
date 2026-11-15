@@ -3,9 +3,9 @@
 // invalid, or left out, is refused at decoding. The values are generated; the database half of both
 // laws is in `JobsTest.ts`.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Result as R, Schema } from "effect";
 import * as fc from "fast-check";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Executor, Recorded, Request, Result } from "./Job.ts";
 import {
   BAD_EXECUTOR,

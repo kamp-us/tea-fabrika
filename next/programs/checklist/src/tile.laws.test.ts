@@ -13,7 +13,7 @@
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 import type { checklistMachine } from "./program.ts";

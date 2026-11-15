@@ -12,6 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { applyCell, Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import {
   Cause,
   Arbitrary,
@@ -43,7 +44,6 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type SpanRow } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";

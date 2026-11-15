@@ -1,9 +1,10 @@
 // T878, next/. The git fixture and reader RepositoriesGit.test.ts and
 // RepositoriesGit.identity.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
 // file stays under about 60 s on a CI leg. Each runs on the git layers of GitLaws (0535).
+
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 

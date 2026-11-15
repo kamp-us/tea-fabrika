@@ -15,7 +15,7 @@
 // a stale Ask again that names a key no longer stored, a read while the store fails, and a persistence
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";

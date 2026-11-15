@@ -3,6 +3,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -23,7 +24,6 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { ProgramRunner } from "./Runner.ts";

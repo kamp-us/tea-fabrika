@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,

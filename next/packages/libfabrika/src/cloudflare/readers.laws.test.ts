@@ -8,6 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -17,7 +18,6 @@ import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";

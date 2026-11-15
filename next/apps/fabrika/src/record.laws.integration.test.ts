@@ -6,9 +6,9 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import type { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
+import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 

@@ -1,9 +1,9 @@
 // P33, p79 atomic exit's storage contract. Each plant is named beside its law.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerTransaction } from "./LedgerTransaction.ts";

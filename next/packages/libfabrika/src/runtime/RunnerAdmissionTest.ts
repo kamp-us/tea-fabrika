@@ -2,6 +2,7 @@ import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -11,7 +12,6 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { type Runs, runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { defaultPolicy, supervisor, Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";

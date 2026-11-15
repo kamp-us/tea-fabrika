@@ -10,8 +10,8 @@ import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenera
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";

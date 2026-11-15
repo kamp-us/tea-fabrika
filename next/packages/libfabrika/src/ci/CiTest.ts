@@ -1,11 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { runsFor } from "../TestDepth.test-support.ts";
 import type { CheckRun } from "./Ci.ts";
 import { Checks, Ci, CiError, RateLimited, Status, Unavailable } from "./Ci.ts";
 

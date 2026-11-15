@@ -16,6 +16,7 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
@@ -46,7 +47,6 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
-import { type Runs, runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { mailRequester, Model as RequesterModel } from "./internal/mailRequester.test-support.ts";
 import { mailResponder, Model as ResponderModel } from "./internal/mailResponder.test-support.ts";

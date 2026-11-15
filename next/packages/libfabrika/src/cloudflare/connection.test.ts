@@ -19,6 +19,7 @@ import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -26,7 +27,6 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));

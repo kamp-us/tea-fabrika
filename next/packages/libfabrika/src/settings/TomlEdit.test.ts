@@ -1,9 +1,9 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { runsFor } from "../TestDepth.test-support.ts";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";

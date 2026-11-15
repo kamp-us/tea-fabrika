@@ -3,7 +3,7 @@
 // wrap the original error class, repeat a dead write, recompute a saved refusal, drop a note.
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 

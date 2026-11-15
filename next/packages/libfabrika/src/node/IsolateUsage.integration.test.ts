@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -41,7 +42,6 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { REFUSED, SpanRow } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 
 const PID = "process_0000000000e008000000000001";
 const NAME = "checklist:1";

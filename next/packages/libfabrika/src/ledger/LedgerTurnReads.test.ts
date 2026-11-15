@@ -5,10 +5,10 @@
 // appended and in a later turn. L4: SQLite answers both through an index of `entries`, never a scan.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";

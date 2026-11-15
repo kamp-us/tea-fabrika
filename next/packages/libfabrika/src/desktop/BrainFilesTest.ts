@@ -1,8 +1,8 @@
 // L6, next/. The driver owner supplies real files and the adapter; desktop imports no platform.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
-import { runsFor } from "../TestDepth.test-support.ts";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 

@@ -2,7 +2,7 @@
 // 3-hour schedule says `full`, and a `fast` count is held between `LEAST` and the law's full count.
 import { expect, it } from "@effect/vitest";
 import * as fc from "fast-check";
-import { decodeDepth, depth, LEAST, runsAt, runsFor } from "./TestDepth.test-support.ts";
+import { decodeDepth, depth, LEAST, runsAt, runsFor } from "./Depth.ts";
 
 const SEED = 119120;
 

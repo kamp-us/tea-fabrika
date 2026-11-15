@@ -1,11 +1,11 @@
 // P12, next/. Corrupt saved rows at each synchronous decoder in the changed record files.
 import { DatabaseSync } from "node:sqlite";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Archive } from "./Archive.ts";
 import { recordPart, RecordManager } from "./Records.ts";
 import { SpanSink } from "./Sink.ts";

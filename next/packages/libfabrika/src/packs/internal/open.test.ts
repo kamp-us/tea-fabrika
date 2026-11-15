@@ -3,11 +3,11 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
 import { Arbitrary, Effect } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 

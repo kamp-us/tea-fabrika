@@ -1,9 +1,9 @@
 // T714, next/. A5 uses the real ledger and discovery layer, with the driver's scope owned above us.
 // Page, wildcard-prefix and error-cause plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerStreams, LedgerStreamsError, Storage } from "./LedgerStreams.ts";

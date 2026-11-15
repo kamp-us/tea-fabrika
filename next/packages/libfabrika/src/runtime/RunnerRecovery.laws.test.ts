@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -15,7 +16,6 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { workerExecution } from "./Execution.ts";
 import { Supervision } from "./internal/supervisor.ts";

@@ -25,7 +25,6 @@ import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import {
   configureProcess,
   processDescriptor,
@@ -35,6 +34,7 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";

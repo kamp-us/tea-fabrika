@@ -951,14 +951,17 @@ itself (`@kampus/libfabrika/processes/Process` inside the library reaches an all
 
 The table is in `.oxlintrc.json`, in its own override for `next/packages/**` and `next/programs/**`,
 so the `next/**` block stays the `.agents/` block's twin: a `scope` (`@kampus/`) and `parts`, each a name, globs and `may`, the exact
-names its files may import. A file's part is the first whose glob matches. The library's part is
-the whole package, `next/packages/libfabrika/**`, so a file outside `src/` is judged too, and it may
-import none; desktop, the library's root; a window, the root, transport's eight front files and its bare
+names its files may import. A file's part is the first whose glob matches. The test primitives'
+part is the whole package, `next/packages/vitest/**` (0538), and it may import none of our names.
+The library's part is the whole package, `next/packages/libfabrika/**`, so a file outside `src/` is
+judged too, and it may import only the test primitives, `@kampus/vitest`, which its shared suites
+read their case counts from; desktop, the library's root; a window, the root, transport's eight front files and its bare
 name, the window client's three, and the design package's root and `tokens.css`; dom and headless,
 none; browser, transport's; electron, transport's and `coordination`; a program's `.tsx` files, the
-library's root and tuval's; the rest of a program, the library's root. `next/apps` is not judged.
-A test is judged only where its part has `tests`, the packages its tests may import, each with
-every subpath: the library's tests may name only `@kampus/libfabrika`. That is the old scan's wall,
+library's root and tuval's; the rest of a program, the library's root and the test primitives.
+`next/apps` is not judged. A test is judged only where its part has `tests`, the packages its tests
+may import, each with every subpath: the library's tests may name only `@kampus/libfabrika` and
+`@kampus/vitest`, and the test primitives' tests only `@kampus/vitest`. That is the old scan's wall,
 "the library imports nothing above it, tests included", on every file of the package: code-graph
 judges a test only when a row claims it, and the four top-level tests and a test beside a one-file
 row (`coordination/`) have none. Other parts leave their tests to code-graph. A program's window is its `.tsx` files, as `fabrika/program-package-layout` reads a window;
@@ -984,7 +987,7 @@ table and in one oxlint run with the repo's config.
 `runs-from-depth` refuses a case count written as a number in a `next/` test file (`*.test.ts`,
 `*.test-support.ts`, a shared suite `*Test.ts`) when the law reaches real IO, or when the number is
 over fast-check's default of 100. The count reads
-`runsFor({ fast, full })` from `@kampus/libfabrika/TestDepth.test-support` instead: `fast` on a pull
+`runsFor({ fast, full })` from `@kampus/vitest` (`next/packages/vitest/src/Depth.ts`, decision 0538) instead: `fast` on a pull
 request and in the merge queue, `full` when the 3-hour schedule sets `FABRIKA_TEST_DEPTH=full`. The
 rule's header says what real IO is, how a law reaches it, and what the rule cannot see.
 

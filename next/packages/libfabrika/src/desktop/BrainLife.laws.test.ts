@@ -2,10 +2,10 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { syncTest } from "../Testing.ts";
 import * as Outside from "./BrainControl.test-support.ts";
 import * as BrainLife from "./BrainLife.ts";

@@ -9,10 +9,10 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runsFor } from "@kampus/vitest";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { runsFor } from "../TestDepth.test-support.ts";
 
 type Api = { readonly ProgramName: Schema.Codec<string> };
 

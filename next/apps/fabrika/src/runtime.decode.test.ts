@@ -4,8 +4,8 @@
 // change is the oracle: the same name, and the same reads of `type` in the same order.
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";

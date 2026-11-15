@@ -4,6 +4,7 @@
 // RunnerInitTest.suite(files), acquiring each world's database files in its own scope (0062, 0061).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -11,7 +12,6 @@ import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/i
 import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Process.test-support.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";

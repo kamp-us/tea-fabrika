@@ -727,12 +727,22 @@
             "scope": "@kampus/",
             "parts": [
               {
-                // Every file of the library package, wherever it sits: none of our names. Its tests
-                // name only the library itself, so no file of it imports tuval, a program or the app.
+                // The test primitives (0538) sit below everything else of ours: none of our names,
+                // and its tests name only the package itself.
+                "name": "test primitives",
+                "files": ["next/packages/vitest/**"],
+                "may": [],
+                "tests": ["@kampus/vitest"]
+              },
+              {
+                // Every file of the library package, wherever it sits: of our names, only the test
+                // primitives (0538), which its shared suites read their case counts from. Its tests
+                // name only the library itself and the test primitives, so no file of it imports
+                // tuval, a program or the app.
                 "name": "library",
                 "files": ["next/packages/libfabrika/**"],
-                "may": [],
-                "tests": ["@kampus/libfabrika"]
+                "may": ["@kampus/vitest"],
+                "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
                 "name": "desktop",
@@ -806,10 +816,11 @@
               },
               {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
-                // that imports a window file.
+                // that imports a window file. A program's shared suites (`*Test.ts`) read their case
+                // counts from the test primitives (0538).
                 "name": "program",
                 "files": ["next/programs/**"],
-                "may": ["@kampus/libfabrika"]
+                "may": ["@kampus/libfabrika", "@kampus/vitest"]
               }
             ]
           }
@@ -1188,7 +1199,7 @@
               "client"
             ],
             "folders": ["node", "cloudflare", "coordination"],
-            "files": ["index", "Id", "Testing", "TestDepth", "ProcessId", "Sql", "Rev", "SpanTag"],
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
             "values": ["ProcessId", "Sql", "Rev", "SpanTag"]
           }
         ],

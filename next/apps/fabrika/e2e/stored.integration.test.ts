@@ -6,7 +6,7 @@
 // its `-wal` file only until the clean stop closes the database. Each race here is certain, not timed.
 import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

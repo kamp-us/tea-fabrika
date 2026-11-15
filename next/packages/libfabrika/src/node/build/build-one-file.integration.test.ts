@@ -23,6 +23,7 @@ import {
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -31,7 +32,6 @@ import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../../settings/StartsTest.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];

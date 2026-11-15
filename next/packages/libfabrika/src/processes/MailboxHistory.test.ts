@@ -1,6 +1,7 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -8,7 +9,6 @@ import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
 
 // Each world's own scope closes its database (0061).

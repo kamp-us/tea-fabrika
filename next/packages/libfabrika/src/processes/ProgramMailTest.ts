@@ -14,6 +14,7 @@
 // with no host grant, the right read from the requester on the child's first `started` line. The
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -23,7 +24,6 @@ import { Model } from "../permissions/Model.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Children } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";

@@ -19,7 +19,6 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import {
   commitReply,
   configureProcess,
@@ -30,6 +29,7 @@ import {
   savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";

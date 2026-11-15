@@ -3,6 +3,7 @@
 // A4 and A6-A12 plant trials, including A-Kept's reconnect metadata, are in the tests-step report.
 // Temporary edits are restored after each trial. A14 runs on the lead's host.
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Deferred,
@@ -24,7 +25,6 @@ import { Job, State, type Request, Request as RequestSchema, Result as JobResult
 import { Jobs } from "../jobs/Jobs.ts";
 import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { connection } from "../transport/Connection.ts";
 import type { Answer } from "../transport/Wire.ts";
 import { Attached } from "../transport/Wire.ts";

@@ -2,8 +2,8 @@
 import { applyCell } from "@demlik/tea";
 import { foldEvents } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { syncTest } from "../../Testing.ts";
 import { nth } from "../RepliesTest.ts";
 import { Model, watchers } from "./watchers.ts";

@@ -2,13 +2,13 @@
 // record by traceId, including an own write. With no span, the helper fails instead of making one.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import { fromHere, lineFor, TraceId } from "./Log.ts";

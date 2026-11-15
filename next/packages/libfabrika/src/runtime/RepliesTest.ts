@@ -3,10 +3,10 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import type * as Module from "./Replies.ts";
 import { Replies } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";

@@ -14,6 +14,7 @@
 // Every oracle here is the walk's own model, or the store's raw rows read with SQL: never the
 // product's fold.
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Cause,
   Context,
@@ -40,7 +41,6 @@ import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Senders } from "../permissions/Senders.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
-import { type Runs, runsFor } from "../TestDepth.test-support.ts";
 import { Children, ChildrenError, type Child, type StartGrant, Started } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";

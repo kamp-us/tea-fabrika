@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

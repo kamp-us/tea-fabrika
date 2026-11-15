@@ -5,8 +5,8 @@ import * as RunnerTest from "@kampus/chaos/RunnerTest";
 import * as TargetsTest from "@kampus/chaos/TargetsTest";
 import { checklist } from "@kampus/checklist";
 import * as ChaosTest from "@kampus/libfabrika/node/Chaos.test-support";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { syncTest } from "@kampus/libfabrika/testing";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
 import * as RevokeHold from "../e2e/chaos-revoke.test-support.ts";
 

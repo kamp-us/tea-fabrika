@@ -13,6 +13,7 @@
 //   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
@@ -21,7 +22,6 @@ import { SettingsError } from "../../settings/Files.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats

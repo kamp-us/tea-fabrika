@@ -66,7 +66,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -142,7 +143,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -194,7 +196,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -209,7 +212,8 @@
         "next-jobs",
         "next-packs",
         "next-permissions",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -234,7 +238,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -268,7 +273,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -296,7 +302,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -310,7 +317,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
@@ -331,7 +339,7 @@
       "name": "next-ledger",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ledger"],
-      "imports": ["next-telemetry", "next-shared"]
+      "imports": ["next-telemetry", "next-shared", "next-vitest"]
     },
     {
       "name": "next-codehost",
@@ -343,7 +351,7 @@
       "name": "next-ci",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ci"],
-      "imports": ["next-telemetry", "next-shared"]
+      "imports": ["next-telemetry", "next-shared", "next-vitest"]
     },
     {
       "name": "next-transport",
@@ -383,9 +391,14 @@
         "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts",
-        "next/packages/libfabrika/src/Testing.test-support.ts",
-        "next/packages/libfabrika/src/TestDepth.test-support.ts"
+        "next/packages/libfabrika/src/Testing.test-support.ts"
       ],
+      "imports": []
+    },
+    {
+      "name": "next-vitest",
+      "layer": 0,
+      "paths": ["next/packages/vitest"],
       "imports": []
     },
     {
@@ -433,7 +446,7 @@
       "paths": ["packages/fabrika/src/program"]
     }
   ],
-  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src"],
+  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src"],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
     {

@@ -7,12 +7,12 @@ import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import { check } from "./compiler.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };

@@ -1,5 +1,5 @@
 import { it, expect } from "@effect/vitest";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import { rolldown } from "rolldown";
 

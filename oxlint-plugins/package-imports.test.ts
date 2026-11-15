@@ -13,6 +13,7 @@ import { packageImports } from "./package-imports.ts";
 
 const CODE = "fabrika(package-imports)";
 const LIBRARY = "@kampus/libfabrika";
+const VITEST = "@kampus/vitest";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
@@ -38,7 +39,8 @@ type Part = { name: string; files: string[]; may: string[]; tests?: string[] };
 const TABLE: { scope: string; parts: Part[] } = {
   scope: "@kampus/",
   parts: [
-    { name: "library", files: ["next/packages/libfabrika/**"], may: [], tests: [LIBRARY] },
+    { name: "test primitives", files: ["next/packages/vitest/**"], may: [], tests: [VITEST] },
+    { name: "library", files: ["next/packages/libfabrika/**"], may: [VITEST], tests: [LIBRARY, VITEST] },
     { name: "desktop", files: ["next/packages/tuval/src/desktop/**"], may: [LIBRARY] },
     {
       name: "window",
@@ -62,15 +64,23 @@ const TABLE: { scope: string; parts: Part[] } = {
     },
     { name: "headless", files: ["next/packages/tuval/src/headless/**"], may: [] },
     { name: "program window", files: ["next/programs/*/src/**/*.tsx"], may: [LIBRARY, "@kampus/tuval"] },
-    { name: "program", files: ["next/programs/**"], may: [LIBRARY] },
+    { name: "program", files: ["next/programs/**"], may: [LIBRARY, VITEST] },
   ],
 };
+
+/** The name is one of these packages, root or subpath. */
+const within =
+  (...packages: ReadonlyArray<string>) =>
+  (name: string) =>
+    packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
   ...Object.fromEntries(TABLE.parts.map((part) => [part.name, (name: string) => part.may.includes(name)])),
-  // A library test names the library itself, root or subpath, and nothing else of ours.
-  "library test": (name) => name === LIBRARY || name.startsWith(`${LIBRARY}/`),
+  // A library test names the library itself and the test primitives, root or subpath, and nothing
+  // else of ours. A test of the test primitives names only that package.
+  "library test": within(LIBRARY, VITEST),
+  "test primitives test": within(VITEST),
   "tuval test": null,
   "tuval, no part": null,
   "program test": null,
@@ -88,6 +98,17 @@ const ext = fc.constantFrom("ts", "tsx");
 
 /** Each place a file can sit, by its key in `ALLOWS`, and the paths there. */
 const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
+  [
+    "test primitives",
+    fc.oneof(
+      fc.tuple(below, base).map(([at, name]) => `next/packages/vitest/src/${at}${name}.ts`),
+      fc.tuple(below, base).map(([at, name]) => `next/packages/vitest/${at}${name}.ts`),
+    ),
+  ],
+  [
+    "test primitives test",
+    fc.tuple(below, base, ext).map(([at, name, end]) => `next/packages/vitest/src/${at}${name}.test.${end}`),
+  ],
   [
     "library",
     fc.oneof(
@@ -172,6 +193,10 @@ const target = fc.oneof(
     .map(([folder, front]) => `${LIBRARY}/${folder}${front === undefined ? "" : `/${front}`}`),
   fc.constantFrom(
     LIBRARY,
+    VITEST,
+    // Next to the test primitives' one name: a subpath no part's `may` holds, and a longer name.
+    `${VITEST}/Depth`,
+    "@kampus/vitest-x",
     "@kampus/libfabrika-x",
     "@kampus/tuval",
     "@kampus/tuval/browser",

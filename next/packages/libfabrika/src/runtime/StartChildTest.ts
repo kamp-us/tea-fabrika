@@ -14,6 +14,7 @@
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
 import type { Tagged } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import type { Tracer } from "effect";
 import {
   Clock,
@@ -38,7 +39,6 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import type { Sql } from "../Sql.ts";
-import { type Runs, runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model } from "./internal/childStarter.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";

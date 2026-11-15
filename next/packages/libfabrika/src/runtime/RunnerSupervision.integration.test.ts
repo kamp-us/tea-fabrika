@@ -5,6 +5,7 @@ import { Outcome } from "@demlik/tea";
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -36,7 +37,6 @@ import { Activity, Down, ProcessEvent, Recipient } from "../processes/Process.ts
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { Refusal } from "./Program.ts";

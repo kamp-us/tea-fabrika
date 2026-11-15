@@ -4,8 +4,8 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { senderTest } from "@kampus/libfabrika/testing";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, FileSystem, Schema } from "effect";
 
 const SEED = 119120;

@@ -22,8 +22,8 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;

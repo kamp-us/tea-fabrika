@@ -2,8 +2,8 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";

@@ -9,6 +9,7 @@
 // own account, never against the runner's saved model.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -17,7 +18,6 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";

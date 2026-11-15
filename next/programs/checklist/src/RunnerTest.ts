@@ -7,7 +7,7 @@
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";

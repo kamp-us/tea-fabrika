@@ -2,12 +2,12 @@
 // The repository laws run on memory git, and on real git too at depth `full` (0535, GitLaws).
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
-import { runsFor } from "../../TestDepth.test-support.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
 import { fixture, git, gitCommandBudget, runs, withReader } from "./RepositoriesGit.test-support.ts";
 

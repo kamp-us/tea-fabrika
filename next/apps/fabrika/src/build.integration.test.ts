@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { runsFor } from "@kampus/libfabrika/TestDepth.test-support";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";

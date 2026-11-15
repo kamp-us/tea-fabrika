@@ -2,12 +2,12 @@
 // the module that owns a driver calls `ExitReasonTest.suite(open)`; `open` acquires one store in a
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Mailbox } from "./Mailbox.ts";
 import {
   BRAIN,

@@ -1,7 +1,7 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
-import { runsFor } from "../TestDepth.test-support.ts";
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";

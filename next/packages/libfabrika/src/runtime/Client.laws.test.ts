@@ -24,9 +24,9 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { runsFor } from "../TestDepth.test-support.ts";
 import type { Client, ClientMsg, Pending } from "./Client.ts";
 import { clientMachineFor, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";

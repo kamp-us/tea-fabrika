@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -16,7 +17,6 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
-import { runsFor } from "../TestDepth.test-support.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
 
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
