@@ -10,6 +10,7 @@ import { type Incoming } from "@kampus/libfabrika";
 import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
@@ -209,6 +210,18 @@ export class Project extends DurableObject<Env> {
   processStop(stop: ChildStop, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processStop(stop, from)));
+  }
+
+  /** A program's watch by name, in the Project's write turn; a refusal is reply data. */
+  programMonitor(watch: Watch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programMonitor(watch, from)));
+  }
+
+  /** Ends a program's own watch under its ref, in the Project's write turn. */
+  programDemonitor(unwatch: Unwatch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programDemonitor(unwatch, from)));
   }
 
   processExit(pid: string, reason: ExitReason, from: From) {
