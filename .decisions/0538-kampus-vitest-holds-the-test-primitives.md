@@ -1,7 +1,7 @@
 ---
 id: 0538
 title: The test primitives our test decisions need live in one workspace package, @kampus/vitest in next/packages/vitest, which next/ and infra/ use, and each service's in-memory layer stays beside its service
-status: accepted
+status: amended-in-part by [0557](0557-kalfa-vitest-is-the-test-toolbox.md)
 date: 2026-11-14
 tags: [tests, vitest, package, depth, integration, infra, next]
 ---
@@ -17,6 +17,8 @@ import { describe, it, runsFor } from "@kampus/vitest";
 fc.assert(property, { numRuns: runsFor({ fast: 10, full: 100 }) }); // 0535's depth, one reader
 lawsOn([Watchers.layerMemory], [WatchersSql.layer])("watcher laws", watcherLaws); // 0536: memory on PRs, real on the schedule
 ```
+
+*[0557](0557-kalfa-vitest-is-the-test-toolbox.md) names the package `@kalfa/vitest` and makes its exports the whole list of test tooling; the rest of this file still holds.*
 
 ## Context
 
