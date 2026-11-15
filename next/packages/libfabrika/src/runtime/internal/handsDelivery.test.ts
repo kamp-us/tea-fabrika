@@ -19,7 +19,7 @@ import { Schema } from "effect";
 import * as fc from "fast-check";
 import { fcResult } from "../../jobs/JobsTest.ts";
 import { Reply } from "../HandsJobs.ts";
-import { handsDelivery } from "./handsDelivery.ts";
+import { handsDelivery, State } from "./handsDelivery.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
@@ -63,9 +63,7 @@ const loaded = fc.oneof(
   fc.constant(null),
   fc
     .record({ rev, arrivedAt })
-    .map((fields) =>
-      Schema.decodeUnknownSync(handsDelivery.model)(Schema.encodeSync(Reply)(Reply.cases.waiting.make(fields))),
-    ),
+    .map((fields) => Schema.decodeUnknownSync(State)(Schema.encodeSync(Reply)(Reply.cases.waiting.make(fields)))),
 );
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);

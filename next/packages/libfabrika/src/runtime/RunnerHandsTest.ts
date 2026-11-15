@@ -8,6 +8,7 @@
 // gateway methods do, and the gateway's wake after a finish is the runner's own `mailed`. Every cut
 // lands at a reachable boundary, through a test layer around `HandsJobs` and a planted SQL fault:
 //
+//   hold           the Project holds one ask open while the same program is poked
 //   lose_before    the ask fails before it reaches the Project
 //   lose_after     the Project saved the request, or the collect, and the reply is lost
 //   cut_checkpoint the reply came back and the runner's next checkpoint write fails
@@ -33,7 +34,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Command, type Job, Result as JobResult } from "../jobs/Job.ts";
@@ -194,6 +195,8 @@ type World = {
   readonly sentBy: Map<string, string>;
   readonly done: Set<string>;
   n: number;
+  /** The next ask the Project holds open: it says it arrived, then waits for its release. */
+  gate?: { readonly entered: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
 };
 
 const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
@@ -300,6 +303,14 @@ const host = Effect.fnUntraced(function* (
   const cut = Layer.succeed(HandsJobs, {
     ask: (ask, from) =>
       Effect.gen(function* () {
+        const gate = world.gate;
+
+        if (gate !== undefined) {
+          world.gate = undefined;
+          yield* Deferred.succeed(gate.entered, undefined);
+          yield* Deferred.await(gate.release);
+        }
+
         if (world.fault.before) {
           world.fault.before = false;
           world.done.add("lose_before:fired");
@@ -411,6 +422,7 @@ type Move =
   | "repeat_finish"
   | "wake"
   | "due"
+  | "hold"
   | "lose_before"
   | "lose_after"
   | "cut_checkpoint"
@@ -668,6 +680,7 @@ const walk = (
         finish: waiting.length > 0,
         repeat_finish: finished.length > 0,
         wake: true,
+        hold: true,
         due: world.alarms.size > 0,
         lose_before: !world.fault.before,
         lose_after: !world.fault.after,
@@ -742,6 +755,34 @@ const walk = (
           const [alarmed, at] = choose([...world.alarms], cell.pick);
           world.alarms.delete(alarmed);
           yield* answers(runner(alarmed).due(at), `${alarmed}'s alarm`);
+          break;
+        }
+        case "hold": {
+          // L20: the Project holds an ask open, and a poke to the same program steps meanwhile.
+          const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
+          world.gate = gate;
+          world.sentBy.set(`letter-${++world.n}`, current);
+          const held = yield* Effect.forkChild(runner(name).msg(letter(world.n, { type: "ask" })));
+          const entered = yield* Deferred.await(gate.entered).pipe(Effect.timeoutOption(LIMIT));
+          world.gate = undefined;
+
+          if (Option.isSome(entered)) {
+            const before = (yield* model(name))?.pokes ?? 0;
+            world.sentBy.set(`letter-${++world.n}`, current);
+            const poke = yield* Effect.forkChild(runner(name).msg(letter(world.n, { type: "poke" })));
+            const stepped = yield* model(name).pipe(
+              Effect.repeat({ schedule: Schedule.spaced("5 millis"), until: (m) => (m?.pokes ?? 0) > before }),
+              Effect.timeoutOption(LIMIT),
+            );
+            yield* Deferred.succeed(gate.release, undefined);
+            expect(Option.isSome(stepped), "L20: a poke steps while the Project holds an ask open").toBe(true);
+            yield* answers(Fiber.join(poke), `${name}'s poke beside a held ask`);
+            done.add("hold:poke_stepped");
+          } else {
+            yield* Deferred.succeed(gate.release, undefined);
+          }
+
+          yield* answers(Fiber.join(held), `${name}'s held ask`);
           break;
         }
         case "lose_before":
@@ -941,8 +982,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       open,
       {
         names: [CHECK, OTHER],
-        moves: ["ask", "poke", "finish", "wake", "due", "lose_before"],
-        required: ["poke:while_out", "lose_before:fired", "delivered", "refused"],
+        moves: ["ask", "poke", "finish", "wake", "due", "hold", "lose_before"],
+        required: ["poke:while_out", "hold:poke_stepped", "lose_before:fired", "delivered", "refused"],
         runs: { fast: 30, full: 60 },
         target: fc.option(fcFingerprint, { nil: null, freq: 3 }),
       },

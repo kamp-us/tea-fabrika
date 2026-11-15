@@ -1,0 +1,134 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1040-tests2",
+  "ticket": "kamp-us/tea-fabrika#1040",
+  "pr": "kamp-us/tea-fabrika#1309",
+  "started": "2026-11-15T04:10:03-08:00",
+  "ended": "2026-11-15T04:26:44-08:00",
+  "parent": "2026-11-15-t1040-tests1",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "tests step, second round for hands slice 3 in next/, after the build: pnpm typecheck failed in test files only. The seven hand-written Jobs stubs in six test files gain a collected method that dies if called, and the D1 law decodes with the exported State of runtime/internal/handsDelivery.ts. Every plant the first round ran on throwaway code was run again on the real build, and the plants owed until the build existed (L12, L13, L14, R1, W1, T1) were run for the first time. Each plant was put in one product file, its law run, and the file restored; git status showed no product change after each. One plant stayed green (L20, hold the turn permit during an ask), so L20 gained a hold move: the Project holds one ask open and a poke to the same program must step meanwhile. pnpm typecheck then passed whole.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "note": "A second L14 plant, dropping the process check in runtime/HandsJobsLive.ts (s.request.process !== ask.process answers conflict), stayed green and was not counted as a hole: the runner can never ask with another process's job id, since a Cmd id names its process, and the job's own collect cell refuses wrong_process behind it. That conflict branch is pinned by no law. The L20 hold plant goes red by the test's time limit while fast-check shrinks; with shrinking off it goes red in 5 s on the new hold message. The L12 bad_cmd plant goes red on the R1 invariant (a delivered answer with no collected job), not on an L12 message.",
+  "step": "tests",
+  "plants": [
+    {
+      "law": "J1 (jobs/internal/job.test.ts)",
+      "plant": "jobs/internal/job.ts collect cell accepts a collect in started",
+      "result": "red"
+    },
+    {
+      "law": "J1 (jobs/internal/job.test.ts)",
+      "plant": "jobs/internal/job.ts collect cell drops the requesting-process check",
+      "result": "red"
+    },
+    {
+      "law": "select (gateway/JobAccess.test.ts)",
+      "plant": "gateway/JobAccess.ts select keeps collected jobs",
+      "result": "red"
+    },
+    {
+      "law": "J2 (jobs/JobsTest.ts)",
+      "plant": "jobs/JobsLedger.ts appends a repeated collect (red by the time limit while shrinking)",
+      "result": "red"
+    },
+    {
+      "law": "D1 (runtime/internal/handsDelivery.test.ts)",
+      "plant": "runtime/internal/handsDelivery.ts failed moves waiting back to pending",
+      "result": "red"
+    },
+    {
+      "law": "C1 (cloudflare/hands.test.ts)",
+      "plant": "cloudflare/hands.ts maps an RPC failure to refused no_hands",
+      "result": "red"
+    },
+    {
+      "law": "S1 (runtime/HandsJobsTest.ts)",
+      "plant": "runtime/HandsJobsLive.ts requests a job when hands.target is unset",
+      "result": "red"
+    },
+    {
+      "law": "S1 (runtime/HandsJobsTest.ts)",
+      "plant": "runtime/HandsJobsLive.ts rebuilds and sends the request again on a retry",
+      "result": "red"
+    },
+    {
+      "law": "B1 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Entry.ts takes hands out of BUILT_IN",
+      "result": "red"
+    },
+    {
+      "law": "L20 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts holds the turn permit for the whole hands ask, against L20 as the first round wrote it",
+      "result": "green"
+    },
+    {
+      "law": "L20 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts holds the turn permit for the whole hands ask, against L20 with the new hold move",
+      "result": "red"
+    },
+    {
+      "law": "L20 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts owesHostCmd counts a waiting hands Cmd as owed",
+      "result": "red"
+    },
+    {
+      "law": "K1 (pnpm lint:layers)",
+      "plant": "runtime/HandsJobsLive.ts imports ledger/Ledger.ts",
+      "result": "red"
+    },
+    {
+      "law": "L12 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts gives the ask a fresh id on each try",
+      "result": "red"
+    },
+    {
+      "law": "L12 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts answers bad_cmd after a failed ask (red on the R1 invariant)",
+      "result": "red"
+    },
+    {
+      "law": "L13 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts place gives each hands answer a fresh letter id",
+      "result": "red"
+    },
+    {
+      "law": "L14 (runtime/RunnerHandsTest.ts)",
+      "plant": "jobs/internal/job.ts collect cell drops the wrong_process check",
+      "result": "red"
+    },
+    {
+      "law": "L14 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/HandsJobsLive.ts drops its own process check (extra, not in the plan) (unreachable from the runner)",
+      "result": "green"
+    },
+    {
+      "law": "R1 (runtime/RunnerHandsTest.ts)",
+      "plant": "runtime/Runner.ts drops the Cmd from the checkpoint when ask answers finished, before the letter is placed",
+      "result": "red"
+    },
+    {
+      "law": "W1 (gateway/JobsTest.ts)",
+      "plant": "gateway/Gateway.ts wakes inside the write turn",
+      "result": "red"
+    },
+    {
+      "law": "W1 (gateway/JobsTest.ts)",
+      "plant": "gateway/Jobs.ts wakes nobody on a repeated finish",
+      "result": "red"
+    },
+    {
+      "law": "T1 (runtime/HandsJobs.types.test.ts)",
+      "plant": "runtime/HandsJobs.ts puts JobsError in ask's error channel (red in a libfabrika typecheck)",
+      "result": "red"
+    }
+  ]
+}

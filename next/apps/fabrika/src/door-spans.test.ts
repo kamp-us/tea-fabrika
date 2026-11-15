@@ -295,6 +295,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
           finish: () => Effect.die("unexpected job finish in legacy gateway law"),
           read: () => Effect.die("unexpected job read in legacy gateway law"),
           forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+          collected: () => Effect.die("unexpected job collect in legacy gateway law"),
         }),
         SpanSink.layer(sql, { object: PROCESS }),
         RateLimiter.layer.pipe(
