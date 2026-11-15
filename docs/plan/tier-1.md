@@ -84,10 +84,13 @@ At the laptop, in the app or a tab, a person can:
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
   ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
   the member whose line caused it, never against `fabsh`'s program
-  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
-  The start still checks only program to program, `StartGrant` in
-  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
-  `StartGrant` is the owner's open question;*
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: built
+  (ticket 953), on the ReBAC core of [0526](../../.decisions/0526-one-rebac-permission-system.md):
+  the brain asks the gateway who sent the start's cause, checks `StartProgram` on this fabrika, and
+  the child's `started` line records that member. A start with no member's input behind it is
+  checked against the requester's recorded member when it has one. `StartGrant` still judges a
+  start with neither, such as a boot process's own; it moves onto relation rows in its own pull
+  request;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
@@ -213,7 +216,9 @@ In build order. "Decide first" lists only what no decision answers yet.
 - *2026-11-14: the desk lane's slice S1 is built on branch `fabrikalfa/cloud-desk-tezgah`, not yet
   merged: a start a member's letter caused is checked against that member with `mayStart`, which
   lets any member start any program (0170), and `stop_child`, OTP's `terminate_child` with
-  `shutdown`. The Worker's process side does not wire `stop_child` yet.*
+  `shutdown`. The Worker's process side does not wire `stop_child` yet. On 2026-11-15 the fabsh
+  branch, which carries S1, merged main, and ticket 953's check (`StartProgram` on the ReBAC core,
+  0526) took the place of `mayStart`; `stop_child` stays.*
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
@@ -501,10 +506,10 @@ log           one row per agent run, with the sha of the commit it made, and a n
 P1, PR 402, the frame
   pnpm-workspace.yaml, vitest.config.ts   next/{packages,programs,apps}/* are packages; pnpm test runs their src/**/*.test.ts
   .github/workflows/check.yaml            a `next` job: vitest run next/, Chromium once an e2e file exists, then the runner
-  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails
+  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails. Since 0536 the `next-visual` Vitest project holds that job and the runner is gone
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
-  src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)
+  src/exam/layers.test.ts                 plants through the real code-graph: each part's walls in layer-rules.json fire (p32, p65); the scan itself is pnpm lint (ticket 987)
   src/exam/deps.test.ts                   next/ stands alone, and each top level bundles for a browser (p65), with esbuild for now
   src/exam/laws-scan.test.ts              every file that makes a machine has a laws file beside it
   fixtures/next/sshsig/                   real ssh-keygen vectors, namespace fabrika-client (p27, p44)
@@ -584,8 +589,9 @@ P35, PR 435, edges as comments and the sync test
 **Tier 1 is done when each check below passes where it says, and the whole demo works in a browser tab and an Electron window, on the laptop and on Cloudflare** ([the rule](./tiers.md#the-rules)). Each half starts in a named pull request and stays working after it: the browser tab with P14, the first window; the Electron window with P19, the app; Cloudflare with P24 and P26, for the checklist. Each runs with `pnpm typecheck`, `pnpm lint` and `pnpm test` green. Every law in [the detail file](./tier-1-detail.md#properties) has to pass too, named below or not. These commands do not exist yet. Tier 1 builds them.
 
 ```sh
-pnpm exec vitest run next/                 # the laws that run on Node
-node next/apps/fabrika/e2e.ts              # the exam's thin runner, over each landing's e2e/*.test.ts
+pnpm exec vitest run --project next        # the laws on in-memory layers: pull requests and the merge queue (0536)
+pnpm exec vitest run --project next-integration   # the laws over a real resource, *.integration.test.ts: the schedule
+pnpm exec vitest run --project next-visual # a browser or Electron, *.visual.test.ts, one file at a time: the schedule
 node next/apps/fabrika/dev.ts --port=N --founder=<key.pub>    # a brain for agents and tests
 alchemy plan                               # read by the owner, and a yes, before any deploy
 node next/apps/fabrika/chaos-drill.ts      # a run on a throwaway ledger, to a verdict
@@ -673,7 +679,7 @@ Read [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) first. It holds for 
 - **Every pull request takes the pipeline's steps, by hand:** plan, tests first, build, mutation, one review, each by its own agent, and the lead agent's check before merge ([how it is built now](#how-it-is-built-now)). *Changed 2026-11-05: this said every pull request goes through today's pipeline, with a step that cannot run going by hand. Today's pipeline is paused, so for `next/` every step goes by hand, and each is logged in `field/`.*
 - **The test writer only adds new `*.test.ts` files.** A helper goes in such a file too. It does not move a test, change one, delete one, or write a data fixture. The builder never touches the tests or the exam, and the lead agent checks both in the diff before merge. So a saved vector or a fixture comes from an exam PR, or sits inside a test file. A later law goes in a new test file rather than a bigger old one, so each landing adds its own e2e file, and the exam holds a thin runner that finds them (my call, 80%). A test that renders React uses `createElement` in a `.ts` file.
 - **A law on a real window or a real service can go red first now.** In the lane, the test writer ran vitest in a box with a temp home and no network, so laws on real Chromium, real Electron, launchd or the cloud (p29, p31, p46 to p48, p50, the live halves of p51, p58, p59, p62, p41) had no red-to-green step. By hand, the test writer runs on the laptop, so Chromium and Electron laws are written and run red on the base like the rest, one Electron test app at a time, with `FABRIKA_HOME` set to a short temp path. Laws on launchd from a dev build, the real finger and the cloud still run by hand and are logged. Lean, 70%; the first Electron law tells.
-- **The catalog lives in `pnpm-workspace.yaml`, an exam file.** A new dependency lands in the test writer's commit of the pull request that needs it (P12 for `rolldown`), so the owner reads it. A package's own `package.json` is the builder's, and so is `pnpm-lock.yaml`. Today's catalog already has Electron, `@modelcontextprotocol/server`, `@pierre/highlights` and the mdast packages, and P2 added `oxc-transform-react` and `oxc-parser` at 0.157.0. `@effect/platform-browser` and `rolldown` are ones it lacks; `rolldown` comes with P12's test writer commit.
+- **The catalog lives in `pnpm-workspace.yaml`, an exam file.** A new dependency lands in the test writer's commit of the pull request that needs it (P12 for `rolldown`), so the owner reads it. A package's own `package.json` is the builder's. `pnpm-lock.yaml` is an exam path (`exam-paths.json`, since T883), so the lead commits it by the lockfile ask, never the builder. Today's catalog already has Electron, `@modelcontextprotocol/server`, `@pierre/highlights` and the mdast packages; P2 added `oxc-transform-react` and `oxc-parser` at 0.157.0, P12's test writer commit added `rolldown`, and the pull request that starts Tuval's page on `BrowserRuntime.runMain` added `@effect/platform-browser` at 4.1.2, effect's own version. *Changed 2026-11-14: this said the builder owns `pnpm-lock.yaml` and the catalog lacks `@effect/platform-browser`.*
 - **A rule or law that lives in the exam is written by the exam PR.** A pull request that "owns" it (p24, p32, p65) only turns it green. Everything else is the test writer's: each machine's `*.laws.test.ts`, and the ported tests for the copies. The small exam holds their fixtures and rules.
 - **On main, every law is `new`.** There is no `next/` to pass an `existing` test on. So plan-115's `existing` laws go red first like the rest, and p16 means PR 223's tests come over, fitted.
 - **Guarding the exam files in today's lane no longer blocks Tier 1.** Tracker ticket 122 adds `next/**/*.test.ts`, `fixtures/next/**`, the exam folder, `boundary-rules.json`, `vitest.config.ts` and `pnpm-workspace.yaml` to the lane's `RULES` (`packages/pipeline/src/stages/exam/machine.ts`). No lane builds `next/` now, so the lead agent's read of each diff is the guard. Ticket 122 stays for when a lane does.

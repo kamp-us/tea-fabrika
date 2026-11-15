@@ -97,6 +97,16 @@ These bind the steps. Where they and a line below differ, these win.
   fabsh cannot ask `programs` in `init`; when it asks is the build's choice, held by L28: fabsh
   knows its table before a person's first line, and no start ever comes from that answer (L20).
 
+- **A8, main merged in, 2026-11-15.** Ticket 953 landed 0170's start check on main, on the ReBAC
+  core (0526): `ChildrenLedger` asks `Senders` who sent the start's cause and checks that member
+  with `StartProgram` on the fabrika, whose `start` every owner, admin and member holds. That
+  replaces the desk branch's `mayStart` (`access/StartRule.ts`) and the runner's own sender read,
+  which the merge drops; its L1 is held on main by `processes/ChildrenMemberTest.ts` L10 and L13.
+  Main's 0536 also names every test on a real resource `*.integration.test.ts` and every browser
+  test `*.visual.test.ts`, so this lane's `fabsh-start.laws.test.ts`, `RunnerDraft.laws.test.ts`,
+  `GatewayDraft.laws.test.ts`, `Programs.test.ts` and `e2e/fabsh.test.ts` carry those names now,
+  and run on the 3-hour schedule.
+
 ## The answer first
 
 One ticket, two slices, each its own pull request, in the order the owner sees them.
@@ -519,15 +529,15 @@ package, where the picker can import them later.
 | next/programs/fabsh/src/tile.laws.test.ts | tests | tests | 1 | L4, L5, L12, L19 |
 | next/programs/fabsh/src/window.laws.test.ts | tests | tests | 1 | L3, L16 |
 | next/packages/libfabrika/src/runtime/Program.types.test.ts | tests | tests | 1 | L9 |
-| next/packages/libfabrika/src/runtime/RunnerDraft.laws.test.ts | tests | tests | 1 | L6, L7, L8 |
-| next/packages/libfabrika/src/gateway/GatewayDraft.laws.test.ts | tests | tests | 1 | L10, L11 |
+| next/packages/libfabrika/src/node/runtime/RunnerDraft.laws.integration.test.ts | tests | tests | 1 | L6, L7, L8 |
+| next/packages/libfabrika/src/node/gateway/GatewayDraft.laws.integration.test.ts | tests | tests | 1 | L10, L11 |
 | next/packages/libfabrika/src/client/WindowMachine.laws.test.ts | tests | tests | 1 | L12, L19, at the parent |
 | next/apps/fabrika/e2e/fabsh.test-support.ts | tests | tests | 1 | L17's suite and its two backends |
-| next/apps/fabrika/e2e/fabsh.test.ts | tests | tests | 1 | L17 and L18; slice 2 adds L26 and L27 |
+| next/apps/fabrika/e2e/fabsh.visual.test.ts | tests | tests | 1 | L17 and L18; slice 2 adds L26 and L27 |
 | next/packages/libfabrika/src/runtime/Programs.ts | build | 30 | 2 | the `programs` built-in Cmd |
-| next/packages/libfabrika/src/runtime/Programs.test.ts | tests | tests | 2 | L24 |
+| next/packages/libfabrika/src/node/runtime/Programs.integration.test.ts | tests | tests | 2 | L24 |
 | next/programs/fabsh/src/start.laws.test.ts | tests | tests | 2 | L20, L21, L22, L23, L25 |
-| next/apps/fabrika/src/fabsh-start.laws.test.ts | tests | tests | 2 | L28, after 953 |
+| next/apps/fabrika/src/fabsh-start.laws.integration.test.ts | tests | tests | 2 | L28, after 953 |
 | next/programs/tezgah/src/program.ts | build | 40 | 2 | only if the desk lane leaves `show` out: the one input, the seam |
 | .glossary/TERMS.md | build | docs | 1 | rows `draft (fabsh)` and `echo`, under Clients |
 | docs/plan/tier-1.md | build | docs | 1 | step 3's row and the fabsh line in what done means (0013) |
@@ -580,7 +590,7 @@ package, where the picker can import them later.
 - The lead, outside any box, runs the changed set and one type check, since the lockfile changes
   and makes the changed set the whole suite: the lead runs the narrow paths of the touched tests
   and of the tests that read the lockfile's packages, then CI is the full check.
-- CI's end-to-end job runs `next/apps/fabrika/e2e/fabsh.test.ts` (L17, then L26). New test files
+- The 3-hour full run runs `next/apps/fabrika/e2e/fabsh.visual.test.ts` (L17, then L26). New test files
   land in CI's shard table at 1 s each until measured (see the shard finding of 2026-11-13).
 
 ## Size
