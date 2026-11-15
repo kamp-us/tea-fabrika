@@ -58,7 +58,7 @@ export type TextStyle = keyof typeof textStyles;
 ```tsx
 // A sketch, today's version: the ask desk's card, made only from text styles.
 <Text {...textStyles.label}>
-	<Text as="span" {...textStyles.label} variant="primary">Your turn</Text> · lane asked at 10:09
+	<Text as="span" {...textStyles.label} variant="primary">Your turn</Text> · quest asked at 10:09
 </Text>
 <Heading level={2} {...textStyles.strong}>Approve plan v1?</Heading>
 <DescriptionList>

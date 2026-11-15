@@ -363,7 +363,7 @@ its machine               a process id, a trace, saved state, hot reload, a job 
   ```ts
   // a sketch
   index: (model: Model) => ReadonlyArray<SearchableItem>
-  // SearchableItem (Core Spotlight's word): {location: "#193", title: "lane stalls at the test writer", hint: "running"}
+  // SearchableItem (Core Spotlight's word): {location: "#193", title: "quest stalls at the test writer", hint: "running"}
   ```
 
   Still open: whether Cmd-K is one box for commands and things (Linear's command menu), lean 70%,
@@ -650,7 +650,7 @@ class TicketRow extends Schema.Opaque<TicketRow>()(
 class NoteRow extends Schema.Opaque<NoteRow>()(
 	Schema.TaggedStruct("note", {id: Schema.String, parent: Schema.NullOr(Schema.String), text: Schema.String}),
 ) {}
-const Row = Schema.Union([TicketRow, NoteRow /* , ask, lane, step: one case each */]);
+const Row = Schema.Union([TicketRow, NoteRow /* , ask, quest, step: one case each */]);
 
 // A drawer matches every case. A new kind of row is a new case, so the compiler points at every drawer.
 const glyph = (row: typeof Row.Type) => Match.valueTags(row, {ticket: (t) => t.state, note: () => null});

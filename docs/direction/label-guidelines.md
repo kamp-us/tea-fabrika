@@ -37,15 +37,15 @@ experiment's links.
 // A sketch, next/. The project's labels: one stream, a person's facts only.
 // tracker/labels
 {_tag: "group_made", group: 1, name: "Area", pick: "one", guess: true}
-{_tag: "label_made", label: 1, name: "pipeline", group: 1, suggested: {_tag: "titles", word: "lane", tickets: 21}}
+{_tag: "label_made", label: 1, name: "pipeline", group: 1, suggested: {_tag: "titles", word: "quest", tickets: 21}}
 {_tag: "label_made", label: 2, name: "desk", group: 1}
 {_tag: "label_made", label: 3, name: "flaky"}                 // no group: any number per ticket
-{_tag: "label_made", label: 4, name: "lane", group: 1}
-{_tag: "label_merged", label: 4, into: 1}                     // every ticket on "lane" now reads "pipeline"
+{_tag: "label_made", label: 4, name: "quest", group: 1}
+{_tag: "label_merged", label: 4, into: 1}                     // every ticket on "quest" now reads "pipeline"
 
 // tracker/ticket/193. An agent filed it, for a person.
 {_tag: "filed", title: "Test writer: a failed run on base loses its cause", body: "...",
- from: {_tag: "run", ticket: 117, run: "lane 7"}, guess: [4]}
+ from: {_tag: "run", ticket: 117, run: "quest 7"}, guess: [4]}
 // TicketLabels.fromTimeline(193)  {area: {_tag: "guessed", label: 1, why: "filer"}, others: []}
 {_tag: "labeled", add: [1, 3], drop: []}                     // a person; the door refuses an agent
 // TicketLabels.fromTimeline(193)  {area: {_tag: "picked", label: 1}, others: [3]}
@@ -54,7 +54,7 @@ experiment's links.
 
 ```text
 one sitting, traced (next/, after the build; counts made up)
-tracker               193 shows "pipeline?" in its row: the filer guessed "lane", merged into pipeline
+tracker               193 shows "pipeline?" in its row: the filer guessed "quest", merged into pipeline
 Enter on #193         the ticket tile; Labels row: Area pipeline? (the filer's), no other labels
 l                     the label menu: Area as a radio list (pipeline marked "guess"), then flaky, stale, ...
 Space on pipeline     the guess becomes a pick
@@ -126,14 +126,14 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 **Decided 2026-11-06** (lean was 90%). **Kind: law and lint.** Builds the decided "labels never gate a build".
 
-- **What it means.** No step, gate, lane, turn, notification or sort order branches on a label. A
+- **What it means.** No step, gate, quest, turn, notification or sort order branches on a label. A
   label is for people to find, filter and group work. If code needs to branch on a thing, the
   thing is a fact with its own type.
 - **Why.** Kubernetes: labels "do not directly imply semantics to the core system" [k1]. On
   phoenix, `ready-for:agent` was what the build read, and a ruled decision stayed at
   `ready-for:human` with no way back but a hand relabel
   ([#5842](https://github.com/kamp-us/phoenix/issues/5842)). Experiment 85 found
-  the lane read one label and ignored four.
+  the quest read one label and ignored four.
 - **Linear as the builder.** The tracker owns labels; filters, grouping and views read them. No
   pipeline program subscribes to the labels stream. Linear's workflow moves on status (a guess
   from use, not from a page read).

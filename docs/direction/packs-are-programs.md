@@ -26,7 +26,7 @@ today's word, not the core pack.
 
 - **fabrika is a small core plus add-on packs.** The core is report, sort,
   plan, build, review, ship, the parent loop and the ledger. Everything else
-  (owner approvals, on-call, cost, a UI lane, other trackers) is a pack.
+  (owner approvals, on-call, cost, a UI quest, other trackers) is a pack.
 - **A pack is one or more [programs](./tea-program.md),** shipped as a package.
   Install it, then enable it with one line of fabrika config that wires it in.
 - **The core never knows a pack exists.** It emits events and takes answers.
@@ -75,7 +75,7 @@ For repos whose work changes what a user sees. Its branches:
 
 It brings back a person's look at a PR only where a picture beats a test, and
 only where the pack is enabled; by default the owner approves plans, not PRs.
-It would replace today's separate UI lane. It is also the first pack that leans
+It would replace today's separate UI quest. It is also the first pack that leans
 on another: it emits an ask, and an owner-desk pack shows it. Whether two packs
 can work together through the core's events alone is part of the first test.
 

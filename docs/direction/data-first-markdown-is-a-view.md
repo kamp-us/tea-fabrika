@@ -118,7 +118,7 @@ const makeTree = act("tree_make", { input: Schema.Struct({ name: Schema.String }
 
 // Until the repo is off zod a slot takes a zod schema too, so a Cmd can move one schema at a time.
 // A sketch: the zod `At` stays as it is while `PrState` becomes an Effect schema.
-const readPr = gather("lane_pr", { input: At.extend({ pr: z.string() }), ok: PrState, err: ["unknown"] });
+const readPr = gather("quest_pr", { input: At.extend({ pr: z.string() }), ok: PrState, err: ["unknown"] });
 ```
 
 The same proposal for tea itself is
@@ -158,7 +158,7 @@ which file's schemas sit inside which:
 ```ts
 // 1. On their own, any time:        ship.ts, comments.ts, combos.ts, refine.ts
 // 2. The operator, as one pass:     fabrika.ts, then the rest of turn.ts
-// 3. The lane, leaves first:        issue.ts, surface.ts, facts.ts, vetting.ts
+// 3. The quest, leaves first:       issue.ts, surface.ts, facts.ts, vetting.ts
 //    then what nests them:          review.ts, lane.ts, claude.ts, tracker.ts, replay.ts, ...
 // 4. The files that parse, last:    settings.ts, replay-run.ts, local.ts (defaults and a transform)
 ```
