@@ -8,13 +8,14 @@ import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 type Link = WindowModel["link"];
 type Reach = WindowModel["tiles"][number]["reach"];
 
-/** A tile's state in words, never color alone (0502): an ended tile names its exit's reason. */
-export const stateWord = (link: Link, reach: Reach) => {
+/** A tile's state in words, never color alone (0502): an ended tile names its exit's reason, and a
+ *  tile with no reach yet, one the window has no row for, is opening. */
+export const stateWord = (link: Link, reach: Reach | undefined) => {
   if (link._tag !== "online") {
     return link._tag === "retrying" ? "Retrying" : "Connecting";
   }
 
-  switch (reach._tag) {
+  switch (reach?._tag) {
     case "open":
       return "Online";
     case "ended":
@@ -29,10 +30,11 @@ export const stateWord = (link: Link, reach: Reach) => {
 /**
  * The one word a tile's body shows where its view will start, or null when it draws the view.
  * `drawn` says whether a view is there to draw. An ended tile shows its word even then: the view is
- * the ended process's last one, and the title bar's state slot says why it ended.
+ * the ended process's last one, and the title bar's state slot says why it ended. A tile with no
+ * reach yet is opening.
  */
-export const bodyWord = (reach: Reach, drawn: boolean): string | null => {
-  switch (reach._tag) {
+export const bodyWord = (reach: Reach | undefined, drawn: boolean): string | null => {
+  switch (reach?._tag) {
     case "ended":
       return "Ended";
     case "missing":

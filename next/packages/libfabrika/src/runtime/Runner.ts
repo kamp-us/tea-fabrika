@@ -84,7 +84,7 @@ import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
-import { ExitInput, StartChildInput } from "./StartChild.ts";
+import { ExitInput, StartChildInput, StopChildInput } from "./StartChild.ts";
 import { StepFault } from "./StepFault.ts";
 import type { WatchersError } from "./Watchers.ts";
 import { Watchers } from "./Watchers.ts";
@@ -215,13 +215,15 @@ const SEND = "send";
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const isRefusal = Schema.is(MailRefusal);
 
-/** The Cmds a program asks its supervisor for: a child by name, and the end of its own life. */
+/** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
+const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, START_CHILD, EXIT]);
-/** This life still owes a host Cmd (a send, a start_child or an exit): the next alarm tries it again. */
+const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT]);
+/** This life still owes a host Cmd (a send, a start_child, a stop_child or an exit): the next alarm
+ *  tries it again. */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
 
 /**
@@ -239,8 +241,10 @@ const operands = (cmd: unknown, fields: object): Option.Option<Record<string, un
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
+const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessProperty: "error" });
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -1449,11 +1453,16 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
-        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's or exit's
-         *  `err` keeps only its type, since a refused operand may hold anything its program put there. */
+        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's, stop_child's
+         *  or exit's `err` keeps only its type, since a refused operand may hold anything its program
+         *  put there. */
         const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
           const type = cmdType(job);
-          return type !== START_CHILD && type !== EXIT ? job.cmd : outcome === "err" ? { type } : withoutInput(job.cmd);
+          return type !== START_CHILD && type !== STOP_CHILD && type !== EXIT
+            ? job.cmd
+            : outcome === "err"
+              ? { type }
+              : withoutInput(job.cmd);
         };
         const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
           return yield* Effect.map(at, (time) => ({
@@ -1667,6 +1676,31 @@ export class ProgramRunner extends Context.Service<
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
         });
 
+        /** The built-in stop_child, OTP's terminate_child: this life is the requester, and only a child
+         *  its name started ends, with `shutdown`. A refusal is its answer; storage is not, so the Cmd
+         *  stays dispatched. */
+        const stopChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeStopChild(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(children) || Option.isNone(input)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          const stopped = yield* children.value
+            .stop(
+              { name: input.value.name, requester: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(stopped)) {
+            return yield* ok(job, null);
+          }
+
+          const { reason } = stopped.failure;
+          return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
+        });
+
         /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -1762,9 +1796,11 @@ export class ProgramRunner extends Context.Service<
               ? cmdSpan(job, mail(state, job))
               : type === START_CHILD
                 ? cmdSpan(job, startChild(state, job))
-                : type === EXIT
-                  ? cmdSpan(job, stop(state, job))
-                  : handle(state, job);
+                : type === STOP_CHILD
+                  ? cmdSpan(job, stopChild(state, job))
+                  : type === EXIT
+                    ? cmdSpan(job, stop(state, job))
+                    : handle(state, job);
 
           if (m === null) {
             // The life ended: what it still owed, the Cmds listed after its exit included, never runs.

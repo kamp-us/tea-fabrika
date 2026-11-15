@@ -500,15 +500,15 @@ export const tile = (page: Page, name: string) => {
      *  the tile guideline's text token, `--tile-text`, as its empty state's word is. */
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's evaluate is a Promise
     body: Effect.promise(() =>
-      region.locator(".slot").evaluate((slot) => {
+      region.locator(".tile-body").evaluate((body) => {
         const probe = document.createElement("span");
         probe.style.color = "var(--tile-text)";
-        slot.appendChild(probe);
+        body.appendChild(probe);
         const token = getComputedStyle(probe).color;
         probe.remove();
-        const first = slot.firstElementChild;
+        const first = body.firstElementChild;
         return {
-          words: slot instanceof HTMLElement ? slot.innerText.trim() : "",
+          words: body instanceof HTMLElement ? body.innerText.trim() : "",
           ink: first !== null && getComputedStyle(first).color === token,
         };
       }),

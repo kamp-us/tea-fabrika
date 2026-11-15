@@ -4,13 +4,13 @@
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Option, Path, Stream, Tracer } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
-import { Model } from "../permissions/Model.ts";
 import * as RelationsMemory from "../permissions/RelationsMemory.ts";
 import { Senders } from "../permissions/Senders.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
@@ -102,12 +102,13 @@ const databases = Effect.gen(function* () {
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
-  const shared: StartChildTest.Store["shared"] = (sql, next) =>
+  const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
-      ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: Model.ref("fabrika", "p42") }).pipe(
-        // T953: these laws pin `StartGrant`, so the person inputs they send are given no member behind them.
-        Layer.provide(RelationsMemory.layer([])),
-        Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+      ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
+        // Desk S1 (amendment 15): the world's relation rows, and the door's own record of who sent
+        // each letter, made into `Senders` as `cloudflare/runtime.ts` makes the real one.
+        Layer.provide(RelationsMemory.layer(world.rows)),
+        Layer.provide(Layer.succeed(Senders, SessionSenders.make(world.sessions.sender))),
       ),
       ProgramMailLedger.layer({ grants: StartChildTest.HOST }),
     ).pipe(

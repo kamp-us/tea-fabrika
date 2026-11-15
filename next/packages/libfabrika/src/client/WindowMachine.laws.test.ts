@@ -43,15 +43,22 @@ import { applyCell } from "@demlik/tea";
 // generated tile machine, and a tile with none. Tuval may not import a program, so the checklist's own
 // tile is stepped through its registration in the checklist's laws (L22, L24).
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
-import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Option, Schema } from "effect";
+import { arbMsgSequence } from "@demlik/tea/pbt";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import type { SchemaAST } from "effect";
+import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
 import { diff } from "../runtime/Patch.ts";
+import type { Binding } from "../runtime/Program.ts";
+import * as Layout from "../tezgah/Layout.ts";
+import { type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import { ClientRecord } from "../transport/ClientRows.ts";
 import { linkTimer } from "../transport/Link.ts";
 import { PAGE } from "../transport/Wire.ts";
+import * as Keys from "./Keys.ts";
+import { optimisticState, type TezgahClient } from "./Tezgah.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
@@ -3210,5 +3217,1203 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     for (const [k, n] of Object.entries(seen)) {
       expect(n, `region steps seen as ${k}`).toBeGreaterThan(0);
     }
+  });
+});
+
+// Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L10 of the
+// approved plan. Written before the window has a desk. The shape it holds `WindowMachine.ts` to,
+// from the plan (the build may add more):
+// - The ctx may carry `tezgah: {workspace}` (never `desk`). A window started with it shows no tile of
+//   `ctx.tiles`: once its hello is admitted, it reads `processes/tezgah:<person>`, the person from
+//   the door's admission (`Handshake`'s `admitted` keeps it), opens that pid's view and decodes it
+//   as `TezgahView` itself, never through `checks.decode`. Its tiles are then the tiles of its
+//   workspace in tezgah's latest view, each named by the process it shows (`shows`): a view change
+//   adds and removes tiles, and a tile that is new while online has its `processes/<shows>` read
+//   written in that same step, and its pid opened once the read answers.
+// - With no desk, the given tiles stay, and the window never reads a tezgah stream.
+// The walk goes online through the real hello exchange, then each step reads the folded model and
+// the walk's brain and picks one move possible there: an answer to a written call really in flight,
+// an answer to a Cmd really waiting, or an edit of tezgah's workspaces, sent as a view notice once
+// the window has opened tezgah's view. The brain's views are real `TezgahView` wire values: tile
+// and workspace ids are canonical TypeIDs, and every layout's parts sum to 100.
+const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
+const typeId = (prefix: string, n: number): string => {
+  let uuid = (BigInt(n) << 80n) | (7n << 76n) | (2n << 62n);
+  let suffix = "";
+
+  for (let i = 0; i < 26; i++) {
+    suffix = ID_ALPHABET[Number(uuid & 31n)] + suffix;
+    uuid >>= 5n;
+  }
+
+  return `${prefix}_${suffix}`;
+};
+
+/** The tiles a start is given, named by processes tezgah never shows, so a read of one of their
+ *  streams can only come from the given list, never from tezgah's view. */
+const GIVEN = ["given:1", "given:2", "given:3"].map((name, i) => ({ id: `given_${i + 1}`, name }));
+const DESK_PERSON = typeId("person", 41);
+const TEZGAH_PID = "process_of_tezgah";
+const DESK_ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: DESK_PERSON, as: "window" } };
+const deskWindow = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: tileFor });
+
+/** tezgah's workspaces as the brain holds them: each workspace's tiles in reading order, by number. */
+type Desk = { rev: number; spaces: Map<number, Array<string>>; shows: Map<string, string>; next: number };
+
+/** The brain's view as the wire carries it: each workspace one row, its percents summing to 100. */
+const deskView = (d: Desk) => ({
+  workspaces: [...d.spaces].map(([n, tiles]) => {
+    const base = Math.floor(100 / tiles.length);
+    return {
+      id: typeId("workspace", n),
+      n,
+      layout:
+        tiles.length === 1
+          ? tiles[0]
+          : {
+              dir: "row",
+              parts: tiles.map((inner, i) => ({ percent: i === 0 ? 100 - base * (tiles.length - 1) : base, inner })),
+            },
+      focus: tiles[0],
+      recent: [tiles[0]],
+    };
+  }),
+  tiles: [...d.spaces.values()].flat().map((id, i) => ({
+    id,
+    n: i + 1,
+    shows: d.shows.get(id),
+    program: "fabrika/checklist",
+    child: i > 0,
+    keep: "failed",
+    cursor: null,
+  })),
+});
+
+const DeskPick = fc.record({
+  type: fc.constant("pick" as const),
+  move: fc.nat(),
+  pick: fc.nat(),
+  ms: fc.integer({ min: 0, max: 5_000 }),
+});
+type DeskPick = typeof DeskPick extends fc.Arbitrary<infer A> ? A : never;
+
+type DeskWorld = {
+  s: WindowModel;
+  waiting: Array<Cmd>;
+  desk: Desk;
+  /** The workspace-1 tiles of the last view the window was sent, or null before any. */
+  shown: ReadonlyArray<{ readonly id: string; readonly name: string }> | null;
+  subscribed: boolean;
+  /** Whether the brain has started this person's tezgah: the boot starts only the founder's, so for
+   *  any other person a read of `processes/tezgah:<person>` finds no process until something starts it
+   *  (plan amendment 11, point 2). */
+  up: boolean;
+};
+
+type DeskEvent = {
+  readonly prev: WindowModel;
+  readonly m: WindowMsg;
+  readonly next: WindowModel;
+  readonly cmds: ReadonlyArray<Cmd>;
+  readonly w: DeskWorld;
+};
+
+const deskTiles = (d: Desk) => (d.spaces.get(1) ?? []).map((id) => ({ id, name: d.shows.get(id) ?? "" }));
+
+/** Steps the desk window and keeps every Cmd it hands out until it is answered. */
+const deskStep = (w: DeskWorld, m: WindowMsg, machine: typeof deskWindow, each: (e: DeskEvent) => void) => {
+  const prev = w.s;
+  const [next, cmds] = applyCell(machine, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
+  w.waiting = [...w.waiting.filter((cmd) => !("cmd" in m) || m.cmd !== cmd), ...cmds];
+  w.s = next;
+  each({ prev, m, next, cmds, w });
+};
+
+/** The hello exchange on dial 1, as the door runs it: a challenge, a hello, the admission. */
+const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent) => void, dial = 1) => {
+  const key = w.waiting.find((c) => c.type === "key");
+
+  if (key !== undefined) {
+    deskStep(
+      w,
+      { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
+      machine,
+      each,
+    );
+  }
+
+  deskStep(w, { type: "socket_opened", dial, at: 0 } as WindowMsg, machine, each);
+  deskStep(
+    w,
+    { type: "frame", dial, text: rpc({ method: "challenge", params: { nonce: `n0nce${dial}` } }), at: 1 } as WindowMsg,
+    machine,
+    each,
+  );
+  const hello = w.waiting.find((c) => c.type === "hello" && c["dial"] === dial);
+
+  if (hello !== undefined) {
+    deskStep(w, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, machine, each);
+    deskStep(
+      w,
+      { type: "frame", dial, text: rpc({ id: hello["id"], result: DESK_ADMITTED }), at: 2 } as WindowMsg,
+      machine,
+      each,
+    );
+  }
+};
+
+/** Every move the desk world allows now. */
+const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | null> => {
+  const s = w.s;
+  const out: Array<() => WindowMsg | null> = [];
+  const d = w.desk;
+  const notice = (): WindowMsg | null => {
+    d.rev++;
+
+    if (!w.subscribed) {
+      return null;
+    }
+
+    w.shown = deskTiles(d);
+    return {
+      type: "view",
+      pid: TEZGAH_PID,
+      note: { pid: TEZGAH_PID, type: "whole", rev: d.rev, view: deskView(d) },
+    } as WindowMsg;
+  };
+
+  for (const f of s.flight) {
+    const on = { id: f.id, dial: f.dial };
+    out.push(() => {
+      if (f.call._tag === "read") {
+        const name = f.call.stream.replace(/^processes\//, "");
+        const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        // A stream no process was ever started on reads as the brain sends it: no entries.
+        const none = name.startsWith("tezgah:") && !w.up;
+        return {
+          type: "read_ok",
+          ...on,
+          value: none ? [] : [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          ms: c.ms,
+        } as WindowMsg;
+      }
+
+      if (f.call._tag === "open") {
+        if (f.call.pid === TEZGAH_PID) {
+          w.subscribed = true;
+          w.shown = deskTiles(d);
+          return { type: "open_ok", ...on, value: { rev: d.rev, view: deskView(d) }, ms: c.ms } as WindowMsg;
+        }
+
+        return { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms } as WindowMsg;
+      }
+
+      if (f.call._tag === "send") {
+        return { type: "send_ok", ...on, value: { _tag: "accepted", rev: c.ms, pos: c.pick }, ms: c.ms } as WindowMsg;
+      }
+
+      return { type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg;
+    });
+  }
+
+  for (const cmd of w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
+    out.push(
+      () =>
+        ({
+          type: `${cmd.type}_ok`,
+          cmd,
+          value:
+            cmd.type === "now"
+              ? { letter: `letter_${c.pick}`, sentAt: "2026-11-14T00:00:00.000Z" }
+              : cmd.type === "persist"
+                ? true
+                : null,
+        }) as WindowMsg,
+    );
+  }
+
+  // The socket drops while online: the brain sends nothing more to it, and the Link retries.
+  if (s.link._tag === "online") {
+    const dial = s.link.dial;
+    out.push(() => {
+      w.subscribed = false;
+      return { type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg;
+    });
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null && s.link._tag === "retrying") {
+    out.push(
+      () => timer.msg,
+      () => timer.msg,
+      () => timer.msg,
+    );
+  }
+
+  // The brain starts this person's tezgah, which tells the window nothing on its own.
+  if (!w.up) {
+    out.push(() => {
+      w.up = true;
+      return null;
+    });
+  }
+
+  // tezgah's edits: a tile joins or leaves workspace 1, or workspace 2, which this window never shows.
+  for (const n of [1, 1, 2]) {
+    out.push(() => {
+      const tiles = d.spaces.get(n) ?? [];
+      const id = typeId("tile", 100 + d.next++);
+      d.spaces.set(n, [
+        ...tiles.slice(0, (c.pick % (tiles.length + 1)) | 0),
+        id,
+        ...tiles.slice(c.pick % (tiles.length + 1)),
+      ]);
+      d.shows.set(id, `checklist:t${d.next}`);
+      return notice();
+    });
+    out.push(() => {
+      const tiles = d.spaces.get(n) ?? [];
+
+      if (tiles.length < 2) {
+        return null;
+      }
+
+      d.spaces.set(
+        n,
+        tiles.filter((_, i) => i !== c.pick % tiles.length),
+      );
+      return notice();
+    });
+  }
+
+  return out;
+};
+
+const deskFold = (
+  picks: ReadonlyArray<DeskPick>,
+  machine: typeof deskWindow,
+  withDesk: boolean,
+  each: (e: DeskEvent) => void,
+  up = true,
+) => {
+  const desk: Desk = {
+    rev: 1,
+    spaces: new Map([[1, [typeId("tile", 1)]]]),
+    shows: new Map([[typeId("tile", 1), "checklist:1"]]),
+    next: 2,
+  };
+  const ctx = withDesk ? { tiles: GIVEN, tab: TAB, tezgah: { workspace: 1 } } : { tiles: GIVEN, tab: TAB };
+  const [s0, cmds0] = machine.init(null, ctx as never);
+  const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false, up };
+  each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
+  goOnline(w, machine, each);
+  const dialed = new Set([1]);
+
+  for (const c of picks) {
+    if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+      dialed.add(w.s.link.dial);
+      goOnline(w, machine, each, w.s.link.dial);
+      continue;
+    }
+
+    const options = deskMoves(w, c);
+    const m = options[c.move % options.length]!();
+
+    if (m !== null) {
+      deskStep(w, m, machine, each);
+    }
+  }
+
+  return w;
+};
+
+const reads = (cmds: ReadonlyArray<Cmd>) =>
+  cmds.filter(isWrite).flatMap((c) => (c.call._tag === "read" ? [String(c.call["stream"])] : []));
+
+describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () => {
+  it("L10: a window started with the tezgah option takes its tiles only from tezgah's view: a view change adds and removes tiles and opens each new one's process view, after a redial too", () => {
+    let online = 0;
+    let redials = 0;
+    fc.assert(
+      fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
+        deskFold(picks, deskWindow, true, ({ prev, m, next, cmds, w }) => {
+          online += m.type === "frame" && next.link._tag === "online" && prev.link._tag !== "online" ? 1 : 0;
+          redials +=
+            m.type === "frame" && next.link._tag === "online" && prev.link._tag !== "online" && next.link.dial > 1
+              ? 1
+              : 0;
+          const want = w.shown ?? [];
+          const got = next.tiles.map((t) => ({ id: t.id, name: t.name }));
+          expect(
+            [...got].sort((a, b) => (a.id < b.id ? -1 : 1)),
+            `L10: after ${m.type} the window's tiles are workspace 1's in tezgah's latest view`,
+          ).toEqual([...want].sort((a, b) => (a.id < b.id ? -1 : 1)));
+
+          for (const name of GIVEN.map((t) => t.name)) {
+            expect(reads(cmds), `L10: a desk window never reads the given tile ${name}`).not.toContain(
+              `processes/${name}`,
+            );
+          }
+
+          if (next.link._tag === "online" && prev.link._tag !== "online") {
+            expect(
+              reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
+              "L10: going online, the first time or after a redial, reads the admitted person's tezgah once",
+            ).toHaveLength(1);
+          }
+
+          if (next.link._tag === "online") {
+            for (const t of next.tiles.filter((t) => !prev.tiles.some((p) => p.id === t.id))) {
+              expect(reads(cmds), `L10: a new tile ${t.id} reads processes/${t.name} in the same step`).toContain(
+                `processes/${t.name}`,
+              );
+            }
+          }
+
+          if (m.type === "read_ok" && m.value.length > 0) {
+            const name = String(Reflect.get(Object(Reflect.get(Object(m.value[0]), "body")), "name"));
+
+            if (next.tiles.some((t) => t.name === name)) {
+              expect(
+                writes(cmds, "open").map((c) => c.call["pid"]),
+                `L10: ${name}'s read opens its process view`,
+              ).toContain(`process_of_${name}`);
+            }
+          }
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(online, "L10: the walks go online").toBeGreaterThan(0);
+    expect(redials, "L10: the walks drop the link and go online again on a later dial").toBeGreaterThan(0);
+  });
+
+  it("L10: with no tezgah option the given tiles stay, and the window never reads a tezgah stream", () => {
+    let opened = 0;
+    fc.assert(
+      fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
+        deskFold(picks, deskWindow, false, ({ prev, next, cmds }) => {
+          opened += next.tiles.filter((t, i) => t.reach._tag === "open" && prev.tiles[i]?.reach._tag !== "open").length;
+          expect(
+            next.tiles.map((t) => [t.id, t.name]),
+            "L10: the given tiles stay",
+          ).toEqual(GIVEN.map((t) => [t.id, t.name]));
+          expect(
+            reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
+            "L10: no desk, no tezgah read",
+          ).toEqual([]);
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(opened, "L10: the walks go online and open the given tiles").toBeGreaterThan(0);
+  });
+});
+
+// Desk round R, next/: plan amendment 11, point 2. The boot starts only the founder's tezgah, so a
+// window whose person has none finds no process at `processes/tezgah:<person>`. The walk is L10's,
+// started with no tezgah for the window's person; one of its moves has the brain start it later.
+describe("Desk R: a window whose person has no tezgah says so, and follows tezgah once it exists", () => {
+  it("R2: a read that finds no tezgah takes the window's tezgah link to missing, with no tile and nothing opened; each redial reads processes/tezgah:<person> again, and once tezgah exists the window opens it and takes its tiles", () => {
+    const stream = `processes/tezgah:${DESK_PERSON.slice("person_".length)}`;
+    const seen = { missing: 0, redialed: 0, followed: 0 };
+    fc.assert(
+      fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
+        let wasMissing = false;
+        let counted = false;
+        deskFold(
+          picks,
+          deskWindow,
+          true,
+          ({ prev, m, next, cmds, w }) => {
+            const reach = next.tezgah?.reach._tag;
+            const tezgahRead = (x: WindowModel) =>
+              x.flight.some((f) => f.call._tag === "read" && f.call.stream === stream);
+
+            const emptied = m.type === "read_ok" && m.value.length === 0 && tezgahRead(prev) && !tezgahRead(next);
+            const opened = writes(cmds, "open").map((c) => c.call["pid"]);
+            seen.missing += emptied ? 1 : 0;
+            wasMissing ||= emptied;
+            expect(emptied ? reach : "missing", "R2: a read that finds no tezgah takes the link to missing").toBe(
+              "missing",
+            );
+            expect(emptied ? opened : [], "R2: no tezgah, nothing opened").toEqual([]);
+            expect(reach === "missing" ? next.tiles : [], "R2: a window with no tezgah shows no tile").toEqual([]);
+            expect(reach === "missing" && opened.includes(TEZGAH_PID), "R2: a missing tezgah is never opened").toBe(
+              false,
+            );
+
+            const online = next.link._tag === "online" && prev.link._tag !== "online";
+            seen.redialed += online && wasMissing ? 1 : 0;
+            expect(
+              online ? reads(cmds).filter((r) => r.startsWith("processes/tezgah:")) : [stream],
+              "R2: each time the window goes online it reads its own person's tezgah once",
+            ).toEqual([stream]);
+
+            const follows = wasMissing && w.up && reach === "open" && !counted;
+            counted ||= follows;
+            seen.followed += follows ? 1 : 0;
+            const want = deskTiles(w.desk)
+              .map((t) => t.name)
+              .sort();
+            expect(
+              follows ? [...next.tiles].map((t) => t.name).sort() : want,
+              "R2: once tezgah exists, the window takes workspace 1's tiles from its view",
+            ).toEqual(want);
+          },
+          false,
+        );
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.missing, "R2: the walks reach a window with no tezgah").toBeGreaterThan(0);
+    expect(seen.redialed, "R2: the walks redial after finding no tezgah").toBeGreaterThan(0);
+    expect(seen.followed, "R2: the walks follow tezgah once it exists").toBeGreaterThan(0);
+  });
+});
+
+// Desk S3, next/: the window's focus moves walked through the link's life, L26's window half and the
+// lean's offline rule. Written before a window moves focus; `client/Tezgah.laws.test.ts` holds L23 to
+// L25 and L29 on two windows. The shape it holds `WindowMachine.ts` to, from the plan's "The lead's
+// lean" (the build may add more):
+// - A focus key is resolved on the window's own drawn state (`optimisticState` of its tezgah child),
+//   never on tezgah's: `focus_next` and `focus_previous` follow reading order and wrap, `focus_last`
+//   goes to the drawn `recent[1]`, and a direction goes to `Layout.neighbor` of the drawn layout. A
+//   key that finds no other tile changes nothing. The move is drawn on the step that reads the key,
+//   online or not, and the page's `{type: "focus", tile, cursor}` on another tile is a move too.
+// - An offline window keeps its pending mutations, and each move's letter reaches tezgah once the
+//   link is back, as every letter on the press path does (the lean, 70%).
+// The walk goes online through the real hello exchange, and each step picks one move possible in the
+// state it folded: a focus key or a click, an answer to a call in flight or a Cmd waiting, a socket
+// drop while online, the link's timer, or a view tezgah sent. The fake tezgah takes a letter when its
+// send is answered, focuses its `to` and sends its whole view to the window while it is subscribed.
+const FOCUS_ROWS: ReadonlyArray<Binding> = [
+  { does: "tezgah.focus_next", keys: ["<prefix>o", "f6"], word: "focus next", label: "Focus next tile" },
+  { does: "tezgah.focus_previous", keys: ["shift+f6"], word: "focus previous", label: "Focus previous tile" },
+  { does: "tezgah.focus_last", keys: ["<prefix>;"], word: "focus last", label: "Focus last tile" },
+  { does: "tezgah.focus_left", keys: ["<prefix>h", "<prefix>arrowleft"], word: "focus left", label: "Focus left" },
+  { does: "tezgah.focus_right", keys: ["<prefix>l", "<prefix>arrowright"], word: "focus right", label: "Focus right" },
+  { does: "tezgah.focus_up", keys: ["<prefix>k", "<prefix>arrowup"], word: "focus up", label: "Focus up" },
+  { does: "tezgah.focus_down", keys: ["<prefix>j", "<prefix>arrowdown"], word: "focus down", label: "Focus down" },
+];
+
+const FOCUS_BACKEND = Keys.backend("electron", "linux");
+const focusTable = Keys.load(Keys.ship(FOCUS_ROWS, FOCUS_BACKEND), FOCUS_BACKEND);
+
+const focusWindow = windowMachineFor({
+  decode: () => Schema.decodeUnknownSync(ListView),
+  tile: tileFor,
+  keys: Result.getOrThrow(focusTable),
+});
+
+type FocusTo = "next" | "previous" | "last" | "left" | "right" | "up" | "down";
+
+const FOCUS_PRESSES: ReadonlyArray<{ readonly keys: ReadonlyArray<string>; readonly to: FocusTo }> = [
+  { keys: ["ctrl+b", "o"], to: "next" },
+  { keys: ["f6"], to: "next" },
+  { keys: ["shift+f6"], to: "previous" },
+  { keys: ["ctrl+b", ";"], to: "last" },
+  { keys: ["ctrl+b", "h"], to: "left" },
+  { keys: ["ctrl+b", "arrowright"], to: "right" },
+  { keys: ["ctrl+b", "k"], to: "up" },
+  { keys: ["ctrl+b", "arrowdown"], to: "down" },
+];
+
+/** The workspace the window draws. */
+const drawnHere = (s: WindowModel) => {
+  const client = s.tezgah?.client;
+  const view = client === undefined ? null : optimisticState(client);
+  return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
+};
+
+/** Where a focus key goes on the drawn workspace, by the lean's words; null when nowhere new. */
+const resolved = (s: WindowModel, to: FocusTo): string | null => {
+  const space = drawnHere(s);
+
+  if (space === null) {
+    return null;
+  }
+
+  const tiles = Layout.order(space.layout);
+  const i = tiles.indexOf(space.focus);
+  const found =
+    to === "next"
+      ? tiles[(i + 1) % tiles.length]
+      : to === "previous"
+        ? tiles[(i - 1 + tiles.length) % tiles.length]
+        : to === "last"
+          ? space.recent[1]
+          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  return found === undefined || found === space.focus ? null : found;
+};
+
+type FocusWorld = DeskWorld & {
+  view: TezgahView;
+  pos: number;
+  notices: Array<{ readonly rev: number; readonly view: TezgahView }>;
+  moves: Array<{ readonly to: string; letter: string | null }>;
+  /** Letters tezgah took, in the order it took them. */
+  took: Array<string>;
+  letters: number;
+};
+
+/** A workspace split by `cuts`, focus on the tile `focus` picks. */
+const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  const first = typeId("tile", 1) as TileId;
+  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+    id: typeId("workspace", 1),
+    n: 1,
+    layout: first,
+    focus: first,
+    recent: [first],
+  });
+  const tiles: Array<Tile> = [];
+  const row = (id: string, n: number) =>
+    ({
+      id,
+      n,
+      shows: n === 1 ? "checklist:1" : `plain:${n}`,
+      program: "fabrika/checklist",
+      child: n > 1,
+      keep: "failed",
+      cursor: null,
+    }) as Tile;
+  tiles.push(row(first, 1));
+
+  for (const [k, cut] of cuts.entries()) {
+    const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    const id = typeId("tile", k + 2) as TileId;
+    w = Layout.split(w, at, cut.down ? "column" : "row", id);
+    tiles.push(row(id, k + 2));
+  }
+
+  const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+  return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
+};
+
+/** Every move the focus world allows now. */
+const focusMoves = (w: FocusWorld, c: DeskPick, each: (e: DeskEvent) => void): ReadonlyArray<() => void> => {
+  const s = w.s;
+  const out: Array<() => void> = [];
+  const send = (m: WindowMsg) => deskStep(w, m, focusWindow, each);
+
+  // A `ledger.wait` stays parked at the door: nothing in this world writes past its cursor, the
+  // window's inbox or a tile's name, so the door never answers it (P18 slice 2's inbox wait).
+  for (const f of s.flight.filter((x) => x.call._tag !== "wait")) {
+    const on = { id: f.id, dial: f.dial };
+    out.push(() => {
+      if (f.call._tag === "read") {
+        const name = f.call.stream.replace(/^processes\//, "");
+        const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        send({
+          type: "read_ok",
+          ...on,
+          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          ms: c.ms,
+        } as WindowMsg);
+      } else if (f.call._tag === "open" && f.call.pid === TEZGAH_PID) {
+        w.subscribed = true;
+        send({ type: "open_ok", ...on, value: { rev: w.pos, view: w.view }, ms: c.ms } as WindowMsg);
+      } else if (f.call._tag === "open") {
+        send({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms } as WindowMsg);
+      } else if (f.call._tag === "send") {
+        const pos = w.took.indexOf(f.call.letter) + 2;
+        send({
+          type: "send_ok",
+          ...on,
+          value: { _tag: "accepted", rev: pos + 1_000, pos },
+          ms: c.ms,
+        } as WindowMsg);
+      } else if (f.call._tag === "monitor") {
+        // P18 slice 2: the door's process.monitor answers null.
+        send({ type: "monitor_ok", ...on, value: null, ms: c.ms } as WindowMsg);
+      } else {
+        send({ type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg);
+      }
+    });
+  }
+
+  for (const cmd of w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
+    out.push(() =>
+      send({
+        type: `${cmd.type}_ok`,
+        cmd,
+        value:
+          cmd.type === "now"
+            ? { letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
+            : cmd.type === "persist"
+              ? true
+              : null,
+      } as WindowMsg),
+    );
+  }
+
+  if (s.link._tag === "online") {
+    const dial = s.link.dial;
+    out.push(() => {
+      w.subscribed = false;
+      w.notices = [];
+      send({ type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg);
+    });
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null && s.link._tag === "retrying") {
+    out.push(() => send(timer.msg));
+  }
+
+  const n = w.notices.shift();
+
+  if (n !== undefined) {
+    w.notices.unshift(n);
+    out.push(() => {
+      w.notices.shift();
+      send({
+        type: "view",
+        pid: TEZGAH_PID,
+        note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view },
+      } as WindowMsg);
+    });
+  }
+
+  // A person's moves, three times as likely as any one answer.
+  for (let k = 0; k < 3; k++) {
+    out.push(() => {
+      const press = FOCUS_PRESSES[(c.pick + k) % FOCUS_PRESSES.length]!;
+
+      for (const [i, key] of press.keys.entries()) {
+        if (i === press.keys.length - 1) {
+          const to = resolved(w.s, press.to);
+
+          if (to !== null) {
+            w.moves.push({ to, letter: null });
+          }
+        }
+
+        send({ type: "key", key, at: 10 } as WindowMsg);
+      }
+    });
+  }
+
+  out.push(() => {
+    const space = drawnHere(w.s);
+
+    if (space === null) {
+      return;
+    }
+
+    const tile = Layout.order(space.layout)[c.pick % Layout.order(space.layout).length]!;
+
+    if (tile !== space.focus) {
+      w.moves.push({ to: tile, letter: null });
+    }
+
+    send({ type: "focus", tile, cursor: c.pick % 2 === 0 ? "item:milk" : null } as WindowMsg);
+  });
+
+  return out;
+};
+
+describe("Desk S3: the window's focus moves, walked through the link's life", () => {
+  it("L26 (the window's half): each focus key and click is drawn on its step, resolved on the window's drawn layout, offline too; each move reaches tezgah as one letter once the link is back, and the window ends on tezgah's focus", () => {
+    const seen = { offline: 0, redial: 0, moves: 0 };
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 5 }),
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          const view = focusDesk(cuts, focus);
+          const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
+          const w: FocusWorld = {
+            s: s0,
+            waiting: [...cmds0],
+            desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+            shown: null,
+            subscribed: false,
+            up: true,
+            view,
+            pos: 1,
+            notices: [],
+            moves: [],
+            took: [],
+            letters: 0,
+          };
+          /** tezgah takes a letter as the socket hands it over, in order: a move to a tile on its
+           *  workspace focuses it, and its view goes to the window while it is subscribed. */
+          const take = (letter: string, m: unknown) => {
+            const did = m as { readonly to?: string };
+            const space = w.view.workspaces[0]!;
+
+            if (
+              w.took.includes(letter) ||
+              did.to === undefined ||
+              !Layout.order(space.layout).includes(did.to as TileId)
+            ) {
+              return;
+            }
+
+            w.took.push(letter);
+            w.pos++;
+            const to = did.to as TileId;
+            w.view = {
+              ...w.view,
+              workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
+            };
+
+            if (w.subscribed) {
+              w.notices.push({ rev: w.pos, view: w.view });
+            }
+          };
+          /** The tile each letter to tezgah named, by letter. */
+          const named = new Map<string, unknown>();
+          const each = ({ m, next, cmds }: DeskEvent) => {
+            for (const c of cmds.filter(isWrite)) {
+              if (c.call._tag === "send" && c.call["pid"] === TEZGAH_PID) {
+                const letter = String(c.call["letter"]);
+                take(letter, c.call["m"]);
+                named.set(letter, Reflect.get(Object(c.call["m"]), "to"));
+                const move = w.moves.find((x) => x.letter === null);
+
+                if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
+                  move.letter = letter;
+                }
+              }
+            }
+
+            seen.offline += (m.type === "key" || m.type === "focus") && next.link._tag !== "online" ? 1 : 0;
+          };
+          goOnline(w, focusWindow, each);
+          const dialed = new Set([1]);
+          const pump = (c: DeskPick) => {
+            if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+              dialed.add(w.s.link.dial);
+              seen.redial++;
+              goOnline(w, focusWindow, each, w.s.link.dial);
+              return;
+            }
+
+            const options = focusMoves(w, c, each);
+            options[c.move % options.length]!();
+          };
+
+          for (const c of picks) {
+            const before = w.moves.length;
+            pump(c);
+
+            // A key or a click that made a move draws it at once.
+            if (w.moves.length > before) {
+              expect(drawnHere(w.s)?.focus, "L26: the window draws the move it made").toBe(w.moves.at(-1)!.to);
+            }
+          }
+
+          // Settle: back online, every call and Cmd answered, every view delivered. A parked
+          // `ledger.wait` is no call left to answer: the door holds it until its stream grows.
+          for (let guard = 0; guard < 3_000; guard++) {
+            const s = w.s;
+            const unanswered = s.flight.filter((f) => f.call._tag !== "wait");
+
+            if (s.link._tag === "dialing" && !dialed.has(s.link.dial)) {
+              dialed.add(s.link.dial);
+              goOnline(w, focusWindow, each, s.link.dial);
+              continue;
+            }
+
+            const options = focusMoves(w, { type: "pick", move: 0, pick: 0, ms: 1 }, each);
+            const quiet =
+              s.link._tag === "online" &&
+              unanswered.length === 0 &&
+              w.notices.length === 0 &&
+              !w.waiting.some((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)) &&
+              w.moves.every((x) => x.letter !== null && w.took.includes(x.letter));
+
+            if (quiet) {
+              break;
+            }
+
+            // The first options are the answers; a timer when retrying; never a socket drop or a key.
+            const answers =
+              unanswered.length +
+              w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
+
+            if (answers > 0) {
+              options[0]!();
+            } else if (s.link._tag === "retrying" && linkTimer(s.link) !== null) {
+              deskStep(w, linkTimer(s.link)!.msg, focusWindow, each);
+            } else if (w.notices.length > 0) {
+              const n = w.notices.shift()!;
+              deskStep(
+                w,
+                {
+                  type: "view",
+                  pid: TEZGAH_PID,
+                  note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view },
+                } as WindowMsg,
+                focusWindow,
+                each,
+              );
+            } else {
+              const timer = linkTimer(s.link);
+              const resend = { type: "resend", dial: s.link._tag === "online" ? s.link.dial : 0 } as WindowMsg;
+              deskStep(w, s.link._tag === "online" ? resend : timer!.msg, focusWindow, each);
+            }
+          }
+
+          seen.moves += w.moves.length;
+          expect(
+            w.moves.filter((x) => x.letter === null || !w.took.includes(x.letter)).map((x) => x.to),
+            "L26: every move the window drew reached tezgah as one letter, after any drop of the link",
+          ).toEqual([]);
+          expect(
+            w.moves.map((x) => named.get(x.letter ?? "")),
+            "L26: each move's letter names the tile the window drew",
+          ).toEqual(w.moves.map((x) => x.to));
+          expect(w.took, "L26: tezgah took each move once, in the order they were made").toEqual(
+            w.moves.map((x) => x.letter),
+          );
+          expect(drawnHere(w.s)?.focus, "L26: once all is answered the window draws tezgah's focus").toBe(
+            w.view.workspaces[0]!.focus,
+          );
+          expect(w.s.tezgah?.client.pendingMutations, "L26: nothing is left pending").toEqual([]);
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.moves, "the walks move focus").toBeGreaterThan(0);
+    expect(seen.offline, "the walks press focus keys while the link is down").toBeGreaterThan(0);
+    expect(seen.redial, "the walks drop the link and dial again").toBeGreaterThan(0);
+  });
+});
+
+// Desk S4, next/: a smaller window folds what does not fit. The `fold` client row of the plan's "What
+// it records" and law L32, walked on the S3 focus world. Written before a window folds. The shape
+// these hold `WindowMachine.ts` and `transport/ClientRows.ts` to, from the plan (the build may add
+// more):
+// - Size belongs to the viewer (0277). A window's strips are `fold` of its drawn workspace (the
+//   `optimisticState` of its tezgah child) at its last `size`: every tile but the drawn focus that the
+//   frame draws under 220x120 there (`Layout.rects` with `GAP`, plan amendment 7). Before the page
+//   says a size, nothing folds. The rule is written here from the plan's words, never read from the
+//   product's `fold`; `tezgah/Fold.laws.test.ts` holds `fold` to the same rule.
+// - "What it records": `fold {strips, width, height}` on change. On each step whose strips differ from
+//   the step before (a new size, a view, a focus move), the window hands out one `record` Cmd of
+//   `{_tag: "fold", strips, width, height}`: `strips` how many tiles it draws as strips now, and
+//   `width` and `height` the size it folded at. A step that changes no strip writes no fold row. The
+//   tiles folded are not written: the layout, the focus and the size rebuild them.
+// - L32: a fold is never sent to tezgah and never stored. No key of the window's model, its tezgah
+//   link, its tezgah child or tezgah's wire shapes names a fold or a strip; a `size` Msg changes the
+//   model in its `size` alone and writes nothing to the brain; and every letter the window sends
+//   tezgah carries only the keys of tezgah's `did`.
+// A step where a drawn tile sits within half a pixel of the floor is left out of the fold row's
+// check, so float rounding cannot decide it.
+const FOLD_SMALLEST = { width: 220, height: 120 } as const;
+
+const FOLD_ACROSS = { row: 22, column: 20 } as const;
+
+const foldTiles = (node: Workspace["layout"]): ReadonlyArray<string> =>
+  typeof node === "string" ? [node] : node.parts.flatMap((p) => foldTiles(p.inner));
+
+type Extent = { readonly width: number; readonly height: number };
+
+/** Each open tile's drawn size by plan amendment 13, written here from its words: a strip takes 22px
+ *  along a row or 20px along a column, a container whose tiles all fold one strip's size, the open
+ *  parts share what is left by percent, and the part on the focused path is held at
+ *  `min(220 or 120, what the container has)`. */
+const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): ReadonlyMap<string, Extent> => {
+  const out = new Map<string, Extent>();
+  const walk = (node: Workspace["layout"], box: Extent): void => {
+    if (typeof node === "string") {
+      out.set(node, box);
+      return;
+    }
+
+    const row = node.dir === "row";
+    const left = (row ? box.width : box.height) - (node.parts.length - 1) * Layout.GAP;
+    const fixed = node.parts.map((p) => foldTiles(p.inner).every((t) => strips.has(t)));
+    const has = left - fixed.filter((f) => f).length * FOLD_ACROSS[node.dir];
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const lead = node.parts.findIndex((p) => foldTiles(p.inner).includes(w.focus));
+    let shares = node.parts.map((p, i) => (fixed[i] ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
+    const least = Math.min(row ? FOLD_SMALLEST.width : FOLD_SMALLEST.height, has);
+
+    if (lead >= 0 && shares[lead]! < least) {
+      const rest = total - node.parts[lead]!.percent;
+      shares = node.parts.map((p, i) =>
+        i === lead ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+      );
+    }
+
+    for (const [i, p] of node.parts.entries()) {
+      if (!fixed[i] || typeof p.inner === "string") {
+        walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
+      }
+    }
+  };
+  walk(w.layout, size);
+  return out;
+};
+
+/** The tiles a window draws as strips now, the fixpoint of plan amendment 13 on its drawn workspace
+ *  at its size, in reading order; null when a round draws a tile within half a pixel of the floor. */
+const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
+  const space = drawnHere(s);
+
+  if (s.size === null || space === null) {
+    return [];
+  }
+
+  let strips = new Set<string>();
+
+  for (;;) {
+    const open = [...foldDrawn(space, s.size, strips)].filter(([t]) => !strips.has(t) && t !== space.focus);
+
+    if (
+      open.some(
+        ([, r]) => Math.abs(r.width - FOLD_SMALLEST.width) <= 0.5 || Math.abs(r.height - FOLD_SMALLEST.height) <= 0.5,
+      )
+    ) {
+      return null;
+    }
+
+    const due = open.filter(([, r]) => r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height);
+
+    if (due.length === 0) {
+      return Layout.order(space.layout).filter((t) => strips.has(t));
+    }
+
+    strips = new Set([...strips, ...due.map(([t]) => t)]);
+  }
+};
+
+/** The record and Msg fields a law reads by their schema: every object case of a union. */
+const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
+  ast._tag === "Union" ? ast.types.flatMap(objectsIn) : ast._tag === "Objects" ? [ast] : [];
+
+const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
+  o?.propertySignatures.find((p) => p.name === name)?.type;
+
+/** The window Msg whose `type` is `t`, as the machine's own Msg schema says it. */
+const msgCase = (t: string) =>
+  objectsIn(focusWindow.msg.ast).find((o) => {
+    const ty = fieldIn(o, "type");
+    return ty?._tag === "Literal" && ty.literal === t;
+  });
+
+/** Every key in a value, at any depth. */
+const keysIn = (v: unknown): ReadonlyArray<string> =>
+  Array.isArray(v)
+    ? v.flatMap(keysIn)
+    : v !== null && typeof v === "object"
+      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      : [];
+
+/** A key that would hold a fold: the one thing L32 forbids the model and the wire. */
+type Folded = `${string}${"fold" | "Fold" | "strip" | "Strip"}${string}`;
+const FOLDED = /fold|strip/i;
+
+/** The keys of tezgah's `did`, the plan's "The shape": what a letter from a window may carry. */
+const DID_KEYS = new Set(["type", "does", "from", "via", "tile", "to", "cursor"]);
+
+/** One walk of the focus world, with sizes the page says among its moves. */
+const foldWalk = (
+  cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>,
+  focus: number,
+  picks: ReadonlyArray<DeskPick>,
+  check: (e: DeskEvent) => void,
+) => {
+  const view = focusDesk(cuts, focus);
+  const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
+  const w: FocusWorld = {
+    s: s0,
+    waiting: [...cmds0],
+    desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+    shown: null,
+    subscribed: false,
+    up: true,
+    view,
+    pos: 1,
+    notices: [],
+    moves: [],
+    took: [],
+    letters: 0,
+  };
+  /** tezgah takes a move as the socket hands it over and sends its view while the window listens. */
+  const each = (e: DeskEvent) => {
+    for (const c of e.cmds.filter(isWrite)) {
+      const to = Reflect.get(Object(c.call["m"]), "to");
+      const space = w.view.workspaces[0]!;
+      const letter = String(c.call["letter"]);
+
+      if (
+        c.call._tag === "send" &&
+        c.call["pid"] === TEZGAH_PID &&
+        typeof to === "string" &&
+        !w.took.includes(letter) &&
+        Layout.order(space.layout).includes(to as TileId)
+      ) {
+        w.took.push(letter);
+        w.pos++;
+        w.view = { ...w.view, workspaces: [Layout.focus(space, to as TileId)] };
+
+        if (w.subscribed) {
+          w.notices.push({ rev: w.pos, view: w.view });
+        }
+      }
+    }
+
+    check(e);
+  };
+  goOnline(w, focusWindow, each);
+  const dialed = new Set([1]);
+
+  for (const c of picks) {
+    if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+      dialed.add(w.s.link.dial);
+      goOnline(w, focusWindow, each, w.s.link.dial);
+      continue;
+    }
+
+    // The page says a size: often a small one, where tiles fold, sometimes the same one again.
+    const small = c.pick % 2 === 0;
+    const size = {
+      width: small ? 320 + ((c.ms * 13) % 700) : 320 + ((c.ms * 13) % 2_241),
+      height: small ? 240 + ((c.pick * 7) % 400) : 240 + ((c.pick * 7) % 1_361),
+    };
+    const options = [
+      ...focusMoves(w, c, each),
+      () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      () => deskStep(w, { type: "size", ...(w.s.size ?? size) } as WindowMsg, focusWindow, each),
+    ];
+    options[c.move % options.length]!();
+  }
+
+  return w;
+};
+
+const FoldCuts = fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 6 });
+
+describe("Desk S4: a window folds at its own size, records each change of its folds, and keeps no fold", () => {
+  it("fold row: on each step that changes which tiles the window draws as strips, by a size, a view or a focus move, one record fold {strips, width, height}, its count and the size it folded at; a step that changes none writes no fold row; and a pixel size is typed by its own schema, never the duration's", () => {
+    // Plan amendment 13, point 7 (0212: one meaning, one way): the fold row's and the size Msg's width
+    // and height are pixels, never `Ms`. A law can say only that they are not the very schema a
+    // duration field uses; that they are pixels by name is typecheck's and review's to read.
+    const fold = ClientRecord.cases.fold.fields;
+    expect(fold.width.ast, "the fold row's width is not the duration schema").not.toBe(
+      ClientRecord.cases.reply.fields.ms.ast,
+    );
+    expect(fold.height.ast, "the fold row's height is not the duration schema").not.toBe(
+      ClientRecord.cases.reply.fields.ms.ast,
+    );
+    expect(msgCase("size"), "the window takes a size Msg").toBeDefined();
+    expect(fieldIn(msgCase("size"), "width"), "the size Msg's width is not the duration schema").not.toBe(
+      fieldIn(msgCase("socket_opened"), "at"),
+    );
+    expect(fieldIn(msgCase("size"), "height"), "the size Msg's height is not the duration schema").not.toBe(
+      fieldIn(msgCase("socket_opened"), "at"),
+    );
+    const seen = { rows: 0, bySize: 0, byOther: 0, quiet: 0 };
+    fc.assert(
+      fc.property(
+        FoldCuts,
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
+            const before = stripsNow(prev);
+            const after = stripsNow(next);
+            const rows = cmds.flatMap((c) => {
+              const r = recordIn(c);
+              return r?._tag === "fold" ? [r] : [];
+            });
+
+            if (before === null || after === null) {
+              return;
+            }
+
+            const changed = JSON.stringify([...before].sort()) !== JSON.stringify([...after].sort());
+            expect(
+              rows,
+              changed
+                ? `fold row: after ${m.type} the strips went from ${before.length} to ${after.length}, one fold row`
+                : `fold row: after ${m.type} no strip changed, no fold row`,
+            ).toEqual(
+              changed
+                ? [{ _tag: "fold", strips: after.length, width: next.size!.width, height: next.size!.height }]
+                : [],
+            );
+            seen.rows += rows.length;
+            seen.bySize += changed && m.type === "size" ? 1 : 0;
+            seen.byOther += changed && m.type !== "size" ? 1 : 0;
+            seen.quiet += !changed && m.type === "size" ? 1 : 0;
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.bySize, "fold row: the walks fold and unfold by a new size").toBeGreaterThan(0);
+    expect(seen.byOther, "fold row: the walks fold and unfold by a view or a focus move").toBeGreaterThan(0);
+    expect(seen.quiet, "fold row: the walks say sizes that change no strip").toBeGreaterThan(0);
+  });
+
+  it("L32: a fold is never stored in the window's model nor sent to tezgah: no model or wire key names one, a size Msg changes only the model's size and writes nothing, and every letter to tezgah carries only did's keys", () => {
+    // L32's type half is checked by `tsc` over this file (CI's typecheck job, 0133): a key that names a
+    // fold or a strip on the window's model, its tezgah link, its tezgah child or tezgah's wire shapes
+    // fails typecheck. The walk checks the same at run time, on every state.
+    expectTypeOf<Extract<keyof WindowModel, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof TezgahClient, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof TezgahView, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof Workspace, Folded>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof Tile, Folded>>().toEqualTypeOf<never>();
+    const seen = { sizes: 0, folded: 0, letters: 0 };
+    fc.assert(
+      fc.property(
+        FoldCuts,
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
+            expect(
+              keysIn(next).filter((k) => FOLDED.test(k)),
+              `L32: after ${m.type} the window's model holds no fold`,
+            ).toEqual([]);
+
+            if (m.type === "size") {
+              seen.sizes++;
+              seen.folded += (stripsNow(next) ?? []).length > 0 ? 1 : 0;
+              expect({ ...next, size: null }, "L32: a size Msg changes the model in its size alone").toEqual({
+                ...prev,
+                size: null,
+              });
+              expect(
+                cmds.filter(isWrite).map((c) => c.call._tag),
+                "L32: a size Msg writes nothing to the brain",
+              ).toEqual([]);
+            }
+
+            for (const c of cmds
+              .filter(isWrite)
+              .filter((c) => c.call._tag === "send" && c.call["pid"] === TEZGAH_PID)) {
+              seen.letters++;
+              expect(
+                Object.keys(Object(c.call["m"])).filter((k) => !DID_KEYS.has(k)),
+                "L32: a letter to tezgah carries only did's keys",
+              ).toEqual([]);
+              expect(
+                keysIn(c.call["m"]).filter((k) => FOLDED.test(k)),
+                "L32: a letter to tezgah names no fold",
+              ).toEqual([]);
+            }
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.sizes, "L32: the walks say sizes").toBeGreaterThan(0);
+    expect(seen.folded, "L32: the walks say sizes at which tiles fold").toBeGreaterThan(0);
+    expect(seen.letters, "L32: the walks send tezgah letters").toBeGreaterThan(0);
   });
 });

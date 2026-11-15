@@ -58,8 +58,9 @@ input {
   font-family: var(--mono);
   overflow-wrap: anywhere;
 }
+/* The frame fills the window: the top bar, the workspace's tiles, then the status bar. */
 .frame {
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -68,41 +69,92 @@ input {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-4);
+  padding: var(--s-1) var(--s-3);
   border-bottom: 1px solid var(--border);
   font-family: var(--mono);
   font-size: var(--fs-small);
 }
-.desk {
-  display: flex;
+/* The area the tiles are drawn in: the window tells tezgah's geometry this box's size. */
+.area {
   flex: 1;
+  display: flex;
   min-width: 0;
-  padding: var(--s-3);
+  min-height: 0;
 }
+/*
+ * One workspace (Layout.tsx): the main and each part lay out in a row or a column, each part
+ * taking its percent as its grow, with a divider of libfabrika's GAP between two parts (0492). Tiles
+ * never touch.
+ */
+.desk {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.part {
+  display: flex;
+  flex: 0 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.flow-row {
+  flex-direction: row;
+}
+.flow-column {
+  flex-direction: column;
+}
+/* Its width and the desk's padding are libfabrika's GAP, set inline from that one number. */
+.divider {
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+/* A tile: one 1px edge, slate a4 at rest; the focused one's edge at slate a9 (the tile guidelines). */
 .tile {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--r-lg);
   outline: 1px solid var(--tile-edge);
   outline-offset: -1px;
   background: var(--surface);
 }
+.tile.focused {
+  outline-color: var(--tile-edge-on);
+}
 .tile.disconnected {
   opacity: 0.6;
 }
+/* The title bar: 20px, mono, on the wash, no line under it. Slot, name, state, then the id. */
 .titlebar {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--s-2);
-  min-height: var(--s-5);
+  height: var(--s-5);
   padding-inline: var(--s-3);
+  overflow: hidden;
   background: var(--tile-wash);
   color: var(--tile-text);
   font: 400 var(--fs-small) / var(--s-5) var(--mono);
   white-space: nowrap;
+  user-select: none;
 }
 .titlebar:hover {
   color: var(--tile-text-on);
 }
+/* Focus lifts the wash and sets the name at slate 12, weight 500: weight is the cue beside color. */
+.tile.focused .titlebar {
+  background: var(--tile-wash-on);
+}
+.tile.focused .tile-name {
+  color: var(--tile-text-on);
+  font-weight: 500;
+}
+/* The name cuts first; the state and the id are never cut. */
 .tile-name {
   min-width: 0;
   overflow: hidden;
@@ -117,18 +169,109 @@ input {
   content: "·" / "";
   padding-right: var(--s-2);
 }
+/* The close question waits on the person, so it reads at the high step. */
+.tile-state.question {
+  color: var(--tile-text-on);
+}
 .tile-id {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
-.slot {
+/*
+ * A strip: a tile this window folds at its size (0277), drawn where it sits, its part as thin as
+ * Layout.tsx sets it. The tile's edge and wash, its name upright in a row, cut with an ellipsis.
+ * Its ring is the focused tile's edge at 2px (the tile guidelines). Nothing on it moves.
+ */
+.strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-lg);
+  outline: 1px solid var(--tile-edge);
+  outline-offset: -1px;
+  background: var(--tile-wash);
+  color: var(--tile-text);
+  font: 400 var(--fs-small) / var(--s-5) var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.strip:hover {
+  outline-color: var(--tile-edge-hover);
+  color: var(--tile-text-on);
+}
+.strip:focus-visible {
+  outline: 2px solid var(--tile-edge-on);
+  outline-offset: -2px;
+  color: var(--tile-text-on);
+}
+.strip-name {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip-row .strip-name {
+  writing-mode: vertical-rl;
+}
+.tile-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
   padding: var(--s-3);
 }
 /* The tile guideline's empty state: one word where the content will start, also on an ended tile. */
 .tile-empty {
+  margin: 0;
   color: var(--tile-text);
   font-size: var(--manti-text-base);
+}
+/*
+ * The status bar: more about the focused tile, the prefix line while armed, the close ask. Always one
+ * line of the same height, so arming the prefix moves no tile (the tile guidelines: one line in all
+ * layouts). What runs out is cut with an ellipsis, and the prefix line's two ends never are.
+ */
+.statusbar {
+  flex: none;
+  display: flex;
+  column-gap: var(--s-2);
+  height: var(--s-5);
+  padding: 0 var(--s-3);
+  overflow: hidden;
+  color: var(--tile-text);
+  font: 400 var(--fs-small) / var(--s-5) var(--mono);
+  white-space: nowrap;
+}
+.statusbar.on {
+  color: var(--tile-text-on);
+}
+.statusbar .says,
+.statusbar .hints {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The prefix line (modes M3): its mode word, the hints with a dot after all but the last, and the way
+ * out pinned at the right end. */
+.statusbar .mode,
+.statusbar .way-out {
+  flex: none;
+}
+.statusbar .way-out {
+  margin-left: auto;
+}
+.statusbar .hint:not(:last-child)::after {
+  content: "·" / "";
+  padding: 0 var(--s-2);
 }
 .checklist {
   max-width: 56rem;
@@ -182,17 +325,30 @@ input {
   border: 0;
 }
 @media (prefers-contrast: more) {
-  .tile {
+  .tile,
+  .strip {
     outline-color: var(--wire);
   }
+  .tile.focused,
+  .strip:focus-visible {
+    outline: 2px solid var(--tile-edge-loud);
+    outline-offset: -2px;
+  }
   .titlebar,
+  .strip,
   .tile-empty {
     color: var(--text-primary);
   }
 }
 @media (forced-colors: active) {
-  .tile {
+  .tile,
+  .strip {
     outline-color: CanvasText;
+  }
+  .tile.focused,
+  .strip:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   .tile.disconnected {
     opacity: 1;

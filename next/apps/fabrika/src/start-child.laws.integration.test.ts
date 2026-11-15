@@ -5,14 +5,16 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Started } from "@kampus/libfabrika/processes/Children";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
+import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
-import { assert, describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   childProject,
   childInstance,
@@ -27,6 +29,7 @@ import {
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
   checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+  tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
   child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
 }));
 
@@ -35,6 +38,8 @@ vi.mock("virtual:fabrika-built", () => ({
     "fabrika/counter": CODE.counter,
     // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
     "fabrika/checklist": CODE.checklist,
+    // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+    "fabrika/tezgah": CODE.tezgah,
     "p42/child": CODE.child,
   },
   assets: {},
@@ -179,11 +184,14 @@ type Client = Effect.Success<ReturnType<typeof wire>>;
  * One real instance for the length of `test`, given back with its scope whatever `test` answers.
  * `connect` acquires a client in that scope, so each socket closes before the instance it reached.
  */
-const world = (test: (fixture: Fixture, connect: (tab: string) => Promise<Client>) => Promise<void>) =>
+const world = (
+  test: (fixture: Fixture, connect: (tab: string) => Promise<Client>) => Promise<void>,
+  starts: ReadonlyArray<{ readonly source: string; readonly to: string }> = STARTS,
+) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const fixture = yield* childInstance(STARTS);
+        const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
         const connect = (tab: string) =>
           Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
@@ -890,6 +898,68 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     );
   });
 
+  // scenario: Desk S1 L1, L2. Only the real door stamps a letter's sender and keeps it where main's
+  // permission core asks for it, and only the real boot writes the owner row: generated roles and
+  // senders walk on real runners in `StartChildTest.ts`, and this one founder's letters prove the
+  // same check end to end, on an instance with no start grant. Only the founder can be admitted on a
+  // real instance today, so the refusal half stays with L1 and L2 there, and with T953's L18.
+  it("scenario: Desk S1 L1, L2: the founder's letter starts two programs with no start grant, as the fabrika's owner, and each started line names the founder as member", async () => {
+    await world(async (fixture, connect) => {
+      const { start, live, facts } = helpers(fixture);
+      const starter = await start("starter:1", "starter");
+      const client = await connect("desk-s1");
+      const founder = { _tag: "person", key: fixture.key.fingerprint, for: fixture.from.for };
+      const asks = [
+        { program: "p42/child", name: "child:desk-s1" },
+        { program: "p42/starter", name: "starter:desk-s1" },
+      ];
+
+      for (const [n, ask] of asks.entries()) {
+        expect(
+          await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          "the starter takes the founder's letter",
+        ).toMatchObject({ result: { _tag: "accepted" } });
+      }
+
+      const view = await until(
+        "the starter was told both answers",
+        () => client.call("view.open", { pid: starter }),
+        (opened) => (opened.result?.view?.told?.length ?? 0) >= asks.length,
+      );
+      const told = view.result.view.told as Array<unknown>;
+      expect(told, "L1: no start was refused, though no grant names its program").not.toContain("forbidden");
+
+      for (const [n, ask] of asks.entries()) {
+        expect(
+          Schema.decodeUnknownOption(Started)(told[n])._tag,
+          `L1: the start of ${ask.program} answers in Started's shape`,
+        ).toBe("Some");
+        expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
+        expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
+        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
+          { requester: { process: starter } },
+        ]);
+        expect(lines[0]?.member, `L1, L2: the started line of ${ask.name} names the founder as member`).toEqual(
+          founder,
+        );
+      }
+
+      // The starts were allowed because of this one row: no grant names either program.
+      expect(
+        (await facts("permissions/relations")).map(({ _tag, subject, relation, object }) => ({
+          _tag,
+          subject,
+          relation,
+          object,
+        })),
+        "L1: the boot's one relation row makes the founder the fabrika's owner",
+      ).toEqual([
+        { _tag: "related", subject: `person:${founder.for}`, relation: "owner", object: `fabrika:${PROJECT}` },
+      ]);
+    }, []);
+  });
+
   // scenario: L9. Only the real project holds the client list a notify would reach, so one real
   // instance with one connected client is the check; generated Node laws cannot see that list.
   it("scenario: L9: a code start sends nothing to any client: no view, no notify, no focus", async () => {
@@ -1042,5 +1112,42 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });
+  });
+});
+
+// Desk S1 L4: `stop_child`'s refusals and `StartRefusal` are closed lists of names, so any client,
+// this app included, decodes a refusal by its name. The type half is compiled, never executed: the
+// lead and CI run the compiler; Vitest does not typecheck.
+const checkRefusalTypes = () => {
+  expectTypeOf<(typeof StartChild.stopChild.errTags)[number]>().toEqualTypeOf<"not_child" | "noproc">();
+  expectTypeOf<typeof StartChild.StartRefusal.Type>().toEqualTypeOf<
+    "no_program" | "forbidden" | "stale_sender" | "bad_name" | "bad_input" | "id_reused" | "name_taken"
+  >();
+  expectTypeOf<(typeof StartChild.startChild.errTags)[number]>().toEqualTypeOf<typeof StartChild.StartRefusal.Type>();
+  // A refusal widened to `string` would let this through.
+  // @ts-expect-error a stop refusal is one of its names, never any string
+  const widened: (typeof StartChild.stopChild.errTags)[number] = "anything";
+  return widened;
+};
+
+describe("Desk S1: start and stop refusals decode by name", () => {
+  it("L4: every stop_child and start_child refusal decodes by its name, and no other word does", () => {
+    expectTypeOf(checkRefusalTypes).toBeFunction(); // The function above stays uncalled.
+    const stops = Schema.Literals(StartChild.stopChild.errTags);
+    const named = [...StartChild.stopChild.errTags, ...StartChild.StartRefusal.literals];
+    fc.assert(
+      fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
+        const decoded = Schema.decodeUnknownOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
+        expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
+        expect(
+          Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),
+          `L4: ${JSON.stringify(other)} is no refusal`,
+        ).toBe(named.includes(other as never));
+      }),
+      { seed: 119120, numRuns: 200 },
+    );
+    expect(new Set(StartChild.stopChild.errTags), "L4: stop_child declares both of its refusals").toEqual(
+      new Set(["not_child", "noproc"]),
+    );
   });
 });

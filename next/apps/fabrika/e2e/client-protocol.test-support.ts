@@ -29,8 +29,13 @@ import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { type Dev, grant, type Home, PERSON, reader, type Waiting } from "./p14.test-support.ts";
 
-export const NAME = "checklist:1";
-const TILES = [{ id: "tile_1", name: NAME }];
+/** The registered name of the checklist's process: the headless tile shows it, and its streams are
+ *  read by it. */
+const PROCESS = "checklist:1";
+/** format: the browser tile's accessible name, `tileName`'s words (Desk S2b, 0503): the program
+ *  first, then `t<n>`. The tab draws workspace 1 of the founder's tezgah, whose t1 shows PROCESS. */
+export const NAME = "checklist, t1";
+const TILES = [{ id: "tile_1", name: PROCESS }];
 
 /** One row of the checklist as the backend shows it. */
 export type Row = { readonly name: string; readonly checked: boolean };
@@ -116,7 +121,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
       backend.last,
     );
     const r = yield* reader(h, dev);
-    const inbox = yield* r.read(`${NAME}/inbox`);
+    const inbox = yield* r.read(`${PROCESS}/inbox`);
     const sent = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
     return { first, kept, sent: sent.length };
   });
@@ -351,10 +356,10 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
 
     yield* backend.online;
     const tab = yield* backend.tab;
-    const first = newest(yield* s.facts(`processes/${NAME}`));
+    const first = newest(yield* s.facts(`processes/${PROCESS}`));
 
     if (first === undefined) {
-      return yield* new SuiteError({ waited: `${backend.name}: a live ${NAME}` });
+      return yield* new SuiteError({ waited: `${backend.name}: a live ${PROCESS}` });
     }
 
     yield* invoke(s.control, "exit", [first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()]);
@@ -368,7 +373,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     const started = yield* invoke(s.control, "start", [
       Start.cases.again.make({
         id: "p18-e1-again",
-        name: NAME,
+        name: PROCESS,
         code: { program: "fabrika/checklist", hash: s.hash },
         after: first,
         reason: "p18-e1",
@@ -391,10 +396,10 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
-    const restarted = (yield* s.facts(`processes/${NAME}`)).find(
+    const restarted = (yield* s.facts(`processes/${PROCESS}`)).find(
       (f) => f._tag === "restarted" && field(f.body, "process") === second,
     );
-    const sent = (yield* s.facts(`${NAME}/inbox`)).filter((f) => field(field(f.body, "m"), "name") === "milk");
+    const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => field(field(f.body, "m"), "name") === "milk");
     const watches = (yield* s.facts("processes")).filter(
       (f) => f._tag === "monitored" && field(field(f.body, "to"), "client") === tab,
     );

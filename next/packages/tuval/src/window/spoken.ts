@@ -21,11 +21,12 @@ export const refusalFor = (registration: TileWindow | null, refusal: Refusal | n
   return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
 };
 
-/** One status message in words, or null when its tile is gone. */
+/** One status message in words, or null when its tile is gone. `windowFor` finds the window
+ *  registered for the program a tile shows, by the tile's id. */
 const wordsFor = (
   m: Pick<WindowModel, "tiles">,
   message: StatusMessage,
-  windowFor: (name: string) => TileWindow | null,
+  windowFor: (tile: string) => TileWindow | null,
 ): string | null => {
   const tile = m.tiles.find((t) => t.id === message.tile);
 
@@ -36,11 +37,11 @@ const wordsFor = (
   // The tile guideline's words, `tracker in t2 ended`, with this slice's reason after them.
   return message._tag === "ended"
     ? `${tile.name} in ${tile.id} ended (${message.reason._tag})`
-    : refusalFor(windowFor(tile.name), message);
+    : refusalFor(windowFor(tile.id), message);
 };
 
 /** The polite region's words: the current burst's status messages, in order, as one line. */
 export const spoken = (
   m: Pick<WindowModel, "said" | "tiles">,
-  windowFor: (name: string) => TileWindow | null,
+  windowFor: (tile: string) => TileWindow | null,
 ): string => m.said.messages.flatMap((message) => wordsFor(m, message, windowFor) ?? []).join(", ");
