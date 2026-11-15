@@ -13,6 +13,7 @@ import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Sources from "./Sources.ts";
+import type { TomlDocument } from "./Toml.ts";
 
 const KIB = 1_024;
 const MIB = 1_024 * KIB;
@@ -23,7 +24,7 @@ const CHUNK = { least: KIB, most: MIB };
 /** `catchUp` holds every unread letter at once: a full inbox of full chunks fits one eighth of 128 MB. */
 const HELD = 16 * MIB;
 
-const document = (value: object | undefined, path: ReadonlyArray<string>) => ({
+const document = (value: TomlDocument["value"] | undefined, path: ReadonlyArray<string>): TomlDocument => ({
   value: value ?? {},
   spans: value === undefined ? [] : [{ path: [...path], line: 3 }],
 });
@@ -34,7 +35,7 @@ type Source = "default" | "flag" | "env" | "repo" | "person";
 const slots = (
   source: Source,
   setting: { readonly path: string; readonly env: string; readonly segments: ReadonlyArray<string> },
-  file: object,
+  file: TomlDocument["value"],
   text: string,
 ) => ({
   flags: Sources.flags(source === "flag" ? { [setting.path]: text } : {}),

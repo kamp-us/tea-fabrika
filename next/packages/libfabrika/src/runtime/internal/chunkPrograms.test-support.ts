@@ -29,6 +29,8 @@ export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer) });
 
 const Letter = Schema.Struct({ type: Schema.Literal("letter"), n: Schema.Int });
 const Rows = Schema.Struct({ type: Schema.Literal("rows"), n: Schema.Int, items: Schema.Array(Item) });
+/** A plain letter to the writer's second peer, so a law sees whether another name's mail waits. */
+const Aside = Schema.Struct({ type: Schema.Literal("aside"), n: Schema.Int });
 /** A send whose items the writer makes itself: `count` items of `size` padding each. */
 const Big = Schema.Struct({ type: Schema.Literal("big"), n: Schema.Int, count: Schema.Int, size: Schema.Int });
 
@@ -73,15 +75,17 @@ export const pipeWriter = (peer: string) => {
   });
 };
 
-/** @internal A writer that sends plain letters and chunked sends to `peer`. */
-export const chunkWriter = (peer: string) => {
+/** @internal A writer that sends plain letters and chunked sends to `peer`, and an `aside` letter to
+ *  `other`, `peer` when left out. */
+export const chunkWriter = (peer: string, other: string = peer) => {
   const machine = Machine.make({
     model: WriterModel,
-    msg: Schema.Union([Letter, Rows, Big]),
+    msg: Schema.Union([Letter, Aside, Rows, Big]),
     cmds: [send, sendChunks],
     init: (loaded) => [loaded ?? { answers: [] }, []],
     update: {
       letter: (s, m) => [s, [send({ to: peer, m: { type: "letter", n: m.n } })]],
+      aside: (s, m) => [s, [send({ to: other, m: { type: "letter", n: m.n } })]],
       rows: (s, m) => [s, [sendChunks({ to: peer, as: "rows", items: m.items })]],
       big: (s, m) => [
         s,
@@ -105,7 +109,12 @@ export const chunkWriter = (peer: string) => {
     state: { v: 1, upgrades: [] },
     view: (s) => s,
     refuse: () => null,
-    inputs: { letter: "Send one letter", rows: "Send rows in chunks", big: "Send made rows in chunks" },
+    inputs: {
+      letter: "Send one letter",
+      aside: "Send one letter to the other peer",
+      rows: "Send rows in chunks",
+      big: "Send made rows in chunks",
+    },
     outputs: {},
     writes: {},
     wake: () => null,

@@ -92,30 +92,35 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               );
               // Bytes one `end` call returns, by stream, for streams that hold entries.
               const sizes: Array<{ readonly stream: string; readonly newest: number; readonly bytes: number }> = [];
-              const check = (turn: LedgerTurn, moment: string) => {
-                for (const stream of [...STREAMS, EMPTY]) {
-                  const all = [...turn.read(stream, 0)];
+              // What one turn saw, judged after the turn: a throw inside a turn is the turn's own
+              // failure, which the walk would read as a refused append.
+              const look = (turn: LedgerTurn, moment: string) =>
+                [...STREAMS, EMPTY].map((stream) => {
+                  const last = [...turn.read(stream, 0)].at(-1);
                   state.bytes = 0;
                   state.on = true;
                   const end = turn.end(stream);
                   state.on = false;
-                  const last = all.at(-1);
+                  return { moment, stream, end, last, bytes: state.bytes };
+                });
+              const judge = (seen: ReadonlyArray<ReturnType<typeof look>[number]>) => {
+                for (const { moment, stream, end, last, bytes } of seen) {
                   expect(end, `${moment}: end(${stream}) is the pos of read's last entry, or none`).toEqual(
                     last === undefined ? Option.none() : Option.some(last.pos),
                   );
 
                   if (last !== undefined) {
-                    sizes.push({
-                      stream,
-                      newest: encoder.encode(JSON.stringify(last.body)).length,
-                      bytes: state.bytes,
-                    });
+                    sizes.push({ stream, newest: encoder.encode(JSON.stringify(last.body)).length, bytes });
+
+                    if (last.pos > 1) {
+                      reached.add("several");
+                    }
                   }
                 }
               };
               const pads = new Map<string, number>();
 
-              yield* tx.transact((turn) => check(turn, "an empty log"));
+              judge(yield* tx.transact((turn) => look(turn, "an empty log")));
 
               for (const append of log) {
                 const stream = STREAMS[append.stream % STREAMS.length] as string;
@@ -125,16 +130,17 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 const inside = yield* Effect.exit(
                   tx.transact((turn) => {
                     turn.append(stream, id, line(append.id, append.id % 2 === 0 ? pad : append.pad));
-                    check(turn, `inside the turn that appended ${stream}/${id}`);
+                    return look(turn, `inside the turn that appended ${stream}/${id}`);
                   }),
                 );
                 reached.add(Exit.isSuccess(inside) ? "appended" : "refused");
 
                 if (Exit.isSuccess(inside)) {
+                  judge(inside.value);
                   pads.set(`${stream}/${id}`, append.id % 2 === 0 ? pad : append.pad);
                 }
 
-                yield* tx.transact((turn) => check(turn, `after ${stream}/${id}`));
+                judge(yield* tx.transact((turn) => look(turn, `after ${stream}/${id}`)));
               }
 
               const least = Math.min(...sizes.map((s) => s.bytes));
@@ -152,9 +158,9 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               ).toBe(0);
             });
           yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }), endOnFailure: true });
-          // An empty walk cannot pass: appends landed, ids were refused, and small and large newest
-          // bodies were both read past.
-          expect([...reached].sort()).toEqual(["appended", "both_sizes", "refused"]);
+          // An empty walk cannot pass: appends landed, ids were refused, a stream held several
+          // entries, and small and large newest bodies were both read past.
+          expect([...reached].sort()).toEqual(["appended", "both_sizes", "refused", "several"]);
         }),
       120_000,
     );

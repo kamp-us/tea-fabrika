@@ -1592,12 +1592,16 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
 const PIPE_WRITER = "writer:1";
 const PIPE_READER = "reader:1";
+/** A second reader, started only when a walk asks for one. */
+const PIPE_ASIDE = "reader:2";
 
 type Pipe = {
   readonly cap: number;
   /** `mail.chunk` as the brain hands it in; a restart may hand in another. */
   chunk: number;
   readonly writer: "plain" | "chunks";
+  /** Whether the writer has a second reader, `reader:2`, for its `aside` letters. */
+  readonly aside?: boolean;
   /** Cuts, each taken once: the reader's next checkpoint save, and the next ack write. */
   readonly fault: { save: boolean; ack: boolean };
   /** The walk's last input number: each input to the writer gets the next one. */
@@ -1664,20 +1668,27 @@ const pipeHost = Effect.fnUntraced(function* (
   });
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(ProgramMailLedger.layer({ grants: { [PIPE_WRITER]: [PIPE_READER] }, cap: pipe.cap }), wakeups),
+      Layer.mergeAll(
+        ProgramMailLedger.layer({
+          grants: { [PIPE_WRITER]: pipe.aside === true ? [PIPE_READER, PIPE_ASIDE] : [PIPE_READER] },
+          cap: pipe.cap,
+        }),
+        wakeups,
+      ),
     ),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
   );
   const context = yield* Layer.buildWithScope(shared, scope);
-  const writer = pipe.writer === "plain" ? pipeWriter(PIPE_READER) : chunkWriter(PIPE_READER);
+  const writer = pipe.writer === "plain" ? pipeWriter(PIPE_READER) : chunkWriter(PIPE_READER, PIPE_ASIDE);
   const reader = pipeReader();
   const programs: Record<string, unknown> = { [writer.name]: writer, [reader.name]: reader };
 
   for (const [name, program] of [
     [PIPE_WRITER, writer.name],
     [PIPE_READER, reader.name],
+    ...(pipe.aside === true ? [[PIPE_ASIDE, reader.name] as const] : []),
   ] as const) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context), Effect.result);
     const pid = Result.isSuccess(status)
@@ -1805,22 +1816,25 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       } satisfies Incoming),
       "the writer's input",
     );
-  /** Fires every saved alarm of `names` once; true when one fired. */
-  const fire = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
+  /** Fires every saved alarm of `names` once, and gives each turn's answer. */
+  const turns = Effect.fnUntraced(function* (...names: ReadonlyArray<string>) {
     const due = (yield* store.alarms.saved).filter((a) => names.includes(a.name));
+    const answers = [];
 
     for (const alarm of due) {
       yield* store.alarms.take(alarm);
       const now = yield* Clock.currentTimeMillis;
-      yield* call(runner(alarm.name).due(Math.max(now, alarm.at)), `${alarm.name}'s alarm`);
+      answers.push(yield* call(runner(alarm.name).due(Math.max(now, alarm.at)), `${alarm.name}'s alarm`));
     }
 
-    return due.length > 0;
+    return answers;
   });
+  /** Fires every saved alarm of `names` once; true when one fired. */
+  const fire = (names: ReadonlyArray<string>) => Effect.map(turns(...names), (answers) => answers.length > 0);
   /** Fires saved alarms until none is left. */
   const settle = Effect.fnUntraced(function* () {
     for (let round = 0; round < 96; round++) {
-      if (!(yield* fire([PIPE_WRITER, PIPE_READER]))) {
+      if (!(yield* fire([PIPE_WRITER, PIPE_READER, PIPE_ASIDE]))) {
         return;
       }
     }
@@ -1846,7 +1860,7 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       ),
     ).pipe(Effect.result);
   });
-  return { inbox, savedPos, answers, owed, input, fire, settle, reopen, forge };
+  return { inbox, savedPos, answers, owed, input, turns, fire, settle, reopen, forge };
 });
 
 type PipeView = Effect.Success<ReturnType<typeof pipeWorld>>;
@@ -2007,8 +2021,12 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 if (round === lose) {
                   // The reader drains the inbox, and its ack write is lost.
                   pipe.fault.ack = true;
-                  yield* view.fire([PIPE_READER]);
+                  const turns = yield* view.turns(PIPE_READER);
                   expect(pipe.fault.ack, "the reader's turn tried to ack").toBe(false);
+                  expect(
+                    turns.map((turn) => Result.isSuccess(turn)),
+                    "L10: a lost ack fails no turn: the reader's turn answers",
+                  ).toEqual(turns.map(() => true));
                   done.add("lost");
                 }
 
@@ -2300,11 +2318,84 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     300_000,
   );
 
+/**
+ * L11, order per pair: a send_chunks waiting on one reader's full inbox holds back the writer's
+ * later mail to that reader, and only to it. A letter to another reader lands at once, as OTP keeps
+ * order per sender and receiver and no further (`otp.md`, row 19).
+ */
+const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+  it.effect(
+    "T1041 L11: a send_chunks waiting on a full inbox holds back the writer's later mail to that name only, and a letter to another name lands at once",
+    () =>
+      Effect.gen(function* () {
+        const done = new Set<string>();
+        yield* pipeProperty(
+          fc.record({
+            cap: fc.integer({ min: 1, max: 3 }),
+            // Over half a 1 KiB chunk each, so every item is a part of its own: more parts than the cap.
+            pads: fc.array(fc.integer({ min: 600, max: 900 }), { minLength: 4, maxLength: 7 }),
+            // At most the cap, since nothing fires reader:2's alarm before the walk's end.
+            asides: fc.nat(),
+          }),
+          ({ cap, pads, asides }) =>
+            Effect.gen(function* () {
+              const pipe: Pipe = {
+                cap,
+                chunk: KIB,
+                writer: "chunks",
+                aside: true,
+                fault: { save: false, ack: false },
+                n: 0,
+              };
+              const view = yield* pipeWorld(open, pipe);
+              const answer = (n: number) => Effect.map(view.answers, (all) => all.find((a) => a.n === n)?.answer);
+              const rows = ++pipe.n;
+              const items = tagged(rows, pads);
+              yield* view.input({ type: "rows", n: rows, items });
+              expect(yield* answer(rows), "the chunked send waits on reader:1's full inbox").toBeUndefined();
+              done.add("waited");
+              const held = ++pipe.n;
+              yield* view.input({ type: "letter", n: held });
+              expect(yield* answer(held), "L11: a letter to the same name waits behind it").toBeUndefined();
+              done.add("held");
+
+              for (let k = 0; k < 1 + (asides % cap); k++) {
+                const n = ++pipe.n;
+                yield* view.input({ type: "aside", n });
+                expect(yield* answer(n), "L11: a letter to another name lands while the chunked send waits").toBe(
+                  "queued",
+                );
+                done.add("aside");
+              }
+
+              expect(yield* answer(rows), "the chunked send still waits").toBeUndefined();
+              // Every alarm fires: reader:1 reads and acks, the chunked send finishes, then the held letter.
+              yield* view.settle();
+              expect(yield* answer(rows), "the chunked send finished").toBe("queued");
+              // The held letter goes once the chunked send is done: a plain send, it lands or meets full.
+              const last = yield* answer(held);
+              expect(["queued", "full"], "the held letter was sent after the chunked send").toContain(last);
+              const order = (yield* view.inbox).flatMap((l) =>
+                l.m === null ? [] : [l.m.type === "letter" ? l.m.n : (l.m.items[0]?.s ?? Number.NaN)],
+              );
+              expect(order, "reader:1 got the chunked send, then the held letter if it landed").toEqual([
+                ...items.map(() => rows),
+                ...(last === "queued" ? [held] : []),
+              ]);
+            }),
+          { fast: 5, full: 20 },
+        );
+        expect([...done].sort()).toEqual(["aside", "held", "waited"]);
+      }),
+    300_000,
+  );
+
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P41: a request and its answer between two real runners", () => {
     fullLaw(open);
     repairLaw(open);
     chunkLaw(open);
+    pairLaw(open);
     refuseLaw(open);
 
     for (const trace of [false, true]) {
