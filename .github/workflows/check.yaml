@@ -8,22 +8,44 @@ on:
     branches:
       - main
   # A draft runs only the fast jobs; marking it ready (`ready_for_review`) starts the full set on
-  # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11).
+  # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11). Adding a label
+  # (`labeled`) runs it again, so the `visual` label starts the visual tests (0536): they are
+  # opt-in on a pull request, and never run in the merge queue.
+  # A pull request that changes only plan files and field rows starts no run (ticket 988): CI runs
+  # nothing on them but the row check, which `pnpm lint` runs on the writer's laptop. GitHub
+  # compares the whole pull request with its base, so a later push of any other path starts the
+  # run. The list is changes.mjs's `ignored`; workflow-lint.ts holds this copy to it.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    paths-ignore:
+      - docs/plan/*.md
+      - docs/plan/lanes/*.md
+      - field/findings/*.json
+      - field/notes/*.json
+      - field/runs/*.json
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
-  # (see BASE below).
+  # (see BASE below). Neither runs the tooling tests or the whole of next/ (0534): next/ runs the
+  # tests the change reaches, and the schedule (scheduled.yaml) runs everything every 3 hours.
   merge_group:
     types: [checks_requested]
 
 # A newer push to the same pull request stops the run it replaces. Main's runs
 # all finish, one per commit. Only a new head cancels: the run that marking ready starts waits for
-# the draft run on the same head to end, so no check of that head is left canceled.
+# the draft run on the same head to end, so no check of that head is left canceled. The `visual`
+# label's run cancels too: it is the same run on the same head, plus the visual legs. Any other
+# label's run waits, as marking ready does.
 concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'labeled' && github.event.label.name == 'visual')) }}
+
+# `actions: write` lets each job's last step, `stop the run` (in changes below), cancel its own run.
+# `contents: read` is the checkout's; no job uses the other scopes the repository's read-only
+# default gave. ci-required takes `actions` back, since it never cancels. workflow-lint.ts holds this.
+permissions:
+  actions: write
+  contents: read
 
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
@@ -35,8 +57,9 @@ jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
   # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
-  # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
-  # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
+  # Today's version is frozen (0525, 0533): its tests, its promise checks and its app end to end run
+  # on no event, so no output here starts them. Its build starts only when a file of today's
+  # version changed, on every event: the `build` output (0175).
   # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
   # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
   # unknown path does.
@@ -46,45 +69,78 @@ jobs:
   # comments; else all of next/. The parser's pass (`same`) proves the second case. It runs only when
   # every changed line looks like a comment (`probe`), and its install and run may fail without
   # failing changes: then the first pass's `next` and `filter` stand, which run all of next/.
+  # On a push to main, changes also asks GitHub whether a merge queue run already passed the same
+  # change: a run whose head has this push's tree and whose head's parent has the tree main held
+  # before. The queue moves main to the very commit it tested, so that run's jobs were this push's
+  # jobs on the same files, and next skips (changes.mjs's `tested`); a push never starts test
+  # (0534). Push run 43625168838 repeated queue run 43623078615 on tree 758c5cf5 that way: 61
+  # machine-min of next and 26 of test. check and typecheck run, and typecheck saves main's tsc cache. An admin
+  # merge, a direct push, a failed or canceled queue run, or any error asking runs every job.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The classify step's token reads this workflow's runs, main's caches and commits; no other step
+    # but the stop step is given it. It is the workflow's token: a job's own `permissions` would
+    # replace that whole map, and the stop step at the end needs its `actions: write`.
     outputs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
       test: ${{ steps.diff.outputs.test }}
-      next: ${{ steps.same.outputs.next || steps.diff.outputs.next }}
+      # The size step's `next` is false when legs.ts picked no next/ test file, so next skips.
+      next: ${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}
       filter: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
-      e2e: ${{ steps.diff.outputs.e2e }}
+      # How many of next's machines run, from the size step (legs.ts). Empty on any run it did not
+      # size, and then next runs its full matrix on changes' filter.
+      shards: ${{ steps.size.outputs.shards }}
+      files: ${{ steps.size.outputs.files }}
+      vitest-legs: ${{ steps.size.outputs.vitest }}
+      e2e-legs: ${{ steps.size.outputs.e2e }}
+      # The commit a sized run's end-to-end legs narrow from, `--changed`; empty on any other run.
+      base: ${{ steps.size.outputs.base }}
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
-      today: ${{ steps.diff.outputs.today }}
     steps:
+      # Every checkout here leaves the token out of .git/config (`persist-credentials: false`), so
+      # no test or install script can read the `actions: write` token from it (ticket 990). No job
+      # pushes, and the one fetch (ratchet.ts) reads this public repository without one. The stop step gets the token in its own env alone. workflow-lint.ts holds it.
+      # Every commit and tree, and only the head's files: a full clone fetched 803 MB of history
+      # and a blobless one 7 MB before its checkout, on 2026-11-14 (`git clone --no-checkout`, with
+      # and without `--filter=blob:none`). Names, diffs and merge bases read trees; a file at an
+      # older commit is fetched the first time a command reads it (git's partial clone).
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - id: diff
+          filter: blob:none
+          persist-credentials: false
+      - name: classify
+        id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node .github/ci/changes.mjs
       - run: sh .agents/skills/lead/scripts/skillscheck.sh
         if: ${{ !cancelled() }}
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
-      # The parser for the `--same` pass, with the field job's filtered install, about 15 s.
-      - uses: pnpm/action-setup@v6
-        if: steps.diff.outputs.probe == 'true'
+      # pnpm and Node for the parser's pass and for sizing next. The size step's own guard, read from
+      # the first pass alone, which the parser's pass can only narrow. No pnpm store cache: it did not
+      # pay, and it saved a copy per ref (.github/actions/pnpm).
+      - name: setup pnpm
+        uses: pnpm/action-setup@v6
+        if: steps.diff.outputs.probe == 'true' || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')
         continue-on-error: true
         with:
           run_install: false
-      - uses: actions/setup-node@v7
-        if: steps.diff.outputs.probe == 'true'
+      - name: setup node
+        uses: actions/setup-node@v7
+        if: steps.diff.outputs.probe == 'true' || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')
         continue-on-error: true
         with:
           node-version: 26.13.0
+      # The parser for the `--same` pass, with the CI package's filtered install, about 15 s.
       - run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
         if: steps.diff.outputs.probe == 'true'
         continue-on-error: true
@@ -99,105 +155,127 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: node .github/ci/changes.mjs --same
-
-  # Start beside changes. No workspace setup for Markdown alone.
-  # Filtered install uses the root lockfile and all workspace supply-chain rules.
-  # The proof PR measures this path's cold install and cache cost.
-  field:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
+      # How many of next's machines this run starts (legs.ts), once the parser's pass has said what
+      # next runs. On a run that tests all of next/, a pull request, a merge queue group or a push to
+      # main alike (0534), it lists the files Vitest's `--changed` picks from the run's base (BASE:
+      # the pull request's base, the group's base, what main held before the push) and every reader
+      # test, which read files as text so `--changed` misses them, and sizes the legs from their
+      # measured seconds: none when nothing is picked, then `next` is false and next skips; one when
+      # they fit one leg; else the fewest that fit, up to the full matrix. `files` is that vitest
+      # list, each file once, and every vitest leg runs exactly it; `base` is the commit the
+      # end-to-end legs narrow from. The merge line never runs the whole suite: the schedule does
+      # (scheduled.yaml). With the reader tests alone, or no base commit (a first push), legs.ts
+      # prints the full matrix and no list. A failed install or list prints nothing, so it fails open
+      # to the full matrix and every file. It was its own job, legs, until each small job's about
+      # 30 s of setup and its machine slot were counted (ticket 985). It lists the `next` project's
+      # files, and sizes end-to-end legs, which run the visual tests, only on a pull request with the
+      # `visual` label (VISUAL); everywhere else it prints none (0536).
+      # No install scripts: listing runs no test, and builds nothing.
+      - name: install for sizing
+        run: pnpm install --frozen-lockfile --ignore-scripts
+        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'
+        continue-on-error: true
+      - name: size
+        id: size
+        if: (steps.same.outputs.next || steps.diff.outputs.next) != 'false' && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'
+        continue-on-error: true
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
-          DRAFT: ${{ github.event.pull_request.draft }}
-        run: node .github/ci/changes.mjs
-      - uses: pnpm/action-setup@v6
-        if: steps.diff.outputs.field == 'true'
-        with:
-          run_install: false
-      - uses: actions/setup-node@v7
-        if: steps.diff.outputs.field == 'true'
-        with:
-          node-version: 26.13.0
-      - run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
-        if: steps.diff.outputs.field == 'true'
-      - run: node .github/ci/field-check.ts
-        if: steps.diff.outputs.field == 'true'
+          FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
+        run: node .github/ci/legs.ts
+      # Fail fast (ticket 990): the first red job cancels its own run, so the jobs still running free
+      # their runners and ci-required answers within seconds, not after the slowest job. Merge queue
+      # group 1199 (run 43633120187) waited about 10 minutes behind a lint that failed at 43 s.
+      # `failure()` is true once an earlier step of this job failed (a `continue-on-error` step does
+      # not count). A normal cancel, never `force-cancel`, so ci-required's `always()` keeps it
+      # running, and it reports failure: the red job's own result is `failure`, the others end
+      # `cancelled` or skip without their flag, and required.mjs passes none of those. A push to main
+      # runs to the end, one whole answer per commit. Every other job ends with this same step, the
+      # anchor below; workflow-lint.ts holds it there, last, in every job but ci-required.
+      - &stop
+        name: stop the run
+        if: ${{ failure() && github.event_name != 'push' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # On a draft this job is lint alone, and it says so in its name: a draft's `lint` never stands in
   # for the ready run's `check` on the same head, which catchup.sh waits for.
+  # It also checks the field rows (field-check.ts), on changes' `field` flag: it runs when either
+  # flag is on, each step on its own flag, so field rows alone install only the CI package and run
+  # the row check. The rows had their own job, field, until each small job's about 30 s of setup and
+  # its machine slot were counted (ticket 985).
   check:
     name: ${{ github.event.pull_request.draft && 'lint' || 'check' }}
     needs: changes
     if: >-
       ${{ !cancelled() &&
           (needs.changes.result != 'success' ||
-           needs.changes.outputs.check != 'false') }}
+           needs.changes.outputs.check != 'false' ||
+           needs.changes.outputs.field != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The row check diffs the change's base with its head. Blobless, as in changes.
       - uses: actions/checkout@v7
-
-      # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v6
         with:
-          run_install: false
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      # pnpm and Node, with no store cache: restoring one did not pay (.github/actions/pnpm).
+      - uses: ./.github/actions/pnpm
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
+      - name: install
+        if: ${{ needs.changes.outputs.check != 'false' }}
+        run: pnpm install --frozen-lockfile
+      # Field rows alone: the CI package and the root lockfile's supply-chain rules, nothing else.
+      - name: install the row check
+        if: ${{ needs.changes.outputs.check == 'false' }}
+        run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+      - name: lint
+        if: ${{ needs.changes.outputs.check != 'false' }}
+        run: pnpm lint
       # `pnpm lint` fails on a dead export the ledger does not name (code-graph 0.12.0:
       # 0 of 4 findings wrong on 2026-10-29). It also prunes entries whose finding is
       # gone; this step fails when that pruned ledger was not committed.
       - name: dead exports ledger committed
+        if: ${{ needs.changes.outputs.check != 'false' }}
         run: git diff --exit-code -- unreachable-ledger.json
       # `.agents/` is held to next/'s rules (0033). `pnpm lint` waives only the findings
       # agents-ledger.json names and prunes the ones that are gone; this step fails when that
       # pruned ledger was not committed, so the ledger only shrinks.
       - name: agents ledger committed
+        if: ${{ needs.changes.outputs.check != 'false' }}
         run: git diff --exit-code -- agents-ledger.json
       # The same for `next/`: what a rule met the day it joined, which only shrinks (ledger.ts).
       - name: next ledger committed
+        if: ${{ needs.changes.outputs.check != 'false' }}
         run: git diff --exit-code -- next-ledger.json
       # 0524: a list file only shrinks until it is deleted. Each list's rows at the head, against the
       # base, keyed as its reader matches them (ratchet.ts). Pruning and deleting pass.
       - name: lists only shrink
+        if: ${{ needs.changes.outputs.check != 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
         run: node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"
-      # Experiment 117: each formal check is tied to the code it covers (promises/).
-      # It fails when covered code changed and its record was not confirmed again, when
-      # a check is red at this head, or when a planted break is not caught. A change to a
-      # check itself is listed for the owner, here and in the step summary.
-      - name: promises
-        if: ${{ needs.changes.outputs.build != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-        run: |
-          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] \
-            && git fetch --no-tags --depth=1 origin "$BASE"; then
-            pnpm promises gate --base "$BASE"
-          else
-            pnpm promises gate
-          fi
+      # No step runs `pnpm promises`: its formal checks and planted breaks test today's pipeline
+      # code, and CI runs no test of today's version (0533). They run on the laptop.
       # The builds of @kampus/fabrika-old and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build
         if: ${{ needs.changes.outputs.build != 'false' }}
+      # Last, and after any failure above, so a red lint and red rows each show.
+      - name: field rows
+        if: ${{ !cancelled() && needs.changes.outputs.field != 'false' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: node .github/ci/field-check.ts
+      - *stop
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
@@ -213,92 +291,62 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
         with:
-          run_install: false
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-
-  # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
-  # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
-  # the window back), so it runs on a macOS runner; on Linux those rules are not there to check.
-  # It runs when a file of today's version changed, on a pull request, in the merge queue and on a
-  # push to main (0175).
-  # No secret and no key: the API keys are never set here. The one download beyond what the other
-  # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
-  e2e:
-    needs: changes
-    if: >-
-      ${{ !cancelled() &&
-          (needs.changes.result != 'success' ||
-           needs.changes.outputs.e2e != 'false') }}
-    runs-on: macos-latest
-    # 15 for the run, and room for the ARIA stage's own app and its about 35 cells.
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
+      # What each package's last check found (scripts/typecheck.sh's `--incremental`), from main's
+      # latest run. The key holds the lockfile and every tsconfig, so a change to the compiler, the
+      # Effect checks or their settings starts cold; inside one key, tsc checks again every file
+      # whose text changed and every file that reaches one. On the laptop on 2026-11-14 the whole
+      # typecheck took 12.9 s cold and 3.7 s warm, with a fresh mtime on every file. One path per
+      # pnpm-workspace.yaml package glob (workflow-lint.ts holds that).
+      - name: tsc key
+        id: tsc-key
+        run: echo "hash=$(git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
+      - name: restore the tsc cache
+        id: tsc
+        uses: actions/cache/restore@v6
         with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
+          path: &tsc |
+            apps/*/node_modules/.cache/tsc
+            packages/*/node_modules/.cache/tsc
+            programs/*/node_modules/.cache/tsc
+            docs/tutorials/*/node_modules/.cache/tsc
+            oxlint-plugins/node_modules/.cache/tsc
+            .github/ci/node_modules/.cache/tsc
+            .agents/node_modules/.cache/tsc
+            next/packages/*/node_modules/.cache/tsc
+            next/programs/*/node_modules/.cache/tsc
+            next/apps/*/node_modules/.cache/tsc
+          key: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-${{ github.sha }}
+          restore-keys: tsc-${{ runner.os }}-${{ steps.tsc-key.outputs.hash }}-
+      - name: typecheck
+        run: pnpm typecheck
+      # Each push to main saves its own, so the next pull request starts from the newest.
+      - name: save the tsc cache
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v6
         with:
-          node-version: 26.13.0
-          cache: pnpm
+          path: *tsc
+          key: ${{ steps.tsc.outputs.cache-primary-key }}
+      - *stop
 
-      # Electron fetches its binary the first time it is asked for its path, into this folder.
-      - uses: actions/cache@v6
-        with:
-          path: ~/Library/Caches/electron
-          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
-
-      - run: pnpm install --frozen-lockfile
-      # Each run makes its own fresh FABRIKA_HOME in the temp folder, and stops the hosts it started.
-      - name: e2e
-        env:
-          SHOTS: ${{ runner.temp }}/e2e-shots
-        run: pnpm --filter @kampus/fabrika-app-old e2e
-      # The trace ruler's labels at widths from 60 to 1600px (apps/fabrika/ruler-e2e.ts): the built
-      # renderer in headless Chromium, as shots.ts draws it. The build above made dist/.
-      - name: ruler labels
-        run: pnpm --filter @kampus/fabrika-app-old exec playwright install chromium && pnpm --filter @kampus/fabrika-app-old exec node ruler-e2e.ts
-      # What the window showed at each step, to see a red run without running it again.
-      - if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-shots
-          path: ${{ runner.temp }}/e2e-shots
-          if-no-files-found: ignore
-      # The ARIA trees (design language call 8, decided 2026-11-07): each key state at the five
-      # layouts, compared with apps/fabrika/aria/. It advises and never blocks: a diff is printed and
-      # the step passes, so `continue-on-error` only covers a state it cannot reach (exit 2). It
-      # blocks once its false alarms are counted (0 noise in 300 clean checks, 0 flakes).
-      - name: aria
-        continue-on-error: true
-        env:
-          SHOTS: ${{ runner.temp }}/e2e-shots
-        run: pnpm --filter @kampus/fabrika-app-old e2e -- --aria
-      - if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: aria-received
-          path: ${{ runner.temp }}/e2e-shots/aria-received
-          if-no-files-found: ignore
-
-  # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
-  # The tests, split by file over six machines (vitest's `--shard`, each machine
-  # given about the same seconds by vitest.shards.ts). The lane's tests were one
-  # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
-  # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
+  # The tooling tests, the ones that belong to neither version's product code: CI's own
+  # (.github/ci), the lint plugins, the root scripts and the skill scripts. Today's version is
+  # frozen (0525, 0533), so its own tests run here on no event: every vitest call below leaves its trees
+  # out, and workflow-lint.ts holds that. Its app end to end, the e2e job until 0533, runs in no
+  # job.
+  # Split by file over two machines (vitest's `--shard`, each given about the same seconds by
+  # vitest.shards.ts). On main run 43615844695 they took 68, 111, 125, 230, 274 and 363 s on six
+  # (19.5 machine-min): four files of 124 to 362 s each sat alone on a machine, and boxrm.test.ts
+  # alone, 362 s, sets the shortest a run can be. Placed by vitest.shards.ts's table and run three
+  # files at a time, those 97 files' seconds give two machines of 353 and 362 s (11.9 machine-min),
+  # the same longest wait.
+  # It runs on a pull request alone (0534): a merge queue group and a push to main never start it
+  # (changes.mjs's `jobs`), and the schedule (scheduled.yaml) runs every tooling test.
   test:
     needs: changes
     if: >-
@@ -310,180 +358,73 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2]
     steps:
-      - uses: actions/checkout@v7
+      - name: checkout
+        uses: actions/checkout@v7
         with:
           # `--changed` compares with the pull request's base commit, so the
-          # history must hold it. The whole repository is a few MB.
+          # history must hold it. Blobless, as in changes: `--changed` reads only names.
           fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
-
-      # tsh's terminal tests drive it through `expect` (a pty) and from zsh.
-      # The runner image has neither, and without them those tests skip.
-      # The os sandbox (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
-      # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
-      # 24.04 restricts by default (its README says so). On CI its tests never skip.
-      # The image has none of the five (image 20261101.360 installs all of them new; its
-      # Ubuntu2404-Readme.md and toolset-2404.json list none of them), so apt always runs here.
-      # The runner's mirrors sometimes stop answering, and apt then waits with no end: 32 min on
-      # pull request 696 (actions/runner-images issue 14594), and on 2026-11-11 every Canonical
-      # host at once (issues 15296, 15297). apt.sh gives each try a wall-clock limit and, after a
-      # failed try, drops the top mirror, walking a chain of six that ends outside Canonical. Its
-      # comment holds the measured limits; the cause is outside this repo (decision 0036). Three
-      # dead mirrors, then a full install, take about 8 min, inside the step's 12.
-      # `ubuntu-latest` is Ubuntu 26.04 for this repository since it moved to the organization on
-      # 2026-11-13 (24.04 on every job before the move, 26.04 on every job after). That image has
-      # bubblewrap already, with an AppArmor profile of its own, `bwrap-userns-restrict`: what bwrap
-      # starts runs as `unpriv_bwrap`, which denies every capability. sandbox-runtime's seccomp
-      # helper needs CAP_SYS_ADMIN in the user namespace it makes inside the box, so every box ended
-      # with exit 1 before its program started: "apply-seccomp: write /proc/self/setgroups (nested
-      # userns is capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied" (run
-      # 43493167395, test (1): refused before the unload, ran after it). The sysctl does not reach a
-      # named profile, and a `deny` in a profile cannot be allowed back from a local file, so the
-      # profile is unloaded where the image has it. 24.04 has none.
-      - name: apt packages
-        timeout-minutes: 12
-        run: |
-          sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
-            sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
-          fi
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # Today's tests run only when a file of today's version changed (changes' `today` flag, 0175);
-      # otherwise the last test step runs the tooling tests alone.
-      # BASE is the commit the run's change starts from: a pull request's base, a merge queue group's
-      # base, or what main held before a push. It is empty when there is none (a first push, whose
-      # `before` is all zeros, or a run started by hand), and then every test runs.
-      # With a BASE, a run runs the tests that import what it
-      # changed (vitest's `--changed`, its config's `forceRerunTriggers` for files
-      # tests read without importing), then, on the first machine, the tests that
-      # read the whole repo themselves, which an import walk never picks: the
-      # app's bundles, and the law that every machine has laws.
-      - name: lane tests, one file at a time
-        if: ${{ needs.changes.outputs.today != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
-        run: |
-          if [ -n "$BASE" ]; then
-            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --changed "$BASE" --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
-          else
-            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
-          fi
-      - name: test
-        if: ${{ !cancelled() && needs.changes.outputs.today != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
-        run: |
-          if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
-            if [ "${{ matrix.shard }}" = 1 ]; then
-              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/forced.json"
-            fi
-          else
-            pnpm exec vitest run --shard "$SHARD" --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
-          fi
-      # The tests that belong to neither version's product code: CI's own (.github/ci), the lint
-      # plugins, the root scripts and the skill scripts. With no file of today's version changed
-      # they run alone: every test vitest.config.ts includes, less the three trees of today's tests
-      # and next/. With a BASE the ones that reach the change run; with none, all of them.
+      # The `tooling` project of vitest.config.ts: every test it includes, less next/ and the three
+      # trees of today's tests, which are projects of their own (`next`, `next-integration`,
+      # `next-visual` and `today`); a project ignores `--exclude`, so `--project` keeps them out. BASE
+      # is the commit the run's change starts from: a pull request's base, a merge queue group's
+      # base, or what main held before a push. With a BASE the tests that reach the change run
+      # (vitest's `--changed`, its config's `forceRerunTriggers` for files tests read without
+      # importing, and `githubReads` for tests that read CI's files as text); with none (a run
+      # started by hand), all of them.
       - name: tooling tests
-        if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/6
+          # The matrix's two machines.
+          SHARD: ${{ matrix.shard }}/2
         run: |
           if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+            pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
           else
-            pnpm exec vitest run --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+            pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
           fi
       - name: shard times
         if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
-
-  # How many of next's machines this run starts (legs.ts). On a pull request that tests all of next/,
-  # it lists the files Vitest's `--changed` picks, as each leg will, and sizes the legs from their
-  # measured seconds: none when nothing is picked, then next skips; one when they fit one leg; else
-  # the fewest that fit, up to the full matrix. A small pull request then holds no runner it does not
-  # need, so a big one can claim it. Everywhere else every step skips and it prints nothing, so next
-  # runs its full matrix, the fallback in its `matrix`: the merge queue, main, the reader tests, and a
-  # failed changes. A failed install or list prints nothing too, so it fails open to the full matrix.
-  legs:
-    needs: changes
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      shards: ${{ steps.size.outputs.shards }}
-      vitest: ${{ steps.size.outputs.vitest }}
-      e2e: ${{ steps.size.outputs.e2e }}
-      next: ${{ steps.size.outputs.next }}
-    steps:
-      - uses: actions/checkout@v7
-        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
-        with:
-          # `--changed` compares with the pull request's base commit, so the history must hold it.
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
-        continue-on-error: true
-        with:
-          run_install: false
-      - uses: actions/setup-node@v7
-        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
-        continue-on-error: true
-        with:
-          node-version: 26.13.0
-          cache: pnpm
-      # No install scripts: listing runs no test, and builds nothing.
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
-        continue-on-error: true
-      - id: size
-        if: needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'
-        continue-on-error: true
-        env:
-          EVENT: ${{ github.event_name }}
-          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: node .github/ci/legs.ts
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/tooling.json"
+      - *stop
 
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
   # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
-  # imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/, which takes
-  # no filter, so the e2e legs run every end-to-end file, and which fails on a leg with no file.
-  # Chromium is fetched only once an e2e file exists, by
+  # imports, would not pick them up. The e2e legs run the `next-visual` project, which takes no
+  # filter, so they run every visual file a change reaches, and which fails on a leg with no file.
+  # Chromium is fetched only once a visual file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
-  # The full matrix is seven machines, the fallback below. Legs `1` to `5` run vitest, each a fifth of
-  # the files by measured seconds (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no vitest step:
-  # each fetches chromium and runs the end-to-end runner on its half of the end-to-end files, split by
-  # the same measured seconds (vitest.e2e.config.ts). On a pull request that tests all of next/, the
-  # legs job prints fewer, with each kind's `/N` to match, or none, and then this job skips. Every leg
+  # Which tests (0536): the merge line (a pull request, a merge queue group, a push to main) runs the
+  # `next` project alone, the tests on our interfaces' in-memory layers. A test that drives a real
+  # resource is named `*.integration.test.ts` and runs on the 3-hour schedule (scheduled.yaml), with
+  # the visual ones. A visual test (`*.visual.test.ts`, a browser or Electron) runs here only on a
+  # pull request with the `visual` label.
+  # The full matrix is seven machines, the fallback below on a pull request with the label; the
+  # merge queue, main and a pull request without it fall back to legs `1` to `5` alone. Legs `1` to
+  # `5` run vitest, each a fifth of the files by measured seconds (vitest.shards.ts). Legs `e2e-1`
+  # and `e2e-2` run no vitest step: each fetches chromium and runs the `next-visual` project on its
+  # half of the visual files, split by the same measured seconds. On a pull request, a merge queue
+  # group or a push to main that tests all of next/ (0534), the changes job's size step prints fewer,
+  # with each kind's `/N` to match, or none, and then this job skips. Every leg
   # is a quoted string, so each `if` below compares a string with a string. workflow-lint.ts pins the
   # fallback, each `/N` and each `if`; vitest.shards.test.ts (E4) pins the count of e2e legs: the
   # fewest whose longest leg fits in half the time limit.
   next:
-    needs: [changes, legs]
+    needs: changes
     if: >-
       ${{ !cancelled() &&
           (needs.changes.result != 'success' ||
-           needs.changes.outputs.next != 'false') &&
-          needs.legs.outputs.next != 'false' }}
+           needs.changes.outputs.next != 'false') }}
     runs-on: ubuntu-latest
     # Largest of 30 completed next jobs: 486 s, run 43239450301 attempt 1, job 131255816934.
     # Twice that whole-job time, rounded up to a minute: ceil(972 / 60) = 17.
@@ -491,52 +432,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.legs.outputs.shards || '["e2e-1","e2e-2","1","2","3","4","5"]') }}
+        shard: ${{ fromJSON(needs.changes.outputs.shards || (contains(github.event.pull_request.labels.*.name, 'visual') && '["e2e-1","e2e-2","1","2","3","4","5"]' || '["1","2","3","4","5"]')) }}
     steps:
       - uses: actions/checkout@v7
         with:
           # The edges step compares the pull request with its merge base, so the history must hold
-          # it. The whole repository is a few MB.
+          # it. Blobless, as in changes: edges fetches each changed file's base text when it reads it.
           fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # FILTER is the path: the reader tests, or all of next/ (the plan for CI paths, slice 2). A
-      # missing filter runs all of next/. On a pull request whose filter is all of next/, only the
-      # tests whose imports reach a changed file run: Vitest's own `--changed`, which runs everything
-      # when a file in vitest.config.ts's forceRerunTriggers changed (configs, the lockfile, fixtures,
-      # .github). When the filter names the reader tests, CHANGED is empty: they read files as text,
-      # so the import graph would drop them, and the filter alone decides. The merge queue and main
-      # run the whole suite, so a test the import graph misses still runs before main moves. FILTER
-      # and CHANGED stay unquoted so each reader path and each flag is its own argument.
-      - run: pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # FILTER is the paths. On a sized run (a pull request, a merge queue group or a push to main
+      # whose filter is all of next/), changes' `files`: the tests whose imports reach a changed file
+      # (Vitest's own `--changed`, which picks everything when a file in vitest.config.ts's
+      # forceRerunTriggers changed: configs, the lockfile, fixtures), and every reader test. Those
+      # read files as text, so the import graph misses them. Each file is listed once, so each runs
+      # once, on the leg `Shards` gives it, and the legs were sized with them. Else changes' filter:
+      # the reader tests, or all of next/ (the plan for CI paths, slice 2), on a run with no base
+      # commit or whose size step printed nothing, which then runs every file. A missing filter runs
+      # all of next/. FILTER stays unquoted so each path is its own argument. `--project next` keeps
+      # the run to the in-memory layer: a path filter alone finds a file in any project (0536).
+      - run: pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
-          SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.vitest || 5 }}
-          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
-          CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
+          SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.vitest-legs || 5 }}
+          FILTER: ${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
-        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''
         run: |
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
-      # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
-      # The same narrowing on a pull request as the vitest step above.
-      - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
+      # On a sized run only the visual files whose imports reach a changed file run, the ones the
+      # size step sized these legs with, from the same base commit (changes' `base`). A run the size
+      # step did not size has no `base`, and runs every visual file.
+      - run: pnpm exec vitest run --project next-visual $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:
-          SHARD: ${{ matrix.shard }}/${{ needs.legs.outputs.e2e || 2 }}
-          CHANGED: ${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
+          SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.e2e-legs || 2 }}
+          CHANGED: ${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}
       # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
       - name: shard times
         if: ${{ !cancelled() }}
@@ -549,6 +488,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
+      - *stop
 
   # The one check from this workflow that GitHub's ruleset for main requires, so a merge made outside
   # catchup.sh is refused while a job above is red. The same name and shape as phoenix's (its ci.yml
@@ -561,16 +501,21 @@ jobs:
   # end, so for the whole ready run the draft's green `ci-required` on the same head would be the
   # latest one and would satisfy the ruleset. Under its own name it never does; a draft cannot
   # merge anyway.
+  # When a red job stops the run (`stop the run`, in changes), this is the one job that keeps
+  # running: a normal cancel leaves an `always()` job be. It needs no `actions: write`, so it drops it.
   ci-required:
     name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
-    needs: [changes, field, check, typecheck, e2e, test, legs, next]
+    needs: [changes, check, typecheck, test, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/ci
+          persist-credentials: false
       - env:
           NEEDS: ${{ toJSON(needs) }}
         run: node .github/ci/required.mjs

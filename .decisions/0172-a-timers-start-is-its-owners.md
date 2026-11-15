@@ -1,7 +1,7 @@
 ---
 id: 0172
 title: In next/, a start with no member's input behind it is the brain's own when it is a restart or a start at boot and the process owner's when a timer fires it, a process keeps the member whose input started it, and that member's timers stop when the member is removed
-status: accepted
+status: amended-in-part by [0531](0531-a-start-carries-its-member-down.md)
 date: 2026-11-13
 tags: [start, timer, restart, boot, own, process-owner, member, brain, access, next]
 ---
@@ -115,6 +115,8 @@ owner was deleted.
 - Whether a restarted process, which is a new process, keeps the owner of the one it replaces.
 - The names of the `Write` union's cases. A naming decision is coming separately. This file says
   `caused` and `own` only because the code does today.
+
+*Amended in part by [0531](0531-a-start-carries-its-member-down.md): the process owner carries down the whole chain of starts, through a child's child, and not through mail. The rest here still holds.*
 
 ## Records
 

@@ -46,6 +46,7 @@ libfabrika
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
 | A module's files, names and `internal/` | `fabrika/modules`, `eslint/no-restricted-imports` |
 | A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
+| A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at

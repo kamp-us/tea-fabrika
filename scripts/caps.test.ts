@@ -558,7 +558,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           }),
           args: fc.constantFrom([], ["run"], ["run", "stryker.config.json"]),
           ci: fc.constantFrom(undefined, "1"),
-          trigger: fc.constantFrom("pnpm-lock.yaml", "fixtures/toy/input.txt", ".github/workflows/check.yaml"),
+          trigger: fc.constantFrom("pnpm-lock.yaml", "fixtures/toy/input.txt", ".oxlintrc.json"),
         }),
         ({ paths, args, ci, trigger }) => {
           const dir = mkdtempSync(join(tmpdir(), "caps-config-"));
@@ -601,11 +601,13 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
               expect(got.sequencer).toBe(true);
               expect(got.sharedTimeouts).toEqual([60_000, 60_000]);
 
-              // T375: Stryker keeps the remaining triggers and skill non-triggers.
+              // T375: Stryker keeps the remaining triggers and skill non-triggers. 0534: CI's own
+              // files are no trigger; the tests that read them reach them as watched files.
               for (const [path, forced] of [
                 [trigger, true],
                 [".agents/skills/tests/SKILL.md", false],
                 [".claude/skills/tests/SKILL.md", false],
+                [".github/workflows/check.yaml", false],
               ] as const) {
                 expect(
                   got.forceRerunTriggers.some((glob: string) => matchesGlob(path, glob)),
@@ -850,7 +852,9 @@ exit 0
           },
         });
         const install = "pnpm install --offline --frozen-lockfile\n";
-        const run = "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n";
+        const run =
+          "pnpm exec effect-tsgo patch --typescript\n" +
+          "pnpm -r typecheck --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo\n";
         const shapeNow = !existsSync(modules) ? "missing" : lstatSync(modules).isDirectory() ? "folder" : "other";
 
         expect({

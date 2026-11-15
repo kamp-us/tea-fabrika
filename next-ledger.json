@@ -1,22 +1,22 @@
 {
 	"entries": [
 		{
-			"file": "next/apps/fabrika/e2e/instance.test.ts",
+			"file": "next/apps/fabrika/e2e/instance.visual.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/brain-life.test.ts",
+			"file": "next/apps/fabrika/src/brain-life.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/build.test.ts",
+			"file": "next/apps/fabrika/src/build.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/door.test.ts",
+			"file": "next/apps/fabrika/src/door.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
 		},
@@ -26,67 +26,67 @@
 			"code": "afterAll(() => rmSync(TOP, { recursive: true, force: true }));"
 		},
 		{
-			"file": "next/apps/fabrika/src/instance-one-file.test.ts",
+			"file": "next/apps/fabrika/src/instance-one-file.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/instance-wire.test.ts",
+			"file": "next/apps/fabrika/src/instance-wire.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/runtime-recovery.laws.test.ts",
+			"file": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"file": "next/packages/libfabrika/src/access/AccessSpans.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"file": "next/packages/libfabrika/src/access/AccessSpans.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"file": "next/packages/libfabrika/src/access/AccessSpans.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"file": "next/packages/libfabrika/src/access/AccessSpans.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { LedgerTransaction, type LedgerTurn } from \"../ledger/LedgerTransaction.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { type Line, lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"file": "next/packages/libfabrika/src/access/Authorization.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
@@ -106,17 +106,17 @@
 			"code": "import { Appended, type Line, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
+			"file": "next/packages/libfabrika/src/access/ClientManager.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
+			"file": "next/packages/libfabrika/src/access/ClientManager.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
+			"file": "next/packages/libfabrika/src/access/ClientManager.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
@@ -161,47 +161,47 @@
 			"code": "import { fromHere, Line, lineFor, PAGE, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger, type LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { LedgerTransaction, type LedgerTurn } from \"../ledger/LedgerTransaction.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/node/build/build-assets.test.ts",
+			"file": "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
 		{
-			"file": "next/packages/libfabrika/src/node/build/build-one-file.test.ts",
+			"file": "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
 		{
-			"file": "next/packages/libfabrika/src/node/build/css.test.ts",
+			"file": "next/packages/libfabrika/src/node/build/css.integration.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
@@ -266,22 +266,22 @@
 			"code": "import * as RefereeSql from \"../ledger/RefereeSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import type { LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
@@ -296,37 +296,37 @@
 			"code": "import { lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/RecoveryGaps.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/RecoveryGaps.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { InputId, lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Appended, type Entry, InputId, lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
@@ -356,22 +356,22 @@
 			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { InputId, lineFor, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/internal/recovery.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Ledger } from \"../../ledger/Ledger.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/internal/recovery.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { lineFor, valueFor } from \"../../ledger/Log.ts\";"
 		}
