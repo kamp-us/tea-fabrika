@@ -160,8 +160,8 @@ describe("the memory restart's bounded stop, next/", () => {
         "replacing-end",
         "after-SIGTERM",
         "grace",
-        // At the very moment the grace runs out: between the timeout and the `killed` fold.
-        "at-grace",
+        // Once the grace ran out: between the timeout and the `killed` fold.
+        "timeout",
         "killed-start",
         "killed-end",
         "after-SIGKILL",
@@ -185,12 +185,16 @@ describe("the memory restart's bounded stop, next/", () => {
         // which waits its turn on the life state.
         const land = (at: string) =>
           point === at ? Effect.forkScoped(w.life.send(msg)).pipe(Effect.map((f) => landed.push(f))) : Effect.void;
+        // A fact's write takes a while, as a synced file write does: other fibers run meanwhile.
+        const write = Effect.yieldNow.pipe(Effect.repeat({ times: 5 }));
         const record = (prev: unknown, next: { readonly signal: Signal }) =>
           Effect.gen(function* () {
             const fact = next.signal === "SIGTERM" ? "replacing" : "killed";
             yield* land(`${fact}-start`);
+            yield* write;
             yield* w.record(prev, next);
             yield* land(`${fact}-end`);
+            yield* write;
           });
         // The stand-in ignores SIGTERM, and only what lands moves the state.
         const stand = (target: number, name: Signal) =>
@@ -199,19 +203,30 @@ describe("the memory restart's bounded stop, next/", () => {
             yield* w.heard(name);
             yield* land(`after-${name}`);
 
-            if (name === "SIGTERM" && (point === "grace" || point === "at-grace")) {
-              const moment = point === "grace" ? Math.floor((share * grace) / 10_000) : grace;
+            if (name === "SIGTERM" && point === "grace") {
+              const moment = Math.floor((share * grace) / 10_000);
               landed.push(yield* Effect.forkScoped(Effect.sleep(moment).pipe(Effect.andThen(w.life.send(msg)))));
             }
           });
+        // The real life cell, with one seam: once the grace ran out, what lands is folded just before
+        // the `killed` Msg asks its turn, as an exit that the event fiber folds in that gap.
+        const life: typeof w.life = {
+          ...w.life,
+          step: (next, moved, then) =>
+            (point === "timeout" && next.type === "killed" ? w.life.send(msg) : Effect.void).pipe(
+              Effect.andThen(w.life.step(next, moved, then)),
+            ),
+        };
 
         if (point === "before") {
           yield* w.life.send(msg);
         }
 
         const fiber = yield* Effect.forkChild(
-          terminate({ life: w.life, sample: sample(stale ? pid + 2 : pid), grace, signal: stand, record }),
+          terminate({ life, sample: sample(stale ? pid + 2 : pid), grace, signal: stand, record }),
         );
+        // The SIGTERM's step and every timer it sets run before the clock moves.
+        yield* write.pipe(Effect.repeat({ times: 5 }));
         yield* TestClock.adjust(grace * 2 + 1);
         const ended = yield* Fiber.join(fiber);
 
@@ -220,21 +235,13 @@ describe("the memory restart's bounded stop, next/", () => {
         }
 
         // How many signals the replace sends: none for a sample the state does not vouch for, the
-        // SIGTERM alone when the process went before the grace ran out, else both. At the grace's
-        // own moment either fold may come first, and the count says which did.
-        const tie = !stale && point === "at-grace";
-        const sent = tie
-          ? w.log.length / 2
-          : stale || point === "before"
-            ? 0
-            : point.startsWith("killed") || point === "after-SIGKILL"
-              ? 2
-              : 1;
+        // SIGTERM alone when the process went before the `killed` fold, else both.
+        const sent =
+          stale || point === "before" ? 0 : point.startsWith("killed") || point === "after-SIGKILL" ? 2 : 1;
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],
         ];
-        expect(tie ? [1, 2] : [sent]).toContain(sent);
         expect(w.log.map(({ step }) => step)).toEqual(steps.slice(0, sent).flat());
         // No signal went out on a pid the state had stopped vouching for.
         expect(w.log.filter(({ vouched }) => !vouched)).toEqual([]);
