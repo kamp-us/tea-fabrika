@@ -417,6 +417,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
       // plants generated lines at those paths, and at product and outside paths it must pass.
       "test-database",
+      // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
+      "runs-from-depth",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
@@ -461,6 +463,28 @@ it("scenario: the isolate-boundary rule refuses a platform type outside cloudfla
   const file = "next/packages/libfabrika/src/runtime/usage.ts";
   const result = await lintCopies({ [file]: "export type Usage = TraceItem;\n" });
   expect(result("fabrika(isolate-boundary)", file)).toEqual([1]);
+});
+
+// scenario: 0535's rule reads only next/'s test files, so its planted lines run there with the real config.
+it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, and a law in memory keeps it", async () => {
+  const io = "next/packages/libfabrika/src/plant/OverIo.test.ts";
+  const memory = "next/packages/libfabrika/src/plant/InMemory.test.ts";
+  const imports = ['import * as fc from "fast-check";', 'import { it } from "vitest";'];
+  const law = (body: string, count: string) =>
+    `it("law", () => { ${body}fc.assert(fc.property(fc.nat(), () => true), { seed: 119120, numRuns: ${count} }); });`;
+  const result = await lintCopies({
+    [io]: [
+      'import { DatabaseSync } from "node:sqlite";',
+      'import { runsFor } from "@kampus/vitest";',
+      ...imports,
+      law('new DatabaseSync(":memory:"); ', "100"),
+      law('new DatabaseSync(":memory:"); ', "runsFor({ fast: 10, full: 100 })"),
+      "",
+    ].join("\n"),
+    [memory]: [...imports, law("", "3000"), ""].join("\n"),
+  });
+  expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
+  expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
 });
 
 describe("lint.ts, the first step of pnpm lint", () => {
