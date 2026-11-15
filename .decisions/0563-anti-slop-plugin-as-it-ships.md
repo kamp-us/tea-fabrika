@@ -88,6 +88,13 @@ authors already wrote (owner, 2026-11-15).**
 - **D. Each rule goes on folder by folder,** as each folder reaches zero, with no list of
   leftovers and no warn level ([0524](0524-no-list-lets-broken-code-pass.md),
   [0168](0168-old-lint-breaks-are-fixed.md)).
+- **E. Theirs replaces ours.** A lint rule of our own in `oxlint-plugins/` that a trusted
+  repository's rule already covers is replaced by theirs, and ours is deleted. Which of our rules
+  that is, rule by rule, is an audit of its own. This file only states the rule.
+- **Every rule the owner took is on as an error, at zero hits, in `next/` and our tooling:**
+  ternary depth, a reason on every cast, spacing, no `unknown` parameters or returns, no runtime
+  `typeof`, and no hand-written `_tag` anywhere, with the two from 0554 and 0555. The rest of the
+  plugin's rules wait on his ruling, one by one.
 
 **The list, as of 2026-11-15.** Hits are `next/` product, `next/` tests, tooling.
 
@@ -109,7 +116,7 @@ authors already wrote (owner, 2026-11-15).**
 - **Not taken: `anti-slop/no-reprovide-ambient-service`.** Its fix leaves a service in each
   method's requirements, which Effect's own checker forbids. The decision on the order Effect code
   follows, 0560 in its own pull request, records it.
-- **Waiting on the owner, and not to be turned on:** `anti-slop-effect/no-manual-tag-comparison`
+- **Waiting on the owner, one by one, and not to be turned on:** `anti-slop-effect/no-manual-tag-comparison`
   and `anti-slop-effect/prefer-effect-match` (the two Match rules), `anti-slop/no-conditional-spread`
   (the fork's one rule, in place of the parent's `no-conditional-empty-object-spread`),
   `anti-slop/no-shape-in-symbol-names`, and the rest of the list: `no-array-filter-map`,
@@ -150,6 +157,7 @@ authors already wrote (owner, 2026-11-15).**
 **Binding constraints**
 
 - No rule of the plugin is rewritten, copied into `oxlint-plugins/` or wrapped in a rule of ours.
+  A rule of ours is not kept beside one of theirs that covers the same thing.
   If a rule does not fit as shipped, it is not taken, or the gap goes to its authors.
 - No list of allowed leftovers, and no warn level (0524).
 - An ignore line says a fact about its own line. The same sentence pasted down a folder is a bulk
@@ -182,8 +190,9 @@ authors already wrote (owner, 2026-11-15).**
   - How our own `fabrika/padding-line-between-statements` sits with their spacing rule.
   - Where we already hold the same thing with a rule of ours or a built-in one
     (`fabrika/no-hand-tag`, `fabrika/no-type-assertions`, and the two that 0554 and 0555 name,
-    `eslint/no-restricted-properties` and `vitest/no-restricted-vi-methods`): the plan that turns
-    their rule on says which one stays, by the order of precedence that decision 0560 sets.
+    `eslint/no-restricted-properties` and `vitest/no-restricted-vi-methods`): rule E says theirs
+    replaces ours where theirs covers it. Whether it does, for each of these, is for the audit and
+    the plan that turns their rule on, by the order of precedence that decision 0560 sets.
     Their `no-reflect-get` reads only `Reflect.get`, and their `no-module-mocking` only `mock`,
     `doMock` and `unstable_mockModule`, so 0554's `set` and `has` and 0555's `spyOn` and
     `stubEnv` need a hold of their own either way.
