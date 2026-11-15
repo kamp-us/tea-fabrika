@@ -1,0 +1,374 @@
+// P39 slice 4a, next/: the hands start's laws H2 and H5, on the real start over Effect's own socket,
+// the real journal on Effect's memory `KeyValueStore`, and the fake `Commands`.
+//
+// What these laws hold `client/HandsStart.ts` to, from the approved plan (the build may add more):
+// - `start({ origin, build, label })` boots `handsMachine` on tea's Effect engine with the dial Sub
+//   the window shares and its Cmd handlers, and returns tea's booting run, whose `ready` is the run,
+//   as `WindowStart.start` does. It needs `ClientKey`, `Journal`, `Commands`, `Id.Generator`,
+//   `Socket.WebSocketConstructor` and a `Scope`: closing the scope stops the run and its sockets,
+//   which is how these laws crash a client.
+// - Its hello is `initialize` with `has` from `Commands.has`, `platform: "headless"` and `build`.
+//   Its calls are JSON-RPC 2.0 `jobs.list {}`, `jobs.wait { after }`, `jobs.take { process }`,
+//   `jobs.started` and `jobs.finish`, answered as `gateway/Jobs.ts` answers them.
+// - `journal_read`, `journal_write` and `execute` go to `Journal.read`, `Journal.write` and
+//   `Commands.execute`, and nothing else reads or writes the journal or runs a command.
+//
+// The door is the scripted brain (`HandsDoor.test-support.ts`) on one in-memory socket per dial. The
+// walk reads the run's state and the timeline the fakes keep, and picks its next move from there: a
+// request for the client's key, a cut at the next journal write, call or command the state is about
+// to make, a crash and restart over the same journal and brain, a socket drop while local work is in
+// flight, or time passing. The oracle is the timeline: what really ran, what was really saved, and
+// where each crash fell (`expectedResults`).
+//
+// Plants (after build): H2, read `executing` without a result as nothing, so the command runs
+// again. H5, move every work state to `offline` on a drop, losing the result.
+import { describe, expect, it } from "@effect/vitest";
+import { Deferred, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
+import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import { Socket } from "effect/socket";
+import { TestClock } from "effect/testing";
+import * as fc from "fast-check";
+import * as Id from "../Id.ts";
+import { fcTypeId } from "../jobs/JobsTest.ts";
+import { property } from "../Testing.test-support.ts";
+import { ClientKey } from "../transport/ClientKey.ts";
+import { KeyLine } from "../transport/Sshsig.ts";
+import {
+  type Armed,
+  crashed,
+  cutJournal,
+  expectedResults,
+  fakeCommands,
+  resumed,
+  seen,
+  type Seen,
+} from "./Commands.test-support.ts";
+import { admitted, answerText, brain, type Brain } from "./HandsDoor.test-support.ts";
+import { start } from "./HandsStart.ts";
+import * as JournalStore from "./JournalStore.ts";
+import { MemorySocket } from "./WindowStart.test-support.ts";
+
+const ORIGIN = "http://127.0.0.1:18787";
+const KEY = "SHA256:hands-own-key-0000000000000000000000000000";
+
+/** A made-up Ed25519 public key line: the scripted door checks no signature, so nothing signs for real. */
+const identity = (() => {
+  const raw = new Uint8Array(32).fill(7);
+  const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
+  const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
+  return {
+    fingerprint: KEY,
+    raw: btoa(String.fromCharCode(...raw))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, ""),
+    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    found: "reused" as const,
+    sign: () => Effect.succeed(new Uint8Array(64)),
+  };
+})();
+
+const keys = Layer.succeed(ClientKey, {
+  current: () => Effect.succeed(identity),
+  claimPersist: Effect.succeed(false),
+  persist: Effect.succeed(true),
+});
+
+/** One JSON-RPC call the client wrote. */
+const Call = Schema.fromJsonString(
+  Schema.Struct({
+    id: Schema.Union([Schema.Number, Schema.String]),
+    method: Schema.String,
+    params: Schema.optionalKey(Schema.Unknown),
+  }),
+);
+
+const decodeCall = Schema.decodeUnknownOption(Call);
+
+/** How the door cuts the next jobs call: drop the socket before it reads the call, or after it acted. */
+type CallCut = "before" | "after" | null;
+
+/** What the door holds: the socket open now, the cut armed, the waits it parked, and what it heard. */
+type DoorState = {
+  open: MemorySocket | null;
+  cut: CallCut;
+  parked: Array<{ readonly id: string | number; readonly after: number; readonly on: MemorySocket }>;
+  readonly hellos: Array<unknown>;
+  readonly calls: Array<{ readonly method: string; readonly params: unknown }>;
+  dials: number;
+};
+
+/** The door as a script over the brain: one socket per dial, the challenge waiting in it. */
+const door = (b: Brain) => {
+  const state: DoorState = { open: null, cut: null, parked: [], hellos: [], calls: [], dials: 0 };
+  const answer = (text: string, on: MemorySocket) => {
+    if (text === "ping") {
+      on.receive("pong");
+      return;
+    }
+
+    const decoded = decodeCall(text);
+
+    if (Option.isNone(decoded)) {
+      return;
+    }
+
+    const call = decoded.value;
+
+    if (call.method === "initialize") {
+      state.hellos.push(call.params);
+      on.receive(JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(KEY) }));
+      return;
+    }
+
+    if (!call.method.startsWith("jobs.")) {
+      return;
+    }
+
+    const cut = state.cut;
+
+    if (cut === "before") {
+      state.cut = null;
+      on.drop(1006);
+      return;
+    }
+
+    state.calls.push({ method: call.method, params: call.params });
+    const outcome = b.call(KEY, call.method, call.params);
+
+    if (cut === "after") {
+      state.cut = null;
+      on.drop(1006);
+      return;
+    }
+
+    if (outcome._tag === "parked") {
+      state.parked.push({ id: call.id, after: outcome.after, on });
+      return;
+    }
+
+    const body = answerText(call.id, outcome);
+
+    if (body !== null) {
+      on.receive(body);
+    }
+  };
+  const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+    state.dials++;
+    const made: MemorySocket = new MemorySocket(url, { send: (text, from) => answer(text, from) });
+    state.open = made;
+    made.open();
+    made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${state.dials}` } }));
+    return made;
+  });
+  return {
+    state,
+    socket,
+    /** A program asks the client's key: the brain saves it, and each parked wait past its rev is rung. */
+    request: (process: string, n: number) => {
+      const id = b.request(KEY, process, n);
+      const ringing = state.parked.filter((p) => b.rev(KEY) > p.after);
+      state.parked = state.parked.filter((p) => !ringing.includes(p));
+
+      for (const p of ringing) {
+        p.on.receive(JSON.stringify({ jsonrpc: "2.0", id: p.id, result: { rev: b.rev(KEY) } }));
+      }
+
+      return id;
+    },
+    drop: () => state.open?.drop(1006),
+  };
+};
+
+/** Lets the run go on: virtual time moves `ms`, and real work (the hello's hashing) gets its turn. */
+const pass = (ms: number) =>
+  TestClock.adjust(ms).pipe(
+    Effect.andThen(TestClock.withLive(Effect.sleep("1 millis"))),
+    Effect.andThen(Effect.yieldNow),
+  );
+
+const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), ms: fc.integer({ min: 0, max: 40_000 }) });
+type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
+const Tape = fc.record({
+  processes: fc.uniqueArray(fcTypeId("process"), { minLength: 2, maxLength: 4 }),
+  cells: fc.array(Cell, { minLength: 20, maxLength: 60, size: "max" }),
+});
+type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
+
+type Focus = "H2" | "H5";
+
+/** The cuts a work state is about to cross: the journal write, the call or the command it makes next. */
+const cutsFor = (work: string): ReadonlyArray<Armed | "call"> =>
+  work === "saving"
+    ? [
+        { op: "write", at: "before", mode: "stop" },
+        { op: "write", at: "after", mode: "stop" },
+        { op: "write", at: "before", mode: "fail" },
+      ]
+    : work === "executing"
+      ? [
+          { op: "execute", at: "before", mode: "stop" },
+          { op: "execute", at: "after", mode: "stop" },
+        ]
+      : work === "recalling"
+        ? [{ op: "read", at: "before", mode: "stop" }]
+        : ["call"];
+
+const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
+  Effect.gen(function* () {
+    const b = brain();
+    const d = door(b);
+    const s: Seen = seen();
+    // The journal's store outlives every process, as a file would: one memory store for the walk.
+    const store = yield* Layer.build(KeyValueStore.layerMemory);
+    const layers = Layer.mergeAll(
+      d.socket,
+      keys,
+      fakeCommands(s),
+      cutJournal(s).pipe(Layer.provide(JournalStore.layer), Layer.provide(Layer.succeedContext(store))),
+      Id.Generator.layer,
+    );
+    const boot = Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands" }).pipe(
+        Effect.provide(layers),
+        Scope.provide(scope),
+      );
+      const run = yield* booting.ready;
+      return { scope, run };
+    });
+    let live = yield* boot;
+    const crash = Effect.gen(function* () {
+      yield* Scope.close(live.scope, Exit.void);
+      crashed(s);
+      done.add("restart");
+      live = yield* boot;
+    });
+    const work = () => live.run.getState().work._tag;
+    let n = 0;
+
+    for (const cell of tape.cells) {
+      yield* pass(0);
+      const now = work();
+      const stopped = yield* Deferred.isDone(s.stopped);
+      const open = b.all().filter((j) => j.phase !== "finished");
+      const options: Array<string> = [
+        ...(stopped ? ["restart", "restart"] : []),
+        ...(open.length === 0 ? ["request", "request"] : ["request"]),
+        "time",
+        "time",
+        ...(focus === "H2" ? ["cut", "cut", "restart"] : ["pause", "pause", "drop", "resume"]),
+      ];
+      const move = options[cell.move % options.length] ?? "time";
+
+      if (move === "request") {
+        d.request(tape.processes[n % tape.processes.length] ?? "", ++n);
+        done.add("request");
+      } else if (move === "time") {
+        yield* pass(cell.ms);
+      } else if (move === "restart") {
+        done.add(`restart@${now}`);
+        yield* crash;
+      } else if (move === "cut") {
+        const cut = cutsFor(now)[cell.pick % cutsFor(now).length] ?? "call";
+
+        if (cut === "call") {
+          d.state.cut = cell.pick % 2 === 0 ? "before" : "after";
+          done.add(`cut:call:${d.state.cut}@${now}`);
+        } else {
+          s.armed = cut;
+          done.add(`cut:${cut.op}:${cut.at}:${cut.mode}`);
+        }
+      } else if (move === "pause") {
+        if (now === "executing" || now === "saving") {
+          s.armed = {
+            op: now === "executing" ? "execute" : "write",
+            at: cell.pick % 2 === 0 ? "before" : "after",
+            mode: "pause",
+          };
+        } else {
+          s.armed = { op: cell.pick % 2 === 0 ? "execute" : "write", at: "before", mode: "pause" };
+        }
+      } else if (move === "drop") {
+        const paused = yield* Deferred.isDone(s.paused);
+        d.drop();
+        yield* pass(0);
+
+        if (paused) {
+          // H5: the link went down with local work in flight; the work goes on and is not lost.
+          expect(["executing", "saving"], `H5: a drop in ${now} keeps the local work`).toContain(work());
+          done.add(`drop@${now}`);
+        }
+      } else if (move === "resume") {
+        yield* resumed(s);
+        done.add("resume");
+      }
+    }
+
+    // Quiet now: no cut, no pause, and the client runs until the brain has every job finished.
+    s.armed = null;
+    d.state.cut = null;
+    yield* resumed(s);
+
+    if (yield* Deferred.isDone(s.stopped)) {
+      yield* crash;
+    }
+
+    for (let i = 0; i < 400 && b.all().some((j) => j.phase !== "finished"); i++) {
+      yield* pass(i % 10 === 0 ? 30_000 : 1_000);
+    }
+
+    const { runs, results } = expectedResults(s.events);
+
+    for (const job of b.all()) {
+      const id = job.request.id;
+      expect(job.phase, `${focus}: ${id} ends finished`).toBe("finished");
+      expect(runs.get(id) ?? 0, `H2: ${id}'s command ran at most once across every restart`).toBeLessThanOrEqual(1);
+      expect(job.result, `H2: ${id} ends with the result its journal held`).toEqual(results.get(id));
+      done.add(job.result?._tag === "unknown" ? "ended:unknown" : "ended:result");
+    }
+
+    expect(runs.get("") ?? 0, "a command ran with no `executing` entry saved before it").toBe(0);
+    yield* Scope.close(live.scope, Exit.void);
+  });
+
+const law = (name: string, focus: Focus, required: ReadonlyArray<string>, runs: number) =>
+  it.effect(
+    name,
+    () =>
+      Effect.gen(function* () {
+        const done = new Set<string>();
+        // The shared runner: each walk in a scope of its own, from the shared seed 119120.
+        yield* property(Tape, (tape) => walk(tape, focus, done).pipe(Effect.provide(TestClock.layer())), {
+          numRuns: runs,
+        });
+        // An empty walk cannot pass: every transition the law is about ran at least once.
+        expect([...done]).toEqual(expect.arrayContaining([...required]));
+      }),
+    300_000,
+  );
+
+describe("P39 slice 4a: the hands start", () => {
+  law(
+    "H2: after a cut at any journal or call boundary and a restart, the job ends finished with the fake's result when the journal held one, and with unknown interrupted when it held executing and no result",
+    "H2",
+    [
+      "request",
+      "restart",
+      "cut:write:before:stop",
+      "cut:write:after:stop",
+      "cut:execute:before:stop",
+      "cut:execute:after:stop",
+      "ended:unknown",
+      "ended:result",
+    ],
+    100,
+  );
+  law(
+    "H5: a dropped link during executing or saving lets the local work finish; on reconnect the client lists, takes and reports it, and runs nothing again",
+    "H5",
+    ["request", "drop@executing", "drop@saving", "resume", "ended:result"],
+    60,
+  );
+});
