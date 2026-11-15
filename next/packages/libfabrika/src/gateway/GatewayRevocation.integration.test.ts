@@ -214,6 +214,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         read: () => Effect.die("unexpected job read in legacy gateway law"),
         forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
         collected: () => Effect.die("unexpected job collect in legacy gateway law"),
+        forTarget: () => Effect.die("unexpected job index read in legacy gateway law"),
       }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,

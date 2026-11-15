@@ -117,6 +117,8 @@ type World = {
   readonly acked: Set<string>;
   /** Jobs this process holds after a refusal for good. */
   held: Set<string>;
+  /** H4: processes that asked this key twice, whose jobs no take can get. */
+  readonly twins: Set<string>;
   at: number;
   n: number;
 };
@@ -162,6 +164,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     results: new Map(),
     acked: new Set(),
     held: new Set(),
+    twins: new Set(),
     at: 1_000,
     n: 0,
   };
@@ -194,6 +197,11 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         done.add("execute");
       }
 
+      if (c.type === "write" && record(c).get("method") === "jobs.take") {
+        const process = text(record(record(c).get("params")).get("process"));
+        expect(w.twins.has(process), "H4: no take names a process with two open jobs: it cannot succeed").toBe(false);
+      }
+
       if (c.type === "write" && record(c).get("method") === "jobs.finish") {
         const params = record(record(c).get("params"));
         const job = text(params.get("job"));
@@ -215,6 +223,13 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const prev = w.s;
     const [next, cmds] = step(prev, m);
     check(next, cmds);
+
+    // A held result is held for the link it was refused on, as the `close` move says: a link that
+    // left online, by a close or by its own stall timer, starts a new link.
+    if (prev.link._tag === "online" && (next.link._tag !== "online" || next.link.dial !== prev.link.dial)) {
+      w.held = new Set();
+    }
+
     w.s = next;
     w.waiting.push(...cmds);
     w.at += 7;
@@ -307,6 +322,8 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     }
 
     if (call.method === "jobs.finish" && mode === "lost") {
+      // The answer never came, so the call is still the machine's live one, never a stale id.
+      w.stale = w.stale.filter((x) => x !== call);
       done.add("finish:lost");
       return null;
     }
@@ -414,18 +431,39 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       });
     }
 
+    // A new job is asked for a process only when that process has no open job (0093): two open
+    // jobs of one process wedge `jobs.take` (finding 2026-11-15-jobs-take-ambiguous-wedges), and
+    // only H4's `twin` move builds that state, on purpose.
     const open = w.door.all().filter((j) => j.phase !== "finished");
-    out.push({
-      label: open.length === 0 ? "request" : "request_more",
-      weight: open.length === 0 ? 4 : 1,
-      run: () => {
-        const process = tape.processes[w.n % tape.processes.length] ?? "process_01m6v5270hetdrt4r8h9vvjwjs";
-        const target = moves.forge && cell.variant % 3 === 0 ? OTHER : KEY;
-        w.door.request(target, process, ++w.n);
-        done.add(target === KEY ? "request" : "request:other");
-        return null;
-      },
-    });
+    const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
+    const process = free[cell.pick % Math.max(1, free.length)];
+
+    if (process !== undefined) {
+      out.push({
+        label: open.length === 0 ? "request" : "request_more",
+        weight: open.length === 0 ? 4 : 1,
+        run: () => {
+          const target = moves.forge && cell.variant % 3 === 0 ? OTHER : KEY;
+          w.door.request(target, process, ++w.n);
+          done.add(target === KEY ? "request" : "request:other");
+          return null;
+        },
+      });
+    }
+
+    // H4: one process asks this key twice, so neither job can be taken.
+    if (moves.forge && process !== undefined && free.length > 1 && w.twins.size === 0) {
+      out.push({
+        label: "twin",
+        weight: 1,
+        run: () => {
+          w.door.request(KEY, process, ++w.n);
+          w.door.request(KEY, process, ++w.n);
+          w.twins.add(process);
+          return null;
+        },
+      });
+    }
 
     for (const deps of subs(w.s, "timer")) {
       if (isTimer(deps)) {
@@ -529,6 +567,26 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       }
     }
 
+    // H4: a list whose open jobs all belong to a process with two of them takes none and waits for
+    // new work, with a `jobs.wait` after the list's rev, never a take that cannot succeed.
+    const listed = record(reply.get("result")).get("jobs");
+    const pointers = Array.isArray(listed) ? listed.map((p) => text(record(p).get("process"))) : [];
+
+    if (
+      chosen.label === "door:jobs.list" &&
+      live.tag === "listing" &&
+      reply.get("id") === live.call &&
+      pointers.length > 0 &&
+      pointers.every((p) => w.twins.has(p))
+    ) {
+      expect(next.work._tag, "H4: two open jobs of one process: take neither, wait for new work").toBe("watching");
+      expect(
+        cmds.filter((c) => c.type === "write").map((c) => record(c).get("method")),
+        "H4: the one call is a wait",
+      ).toEqual(["jobs.wait"]);
+      done.add("twin:watching");
+    }
+
     // H4: a forged answer to the live take, or any answer to a stale id, starts nothing to execute.
     if (chosen.label.startsWith("forge:") || chosen.label === "stale") {
       const forged = take !== undefined && take.id === live.call && chosen.label.startsWith("forge:");
@@ -573,9 +631,18 @@ describe("P39 slice 4a: the hands machine", () => {
     60,
   );
   law(
-    "H4: the client runs only work assigned to its own key: an idle, a refusal, another key's assignment or an answer to a stale call id changes nothing it would execute",
+    "H4: the client runs only work assigned to its own key: an idle, a refusal, another key's assignment or an answer to a stale call id changes nothing it would execute; two open jobs of one process are taken by no take and the client waits for new work",
     { forge: true, finish: ["ok"], restart: false },
-    ["execute", "request:other", "forge:other@live", "forge:idle@live", "forge:refused@live", "stale"],
+    [
+      "execute",
+      "request:other",
+      "forge:other@live",
+      "forge:idle@live",
+      "forge:refused@live",
+      "stale",
+      "twin",
+      "twin:watching",
+    ],
     100,
   );
 });

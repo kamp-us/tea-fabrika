@@ -198,22 +198,19 @@ type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Focus = "H2" | "H5";
 
-/** The cuts a work state is about to cross: the journal write, the call or the command it makes next. */
-const cutsFor = (work: string): ReadonlyArray<Armed | "call"> =>
-  work === "saving"
-    ? [
-        { op: "write", at: "before", mode: "stop" },
-        { op: "write", at: "after", mode: "stop" },
-        { op: "write", at: "before", mode: "fail" },
-      ]
-    : work === "executing"
-      ? [
-          { op: "execute", at: "before", mode: "stop" },
-          { op: "execute", at: "after", mode: "stop" },
-        ]
-      : work === "recalling"
-        ? [{ op: "read", at: "before", mode: "stop" }]
-        : ["call"];
+/**
+ * H2's boundaries: a pause armed before or after the next journal read, journal write or command
+ * holds the client there, in `recalling`, `saving` or `executing`, and a crash while it is held is
+ * the cut. With the memory journal and the fake command those states end within one tick, so only a
+ * held call lets a cut land in them.
+ */
+const PAUSES: ReadonlyArray<Armed> = [
+  { op: "write", at: "before", mode: "pause" },
+  { op: "write", at: "after", mode: "pause" },
+  { op: "execute", at: "before", mode: "pause" },
+  { op: "execute", at: "after", mode: "pause" },
+  { op: "read", at: "before", mode: "pause" },
+];
 
 const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
   Effect.gen(function* () {
@@ -247,23 +244,35 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
     });
     const work = () => live.run.getState().work._tag;
     let n = 0;
+    /** H2: the pause armed last, so a crash while it holds names the boundary it cut. */
+    let pending: Armed | null = null;
 
     for (const cell of tape.cells) {
       yield* pass(0);
       const now = work();
       const stopped = yield* Deferred.isDone(s.stopped);
+      const held = yield* Deferred.isDone(s.paused);
       const open = b.all().filter((j) => j.phase !== "finished");
-      const options: Array<string> = [
-        ...(stopped ? ["restart", "restart"] : []),
-        ...(open.length === 0 ? ["request", "request"] : ["request"]),
-        "time",
-        "time",
-        ...(focus === "H2" ? ["cut", "cut", "restart"] : ["pause", "pause", "drop", "resume"]),
-      ];
+      // A new job is asked for a process only when that process has no open job (0093): two open
+      // jobs of one process wedge `jobs.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
+      const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
+      const asks = free.length === 0 ? [] : open.length === 0 ? ["request", "request"] : ["request"];
+      const options: Array<string> =
+        focus === "H2" && held
+          ? ["cut", "cut", "resume"]
+          : [
+              ...(stopped ? ["restart", "restart"] : []),
+              ...asks,
+              "time",
+              "time",
+              ...(focus === "H2"
+                ? ["pause", "pause", "pause", "fail", "call", "restart"]
+                : ["pause", "pause", "drop", "resume"]),
+            ];
       const move = options[cell.move % options.length] ?? "time";
 
       if (move === "request") {
-        d.request(tape.processes[n % tape.processes.length] ?? "", ++n);
+        d.request(free[cell.pick % free.length] ?? "", ++n);
         done.add("request");
       } else if (move === "time") {
         yield* pass(cell.ms);
@@ -271,15 +280,19 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
         done.add(`restart@${now}`);
         yield* crash;
       } else if (move === "cut") {
-        const cut = cutsFor(now)[cell.pick % cutsFor(now).length] ?? "call";
-
-        if (cut === "call") {
-          d.state.cut = cell.pick % 2 === 0 ? "before" : "after";
-          done.add(`cut:call:${d.state.cut}@${now}`);
-        } else {
-          s.armed = cut;
-          done.add(`cut:${cut.op}:${cut.at}:${cut.mode}`);
-        }
+        // The client is held at the boundary the pause names: a crash there is the cut.
+        done.add(`cut:${pending?.op ?? ""}:${pending?.at ?? ""}@${now}`);
+        pending = null;
+        yield* crash;
+      } else if (move === "fail") {
+        s.armed = { op: "write", at: cell.pick % 2 === 0 ? "before" : "after", mode: "fail" };
+        done.add("fail:write");
+      } else if (move === "call") {
+        d.state.cut = cell.pick % 2 === 0 ? "before" : "after";
+        done.add(`cut:call:${d.state.cut}`);
+      } else if (move === "pause" && focus === "H2") {
+        pending = PAUSES[cell.pick % PAUSES.length] ?? null;
+        s.armed = pending;
       } else if (move === "pause") {
         if (now === "executing" || now === "saving") {
           s.armed = {
@@ -356,10 +369,15 @@ describe("P39 slice 4a: the hands start", () => {
     [
       "request",
       "restart",
-      "cut:write:before:stop",
-      "cut:write:after:stop",
-      "cut:execute:before:stop",
-      "cut:execute:after:stop",
+      // The closing reach check: each state the plan cuts in was really cut, at each boundary.
+      "cut:write:before@saving",
+      "cut:write:after@saving",
+      "cut:execute:before@executing",
+      "cut:execute:after@executing",
+      "cut:read:before@recalling",
+      "fail:write",
+      "cut:call:before",
+      "cut:call:after",
       "ended:unknown",
       "ended:result",
     ],

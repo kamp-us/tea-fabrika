@@ -62,7 +62,7 @@ import * as RateLimiter from "effect/persistence/RateLimiter";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { Gateway } from "./door.ts";
+import { type ConnectionId, Gateway } from "./door.ts";
 
 const SEED = 119120;
 const ORIGIN = "http://127.0.0.1:18787";
@@ -254,10 +254,14 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
     const [name = "", tab = ""] = (new URL(url).pathname.split("/client/")[1] ?? "").split("/").map(decodeURIComponent);
-    const client: { id: string } = { id: "" };
+    // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
+    const client: { id: ConnectionId | null } = { id: null };
+    const connected = Effect.suspend(() =>
+      client.id === null ? Effect.fail(Answer.cases.refused.make({ reason: "no_session" })) : Effect.succeed(client.id),
+    );
     const made: MemorySocket = new MemorySocket(url, {
       send: (frame) => Queue.offerUnsafe(work, Effect.ignore(Effect.suspend(() => c.frame(frame)))),
-      closed: () => Queue.offerUnsafe(work, Effect.ignore(b.d.disconnect(client.id))),
+      closed: () => Queue.offerUnsafe(work, Effect.ignore(Effect.flatMap(connected, (id) => b.d.disconnect(id)))),
     });
     sockets.push(made);
     let attached: typeof Attached.Type = Attached.cases.new.make({ client: "", nonce: "" });
@@ -279,30 +283,35 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       },
       close: (code) => made.drop(code),
       wait: (stream, after, reader) =>
-        (stream.startsWith("target:")
-          ? b.d.route(client.id, "jobs.wait", { after })
-          : b.d.route(client.id, "ledger.wait", { stream, after }, reader)
-        ).pipe(
-          Effect.flatMap((answer) =>
-            answer._tag === "parked"
-              ? Effect.succeed(Waited.cases.parked.make({}))
-              : answer._tag === "ok"
-                ? Effect.map(Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result), ({ rev }) =>
-                    Waited.cases.ready.make({ rev }),
-                  )
-                : Effect.fail(answer),
-          ),
-        ),
+        Effect.gen(function* () {
+          const id = yield* connected;
+          const answer = stream.startsWith("target:")
+            ? yield* b.d.route(id, "jobs.wait", { after })
+            : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
+
+          if (answer._tag === "parked") {
+            return Waited.cases.parked.make({});
+          }
+
+          if (answer._tag === "ok") {
+            const { rev } = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result);
+            return Waited.cases.ready.make({ rev });
+          }
+
+          return yield* Effect.fail(answer);
+        }),
       call: (method, params) =>
         method === "initialize"
-          ? b.d.initialize(client.id, params, { url: ORIGIN, tab, name }).pipe(
-              Effect.map((checked) => {
+          ? Effect.flatMap(connected, (id) =>
+              Effect.map(b.d.initialize(id, params, { url: ORIGIN, tab, name }), (checked) => ({ id, checked })),
+            ).pipe(
+              Effect.map(({ id, checked }) => {
                 if (checked._tag === "refused") {
                   return checked;
                 }
 
                 attached = Attached.cases.online.make({
-                  client: client.id,
+                  client: id,
                   identity: checked.identity,
                   version: checked.version,
                   waits: [],
@@ -317,17 +326,18 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
               }),
               Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
             )
-          : b.d
-              .route(client.id, method, params)
-              .pipe(Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" })))),
+          : Effect.flatMap(connected, (id) => b.d.route(id, method, params)).pipe(
+              Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
+            ),
     });
     made.open();
     Queue.offerUnsafe(
       work,
       Effect.gen(function* () {
-        client.id = yield* b.d.connect();
-        const nonce = yield* b.d.challenge(client.id);
-        attached = Attached.cases.new.make({ client: client.id, nonce });
+        const id = yield* b.d.connect();
+        client.id = id;
+        const nonce = yield* b.d.challenge(id);
+        attached = Attached.cases.new.make({ client: id, nonce });
         drivers.add(c);
         made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       }).pipe(Effect.ignore),
@@ -352,6 +362,7 @@ const strings = () => {
     remove: (key) => Effect.sync(() => void values.delete(key)),
     clear: Effect.sync(() => values.clear()),
     size: Effect.sync(() => values.size),
+    keys: Effect.sync(() => [...values.keys()]),
   });
   return { values, layer: Layer.succeed(KeyValueStore.KeyValueStore, store) };
 };
@@ -417,12 +428,25 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     for (const cell of f.cells) {
       yield* pass(0);
-      const moves = ["request", "run", "run", "drop", "lose", "restart"];
+      // A new job is asked for a process only when that process has no open job (0093): two open
+      // jobs of one process wedge `jobs.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
+      const jobs = yield* Effect.forEach(requested, (id) => b.jobs((j) => j.read(id)).pipe(Effect.orDie), {
+        concurrency: 1,
+      });
+      const busy = new Set(
+        jobs.flatMap((job) =>
+          job.state._tag === "absent" || job.state._tag === "finished" || job.state._tag === "collected"
+            ? []
+            : [job.state.request.process],
+        ),
+      );
+      const free = f.processes.filter((p) => !busy.has(p));
+      const moves = [...(free.length > 0 ? ["request"] : []), "run", "run", "drop", "lose", "restart"];
       const move = moves[cell.move % moves.length] ?? "run";
       done.add(move);
 
       if (move === "request") {
-        const process = f.processes[n % f.processes.length] ?? "process_01m6v5270hetdrt4r8h9vvjwjs";
+        const process = free[cell.ms % free.length] ?? "process_01m6v5270hetdrt4r8h9vvjwjs";
         const id = `${process}/${++n}/0`;
         yield* b.jobs((j) =>
           j.request(
