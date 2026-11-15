@@ -188,3 +188,5 @@ service with a test layer (owner, 2026-11-15).**
   - The shape of the test package's own way to spy, and of its way for the wrapper exception.
   - Which of the four files that mock `rolldown` today count as a wrapper's own law. The plan of
     that cleanup says so per file.
+- [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
+  `anti-slop/no-module-mocking` when the plugin is installed. The ban itself does not change.
