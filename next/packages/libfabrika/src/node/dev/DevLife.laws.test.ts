@@ -1,18 +1,34 @@
 // T708, next/. The dev server's life is one tea machine; every law walks its real reducer from init.
 // The walk reads the folded state before it picks each move (0093), and an independent reference
-// written from the plan's transition table checks each step.
+// written from the plan's transition table checks each step. The memory restart plan
+// (docs/plan/lanes/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
 import { applyCell } from "@demlik/tea";
 import { Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";
-import { address, devLife, pending, target } from "./DevLife.ts";
+import { address, devLife, pending, reachable, target } from "./DevLife.ts";
 
 const SEED = 119120;
 type State = typeof DevState.Type;
 type Msg = typeof devLife.msg.Type;
 type Phase = State["_tag"];
 type Case<T extends Phase> = Extract<State, { readonly _tag: T }>;
+type Pending = { readonly _tag: "pending"; readonly id: string };
+
+// L4, a type law checked by tsc. A replace holds the old pid and a replacement that is always
+// pending from its first signal, and its Msg carries what the sampler saw and when.
+// Plant: type the field as `Replacement` (both cases): the `toBeNever` check on the none case fails.
+expectTypeOf<Case<"replacing">>().toHaveProperty("pid");
+expectTypeOf<Case<"replacing">>().toHaveProperty("listener");
+expectTypeOf<Case<"replacing">>().toHaveProperty("signal");
+expectTypeOf<Case<"replacing">["replacement"]>().toMatchTypeOf<Pending>();
+expectTypeOf<Extract<Case<"replacing">["replacement"], { readonly _tag: "none" }>>().toBeNever();
+expectTypeOf<Case<"replacing">["signal"]>().toEqualTypeOf<"SIGTERM" | "SIGKILL">();
+expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("bytes");
+expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("at");
+expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("replacement");
+expectTypeOf(reachable).returns.toEqualTypeOf<number | null>();
 
 // Type law, checked by tsc: only a running process holds a pid, and a replacement token lives only
 // where an exit put it. The negative checks are not vacuous: the positive ones name the same fields.
@@ -52,6 +68,10 @@ const Choice = fc.record({
   at: fc.integer({ min: 1_000_000_000, max: 1_999_999_999 }),
   until: fc.integer({ min: 2_000_000_000, max: 2_999_999_999 }),
   reason: fc.constantFrom("intensity", "restart_failed", "stop"),
+  // What the memory sampler saw: bytes at or over a limit, and its clock.
+  bytes: fc.integer({ min: 50_000_000, max: 4_000_000_000 }),
+  // L2: how many `replacing` Msgs arrive in a row once a replace has begun.
+  burst: fc.integer({ min: 1, max: 5 }),
 });
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
@@ -65,10 +85,22 @@ const Walk = fc.record({
 type Walk = typeof Walk extends fc.Arbitrary<infer A> ? A : never;
 
 type Kind = Msg["type"];
-const kinds: ReadonlyArray<Kind> = ["listened", "started", "exited", "waiting", "braked", "stop", "stopped"];
+
+const kinds: ReadonlyArray<Kind> = [
+  "listened",
+  "started",
+  "exited",
+  "waiting",
+  "braked",
+  "stop",
+  "stopped",
+  "replacing",
+  "killed",
+];
 
 // The plan's table, as the moves each state can really receive. Stop and brake are rarer, so a walk
-// reaches deep states before it ends.
+// reaches deep states before it ends. The memory sampler replaces only a running process, and a
+// replace ends in its exit, its kill, a brake or a stop.
 const legal: Record<Phase, ReadonlyArray<readonly [Kind, number]>> = {
   starting: [
     ["listened", 4],
@@ -86,6 +118,7 @@ const legal: Record<Phase, ReadonlyArray<readonly [Kind, number]>> = {
     ["listened", 4],
     ["started", 1],
     ["exited", 4],
+    ["replacing", 2],
     ["braked", 1],
     ["stop", 1],
   ],
@@ -93,6 +126,16 @@ const legal: Record<Phase, ReadonlyArray<readonly [Kind, number]>> = {
     ["listened", 2],
     ["started", 1],
     ["exited", 4],
+    ["replacing", 3],
+    ["braked", 1],
+    ["stop", 1],
+  ],
+  replacing: [
+    ["killed", 2],
+    ["exited", 4],
+    ["replacing", 1],
+    ["listened", 1],
+    ["started", 1],
     ["braked", 1],
     ["stop", 1],
   ],
@@ -141,6 +184,14 @@ const message = (kind: Kind, c: Choice, index: number): Msg => {
     return { type: "braked", reason: c.reason };
   }
 
+  if (kind === "replacing") {
+    return { type: "replacing", replacement: `replace-${index}`, bytes: c.bytes, at: c.at };
+  }
+
+  if (kind === "killed") {
+    return { type: "killed" };
+  }
+
   return { type: kind };
 };
 
@@ -174,6 +225,8 @@ type Ref = {
   readonly start: string | null;
   readonly after: string | null;
   readonly last: string | null;
+  // The last signal a replace sent, held only while the phase is `replacing`.
+  readonly signal: "SIGTERM" | "SIGKILL" | null;
 };
 
 type Settled = "completed" | "failed" | "discarded" | null;
@@ -181,7 +234,35 @@ type Settled = "completed" | "failed" | "discarded" | null;
 const active = (phase: Phase) => phase !== "braked" && phase !== "stopping" && phase !== "stopped";
 const known = (port: number) => (port === 0 ? null : port);
 
+// The plan's rows for a replace: the sampler replaces only a running process, once; its kill marks
+// the second signal; its exit is an ordinary exit; the old process already listened, so a listener
+// changes nothing until the exit. Every other Msg follows main's rows below.
 const reference = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
+  const { phase } = ref;
+
+  if (msg.type === "replacing") {
+    return phase === "spawned" || phase === "online"
+      ? [{ ...ref, phase: "replacing", token: msg.replacement, signal: "SIGTERM" }, null]
+      : [ref, null];
+  }
+
+  if (msg.type === "killed") {
+    return phase === "replacing" ? [{ ...ref, signal: "SIGKILL" }, null] : [ref, null];
+  }
+
+  if (msg.type === "listened" && phase === "replacing") {
+    return [ref, null];
+  }
+
+  if (msg.type === "exited" && phase === "replacing") {
+    return [{ ...ref, phase: "exited", pid: null, token: msg.replacement, signal: null }, null];
+  }
+
+  const [next, settled] = main(ref, msg);
+  return [{ ...next, signal: next.phase === "replacing" ? next.signal : null }, settled];
+};
+
+const main = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
   const { phase } = ref;
 
   if (msg.type === "listened") {
@@ -264,7 +345,16 @@ const walk = (w: Walk, visit: (step: Step) => void) => {
   expect(cmds).toEqual([]);
   expect(isState(initial)).toBe(true);
   let s = initial;
-  let ref: Ref = { phase: "starting", port: null, pid: null, token: null, start: null, after: null, last: w.last };
+  let ref: Ref = {
+    phase: "starting",
+    port: null,
+    pid: null,
+    token: null,
+    start: null,
+    after: null,
+    last: w.last,
+    signal: null,
+  };
 
   for (const [index, choice] of w.choices.entries()) {
     const msg = choose(s._tag, choice, index);
@@ -283,6 +373,9 @@ const coverage = () => ({
   failed: 0,
   late: 0,
   stopped: 0,
+  replacing: 0,
+  killed: 0,
+  replaced: 0,
 });
 
 const covered = (seen: ReturnType<typeof coverage>) => {
@@ -311,10 +404,24 @@ const count = (seen: ReturnType<typeof coverage>, step: Step) => {
   if (step.ref.phase === "stopped") {
     seen.stopped++;
   }
+
+  if (step.ref.phase === "replacing" && step.before.phase !== "replacing") {
+    seen.replacing++;
+  }
+
+  if (step.ref.signal === "SIGKILL" && step.before.signal === "SIGTERM") {
+    seen.killed++;
+  }
+
+  if (step.before.phase === "replacing" && step.ref.phase === "exited") {
+    seen.replaced++;
+  }
 };
 
 describe("T708 dev life laws", () => {
-  it("every transition preserves the state-specific fields and sampling eligibility", () => {
+  // L1. Plant: let `replacing` from `spawned` be ignored, or let `listened` end a `replacing`: the
+  // walk and the reference differ.
+  it("L1 every transition, replacing and killed included, preserves the state-specific fields and sampling eligibility", () => {
     const seen = coverage();
     fc.assert(
       fc.property(Walk, (w) => {
@@ -330,23 +437,93 @@ describe("T708 dev life laws", () => {
           }
 
           expect(pending(next)).toBe(ref.token);
-          // Only a live process is a sample target, and no other state hides its pid.
+          // Only a live process is a sample target. A replace still holds the old pid for its kill, and
+          // no other state hides a pid.
+          const holds = ref.phase === "spawned" || ref.phase === "online" || ref.phase === "replacing";
           expect(target(next)).toBe(ref.phase === "spawned" || ref.phase === "online" ? ref.pid : null);
-          expect(pids(next)).toEqual(ref.phase === "spawned" || ref.phase === "online" ? [ref.pid] : []);
+          expect(pids(next)).toEqual(holds ? [ref.pid] : []);
+          expect(next._tag === "replacing" ? next.signal : null).toBe(ref.signal);
 
           // A process keeps its start and the start before it for the driver's events.
           if (ref.start !== null && ref.phase !== "stopped") {
             expect(leaves(next)).toContain(ref.start);
           }
 
-          if ((ref.phase === "spawned" || ref.phase === "online") && ref.after !== null) {
+          if (holds && ref.after !== null) {
             expect(leaves(next)).toContain(ref.after);
           }
         });
       }),
-      { seed: SEED, numRuns: 100 },
+      { seed: SEED, numRuns: 200 },
     );
     covered(seen);
+  });
+
+  // L2. Plant: `target(replacing)` returns the pid: the sampler could reach a second `replacing`.
+  it("L2 a replace happens once per start: target is null and another replacing changes nothing until a new start", () => {
+    const seen = { repeats: 0, again: 0 };
+    fc.assert(
+      fc.property(Walk, (w) => {
+        // Set by a replace, cleared only by a start that gave a running process again.
+        let armed = false;
+        let replaces = 0;
+        walk(w, ({ prev, msg, next, choice }) => {
+          // No state but a running process is a sample target, and a replace is not one.
+          expect(next._tag === "replacing" ? target(next) : null).toBeNull();
+          // Once replaced, a sample over the limit changes nothing until a new start.
+          expect(armed && msg.type === "replacing" ? next : prev).toEqual(prev);
+          const began = msg.type === "replacing" && next._tag === "replacing" && prev._tag !== "replacing";
+          // A second replace in one walk came after a new start re-armed the sampler.
+          seen.again += began && replaces > 0 ? 1 : 0;
+          replaces += began ? 1 : 0;
+          armed = armed || began;
+          // One to five more samples over the limit while the old process drains.
+          const sample = began && msg.type === "replacing" ? msg : null;
+          const repeats =
+            sample === null
+              ? []
+              : Array.from({ length: choice.burst - 1 }, (_, n) =>
+                  applyCell(devLife, next, { ...sample, replacement: `${sample.replacement}-${n + 1}` }),
+                );
+          seen.repeats += repeats.length;
+          expect(repeats).toEqual(repeats.map(() => [next, []]));
+
+          if (msg.type === "started" && (next._tag === "spawned" || next._tag === "online")) {
+            armed = false;
+          }
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.repeats, "walks sent a replacing to a replace").toBeGreaterThan(0);
+    expect(seen.again, "walks replaced a later start too").toBeGreaterThan(0);
+  });
+
+  // L3. Plant: `reachable` returns the port of an `online` with a pending replacement: it fails on the
+  // walk whose replacement starts before it listens.
+  it("L3 reachable is a port only in listening or online with no pending replacement, and equals address there", () => {
+    const seen = { early: 0, reachable: 0 };
+    fc.assert(
+      fc.property(Walk, (w) => {
+        walk(w, ({ next, ref }) => {
+          const open = (ref.phase === "listening" || ref.phase === "online") && ref.token === null;
+          expect(reachable(next)).toBe(open ? ref.port : null);
+
+          if (open) {
+            seen.reachable++;
+            expect(reachable(next)).toBe(address(next));
+          }
+
+          if (ref.phase === "online" && ref.token !== null) {
+            // A replacement that started before its listener: the old port is known, not reachable.
+            seen.early++;
+          }
+        });
+      }),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.early, "walks reached an online replacement before its listener").toBeGreaterThan(0);
+    expect(seen.reachable).toBeGreaterThan(0);
   });
 
   it("either startup order yields the same usable process and listener", () => {
@@ -354,7 +531,9 @@ describe("T708 dev life laws", () => {
     fc.assert(
       fc.property(Walk, (w) => {
         walk(w, ({ index, prev, choice }) => {
-          if (!active(prev._tag)) {
+          // A replacing process already listened, so its listener is not a startup's: the plan's
+          // `replacing` ignores it until the exit.
+          if (!active(prev._tag) || prev._tag === "replacing") {
             return;
           }
 
@@ -403,6 +582,8 @@ describe("T708 dev life laws", () => {
               braked: "failed",
               stopped: "discarded",
               exited: null,
+              // A replace of a process whose own replacement had not listened yet takes its place.
+              replacing: null,
             };
             const way = ways[msg.type];
             expect(way).not.toBeUndefined();

@@ -7,6 +7,7 @@ import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Snapshot from "./Snapshot.ts";
+import * as Sources from "./Sources.ts";
 import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
@@ -104,17 +105,22 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
         : r.origin === "file"
           ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
           : Origin.cases.default.make({});
+  // Every setting this recipe does not name keeps its declared default, read from empty sources, so a
+  // new declaration (the brain's memory limit and grace) joins every start fixture with no new line.
+  const empty = { value: {}, spans: [] };
+  const defaults = yield* Sources.resolve(Declarations.all, {
+    flags: Sources.flags({}),
+    env: Sources.env({}),
+    repo: Sources.file("repo", empty),
+    person: Sources.file("person", empty),
+  }).pipe(Effect.orDie);
   const settings = yield* Snapshot.make(Declarations.all, {
     values: {
+      ...defaults.values,
       port: r.port,
       version: "0.0.0",
       gatewayLimit: rateLimit.limit,
       gatewayWindow: rateLimit.window,
-      brainThrottle: Declarations.brainThrottle.default,
-      brainPoll: Declarations.brainPoll.default,
-      brainStartTimeout: Declarations.brainStartTimeout.default,
-      brainStopTimeout: Declarations.brainStopTimeout.default,
-      desktopLinkTtl: Declarations.desktopLinkTtl.default,
       // P39 slice 3: no hands key is set, the person's default.
       handsTarget: null,
     },

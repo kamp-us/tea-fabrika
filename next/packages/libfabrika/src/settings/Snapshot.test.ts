@@ -465,7 +465,12 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
           if (Exit.isSuccess(exit)) {
             expect(place.named).toBeUndefined();
             outputs.push(JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(exit.value.made)));
-            outputs.push(JSON.stringify(exit.value.resolved));
+            // A byte size setting resolves to a bigint, which JSON cannot spell; its digits are what a leak would show.
+            outputs.push(
+              JSON.stringify(exit.value.resolved, (_key, value: unknown) =>
+                typeof value === "bigint" ? String(value) : value,
+              ),
+            );
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
             expect(place.named).toBeDefined();

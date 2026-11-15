@@ -1,6 +1,7 @@
-// L14 next/. Only the declarations and lower settings services belong in this law.
+// L14 next/. Only the declarations and lower settings services belong in this law. The memory restart
+// plan (docs/plan/lanes/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -82,4 +83,42 @@ it.effect.prop(
       expect(Exit.isFailure(failed)).toBe(true);
     }).pipe(Effect.provide(TomlParser.layer)),
   { arbitrary: { seed: 119120, runs: 100 } },
+);
+
+// The group's own name for a declared path, so a law reads the decoded value it resolved.
+const named = (path: string) => Object.entries(Declarations.all.settings).find(([, d]) => d.path === path)?.[0];
+
+// L9. Plant: default the limit to 50 MB, or leave the grace out of `all`: L9 fails.
+it.effect.prop(
+  "L9 the brain's memory limit and grace are declared person settings that read a provider, keep their defaults and survive snapshots",
+  [Schema.Tuple([Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000_000_000 })), Positive])],
+  ([[bytes, grace]]) =>
+    Effect.gen(function* () {
+      const memory = declaration("desktop.brain-memory");
+      const wait = declaration("desktop.brain-grace");
+      // A byte size has one spelling: a string with its unit.
+      const flags = { "desktop.brain-memory": `${bytes} B`, "desktop.brain-grace": String(grace) };
+      const resolved = yield* Sources.resolve(Declarations.all, slots(flags));
+      const saved = yield* Snapshot.make(Declarations.all, resolved);
+      const checked = yield* Snapshot.read(Declarations.all, saved);
+      const values: Record<string, unknown> = checked.values;
+
+      for (const d of [memory, wait]) {
+        expect(d.scope).toEqual(["person"]);
+        expect(d.reload).toBe("restart");
+        expect(saved.origins[d.path]?._tag).toBe("flag");
+        expect(checked.snapshot.values[d.path]).toEqual(saved.values[d.path]);
+      }
+
+      expect(
+        yield* memory.parse(ConfigProvider.fromUnknown({ desktop: { "brain-memory": `${bytes} B` } })),
+      ).toStrictEqual(ByteSize.bytes(bytes));
+      expect(yield* wait.parse(ConfigProvider.fromUnknown({ desktop: { "brain-grace": grace } }))).toBe(grace);
+      expect(values[named(memory.path)!]).toStrictEqual(ByteSize.bytes(bytes));
+      expect(values[named(wait.path)!]).toBe(grace);
+      // The mark 0292 and experiment 93 set, and OTP's worker default for a stop's grace.
+      expect(yield* memory.parse(ConfigProvider.fromUnknown({}))).toStrictEqual(ByteSize.bytes(500_000_000));
+      expect(yield* wait.parse(ConfigProvider.fromUnknown({}))).toBe(5000);
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+  { arbitrary: { seed: 119120, runs: 50 } },
 );
