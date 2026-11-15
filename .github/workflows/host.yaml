@@ -90,7 +90,7 @@ jobs:
           ) > "$RUNNER_TEMP/launchd-states.txt" 2>/dev/null &
           sampler=$!
           code=0
-          pnpm exec vitest run --maxWorkers=1 --root e2e --fileParallelism=false --testTimeout=120000 --hookTimeout=120000 electron-launchd.test.ts || code=$?
+          pnpm exec vitest run --maxWorkers=1 --root e2e --fileParallelism=false --testTimeout=120000 --hookTimeout=120000 electron-launchd.visual.test.ts || code=$?
           kill "$sampler" || true
           exit "$code"
 
