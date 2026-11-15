@@ -74,8 +74,8 @@ export class QuotasError extends Schema.TaggedError<QuotasError>()("QuotasError"
 }) {}
 
 /**
- * The limits of one account: its `writes` and `bytes`, and under `letter` the writes and bytes
- * one replayed letter may take without counting against them.
+ * The limits of one account: its `writes` and `bytes`, and under `message` the writes and bytes
+ * one replayed message may take without counting against them.
  *
  * **Details**
  *
@@ -88,7 +88,7 @@ export class QuotasError extends Schema.TaggedError<QuotasError>()("QuotasError"
 export interface Allowance {
   readonly writes: number;
   readonly bytes: number;
-  readonly letter: { readonly writes: number; readonly bytes: number };
+  readonly message: { readonly writes: number; readonly bytes: number };
 }
 
 /**
@@ -106,7 +106,7 @@ export interface Limits {
 
 /**
  * An account's use as read: the writes and bytes counted against its limits now, the charge held
- * `ahead` for accepted letters whose step is not committed yet, and the running `total` it has
+ * `ahead` for accepted messages whose step is not committed yet, and the running `total` it has
  * committed.
  *
  * @stability unstable
@@ -163,10 +163,11 @@ export class Quotas extends Context.Service<
     readonly program: (identity: string) => Effect.Effect<Use, QuotasError>;
     readonly recovery: (name: string) => Effect.Effect<Use, QuotasError>;
     /**
-     * Whether `name`'s inbox would admit the letter `letter` with this line now, the letter and
-     * its step charged together. A letter the inbox already took answers true. Nothing is saved.
+     * Whether `name`'s inbox would admit the message `id` with this line now, the message and its
+     * step charged together, placed after the `before` entries the caller writes first. A message
+     * the inbox already took answers true. Nothing is saved.
      */
-    readonly admits: (name: string, letter: string, line: Line) => Effect.Effect<boolean, QuotasError>;
+    readonly admits: (name: string, id: string, line: Line, before: number) => Effect.Effect<boolean, QuotasError>;
     readonly ordinary: <A>(process: string, step: () => A) => A;
     readonly recovering: <A>(process: string, step: () => A) => A;
     readonly infrastructure: <A>(step: () => A) => A;

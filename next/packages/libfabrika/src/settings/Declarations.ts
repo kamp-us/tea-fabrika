@@ -318,7 +318,7 @@ const Bytes = Schema.ByteSizeFromString.check(
 const RecoveryAllowance = Schema.Struct({
   writes: Positive,
   bytes: Bytes,
-  letter: Schema.Struct({ writes: Positive, bytes: Bytes }),
+  message: Schema.Struct({ writes: Positive, bytes: Bytes }),
 });
 
 /**
@@ -357,7 +357,7 @@ export const storage = Setting.make("limits.storage", {
 
 /**
  * Setting for the recovery allowance of each storage location: its writes and bytes per rolling
- * minute, and the room one replayed letter may take.
+ * minute, and the room one replayed message may take.
  *
  * @stability unstable
  * @category settings
@@ -365,10 +365,10 @@ export const storage = Setting.make("limits.storage", {
 export const recovery = Setting.make("limits.recovery", {
   schema: Schema.Struct({ project: RecoveryAllowance, process: RecoveryAllowance }),
   default: {
-    project: { writes: 160, bytes: ByteSize.bytes(74_080), letter: { writes: 10, bytes: ByteSize.bytes(5_469) } },
-    process: { writes: 290, bytes: ByteSize.bytes(207_410), letter: { writes: 50, bytes: ByteSize.bytes(18_790) } },
+    project: { writes: 160, bytes: ByteSize.bytes(74_080), message: { writes: 10, bytes: ByteSize.bytes(5_469) } },
+    process: { writes: 290, bytes: ByteSize.bytes(207_410), message: { writes: 50, bytes: ByteSize.bytes(18_790) } },
   },
-  doc: "Recovery writes and bytes per rolling minute, plus each accepted letter's replay room.",
+  doc: "Recovery writes and bytes per rolling minute, plus each accepted message's replay room.",
   scope: ["person"],
   reload: "restart",
   since: "0.0.0",

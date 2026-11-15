@@ -23,7 +23,7 @@ const Instance = Schema.fromJsonString(Schema.Struct({ settings: Schema.Unknown 
 const allowance = (declared: Declared["recovery"]["project"]): Allowance => ({
   writes: declared.writes,
   bytes: ByteSize.toNumberUnsafe(declared.bytes),
-  letter: { writes: declared.letter.writes, bytes: ByteSize.toNumberUnsafe(declared.letter.bytes) },
+  message: { writes: declared.message.writes, bytes: ByteSize.toNumberUnsafe(declared.message.bytes) },
 });
 
 const refused = (cause: unknown) =>

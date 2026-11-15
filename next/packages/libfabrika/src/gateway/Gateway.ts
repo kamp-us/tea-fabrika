@@ -309,11 +309,15 @@ type Options<A, RNext, RDeliver, RNotify> = {
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
   readonly nextProcess: () => Effect.Effect<string, never, RNext>;
   /**
-   * Whether the program behind `process` has room for this input's letter and its step. The door
-   * asks before it saves anything of the input, and `false` answers `quota` (0147). Left out,
-   * every input has room.
+   * Whether the program behind `process` has room for this input's message and its step, placed
+   * after the `before` entries the door writes first. The door asks before it saves anything of
+   * the input, and `false` answers `quota` (0147). Left out, every input has room.
    */
-  readonly admit?: (process: string, incoming: Incoming) => Effect.Effect<boolean, LedgerError, RDeliver>;
+  readonly admit?: (
+    process: string,
+    incoming: Incoming,
+    before: number,
+  ) => Effect.Effect<boolean, LedgerError, RDeliver>;
   readonly deliver: (
     process: string,
     envelope: Envelope<A>,
@@ -1132,7 +1136,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
   });
   /**
-   * Whether the target's program has room for one send, asked as its letter would land, with
+   * Whether the target's program has room for one send, asked as its message would land, with
    * nothing saved or recorded. A send this cannot read has room: the door's own checks answer it.
    */
   const roomFor = Effect.fnUntraced(function* (
@@ -1155,13 +1159,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const by = yield* membership(raw, key);
       const id = yield* ids.next(InputId);
       const span = yield* Effect.currentSpan;
-      return yield* admit(sent.pid, {
-        id: sent.letter,
-        envelope: { id, by, arrivedAt: yield* clock, input: message.success },
-        sentAt: sent.sentAt,
-        seen: sent.seen,
-        span: { traceId: span.traceId, spanId: span.spanId },
-      });
+      // The door's record of the input on `gateway/inputs` is its one entry before the message.
+      return yield* admit(
+        sent.pid,
+        {
+          id: sent.letter,
+          envelope: { id, by, arrivedAt: yield* clock, input: message.success },
+          sentAt: sent.sentAt,
+          seen: sent.seen,
+          span: { traceId: span.traceId, spanId: span.spanId },
+        },
+        1,
+      );
     }).pipe(
       Effect.withSpan("gateway.quota"),
       // A storage failure fails the call; a writer who is not granted is answered by the door below.

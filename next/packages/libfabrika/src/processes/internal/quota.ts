@@ -5,16 +5,31 @@ import { Exceeded, RecoveryReserveExhausted, type Allowance } from "../Quotas.ts
 const Amount = Schema.Struct({ writes: Schema.Number, bytes: Schema.Number });
 const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded } });
 
+/**
+ * Schema for whose account one machine keeps: a `program`'s ledger account, a registered name's
+ * `recovery` account at one storage location, or a name's Process-local `local` program account.
+ * Code that charges a write picks it; it is never read from a name's text.
+ *
+ * @internal
+ */
+export const Account = Schema.TaggedUnion({
+  program: { program: Schema.String },
+  recovery: { name: Schema.String, location: Schema.Literals(["project", "process"]) },
+  local: { name: Schema.String },
+});
+
+/** @internal */
+export type Account = typeof Account.Type;
+
 const Fields = {
-  account: Schema.String,
-  channel: Schema.Literals(["program", "recovery", "local"]),
+  account: Account,
   at: Schema.Number,
   writes: Schema.Number,
   bytes: Schema.Number,
   total: Amount,
   ahead: Amount,
   groups: Schema.Array(Schema.Struct({ at: Schema.Number, ...Amount.fields })),
-  replay: Schema.Struct({ recovery: Schema.String, letters: Schema.Array(Schema.String) }),
+  replay: Schema.Struct({ recovery: Schema.String, messages: Schema.Array(Schema.String) }),
   decision: Decision,
 };
 
@@ -34,7 +49,7 @@ const Msg = Schema.Union([
     operation: Schema.String,
     ...Amount.fields,
     ahead: Amount,
-    replay: Schema.optionalKey(Schema.Struct({ letter: Schema.String, recovery: Schema.String })),
+    replay: Schema.optionalKey(Schema.Struct({ message: Schema.String, recovery: Schema.String })),
   }),
   Schema.Struct({ type: Schema.Literal("advance"), at: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("resume"), at: Schema.Number }),
@@ -51,16 +66,12 @@ const advance = (s: Model, at: number): Model => {
   return {
     ...s,
     writes: groups.reduce((n, g) => n + g.writes, 0),
-    bytes: s.channel === "recovery" ? groups.reduce((n, g) => n + g.bytes, 0) : s.bytes,
+    bytes: s.account._tag === "recovery" ? groups.reduce((n, g) => n + g.bytes, 0) : s.bytes,
   };
 };
 
 /** @internal */
-export const make = (options: {
-  readonly account: string;
-  readonly channel: Model["channel"];
-  readonly limits: Allowance;
-}) =>
+export const make = (options: { readonly account: Account; readonly limits: Allowance }) =>
   Machine.make({
     model: Model,
     msg: Msg,
@@ -69,14 +80,13 @@ export const make = (options: {
       saved ??
         Model.cases.ready.make({
           account: options.account,
-          channel: options.channel,
           at: 0,
           writes: 0,
           bytes: 0,
           ahead: { writes: 0, bytes: 0 },
           total: { writes: 0, bytes: 0 },
           groups: [],
-          replay: { recovery: "", letters: [] },
+          replay: { recovery: "", messages: [] },
           decision: Decision.cases.admitted.make({}),
         }),
       [],
@@ -105,21 +115,22 @@ export const make = (options: {
           return [s, []];
         }
 
+        const account = s.account;
         const replay =
           m.replay !== undefined &&
-          (s.replay.recovery !== m.replay.recovery || !s.replay.letters.includes(m.replay.letter)) &&
-          m.writes <= options.limits.letter.writes &&
-          Math.max(0, m.bytes) <= options.limits.letter.bytes;
+          (s.replay.recovery !== m.replay.recovery || !s.replay.messages.includes(m.replay.message)) &&
+          m.writes <= options.limits.message.writes &&
+          Math.max(0, m.bytes) <= options.limits.message.bytes;
         const writes = replay ? 0 : m.writes + m.ahead.writes;
         const bytes = replay ? 0 : Math.max(0, m.bytes + m.ahead.bytes);
         const usedWrites = s.writes + writes;
-        const usedBytes = s.channel === "recovery" ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
+        const usedBytes = account._tag === "recovery" ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
         const resource = usedWrites > options.limits.writes ? "writes" : "storage";
         const exceeded =
-          s.channel !== "local" && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
+          account._tag !== "local" && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
 
         if (exceeded) {
-          if (s.channel === "recovery") {
+          if (account._tag === "recovery") {
             const { _tag: _case, ...fields } = s;
             return [
               Model.cases.reserve_fault.make({
@@ -127,8 +138,8 @@ export const make = (options: {
                 operation: m.operation,
                 fault: new RecoveryReserveExhausted({
                   resource,
-                  location: s.account.endsWith("/project") ? "project" : "process",
-                  process: s.account,
+                  location: account.location,
+                  process: account.name,
                   required: resource === "writes" ? writes : bytes,
                   remaining: resource === "writes" ? options.limits.writes - s.writes : options.limits.bytes - s.bytes,
                   cause: null,
@@ -183,7 +194,7 @@ export const make = (options: {
               replay && m.replay !== undefined
                 ? {
                     recovery: m.replay.recovery,
-                    letters: [...(s.replay.recovery === m.replay.recovery ? s.replay.letters : []), m.replay.letter],
+                    messages: [...(s.replay.recovery === m.replay.recovery ? s.replay.messages : []), m.replay.message],
                   }
                 : s.replay,
             decision: Decision.cases.admitted.make({}),

@@ -5,28 +5,31 @@
  */
 import { Effect, Layer, Option } from "effect";
 import type { Sql } from "../Sql.ts";
-import { committedEntries, ledgerStore, policyFor } from "./internal/ledgerStore.ts";
+import { committedEntries, headPlace, ledgerStore, policyFor } from "./internal/ledgerStore.ts";
 import { Doorbell } from "./Ledger.ts";
-import { Referee } from "./Referee.ts";
+import { Referee, Selection } from "./Referee.ts";
 import { WritePolicy } from "./WritePolicy.ts";
 
 /**
- * Returns the committed entries in `sql`, oldest first, or none before the ledger's table exists.
- * Accounting reads them to find each entry's owner.
- *
- * **Details**
- *
- * `scope.after` keeps only entries past that revision, and `scope.stream` only one stream's, so a
- * reader that knows what it needs does not decode the whole ledger. `scope.at` with a stream
- * returns the one entry at that position, as an ack names it.
+ * Returns the committed entries in `sql` that `selection` names, oldest first, or none before the
+ * ledger's table exists. Accounting reads them to find each entry's owner, so a reader that knows
+ * what it needs does not decode the whole ledger. Left out, it reads them all.
  *
  * @stability unstable
  * @category getters
  */
-export const accountingEntries = (
-  sql: Sql,
-  scope?: { readonly stream?: string; readonly after?: number } | { readonly stream: string; readonly at: number },
-) => committedEntries(sql, scope);
+export const accountingEntries = (sql: Sql, selection: Selection = Selection.cases.all.make({ after: 0 })) =>
+  committedEntries(sql, selection);
+
+/**
+ * Returns the place the next entry appended to `stream` would get at the referee's time `now`: its
+ * `rev` in the whole log, its `pos` in the stream and its `arrivedAt`, never before the head's, as
+ * `append` gives them. A trial measures an entry there before it lands.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const nextPlace = (sql: Sql, stream: string, now: number) => headPlace(sql, stream, now);
 
 /**
  * Layer that provides `Referee` on the given `Sql`. An append is decided and written in one SQL

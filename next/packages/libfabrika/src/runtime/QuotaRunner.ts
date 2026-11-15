@@ -11,7 +11,7 @@ import { QuotasError, type Accounting, type RecoveryReserveExhausted } from "../
 import type { ProgramRunner } from "./Runner.ts";
 
 /**
- * Error the runner raises inside a turn when its own letter, a timer's or a command answer's, is
+ * Error the runner raises inside a turn when its own message, a timer's or a command answer's, is
  * refused for quota. The turn catches it, keeps the saved wake or command and sets an alarm to
  * try again.
  *
@@ -84,20 +84,33 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
 
 /**
  * Restarts a stopped name for a person: clears its saved reserve fault once the pending charge
- * fits, then runs the runner's restart. Any other writer fails with `NotGranted`.
+ * fits, then runs the runner's restart. The caller is the person's gate: it calls this only for a
+ * restart it has checked is the person's.
  *
  * @stability unstable
  * @category combinators
  */
-export const restart = Effect.fn("quota_runner.restart")(function* (
+export const personRestart = Effect.fn("quota_runner.restart")(function* (
   runner: ProgramRunner["Service"],
   accounting: Accounting,
-  request: { readonly id: string; readonly build: string; readonly by: Writer },
+  request: { readonly id: string; readonly build: string },
 ) {
-  if (request.by._tag !== "person") {
-    return yield* new NotGranted({});
-  }
-
   yield* accounting.resume;
   return yield* runner.restart({ id: request.id, build: request.build });
 });
+
+/**
+ * Restarts a stopped name for the checked writer `by`, as `personRestart` does for a person. Any
+ * other writer fails with `NotGranted`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const restart = (
+  runner: ProgramRunner["Service"],
+  accounting: Accounting,
+  request: { readonly id: string; readonly build: string; readonly by: Writer },
+) =>
+  request.by._tag === "person"
+    ? personRestart(runner, accounting, { id: request.id, build: request.build })
+    : Effect.fail(new NotGranted({}));

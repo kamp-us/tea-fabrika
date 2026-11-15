@@ -163,23 +163,23 @@ unrun write-quota rows above. Raw samples remain private. The script is
 
 The host used Node 26.13.0, Effect 4.1.2, tea 0.25.0, Vitest 5.0.5 and
 Alchemy 2.0.0-beta.85 with the locked patches. Two clients drove steady and burst
-checklist work. Recovery samples cover fresh throws, saved-letter throws, poison
+checklist work. Recovery samples cover fresh throws, saved-message throws, poison
 completion and person restarts. The supplied amendment does not give the elapsed
 run duration or the ordinary-load p50 and p95. No value is inferred for them here.
 
 Percentiles use nearest rank, `sorted[ceil(p * count) - 1]`. Program inbox p99
-was 688 over 561 rolling-minute samples, with maximum 720. Each accepted letter
+was 688 over 561 rolling-minute samples, with maximum 720. Each accepted message
 had exactly one `stepped` record. Its two-write charge gives
 `ceil(10 × 2 × 688) = 13,760` program writes per minute. The storage ceiling stays
 the decided decimal 1,000,000,000 bytes.
 
-| Account | Minute p99 writes / bytes | Complete chain writes / bytes | Largest replay-letter writes / bytes | Default writes / bytes / letter writes / letter bytes |
+| Account | Minute p99 writes / bytes | Complete chain writes / bytes | Largest replay-message writes / bytes | Default writes / bytes / message writes / message bytes |
 |---|---|---|---|---|
 | Project recovery | 16 / 7,408 | 16 / 7,398 | 1 / 546.83 | 160 / 74,080 / 10 / 5,469 |
 | Process recovery | 29 / 20,741 | 28 / 19,870 | 5 / 1,879 | 290 / 207,410 / 50 / 18,790 |
 
 Recovery defaults are `ceil(10 × max(minute p99, complete chain))`, separately
-for writes and bytes. Replay defaults are `ceil(10 × largest replay-letter cost)`.
+for writes and bytes. Replay defaults are `ceil(10 × largest replay-message cost)`.
 The Process chain includes 25 changed rows and three checkpoint copies for its
 write count. The three copies' 567 bytes are counted separately from the byte
 window. The first delivery receipts belong to ordinary Process-local work.
@@ -187,10 +187,10 @@ Process writes therefore use 28, rather than the withdrawn 32. All recovery p99
 values equal their maxima. Each name had 20 scripted minute windows; this does
 not measure sustained daily use.
 
-Restart histories of 2, 4, 9, 10, 100 and 350 letters cost exactly five Process
-writes and one Project write per replayed letter. A 1,000-letter fill failed
+Restart histories of 2, 4, 9, 10, 100 and 350 messages cost exactly five Process
+writes and one Project write per replayed message. A 1,000-message fill failed
 three times when the local control door refused connections. The assumption
-beyond 350 letters remains for Q18 to test. IDs were under ten bytes. Longer
+beyond 350 messages remains for Q18 to test. IDs were under ten bytes. Longer
 IDs and longer restart histories can require larger replay settings. Monitor
 fan-out, saved-state upgrades and remembered refusals have no sample here.
 

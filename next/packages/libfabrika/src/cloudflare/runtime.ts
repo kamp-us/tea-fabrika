@@ -1223,8 +1223,8 @@ const projectLogic = Effect.fn("project.init")(function* (
       }),
       nextProcess: () => ids.next,
       notify,
-      admit: (pid, incoming) =>
-        ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build),
+      admit: (pid, incoming, before) =>
+        ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
       deliver: (pid, incoming) =>
         processObject(pid).pipe(
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).msg(incoming))),
@@ -1830,7 +1830,8 @@ const projectLogic = Effect.fn("project.init")(function* (
     },
     hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
       // Under the shared write turn, as every task call is: a read and its request or collect are one step.
-      const work = write(hands.ask(ask, origin));
+      // The request, its pointer and the collect are the asking program's own writes, charged to it.
+      const work = write(ProjectQuotas.own(ask.process, hands.ask(ask, origin)));
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     target: door.target,
@@ -2386,14 +2387,10 @@ const processLogic = Effect.fnUntraced(function* (
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-        // A restart for a person's name may clear its saved reserve fault; any other stays guarded.
-        Effect.flatMap((checked) =>
-          attributed(
-            saved.owner._tag === "person"
-              ? QuotaRunner.restart(runner, accounting, { ...checked, by: saved.owner })
-              : runner.restart(checked),
-          ),
-        ),
+        // The control door is the person's gate: only the instance's own token reaches this call,
+        // and it carries no checked requester. So a restart here is the person's, and it may clear
+        // the name's saved reserve fault.
+        Effect.flatMap((checked) => attributed(QuotaRunner.personRestart(runner, accounting, checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
     alarm: () =>

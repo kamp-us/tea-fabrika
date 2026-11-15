@@ -127,7 +127,7 @@
                 "bytes": {
                   "type": "string"
                 },
-                "letter": {
+                "message": {
                   "type": "object",
                   "properties": {
                     "writes": {
@@ -143,7 +143,7 @@
                   "additionalProperties": false
                 }
               },
-              "required": ["writes", "bytes", "letter"],
+              "required": ["writes", "bytes", "message"],
               "additionalProperties": false
             },
             "process": {
@@ -157,7 +157,7 @@
                 "bytes": {
                   "type": "string"
                 },
-                "letter": {
+                "message": {
                   "type": "object",
                   "properties": {
                     "writes": {
@@ -173,18 +173,18 @@
                   "additionalProperties": false
                 }
               },
-              "required": ["writes", "bytes", "letter"],
+              "required": ["writes", "bytes", "message"],
               "additionalProperties": false
             }
           },
           "required": ["project", "process"],
           "additionalProperties": false,
-          "description": "Recovery writes and bytes per rolling minute, plus each accepted letter's replay room.",
+          "description": "Recovery writes and bytes per rolling minute, plus each accepted message's replay room.",
           "default": {
             "project": {
               "writes": 160,
               "bytes": "74080 bytes",
-              "letter": {
+              "message": {
                 "writes": 10,
                 "bytes": "5469 bytes"
               }
@@ -192,7 +192,7 @@
             "process": {
               "writes": 290,
               "bytes": "207410 bytes",
-              "letter": {
+              "message": {
                 "writes": 50,
                 "bytes": "18790 bytes"
               }

@@ -325,7 +325,7 @@ export class ProcessManager extends Context.Service<
                       ),
                     );
 
-                    // The first letter keeps the caller's own `from`: it is the requester's mail, not the brain's.
+                    // The first message keeps the caller's own `from`: it is the requester's mail, not the brain's.
                     if (first !== undefined) {
                       turn.append(inbox(request.name), id("start", request.id), letterLine(from, first.m));
                     }

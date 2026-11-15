@@ -98,7 +98,7 @@ export type Changes = {
 };
 
 /**
- * @internal The journal states in which the runner does a program's own work: waiting for a letter,
+ * @internal The journal states in which the runner does a program's own work: waiting for a message,
  * checking a fresh one, or stepping it. Every other state is the brain keeping or restoring the
  * process, so its writes are recovery writes (0147). Extra fields are ignored, so any journal in
  * one of these states decodes, and the runner reads its own journal by the same schema.

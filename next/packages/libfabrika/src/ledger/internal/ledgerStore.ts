@@ -14,8 +14,8 @@ import type { Doorbell } from "../Ledger.ts";
 import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
 import { Appended, Entry, Line, PAGE, Row, ROW_BYTES, Waited } from "../Log.ts";
-import type { Referee } from "../Referee.ts";
-import { OwnWrite, QuotaRefused, RuntimeWrite, type WritePolicy, type Writer } from "../WritePolicy.ts";
+import { Selection, type Referee } from "../Referee.ts";
+import { QuotaRefused, TrustedWriter, type WritePolicy } from "../WritePolicy.ts";
 import { STREAM, tag } from "./ledgerTrace.ts";
 
 const TABLES = [
@@ -503,43 +503,59 @@ export const ledgerStore = (
 };
 
 /**
- * The policy as this call asks it: with the writer trusted code named around the call, a
- * process's runtime or its program's own write, or as it is when none is named.
+ * The policy as this call asks it: with the writer trusted code named around the call, or as it is
+ * when none is named.
  *
  * @internal
  */
 export const policyFor = Effect.fnUntraced(function* (policy: WritePolicy["Service"] | undefined) {
-  const runtime = yield* Effect.serviceOption(RuntimeWrite);
-  const own = yield* Effect.serviceOption(OwnWrite);
-  const writer: Writer | undefined = Option.isSome(runtime)
-    ? { runtime: runtime.value.process }
-    : Option.isSome(own)
-      ? { own: own.value.process }
-      : undefined;
-  return policy === undefined || writer === undefined
+  const writer = yield* Effect.serviceOption(TrustedWriter);
+  return policy === undefined || Option.isNone(writer)
     ? policy
-    : { admit: (entry: Entry) => policy.admit(entry, writer) };
+    : { admit: (entry: Entry) => policy.admit(entry, writer.value) };
 });
 
+const hasEntries = (sql: Sql) => sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length !== 0;
+
 /**
- * Committed entries past `after`, oldest first: every stream's, one `stream`'s, or the one entry
- * at `at` in a stream. None before the ledger's table exists.
+ * The committed entries a selection names, oldest first. None before the ledger's table exists.
  *
  * @internal
  */
-export const committedEntries = (
-  sql: Sql,
-  scope: { readonly stream?: string; readonly after?: number } | { readonly stream: string; readonly at: number } = {},
-) => {
-  if (sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0) {
+export const committedEntries = (sql: Sql, selection: Selection): ReadonlyArray<Entry> => {
+  if (!hasEntries(sql)) {
     return [];
   }
 
-  const rows =
-    "at" in scope
-      ? sql.exec("SELECT * FROM entries WHERE stream = ? AND pos = ?", scope.stream, scope.at)
-      : scope.stream === undefined
-        ? sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", scope.after ?? 0)
-        : sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", scope.stream, scope.after ?? 0);
+  const rows = Selection.match(selection, {
+    all: ({ after }) => sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", after),
+    stream: ({ stream, after }) =>
+      sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", stream, after),
+    entry: ({ stream, pos }) => sql.exec("SELECT * FROM entries WHERE stream = ? AND pos = ?", stream, pos),
+  });
   return rows.map((row) => decodeRow(row));
+};
+
+const Place = Schema.Struct({ rev: Rev, pos: Rev, arrivedAt: Schema.Int });
+
+/**
+ * The place `place` would give the next entry on `stream` at the referee's time `now`: the next
+ * `rev`, the stream's next `pos`, and an `arrivedAt` never before the head's.
+ *
+ * @internal
+ */
+export const headPlace = (sql: Sql, stream: string, now: number): typeof Place.Type => {
+  if (!hasEntries(sql)) {
+    return { rev: 1, pos: 1, arrivedAt: now };
+  }
+
+  const [row] = sql.exec(
+    `SELECT (SELECT coalesce(max(rev), 0) FROM entries) + 1 AS rev,
+       coalesce(max(pos), 0) + 1 AS pos,
+       max(?, (SELECT coalesce(max("arrivedAt"), 0) FROM entries)) AS "arrivedAt"
+     FROM entries WHERE stream = ?`,
+    now,
+    stream,
+  );
+  return Schema.decodeUnknownSync(Place)(row);
 };

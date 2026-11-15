@@ -20,35 +20,37 @@ import type { Entry } from "./Log.ts";
 export class QuotaRefused extends Schema.TaggedError<QuotaRefused>()("QuotaRefused", {}) {}
 
 /**
- * Service that names the process whose runtime is writing. The trusted runtime assembly provides
- * it around a write, and it is never decoded from a request.
+ * Schema for who trusted code says a write is for: `runtime`, a process's runtime writing its own
+ * stream, or `own`, a process's program writing its own entry, as a checked write or a hands task
+ * request is.
  *
  * @stability unstable
- * @category services
+ * @category schemas
  */
-export class RuntimeWrite extends Context.Service<RuntimeWrite, { readonly process: string }>()(
-  "@kampus/libfabrika/ledger/WritePolicy.RuntimeWrite",
-) {}
+export const Writer = Schema.TaggedUnion({
+  runtime: { process: Schema.String },
+  own: { process: Schema.String },
+});
 
 /**
- * Service that names the process whose program is writing its own entry, as a program's checked
- * write. The trusted assembly provides it around the call, and it is never decoded from a request.
- *
- * @stability unstable
- * @category services
- */
-export class OwnWrite extends Context.Service<OwnWrite, { readonly process: string }>()(
-  "@kampus/libfabrika/ledger/WritePolicy.OwnWrite",
-) {}
-
-/**
- * Who trusted code says a write is for: a process's runtime, or a process's program writing its
- * own entry. Left out, the policy finds the entry's owner itself.
+ * Who trusted code says a write is for: a process's runtime, or a process's program.
  *
  * @stability unstable
  * @category models
  */
-export type Writer = { readonly runtime: string } | { readonly own: string };
+export type Writer = typeof Writer.Type;
+
+/**
+ * Service that names the `Writer` of the writes inside it. The trusted assembly provides it around
+ * a call, and it is never decoded from a request. Left out, the policy finds an entry's owner
+ * itself.
+ *
+ * @stability unstable
+ * @category services
+ */
+export class TrustedWriter extends Context.Service<TrustedWriter, Writer>()(
+  "@kampus/libfabrika/ledger/WritePolicy.TrustedWriter",
+) {}
 
 /**
  * Service that admits or refuses one new entry before the ledger inserts it. `admit` runs

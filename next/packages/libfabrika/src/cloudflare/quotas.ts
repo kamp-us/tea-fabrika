@@ -51,7 +51,7 @@ export const process = (sql: Sql, name: string, values: Values): Effect.Effect<A
   });
 
 /**
- * Returns the line a delivered input's letter is saved as in its name's inbox. The inbox append
+ * Returns the line a delivered input's message is saved as in its name's inbox. The inbox append
  * and the door's quota trial both build it here, so the trial charges what would land.
  *
  * @stability unstable
@@ -76,9 +76,10 @@ export const inboxLine = Effect.fnUntraced(function* (input: Incoming, build: st
 });
 
 /**
- * Whether the program behind `process` would take this input's letter and its step now, asked by
- * the door before it saves anything of the input. A name that is not live, or a letter its inbox
- * already took, is taken: the door's own answer for it stands (0147).
+ * Whether the program behind `process` would take this input's message and its step now, placed
+ * after the `before` entries the door writes first, asked by the door before it saves anything of
+ * the input. A name that is not live, or a message its inbox already took, is taken: the door's
+ * own answer for it stands (0147).
  *
  * @stability unstable
  * @category getters
@@ -89,6 +90,7 @@ export const admitsInput = Effect.fnUntraced(function* (
   process: string,
   input: Incoming,
   build: string,
+  before: number,
 ) {
   const found = yield* Effect.option(processes.resolve(process));
 
@@ -97,13 +99,13 @@ export const admitsInput = Effect.fnUntraced(function* (
   }
 
   return yield* quotas
-    .admits(found.value.name, input.id, yield* inboxLine(input, build))
+    .admits(found.value.name, input.id, yield* inboxLine(input, build), before)
     .pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })));
 });
 
 /**
  * Runs a Process object's append to the Project's ledger as that process's own runtime write when
- * the stream is a process's own stream, so its step record settles the charge its letter took
+ * the stream is a process's own stream, so its step record settles the charge its message took
  * ahead. Any other stream is admitted by its owner, as every other write is.
  *
  * @stability unstable
@@ -121,6 +123,19 @@ export const runtimeAppend = <A, E, R>(
   });
 
 /**
+ * Runs Project work asked by a process's Process object as that process's program writing its own
+ * entries, so every entry it commits is charged to the program: a hands task's request, its
+ * pointer for the hands key and its later collect are, as a checked write is.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const own = <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.serviceOption(Quotas), (quotas) =>
+    Option.isSome(quotas) ? quotas.value.own(process, work) : work,
+  );
+
+/**
  * Runs a process's own checked write, asked of the Project by its Process object, as that
  * process's program writing its own entries, so the write is charged to the program. A write over
  * the program's quota answers the `quota` refusal, as a single append's does.
@@ -129,9 +144,7 @@ export const runtimeAppend = <A, E, R>(
  * @category combinators
  */
 export const ownWrite = <E, R>(process: string, work: Effect.Effect<Appended, E, R>): Effect.Effect<Appended, E, R> =>
-  Effect.flatMap(Effect.serviceOption(Quotas), (quotas) =>
-    Option.isSome(quotas) ? quotas.value.own(process, work) : work,
-  ).pipe(
+  own(process, work).pipe(
     Effect.catchIf(
       (error) => error instanceof LedgerError && error.cause instanceof QuotaRefused,
       () => Effect.succeed(Appended.cases.refused.make({ reason: "quota" })),
