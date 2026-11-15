@@ -149,6 +149,19 @@ The gateway window in milliseconds.
 | Reload | restart |
 | Since | 0.0.0 |
 
+### `hands.target`
+
+The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.
+
+| Field | Value |
+|---|---|
+| Scope | person |
+| Environment | `FABRIKA_HANDS_TARGET` |
+| Flag | `--hands.target` |
+| Default | `null` |
+| Reload | restart |
+| Since | 0.0.0 |
+
 ### `instance.port`
 
 The port the local instance listens on.

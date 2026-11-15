@@ -1,11 +1,12 @@
 // P39 slice 1, L9 (0095): `Jobs.ts` holds the contract, with its service type written out in the
 // jobs module's own types and error, and its one layer is the sibling `JobsLedger.ts`, read through
 // its module. No ledger name (`LedgerTurn`, `LedgerError`, `Line`) is part of the contract. CI's
-// typecheck is this law's runner.
+// typecheck is this law's runner. P39 slice 3 (ticket 1040) adds `collected`, which takes the
+// collection in the jobs module's own `Collection` type, and the `wrong_process` reason.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Context, Effect, Layer, Stream } from "effect";
 import type { ProcessId } from "../ProcessId.ts";
-import type { Executor, Job, Recorded, Request, Result } from "./Job.ts";
+import type { Collection, Executor, Job, Recorded, Request, Result } from "./Job.ts";
 import type * as JobsFront from "./Jobs.ts";
 import type { Jobs, JobsError } from "./Jobs.ts";
 import type * as JobsLedger from "./JobsLedger.ts";
@@ -31,6 +32,11 @@ it("type: L9 the contract speaks only the jobs module's types and errors, and th
       recorded: Recorded,
     ) => Effect.Effect<JobsFront.Receipt, JobsError>;
     readonly read: (id: string) => Effect.Effect<Job, JobsError>;
+    readonly collected: (
+      id: string,
+      collection: typeof Collection.Type,
+      recorded: Recorded,
+    ) => Effect.Effect<JobsFront.Receipt, JobsError>;
   }>();
   // A receipt is where the referee placed the event and when it arrived; a take adds its execution.
   expectTypeOf<JobsFront.Receipt>().toEqualTypeOf<Receipt>();
@@ -49,6 +55,7 @@ it("type: L9 the contract speaks only the jobs module's types and errors, and th
     | "lacks_capability"
     | "wrong_execution"
     | "wrong_state"
+    | "wrong_process"
     | "bad_input"
     | "storage"
   >();

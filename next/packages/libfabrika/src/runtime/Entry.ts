@@ -106,8 +106,8 @@ export type Loaded = {
 /** The one Cmd that only the chaos program may run. */
 const CHAOS_ONLY: Readonly<Record<string, string>> = { fire: "fabrika/chaos" };
 
-/** The Cmd the runner performs itself: no caller-supplied handler ever runs it. */
-const BUILT_IN = new Set(["send"]);
+/** The Cmds the runner performs itself: no caller-supplied handler ever runs them. */
+const BUILT_IN = new Set(["send", "hands"]);
 
 /**
  * Service that loads a program by name for the runner.

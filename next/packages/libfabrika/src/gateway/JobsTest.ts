@@ -2,6 +2,11 @@
 // The Node runner supplies its layers and scoped SQL; this module imports no driver or ledger.
 // A4 and A6-A12 plant trials, including A-Kept's reconnect metadata, are in the tests-step report.
 // Temporary edits are restored after each trial. A14 runs on the lead's host.
+// P39 slice 3 (ticket 1040), W1: an accepted or repeated `jobs.finish` wakes the requester's name
+// after the shared write turn and before it answers; a failed wake answers `refused unavailable`
+// and leaves the job finished, so the same finish sent again repeats and wakes again. The suite
+// supplies the gateway's `MailWakeups` itself and records every wake. Plants (after build): wake
+// only on the first finish, or wake inside the write turn.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import {
@@ -11,6 +16,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Option,
   Redacted,
   Result as R,
   Schema,
@@ -23,19 +29,20 @@ import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { Job, State, type Request, Request as RequestSchema, Result as JobResult } from "../jobs/Job.ts";
 import { Jobs } from "../jobs/Jobs.ts";
+import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
 import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
-import type { Answer } from "../transport/Wire.ts";
-import { Attached } from "../transport/Wire.ts";
+import { Answer, Attached } from "../transport/Wire.ts";
 import { Gateway, type ConnectionId } from "./Gateway.ts";
 
+/** The gateway over one real store. It needs the `MailWakeups` the suite gives it, which records each wake. */
 export type Store = {
   readonly sql: Sql;
   readonly reopen: Effect.Effect<void>;
   readonly gateway: (
     options: Parameters<typeof Gateway.layer<Schema.Json, never, never, never>>[0],
-  ) => Layer.Layer<Gateway | Jobs>;
+  ) => Layer.Layer<Gateway | Jobs, never, MailWakeups>;
 };
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -222,6 +229,23 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   const controls: { pause: null | { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> } } = {
     pause: null,
   };
+  /** W1: every wake the gateway asked for, the name it named, and whether the shared turn was free then. */
+  const wakes: Array<{ readonly name: string; readonly free: boolean }> = [];
+  const wakeFault = { fail: false };
+  const wakeups = Layer.succeed(MailWakeups, {
+    wake: (name: string) =>
+      Effect.gen(function* () {
+        // A wake inside the write turn would hold every other job call behind the recipient's alarm.
+        const free = Option.isSome(yield* turn.withPermitsIfAvailable(1)(Effect.void));
+        wakes.push({ name, free });
+
+        if (wakeFault.fail) {
+          wakeFault.fail = false;
+          return yield* new MailWakeupsError({ reason: "unavailable" });
+        }
+      }),
+  });
+  const gatewayFor = () => store.gateway(options).pipe(Layer.provide(wakeups));
   const options: Parameters<typeof Gateway.layer<Schema.Json, never, never, never>>[0] = {
     sql: store.sql,
     founder: {
@@ -273,7 +297,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   };
-  let life = yield* Layer.build(store.gateway(options));
+  let life = yield* Layer.build(gatewayFor());
   const delegate = yield* Effect.tracer.pipe(Effect.provide(life));
   const tracer = Tracer.make({
     span: (init) => {
@@ -341,7 +365,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       saw: { label: "test", location: "test", method: "command", check: "touch" },
     });
     // A second gateway over the same store takes the membership write before a held call.
-    const b = yield* Gateway.pipe(Effect.provide(store.gateway(options)));
+    const b = yield* Gateway.pipe(Effect.provide(gatewayFor()));
     expect((yield* b.grant({ text: value, armored: yield* (ancestor ? backup : root).sign(value) }))._tag).toBe(
       "applied",
     );
@@ -429,6 +453,8 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     spans,
     attachments,
     controls,
+    wakes,
+    wakeFault,
     grant,
     hello,
     revoke,
@@ -437,13 +463,13 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     j,
     reopen: Effect.gen(function* () {
       yield* store.reopen;
-      life = yield* Layer.build(store.gateway(options));
+      life = yield* Layer.build(gatewayFor());
       d = yield* door();
     }),
   };
 });
 
-type Focus = "A4" | "A6" | "A7" | "A8" | "A9" | "A10" | "A11" | "A12";
+type Focus = "A4" | "A6" | "A7" | "A8" | "A9" | "A10" | "A11" | "A12" | "W1";
 
 const moves: Record<Focus, ReadonlyArray<string>> = {
   A4: ["advance", "take", "capabilities", "role", "reconnect"],
@@ -454,6 +480,7 @@ const moves: Record<Focus, ReadonlyArray<string>> = {
   A10: ["advance", "take", "retry", "reconnect", "reopen"],
   A11: ["advance", "take", "malformed", "reserved"],
   A12: ["advance", "take", "retry", "malformed", "reserved", "reconnect", "reopen", "forbidden", "role", "grant"],
+  W1: ["advance", "take", "retry", "fail_wake", "reopen"],
 };
 
 const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done: Set<string>) =>
@@ -517,6 +544,19 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       expect(s.job.state).toMatchObject({ request: s.request });
       expect(event.traceId).toMatch(/^[0-9a-f]{32}$/);
       expect(event.arrivedAt).toBeGreaterThanOrEqual(0);
+    };
+    /** W1: a finish the gateway took woke its requester's name once, outside the turn; any other call woke nobody. */
+    const woke = (s: Saved, before: number, finished: boolean) => {
+      const fresh = w.wakes.slice(before);
+
+      if (finished) {
+        expect(fresh, "W1: a taken finish wakes the requester's name once, after the write turn").toEqual([
+          { name: s.request.name, free: true },
+        ]);
+        done.add("woke");
+      } else {
+        expect(fresh, "W1: a refused call wakes nobody").toEqual([]);
+      }
     };
     const take = Effect.fnUntraced(function* (s: Saved, cell: Cell) {
       const before = s.job;
@@ -614,10 +654,31 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             ...said(cell),
             ...(method === "jobs.finish" ? { result: cell.result } : {}),
           };
+          const failing = w.wakeFault.fail;
+          const woken = w.wakes.length;
           const answer = yield* w.route(current, method, params);
+          const able = current.live && current.build !== undefined && current.has.includes("git");
 
-          if (!current.live || current.build === undefined || !current.has.includes("git")) {
+          if (focus === "W1") {
+            woke(s, woken, able && method === "jobs.finish");
+          }
+
+          if (!able) {
             refused(answer);
+          } else if (focus === "W1" && method === "jobs.finish" && failing) {
+            // The finish is saved before the wake: a failed wake answers `unavailable`, never an ok.
+            expect(answer, "W1: a failed wake answers refused unavailable").toEqual(
+              Answer.cases.refused.make({ reason: "unavailable" }),
+            );
+            const first = s.job;
+            s.job = yield* w.j((j) => j.read(s.request.id));
+            checkEvent(s, current, cell, params.seen);
+            expect(s.job.events).toHaveLength(first.events.length + 1);
+            expect(s.job.state._tag, "W1: a failed wake leaves the job finished").toBe("finished");
+            expect(s.job.state).toMatchObject({ result: cell.result });
+            s.finish = { rev: last(s.job.events).rev, arrivedAt: last(s.job.events).arrivedAt };
+            done.add("finished");
+            done.add("wake_failed");
           } else {
             const receipt = accepted(answer);
             const first = s.job;
@@ -706,6 +767,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         }
 
         const changed = { ...said(cell), sentAt: `${cell.sentAt}-retry` };
+        const woken = w.wakes.length;
         const start = yield* w.route(current, "jobs.started", {
           ...snapshot(s),
           execution: assignment(s).execution,
@@ -719,7 +781,14 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           refused(start);
         }
 
+        if (focus === "W1") {
+          // A start, first or repeated, wakes nobody: only a finish has a result to deliver.
+          expect(w.wakes.length, "W1: a start wakes nobody").toBe(woken);
+        }
+
         if (p === "finished" && s.job.state._tag === "finished") {
+          const failing = w.wakeFault.fail;
+          const before = w.wakes.length;
           const finish = yield* w.route(current, "jobs.finish", {
             ...snapshot(s),
             execution: assignment(s).execution,
@@ -727,11 +796,24 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             result: s.job.state.result,
           });
 
-          if (able) {
+          if (focus === "W1") {
+            woke(s, before, able);
+          }
+
+          if (able && focus === "W1" && failing) {
+            expect(finish, "W1: a repeated finish whose wake failed answers unavailable").toEqual(
+              Answer.cases.refused.make({ reason: "unavailable" }),
+            );
+            done.add("wake_failed@repeat");
+          } else if (able) {
             expect(accepted(finish)).toEqual(s.finish);
+            done.add("woke@repeat");
           } else {
             refused(finish);
           }
+
+          // The job stays as the first finish left it, whatever the wake did.
+          expect(yield* w.j((j) => j.read(s.request.id))).toEqual(s.job);
         }
 
         done.add(`retry@${p}`);
@@ -780,6 +862,8 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         yield* Deferred.succeed(release, undefined);
         refused(yield* Fiber.join(pending));
         done.add(`race:${method}`);
+      } else if (move === "fail_wake") {
+        w.wakeFault.fail = true;
       } else if (move === "grant") {
         yield* w.tryGrant(current, `hands-grant-${sequence++}`);
       } else if (move === "forbidden") {
@@ -1009,12 +1093,15 @@ const required: Record<Focus, ReadonlyArray<string>> = {
     "malformed:extra",
   ],
   A12: ["assigned", "started", "finished", "retry", "malformed", "reserved", "reconnect", "reopen"],
+  W1: ["assigned", "started", "finished", "woke", "wake_failed", "woke@repeat", "wake_failed@repeat", "reopen"],
 };
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
   for (const focus of Object.keys(moves) as Array<Focus>) {
     it.effect(
-      `${focus}${focus === "A12" ? " [secrets]" : ""}: authenticated job histories preserve authority and durable facts`,
+      focus === "W1"
+        ? "W1: an accepted or repeated jobs.finish wakes the requester's name after the write turn and before it answers; a failed wake answers refused unavailable and leaves the job finished"
+        : `${focus}${focus === "A12" ? " [secrets]" : ""}: authenticated job histories preserve authority and durable facts`,
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();
@@ -1032,9 +1119,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               runs: runsFor(
                 focus === "A12"
                   ? { fast: 10, full: 40 }
-                  : focus === "A8" || focus === "A10"
-                    ? { fast: 30, full: 60 }
-                    : { fast: 25, full: 100 },
+                  : focus === "W1"
+                    ? { fast: 10, full: 60 }
+                    : focus === "A8" || focus === "A10"
+                      ? { fast: 30, full: 60 }
+                      : { fast: 25, full: 100 },
               ),
               concurrency: 1,
             },

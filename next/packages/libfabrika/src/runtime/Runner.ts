@@ -48,6 +48,7 @@ import {
   type ProcessError,
   Recipient,
   RuntimeRecord,
+  Rev,
   RunnerMail,
   SessionManager,
   sha256,
@@ -58,6 +59,7 @@ import {
   type Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
+import { Result as JobResult } from "../jobs/Job.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
@@ -74,7 +76,10 @@ import {
   Recording,
   type View,
 } from "./Entry.ts";
+import { HandsInput } from "./Hands.ts";
+import { HandsJobs } from "./HandsJobs.ts";
 import { fromFailure } from "./internal/exitReason.ts";
+import { handsDelivery } from "./internal/handsDelivery.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
@@ -191,6 +196,8 @@ const Dispatched = Schema.Struct({
   /** A start_child or exit whose operands can never fit a row, saved without them so its row
    *  fits: the one refusal it can get, after the loader for a program it kept. */
   oversize: Schema.optionalKey(Schema.Literals(["bad_cmd", "no_program", "bad_name", "bad_input"])),
+  /** A hands Cmd's saved delivery, which only its machine changes. Absent reads as `pending`. */
+  hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } })),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -220,11 +227,17 @@ const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
+/** The Cmd the runner hands to the Project as a job for the person's hands. */
+const HANDS = "hands";
+
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT]);
-/** This life still owes a host Cmd (a send, a start_child, a stop_child or an exit): the next alarm
- *  tries it again. */
-const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
+const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT, HANDS]);
+
+/** This life still owes a host Cmd (a send, a start_child, a stop_child, an exit, or a hands Cmd the
+ *  Project has not saved yet): the next alarm tries it again. A hands job that only waits on the
+ *  hands is owed nothing: a wake or a due asks it again (0105). */
+const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
+  cmds.some((cmd) => cmd.mail === true && cmd.hands?._tag !== "waiting");
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -245,6 +258,9 @@ const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessPro
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
 const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
+const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
+const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
+const encodeResult = Schema.encodeSync(JobResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -450,6 +466,7 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
+        const handsJobs = yield* Effect.serviceOption(HandsJobs);
         const children = yield* Effect.serviceOption(Children);
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
@@ -973,6 +990,14 @@ export class ProgramRunner extends Context.Service<
           }
         });
 
+        /** Abandons the attempt the journal has open, as the next step would. */
+        const abandon = Effect.suspend(() => {
+          const j = supervision?.journal;
+          return j?._tag === "stepping" || j?._tag === "checking"
+            ? complete({ type: "abandoned", seq: j.attempt.seq }).pipe(Effect.andThen(continueRecovery()))
+            : Effect.void;
+        });
+
         const step = Effect.fnUntraced(function* (
           reason: ProgramDown["reason"],
           letter: string,
@@ -994,7 +1019,13 @@ export class ProgramRunner extends Context.Service<
             yield* complete({ type: "begin", process: process.id, letter, build: process.build, phase, at: status.at });
           }
 
-          yield* store.activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }));
+          yield* store
+            .activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }))
+            .pipe(
+              // The step has not run: its attempt is abandoned, so a later life never takes the begun
+              // attempt for an interrupted step and ends this process over a failed write.
+              Effect.tapError(() => abandon),
+            );
           const result = yield* Effect.gen(function* () {
             if (Option.isSome(stepFault)) {
               yield* stepFault.value.before({
@@ -1614,6 +1645,79 @@ export class ProgramRunner extends Context.Service<
           });
         });
 
+        /** Saves a hands Cmd's waiting job on its dispatched entry, so this life owes it nothing until
+         *  a wake or a due asks again. The permit is held. */
+        const wait = Effect.fnUntraced(function* (job: Dispatched, waiting: NonNullable<Dispatched["hands"]>) {
+          const saved = live?.cmds.find((cmd) => cmd.id === job.id);
+
+          if (live === null || saved === undefined || saved.hands?._tag === waiting._tag) {
+            return;
+          }
+
+          const next = {
+            ...live,
+            cmds: live.cmds.map((cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
+          };
+          yield* store.save(checkpoint(next, null));
+          live = next;
+          yield* setAlarm();
+        });
+
+        /** The built-in hands Cmd: the Project keeps its job under the Cmd's own id, for the person's
+         *  hands. A finished job or a refusal is its answer. A waiting job answers nothing yet, and a
+         *  failed ask is not an answer either: the Cmd stays dispatched, and an alarm asks again. The
+         *  ask is the life that dispatched it, `origin`, even if a restart or a swap moved on since. */
+        const hands = Effect.fnUntraced(function* (state: Live, job: Dispatched, origin: Descriptor) {
+          const input = decodeHands(job.cmd);
+
+          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(HANDS) || Option.isNone(handsJobs)) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const replied = yield* handsJobs.value
+            .ask(
+              {
+                id: job.id,
+                process: origin.id,
+                name: origin.name,
+                program: origin.program,
+                build: origin.build,
+                command: input.value.command,
+                parent: job.parent,
+                traceId: job.traceId,
+              },
+              { ...(yield* from(job.parent, job.traceId)), build: origin.build },
+            )
+            .pipe(Effect.result);
+
+          // A failed ask may pass, so it is no reply and changes nothing the delivery saved. A waiting
+          // Cmd is owed nothing, so this alarm is what asks it again. A refusal for good, `id_reused`
+          // included, is a reply, and the program reads it.
+          if (Result.isFailure(replied)) {
+            yield* permit.withPermit(retryLater);
+            return yield* new LedgerError({
+              reason: replied.failure.reason === "storage" ? "storage" : "unreachable",
+              message: Cause.pretty(Cause.fail(replied.failure)),
+            });
+          }
+
+          const [before] = handsDelivery.init(job.hands ?? null, undefined);
+          const [next] = applyCell(handsDelivery, before, { type: "replied", reply: replied.success });
+
+          if (next._tag === "result") {
+            const { answer } = next;
+            return Option.some(
+              answer._tag === "ok" ? yield* ok(job, encodeResult(answer.result)) : yield* err(job, answer.reason),
+            );
+          }
+
+          if (next._tag === "waiting") {
+            yield* permit.withPermit(wait(job, next));
+          }
+
+          return Option.none();
+        });
+
         /** The built-in start_child: the loader names the program and its hash, this life is the
          *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
          *  Cmd stays dispatched, and its failure carries the reason only. */
@@ -1790,6 +1894,12 @@ export class ProgramRunner extends Context.Service<
           }
 
           const type = cmdType(job);
+
+          if (type === HANDS) {
+            const answer = yield* cmdSpan(job, hands(state, job, origin));
+            return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
+          }
+
           const m = yield* type === WRITE
             ? cmdSpan(job, write(state, job))
             : type === SEND
@@ -1817,7 +1927,13 @@ export class ProgramRunner extends Context.Service<
             );
           }
 
-          return yield* permit.withPermit(
+          return yield* place(job, origin, originStore, m);
+        });
+
+        /** Saves one Cmd's answer as its letter and folds it, or, when the life that dispatched it
+         *  ended meanwhile, records it in that life's stream. Answers the Cmds the fold made. */
+        const place = (job: Dispatched, origin: Descriptor, originStore: ProcessStore["Service"], m: unknown) =>
+          permit.withPermit(
             Effect.gen(function* () {
               const answer = `${job.id}/answer`;
 
@@ -1857,7 +1973,6 @@ export class ProgramRunner extends Context.Service<
               return (yield* catchUp(current, { mine: answer })).fresh;
             }),
           );
-        });
 
         /** Sets the alarm that tries a failed drain again. The permit is held. */
         const retryLater = Effect.gen(function* () {

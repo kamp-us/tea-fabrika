@@ -7,6 +7,7 @@ import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLed
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
@@ -75,6 +76,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     SpanSink.layer(sql, { object: process }),
     RecordManager.memory(4 * 1024 * 1024),
     Archive.memory,
+    Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
     Layer.succeed(Jobs, {
       request: () => Effect.die("unexpected job request in legacy gateway law"),
       take: () => Effect.die("unexpected job take in legacy gateway law"),
@@ -82,6 +84,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       finish: () => Effect.die("unexpected job finish in legacy gateway law"),
       read: () => Effect.die("unexpected job read in legacy gateway law"),
       forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+      collected: () => Effect.die("unexpected job collect in legacy gateway law"),
     }),
     Id.Generator.layer,
     ProcessIdGenerator.layer,
