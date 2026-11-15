@@ -19,6 +19,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -1025,7 +1026,7 @@ const runnerWorld = (
       build: a.build,
       owner,
     },
-    { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 } },
+    { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
   ).pipe(Layer.provideMerge(observed));
   const input = (n: number, m: unknown) =>
     decodeIncoming({

@@ -248,6 +248,8 @@ const turnHolding = (entries: ReadonlyArray<Entry>): LedgerTurn => ({
   read: (stream, after) => entries.filter((e) => e.stream === stream && e.rev > after),
   get: (stream, id) => Option.fromNullishOr(entries.find((e) => e.stream === stream && e.id === id)),
   head: (stream) => entries.reduce((rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev), 0),
+  // T1041: the newest entry's pos, or none, as the store's position-only read answers.
+  end: (stream) => Option.fromUndefinedOr(entries.filter((e) => e.stream === stream).at(-1)?.pos),
   append: () => {
     throw new Error("a check never appends");
   },

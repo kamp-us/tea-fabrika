@@ -2,7 +2,7 @@
 // plan declares the brain's memory limit and grace, so the values gain `brainMemory` and `brainGrace`.
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -88,6 +88,9 @@ describe("shared Worker settings reader, next/", () => {
               ),
               brainGrace: current.settings.values["desktop.brain-grace"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
+              // T1041: the two mail settings; a byte size is saved as its count of bytes in text.
+              mailUnread: current.settings.values["mail.unread"],
+              mailChunk: ByteSize.bytes(BigInt(String(current.settings.values["mail.chunk"]))),
               // P39 slice 3: the recipe sets no hands key, so the start reads the default, none.
               handsTarget: null,
             });

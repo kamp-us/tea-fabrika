@@ -9,6 +9,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
 import { nth } from "./RepliesTest.ts";
@@ -127,7 +128,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: live.state.process, name: NAME, program: program.name, build: "test", owner },
-        { recovery: { sql, name: NAME, capacity: 1024 ** 3 } },
+        { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
     return { runner: Context.get(context, ProgramRunner), mailbox, sql };

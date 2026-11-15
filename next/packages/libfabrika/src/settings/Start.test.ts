@@ -29,6 +29,9 @@ describe("instance start envelope, next/", () => {
           "gateway.window",
           "hands.target",
           "instance.port",
+          // T1041: the inbox cap and the chunk size.
+          "mail.chunk",
+          "mail.unread",
         ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };

@@ -35,6 +35,7 @@ import { Replies } from "@kampus/libfabrika/runtime/Replies";
 import * as RepliesSql from "@kampus/libfabrika/runtime/RepliesSql";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { FileSystem, Path } from "effect";
@@ -113,7 +114,8 @@ const life = Effect.fnUntraced(function* (
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] } }),
+        // T1041: mail.unread's largest value, so no law here meets a full inbox.
+        ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] }, cap: 16_384 }),
         ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws grant no start, and the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
@@ -172,7 +174,7 @@ const life = Effect.fnUntraced(function* (
   const built = yield* Layer.buildWithScope(
     ProgramRunner.layer(
       { id: PROCESS, name: NAME, program: "pipeline/merger", build: BUILD, owner },
-      { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 } },
+      { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
     ).pipe(Layer.provide(own)),
     scope,
   );

@@ -15,6 +15,7 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { workerExecution } from "../runtime/Execution.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
 const SEED = 119120;
@@ -293,7 +294,7 @@ const replyCase = (
       const layer = ProgramRunner.withLoader(
         { id: PID, name: NAME, program: program.name, build: "test", owner },
         { load: () => Effect.succeed({ ...loaded, execution }) },
-        { recovery: { sql, name: NAME, capacity: 1024 ** 3 } },
+        { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
       yield* Effect.gen(function* () {
         const runner = yield* ProgramRunner;

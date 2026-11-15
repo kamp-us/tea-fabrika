@@ -32,8 +32,8 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
   // the StartChild row (red here and in the all-rows vector); set chaos.laws to 1.0 (red in the
   // all-rows vector).
   for (const [path, samples] of [
-    ["next/packages/libfabrika/src/node/Watchers.integration.test.ts", [488.0, 685.9, 492.4]],
-    ["next/packages/libfabrika/src/node/StartChild.integration.test.ts", [349.9, 341.0, 598.2]],
+    ["next/packages/libfabrika/src/node/Watchers.integration.test.ts", [217.6]],
+    ["next/packages/libfabrika/src/node/StartChild.integration.test.ts", [262.9]],
     ["next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", [258.9]],
     ["next/apps/fabrika/src/start-child.laws.integration.test.ts", [175.9, 108.2, 190.2]],
     ["next/apps/fabrika/src/door.integration.test.ts", [177.7, 117.3, 174.9]],
@@ -58,8 +58,8 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
     "next/packages/libfabrika/src/node/Watchers.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChild.integration.test.ts",
     "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts",
+    "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts",
     "next/apps/fabrika/src/start-child.laws.integration.test.ts",
-    "next/apps/fabrika/src/door.integration.test.ts",
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
@@ -557,10 +557,14 @@ const integrationSamples = {
   "next/packages/libfabrika/src/node/Replies.integration.test.ts": [84.4, 47.5, 70.8],
   // C job 132330501001.
   "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts": [258.9],
-  // A job 132292933169, B job 132315559467, C job 132330501025.
-  "next/packages/libfabrika/src/node/StartChild.integration.test.ts": [349.9, 341.0, 598.2],
-  // A job 132292933326, B job 132315559508, C job 132330500993.
-  "next/packages/libfabrika/src/node/Watchers.integration.test.ts": [488.0, 685.9, 492.4],
+  // Run 43728081584 attempt 1, job 132854293834: PR 1252 split StartChild in three files.
+  "next/packages/libfabrika/src/node/StartChild.integration.test.ts": [262.9],
+  // Job 132854293834.
+  "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts": [215.0],
+  // Job 132854293830.
+  "next/packages/libfabrika/src/node/StartChildExit.integration.test.ts": [95.0],
+  // Run 43728081584 attempt 1, job 132854293826, after PR 1252 cut W3's fill.
+  "next/packages/libfabrika/src/node/Watchers.integration.test.ts": [217.6],
   // A job 132292933192, B job 132315559467, C job 132330500983. Sampled at access/, before PR 1189
   // moved the file to node/access/.
   "next/packages/libfabrika/src/node/access/SessionManager.integration.test.ts": [8.0, 9.6, 14.7],
@@ -590,6 +594,8 @@ const integrationSamples = {
   "next/packages/libfabrika/src/node/gateway/Jobs.integration.test.ts": [147.5],
   // A job 132292933221, B job 132315559486, C job 132330500983.
   "next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts": [5.8, 3.0, 6.2],
+  // Run 43728081584 attempt 1, job 132854293834: the file PR 1252 split off JobsLedger.
+  "next/packages/libfabrika/src/node/jobs/JobsDiscovery.integration.test.ts": [30.8],
   // A job 132292933192, B job 132315559534, C job 132330501001.
   "next/packages/libfabrika/src/node/jobs/JobsLedger.integration.test.ts": [39.2, 35.4, 99.9],
   // B job 132315559497, C job 132330501025.
@@ -1133,7 +1139,7 @@ describe("Shards", () => {
       [watchers, admission, startChild, runner, clock, compiler, failedLight].map((s) =>
         rowOf(relative(ROOT, s.moduleId)),
       ),
-    ).toEqual([492.4, 258.9, 349.9, 123.8, 0, 0, 3.2]);
+    ).toEqual([217.6, 258.9, 262.9, 123.8, 0, 0, 3.2]);
     const vitest = await createVitest("test", { root: ROOT, watch: false });
 
     try {
@@ -1250,12 +1256,16 @@ it("L9: wall equals the largest file or the shared worker load", () => {
 it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; a file with no row counts the median row.
   // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
-  // check run 42874119130, attempts 5 to 14, a median of 10.
+  // check run 42874119130, attempts 5 to 14, a median of 10. PR 1252 split boxrm and plancheck: the
+  // boxrm and plancheck.draft rows are one reading each, from run 43728081584 attempt 1 (tooling legs).
   // Plant: restore plancheck's older median. Lane rows await the PR's own run.
   // catchup.test.ts had a row here until catchup.sh was retired for GitHub's merge queue (0162).
   const expected = {
     ".agents/skills/lead/scripts/box.test.ts": 348.7,
-    ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+    ".agents/skills/lead/scripts/boxrm.test.ts": 170.2,
+    ".agents/skills/lead/scripts/boxrm.storage.test.ts": 250.2,
+    ".agents/skills/lead/scripts/boxrm.guards.test.ts": 206.6,
+    ".agents/skills/plan/scripts/plancheck.draft.test.ts": 193.3,
     ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
     "oxlint-plugins/program-package-layout.test.ts": 80.3,
     "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
