@@ -117,15 +117,12 @@ const legal = (world: World): ReadonlyArray<readonly [Kind, number]> => {
     return [
       ["exit", 4],
       ["call", 2],
-      // A sampler held by a call that waits for a replacement takes no sample.
-      ...quiet(
-        world.pending
-          ? [["listen", 2]]
-          : [
-              ["kill", 2],
-              ["listen", 2],
-            ],
-      ),
+      // A memory kill also comes while a replacement is pending: a new process that grew too big
+      // before its listener was heard.
+      ...quiet([
+        ["kill", 2],
+        ["listen", 2],
+      ]),
       ...gate,
     ];
   }
