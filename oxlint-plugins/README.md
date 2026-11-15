@@ -1,9 +1,11 @@
 These lint rules are the `fabrika` plugin for oxlint, written in TypeScript. `index.ts` lists them, `match.ts` holds what they share, and `.oxlintrc.json` at the top of the repo turns each one on, with the reason for every path it leaves out. Why oxlint: [`docs/direction/oxlint-and-oxfmt.md`](../docs/direction/oxlint-and-oxfmt.md).
 
 ```sh
-pnpm lint                                   # runs lint.ts, then format.ts --check, then the code-graph checks
+pnpm lint                                   # parallel.ts runs lint.ts, format.ts --check, the code-graph checks and the rest at once
 node oxlint-plugins/lint.ts packages/x      # the same oxlint step on one folder
 ```
+
+`parallel.ts` is not an oxlint rule: `pnpm lint` gives it each of its parts as one shell command, and it runs them all at once, prints each part's output whole in the order given, and exits 1 naming each failed part with its last line. Two parts that write the same file go in one argument joined by `&&`; its top comment says which parts write.
 
 `exact-versions.ts` is not an oxlint rule: `pnpm lint` runs it to refuse any ranged npm version in a tracked `package.json` or `pnpm-workspace.yaml` ([`docs/direction/pin-exact-versions.md`](../docs/direction/pin-exact-versions.md)).
 

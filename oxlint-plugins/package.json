@@ -11,8 +11,10 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@oxlint/plugins": "catalog:",
     "@types/node": "catalog:",
+    "effect": "catalog:",
     "fast-check": "catalog:",
     "oxc-parser": "catalog:",
     "oxc-resolver": "catalog:",
