@@ -40,7 +40,7 @@ const prefixShapes = fc
   ]);
 
 const badPrefixShapes = fc
-  .tuple(text(1, 63), text(64, 100), fc.constantFrom("0", "-", "/", "é", "\0", " ", "\n"))
+  .tuple(text(1, 63), text(64, 100), fc.constantFrom(..."0123456789", "-", "/", "é", "\0", " ", "\n"))
   .map(([word, long, bad]) => [
     "", // A8 keeps main's nonempty prefix rule.
     "_",
@@ -48,7 +48,10 @@ const badPrefixShapes = fc
     `${word}_`,
     word.toUpperCase(),
     long,
+    // A bad character is refused in the middle and at both ends, so `${word}1` stays refused.
     `${word}${bad}${word}`,
+    `${bad}${word}`,
+    `${word}${bad}`,
     // T518-PREFIX-EXCEPTION: mutation 13 admitted this invalid prefix; UUIDs stay generated.
     "Stryker was here!",
   ]);
@@ -758,29 +761,39 @@ describe("T518 Id order and generation", () => {
     effectOptions,
   );
   it.effect.prop(
-    "out-of-range, fractional and non-finite clocks fail with a typed IdError",
-    { extra: Count },
-    ({ extra }) =>
+    "out-of-range, fractional and non-finite clocks fail with a typed IdError, even when entropy fails too",
+    { extra: Count, marker: Schema.String },
+    ({ extra, marker }) =>
       Effect.gen(function* () {
         const Specific = Id.make("process");
 
-        // One past each edge, then generated distances past it.
-        for (const now of [
-          -1,
-          -extra,
-          maxClock + 1,
-          maxClock + extra,
-          Number.MAX_SAFE_INTEGER + extra,
-          extra + 0.5,
-          Number.NaN,
-          Infinity,
-        ]) {
-          yield* TestClock.setTime(now);
-          const exit = yield* Effect.gen(function* () {
-            const generator = yield* Id.Generator;
-            return yield* generator.next(Specific);
-          }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
-          expectIdFailure(exit, "clock");
+        // A bad clock is reported as `clock` whether or not entropy works: the clock is checked first.
+        for (const entropy of ["working", "failing"] as const) {
+          const random =
+            entropy === "failing" ? vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker)) : undefined;
+
+          try {
+            // One past each edge, then generated distances past it.
+            for (const now of [
+              -1,
+              -extra,
+              maxClock + 1,
+              maxClock + extra,
+              Number.MAX_SAFE_INTEGER + extra,
+              extra + 0.5,
+              Number.NaN,
+              Infinity,
+            ]) {
+              yield* TestClock.setTime(now);
+              const exit = yield* Effect.gen(function* () {
+                const generator = yield* Id.Generator;
+                return yield* generator.next(Specific);
+              }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
+              expectIdFailure(exit, "clock");
+            }
+          } finally {
+            random?.mockRestore();
+          }
         }
       }),
     effectOptions,
