@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t979-merge-main",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-15T01:13:00-08:00",
+  "ended": "2026-11-15T01:45:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Merged origin/main (the desk, ticket 958) into P18 slice 2 in next/ with a merge commit, 480516d93. Seven files conflicted and each keeps both sides: a tile keeps this slice's reach (its name's pages, its watch, ended) and the tezgah link gets main's simpler reach as TezgahReach; a dial reads tezgah, then the tiles, then parks the inbox wait; the page is main's desk with this slice's state word, body word and polite burst; one .tile-empty in --tile-text with main's margin 0. Main's L32 forbids any model key naming fold, so the resolving reach's key became life. Laws whose fixtures moved: the desk, prefix and tezgah worlds give each window a tab, the focus world answers a monitor and leaves an inbox wait parked, E1 reads the process name where main split it from the tile's name, and p14's body helper reads .tile-body. No assertion was dropped or weakened.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 32,
+  "note": "Ran: pnpm format, pnpm lint, pnpm typecheck, and one at a time the window, start, prefix, tezgah, keys, types, leave, processTable, Client, ProcessMonitors, layers, door, instance-wire, tezgah-runner, checklist-instance, words, spoken and Layout laws, and headless the client-protocol, tezgah-frame, tezgah-focus, tezgah-fold and first-window visual tests: all green. Not run: the full suite and a real screen reader.",
+  "step": "build"
+}
