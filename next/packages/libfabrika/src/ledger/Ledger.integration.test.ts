@@ -17,9 +17,9 @@
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -46,16 +46,7 @@ const folder = Effect.acquireRelease(
 
 const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
+const openDb = (path: string) => TestDatabase.make(path);
 
 const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
 

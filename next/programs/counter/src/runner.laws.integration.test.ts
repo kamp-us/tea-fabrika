@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -15,6 +15,7 @@ import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
@@ -308,11 +309,7 @@ const scopedFolder = Effect.acquireRelease(
   (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
 );
 
-const scopedDb = (file: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.isOpen && db.close()),
-  );
+const scopedDb = (file: string) => TestDatabase.make(file);
 
 const brainFrom = {
   by: "SHA256:brain",

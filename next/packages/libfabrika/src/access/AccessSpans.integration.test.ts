@@ -13,9 +13,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -88,17 +88,7 @@ type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
 const fresh = (): Store =>
   folder.pipe(
-    Effect.flatMap((path) =>
-      Effect.acquireRelease(
-        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
-        (db) =>
-          Effect.sync(() => {
-            if (db.isOpen) {
-              db.close();
-            }
-          }),
-      ),
-    ),
+    Effect.flatMap((path) => TestDatabase.make(join(path, "ledger.db"))),
     Effect.map(nodeSql),
   );
 

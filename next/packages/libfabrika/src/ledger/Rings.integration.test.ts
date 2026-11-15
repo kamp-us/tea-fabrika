@@ -14,8 +14,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
@@ -35,18 +35,7 @@ const folder = Effect.acquireRelease(
 
 const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
-
-const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
+const fresh = () => freshPath.pipe(Effect.flatMap(TestDatabase.make), Effect.map(nodeSql));
 
 type Rung = { readonly to: string; readonly stream: string; readonly rev: number };
 
@@ -234,7 +223,7 @@ describe("p94, a parked wait is a row, rung once", () => {
   it.effect("a ring survives the file closed and opened again, and rings once there", () =>
     Effect.gen(function* () {
       const path = yield* freshPath;
-      const first = yield* openDb(path);
+      const first = yield* TestDatabase.make(path);
       const before = bell();
       yield* Effect.gen(function* () {
         const ledger = yield* Ledger;
@@ -247,7 +236,7 @@ describe("p94, a parked wait is a row, rung once", () => {
         const ledger = yield* Ledger;
         expect(yield* ledger.append("a", "w-2", line())).toEqual(placed(2, 2));
         yield* ledger.append("a", "w-3", line());
-      }).pipe(Effect.provide(onLedger(openDb(path).pipe(Effect.map(nodeSql)), after.layer, T2)));
+      }).pipe(Effect.provide(onLedger(TestDatabase.make(path).pipe(Effect.map(nodeSql)), after.layer, T2)));
       expect(before.rang).toEqual([]);
       expect(after.rang).toEqual([{ to: T1, stream: "a", rev: 2 }]);
     }),

@@ -1,7 +1,6 @@
-// node:sqlite is the edge: Effect has no synchronous SQLite database handle.
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Effect, FileSystem, Path, ScopedRef } from "effect";
 import * as RateLimitTest from "../../gateway/RateLimitTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
@@ -10,23 +9,15 @@ const open = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t843-" });
-  let db: DatabaseSync = yield* Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path.join(dir, "limits.db"))),
-    () =>
-      Effect.sync(() => {
-        db.close();
-      }),
-  );
+  const connect = TestDatabase.make(path.join(dir, "limits.db"));
+  const held = yield* ScopedRef.fromAcquire(connect);
+  // One Sql across reopens: each call goes to the connection open now.
   const sql: Sql = {
-    exec: (query, ...params) => nodeSql(db).exec(query, ...params),
-    transaction: (step) => nodeSql(db).transaction(step),
-    size: () => nodeSql(db).size(),
+    exec: (query, ...params) => nodeSql(ScopedRef.getUnsafe(held)).exec(query, ...params),
+    transaction: (step) => nodeSql(ScopedRef.getUnsafe(held)).transaction(step),
+    size: () => nodeSql(ScopedRef.getUnsafe(held)).size(),
   };
-  const reopen = Effect.sync(() => {
-    db.close();
-    db = new DatabaseSync(path.join(dir, "limits.db"));
-  });
-  return { sql, reopen };
+  return { sql, reopen: ScopedRef.set(held, connect) };
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 RateLimitTest.suite({ open });

@@ -4,7 +4,6 @@
 // gets a fresh temporary folder; each open is a new connection to the same file, closed with its scope,
 // and each restart loads the program module again. Ticket 839: `letters` reads the inbox back on a
 // connection of its own, so L16 and L17 can count rows and read a saved note and writer.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import type { checklist } from "@kampus/checklist";
 import * as RunnerTest from "@kampus/checklist/RunnerTest";
@@ -19,6 +18,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "checklist:1";
@@ -133,10 +133,7 @@ const session = (
 
 /** One connection to a database file, closed with its scope. */
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
+  TestDatabase.make(file).pipe(Effect.map(nodeSql));
 
 /** A fresh folder; each start opens its three databases again and runs one session over them. */
 const open: RunnerTest.Open = Effect.gen(function* () {
