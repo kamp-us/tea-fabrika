@@ -15,7 +15,8 @@ const Settled = Schema.TaggedUnion({
   err: { reason: Schema.Literal("no_hands") },
 });
 
-const State = Schema.TaggedUnion({
+/** @internal */
+export const State = Schema.TaggedUnion({
   /** Saved as dispatched; the Project has not confirmed the request. Owed: the backoff retries it. */
   pending: {},
   /** The Project saved the request, and it has no result yet. `rev` and `arrivedAt` are its receipt. */
