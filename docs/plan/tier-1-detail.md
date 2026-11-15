@@ -1047,6 +1047,8 @@ const Size = Schema.TaggedStruct("size", {at: Schema.Int, bytes: Schema.Int}); /
 
 Packages draw some lines now, and these still draw the rest, including the strict one-layer-down rule (A3c). Two checks go strict in the exam PR. `layer-rules.json` gets `next/` layers, so code-graph's `pnpm lint:layers` fails an upward import. `next/apps/fabrika/src/exam/layers.test.ts` stays small and catches only what code-graph cannot yet: an import that skips a layer, and p65's import names. Its skipped-layer half goes when demlik issue 763 lands. Why: the known tool first, and a small test only for its gaps. Cost: about 12 rows in a rules file, and a test that has a known end. Sure: 90%.
 
+*Changed 2026-11-14 (ticket 987):* both checks are `pnpm lint` now, and the exam's scan is gone. The table below is each row's `imports` list in `layer-rules.json` (demlik issue 763, in code-graph 0.15.0), and the package names each part may import are the `fabrika/package-imports` table in `.oxlintrc.json`. A local code-graph patch adds `roots`, so a library or tuval file no row claims fails (demlik issue 947), and `testFiles`, so a test keeps the upward and sideways rules but not the `imports` lists, as the scan let it (demlik issue 948). tuval's folders and the programs sit above the library in the rule file, so nothing in the library, tests included, imports them. `exam/layers.integration.test.ts` (renamed from `layers.test.ts` by 0536) keeps only plants that run the real tool on the real rule file.
+
 ```json
 // layer-rules.json, a sketch. Top to bottom; a layer may import only what is below it.
 "next-apps": ["next/apps"],
@@ -2074,7 +2076,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **instance** is th
 - The window is online from founding, and the tab comes in through the menu bar. Press in the window, the tab shows it, and the other way. Quit and reopen Electron: same key, no grant. Kill the brain: both show it, both come back, a press made while lost lands once. In the page, `process` and `require` are undefined, and navigation to another origin is blocked. The key file on disk does not contain the private key in the clear.
 - Plants, by hand: `safeStorage` skipped; preload signs anything.
 
-**p32, strict layers.** `existing`-style, in the exam. s1. `pnpm lint:layers` for upward imports, `layers.test.ts` for skipped layers, and the tables above. Red on the base, green at PR A.
+**p32, strict layers.** `existing`-style, in the exam. s1. `pnpm lint:layers` for upward imports, `layers.test.ts` for skipped layers, and the tables above. Red on the base, green at PR A. *Changed 2026-11-14 (ticket 987):* `pnpm lint:layers` holds skipped layers too, and `fabrika/package-imports` the import names; `layers.integration.test.ts` plants breaks through the real tool.
 
 **p33, one file.** `new`, node. s6. `build.ts`, `alchemy.run.ts`.
 - The stack's `env` values are each under 5 KB. `main` is the file `build.ts` made, the same hash for `local` and `cloud` at the same chaos value. Loader code keeps `globalOutbound: null` with empty env, and no program's bundle reads a binding.
@@ -2552,7 +2554,7 @@ Plan-115's list stands, with these added:
 5. **Tests that hold a port across an instance.** Exp 171 says one process cannot reuse a port. Resolved: tests spawn `dev.ts`.
 6. **Where a chaos finding goes.** It may be a real bug in another layer, in the middle of PR E. Resolved: a finding goes to the owner and `field/`; the builder does not fix it in place unless it is in the task's files.
 7. **A law that needs the laptop's own service manager.** p48 runs real launchd, and CI has none. Resolved: laptop only, the PR says so, and CI runs the steps on the test `BrainService`.
-8. **A later check with an end date.** `layers.test.ts` lives until demlik issue 763 lands. No note says who removes it. Resolved: the small exam PR that adopts the new code-graph.
+8. **A later check with an end date.** `layers.test.ts` lives until demlik issue 763 lands. No note says who removes it. Resolved: the small exam PR that adopts the new code-graph. Done 2026-11-14 (ticket 987): its scan moved into `pnpm lint`.
 9. **A plan ahead of the notes.** The plan now differs from notes in `docs/direction/`, and the steps do not say which lands first. Resolved here: PR 269 changed those notes, before PR A, including real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
 10. **When lab data turns real.** `next/` may be rough until a person opens it for real work, and no note says what happens when one job opens first. Notes make one ledger real while the rest stays a lab. Resolved: from PR D the cloud ledger is kept for good, and the laptop instance stays a lab.
 11. **A later PR changes an earlier law's meaning.** Notes change p22 and narrow p25, both written for PR A. Resolved: a small exam PR before PR D, not a builder's edit. No note says a law's old wording must stay readable.

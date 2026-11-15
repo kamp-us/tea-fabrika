@@ -46,6 +46,8 @@ libfabrika
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
 | A module's files, names and `internal/` | `fabrika/modules`, `eslint/no-restricted-imports` |
 | A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
+| A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
+| A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
 | A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
 
 A Promise edge the platform demands is one line, marked

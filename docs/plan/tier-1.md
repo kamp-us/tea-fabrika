@@ -482,7 +482,7 @@ P1, PR 402, the frame
   next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails. Since 0536 the `next-visual` Vitest project holds that job and the runner is gone
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
-  src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)
+  src/exam/layers.test.ts                 plants through the real code-graph: each part's walls in layer-rules.json fire (p32, p65); the scan itself is pnpm lint (ticket 987)
   src/exam/deps.test.ts                   next/ stands alone, and each top level bundles for a browser (p65), with esbuild for now
   src/exam/laws-scan.test.ts              every file that makes a machine has a laws file beside it
   fixtures/next/sshsig/                   real ssh-keygen vectors, namespace fabrika-client (p27, p44)

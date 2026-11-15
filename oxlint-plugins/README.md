@@ -35,6 +35,20 @@ Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `5
 
 The per-folder counts are in the pull request for ticket 930, which made them block. A hand read of every fire in a folder with three or fewer found seven type laws, tests whose `@ts-expect-error` or `expectTypeOf` lines are the check, which `law-shape` cannot read as a property or an example: four take a disable line with that reason (`access/ClientManager.test.ts`, two in `settings/Setting.test.ts`, `checklist/src/program.laws.test.ts`), which brings three folders to zero, and three (`counter/src/window.types.test.ts` twice, `node/ErrorCause.types.test.ts`) wait for the fills that clear their folders. [0527](../.decisions/0527-type-laws-get-a-type-label.md) then gave a type law its own label, `type:`, accepted only on a body of type checks ([Law shape](#law-shape)). Ticket 971 built it, and moved eight laws in `next/` to `type:` titles. Count over `next/` with oxlint 1.90.0, on PR 1199's head `60f09563b`: 277 `law-shape` fires before, 273 after, none in a folder that blocks, so no warn line goes. Five type laws stop firing (`Runtime.types.test.ts`, `Gateway.types.test.ts`, `Program.types.test.ts`, `Entry.test.ts`, and `access/Access.types.test.ts`, which no longer needs its `pinned:` stopgap). Five `type:` laws whose bodies make a call still fire, now with the type message: `runtime/RunnerOptions.test.ts` twice, `counter/src/window.types.test.ts` twice, and `node/ErrorCause.types.test.ts`, whose `expectTypeOf(new LedgerError(...))` builds a value. The four disable lines stay, since each of their bodies makes a call too.
 
+The docs rule, `jsdocs`, works the same way since ticket 948. It is `"error"` for `next/packages/*/src/**`, so a new folder or package blocks from its first file. Its warn override comes right after that block, and 1186's "off" override for files that are not public (`internal/`, tests, test support, shared suites, fixtures, declaration files) comes after both and stays last for `jsdocs`. So a warn line never turns the rule on for a test file. Count on 2026-11-13, ticket 948, at `cf03efb9f`: 316 fires, all in 9 folders that advise, and 0 disable lines.
+
+| Folder | Fires | Folder | Fires |
+|---|---|---|---|
+| libfabrika `src/*` | 95 | libfabrika `telemetry` | 1 |
+| libfabrika `cloudflare` | 93 | libfabrika `transport` | 28 |
+| libfabrika `coordination` | 73 | tuval `src/*` | 4 |
+| libfabrika `node` | 3 | tuval `browser` | 11 |
+| | | tuval `window` | 8 |
+
+The other 14 libfabrika folders block: `access`, `ci`, `codehost`, `desktop`, `gateway`, `jobs`, `ledger`, `packs`, `presence`, `processes`, `repositories`, `runtime`, `schedules` and `settings`. The 4 fires in `node` and `telemetry` were read: each is an export with no block or a block with no `@stability` and `@category`, not a false alarm.
+
+Count again on 2026-11-14, after merging main at `5c3b8277a`: 300 fires, all still in the same 9 folders, and 0 disable lines. Main had added a fifteenth libfabrika folder, `client`, whose fill brought it to zero, so it blocks too. Fewer fires in `transport` (23), tuval `src/*` (2), `browser` (8) and `window` (2) came from main's own changes there; no warn line has reached zero yet.
+
 ## Isolate boundary
 
 | Rule | Checks | Cannot see |
@@ -351,7 +365,7 @@ Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-
 
 Which tools were looked at, and why none could hold the shape here, is the draft plan's table (`docs/plan/ticket-900-docs-lint.md` on the branch of [pull request 1131](https://github.com/kamp-us/tea-fabrika/pull/1131)): Effect's checker (private, needs TypeScript's JS API below 7, asks `@since`), oxlint's `jsdoc` rules (no rule that asks for a block), `eslint-plugin-jsdoc` (2,770 false alarms on Effect's own source), and TypeDoc and API Extractor (a block's presence only).
 
-**On for the folders at zero, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `ci/` and `codehost/` of libfabrika; each fill adds its folder in its own pull request, and the list ends as `next/packages/*/src/**` once the barrels become namespace re-exports (B2.8). A second block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. A folder not yet listed has no ignore: the rule has not reached it ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+**Blocks where clean, advises where not, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `next/packages/*/src/**` (ticket 948, after [0523](../.decisions/0523-advice-rules-block-where-clean.md)). The next block sets it to `warn` for each folder that still has fires, listed in [Where a rule still advises](#where-a-rule-still-advises); a fill deletes its folder's line, and a whole `pnpm lint` fails until it does. A third block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. That off block stays last, after the warn block, so a warn line never turns the rule on for a file that is not public. No list holds a fire back ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)): a warn folder's fires print as advice until its fill.
 
 Count on 2026-11-14, on main at `c0aaf4a24`: `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks, so 0 fires, as the draft's prototype found. With every block stripped from the two files, it fired 23 times: the 21 exports and the 2 files. On Effect 4.1.2's own source, 432 files outside `internal/`, with `since` set to `required`, it fires 10 times: the 6 exports of `StandardSchema.ts`, the one file Effect's config leaves out, and the 4 files whose only block above their first statement is that statement's own, as Effect's checker reads it (`encoding/Ini.ts`, `encoding/Yaml.ts`, `http/HttpStatus.ts`, `index.ts`). So 0 false alarms against Effect's own verdict.
 
@@ -922,3 +936,45 @@ real call, three folders and both extensions, that the call fires on a plain nam
 never under either layer name; one over the in-process cases, which never fire; one real oxlint run
 over a planted folder with the repo's config; and one over the real `next/` tree, which must be at
 zero. Its three plants are named in its header.
+
+## Which of our packages each part imports, ticket 987
+
+p32 and p65, strict layers (`docs/plan/tier-1-detail.md`, "Strict layers"). `fabrika/package-imports`
+holds the names of our own packages (`@kampus/*`) each part of `next/` may import, as written. It
+and `pnpm lint:layers` together replace the exam's `layers.test.ts` scan, which kept a second import
+reader (a check on the shape of code is a lint rule, never a test). `pnpm lint:layers` judges the
+file an import reaches, by `layer-rules.json`'s rows, `imports` lists and `roots`; this rule judges
+the name, which code-graph cannot do in three cases: two front files of one module
+(`transport/Link` passes in a window, `transport/Connection` does not), a stylesheet
+(`@kampus/fabrika-design/tokens.css`, which code-graph reads as unresolved), and the library naming
+itself (`@kampus/libfabrika/processes/Process` inside the library reaches an allowed row).
+
+The table is in `.oxlintrc.json`, in its own override for `next/packages/**` and `next/programs/**`,
+so the `next/**` block stays the `.agents/` block's twin: a `scope` (`@kampus/`) and `parts`, each a name, globs and `may`, the exact
+names its files may import. A file's part is the first whose glob matches. The library's part is
+the whole package, `next/packages/libfabrika/**`, so a file outside `src/` is judged too, and it may
+import none; desktop, the library's root; a window, the root, transport's eight front files and its bare
+name, the window client's three, and the design package's root and `tokens.css`; dom and headless,
+none; browser, transport's; electron, transport's and `coordination`; a program's `.tsx` files, the
+library's root and tuval's; the rest of a program, the library's root. `next/apps` is not judged.
+A test is judged only where its part has `tests`, the packages its tests may import, each with
+every subpath: the library's tests may name only `@kampus/libfabrika`. That is the old scan's wall,
+"the library imports nothing above it, tests included", on every file of the package: code-graph
+judges a test only when a row claims it, and the four top-level tests and a test beside a one-file
+row (`coordination/`) have none. Other parts leave their tests to code-graph. A program's window is its `.tsx` files, as `fabrika/program-package-layout` reads a window;
+the old scan read the box as what `.` reaches, and `pnpm lint:layers` keeps that wall: a box file
+that imports a window file breaks upward.
+
+oxlint's own `eslint/no-restricted-imports` was looked at first (0040). It can say an allow list
+(`["@kampus/**", "!@kampus/libfabrika"]` works in oxlint 1.90.0), but an override replaces a rule's
+options, and libfabrika's folders already have ten overrides of it, each the base list repeated;
+each would take the new group, and its tests would lose their own folder's patterns to a tests
+override.
+
+First-day count, 2026-11-14, on main at `59c063bce`, one oxlint run over `next`: **0 fires**, as
+the old scan found 0 faults on the same tree. Zero measures no false-alarm rate beyond that both
+agree. The library's tests joined on 2026-11-14 (PR 1251's review): 0 fires on `next`, where 8
+imports name the library itself. `package-imports.test.ts` is one property: a file at a generated
+path in each part, or in no part, imports names from every part's list, names next to them and
+names no list holds, and the rule fires on exactly the refused ones, in process with the plan's
+table and in one oxlint run with the repo's config.

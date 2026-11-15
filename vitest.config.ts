@@ -18,6 +18,8 @@ const TOOLING = [
   "vitest.shards.test.ts",
   "vitest.changed.test.ts",
   ".github/ci/*.test.ts",
+  // workflow-lint's families of laws, each test file beside its module.
+  ".github/ci/workflow-lint/*.test.ts",
   "scripts/*.test.ts",
   // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as 0089's hourly
   // mutation run reads them (`flow/**/*.test.ts`).
