@@ -25,6 +25,8 @@ const Kinds = Schema.fromJsonString(
   }),
 );
 
+// The repository's own tracked list, read as text: a reader, which 0536 keeps on pull requests.
+// oxlint-disable-next-line fabrika/integration-test-name -- git ls-files only reads the repository's own index
 const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" })
   .stdout.split("\0")
   .filter((p) => p !== "");
