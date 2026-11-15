@@ -513,7 +513,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   });
   // What the runtime reports, as Alchemy's lifecycle hook hears it.
   const report = (event: RuntimeEvent) => observe(event);
-  return { dev, life, signals, requests, world, first, rows, replaced, term, listen, observe: report };
+  return { dev, life, home, signals, requests, world, first, rows, replaced, term, listen, observe: report };
 });
 
 const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
@@ -625,9 +625,11 @@ effectIt.effect.prop(
 type Called = { readonly at: number; readonly fiber: Fiber.Fiber<unknown, unknown> };
 
 // L8. Plant: dial `address` in place of `reachable`: the fetch stand-in sees a request to the old
-// port. Or clear the waiters on stop without waking them: a call outlives the stop.
+// port. Or clear the waiters on stop without waking them: a call outlives the stop. Or let a call
+// ignore the `stopping` state and wait only for `stopped`: a stop whose write fails holds the call
+// to its bound.
 effectIt.effect.prop(
-  "L8 during a replace no control call dials the old port: each waits for the new listener or fails offline, and a stop ends every waiting call as offline with no SIGKILL",
+  "L8 during a replace no control call dials the old port: each waits for the new listener or fails offline, and a stop ends every waiting call as offline at once with no SIGKILL, even when its own write fails",
   {
     grace: between(1, 10_000),
     // After the SIGKILL, how long the replacement takes to listen, past the call's bound included.
@@ -635,10 +637,13 @@ effectIt.effect.prop(
     // Each call's moment as a share of the time from the SIGTERM to the new listener, in ten-thousandths.
     calls: Schema.Array(between(0, 9_999)).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
     stop: Schema.NullOr(between(0, 9_999)),
+    // The stop's own fact write fails before it reaches `stopped`.
+    broken: Schema.Boolean,
   },
-  ({ grace, delay, calls, stop }) =>
+  ({ grace, delay, calls, stop, broken }) =>
     replaced(
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
         const limit = 500_000_000;
         const w = yield* replaceWorld({ limit, kib: 600_000, grace, honors: false });
         const sent = yield* w.term();
@@ -693,6 +698,12 @@ effectIt.effect.prop(
             }
           } else if (move === "listen") {
             yield* w.listen(NEW.port);
+          } else if (broken) {
+            // The stop's own fact write fails, as on a full disk: a folder where its file goes. The
+            // stop then never reaches `stopped`, and its finalizer dies with the write's error.
+            yield* fs.makeDirectory(join(w.home, "brain.pending.jsonl.tmp"));
+            const closed = yield* Scope.close(w.life, Exit.void).pipe(Effect.exit);
+            expect(Exit.isFailure(closed), "the stop fails on its write").toBe(true);
           } else {
             yield* Scope.close(w.life, Exit.void);
           }
