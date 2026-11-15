@@ -31,7 +31,8 @@
 // Not read yet: waits. A parked wait is a row in the Project object, seen only through a test
 // method on the Project class, so it joins with the slice that ports Project (S3).
 // Plants: bind the Connection class (S1) or the Process class (S2) under another class name in the
-// stack.
+// stack. For the table: a saved name under another process id, or one more boot entry than
+// `booted` names.
 // edge: crypto makes the fixture's own test key and signs with it; no person's key is read
 import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
@@ -43,6 +44,7 @@ import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
@@ -54,10 +56,15 @@ import { startupFixture } from "./record-wire.test-support.ts";
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const FIXTURE = resolve(ROOT, "fixtures/next/port-home");
 const NAME = "port-home";
-// The two programs every instance starts by itself, so a fresh home already holds their facts.
+// The two programs the saved home's build started by itself, so the saved home holds their facts.
 const STREAMS = ["processes/counter:1", "processes/checklist:1"];
 
 const Founding = Schema.Struct({ person: Schema.String, founder: Schema.String, window: Schema.String });
+
+/** The names this build's boot starts that the saved home's build did not, in table order: the
+ *  founder's tezgah, which every instance boots since the workspace program landed (ticket 958,
+ *  docs/plan/lanes/desk-PLAN.md). A program added to the boot list later is added here by name. */
+const booted = (founding: typeof Founding.Type) => [tezgahName(founding.person)];
 
 const Row = Schema.Struct({ name: Schema.String, process: Schema.String });
 const Entries = Schema.Array(Schema.Unknown);
@@ -322,9 +329,20 @@ const reopened = Effect.gen(function* () {
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
   const seen = yield* open(home, saved.founding, observe);
+  const names = new Set(saved.seen.table.map((row) => row.name));
   // The same names under the same process ids: a lost Project would start them again as new.
   expect(saved.seen.table.length).toBeGreaterThan(0);
-  expect(seen.table).toEqual(saved.seen.table);
+  expect(
+    seen.table.filter((row) => names.has(row.name)),
+    "each saved name runs once, under its saved process id",
+  ).toEqual(saved.seen.table);
+  // A newer build may boot a program the saved home's build did not, beside the saved ones. Those
+  // rows are new, so their process ids are fresh; their names are exactly the build's own list,
+  // less any the saved home already ran (a home saved on this build holds them all).
+  expect(
+    seen.table.filter((row) => !names.has(row.name)).map((row) => row.name),
+    "the rows beyond the saved ones are exactly the programs this build adds to the boot",
+  ).toEqual(booted(saved.founding).filter((name) => !names.has(name)));
 
   // A ledger only grows, so every saved entry is still there, in its place.
   for (const stream of STREAMS) {
