@@ -1,6 +1,6 @@
 // The memory restart plan (docs/plan/lanes/memory-restart-PLAN.md), next/, L10 and L11. Real workerd
 // through Alchemy, the app's own build and door, and the brain's own facts on `gateway/brain`. Only
-// the memory reading is a stand-in (`rssStandIn` below): no test can grow workerd to 500 MB on
+// the memory reading is a stand-in (`rssStandIn`, in rss.test-support.ts): no test can grow workerd to 500 MB on
 // purpose, so `ps -o rss= -p <pid>` answers the limit plus one for the first workerd once the test
 // says so, and every other command, workerd's build and every other `ps` included, runs for real. The
 // only process the laws look at is the workerd pid their own instance's `started` fact names, and
@@ -12,12 +12,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Predicate, Sink, Stream } from "effect";
+import { Effect, Layer, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+import { rssStandIn } from "./rss.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-15T04:00:00.000Z";
@@ -32,50 +33,6 @@ const OVER = Math.ceil((LIMIT + 1) / 1024);
 const START = 30_000;
 // How often the poller asks for `info`, and how often a fact or a process is looked at.
 const POLL = 50;
-
-/**
- * Layer over the real `ChildProcessSpawner` that answers `ps -o rss= -p <pid>` with `kib(pid)`, the
- * size in KiB as `ps` prints it, and spawns everything else, that `ps` for a pid `kib` answers null
- * for included, through the real spawner.
- */
-const rssStandIn = (kib: (pid: number) => number | null) =>
-  Layer.effect(
-    ChildProcessSpawner.ChildProcessSpawner,
-    Effect.gen(function* () {
-      const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-      return ChildProcessSpawner.make((command) => {
-        const sample =
-          command._tag === "StandardCommand" &&
-          command.command === "ps" &&
-          command.args.length === 4 &&
-          command.args[0] === "-o" &&
-          command.args[1] === "rss=" &&
-          command.args[2] === "-p";
-        const answer = sample ? kib(Number(command.args[3])) : null;
-
-        if (answer === null) {
-          return real.spawn(command);
-        }
-
-        const stdout = Stream.make(new TextEncoder().encode(`${answer}\n`));
-        return Effect.succeed(
-          ChildProcessSpawner.makeHandle({
-            pid: ChildProcessSpawner.ProcessId(0),
-            exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
-            isRunning: Effect.succeed(false),
-            kill: () => Effect.void,
-            stdin: Sink.drain,
-            stdout,
-            stderr: Stream.empty,
-            all: stdout,
-            getInputFd: () => Sink.drain,
-            getOutputFd: () => Stream.empty,
-            unref: Effect.succeed(Effect.void),
-          }),
-        );
-      });
-    }),
-  );
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
