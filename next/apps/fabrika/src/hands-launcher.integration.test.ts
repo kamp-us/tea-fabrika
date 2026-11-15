@@ -3,7 +3,7 @@
 // in CI's full run, in its container, never on a laptop.
 //
 // What these laws hold `next/apps/fabrika/hands.ts` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, "The launcher" and "One value traced through"):
+// (docs/plan/quests/p39-s5-PLAN.md, "The launcher" and "One value traced through"):
 // - `node hands.ts` takes its home from `FABRIKA_HOME`, keeps its key in `hands/key.json` and its
 //   journal in `hands/journal.sqlite`, reads `instance.port` as `dev.ts` does, and prints one JSON
 //   line per change a parent needs: `waiting { fingerprint, code, until }` while its key is not

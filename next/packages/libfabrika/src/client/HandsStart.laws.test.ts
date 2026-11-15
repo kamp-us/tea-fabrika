@@ -259,7 +259,7 @@ const law = (name: string, focus: Focus, required: ReadonlyArray<string>, runs: 
 const OSES: ReadonlyArray<(typeof Hello.Type)["os"]> = ["macos", "windows", "linux", "android", "ios", "unknown"];
 
 describe("P39 slice 4b: the host's os in the hello", () => {
-  // O1, from the approved plan (docs/plan/lanes/p39-s5-PLAN.md): `start` takes the host's `os` and its
+  // O1, from the approved plan (docs/plan/quests/p39-s5-PLAN.md): `start` takes the host's `os` and its
   // hello sends it, in place of `unknown`. Plant, run once and undone (recorded in the tests step's
   // field row): keep `os: "unknown"`.
   it.effect(

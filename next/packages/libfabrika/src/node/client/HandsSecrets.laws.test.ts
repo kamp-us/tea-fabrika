@@ -6,7 +6,7 @@
 // real launcher and brain, on the schedule.
 //
 // What it holds the real `HandsStart.start` and `KeyFile.layer` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, S2's row and "No secret is in any row"): the private half stays
+// (docs/plan/quests/p39-s5-PLAN.md, S2's row and "No secret is in any row"): the private half stays
 // in `key.json`. The parts are real: the start, the key file on the in-memory file system
 // (`MemoryFiles.test-support.ts`), the journal on `JournalSqlite` at `:memory:`, and the real command
 // layer over a fake spawner (`Spawner.test-support.ts`). The door is the 4a door

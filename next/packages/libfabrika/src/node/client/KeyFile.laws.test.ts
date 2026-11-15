@@ -2,7 +2,7 @@
 // (`MemoryFiles.test-support.ts`). K3, on the real file system, runs on the schedule.
 //
 // What these laws hold `node/client/KeyFile.ts` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, "The key"):
+// (docs/plan/quests/p39-s5-PLAN.md, "The key"):
 // - `KeyFile.layer({ file })` supplies `ClientKey` from Effect's `FileSystem` (and `Path`) over one file.
 // - `current(null)` on no file makes a pair and answers `created`; on a file with mode 0600 it
 //   answers `reused` with that key; on a file with group or other bits it fails `ClientKeyError {

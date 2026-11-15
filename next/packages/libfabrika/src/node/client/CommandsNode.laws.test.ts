@@ -3,7 +3,7 @@
 // process starts here; C4 and C5 run the real spawner on the schedule.
 //
 // What these laws hold `node/client/CommandsNode.ts` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, "The command"):
+// (docs/plan/quests/p39-s5-PLAN.md, "The command"):
 // - `CommandsNode.layer` supplies `Commands` from Effect's `ChildProcessSpawner`, `FileSystem`, `Path`
 //   and the `PATH` the config provider gives.
 // - `execute(git_version)` spawns `git` with argv `["--version"]`, `extendEnv: false` and env `{ PATH }`

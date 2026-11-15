@@ -3,7 +3,7 @@
 // never on a laptop.
 //
 // What it holds `node/client/JournalSqlite.ts` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, "The journal file"): a hands-like child writing journal entries in
+// (docs/plan/quests/p39-s5-PLAN.md, "The journal file"): a hands-like child writing journal entries in
 // a loop and killed with SIGKILL at any moment leaves every key holding one whole entry, or none,
 // when the file is opened again; never a torn value, which the 4a machine reads as `bad_entry` and
 // then skips for good.

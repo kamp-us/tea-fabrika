@@ -3,7 +3,7 @@
 // schedule.
 //
 // What this law holds `node/client/JournalSqlite.ts` to, from the approved plan
-// (docs/plan/lanes/p39-s5-PLAN.md, "The journal file"): `JournalSqlite.layer({ file })` supplies
+// (docs/plan/quests/p39-s5-PLAN.md, "The journal file"): `JournalSqlite.layer({ file })` supplies
 // Effect's `KeyValueStore` over one SQLite file, one row per key, and 4a's `JournalStore.layer` runs
 // on it unchanged. Over it the journal reads exactly what the same writes give over Effect's own
 // `KeyValueStore.layerMemory`, the store holds one value per key however often it is written, and a

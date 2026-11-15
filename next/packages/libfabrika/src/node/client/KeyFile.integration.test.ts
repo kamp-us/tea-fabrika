@@ -2,7 +2,7 @@
 // sends no signal and starts no process: each run is two layers in this process over a fresh
 // temp folder.
 //
-// What it holds `node/client/KeyFile.ts` to, from the approved plan (docs/plan/lanes/p39-s5-PLAN.md,
+// What it holds `node/client/KeyFile.ts` to, from the approved plan (docs/plan/quests/p39-s5-PLAN.md,
 // "The key"): on the real file system the key file is made with mode 0600 and its folder with mode
 // 0700, and two hands starting at once on one empty home agree on one key: the first link wins,
 // the second reads it, and no other key is left in the folder.
