@@ -229,13 +229,14 @@ const decodeSession = Schema.decodeUnknownSync(Schema.fromJsonString(Session));
  * later `record`, `delivered` and `signer` calls for it are refused with `ended`. `signer` needs a
  * `SignRequest`, refuses ids in the signal, runner and notice spaces, checks that the writer's key
  * still belongs, then inside one transaction answers with the session and stores one receipt for
- * the request. `receipt` replays a stored receipt by its id, parent, process and kind, and
- * answers `not_delivered` when there is none.
+ * the request. `sender` answers the writer `signer` would sign for, refused in the same cases, with
+ * no request and no receipt: a `signer` after it is untouched. `receipt` replays a stored receipt
+ * by its id, parent, process and kind, and answers `not_delivered` when there is none.
  *
  * **Gotchas**
  *
- * The membership check in `signer` runs before the transaction, so a key removed in between is
- * not seen by that call. `receipt` runs `signer` again, so it checks membership again.
+ * The membership check in `signer` and `sender` runs before the transaction, so a key removed in
+ * between is not seen by that call. `receipt` runs `signer` again, so it checks membership again.
  *
  * @stability unstable
  * @category services
@@ -251,6 +252,10 @@ export class SessionManager extends Context.Service<
       process: string,
       kind: string,
     ) => Effect.Effect<Session, SigningRefused | NotGranted | SessionManagerError, SignRequest>;
+    readonly sender: (
+      parent: string,
+      process: string,
+    ) => Effect.Effect<Writer, SigningRefused | NotGranted | SessionManagerError>;
     readonly receipt: (
       id: string,
       parent: string,
@@ -290,15 +295,8 @@ export class SessionManager extends Context.Service<
           const [row] = sql.exec("SELECT saved FROM gateway_sessions WHERE parent=?", parent);
           return row === undefined ? null : decode(row.saved);
         };
-        const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
-          const request = yield* SignRequest;
-
-          // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
-          // so no receipt binds one and the delivery's one receipt stays free.
-          if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
-            return yield* new SigningRefused({ reason: "signal" });
-          }
-
+        /** A saved input's writer must still belong; with no saved input, the read after answers. */
+        const belongs = Effect.fnUntraced(function* (parent: string) {
           const saved = yield* stored(() => {
             ensure();
             return load(parent);
@@ -312,20 +310,32 @@ export class SessionManager extends Context.Service<
               ),
             );
           }
+        });
+        /** The session of an input delivered to a live process, read in the caller's transaction. */
+        const deliveredTo = (parent: string, process: string, personOnly: boolean) => {
+          if (ended(process)) {
+            return Result.fail(new SigningRefused({ reason: "ended" }));
+          }
+
+          const current = load(parent);
+          return current === null
+            ? Result.fail(new SigningRefused({ reason: "not_delivered" }))
+            : SavedInput.sign(current, process, personOnly);
+        };
+        const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
+          const request = yield* SignRequest;
+
+          // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
+          // so no receipt binds one and the delivery's one receipt stays free.
+          if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
+            return yield* new SigningRefused({ reason: "signal" });
+          }
+
+          yield* belongs(parent);
 
           return yield* stored(() =>
             sql.transaction(() => {
-              if (ended(process)) {
-                return Result.fail(new SigningRefused({ reason: "ended" }));
-              }
-
-              const current = load(parent);
-
-              if (current === null) {
-                return Result.fail(new SigningRefused({ reason: "not_delivered" }));
-              }
-
-              const session = SavedInput.sign(current, process, policy.event(kind));
+              const session = deliveredTo(parent, process, policy.event(kind));
 
               if (Result.isFailure(session)) {
                 return session;
@@ -366,6 +376,12 @@ export class SessionManager extends Context.Service<
         });
         return {
           signer,
+          sender: Effect.fn("session.sender")(function* (parent: string, process: string) {
+            yield* belongs(parent);
+            // A read, in one transaction as `signer`'s: no request, and no receipt is written.
+            const session = yield* stored(() => sql.transaction(() => deliveredTo(parent, process, false)));
+            return yield* Effect.fromResult(session).pipe(Effect.map(({ by }) => by));
+          }),
           receipt: Effect.fn("session.receipt")(function* (id: string, parent: string, process: string, kind: string) {
             const exists = yield* stored(() => {
               ensure();

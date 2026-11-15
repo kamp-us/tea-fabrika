@@ -1,5 +1,5 @@
 import { type Brand, type Effect, Schema } from "effect";
-import { Session, SigningRefused } from "../access/SessionManager.ts";
+import { Session, SigningRefused, type Writer } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
@@ -106,6 +106,8 @@ export interface GatewayCalls {
   readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
   readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
   readonly sign: (process: string, id: string, parent: string, kind: string) => Effect.Effect<Session, unknown>;
+  /** Who sent `parent`, an input delivered to `process`; the brain asks it before a start (0170). */
+  readonly sender: (process: string, parent: string) => Effect.Effect<Writer, unknown>;
   readonly append: (input: {
     readonly process: string;
     readonly id: string;

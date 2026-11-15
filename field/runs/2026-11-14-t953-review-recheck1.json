@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t953-review-recheck1",
+  "ticket": "953",
+  "pr": "kamp-us/tea-fabrika#1239",
+  "started": "2026-11-15T03:42:00+00:00",
+  "ended": "2026-11-15T03:43:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "recheck of the one blocker at 1b6763463: L10 and L14 now give a member's input to a requester with a recorded member that is never the sender. The review's plant at ChildrenLedger.ts:113 turns L10/L13 and L14 red; restored, the suite is green. At seed 119120, 100 runs: 27 boot requesters, 33 same person by the other key, 15 sender allowed and recorded member not, 6 the reverse, 17 both, 2 neither. The temporary role is written only when the case's roles lack it, under ids the starting rows never use, and removed before the law's start; a leak would fail the law, never pass it. No assertion got weaker; the pinned example stays a boot requester with no recorded member. The two earlier finding rows stand.",
+  "tokens": 10446,
+  "tools": 5,
+  "minutes": 1,
+  "note": null,
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/processes/ChildrenMemberTest.ts L10/L13 and L14 (senderLaw)",
+      "plant": "next/packages/libfabrika/src/processes/ChildrenLedger.ts:113: the requester's recorded member wins over the sender",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}

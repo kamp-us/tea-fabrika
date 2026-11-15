@@ -62,6 +62,10 @@ const RuleFile = Schema.Struct({
 
 type Rules = typeof RuleFile.Type;
 
+/** Each row that has a layer, by its name. */
+const layersByName = (rows: Rules["layers"]): ReadonlyMap<string, number> =>
+  new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
+
 /** The rule file `pnpm lint:layers` reads. Its paths start at the top of the repo. */
 const REAL: Rules = Schema.decodeUnknownSync(RuleFile)(
   JSON.parse(readFileSync(resolve(NEXT, "../layer-rules.json"), "utf8")),
@@ -457,12 +461,14 @@ describe("the real rule file on planted trees", () => {
   );
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access`
-  // is put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
-  // must now fail, and no other pair changes.
+  // is put on the runtime's layer (6 since T953): an import from the runtime to access, which went
+  // down, must now fail, and no other pair changes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
-      const beside = REAL.layers.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
+      const runtime =
+        REAL.layers.find((row) => row.name === "next-runtime")?.layer ?? expect.fail("the runtime has a layer");
+      const beside = REAL.layers.map((row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
       const before = rowEdges(realTree, REAL);
       const after = rowEdges(realTree, { ...REAL, layers: beside });
       expect(after).toEqual(expectedEdges(beside));
@@ -477,25 +483,26 @@ describe("the real rule file on planted trees", () => {
   // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and the
   // rank laws above read their expected edges from this same file: a changed `layer` that makes no
   // break passes them, and only this says which module is on which layer.
-  // Plant: put `next-node` on layer 10. `pnpm lint:layers` and every other law here stay green, and
+  // Plant: put `next-node` on layer 11. `pnpm lint:layers` and every other law here stay green, and
   // this one goes red.
+  // T953 moved every row from the processes up by one, to put the permission core on layer 3 between
+  // the ledger and the processes.
   it("pinned: the modules are on the layers the plan gives them", () => {
-    expect(
-      Object.fromEntries(REAL.layers.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer]]))),
-    ).toEqual({
-      "next-node": 9,
-      "next-workers": 8,
-      "next-libfabrika-entry": 7,
-      "next-desktop-core": 6,
-      "next-schedules": 6,
-      "next-client": 6, // P18: the window client, beside the door
-      "next-door": 6,
-      "next-runtime": 5,
-      "next-access": 4,
-      "next-processes": 3,
-      "next-presence": 3,
-      "next-jobs": 3,
-      "next-packs": 3,
+    expect(Object.fromEntries(layersByName(REAL.layers))).toEqual({
+      "next-node": 10,
+      "next-workers": 9,
+      "next-libfabrika-entry": 8,
+      "next-desktop-core": 7,
+      "next-schedules": 7,
+      "next-client": 7, // P18: the window client, beside the door
+      "next-door": 7,
+      "next-runtime": 6,
+      "next-access": 5,
+      "next-processes": 4,
+      "next-presence": 4,
+      "next-jobs": 4,
+      "next-packs": 4,
+      "next-permissions": 3,
       "next-ledger": 2,
       "next-codehost": 2,
       "next-ci": 2,
@@ -505,6 +512,49 @@ describe("the real rule file on planted trees", () => {
       "next-telemetry": 1,
       "next-shared": 0,
     });
+  });
+
+  // pinned: T953 L19, main's layer table at 85cb7c224, the last commit before the permission core took
+  // layer 3, with the `next-client` row main added after it (P18). Moving every row from the processes
+  // up by one may change numbers only: for each two rows that had a layer then, one is below the other
+  // now exactly when it was below then, so no import that was refused becomes allowed and none that
+  // was allowed becomes refused.
+  it("pinned: T953 L19 the renumbered layers keep the order of every pair of rows main had", () => {
+    const main: Readonly<Record<string, number>> = {
+      "next-node": 9,
+      "next-workers": 8,
+      "next-libfabrika-entry": 7,
+      "next-client": 6, // P18: the window client, beside the door
+      "next-door": 6,
+      "next-desktop-core": 6,
+      "next-schedules": 6,
+      "next-runtime": 5,
+      "next-access": 4,
+      "next-processes": 3,
+      "next-presence": 3,
+      "next-jobs": 3,
+      "next-packs": 3,
+      "next-ci": 2,
+      "next-codehost": 2,
+      "next-repositories": 2,
+      "next-ledger": 2,
+      "next-transport": 2,
+      "next-settings": 2,
+      "next-telemetry": 1,
+      "next-shared": 0,
+    };
+    const now = layersByName(REAL.layers);
+    const changed = Object.entries(main).flatMap(([a, before]) =>
+      Object.entries(main).flatMap(([b, other]) => {
+        const [after, then] = [now.get(a), now.get(b)];
+        return after === undefined || then === undefined
+          ? [`${a} or ${b} lost its layer`]
+          : before < other === after < then
+            ? []
+            : [`${a} (${before} -> ${after}) and ${b} (${other} -> ${then})`];
+      }),
+    );
+    expect(changed).toEqual([]);
   });
 
   // pinned: the review of PR 1251, since a row with no `imports` list lets its files import every
