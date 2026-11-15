@@ -1,7 +1,7 @@
 ---
 id: 0532
 title: A sev0 is the owner's call, and it empties the merge queue, cancels every CI run, and lands the fixes one at a time by admin merge
-status: accepted
+status: amended-in-part by [0542](0542-two-sev-levels-one-skill.md)
 date: 2026-11-14
 tags: [ci, sev0, freeze, merge, queue, admin, lead, owner, tooling]
 ---
@@ -10,6 +10,9 @@ tags: [ci, sev0, freeze, merge, queue, admin, lead, owner, tooling]
 
 **What this decides:** what happens to CI when the owner says CI itself is the emergency, how the
 fixes land, and how it ends.
+
+[0542](0542-two-sev-levels-one-skill.md) adds a second level, the sev1, and changes how a sev0 ends: nothing is
+rerun, and the script is `sev.ts`. The rest of this file still holds.
 
 ```mermaid
 flowchart LR
