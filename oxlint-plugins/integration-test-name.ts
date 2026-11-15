@@ -6,7 +6,9 @@
 // It reads calls, never words: experiment 292 found that matching words marked 182 of next/'s 280
 // test files and matching calls 137, against 133 that drive a resource. A call counts only through
 // the module it was imported from, so a fake with the same method names, or SQLite opened on
-// `:memory:`, which stays in the process (0536's own line), does not fire. It sees the file's own
+// `:memory:`, which stays in the process (0536's own line), does not fire. `TestDatabase.make(file)`
+// and `TestDatabase.open(file)` from `@kampus/vitest/TestDatabase` open a SQLite file just as
+// `new DatabaseSync(file)` does (ticket 1029), through the namespace or by name. It sees the file's own
 // code, not the helpers it calls: a law that opens its resource only in a `*.test-support.ts` file
 // is the reviewer's to name (oxlint-plugins/README.md gives the measured misses).
 //
@@ -39,6 +41,10 @@ const OPENERS: ReadonlyArray<{
 const BROWSERS = /^(?:playwright|playwright-core|@playwright\/test)$/;
 const LAUNCHERS = new Set(["chromium", "firefox", "webkit", "_electron"]);
 
+/** The test primitives' SQLite module (ticket 1029): `make` and `open` open a file, as `new DatabaseSync` does. */
+const TEST_DATABASE = "@kampus/vitest/TestDatabase";
+const DATABASE_OPENERS = new Set(["make", "open"]);
+
 /** The name of a test file that already says it drives a real resource. */
 const NAMED = /\.(?:integration|visual)\.test\.tsx?$/;
 
@@ -62,6 +68,9 @@ export const integrationTestName: CreateRule = {
     const spaces = new Map<string, (typeof OPENERS)[number]>();
     const launchers = new Set<string>();
     const sqlite = new Set<string>();
+    // `TestDatabase.make` and `open` through the module's namespace, or `make` and `open` by name.
+    const databases = new Set<string>();
+    const databaseOpeners = new Set<string>();
     const base = file.replace(/\.test\.(tsx?)$/, "");
     const report = (node: Node, call: string, drives: string) =>
       context.report({
@@ -99,6 +108,14 @@ export const integrationTestName: CreateRule = {
             sqlite.add(local);
           }
 
+          if (source === TEST_DATABASE) {
+            if (imported === null) {
+              databases.add(local);
+            } else if (DATABASE_OPENERS.has(imported)) {
+              databaseOpeners.add(local);
+            }
+          }
+
           if (imported === "localInstance") {
             named.set(local, "the local instance (workerd)");
           }
@@ -115,12 +132,15 @@ export const integrationTestName: CreateRule = {
       },
       CallExpression(node) {
         const callee = node.callee as Node;
+        const onFile = literal(node.arguments[0] as Node | undefined) !== ":memory:";
 
         if (callee.type === "Identifier") {
           const drives = named.get(callee.name);
 
           if (drives !== undefined) {
             report(node, `${callee.name}(…)`, drives);
+          } else if (databaseOpeners.has(callee.name) && onFile) {
+            report(node, `${callee.name}(…)`, "a SQLite file");
           }
 
           return;
@@ -136,6 +156,8 @@ export const integrationTestName: CreateRule = {
 
         if (space !== undefined && space.names.has(method)) {
           report(node, `${object}.${method}(…)`, space.drives);
+        } else if (object !== null && databases.has(object) && DATABASE_OPENERS.has(method) && onFile) {
+          report(node, `${object}.${method}(…)`, "a SQLite file");
         } else if (object !== null && launchers.has(object) && /^launch/.test(method)) {
           report(node, `${object}.${method}(…)`, "a browser or Electron");
         }

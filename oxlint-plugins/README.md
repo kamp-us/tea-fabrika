@@ -907,7 +907,7 @@ It reads calls through the module each name was imported from, never words:
 |---|---|
 | a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process` |
 | a socket | `createServer`, `createSecureServer`, `connect`, `createConnection` from `node:net`, `http`, `https`, `http2` |
-| a SQLite file | `new DatabaseSync(path)` from `node:sqlite`, unless the path is the literal `":memory:"` |
+| a SQLite file | `new DatabaseSync(path)` from `node:sqlite`, and `make(path)` and `open(path)` from `@kampus/vitest/TestDatabase` (ticket 1029), unless the path is the literal `":memory:"` |
 | a bundler | `rolldown` and `build` from `rolldown` |
 | a browser or Electron | `launch…` on `chromium`, `firefox`, `webkit` or `_electron` from Playwright |
 | the local instance | `localInstance(…)` |
@@ -1021,6 +1021,49 @@ main's number back, and the 50 that the real-IO part holds in memory test files 
 `RuleTester` and then one real oxlint run over the planted files with the repo's config. Law 1 plants
 every count form at counts 1 to 5,000 (100, 101, 300 and 3,000 pinned) inside a law that opens SQLite
 and inside one in memory, in each test-file name, in `next/` and in `packages/`, which the rule does
-not hold: only the law over real IO fires. Law 2 plants five IO imports (SQLite, a child process, a
-`node:fs` write, miniflare and the SQLite layer) at counts 1 to 5,000 beside the five false alarm
-kinds above and a law in memory, which must pass.
+not hold: only the law over real IO fires. Law 2 plants seven IO imports (SQLite, a child process, a
+`node:fs` write, miniflare, the SQLite layer, and the test database module through its namespace and
+by name) and `runsFor` from `@kampus/vitest`'s root, which is not IO, at counts 1 to 5,000 beside
+the five false alarm kinds above and a law in memory, which must pass.
+
+## A test opens SQLite through the test database, ticket 1029
+
+`test-database` refuses `new DatabaseSync(file)` in a `next/` test file (`*.test.ts`, `*.test.tsx`),
+a shared suite (`*Test.ts`) or a test kit (`*.test-support.ts`), unless `file` is the literal
+`":memory:"`. A test opens a SQLite file through `TestDatabase` in `@kampus/vitest/TestDatabase`
+(decision 0538):
+
+```ts
+const db = yield* TestDatabase.make(file); // a file the test owns: journal in memory, no disk sync
+const theirs = yield* TestDatabase.open(file, { readOnly: true }); // a file another party owns: sets nothing
+new DatabaseSync(":memory:"); // passes: no file
+new DatabaseSync(file); // refused
+```
+
+In SQLite's default mode every commit writes and deletes a rollback journal and syncs the disk, so a
+law's time is the disk's (ticket 1028, decision 0052). `make` fixes the mode in one place:
+`journal_mode=MEMORY` and `synchronous=OFF`, not a setting, since nobody picks a test's journal mode
+(0069). `open` is for a file a running instance or the product's span queue owns, and it changes
+nothing in it. A reopen is `ScopedRef.set(ref, TestDatabase.make(file))`.
+
+It reads the constructor through the module its name came from: `DatabaseSync` named or renamed from
+`node:sqlite` (or `sqlite`), or `sqlite.DatabaseSync` through a namespace or default import. A local
+class of the same name, a parameter that shadows the import, a look-alike module, product code and
+files outside `next/` pass. It reads syntax, so a `DatabaseSync` reached through another module's
+helper, or `Reflect.construct`, slips past it.
+
+**Measured** on 2026-11-14 on `origin/main` at `86a7668d6`: 62 calls in 53 files. Every one is a file
+store that moves to `make` or a file another party owns that moves to `open`, so none is right as it is
+once `open` exists: 0 false alarms in 62, and the rule blocks (AGENTS.md, "Checks"). The 28 in-memory
+files and the child script inside a template string in `instance-database.integration.test.ts` do
+not fire by construction. A law that must keep SQLite's default mode to prove durability opens its
+file with `open` and sets its own pragma line, as `next/apps/fabrika/e2e/stored.integration.test.ts`
+does; if a line must still write the constructor, it carries
+`// oxlint-disable-next-line fabrika/test-database -- <why>`, and the lead reads it at merge.
+
+`test-database.test.ts` holds its law, a property through oxlint's `RuleTester` at seed 119120 over
+the import form (named, renamed, namespace, default), the module (`node:sqlite`, `sqlite`, two
+look-alikes), the argument (`":memory:"` in three spellings, a variable, a literal or built path,
+with options) and the path (a test, a suite, a test kit, product code, outside `next/`). Its three
+plants are named in its header. `integration-test-name` and `runs-from-depth` read the module too,
+so a file that moves to it keeps its integration name and its depth-read count.

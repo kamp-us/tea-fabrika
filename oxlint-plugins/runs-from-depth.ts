@@ -15,8 +15,9 @@
 // to fast-check's `sample` or `statistics` is how many values to draw, so it stays. It is refused when
 // it is a number literal, or a name the same file declares only as `const NAME = <number>`.
 //
-// Real IO is a name imported from a module in `IO` below (SQLite, a child process, a socket, a
-// bundler, workerd, Alchemy's local state, a browser), a `node:fs` function that writes (`WRITES`),
+// Real IO is a name imported from a module in `IO` below (SQLite, the test primitives' SQLite module
+// `@kampus/vitest/TestDatabase`, a child process, a socket, a bundler, workerd, Alchemy's local
+// state, a browser; `runsFor` from the root `@kampus/vitest` is not), a `node:fs` function that writes (`WRITES`),
 // a dynamic `import()` of such a module, or, in a file that imports Effect's Node services
 // (`@effect/platform-node`), a call of a FileSystem method that writes (`EFFECT_WRITES`). Reading a
 // file or asking whether it exists is not real IO here: a law that checks a module is built before it
@@ -41,7 +42,7 @@ import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
 const IO =
-  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|.*\/NodeSqlite(?:\.ts)?)$/;
+  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|@kampus\/vitest\/TestDatabase|.*\/NodeSqlite(?:\.ts)?)$/;
 
 /** The file system: only a write is real IO, so reads and `existsSync` stay out. */
 const FS = /^(?:node:)?fs(?:\/promises)?$/;

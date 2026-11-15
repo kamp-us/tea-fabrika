@@ -4,7 +4,9 @@
 // zero there. Plants, each run once on integration-test-name.ts and restored: drop the `:memory:`
 // check (red: the memory cases fired); match the method name without its import (red: the fake
 // FileSystem's and the local `spawn`'s cases fired); skip `.visual.` in NAMED (red: the visual files
-// fired).
+// fired). Ticket 1029 (R2) adds `TestDatabase.make` and `open` from `@kampus/vitest/TestDatabase`
+// to both draws; its plant, run once and restored: drop the module from the rule (red: the test
+// database's calls stopped firing).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -42,45 +44,89 @@ const MEMORY = [
   'import { ChildProcessSpawner } from "effect/process";\nChildProcessSpawner.make(() => 0);',
 ] as const;
 
+/** How a file names the test database's two openers (ticket 1029): its import, and the call it writes. */
+const DATABASE_FORM = fc.constantFrom(
+  {
+    imports: 'import * as TestDatabase from "@kampus/vitest/TestDatabase";',
+    call: (name: string) => `TestDatabase.${name}`,
+  },
+  { imports: 'import * as Db from "@kampus/vitest/TestDatabase";', call: (name: string) => `Db.${name}` },
+  { imports: 'import { make, open } from "@kampus/vitest/TestDatabase";', call: (name: string) => name },
+  {
+    imports: 'import { make as makeDatabase, open as openDatabase } from "@kampus/vitest/TestDatabase";',
+    call: (name: string) => `${name}Database`,
+  },
+);
+
+const DATABASE_CALL = fc.constantFrom("make", "open");
+
+/** A file the call opens: a variable, a literal path, a built path, with or without `open`'s options. */
+const DATABASE_FILE = fc.constantFrom("file", '"/tmp/x.db"', `\`\${dir}/store.db\``, "file, { readOnly: true }");
+
+/** A test database call on a file: it drives a SQLite file, as `new DatabaseSync(file)` does. */
+const DATABASE_REAL = fc
+  .record({ form: DATABASE_FORM, call: DATABASE_CALL, file: DATABASE_FILE })
+  .map(({ form, call, file }) => [form.imports, `${form.call(call)}(${file});`, /a SQLite file/] as const);
+
+/** A test database call on `:memory:`, the root's `runsFor`, and look-alikes: none opens a file. */
+const DATABASE_MEMORY = fc.oneof(
+  fc
+    .record({ form: DATABASE_FORM, call: DATABASE_CALL, memory: fc.constantFrom('":memory:"', "`:memory:`") })
+    .map(({ form, call, memory }) => `${form.imports}\n${form.call(call)}(${memory});`),
+  fc.constantFrom(
+    'import { runsFor } from "@kampus/vitest";\nconst runs = runsFor({ fast: 5, full: 50 });',
+    'import * as TestDatabase from "@kampus/vitest";\nTestDatabase.make(file);',
+    "const TestDatabase = { make: (_: string) => 0 };\nTestDatabase.make(file);",
+    'import { make } from "./TestDatabase.ts";\nmake(file);',
+  ),
+);
+
 const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}(?:\.laws)?$/);
 const end = fc.constantFrom(".ts", ".tsx");
 
 it("L1: a real resource's call fires in a plain next/ test file, at its line, and never under the integration or visual name", () => {
   fc.assert(
-    fc.property(fc.constantFrom(...REAL), where, stem, end, ([imports, line, drives], folder, name, ext) => {
-      const code = `${imports}\nconst setup = () => 1;\n${line}\n`;
-      tester.run("integration-test-name", integrationTestName, {
-        valid: [
-          { code, filename: join(root, folder, `${name}.integration.test${ext}`) },
-          { code, filename: join(root, folder, `${name}.visual.test${ext}`) },
-          // Only next/'s test files: product code, today's tests and support files are not this rule's.
-          { code, filename: join(root, folder, `${name}${ext}`) },
-          { code, filename: join(root, folder, `${name}.test-support.ts`) },
-          { code, filename: join(root, "apps/fabrika/src", `${name}.test${ext}`) },
-        ],
-        invalid: [
-          {
-            code,
-            filename: join(root, folder, `${name}.test${ext}`),
-            errors: [{ line: 3, message: new RegExp(`${drives.source}.*\\.integration\\.test\\.ts`) }],
-          },
-        ],
-      });
-    }),
-    { seed: 119120, numRuns: 60 },
+    fc.property(
+      fc.oneof(fc.constantFrom(...REAL), DATABASE_REAL),
+      where,
+      stem,
+      end,
+      ([imports, line, drives], folder, name, ext) => {
+        const code = `${imports}\nconst setup = () => 1;\n${line}\n`;
+        tester.run("integration-test-name", integrationTestName, {
+          valid: [
+            { code, filename: join(root, folder, `${name}.integration.test${ext}`) },
+            { code, filename: join(root, folder, `${name}.visual.test${ext}`) },
+            // Only next/'s test files: product code, today's tests and support files are not this rule's.
+            { code, filename: join(root, folder, `${name}${ext}`) },
+            { code, filename: join(root, folder, `${name}.test-support.ts`) },
+            { code, filename: join(root, "apps/fabrika/src", `${name}.test${ext}`) },
+          ],
+          invalid: [
+            {
+              code,
+              filename: join(root, folder, `${name}.test${ext}`),
+              errors: [{ line: 3, message: new RegExp(`${drives.source}.*\\.integration\\.test\\.ts`) }],
+            },
+          ],
+        });
+      },
+    ),
+    // R2 of ticket 1029 draws the test database's calls in with the rest, at 100 runs.
+    { seed: 119120, numRuns: 100 },
   );
 });
 
 it("L2: code that stays in the process never fires, through an import or a look-alike name", () => {
   fc.assert(
-    fc.property(fc.constantFrom(...MEMORY), where, stem, (code, folder, name) => {
+    fc.property(fc.oneof(fc.constantFrom(...MEMORY), DATABASE_MEMORY), where, stem, (code, folder, name) => {
       tester.run("integration-test-name", integrationTestName, {
         valid: [{ code, filename: join(root, folder, `${name}.test.ts`) }],
         invalid: [],
       });
     }),
-    { seed: 119120, numRuns: 30 },
+    { seed: 119120, numRuns: 100 },
   );
 });
 

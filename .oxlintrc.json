@@ -735,11 +735,12 @@
               },
               {
                 // The library's shared suites and test kits: of our names, only the test primitives
-                // (0538), which they read their case counts from. Its own tests stay as the library's
-                // part has them: macOS matches these globs without case, so a `.test.ts` lands here.
+                // (0538), which they read their case counts from, and their SQLite module, which opens
+                // a test's file (ticket 1029). Its own tests stay as the library's part has them: macOS
+                // matches these globs without case, so a `.test.ts` lands here.
                 "name": "library suites",
                 "files": ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-                "may": ["@kampus/vitest"],
+                "may": ["@kampus/vitest", "@kampus/vitest/TestDatabase"],
                 "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
@@ -823,10 +824,11 @@
               },
               {
                 // A program's shared suites and test kits: what the box may import, and the test
-                // primitives (0538), which they read their case counts from.
+                // primitives (0538), which they read their case counts from, with their SQLite module
+                // (ticket 1029).
                 "name": "program suites",
                 "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+                "may": ["@kampus/libfabrika", "@kampus/vitest", "@kampus/vitest/TestDatabase"]
               },
               {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
