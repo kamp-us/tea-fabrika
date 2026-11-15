@@ -5754,7 +5754,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           expect(yield* processRows(), "a refused monitor wrote a line").toEqual(once);
         }).pipe(w.provide);
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 
   it.effect(
@@ -5869,6 +5869,6 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           expect(yield* processRows(), "a ref moved to another pid wrote a line").toEqual(once);
         }).pipe(w.provide);
       }),
-    { arbitrary: { seed: SEED, runs: 100 } },
+    { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },
   );
 });

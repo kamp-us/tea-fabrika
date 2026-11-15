@@ -3041,4 +3041,150 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     expect(seen.refused, "monitors were refused").toBeGreaterThan(0);
     expect(seen.ignored, "letters were left alone").toBeGreaterThan(0);
   });
+
+  it("S7 property: a saved Model loaded into another tab carries that tab and an inbox cursor of 0, its next inbox wait names that tab's inbox, and a DOWN there for a tile's watch sends the tile back to read its name; loaded into its own tab it is unchanged", () => {
+    const seen = { moved: 0, waited: 0, downed: 0 };
+    const save = Schema.fromJsonString(machine.model);
+    const there = clientInbox(OTHER_TAB);
+    fc.assert(
+      fc.property(follows, fc.nat(), (list, cut) => {
+        const reached: Array<WindowModel> = [];
+        follow(list, (e) => reached.push(e.next));
+        // Online cuts first, so the inbox's next wait comes from the resend timer on the cut's dial.
+        const online = reached.filter((s) => s.link._tag === "online");
+        const pool = online.length > 0 && cut % 4 !== 0 ? online : reached;
+        const saved = pool[cut % pool.length]!;
+        const load = () => Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(saved));
+
+        const [home] = machine.init(load(), ctx);
+        expect(home, "a Model loaded into its own tab changed").toEqual(saved);
+
+        const [away] = machine.init(load(), { tiles: TILES, tab: OTHER_TAB });
+        seen.moved++;
+        expect(away.tab, "the loaded Model's tab").toBe(OTHER_TAB);
+        expect(inboxIn(away), "the loaded Model's inbox").toEqual({ _tag: "idle", after: 0 });
+        expect({ ...away, tab: saved.tab, inbox: saved.inbox }, "a move changed more than the tab and inbox").toEqual(
+          saved,
+        );
+
+        const dial = socketDial(away);
+
+        if (away.link._tag !== "online" || dial === null) {
+          return;
+        }
+
+        const [waiting, armed] = step(away, { type: "resend", dial });
+        const waits = writes(armed, "wait").filter((c) => streamIn(c.call) === there);
+        expect(
+          writes(armed, "wait").map((c) => [streamIn(c.call), c.call["after"]]),
+          "the moved Model's next inbox wait",
+        ).toEqual([[there, 0]]);
+        seen.waited++;
+
+        const watch = waiting.tiles.find((t) => holds(t.reach));
+        const r: ReachView | undefined = watch?.reach;
+
+        if (watch === undefined || r === undefined || r.ref === undefined || r.pid === undefined) {
+          return;
+        }
+
+        const rev = 1 + (cut % 50);
+        const wait = waits[0]!;
+        const [reading, read] = step(waiting, answerMsg({ type: "wait_ok", id: wait.id, dial, value: { rev }, ms: 0 }));
+        const inboxRead = writes(read, "read").filter((c) => streamIn(c.call) === there);
+        expect(
+          inboxRead.map((c) => c.call["after"]),
+          "the woken wait reads the moved Model's inbox",
+        ).toEqual([0]);
+        const to = clientTo(processAt(9_999), OTHER_TAB);
+        const letter = {
+          _tag: "send",
+          by: BRAIN_BY,
+          id: signalId(to, r.ref, 1),
+          rev,
+          arrivedAt: rev,
+          body: { m: Down.make({ ref: r.ref, process: r.pid, reason: EXITS[3]!, to }) },
+        };
+        const [after, cmds] = step(
+          reading,
+          answerMsg({ type: "read_ok", id: inboxRead[0]!.id, dial, value: [letter], ms: 0 }),
+        );
+        const again = writes(cmds, "read").filter((c) => streamIn(c.call) === `processes/${watch.name}`);
+        expect(
+          again.map((c) => c.call["after"]),
+          `${watch.name}'s DOWN in the moved Model's inbox reads its name again`,
+        ).toEqual([0]);
+        expect(reachIn(after, watch.id), `${watch.name} after its DOWN`).toMatchObject({
+          _tag: "resolving",
+          id: again[0]!.id,
+        });
+        seen.downed++;
+      }),
+      opts,
+    );
+    expect(seen.moved, "Models were moved to another tab").toBeGreaterThan(0);
+    expect(seen.waited, "moved Models waited on their new inbox").toBeGreaterThan(0);
+    expect(seen.downed, "moved Models took a DOWN in their new inbox").toBeGreaterThan(0);
+  });
+
+  it("S8 property: the polite region's news is written by the step its event happens in, once: a tile that turns ended tells its end once per process, a refused letter tells its refusal, each news replaces the one before under the next id, and a step with no such event, a tile that stays ended or is found ended again included, leaves the news as it was", () => {
+    const seen = { ended: 0, again: 0, refused: 0, replaced: 0, quiet: 0, kept: 0 };
+    fc.assert(
+      fc.property(follows, (list) => {
+        const told = new Set<string>(); // `${tile} ${pid}`: each end the news told
+        const ends = new Map<string, number>(); // tile → how many ends it told
+        follow(
+          list,
+          ({ prev, m, next }) => {
+            const was = prev.said;
+            const now = next.said;
+            const ended = next.tiles.flatMap((t) => {
+              const r = t.reach;
+              const before = reachIn(prev, t.id);
+              const turned = r._tag === "ended" && !(before._tag === "ended" && before.pid === r.pid);
+              seen.quiet += turned && told.has(`${t.id} ${r.pid}`) ? 1 : 0;
+              return turned && !told.has(`${t.id} ${r.pid}`) ? [{ tile: t.id, pid: r.pid, reason: r.reason }] : [];
+            });
+            // A refused answer to a letter in flight, whose press a tile of this window made.
+            const flight = answeredFlight(prev, m)?.call;
+            const letter = flight?._tag === "send" ? flight.letter : null;
+            const slot = prev.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
+            const owner = slot === undefined ? undefined : prev.from[slot.n]?.tile;
+            const refused =
+              m.type === "send_ok" &&
+              m.value._tag === "refused" &&
+              slot !== undefined &&
+              prev.tiles.some((t) => t.id === owner)
+                ? [{ _tag: "refused", tile: owner, m: slot.m, reason: m.value.reason }]
+                : [];
+            const news = [...ended.map(({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
+            expect(news.length, `${m.type} made more than one news in one step`).toBeLessThanOrEqual(1);
+
+            if (news.length === 0) {
+              seen.kept += was.news === null ? 0 : 1;
+              expect(now, `${m.type} made no news and changed what the region says`).toEqual(was);
+              return;
+            }
+
+            expect(now, `${m.type}'s news`).toEqual({ id: was.id + 1, news: news[0] });
+            seen.replaced += was.news !== null ? 1 : 0;
+            seen.refused += refused.length;
+
+            for (const e of ended) {
+              seen.ended++;
+              seen.again += (ends.get(e.tile) ?? 0) > 0 ? 1 : 0;
+              ends.set(e.tile, (ends.get(e.tile) ?? 0) + 1);
+              told.add(`${e.tile} ${e.pid}`);
+            }
+          },
+          true,
+        );
+      }),
+      opts,
+    );
+
+    for (const [k, n] of Object.entries(seen)) {
+      expect(n, `news steps seen as ${k}`).toBeGreaterThan(0);
+    }
+  });
 });
