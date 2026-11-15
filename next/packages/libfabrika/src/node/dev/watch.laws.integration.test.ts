@@ -14,6 +14,7 @@
 // These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
@@ -357,7 +358,7 @@ describe("P15 slice 1: the watcher", () => {
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: 20, endOnFailure: true },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
     );
     expect(seen).toEqual(new Set(["fit", "syntax", "compiler"]));
   }, 300_000);
@@ -489,7 +490,7 @@ describe("P15 slice 1: the watcher", () => {
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: 20, endOnFailure: true },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
     );
     expect(seen).toEqual(new Set(["edit", "syntax", "fix"]));
   }, 300_000);
@@ -549,7 +550,7 @@ describe("P15 slice 1: the watcher", () => {
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: 20, endOnFailure: true },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
     );
 
     for (const kind of ["shared", "own", "outside"]) {
@@ -636,7 +637,7 @@ describe("P15 slice 1: the watcher", () => {
           }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: 20, endOnFailure: true },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
     );
 
     for (const point of ["acquire", "reached", "error"]) {

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -46,7 +47,7 @@ beforeEach(async () => {
   Id = await vi.importActual<typeof Id>("../Id.ts");
 });
 
-const checks = { seed: 119120, numRuns: 25 };
+const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
 // Each world keeps its ledger file in its own temp folder. The law's scope closes every connection
 // the world opened, then removes the folder (0061).

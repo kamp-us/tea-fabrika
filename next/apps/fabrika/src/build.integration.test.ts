@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
@@ -71,7 +72,7 @@ const law = (name: string, check: (input: ReturnType<typeof generated.generate>[
           }
         }
       }),
-      { seed: 119120, numRuns: 3, examples: [[chosen]] },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [[chosen]] },
     );
   });
 
@@ -431,7 +432,7 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
             ),
           ),
         ),
-        { seed: 119120, numRuns: 30 },
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 30 }) },
       );
       expect(seen.built).toBeGreaterThan(0);
       expect(seen.failed).toBeGreaterThan(0);

@@ -6,6 +6,7 @@
 // its `-wal` file only until the clean stop closes the database. Each race here is certain, not timed.
 import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -82,7 +83,7 @@ describe("stored", () => {
             ).pipe(Effect.provide(NodeServices.layer)),
           ),
       ),
-      { seed: SEED, numRuns: 20 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
   });
 
@@ -123,7 +124,7 @@ describe("stored", () => {
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-      { seed: SEED, numRuns: 10 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 
@@ -178,7 +179,7 @@ describe("stored", () => {
             ).pipe(Effect.provide(NodeServices.layer)),
           ),
       ),
-      { seed: SEED, numRuns: 10 },
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 
@@ -263,7 +264,7 @@ describe("stored", () => {
             ).pipe(Effect.provide(NodeServices.layer)),
           ),
       ),
-      { seed: SEED, numRuns: 40 },
+      { seed: SEED, numRuns: runsFor({ fast: 4, full: 40 }) },
     );
   });
 });

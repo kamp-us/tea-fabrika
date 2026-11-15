@@ -522,6 +522,7 @@ describe("the real rule file on planted trees", () => {
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
       "next-shared": 0,
+      "next-vitest": 0, // 0538: the test primitives, a package of their own below everything else of ours
     });
   });
 

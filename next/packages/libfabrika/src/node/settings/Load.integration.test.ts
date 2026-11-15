@@ -13,6 +13,7 @@
 //   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
@@ -24,7 +25,7 @@ import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const check = { seed: SEED, numRuns: 100 };
+const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
 const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
 const DEFAULT = 18787;
@@ -424,5 +425,5 @@ it.effect.prop(
         }
       }
     }).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, runs: 100 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

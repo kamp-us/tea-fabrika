@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -178,7 +179,7 @@ it.effect.prop(
         expect(batchedHeads).toEqual({ boundary: 2 * count, processBoundary: 2 * count + 2 });
       }),
     ),
-  { arbitrary: { seed: 119120, runs: 25 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 25 }) } },
 );
 
 type ServiceOptions = NonNullable<Parameters<NemesisTest.Driver["service"]>[2]>;

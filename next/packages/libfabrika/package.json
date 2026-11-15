@@ -98,6 +98,7 @@
     "@cloudflare/workers-types": "5.20261027.1",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
     "@types/node": "catalog:",
     "fast-check": "catalog:",
     "react": "catalog:",

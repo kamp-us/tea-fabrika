@@ -1,6 +1,7 @@
 // T878, next/, L7. Resolve through the public Repository handle, using committed tree and disk bytes.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -334,7 +335,7 @@ it.effect.prop(
         }
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
 const string = (value: unknown) => {
@@ -342,7 +343,7 @@ const string = (value: unknown) => {
   return read === null ? null : new TextDecoder().decode(read.bytes);
 };
 
-const realGitRuns = 20;
+const realGitRuns = runsFor({ fast: 3, full: 20 });
 const realGitRunBudget = 30_000;
 
 // Loaded host checks took 695 s for 200 runs, then 138 s for 20 runs (6.9 s/run) on real git.

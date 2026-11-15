@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Context, Effect, Exit, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
@@ -69,7 +70,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
         }
       },
     ),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [1.5]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [1.5]] },
   );
 });
 
@@ -296,7 +297,7 @@ it("every observed exit is durable once across restart or brake, with its reason
     }),
     {
       seed: 119120,
-      numRuns: 20,
+      numRuns: runsFor({ fast: 5, full: 20 }),
       examples: [
         // Review 5: final memory kill, no replacement to carry the RSS.
         [{ restarts: [], final: memoryBrake, reason: "intensity" }],

@@ -14,6 +14,7 @@
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
 import type { Tagged } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { type Runs, runsFor } from "@kampus/vitest";
 import type { Tracer } from "effect";
 import {
   Clock,
@@ -1168,7 +1169,7 @@ const prop = (
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
   answers: ReadonlyArray<string>,
-  numRuns: number,
+  runs: Runs,
 ) =>
   it.effect(
     name,
@@ -1179,7 +1180,7 @@ const prop = (
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
+        const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
@@ -1448,7 +1449,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "mail_start", "forged", "exit", "retry_saved"],
       ["door_start", "mail_start", "forged"],
       ["started", "mailed_start", "forged"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L6: bad_cmd, then no_program, then bad_name, then bad_input, each writing nothing; an undeclared Cmd writes nothing",
@@ -1456,7 +1457,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "bad", "undeclared"],
       ["bad", "undeclared"],
       ["missing", "typed", "no_program", "bad_name", "bad_input", "undeclared"],
-      200,
+      { fast: 20, full: 200 },
     );
     prop(
       "L7: exit ends only its own life with normal, after the Cmds before it and none after; watchers get one DOWN; children outlive it",
@@ -1464,7 +1465,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "exit", "cut_exit", "after_exit", "watch", "start_ended", "retry_saved"],
       ["door_start", "exit", "cut_exit", "after_exit", "watch", "start_ended", "retry_saved"],
       ["exit", "exit_between_cmds", "down", "children_outlive", "already_present", "after_exit", "retried", "cut_exit"],
-      100,
+      { fast: 10, full: 100 },
     );
 
     for (const move of ["queued_exit", "interleaved_exit", "worker_before_exit", "worker_after_exit"] as const) {
@@ -1474,7 +1475,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         [move],
         [move],
         move === "interleaved_exit" ? [move, "interleaved_alarm", "interleaved_letter"] : [move],
-        100,
+        { fast: 10, full: 100 },
       );
     }
 
@@ -1484,7 +1485,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["boundary_start"],
       ["boundary_start"],
       ["boundary_start"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     prop(
@@ -1493,7 +1494,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["checkpoint_starts"],
       ["checkpoint_starts"],
       ["checkpoint_starts"],
-      200,
+      { fast: 20, full: 200 },
     );
 
     prop(
@@ -1502,7 +1503,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["forged", "exit_extra", "undeclared", "undeclared_exit", "door_start"],
       ["forged", "exit_extra", "undeclared", "undeclared_exit"],
       ["forged", "exit_extra", "undeclared", "undeclared_exit"],
-      100,
+      { fast: 10, full: 100 },
     );
 
     it.effect(
@@ -1513,7 +1514,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
+          const checks = {
+            seed: SEED,
+            numRuns: runsFor({ fast: 10, full: 100 }),
+            includeErrorInReport: true,
+            endOnFailure: true,
+          };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
@@ -90,7 +91,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
         cli.work = undefined;
       }
     }),
-    { seed: 119120, numRuns: 30, examples: [["1"], ["1.5"]] },
+    { seed: 119120, numRuns: runsFor({ fast: 4, full: 30 }), examples: [["1"], ["1.5"]] },
   );
 });
 
@@ -153,7 +154,7 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
         cli.work = undefined;
       }
     }),
-    { seed: 119120, numRuns: 15, examples: [["clean-exit", 0]] },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 15 }), examples: [["clean-exit", 0]] },
   );
 });
 
@@ -200,7 +201,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
           rmSync(folder, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 }
@@ -432,7 +433,7 @@ for (const failed of [false, true]) {
           rmSync(folder, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10, examples: [[boundary]] },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), examples: [[boundary]] },
     );
   });
 }
@@ -539,7 +540,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         }
       },
     ),
-    { seed: 119120, numRuns: 40 },
+    { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) },
   );
 });
 
@@ -643,7 +644,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
         ),
       ),
     ),
-    { seed: 119120, numRuns: 100 },
+    { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
   );
 });
 
@@ -677,7 +678,7 @@ it("dev without saved settings reports settings for each missing required value"
         rmSync(folder, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 15 },
+    { seed: 119120, numRuns: runsFor({ fast: 3, full: 15 }) },
   );
 });
 
@@ -712,7 +713,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
         rmSync(folder, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["{"], ["null"], ['[{"file":17}]']] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ['[{"file":17}]']] },
   );
 });
 
@@ -766,7 +767,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
         rmSync(folder, { recursive: true, force: true });
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["{"], ["null"], ["{}"]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ["{}"]] },
   );
 });
 
@@ -879,5 +880,5 @@ it.effect.prop(
         }
       }),
     ),
-  { arbitrary: { seed: 119120, runs: 100 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

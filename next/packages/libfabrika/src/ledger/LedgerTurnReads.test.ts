@@ -5,6 +5,7 @@
 // appended and in a later turn. L4: SQLite answers both through an index of `entries`, never a scan.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
@@ -137,7 +138,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               }
             }).pipe(Effect.provide(store.layer));
           });
-        yield* property(Log, law, { numRuns: 50 });
+        yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }) });
         // An empty walk cannot pass: appends landed, and reused ids were refused.
         expect([...outcomes].sort()).toEqual(["appended", "refused"]);
       }),

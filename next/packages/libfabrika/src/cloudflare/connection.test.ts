@@ -19,6 +19,7 @@ import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -315,7 +316,7 @@ it.effect.prop(
         ]);
       }).pipe(Effect.provide(w.layer));
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 it.effect.prop(
@@ -377,7 +378,7 @@ it.effect.prop(
         expect(w.closes).toEqual([]);
       }).pipe(Effect.provide(w.layer));
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, the three fixed answer shapes", () =>
@@ -559,7 +560,7 @@ it.effect.prop(
         }
       }).pipe(Effect.provide(t864Layer(db, draws[0]!.pick)));
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 it.effect.prop(
@@ -629,7 +630,7 @@ it.effect.prop(
         expect(counts.success + counts.failure).toBe(draws.length);
       }).pipe(Effect.provide(t864Layer(db, draws[0]!.pick)));
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 const AnswerWalk = Schema.Struct({
@@ -752,7 +753,7 @@ it.effect.prop(
         expect([...reached].sort()).toEqual(Object.keys(answerCases).sort());
       }).pipe(Effect.provide(w.layer));
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 it.effect.prop(
@@ -812,7 +813,7 @@ it.effect.prop(
 
       expect([...reached].sort()).toEqual(["new", "waiting"]);
     }),
-  { arbitrary: { seed: 119120, runs: 50 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
 // The codes a peer's close arrives with: the ones a browser really reports (1001 on leaving a page,
@@ -847,5 +848,5 @@ it.effect.prop(
       ]);
       expect(w.frames, "a close is answered by a close frame, never a message").toEqual([]);
     }),
-  { arbitrary: { seed: 119120, runs: 200 } },
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );

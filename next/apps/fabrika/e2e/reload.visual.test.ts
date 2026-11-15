@@ -11,6 +11,7 @@
 // `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
+import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
@@ -330,7 +331,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             }),
           ),
       ),
-      { seed: 119120, numRuns: 10, endOnFailure: true },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
     );
   });
 
@@ -452,7 +453,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             }),
           ),
       ),
-      { seed: 119120, numRuns: 10, endOnFailure: true },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
     );
   }, 1_800_000);
 
@@ -598,7 +599,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
           }),
         ),
       ),
-      { seed: 119120, numRuns: 10, endOnFailure: true },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
     );
     expect(cliMoves).toEqual(new Set(["fit", "shape", "syntax", "load", "compiler"]));
   }, 1_800_000);

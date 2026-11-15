@@ -8,6 +8,7 @@ import type { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
+import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 
@@ -95,7 +96,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
 };
 
 const cap = 64 * 1024;
-const options = { arbitrary: { seed: 119120, runs: 30 } };
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 30 }) } };
 let sequence = 0;
 
 const NodeLive = Layer.succeed(Wire, { driver: node });

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -66,7 +67,7 @@ for (const failed of [false, true]) {
           rmSync(home, { recursive: true, force: true });
         }
       }),
-      { seed: 119120, numRuns: 10 },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
     );
   });
 }

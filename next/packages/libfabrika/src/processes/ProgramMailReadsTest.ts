@@ -7,6 +7,7 @@
 // counts at each history size it reaches: the generated ones, and the domain's two ends (0 and TOP),
 // so a failure always prints the count at the largest history the law uses.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -21,7 +22,7 @@ import { type Grants, ProgramMail, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
-const RUNS = 25;
+const RUNS = runsFor({ fast: 3, full: 25 });
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
 const BRAIN = "SHA256:brain";
