@@ -3793,8 +3793,19 @@ const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boo
   return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
 };
 
-/** Every move the focus world allows now. */
-const focusMoves = (w: FocusWorld, c: DeskPick, each: (e: DeskEvent) => void): ReadonlyArray<() => void> => {
+/** Whether flight `f` is the window's own inbox wait, the one call the door parks in the focus world
+ *  that the window means to leave parked: its id is the one the inbox waits under. */
+const inboxParked = (s: WindowModel, f: WindowModel["flight"][number]): boolean =>
+  f.call._tag === "wait" && s.inbox._tag === "waiting" && f.id === s.inbox.id;
+
+/** Every move the focus world allows now. With `ends`, a read of a tile's name finds, by the pick,
+ *  either a live process or one that started and then ended with one of the exit reasons. */
+const focusMoves = (
+  w: FocusWorld,
+  c: DeskPick,
+  each: (e: DeskEvent) => void,
+  ends = false,
+): ReadonlyArray<() => void> => {
   const s = w.s;
   const out: Array<() => void> = [];
   const send = (m: WindowMsg) => deskStep(w, m, focusWindow, each);
@@ -3807,10 +3818,13 @@ const focusMoves = (w: FocusWorld, c: DeskPick, each: (e: DeskEvent) => void): R
       if (f.call._tag === "read") {
         const name = f.call.stream.replace(/^processes\//, "");
         const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+        const started = { _tag: "started", by: "brain", body: { process, name }, rev: 1 };
+        const ended = ends && !name.startsWith("tezgah:") && c.pick % 2 === 1;
+        const reason = EXITS[c.pick % EXITS.length]!;
         send({
           type: "read_ok",
           ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+          value: ended ? [started, { _tag: "exited", by: "brain", body: { process, reason }, rev: 2 }] : [started],
           ms: c.ms,
         } as WindowMsg);
       } else if (f.call._tag === "open" && f.call.pid === TEZGAH_PID) {
@@ -4010,11 +4024,14 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
             }
           }
 
-          // Settle: back online, every call and Cmd answered, every view delivered. A parked
-          // `ledger.wait` is no call left to answer: the door holds it until its stream grows.
+          // Settle: back online, every call and Cmd answered, every view delivered. The inbox's own
+          // parked `ledger.wait` is no call left to answer: the door holds it until its stream grows.
+          // Any other wait is: no tile in this world ends, so a tile that waits where it should read
+          // leaves the world unsettled.
           for (let guard = 0; guard < 3_000; guard++) {
             const s = w.s;
-            const unanswered = s.flight.filter((f) => f.call._tag !== "wait");
+            const unanswered = s.flight.filter((f) => !inboxParked(s, f));
+            const answerable = unanswered.filter((f) => f.call._tag !== "wait");
 
             if (s.link._tag === "dialing" && !dialed.has(s.link.dial)) {
               dialed.add(s.link.dial);
@@ -4030,14 +4047,17 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
               !w.waiting.some((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)) &&
               w.moves.every((x) => x.letter !== null && w.took.includes(x.letter));
 
-            if (quiet) {
-              break;
-            }
-
             // The first options are the answers; a timer when retrying; never a socket drop or a key.
             const answers =
-              unanswered.length +
+              answerable.length +
               w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
+            // Online with nothing left to answer or deliver, and only a call the door holds: no move
+            // of this world will ever settle it.
+            const stuck = s.link._tag === "online" && answers === 0 && w.notices.length === 0 && unanswered.length > 0;
+
+            if (quiet || stuck) {
+              break;
+            }
 
             if (answers > 0) {
               options[0]!();
@@ -4064,6 +4084,10 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
 
           seen.moves += w.moves.length;
           expect(
+            w.s.flight.filter((f) => !inboxParked(w.s, f)).map((f) => f.call),
+            "L26: the world settles: every call but the inbox's own parked wait is answered",
+          ).toEqual([]);
+          expect(
             w.moves.filter((x) => x.letter === null || !w.took.includes(x.letter)).map((x) => x.to),
             "L26: every move the window drew reached tezgah as one letter, after any drop of the link",
           ).toEqual([]);
@@ -4085,6 +4109,89 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
     expect(seen.moves, "the walks move focus").toBeGreaterThan(0);
     expect(seen.offline, "the walks press focus keys while the link is down").toBeGreaterThan(0);
     expect(seen.redial, "the walks drop the link and dial again").toBeGreaterThan(0);
+  });
+});
+
+// P18 slice 2's fix round, next/: the tile guideline's live-region row is "Program ends, unfocused
+// tile | Polite | `tracker in t2 ended`" (docs/direction/tile-guidelines.md, followed as written by
+// 0543). Focus at the moment of the end is known only in the window's step, on its drawn workspace,
+// so the machine holds the rule: an end is a status message only for a tile that is not the drawn
+// focus then. The guideline has no row for the focused tile's own end, so nothing extra is said; the
+// tile shows it in its state slot and body. The walk is L26's focus world, where a tile's name read
+// finds, by the pick, a live process or one that started and ended.
+describe("S9: an ended tile's end is said only when the tile has no focus", () => {
+  it("S9 property: on each step, a tile whose process end it has not told before tells it as one status message when it is not the drawn focus, and as none when it is; it is told once either way, and no ended message is ever for the drawn focus", () => {
+    const seen = { focused: 0, unfocused: 0, again: 0 };
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ at: fc.nat(), down: fc.boolean() }), { minLength: 1, maxLength: 5 }),
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
+        (cuts, focus, picks) => {
+          const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
+          const w: FocusWorld = {
+            s: s0,
+            waiting: [...cmds0],
+            desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+            shown: null,
+            subscribed: false,
+            up: true,
+            view: focusDesk(cuts, focus),
+            pos: 1,
+            notices: [],
+            moves: [],
+            took: [],
+            letters: 0,
+          };
+          const told = new Set<string>(); // `${tile} ${pid}`: each end the window has met
+          const each = ({ prev, m, next }: DeskEvent) => {
+            const here = drawnHere(next)?.focus ?? null;
+            const appended = next.said.messages.slice(next.said.messages.length - (next.said.id - prev.said.id));
+
+            for (const x of appended.filter((x) => x._tag === "ended")) {
+              expect(x.tile, `S9: after ${m.type}, an end was said for the drawn focus`).not.toBe(here);
+            }
+
+            for (const t of next.tiles) {
+              const before = prev.tiles.find((p) => p.id === t.id)?.reach;
+              const r = t.reach;
+
+              if (r._tag !== "ended" || (before?._tag === "ended" && before.pid === r.pid)) {
+                continue;
+              }
+
+              const key = `${t.id} ${r.pid}`;
+              const said = appended.filter((x) => x._tag === "ended" && x.tile === t.id).length;
+              seen.again += told.has(key) ? 1 : 0;
+              const want = told.has(key) || t.id === here ? 0 : 1;
+              seen.focused += !told.has(key) && t.id === here ? 1 : 0;
+              seen.unfocused += !told.has(key) && t.id !== here ? 1 : 0;
+              expect(said, `S9: ${t.name}'s end after ${m.type}, ${t.id === here ? "focused" : "unfocused"}`).toBe(
+                want,
+              );
+              told.add(key);
+            }
+          };
+          goOnline(w, focusWindow, each);
+          const dialed = new Set([1]);
+
+          for (const c of picks) {
+            if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+              dialed.add(w.s.link.dial);
+              goOnline(w, focusWindow, each, w.s.link.dial);
+              continue;
+            }
+
+            const options = focusMoves(w, c, each, true);
+            options[c.move % options.length]!();
+          }
+        },
+      ),
+      { seed: SEED, numRuns: 200 },
+    );
+    expect(seen.focused, "the walks end a focused tile's process").toBeGreaterThan(0);
+    expect(seen.unfocused, "the walks end an unfocused tile's process").toBeGreaterThan(0);
+    expect(seen.again, "the walks meet a told end again, after a redial").toBeGreaterThan(0);
   });
 });
 

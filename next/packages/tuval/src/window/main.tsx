@@ -351,7 +351,6 @@ const Desk = (props: PageProps) => {
 
 const Page = (props: PageProps) => {
   const [link, send] = useRuntime(props.run, pickLink);
-  const [tiles] = useRuntime(props.run, pickTiles);
   const [client] = useRuntime(props.run, pickTezgah);
   const [dials] = useRuntime(props.run, (m) => m.dials);
   const [views] = useRuntime(props.run, (m) => m.client.views);
@@ -363,12 +362,13 @@ const Page = (props: PageProps) => {
   useKeys(props.run, props.keys, send);
   const view = client === null ? null : optimisticState(client);
   const named = (id: string) => view?.tiles.find((t) => t.id === id);
-  // The status messages of the current burst, as one line (0504): a refusal, or a tile whose process
-  // ended. A refusal's words are those of the program its tile shows.
-  const burst = spoken({ said, tiles }, (id) => {
-    const program = named(id)?.program;
-    return program === undefined ? null : props.windowFor(program);
-  });
+  // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
+  // whose process ended. A refusal's words are those of the program its tile shows.
+  const burst = spoken(
+    { said },
+    (id) => named(id) ?? null,
+    (tile) => props.windowFor(tile.program),
+  );
   const roomless = polite === null ? undefined : named(polite.tile);
   const words = [
     ...(none ? [NO_TEZGAH] : []),

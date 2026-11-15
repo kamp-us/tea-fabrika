@@ -53,9 +53,9 @@ const Inbox = Schema.TaggedUnion({
 });
 
 // A status message for the window's polite region (WCAG 4.1.3), written by the step its event
-// happened in: a tile whose process ended, or a tile's refused letter. The region says the messages
-// of one burst as one line and never the standing state, so a tile that stays ended is shown by its
-// tile and never said again (0504).
+// happened in: a tile without focus whose process ended, or a tile's refused letter. The region says
+// the messages of one burst as one line and never the standing state, so a tile that stays ended is
+// shown by its tile and never said again (0504).
 const StatusMessage = Schema.TaggedUnion({
   ended: { tile: Schema.String, reason: ExitReason },
   refused: { tile: Schema.String, m: Schema.Json, reason: Schema.String },
@@ -485,14 +485,22 @@ const say = (s: WindowModel, message: StatusMessage): WindowModel => ({
 const hushed = (s: WindowModel): WindowModel =>
   s.said.messages.length === 0 ? s : { ...s, said: { id: s.said.id, messages: [] } };
 
-/** A tile whose process `pid` ended tells it once; finding the same end again tells nothing. */
-const tellEnded = (s: WindowModel, tile: TileRow, pid: string, reason: ExitReason): WindowModel =>
-  tile.told === pid
-    ? s
-    : say(
-        { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) },
-        StatusMessage.cases.ended.make({ tile: tile.id, reason }),
-      );
+/**
+ * A tile whose process `pid` ended tells it once, and only when it is not the drawn focus at that
+ * moment: the tile guideline's row is "Program ends, unfocused tile", followed as written (0543). It
+ * has no row for the focused tile's own end, so that end is noted as told and says nothing; the tile
+ * shows it in its state slot and body. Finding the same end again tells nothing.
+ */
+const tellEnded = (s: WindowModel, tile: TileRow, pid: string, reason: ExitReason): WindowModel => {
+  if (tile.told === pid) {
+    return s;
+  }
+
+  const noted: WindowModel = { ...s, tiles: s.tiles.map((t) => (t.id === tile.id ? { ...t, told: pid } : t)) };
+  return drawnSpace(s.tezgah)?.space.focus === tile.id
+    ? noted
+    : say(noted, StatusMessage.cases.ended.make({ tile: tile.id, reason }));
+};
 
 /** Reads each tile in `ids` from rev 0 of its name, as a dial's start does, with a fresh fold. */
 const resolveAgain = (s: WindowModel, dial: number, ids: ReadonlySet<string>): Step => {

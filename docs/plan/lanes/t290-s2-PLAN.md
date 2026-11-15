@@ -1,4 +1,4 @@
-Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 3947c54334e3
+Approved by the lead agent, builds Tier 1's P18 row (the OTP answer of 2026-11-13) and the browser note's C5; body 792fd3088c22
 Plancheck-Version: 3
 # Plan: ticket 290, P18 slice 2: a tile monitors its process and follows the restart
 
@@ -310,8 +310,17 @@ loading").
   and never the ended process's last view. The tile stays `inert`, as for every tile that is not
   open. Both words come from `next/packages/tuval/src/window/words.ts`: `stateWord` for the slot,
   `bodyWord` for the body.
-- The page's polite live region says `checklist:1 in tile_1 ended (crashed)` once, beside the
-  refusal words: the guideline's `tracker in t2 ended`, with this slice's reason after it. It stays
+- ~~The page's polite live region says `checklist:1 in tile_1 ended (crashed)` once, beside the
+  refusal words: the guideline's `tracker in t2 ended`, with this slice's reason after it.~~
+  Amended 2026-11-15 (fix round): the guideline's words replace this plan's, by 0543, which says
+  `next/` follows an approved guideline as written and a lean in a plan is no license to differ.
+  The guideline's row is "Program ends, unfocused tile | Polite | `tracker in t2 ended`"
+  (`docs/direction/tile-guidelines.md`, "What a screen reader is told"). So the polite region says
+  `checklist in t1 ended`, once: the program's own name and the tile's short handle, both from
+  `tileWords` in `next/packages/tuval/src/window/Layout.tsx`, the source `tileName` reads, and no
+  exit reason, which stays in the title bar. It is said only when the ended tile is not the drawn
+  focus at that moment; the window machine's `tellEnded` holds that, where focus is known. The
+  guideline has no row for the focused tile's own end, so nothing extra is said for it. It stays
   polite, not `role="alert"`, as the guideline's live-region table and 0504 say.
 - Color is never the cue: the state is words (0502). This is no new screen, so there is no Linear
   question; the state word follows 0502.
@@ -355,7 +364,8 @@ The window's tab is `tab_x`; its socket's session is `S1`; the tile is `t1`.
 8. **`read_ok` id 12:** `[started A 10, exited A 31]`. No live life; the newest exit is A crashed.
    Tile `ended {A, crashed, id 14}`, `wait processes/checklist:1 after 31` (id 14). The tile's body
    shows the one word `Ended` in place of A's last view, its title bar says `Ended (crashed)`, and
-   the polite region says `checklist:1 in t1 ended (crashed)`; presses are blocked.
+   the polite region says `checklist in t1 ended` when t1 does not have focus, and nothing when it
+   does (amended 2026-11-15, as in section 6); presses are blocked.
 9. **The supervisor's backoff ends** (100 ms on main) and it writes `restarted {process B, after A}`
    at rev 35. The ring answers wait id 14 with `{rev 35}`.
 10. **`wait_ok` id 14:** tile `resolving {id 15}`, `read processes/checklist:1 after 0`. The answer
