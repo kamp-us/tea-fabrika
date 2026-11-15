@@ -8,13 +8,15 @@
 //   journal in `hands/journal.sqlite`, reads `instance.port` as `dev.ts` does, and prints one JSON
 //   line per change a parent needs: `waiting { fingerprint, code, until }` while its key is not
 //   granted, `online { fingerprint }`, `offline { fingerprint }`.
-// - Once a person key grants it as `hands`, a `git_version` job asked of its key ends `finished`
-//   with `exited` code 0. After a SIGTERM and a new start, the fingerprint is the same and the job
+// - Once a person key grants it as `hands`, a `git_version` task asked of its key ends `finished`
+//   with `exited` code 0. After a SIGTERM and a new start, the fingerprint is the same and the task
 //   is not run again.
 // - S2: the key's private half (`jwk.d`) appears in no stdout or stderr line, no journal row, and
 //   no row the brain stored (its `job:` and `target:` rows, and what it kept of each hello and
 //   knock the client wrote). The hands have no span sink at the brain yet (the plan's Records), so
-//   no span reaches a place this law can read.
+//   no span reaches a place this law can read. This is the end-to-end supplement: the property over
+//   generated flows, which scans every frame as sent, every span, log line and error, is
+//   `next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts`.
 //
 // The key's public half is read from the key file the launcher made, to grant it, as the person's
 // approve screen will read it from the knock. The brain is `hands-launcher.test-support.ts`.
@@ -27,13 +29,13 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
-import { Job } from "@kampus/libfabrika/jobs/Job";
+import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
-import { JOB, PROCESS, type Project as LauncherProject } from "./hands-launcher.test-support.ts";
+import { PROCESS, TASK, type Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -64,7 +66,7 @@ const field = (v: string | Uint8Array) => {
   return Buffer.concat([n, b]);
 };
 
-/** The test person's key: a generated Ed25519 pair, as `jobs-wire.integration.test.ts` makes it. */
+/** The test person's key: a generated Ed25519 pair, as `tasks-wire.integration.test.ts` makes it. */
 const person = () => {
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
@@ -110,14 +112,14 @@ const method = (project: object, name: keyof LauncherProject) => Reflect.get(pro
 const call = <A>(label: string, invoke: () => Promise<A>) =>
   Effect.tryPromise({ try: invoke, catch: (cause: unknown) => new Error(label, { cause }) });
 
-/** What one launch of the flow saw: every line, the key's two halves, the job, and every stored row. */
+/** What one launch of the flow saw: every line, the key's two halves, the task, and every stored row. */
 type Seen = {
   readonly lines: Array<string>;
   readonly stderr: Array<string>;
   readonly d: string;
   readonly fingerprints: ReadonlyArray<string>;
-  readonly job: typeof Job.Type;
-  readonly jobAfterRestart: typeof Job.Type;
+  readonly task: typeof Task.Type;
+  readonly taskAfterRestart: typeof Task.Type;
   readonly journal: Record<string, unknown>;
   readonly brain: unknown;
 };
@@ -221,7 +223,7 @@ const flow = Effect.fnUntraced(
     );
     const url = `http://127.0.0.1:${port.port}`;
     const project = running.project(NAME);
-    // The job's requester is a started name: a finish wakes it (P39 slice 3).
+    // The task's requester is a started name: a finish wakes it (P39 slice 3).
     yield* call("requester start failed", () =>
       Reflect.get(project, "start")(
         {
@@ -285,20 +287,22 @@ const flow = Effect.fnUntraced(
         expect(reply.ok, "E2: the person key's grant is accepted").toBe(true);
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
-        yield* call("job request failed", () => method(project, "requestHandsJob")(waiting.fingerprint));
-        let job = Schema.decodeUnknownSync(Job)(
-          yield* call("job read failed", () => method(project, "readHandsJob")()),
+        yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
+        let task = Schema.decodeUnknownSync(Task)(
+          yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 
-        for (let i = 0; i < 120 && job.state._tag !== "finished"; i++) {
+        for (let i = 0; i < 120 && task.state._tag !== "finished"; i++) {
           yield* Effect.sleep("500 millis");
-          job = Schema.decodeUnknownSync(Job)(yield* call("job read failed", () => method(project, "readHandsJob")()));
+          task = Schema.decodeUnknownSync(Task)(
+            yield* call("task read failed", () => method(project, "readHandsTask")()),
+          );
         }
 
         // A SIGTERM, as launchd stops a job; the scope's close then reaps it.
         yield* one.handle.kill({ killSignal: "SIGTERM" });
         yield* one.handle.exitCode.pipe(Effect.ignore);
-        return { fingerprint: waiting.fingerprint, d: stored.jwk.d, job };
+        return { fingerprint: waiting.fingerprint, d: stored.jwk.d, task };
       }),
     );
 
@@ -307,14 +311,14 @@ const flow = Effect.fnUntraced(
       Effect.gen(function* () {
         const two = yield* launcher(script, app, hands, lines, stderr);
         const online = yield* two.next("online");
-        // Time for a client that would take or run the job again to do so.
+        // Time for a client that would take or run the task again to do so.
         yield* Effect.sleep("5 seconds");
-        const job = Schema.decodeUnknownSync(Job)(
-          yield* call("job read failed", () => method(project, "readHandsJob")()),
+        const task = Schema.decodeUnknownSync(Task)(
+          yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
         yield* two.handle.kill({ killSignal: "SIGTERM" });
         yield* two.handle.exitCode.pipe(Effect.ignore);
-        return { fingerprint: online.fingerprint, job };
+        return { fingerprint: online.fingerprint, task };
       }),
     );
 
@@ -333,8 +337,8 @@ const flow = Effect.fnUntraced(
       stderr,
       d: first.d,
       fingerprints: [first.fingerprint, second.fingerprint],
-      job: first.job,
-      jobAfterRestart: second.job,
+      task: first.task,
+      taskAfterRestart: second.task,
       journal,
       brain,
     } satisfies Seen;
@@ -346,12 +350,12 @@ const flow = Effect.fnUntraced(
 
 describe("P39 slice 4b: the hands launcher end to end", () => {
   it.live(
-    "E2 scenario: the real launcher, as its own process with a fresh FABRIKA_HOME, against a real local instance, prints waiting, then online once a person key grants it as hands; a git_version job ends finished with exited code 0; after a SIGTERM and a new start the fingerprint is the same and the job is not run again",
+    "E2 scenario: the real launcher, as its own process with a fresh FABRIKA_HOME, against a real local instance, prints waiting, then online once a person key grants it as hands; a git_version task ends finished with exited code 0; after a SIGTERM and a new start the fingerprint is the same and the task is not run again",
     () =>
       Effect.gen(function* () {
         const seen = yield* flow();
-        expect(seen.job.state._tag, `E2: the job ends finished: ${JSON.stringify(seen.job.state)}`).toBe("finished");
-        const result = seen.job.state._tag === "finished" ? seen.job.state.result : null;
+        expect(seen.task.state._tag, `E2: the task ends finished: ${JSON.stringify(seen.task.state)}`).toBe("finished");
+        const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
         expect(result?._tag === "exited" && result.version.startsWith("git version "), "E2: its version line").toBe(
@@ -359,13 +363,13 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
         );
         const [first, second] = seen.fingerprints;
         expect(second, "E2: a new start keeps the same key").toBe(first);
-        expect(seen.jobAfterRestart, "E2: the restart runs nothing again").toEqual(seen.job);
+        expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
         expect(
-          seen.job.events.map((e) => e.event),
-          "E2: the job was taken, started and finished once",
+          seen.task.events.map((e) => e.event),
+          "E2: the task was taken, started and finished once",
         ).toEqual(["requested", "taken", "started", "finished"]);
-        expect(seen.job.state._tag === "finished" && seen.job.state.request.id).toBe(JOB);
-        expect(seen.job.state._tag === "finished" && seen.job.state.request.process).toBe(PROCESS);
+        expect(seen.task.state._tag === "finished" && seen.task.state.request.id).toBe(TASK);
+        expect(seen.task.state._tag === "finished" && seen.task.state.request.process).toBe(PROCESS);
       }),
     600_000,
   );
@@ -395,7 +399,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     stderr: seen.stderr,
                     journal: seen.journal,
                     brain: seen.brain,
-                    job: seen.job,
+                    task: seen.task,
                   };
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 

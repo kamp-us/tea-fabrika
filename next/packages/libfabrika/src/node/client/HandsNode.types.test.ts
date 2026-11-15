@@ -9,7 +9,7 @@ import type { Context, Effect, FileSystem, Layer, Path, PlatformError } from "ef
 import type { KeyValueStore } from "effect/persistence";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commands } from "../../client/Commands.ts";
-import type { Command, Result } from "../../jobs/Job.ts";
+import type { Command, Result } from "../../tasks/Task.ts";
 import type { ClientKey, ClientKeyError, Identity } from "../../transport/ClientKey.ts";
 import type * as CommandsNode from "./CommandsNode.ts";
 import type * as JournalSqlite from "./JournalSqlite.ts";

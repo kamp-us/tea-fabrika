@@ -23,7 +23,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
-import { Command, type Result } from "../../jobs/Job.ts";
+import { Command, type Result } from "../../tasks/Task.ts";
 import { property } from "../../Testing.test-support.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";

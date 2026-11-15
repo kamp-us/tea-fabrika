@@ -62,7 +62,7 @@ const store = (sql: Sql) => {
  * **Gotchas**
  *
  * A file that cannot be opened is a defect, not an error: the hands cannot keep their promise of
- * running a job at most once without their journal, so the start stops with its cause.
+ * running a task at most once without their journal, so the start stops with its cause.
  *
  * @stability unstable
  * @category layers

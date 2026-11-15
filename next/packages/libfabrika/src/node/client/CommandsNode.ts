@@ -7,7 +7,7 @@
 import { Config, Effect, FileSystem, Layer, Path } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Commands } from "../../client/Commands.ts";
-import type { Command } from "../../jobs/Job.ts";
+import type { Command } from "../../tasks/Task.ts";
 import { capped } from "./internal/capped.ts";
 
 /** The most bytes a command may print, stdout and stderr together, before it is stopped. */
@@ -38,7 +38,7 @@ const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
  * **Details**
  *
  * `has` is `["git"]` when a folder of `PATH` holds an executable `git` at the layer's build, and
- * `[]` otherwise, so a host without git is refused at take time and never runs the job. `execute`
+ * `[]` otherwise, so a host without git is refused at take time and never runs the task. `execute`
  * runs the command's child with only `PATH` in its environment, in a scope of its own, and stops
  * it once it prints more than the command's cap.
  *

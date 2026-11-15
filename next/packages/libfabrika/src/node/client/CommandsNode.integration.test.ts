@@ -13,7 +13,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Config, Effect, Layer, Schedule } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Commands } from "../../client/Commands.ts";
-import { Command } from "../../jobs/Job.ts";
+import { Command } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import { capped } from "./internal/capped.ts";
 

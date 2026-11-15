@@ -1,7 +1,7 @@
 import { Clock, Effect, Option, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process";
-import { Result } from "../../../jobs/Job.ts";
+import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
 type Printed = { readonly out: ReadonlyArray<Uint8Array>; readonly outBytes: number; readonly errBytes: number };

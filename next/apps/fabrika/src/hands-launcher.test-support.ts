@@ -1,31 +1,31 @@
 // P39 slice 4b, next/: the brain E2 and S2 run the real hands launcher against
 // (`hands-launcher.integration.test.ts`). It is the real Project with three calls only the test's
-// own local handle reaches, never a route: ask a `git_version` job of a key, read that job, and read
+// own local handle reaches, never a route: ask a `git_version` task of a key, read that task, and read
 // every stored row for the secrets scan. The key is the launcher's own, known only once it made it,
-// so the job is asked after the grant, not at startup.
-import { Command } from "@kampus/libfabrika/jobs/Job";
-import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
+// so the task is asked after the grant, not at startup.
+import { Command } from "@kampus/libfabrika/tasks/Task";
+import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Effect, Schema } from "effect";
 import { Project as RealProject } from "./brain.ts";
-import { projectJobsLayer } from "./runtime.ts";
+import { projectTasksLayer } from "./runtime.ts";
 
-/** The one job E2 asks, and the started program that asks it. */
-export const JOB = "hands-job";
+/** The one task E2 asks, and the started program that asks it. */
+export const TASK = "hands-task";
 export const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 export class Project extends RealProject {
   /** Asks the hands of `target` for `git --version`, as a started program would. */
-  requestHandsJob(target: string) {
+  requestHandsTask(target: string) {
     const key = Schema.decodeUnknownSync(Schema.NonEmptyString)(target);
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return Effect.runPromise(
       Effect.scoped(
-        Jobs.use((jobs) =>
-          jobs.request(
+        Tasks.use((tasks) =>
+          tasks.request(
             {
-              id: JOB,
+              id: TASK,
               process: PROCESS,
               name: "wire:1",
               program: "fabrika/counter",
@@ -47,16 +47,16 @@ export class Project extends RealProject {
               build: "fixture-build",
             },
           ),
-        ).pipe(Effect.provide(projectJobsLayer(this.ctx, this.env))),
+        ).pipe(Effect.provide(projectTasksLayer(this.ctx, this.env))),
       ),
     );
   }
 
-  /** The job E2 asked, as the brain holds it. */
-  readHandsJob() {
+  /** The task E2 asked, as the brain holds it. */
+  readHandsTask() {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return Effect.runPromise(
-      Effect.scoped(Jobs.use((jobs) => jobs.read(JOB)).pipe(Effect.provide(projectJobsLayer(this.ctx, this.env)))),
+      Effect.scoped(Tasks.use((tasks) => tasks.read(TASK)).pipe(Effect.provide(projectTasksLayer(this.ctx, this.env)))),
     );
   }
 

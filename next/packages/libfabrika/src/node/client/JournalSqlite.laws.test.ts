@@ -9,8 +9,8 @@
 // `KeyValueStore.layerMemory`, the store holds one value per key however often it is written, and a
 // saved value that is no entry reads as `bad_entry` on both.
 //
-// The walk is fast-check's `fc.commands`: write a new job, read a job written, overwrite a job
-// written, read a job never written, and save a value that is no entry, each picked only where the
+// The walk is fast-check's `fc.commands`: write a new task, read a task written, overwrite a task
+// written, read a task never written, and save a value that is no entry, each picked only where the
 // model allows it (0093). The memory store is the oracle, and the model checks it too.
 //
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
@@ -21,7 +21,7 @@ import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
-import { Result } from "../../jobs/Job.ts";
+import { Result } from "../../tasks/Task.ts";
 import { property } from "../../Testing.test-support.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
 
@@ -63,19 +63,19 @@ const side = (store: Layer.Layer<KeyValueStore.KeyValueStore>) =>
     return { journal, store: kv } satisfies Side;
   });
 
-const read = (s: Side, job: string): Effect.Effect<Read> =>
-  s.journal.read(job).pipe(
+const read = (s: Side, task: string): Effect.Effect<Read> =>
+  s.journal.read(task).pipe(
     Effect.map((entry): Read => (entry === null ? { _tag: "none" } : { _tag: "entry", entry })),
     Effect.catch((error) => Effect.succeed<Read>({ _tag: "error", reason: error.reason })),
   );
 
 /** Both stores answer one read alike, and both hold as many values as the model. */
-const agree = (m: Model, r: Real, job: string, label: string) =>
+const agree = (m: Model, r: Real, task: string, label: string) =>
   Effect.gen(function* () {
-    const sql = yield* read(r.sql, job);
-    const memory = yield* read(r.memory, job);
+    const sql = yield* read(r.sql, task);
+    const memory = yield* read(r.memory, task);
     expect(sql, `J1: ${label}: the SQLite journal reads what the memory journal reads`).toEqual(memory);
-    const saved = m.saved.get(job);
+    const saved = m.saved.get(task);
     expect(memory, `J1: ${label}: the memory journal reads what was written`).toEqual(
       saved === undefined
         ? { _tag: "none" }
@@ -90,59 +90,59 @@ const agree = (m: Model, r: Real, job: string, label: string) =>
     ]);
   });
 
-const written = (m: Readonly<Model>, r: Real) => r.pool.filter((job) => m.saved.has(job));
-const unwritten = (m: Readonly<Model>, r: Real) => r.pool.filter((job) => !m.saved.has(job));
+const written = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => m.saved.has(task));
+const unwritten = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => !m.saved.has(task));
 const pick = <A>(from: ReadonlyArray<A>, n: number): A | undefined => from[n % Math.max(from.length, 1)];
 
-/** A write of a new job, or with `over` of a job already written. */
+/** A write of a new task, or with `over` of a task already written. */
 const writeStep = (over: boolean, n: number, entry: Entry): Step => ({
   check: (m) => (over ? m.saved.size > 0 : true),
   run: handOff,
   toString: () => `${over ? "overwrite" : "write"}(${n}, ${entry._tag})`,
   step: (m, r) =>
     Effect.gen(function* () {
-      const job = pick(over ? written(m, r) : unwritten(m, r), n) ?? pick(r.pool, n) ?? "job";
-      const both = yield* Effect.all([r.sql.journal.write(job, entry), r.memory.journal.write(job, entry)], {
+      const task = pick(over ? written(m, r) : unwritten(m, r), n) ?? pick(r.pool, n) ?? "task";
+      const both = yield* Effect.all([r.sql.journal.write(task, entry), r.memory.journal.write(task, entry)], {
         concurrency: 1,
       }).pipe(Effect.exit);
       expect(Exit.isSuccess(both), `J1: a write succeeds on both stores: ${String(both)}`).toBe(true);
-      m.saved.set(job, entry);
-      yield* agree(m, r, job, `after ${over ? "overwrite" : "write"} of ${job}`);
+      m.saved.set(task, entry);
+      yield* agree(m, r, task, `after ${over ? "overwrite" : "write"} of ${task}`);
       return over ? "overwrite" : "write";
     }),
 });
 
-/** A read of a job written, or with `missing` of a job never written. */
+/** A read of a task written, or with `missing` of a task never written. */
 const readStep = (missing: boolean, n: number): Step => ({
   check: (m) => (missing ? true : m.saved.size > 0),
   run: handOff,
   toString: () => `read(${missing ? "missing" : "written"}, ${n})`,
   step: (m, r) =>
     Effect.gen(function* () {
-      const job = pick(missing ? unwritten(m, r) : written(m, r), n);
+      const task = pick(missing ? unwritten(m, r) : written(m, r), n);
 
-      if (job === undefined) {
+      if (task === undefined) {
         return "skip";
       }
 
-      yield* agree(m, r, job, `read of ${job}`);
-      return missing ? "read:missing" : `read:${m.saved.get(job) === "not-an-entry" ? "bad_entry" : "entry"}`;
+      yield* agree(m, r, task, `read of ${task}`);
+      return missing ? "read:missing" : `read:${m.saved.get(task) === "not-an-entry" ? "bad_entry" : "entry"}`;
     }),
 });
 
-/** A value that is no entry, saved under a job straight through each store. */
+/** A value that is no entry, saved under a task straight through each store. */
 const garbageStep = (n: number, value: string): Step => ({
   check: () => true,
   run: handOff,
   toString: () => `garbage(${n}, ${JSON.stringify(value)})`,
   step: (m, r) =>
     Effect.gen(function* () {
-      const job = pick(r.pool, n) ?? "job";
-      yield* Effect.all([r.sql.store.set(job, value), r.memory.store.set(job, value)], { concurrency: 1 }).pipe(
+      const task = pick(r.pool, n) ?? "task";
+      yield* Effect.all([r.sql.store.set(task, value), r.memory.store.set(task, value)], { concurrency: 1 }).pipe(
         Effect.orDie,
       );
-      m.saved.set(job, "not-an-entry");
-      yield* agree(m, r, job, `after a value that is no entry under ${job}`);
+      m.saved.set(task, "not-an-entry");
+      yield* agree(m, r, task, `after a value that is no entry under ${task}`);
       return "garbage";
     }),
 });
@@ -185,8 +185,8 @@ const NotAnEntry = fc.oneof(
 );
 
 const Walk = fc.record({
-  // Keys a job id may hold, quotes, slashes and letters past ASCII included.
-  pool: fc.uniqueArray(fc.oneof(Text, fc.constantFrom("P/7/0", "job'1", 'job"2', "%_*", "ü/ş")), {
+  // Keys a task id may hold, quotes, slashes and letters past ASCII included.
+  pool: fc.uniqueArray(fc.oneof(Text, fc.constantFrom("P/7/0", "task'1", 'task"2', "%_*", "ü/ş")), {
     minLength: 1,
     maxLength: 5,
   }),
