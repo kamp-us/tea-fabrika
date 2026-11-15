@@ -63,6 +63,7 @@
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
     "./testing": "./src/Testing.ts",
+    "./Testing.test-support": "./src/Testing.test-support.ts",
     "./codehost/*": "./src/codehost/*.ts",
     "./codehost/internal/*": null,
     "./ci/*": "./src/ci/*.ts",

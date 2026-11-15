@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-runtime-laws-p12-lifecycle-trace-overflows-after-l4",
+  "date": "2026-11-14",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime.laws.integration.test.ts",
+    "line": 547
+  },
+  "says": "In next/, the law 'a brain lifecycle entry keeps the caller's span trace' fails with 'Maximum call stack size exceeded' whenever the L4 law before it times out, for the same reason as the bootstrap trace law: a world that never finishes leaves its spy on `Layer.buildWithMemoMap`, and the next world's spy calls itself.",
+  "proof": "Failed in the same 4 jobs as 'the bootstrap entry keeps the caller's span trace', each right after L4 timed out at 60 s: https://github.com/kamp-us/tea-fabrika/actions/runs/43586369357/job/132424559551 (`Error: Property failed after 1 tests`, counterexample `{letter: prepare, write: write-1, build: counter-b, rev: 1}`, `Caused by: RangeError: Maximum call stack size exceeded` at runtime.laws.test.ts:281; the rerun of that run went green), https://github.com/kamp-us/tea-fabrika/actions/runs/43594434801/job/132445935994 (push to main; the next push went green), https://github.com/kamp-us/tea-fabrika/actions/runs/43592894030/job/132441517020 and https://github.com/kamp-us/tea-fabrika/actions/runs/43594995101/job/132448971235 (merge queue). The fix is in flight in pull request https://github.com/kamp-us/tea-fabrika/pull/1202, DIRTY against main.",
+  "cost": "As for the bootstrap trace law: a red law that hides the one slow law that caused it.",
+  "head": "411f792898b25e754bc78d90547c3db3bb4ef8c9",
+  "ticket": "kamp-us/tea-fabrika#962",
+  "pr": null
+}
