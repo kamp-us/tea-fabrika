@@ -22,6 +22,7 @@ import { type Sender, Senders, type SendersError } from "../permissions/Senders.
 import { short } from "../telemetry/Trace.ts";
 import { Child, Children, ChildrenError, type ChildStop, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
 import { ExitReason } from "./ExitReason.ts";
+import { pick, recorded } from "./internal/member.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -90,9 +91,10 @@ type Rules = {
 
 /**
  * The permission step (0170, with the owner's answer (c) to its open question). The member checked
- * is the sender of the input that caused the start, else the requester's recorded member, its
- * process owner (0172). A member is checked with `StartProgram` on this fabrika, and `StartGrant` is
- * not read. With no member behind the start, the host's `StartGrant` rule judges it, as before.
+ * is `pick`'s, shared with a watch: the sender of the input that caused the start, else the
+ * requester's recorded member, its process owner (0172). A member is checked with `StartProgram` on
+ * this fabrika, and `StartGrant` is not read. With no member behind the start, the host's
+ * `StartGrant` rule judges it, as before.
  */
 const judge = (
   rules: Rules,
@@ -101,8 +103,10 @@ const judge = (
   child: Child,
   sender: Result.Result<Option.Option<Sender>, SendersError>,
 ): Result.Result<Judged, Found> => {
-  if (Result.isFailure(sender)) {
-    return sender.failure.reason === "ended"
+  const picked = pick(sender, requester.member);
+
+  if (Result.isFailure(picked)) {
+    return picked.failure.reason === "ended"
       ? Result.fail(Found.answered({ answer: Result.fail(refuse("stale_sender")), judged: Option.none() }))
       : Result.fail(
           Found.answered({
@@ -112,7 +116,7 @@ const judge = (
         );
   }
 
-  const member = Option.getOrElse(sender.success, () => requester.member);
+  const member = Option.getOrUndefined(picked.success);
 
   if (member === undefined) {
     return rules.granted(requester.program, child.code.program)
@@ -181,10 +185,7 @@ const answer = (
   const judged = judge(
     rules,
     turn,
-    {
-      program: requester.state.code.program,
-      member: requester.request._tag === "first" ? requester.request.member : undefined,
-    },
+    { program: requester.state.code.program, member: recorded(requester) },
     child,
     sender,
   );

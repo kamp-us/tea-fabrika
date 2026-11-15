@@ -161,7 +161,7 @@ export const NoProc = Schema.TaggedStruct("noproc", {});
  *
  * It carries the watch's `ref`, the process, the recipient it is for, and the reason: the
  * process's exit reason, unchanged, or `noproc` when the process was not live when the watch was
- * made.
+ * made. A watch a program made by name also carries that `name`, as OTP's `{RegName, Node}`.
  *
  * **Gotchas**
  *
@@ -174,6 +174,7 @@ export const NoProc = Schema.TaggedStruct("noproc", {});
 export const Down = Schema.TaggedStruct("DOWN", {
   ref: Text,
   process: ProcessId,
+  name: Schema.optionalKey(ProcessName),
   reason: Schema.Union([ExitReason, NoProc]),
   to: Recipient,
 });
@@ -340,18 +341,18 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-/** A live watch as queries return it; `canceled` is always false and never stored. */
-type Watch = typeof ProcessEvent.cases.monitored.Type & {
+/** A watch as queries return it, with `canceled` read from its state; it is never stored. */
+type Watch = Omit<typeof ProcessEvent.cases.monitored.Type, "member"> & {
   readonly canceled: boolean;
   readonly round: number;
 };
 
 type Held = Model["watches"] extends ReadonlyMap<string, infer W> ? W : never;
 
-const shown = (watch: Held): Watch => ({
-  ...ProcessEvent.cases.monitored.make({ ref: watch.ref, process: watch.process, to: watch.to }),
-  canceled: false,
-  round: watch.round,
+const shown = ({ _tag, round, ...watch }: Held): Watch => ({
+  ...ProcessEvent.cases.monitored.make(watch),
+  canceled: _tag === "canceled",
+  round,
 });
 
 /**
@@ -720,8 +721,12 @@ export class ProcessTable {
 
   /** The caller's own live watch under `ref`, if any. Another recipient's ref is never touched. */
   demonitor(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
-    const watch = this.#model.watches.get(watchKey(to, ref));
-    return watch?._tag === "live" ? Option.some(shown(watch)) : Option.none();
+    return Option.filter(this.watch(ref, to), (watch) => !watch.canceled);
+  }
+
+  /** The watch saved under (`to`, `ref`), live or canceled, so a retried watch finds its own. */
+  watch(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
+    return Option.map(Option.fromUndefinedOr(this.#model.watches.get(watchKey(to, ref))), shown);
   }
 
   inbound(process: string): ReadonlyArray<Watch> {

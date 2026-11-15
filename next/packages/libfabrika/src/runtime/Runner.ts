@@ -62,6 +62,7 @@ import {
 import { InputId } from "../Id.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
+import { Monitors } from "../processes/Monitors.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import { Result as TaskResult } from "../tasks/Task.ts";
@@ -85,6 +86,7 @@ import { handsDelivery } from "./internal/handsDelivery.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
+import { DemonitorInput, MonitorInput } from "./Monitor.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
@@ -239,12 +241,17 @@ const EXIT = "exit";
 /** The Cmd the runner hands to the Project as a task for the person's hands. */
 const HANDS = "hands";
 
+/** The Cmds a program watches another process with, by its registered name, and ends that watch. */
+const MONITOR = "monitor";
+const DEMONITOR = "demonitor";
+
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS]);
+const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, MONITOR, DEMONITOR]);
 
 /** This life still owes a host Cmd (a send, a send_chunks, a start_child, a stop_child, an exit,
- *  or a hands Cmd the Project has not saved yet): the next alarm tries it again. A hands task that
- *  only waits on the hands is owed nothing: a wake or a due asks it again (0105). */
+ *  a monitor, a demonitor, or a hands Cmd the Project has not saved yet): the next alarm tries it
+ *  again. A hands task that only waits on the hands is owed nothing: a wake or a due asks it again
+ *  (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
   cmds.some((cmd) => cmd.mail === true && cmd.hands?._tag !== "waiting");
 
@@ -288,6 +295,10 @@ const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fiel
 const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
 const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
+const strictMonitor = Schema.decodeUnknownOption(MonitorInput, { onExcessProperty: "error" });
+const decodeMonitor = (cmd: unknown) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
+const strictDemonitor = Schema.decodeUnknownOption(DemonitorInput, { onExcessProperty: "error" });
+const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
 const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
@@ -522,6 +533,7 @@ export class ProgramRunner extends Context.Service<
         const delivery = yield* Effect.serviceOption(MailDelivery);
         const handsTasks = yield* Effect.serviceOption(HandsTasks);
         const children = yield* Effect.serviceOption(Children);
+        const monitors = yield* Effect.serviceOption(Monitors);
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
           Effect.suspend(() => manager.status(process.name)),
@@ -1441,12 +1453,15 @@ export class ProgramRunner extends Context.Service<
             view = folded.view;
             wake = folded.wake;
             placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
+            // The brain saves a monitor's answer in its own turn, so any catch-up may fold it first:
+            // what its step made is still this life's to run, as if `settle` had folded it.
+            const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
 
             if (own && letter.id.endsWith("/answer")) {
               cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
             }
 
-            const owed = !accepted || letter.id === options.mine;
+            const owed = !accepted || settled || letter.id === options.mine;
             // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
             const preparedTurn = Option.exists(prepared, (turn) => turn.id === letter.id);
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
@@ -1468,7 +1483,7 @@ export class ProgramRunner extends Context.Service<
               mine = Option.some(letter);
               fresh.push(...dispatched);
             } else {
-              drain.push(...dispatched.filter((job) => !accepted || job.mail === true));
+              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true));
             }
           }
 
@@ -1959,6 +1974,53 @@ export class ProgramRunner extends Context.Service<
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
         });
 
+        /** The built-in monitor, OTP's monitor(process, Name): this life is the watcher and this Cmd's
+         *  id is the ref. The brain saves the answer in the watch's own turn, so a watch answers none
+         *  here; a refusal is the answer to place. Storage is not an answer, so the Cmd stays
+         *  dispatched and asks again under the same ref. */
+        const watch = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeMonitor(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(MONITOR) || Option.isNone(monitors) || Option.isNone(input)) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const watched = yield* monitors.value
+            .monitor(
+              { id: job.id, name: input.value.name, watcher: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(watched)) {
+            return Option.none();
+          }
+
+          const { reason } = watched.failure;
+          return reason === "storage"
+            ? yield* new LedgerError({ reason: "storage" })
+            : Option.some(yield* err(job, reason));
+        });
+
+        /** The built-in demonitor, OTP's demonitor(Ref, [flush]): only this life's own watch under the
+         *  ref ends, and the receive filter keeps an unread DOWN for it from folding. It refuses
+         *  nothing; storage leaves the Cmd dispatched. */
+        const unwatch = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeDemonitor(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(DEMONITOR) || Option.isNone(monitors) || Option.isNone(input)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          yield* monitors.value
+            .demonitor(
+              { ref: input.value.ref, watcher: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.mapError(() => new LedgerError({ reason: "storage" })));
+          return yield* ok(job, null);
+        });
+
         /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -2055,6 +2117,13 @@ export class ProgramRunner extends Context.Service<
             return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
           }
 
+          if (type === MONITOR) {
+            const refusal = yield* cmdSpan(job, watch(state, job));
+            return Option.isSome(refusal)
+              ? yield* place(job, origin, originStore, refusal.value)
+              : yield* settle(job, origin);
+          }
+
           const answered: Option.Option<unknown> =
             type === SEND_CHUNKS
               ? yield* cmdSpan(job, chunks(state, job))
@@ -2067,9 +2136,11 @@ export class ProgramRunner extends Context.Service<
                         ? cmdSpan(job, startChild(state, job))
                         : type === STOP_CHILD
                           ? cmdSpan(job, stopChild(state, job))
-                          : type === EXIT
-                            ? cmdSpan(job, stop(state, job))
-                            : handle(state, job),
+                          : type === DEMONITOR
+                            ? cmdSpan(job, unwatch(state, job))
+                            : type === EXIT
+                              ? cmdSpan(job, stop(state, job))
+                              : handle(state, job),
                 );
 
           // A chunked send waiting on a full inbox has no answer yet: its owed entry's alarm tries again.
@@ -2138,6 +2209,21 @@ export class ProgramRunner extends Context.Service<
               }
 
               return (yield* catchUp(current, { mine: answer })).fresh;
+            }),
+          );
+
+        /** Folds an answer the brain already saved as this Cmd's letter, as `place` folds the one it
+         *  sends. Answers the Cmds the fold made. A life that ended meanwhile never folds it, and a
+         *  recovering one folds it on its next catch-up, as it does every answer of its own. */
+        const settle = (job: Dispatched, origin: Descriptor) =>
+          permit.withPermit(
+            Effect.gen(function* () {
+              if (origin.id !== process.id || recovering(supervision)) {
+                return [];
+              }
+
+              const current = live ?? (yield* ready());
+              return (yield* catchUp(current, { mine: `${job.id}/answer` })).fresh;
             }),
           );
 
