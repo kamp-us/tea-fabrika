@@ -50,6 +50,7 @@ import { Arbitrary, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
+import { PAGE as LOG_PAGE } from "../Rev.ts";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -565,6 +566,12 @@ const walk = <W extends World, C extends Choice>(
 const writes = (cmds: ReadonlyArray<Cmd>, tag: string) => cmds.filter(isWrite).filter((c) => c.call._tag === tag);
 
 describe("L8: the window parent's connection", () => {
+  // The window reads its page size from the wire, and the door and the log cut pages by the log's.
+  // Both names are the one shared value in Rev.ts, so a full page here is a full page there.
+  it("L8 pinned: the wire's page size is the log's one page size, so the window knows a full page when the door sends one", () => {
+    expect(PAGE).toBe(LOG_PAGE);
+  });
+
   // P18 slice 2 amended this law's one clause (the plan's mapping row): after a DOWN a tile must read
   // its name again on the same dial, so a second read of a tile's stream on one dial is allowed only
   // in the step of that tile's DOWN, of its wait's answer, or of its full page. It runs on slice 1's

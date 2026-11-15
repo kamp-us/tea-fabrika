@@ -158,7 +158,7 @@
 		{
 			"file": "next/packages/libfabrika/src/gateway/Gateway.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { fromHere, Line, lineFor, valueFor } from \"../ledger/Log.ts\";"
+			"code": "import { fromHere, Line, lineFor, PAGE, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts",
