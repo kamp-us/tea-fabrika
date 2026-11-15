@@ -69,6 +69,9 @@ const Call = Schema.fromJsonString(
 
 const decodeFrame = Schema.decodeUnknownOption(Call);
 
+/** One sent frame as the whole JSON value the page wrote, every key kept. */
+const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
 /** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
 const asksHello = Schema.is(
   Schema.Struct({
@@ -1335,7 +1338,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }
               : { method: "process.monitor", params: { ref: call["ref"], pid: call["pid"] } };
           expect(
-            door.sent.map((t) => JSON.parse(t) as unknown).filter((f) => Reflect.get(Object(f), "id") === w.id),
+            door.sent.map((t) => decodeJson(t)).filter((f) => Reflect.get(Object(f), "id") === w.id),
             `the frame of write ${w.id}`,
           ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
         }
