@@ -12,8 +12,10 @@
 //   stopped by hand   either                       nothing
 //
 // No installed dependencies and no type stripping, like required.mjs, so the job runs on the
-// runner's own Node with no setup. A pure core (`verdict`, `failures`, `decide`, `body`), and a thin
-// GitHub reader and writer with the job's own token (`github`), as changes.mjs's.
+// runner's own Node with no setup. A pure core (`verdict`, `failures`, `jobsOf`, `decide`, `body`),
+// and a thin GitHub reader and writer with the job's own token (`github`), as changes.mjs's. The run
+// is red when a step failed, whatever its job's conclusion says, so the reader asks for the run's
+// jobs and steps: `needs` alone read a red leg that stopped its own run as stopped (ticket 1023).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,25 +32,68 @@ export const LABEL = "ci-scheduled";
 const isMap = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * The run's verdict from `toJSON(needs)`, already parsed. Red when any job failed: a red leg stops
- * the run (its stop step), so the other legs end `cancelled`, and the one that failed says why.
- * Green only when every job passed. Anything else, a run stopped by hand or `needs` that cannot be
- * read, is `stopped`, and reports nothing: it proved neither.
- * @param {unknown} needs
+ * One step of a job, as GitHub's jobs API lists it: `conclusion` is `null` while it runs.
+ * @typedef {{name: string, conclusion: string | null}} Step
+ */
+
+/**
+ * One job of the run, as GitHub's jobs API lists it, each matrix leg its own job. The report job is
+ * one of them, still running when it reads the list.
+ * @typedef {{name: string, status: string, conclusion: string | null, steps: readonly Step[]}} Job
+ */
+
+/**
+ * What the run left: `toJSON(needs)` already parsed, the run's jobs and their steps, and the failing
+ * tests its legs' reports name (`failures`).
+ * @typedef {{needs: unknown, jobs: readonly Job[], failed: readonly string[]}} Outcome
+ */
+
+/**
+ * The run's verdict. Red when any step of a finished job failed, any job failed, or a leg's report
+ * names a failing test. The steps come first because `needs` cannot say it: a red leg's last step
+ * cancels the run, and the cancel lands on that leg too, so it ends `cancelled` with its failed
+ * step inside (run 43673342835), and `needs` folds every leg of a matrix into one result. A report
+ * names the tests; the steps also catch a leg that broke before it wrote one (an install, a crash).
+ * A `continue-on-error` step that failed reads `success` in the jobs API (the runner's
+ * ApplyContinueOnError sets its result to Succeeded), so a broken time table never turns a run red.
+ * Green only when every job in `needs` passed. Anything else, a run stopped by hand, or `needs` that
+ * cannot be read, is `stopped`, and reports nothing: it proved neither.
+ * @param {Outcome} outcome
  * @returns {Verdict}
  */
-export const verdict = (needs) => {
-  if (!isMap(needs) || Object.keys(needs).length === 0) {
-    return "stopped";
-  }
+export const verdict = ({ needs, jobs, failed }) => {
+  const finished = jobs.filter((job) => job.status === "completed");
+  const broke =
+    failed.length > 0 ||
+    finished.some((job) => job.conclusion === "failure" || job.steps.some((step) => step.conclusion === "failure"));
+  const results = isMap(needs) ? Object.values(needs).map((job) => (isMap(job) ? job["result"] : undefined)) : [];
 
-  const results = Object.values(needs).map((job) => (isMap(job) ? job["result"] : undefined));
-
-  if (results.includes("failure")) {
+  if (broke || results.includes("failure")) {
     return "red";
   }
 
-  return results.every((result) => result === "success") ? "green" : "stopped";
+  return results.length > 0 && results.every((result) => result === "success") ? "green" : "stopped";
+};
+
+/**
+ * The jobs API's answer (`GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs`) as plain jobs. A
+ * field it lacks reads as nothing, so an answer of another shape gives no job, never a throw.
+ * @param {unknown} answer
+ * @returns {Job[]}
+ */
+export const jobsOf = (answer) => {
+  const text = (/** @type {unknown} */ value) => (typeof value === "string" ? value : null);
+  const list = isMap(answer) && Array.isArray(answer["jobs"]) ? answer["jobs"].filter(isMap) : [];
+
+  return list.map((job) => ({
+    name: text(job["name"]) ?? "",
+    status: text(job["status"]) ?? "",
+    conclusion: text(job["conclusion"]),
+    steps: (Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : []).map((step) => ({
+      name: text(step["name"]) ?? "",
+      conclusion: text(step["conclusion"]),
+    })),
+  }));
 };
 
 /**
@@ -184,6 +229,7 @@ export const decide = (result, open, run) => {
  * What the report asks and tells GitHub. Each call may reject, and a rejection fails the report
  * job, so a red run whose issue could not be written shows a red report too.
  * @typedef {{
+ *   jobs: () => Promise<Job[]>,
  *   lastGreen: () => Promise<string | null>,
  *   open: () => Promise<number | null>,
  *   label: () => Promise<void>,
@@ -196,8 +242,8 @@ export const decide = (result, open, run) => {
 /** @typedef {(url: string, init: {method: string, headers: Record<string, string>, body?: string, signal: AbortSignal}) => Promise<{ok: boolean, status: number, json: () => Promise<any>}>} Fetch */
 
 /**
- * GitHub's REST API for this run's repository and workflow, with the job's own token. `null` when
- * the run gave no token, repository or workflow file.
+ * GitHub's REST API for this run's repository, workflow and run, with the job's own token. `null`
+ * when the run gave no token, repository, workflow file or run id.
  * @param {Record<string, string | undefined>} env
  * @param {Fetch} [send]
  * @returns {Api | null}
@@ -205,10 +251,11 @@ export const decide = (result, open, run) => {
 export const github = (env, send = globalThis.fetch) => {
   const token = env["GITHUB_TOKEN"];
   const repository = env["GITHUB_REPOSITORY"];
+  const id = env["GITHUB_RUN_ID"];
   // `owner/repo/.github/workflows/scheduled.yaml@refs/heads/main`: the file this run started from.
   const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
 
-  if (!token || !repository || workflow === undefined) {
+  if (!token || !repository || !id || workflow === undefined) {
     return null;
   }
 
@@ -240,6 +287,8 @@ export const github = (env, send = globalThis.fetch) => {
   };
 
   return {
+    // The latest attempt's jobs, every leg its own; the run has 10, well under one page of 100.
+    jobs: async () => jobsOf(await call("GET", `actions/runs/${id}/jobs?filter=latest&per_page=100`)),
     lastGreen: async () => {
       const runs = (await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=1`))
         .workflow_runs;
@@ -274,25 +323,26 @@ export const github = (env, send = globalThis.fetch) => {
 };
 
 /**
- * Decide and do it: reads the open issue and the last green run, then opens, comments or closes.
- * A run that is neither red nor green asks nothing.
+ * Decide and do it: reads the run's jobs, then the open issue and the last green run, then opens,
+ * comments or closes. A run that is neither red nor green asks nothing past its jobs.
  * @param {{needs: unknown, reports: readonly unknown[], env: Record<string, string | undefined>, api: Api}} options
- * @returns {Promise<Action>}
+ * @returns {Promise<{result: Verdict, action: Action}>}
  */
 export const report = async ({ needs, reports, env, api }) => {
-  const result = verdict(needs);
+  const root = env["GITHUB_WORKSPACE"] ?? "";
+  const failed = failures(reports, root);
+  const result = verdict({ needs, jobs: await api.jobs(), failed });
 
   if (result === "stopped") {
-    return { _tag: "none" };
+    return { result, action: { _tag: "none" } };
   }
 
   const open = await api.open();
 
   if (result === "green" && open === null) {
-    return { _tag: "none" };
+    return { result, action: { _tag: "none" } };
   }
 
-  const root = env["GITHUB_WORKSPACE"] ?? "";
   const server = env["GITHUB_SERVER_URL"] || "https://github.com";
   const repository = env["GITHUB_REPOSITORY"] ?? "";
   const run = {
@@ -301,7 +351,7 @@ export const report = async ({ needs, reports, env, api }) => {
     repository,
     server,
     run: `${server}/${repository}/actions/runs/${env["GITHUB_RUN_ID"] ?? ""}`,
-    failed: failures(reports, root),
+    failed,
   };
   const action = decide(result, open, run);
 
@@ -315,7 +365,7 @@ export const report = async ({ needs, reports, env, api }) => {
     await api.close(action.number);
   }
 
-  return action;
+  return { result, action };
 };
 
 /**
@@ -345,7 +395,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const api = github(process.env);
 
   if (api === null) {
-    console.error("scheduled: no token, repository or workflow file, so nothing can be reported");
+    console.error("scheduled: no token, repository, workflow file or run id, so nothing can be reported");
     process.exitCode = 1;
   } else {
     /** @type {unknown} */
@@ -357,9 +407,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       needs = null;
     }
 
-    const action = await report({ needs, reports: readReports(process.env["RESULTS"] ?? ""), env: process.env, api });
+    const { result, action } = await report({
+      needs,
+      reports: readReports(process.env["RESULTS"] ?? ""),
+      env: process.env,
+      api,
+    });
     console.log(
-      action._tag === "none" ? `scheduled: ${verdict(needs)}, nothing to report` : `scheduled: ${action._tag}`,
+      action._tag === "none" ? `scheduled: ${result}, nothing to report` : `scheduled: ${result}, ${action._tag}`,
     );
   }
 }
