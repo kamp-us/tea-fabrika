@@ -171,20 +171,27 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+// A limit of zero would replace every runtime at its first sample, so the floor is one byte.
+const Memory = Schema.ByteSize.check(Schema.makeFilter((size: ByteSize.ByteSize) => !ByteSize.isZero(size))).annotate({
+  title: "a memory limit",
+  description: 'A memory limit is a byte size above zero, written with its unit, as "500 MB".',
+});
+
 /**
  * Setting for the memory the local runtime may hold before the brain replaces it.
  *
  * **Details**
  *
- * The value is a byte size written with its unit, as `"500 MB"` or `"1 GiB"`. The default is
- * 500 MB. Once a sample of the runtime's memory reaches it, the brain ends the runtime with SIGTERM,
- * then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same ports.
+ * The value is a byte size above zero, written with its unit, as `"500 MB"` or `"1 GiB"`. The
+ * default is 500 MB. Once a sample of the runtime's memory reaches it, the brain ends the runtime
+ * with SIGTERM, then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same
+ * ports.
  *
  * @stability unstable
  * @category settings
  */
 export const brainMemory = Setting.make("desktop.brain-memory", {
-  schema: Schema.ByteSize,
+  schema: Memory,
   format: "text",
   default: ByteSize.bytes(500_000_000),
   doc: 'The memory the local runtime may hold before the brain replaces it, a byte size such as "500 MB".',

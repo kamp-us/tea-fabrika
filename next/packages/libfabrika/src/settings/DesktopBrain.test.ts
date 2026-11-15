@@ -122,3 +122,32 @@ it.effect.prop(
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   { arbitrary: { seed: 119120, runs: 50 } },
 );
+
+// L9, the floor. Plant: declare the limit as a plain `Schema.ByteSize`: a zero limit loads, and the
+// brain would replace every runtime at its first sample.
+it.effect.prop(
+  "L9 a memory limit of zero is refused when the person's file loads, with an error that names the setting and what it takes",
+  [Schema.Literals(["0 B", "0B", "0 kB", "0 MB", "0 KiB", "0 GiB"])],
+  ([zero]) =>
+    Effect.gen(function* () {
+      const memory = declaration("desktop.brain-memory");
+      expect(
+        Exit.isFailure(
+          yield* memory.parse(ConfigProvider.fromUnknown({ desktop: { "brain-memory": zero } })).pipe(Effect.exit),
+        ),
+      ).toBe(true);
+      const toml = yield* Toml;
+      const person = yield* toml.parse(`[desktop]\nbrain-memory = "${zero}"\n`);
+      const repo = yield* toml.parse("");
+      const failed = yield* Files.validate(
+        Declarations.all,
+        { repo: { file: "repo", document: repo }, person: { file: "person", document: person } },
+        { version: "0.0.0" },
+      ).pipe(Effect.flip);
+      expect(failed.reason).toBe("invalid");
+      // A person reads which setting, and the schema's own title in place of "a valid value".
+      expect(failed.message).toContain("desktop.brain-memory");
+      expect(failed.message).not.toContain("a valid value");
+    }).pipe(Effect.provide(TomlParser.layer)),
+  { arbitrary: { seed: 119120, runs: 30 } },
+);
