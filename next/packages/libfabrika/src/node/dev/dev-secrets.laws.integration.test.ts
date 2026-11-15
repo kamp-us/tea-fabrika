@@ -478,7 +478,7 @@ const flow = async (sample: Flow) => {
 };
 
 // Pin the P12 bearer-type gap: the service contract must refuse a plain string.
-it("pinned: [secrets] P12 bearer-type gap, control services require a Redacted bearer", () => {
+it("type: [secrets] P12 bearer-type gap, control services require a Redacted bearer", () => {
   expectTypeOf<Parameters<typeof control>[2]>().toEqualTypeOf<Redacted.Redacted<string>>();
 });
 

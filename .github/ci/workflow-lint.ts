@@ -946,6 +946,102 @@ export const lintWorkflow = (text: string): string[] => {
   return errors;
 };
 
+/** The token ci-speed.yaml's one job gets: what its measure reads, and the one issue it writes. */
+export const CI_SPEED_TOKEN = { actions: "read", contents: "read", issues: "write", "pull-requests": "read" };
+
+/** ci-speed.yaml's install: the script's own dependencies, with no install scripts. */
+const CI_SPEED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
+
+/** The command of ci-speed.yaml's measure step: the script, its issue, and the job summary. */
+export const CI_SPEED_RUN =
+  'node .agents/skills/lead/scripts/ci-speed.ts --issue --repo "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"';
+
+/**
+ * ci-speed.yaml, the daily measure (experiment 293). K1: it starts once a day and by hand, nothing
+ * else. K2: one job, main's copy alone, with a time limit. K3: the workflow's token grants nothing
+ * and the job's grants CI_SPEED_TOKEN, so the issue write lives on that job only. K4: its checkout
+ * keeps no token. K5: the measure step runs CI_SPEED_RUN with the job's token, under pipefail. K6:
+ * no step cancels the run: check.yaml's stop step frees the other jobs' runners, and one job has
+ * none to free, so its token keeps actions: read. K7 (0541): its steps are the checkout, the pnpm
+ * setup, its install and the measure alone, so it runs no test. lintIssues holds that this job and
+ * scheduled.yaml's report are the two that may touch issues.
+ */
+export const lintCiSpeed = (text: string): string[] => {
+  const errors: string[] = [];
+  const require = (holds: boolean, reason: string) => {
+    if (!holds) {
+      errors.push(`ci-speed.yaml: ${reason}`);
+    }
+  };
+  let workflow: Record<string, unknown>;
+
+  try {
+    workflow = map(parse(text));
+  } catch {
+    return ["ci-speed.yaml: not valid YAML"];
+  }
+
+  const on = map(workflow["on"]);
+  const crons = Array.isArray(on["schedule"]) ? on["schedule"].filter(isMap) : [];
+  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+    crons.length === 1 &&
+    /^\d+ \d+ \* \* \*$/.test(
+      String(crons[0]?.["cron"]),
+    ), "K1: it runs on one daily schedule and by hand, nothing else");
+
+  const jobs = Object.values(map(workflow["jobs"]));
+  const job = map(jobs[0]);
+  require(jobs.length === 1, "K2: it has one job");
+  require(compact(job["if"]) === "github.ref=='refs/heads/main'", "K2: the job runs main's copy only");
+  const limit = job["timeout-minutes"];
+  require(typeof limit === "number" && limit > 0 && limit <= 30, "K2: the job sets timeout-minutes, at most 30");
+
+  require(JSON.stringify(workflow["permissions"]) === "{}", "K3: the workflow's token grants nothing");
+  require(JSON.stringify(job["permissions"]) ===
+    JSON.stringify(
+      CI_SPEED_TOKEN,
+    ), "K3: the job's token reads actions, contents and pull requests and writes issues, nothing more");
+
+  const list = allSteps(job);
+  const checkouts = list.filter((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  require(checkouts.length > 0 &&
+    checkouts.every(
+      (s) => map(s["with"])["persist-credentials"] === false,
+    ), "K4: its checkout sets persist-credentials: false");
+
+  const measure = list.find((s) => s["name"] === "measure");
+  require(measure?.["run"] === CI_SPEED_RUN &&
+    measure["shell"] === "bash" &&
+    JSON.stringify(measure["env"]) ===
+      JSON.stringify({
+        GH_TOKEN: `\${{ github.token }}`,
+      }), "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash");
+
+  const cancels = list.filter((s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
+  require(cancels.length === 0, "K6: no step cancels the run: one job has nothing to cancel");
+
+  // K7 (0541): it reads runs and writes its summary and its one issue, so its steps are the
+  // checkout, the pnpm setup, the install and the measure, and no other: no test, no other action.
+  // A cancel step is K6's alone, and the measure step's command K5's, so here it is only its name.
+  const work = list
+    .filter((s) => !cancels.includes(s))
+    .map((s) => {
+      if (s === measure) {
+        return "measure";
+      }
+
+      return typeof s["run"] === "string" ? s["run"] : String(s["uses"]).replace(/@.*$/, "@");
+    });
+  require(JSON.stringify(work) ===
+    JSON.stringify([
+      "actions/checkout@",
+      "./.github/actions/pnpm",
+      CI_SPEED_INSTALL,
+      "measure",
+    ]), "K7: its steps are the checkout, the pnpm setup, its install and the measure, nothing else");
+  return errors;
+};
+
 // The schedule (0534): scheduled.yaml runs all of next/ and every tooling test on main, and a red run
 // opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
 // keep theirs.
@@ -1174,16 +1270,27 @@ export const lintScheduled = (text: string, check: string): string[] => {
 };
 
 /**
- * 0534's binding constraint: the only issues automation opens here are the scheduled report's. No
- * workflow but scheduled.yaml grants `issues` (or `write-all`), at the top or on a job; that one
- * grants it on its report job alone, which lintScheduled holds.
+ * The two jobs that may hold the `issues` permission, each by its workflow file and its job name
+ * (0534, 0541): the 3-hour run's report and the daily speed measure, both under the `ci-scheduled`
+ * label. lintScheduled and lintCiSpeed hold what each grants.
+ */
+const ISSUE_JOBS: Readonly<Record<string, string>> = {
+  ".github/workflows/scheduled.yaml": VERDICT,
+  ".github/workflows/ci-speed.yaml": "measure",
+};
+
+const ISSUES_RULE = "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (0534, 0541)";
+
+/** A grant that touches issues: `write-all`, or a map that names `issues`. */
+const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant) && "issues" in grant);
+
+/**
+ * 0534's and 0541's binding constraint: automation opens issues here from those two jobs alone. A
+ * workflow-wide grant that touches issues fails in every workflow, the two included, and so does a
+ * job's, unless it is one of ISSUE_JOBS asking by name; `write-all` fails there too.
  */
 export const lintIssues = (workflows: Readonly<Record<string, string>>): string[] =>
   Object.entries(workflows).flatMap(([path, text]) => {
-    if (path.endsWith("/scheduled.yaml")) {
-      return [];
-    }
-
     let workflow: Record<string, unknown>;
 
     try {
@@ -1192,13 +1299,14 @@ export const lintIssues = (workflows: Readonly<Record<string, string>>): string[
       return [`${path}: invalid YAML`];
     }
 
-    const grants = [
-      workflow["permissions"],
-      ...Object.values(map(workflow["jobs"])).map((job) => map(job)["permissions"]),
-    ];
-    return grants.some((grant) => grant === "write-all" || (isMap(grant) && "issues" in grant))
-      ? [`${path}: only scheduled.yaml's report job may touch issues (0534)`]
-      : [];
+    const top = touchesIssues(workflow["permissions"]) ? [`${path}: the workflow's token: ${ISSUES_RULE}`] : [];
+    const jobs = Object.entries(map(workflow["jobs"]))
+      .filter(([name, job]) => {
+        const grant = map(job)["permissions"];
+        return touchesIssues(grant) && (ISSUE_JOBS[path] !== name || grant === "write-all");
+      })
+      .map(([name]) => `${path}: job ${name}: ${ISSUES_RULE}`);
+    return [...top, ...jobs];
   });
 
 /** The files the cache lint reads, each as its text. */
@@ -1361,6 +1469,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         .flatMap(([path, text]) => lintNoTooling(path, text)),
       ...lintIssues(files.workflows),
       ...lintCaches(files),
+      ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));

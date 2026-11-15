@@ -377,22 +377,34 @@ describe("closeOnly: closes the named tickets and starts no sweep (0015)", () =>
   const body = "Done.\nfabrika close ticket 5\n";
   const run = (m: ReturnType<typeof memory>) => Queue.closeOnly({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
 
-  // Plant: kick a sweep, or close from a pull request that did not merge.
-  it.effect("a merged pull request closes its open ticket and kicks no sweep", () =>
-    Effect.gen(function* () {
-      const m = memory({ state: "MERGED", open: [5], more: { body, mergeCommit: merged } });
-      const done = yield* run(m);
-      expect(done.lines).toContain("pr 900: closed ticket 5");
-      expect(m.sweeps.kicks).toBe(0);
-    }),
-  );
-
-  it.effect("an open pull request closes nothing", () =>
-    Effect.gen(function* () {
-      const m = memory({ state: "OPEN", open: [5], more: { body } });
-      yield* run(m);
-      expect(m.tracker.posts.filter((p) => p._tag !== "list")).toEqual([]);
-    }),
+  // Plants: kick a sweep; close from a pull request that is open, closed, unconfirmed or merged
+  // off main; close a ticket that is not open.
+  it.effect.prop(
+    "property: only a pull request confirmed merged into main closes its named open ticket, and no world starts a sweep",
+    {
+      state: State,
+      draft: Schema.Boolean,
+      base: Schema.Literals(["main", "fabrikalfa/parent"]),
+      confirmed: Schema.Boolean,
+      open: Schema.Boolean,
+    },
+    ({ state, draft, base, confirmed, open }) =>
+      Effect.gen(function* () {
+        const m = memory({
+          state,
+          draft,
+          open: open ? [5] : [],
+          more: { body, base, mergeCommit: confirmed ? merged : null },
+        });
+        const done = yield* run(m);
+        const lands = state === "MERGED" && confirmed && base === "main";
+        expect(done._tag).toBe(lands ? "merged" : "unmerged");
+        expect(m.tracker.posts.filter((p) => p._tag !== "list").map((p) => p._tag)).toEqual(
+          lands && open ? ["comment", "close"] : [],
+        );
+        expect(done.lines.includes("pr 900: closed ticket 5")).toBe(lands && open);
+        expect(m.sweeps.kicks).toBe(0);
+      }),
   );
 });
 
