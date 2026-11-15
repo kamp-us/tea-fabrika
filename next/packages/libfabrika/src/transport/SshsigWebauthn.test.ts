@@ -1,18 +1,16 @@
-import { spawnSync } from "node:child_process";
 // p27, question 19. Real Chromium 156 assertion from experiment 230, captured by the lead.
 // Plants: DER treated as P1363; challenge only the text hash; UP accepted without UV; a prefix
 // match admits ordinary ECDSA; JSON reserialized before verification; BE always refused.
+// Its independent OpenSSH control runs a process, so it is in SshsigWebauthn.integration.test.ts (0536).
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
+import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
-const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
 
 const u32 = (n: number) => {
@@ -168,14 +166,6 @@ const passkey = Effect.fn("test.passkey")(function* () {
     }),
   };
 });
-
-const text = "P10 passkey SSHSIG spike\n";
-
-const line =
-  "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBGEPo5ySi5t5pOwiGQ+WSY3J3s/zKtn06TmL1fMrSNmurpZ9v7/OjqBjuUe2pidsbivMig9u4oyTDcApCEQJE1oAAAAMZmFicmlrYS50ZXN0";
-
-const realArmor =
-  "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAAIcAAAAic2stZWNkc2Etc2hhMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQ\nAAAAhuaXN0cDI1NgAAAEEEYQ+jnJKLm3mk7CIZD5ZJjcnez/Mq2fTpOYvV8ytI2a6uln2/\nv86OoGO5R7amJ2xuK8yKD27ijJMNwCkIRAkTWgAAAAxmYWJyaWthLnRlc3QAAAAOZmFicm\nlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAYoAAAArd2ViYXV0aG4tc2stZWNkc2Etc2hh\nMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQAAAEoAAAAhANVTo/thhYAu0D8LJl6iukYHc8bZX2\nu9Ja2sv9PJMY2JAAAAIQC93CWItR64zeSMh+CkAQ31AC/mHRQrOG3gIdz/ZEmcgx0AAAAA\nAAAAFGh0dHBzOi8vZmFicmlrYS50ZXN0AAAA6HsidHlwZSI6IndlYmF1dGhuLmdldCIsIm\nNoYWxsZW5nZSI6IlUxTklVMGxIQUFBQURtWmhZbkpwYTJFdFkyeHBaVzUwQUFBQUFBQUFB\nQVp6YUdFMU1USUFBQUJBTE9kSFltTjBySENnal95eTB5dkNIZTB4azVtLW5tYWlVVWNQYX\nQ5c3ZXM0ROcm1wcmdQbDRGbnZKTm05N1VDdlF4RGFIblZXNE14QlBTUGVCMU02QmciLCJv\ncmlnaW4iOiJodHRwczovL2ZhYnJpa2EudGVzdCIsImNyb3NzT3JpZ2luIjpmYWxzZX0AAA\nAA\n-----END SSH SIGNATURE-----\n";
 
 const real = {
   authenticatorData: "TMQQQmREoPKQly4AZogNCSKbLOxgin60g8viZbLsKGkdAAAAAA",
@@ -399,34 +389,6 @@ describe("P10 WebAuthn SSHSIG", () => {
       expect((yield* check(armored))._tag).toBe("passkey");
     }),
   );
-  it("vector: independent control: OpenSSH verifies the same recorded assertion", () => {
-    const dir = mkdtempSync(join(tmpdir(), "p10-vector-"));
-
-    try {
-      writeFileSync(join(dir, "allowed_signers"), `spike ${line}\n`);
-      writeFileSync(join(dir, "assertion.sig"), realArmor);
-      const result = spawnSync(
-        "ssh-keygen",
-        [
-          "-Y",
-          "verify",
-          "-n",
-          SPACE,
-          "-I",
-          "spike",
-          "-f",
-          join(dir, "allowed_signers"),
-          "-s",
-          join(dir, "assertion.sig"),
-        ],
-        { input: text, encoding: "utf8" },
-      );
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stderr).toBe(0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
   const policyCases = [
     ["UP without UV", { flags: 1 }],
     ["UV without UP", { flags: 4 }],

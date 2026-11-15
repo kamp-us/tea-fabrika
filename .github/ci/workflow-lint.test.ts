@@ -1,9 +1,12 @@
-import { readFileSync, globSync } from "node:fs";
-import { matchesGlob } from "node:path";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { cacheFiles, lintCaches, lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
+import { projects } from "../../vitest.config.ts";
+import { ignored, jobs } from "./changes.mjs";
+import { isFieldPath } from "./field-check.ts";
+import { cacheFiles, lintCaches, lintNoTooling, lintWorkflow as lint } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -27,13 +30,11 @@ const diff = {
   run: "node .github/ci/changes.mjs",
 };
 
+// M1: only changes' classify step asks GitHub, with the job's token.
+const token = `\${{ github.token }}`;
+const classify = { ...diff, env: { ...diff.env, GITHUB_TOKEN: token } };
+
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
-
-const LANES = "lane tests, one file at a time";
-
-// The test job's steps: apt has no env.
-type TestStep = { name: string; if: string; env?: Record<string, string>; run: string };
-const testSteps = (list: TestStep[]) => list;
 
 // The next job's steps: a plant may add one with no name, such as a second Vitest call.
 type NextStep = {
@@ -42,6 +43,14 @@ type NextStep = {
   env?: Record<string, string>;
   run: string;
   "working-directory"?: string;
+};
+
+// A test leg's time table and its timings upload, with the keys a plain step leaves out. The wiring
+// below adds both to each test job, last before the stop step.
+type Timed = Record<string, unknown> & {
+  if?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
 };
 
 const nextSteps = (list: NextStep[]) => list;
@@ -72,9 +81,6 @@ const step = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(
 const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) =>
   (w.jobs as Record<string, { steps: unknown[] }>)[job]!.steps.indexOf(step(w, job, name));
 
-// T5: six machines for today's tests, two when only the tooling tests run.
-const testLegs = `\${{ fromJSON(needs.changes.outputs.today == 'false' && '[1, 2]' || '[1, 2, 3, 4, 5, 6]') }}`;
-
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
@@ -82,23 +88,65 @@ const testEnv = {
 // 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
 const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
-const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
-const fieldIf = "steps.diff.outputs.field == 'true'";
+// The test job's one test step before 0539, the tooling tests on two machines: the `tooling`
+// project, since next/ and today's trees are projects of their own and a project ignores `--exclude`.
+const tooling = [
+  'if [ -n "$BASE" ]; then',
+  '  pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
+  "else",
+  '  pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
+  "fi",
+  "",
+].join("\n");
+
+// What changes exposed before 0533 and 0539: the flags that started today's tests, its app end to
+// end, and the tooling tests.
+const goneFlags = ["today", "e2e", "test"] as const;
+
+// The e2e job as it was before 0533, with its own place in ci-required's needs and its stop step
+// last (F1), so T2 alone names it.
+const todaysE2e = (run: Record<string, string>) => (w: Workflow) => {
+  Object.assign(w.jobs, {
+    e2e: { needs: "changes", if: guard("e2e"), "timeout-minutes": 25, steps: [run, stop] },
+  });
+  w.jobs["ci-required"].needs.push("e2e");
+};
+
 const probe = "steps.diff.outputs.probe == 'true'";
+// The check job's steps, each on its own flag (ticket 985): lint on check, the rows on field.
+const checkFlag = `\${{ needs.changes.outputs.check != 'false' }}`;
+const rowsFlag = `\${{ !cancelled() && needs.changes.outputs.field != 'false' }}`;
+const rowsAlone = `\${{ needs.changes.outputs.check == 'false' }}`;
+const rowInstall = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
+
 const name = fc.string({ maxLength: 20 });
 
 // T967: the next job's legs are `e2e-1` to `e2e-N`, then "1" to "5". Only the shape is the lint's;
 // N is E4's, in vitest.shards.test.ts, so the generated workflows below vary it.
 const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
-const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
 
-// On a pull request only: the merge queue and main run the whole suite.
+// 0536: the vitest step tests the `next` project alone, on every event.
+const vitestCommand =
+  'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+
+// 0536: a pull request that asked for its visual tests.
+const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
+
+// Chromium is fetched only once a visual file exists.
+const visualFiles = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
+
+// 0534: the end-to-end legs narrow from changes' `base`, the commit the size step sized them from, on
+// every run it sized: a pull request, a merge queue group and a push to main alike.
+const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
+
+// Before 0534: on a pull request only, so the merge queue and main ran every end-to-end file.
 const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
-// The vitest step's paths: the legs job's list on a sized run, reader tests included, else changes'
+// The vitest step's paths: changes' size step's list on a sized run, reader tests included, else changes'
 // filter (the plan for CI paths, slice 2), else all of next/.
-const vitestFilter = `\${{ needs.legs.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
+const vitestFilter = `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
 
 // What 1230 gave the vitest step: `--changed` on a pull request whose filter is all of next/.
 const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
@@ -112,27 +160,31 @@ const nextLegs = (count: number) => [
   "5",
 ];
 
-// S1: the matrix is the legs job's `shards`, else this fallback, the full matrix (legs.ts).
-const sizedLegs = (legs: readonly unknown[]) =>
-  `\${{ fromJSON(needs.legs.outputs.shards || '${JSON.stringify(legs)}') }}`;
+// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
+// with the `visual` label, the vitest legs alone everywhere else (0536, E10).
+const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
+  `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
 /** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
 const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
-  JSON.parse(/'(.*)'/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
+  JSON.parse(/&& '(.*?)' \|\|/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
 
 const setLegs = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }, legs: readonly unknown[]) => {
   w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
 };
 
-// A leg's `--shard`: its own kind's count from the legs job, else the full matrix's.
-const vitestShard = (gap = " ") => `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.vitest || 5${gap}}}`;
+// A leg's `--shard`: its own kind's count from changes' size step, else the full matrix's.
+const vitestShard = (gap = " ") =>
+  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.vitest-legs || 5${gap}}}`;
 
 const e2eShard = (count: number | string, gap = " ") =>
-  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.legs.outputs.e2e || ${count}${gap}}}`;
+  `\${{${gap}matrix.shard${gap}}}/\${{${gap}needs.changes.outputs.e2e-legs || ${count}${gap}}}`;
 
-// S1: every legs step runs only when legs sizes next.
-const sized =
-  "needs.changes.result == 'success' && needs.changes.outputs.next != 'false' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
+// S1: changes' sizing install and size step run only when it sizes next, all of it or the reader
+// tests alone; its setup also for the parser.
+const sized = "(steps.same.outputs.next || steps.diff.outputs.next) != 'false'";
+
+const toolsFor = `${probe} || steps.diff.outputs.next != 'false'`;
 
 // Fail fast (ticket 990, F1 to F3): the step every job but ci-required ends with. On a pull request
 // or a merge queue group, once an earlier step failed, it cancels the run; ci-required's `always()`
@@ -145,19 +197,63 @@ const stop = {
 };
 
 // Every job that carries the stop step: all of them but ci-required.
-const stopping = ["changes", "field", "check", "typecheck", "test", "legs", "next", "e2e"] as const;
+const stopping = ["changes", "check", "typecheck", "next"] as const;
+
+// TT1 and TT2: each test leg's time table, the job's last command, reading its own report and its
+// own job's steps with the token; then its timings file's upload. Both on every result, and neither
+// fails the job.
+const timeTable = (report: string): Timed => ({
+  name: "time table",
+  if: "always()",
+  "continue-on-error": true,
+  "timeout-minutes": 1,
+  env: {
+    GITHUB_TOKEN: token,
+    JOB_ID: `\${{ job.check_run_id }}`,
+    HEAD: env.HEAD,
+    LEG: `\${{ matrix.shard }}`,
+    REPORT: `\${{ runner.temp }}/${report}`,
+  },
+  run: "node .github/ci/time-table.ts",
+});
+
+// M1: a step outside the test jobs with the time table's command, the token and a loader that runs
+// any file first. Only the test jobs' exact table step may have the token.
+const loader = "--import ./x.mjs";
+
+const tableElsewhere = (): Timed => ({
+  run: "node .github/ci/time-table.ts",
+  env: { GITHUB_TOKEN: token, NODE_OPTIONS: loader },
+});
+
+const timings = (): Timed => ({
+  name: "timings",
+  if: "always()",
+  "continue-on-error": true,
+  "timeout-minutes": 1,
+  uses: "actions/upload-artifact@v7",
+  with: {
+    name: `timings-\${{ github.job }}-\${{ matrix.shard }}-attempt-\${{ github.run_attempt }}`,
+    path: `\${{ runner.temp }}/timings-\${{ github.job }}-\${{ matrix.shard }}.json`,
+    "if-no-files-found": "warn",
+    "retention-days": 90,
+  },
+});
 
 const valid = (label: string, extra: string) => ({
   name: label,
   permissions: { actions: "write", contents: "read" } as unknown,
   on: {
     push: { branches: ["main"] },
-    pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+    pull_request: {
+      types: ["opened", "synchronize", "reopened", "ready_for_review", "labeled"],
+      "paths-ignore": [...ignored] as string[] | undefined,
+    },
     merge_group: { types: ["checks_requested"] },
   },
   concurrency: {
     group: `check-\${{ github.event.pull_request.number || github.sha }}`,
-    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`,
+    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || (github.event.action == 'labeled' && github.event.label.name == 'visual')) }}`,
   },
   jobs: {
     changes: {
@@ -165,18 +261,21 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       outputs: {
         ...Object.fromEntries(
-          ["check", "typecheck", "test", "e2e", "field", "build", "today"].map((key) => [
-            key,
-            `\${{ steps.diff.outputs.${key} }}`,
-          ]),
+          ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
-        // The plan for CI paths, slice 2: the parser's pass prints these two again.
-        next: `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`,
+        // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
+        // prints next once more.
+        next: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
         filter: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
+        shards: `\${{ steps.size.outputs.shards }}`,
+        files: `\${{ steps.size.outputs.files }}`,
+        "vitest-legs": `\${{ steps.size.outputs.vitest }}`,
+        "e2e-legs": `\${{ steps.size.outputs.e2e }}`,
+        base: `\${{ steps.size.outputs.base }}`,
       } as Record<string, string>,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
-        diff,
+        classify,
         { name: "skills check", run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { name: "tracked files", run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
         { name: extra, run: "echo checked" },
@@ -184,14 +283,14 @@ const valid = (label: string, extra: string) => ({
         {
           name: "parser pnpm",
           uses: "pnpm/action-setup@v6",
-          if: probe,
+          if: toolsFor,
           "continue-on-error": true,
           with: { run_install: false },
         },
         {
           name: "parser node",
           uses: "actions/setup-node@v7",
-          if: probe,
+          if: toolsFor,
           "continue-on-error": true,
           with: { "node-version": "26.13.0" },
         },
@@ -209,96 +308,8 @@ const valid = (label: string, extra: string) => ({
           "continue-on-error": true,
           run: "node .github/ci/changes.mjs --same",
         },
-      ] as Record<string, unknown>[],
-    },
-    check: {
-      name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
-      needs: "changes",
-      if: guard("check"),
-      "timeout-minutes": 10,
-      steps: [
-        { name: "lint", run: "pnpm lint" },
-        { name: "promises", if: build, run: "pnpm promises gate" },
-        { name: "build", run: "pnpm build", if: build },
-        { name: "lists only shrink", env: testEnv, run: ratchet },
-      ] as Record<string, unknown>[],
-    },
-    typecheck: {
-      needs: "changes",
-      if: guard("typecheck"),
-      "timeout-minutes": 10,
-      steps: [
-        { name: "install", run: "pnpm install --frozen-lockfile" },
-        { name: "typecheck", run: "pnpm typecheck" },
-      ],
-    },
-    test: {
-      needs: "changes",
-      if: guard("test"),
-      "timeout-minutes": 30,
-      strategy: { matrix: { shard: testLegs } },
-      steps: testSteps([
         {
-          name: "test",
-          if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
-          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
-          run: [
-            'if [ -n "$BASE" ]; then',
-            'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
-            `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-            "pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**'",
-            "fi",
-            "else",
-            "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
-            "fi",
-          ]
-            .map((line) => (line.startsWith("pnpm exec vitest run") ? `${line} --exclude '${LANE_GLOB}'` : line))
-            .join("\n"),
-        },
-        {
-          name: "tooling tests",
-          if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
-          env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` },
-          run: [
-            'if [ -n "$BASE" ]; then',
-            `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
-            "else",
-            `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
-            "fi",
-          ].join("\n"),
-        },
-      ]),
-    },
-    legs: {
-      needs: "changes",
-      if: `\${{ !cancelled() }}`,
-      "timeout-minutes": 5,
-      outputs: Object.fromEntries(
-        ["shards", "files", "vitest", "e2e", "next"].map((key) => [key, `\${{ steps.size.outputs.${key} }}`]),
-      ) as Record<string, string>,
-      steps: [
-        {
-          name: "checkout",
-          uses: "actions/checkout@v7",
-          if: sized,
-          with: { "fetch-depth": 0, "persist-credentials": false },
-        },
-        {
-          name: "pnpm",
-          uses: "pnpm/action-setup@v6",
-          if: sized,
-          "continue-on-error": true,
-          with: { run_install: false },
-        },
-        {
-          name: "node",
-          uses: "actions/setup-node@v7",
-          if: sized,
-          "continue-on-error": true,
-          with: { "node-version": "26.13.0" },
-        },
-        {
-          name: "install",
+          name: "install for sizing",
           run: "pnpm install --frozen-lockfile --ignore-scripts",
           if: sized,
           "continue-on-error": true,
@@ -310,28 +321,87 @@ const valid = (label: string, extra: string) => ({
           "continue-on-error": true,
           env: {
             EVENT: `\${{ github.event_name }}`,
-            FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
-            BASE: `\${{ github.event.pull_request.base.sha }}`,
+            FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+            BASE: env.BASE,
+            VISUAL: `\${{ ${visualLabel} }}`,
+            BUDGET: 240,
           },
           run: "node .github/ci/legs.ts",
         },
+        // Q1: a ready pull request run's record of the tree it tests, for the merge queue.
+        {
+          name: "record",
+          id: "record",
+          if: "github.event_name == 'pull_request' && !github.event.pull_request.draft",
+          "continue-on-error": true,
+          env: {
+            ...diff.env,
+            TESTED: `\${{ github.sha }}`,
+            ...Object.fromEntries(
+              ["check", "typecheck", "field", "build"].map((key) => [
+                key.toUpperCase(),
+                `\${{ steps.diff.outputs.${key} }}`,
+              ]),
+            ),
+            NEXT: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
+            FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
+          } as Record<string, string>,
+          run: "node .github/ci/changes.mjs --record",
+        },
+        {
+          name: "upload the record",
+          if: "steps.record.outputs.name != ''",
+          "continue-on-error": true,
+          uses: "actions/upload-artifact@v7",
+          with: {
+            name: `\${{ steps.record.outputs.name }}`,
+            path: `\${{ runner.temp }}/tested.json`,
+            "retention-days": 1,
+            overwrite: true,
+            "if-no-files-found": "error",
+          } as Record<string, unknown>,
+        },
       ] as Record<string, unknown>[],
     },
+    check: {
+      name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
+      needs: "changes",
+      if: `${guard("check").slice(0, -4)} || needs.changes.outputs.field != 'false') }}`,
+      "timeout-minutes": 10,
+      steps: [
+        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
+        { name: "install", if: checkFlag, run: "pnpm install --frozen-lockfile" },
+        { name: "install the row check", if: rowsAlone, run: rowInstall },
+        { name: "lint", if: checkFlag, run: "pnpm lint" },
+        { name: "build", run: "pnpm build", if: build },
+        { name: "lists only shrink", if: checkFlag, env: testEnv, run: ratchet },
+        { name: "field rows", if: rowsFlag, env, run: "node .github/ci/field-check.ts" },
+      ] as Record<string, unknown>[],
+    },
+    typecheck: {
+      needs: "changes",
+      if: guard("typecheck"),
+      "timeout-minutes": 10,
+      steps: [
+        { name: "install", run: "pnpm install --frozen-lockfile" },
+        { name: "typecheck", run: "pnpm typecheck" },
+      ],
+    },
     next: {
-      needs: ["changes", "legs"] as string | string[],
-      if: `${guard("next").slice(0, -3)} && needs.legs.outputs.next != 'false' }}`,
+      needs: "changes" as string | string[],
+      if: guard("next"),
       "timeout-minutes": 17,
       strategy: { "fail-fast": false, matrix: { shard: sizedLegs(nextLegs(2)) } },
       steps: nextSteps([
         {
           name: "vitest",
-          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: vitestCommand,
           if: `!${onE2e}`,
           env: { SHARD: vitestShard(), FILTER: vitestFilter },
         },
         {
           name: "chromium",
-          if: `${onE2e} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`,
+          if: `${onE2e} && ${visualFiles}`,
           run:
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
@@ -340,7 +410,7 @@ const valid = (label: string, extra: string) => ({
           name: "end to end",
           run: e2eCommand,
           if: onE2e,
-          env: { SHARD: e2eShard(2), CHANGED: changedOnPullRequests },
+          env: { SHARD: e2eShard(2), CHANGED: changedFromBase },
         },
         {
           name: "edges",
@@ -352,30 +422,9 @@ const valid = (label: string, extra: string) => ({
         { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"' },
       ]),
     },
-    e2e: {
-      needs: "changes",
-      if: guard("e2e"),
-      "timeout-minutes": 25,
-      steps: [{ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
-    },
-    field: {
-      "timeout-minutes": 5,
-      steps: [
-        { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
-        diff,
-        { name: "pnpm", uses: "pnpm/action-setup@v6", if: fieldIf },
-        { name: "node", uses: "actions/setup-node@v7", if: fieldIf, with: { "node-version": "26.13.0" } },
-        {
-          name: "install",
-          run: "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts",
-          if: fieldIf,
-        },
-        { name: "row check", run: "node .github/ci/field-check.ts", if: fieldIf, env },
-      ],
-    },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "legs", "next"],
+      needs: ["changes", "check", "typecheck", "next"],
       if: "always()",
       "timeout-minutes": 5,
       permissions: { contents: "read" } as unknown,
@@ -404,29 +453,6 @@ const wiring = fc
     // E1 and E2: any count of e2e legs is the lint's shape, with its own `/N` on the end-to-end step.
     setLegs(clean, nextLegs(e2es));
     step(clean, "next", "end to end").env!.SHARD = e2eShard(e2es);
-    clean.jobs.test.steps.unshift({
-      name: "lane tests, one file at a time",
-      if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      env: { ...testEnv, SHARD: `\${{ matrix.shard }}/6` },
-      run: [
-        'if [ -n "$BASE" ]; then',
-        `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "else",
-        `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "fi",
-      ].join("\n"),
-    });
-    clean.jobs.test.steps.unshift({
-      name: "apt packages",
-      if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      run: "sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep",
-    });
-    clean.jobs.test.steps.push({
-      name: "shard times",
-      if: "!cancelled()",
-      env: testEnv,
-      run: "node .github/ci/shard-times.ts",
-    });
 
     if (whitespace) {
       step(clean, "next", "vitest").env!.SHARD = vitestShard(gap);
@@ -439,6 +465,9 @@ const wiring = fc
 
       step(clean, "next", "shard times").if = `\${{${gap}!cancelled()${gap}}}`;
     }
+
+    // TT1 and TT2: each test job ends its commands with its time table, then uploads its timings.
+    stepsOf(clean, "next").push(timeTable("next.json"), timings());
 
     // F1: the stop step comes last in every job but ci-required, after every step added above, its
     // `if` spaced as the rest.
@@ -476,14 +505,210 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
   expect(lint(JSON.stringify(workflow))).not.toEqual([]);
 });
 
+/** changes' record step's env, for a plant that changes one value. */
+const recordEnv = (w: Workflow) => step(w, "changes", "record")["env"] as Record<string, string>;
+
+/** changes' upload of the record, for a plant that changes one input. */
+const uploadWith = (w: Workflow) => step(w, "changes", "upload the record")["with"] as Record<string, unknown>;
+
 const plants: [string, (workflow: Workflow) => void][] = [
-  // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
-  ...["opened", "synchronize", "reopened", "ready_for_review"].map((type): [string, (w: Workflow) => void] => [
-    `pull requests lose the ${type} trigger`,
+  // Q1: a ready pull request run records the tree it tests and what changes printed, and uploads it
+  // under the name it printed, and neither step fails the run. Each plant here would let the record
+  // say more than the run tested, or let a broken record fail a pull request. Each of Q1's checks in
+  // workflow-lint.ts was also planted out once and turned these red; dropping the record env's key
+  // set survived until the "one more value" plant.
+  ["Q1: the record step is gone", (w) => w.jobs.changes.steps.splice(place(w, "changes", "record"), 1)],
+  [
+    "Q1: the record step runs on drafts too",
+    (w) => (step(w, "changes", "record")["if"] = "github.event_name == 'pull_request'"),
+  ],
+  ["Q1: the record step runs on every event", (w) => Reflect.deleteProperty(step(w, "changes", "record"), "if")],
+  [
+    "Q1: a failed record fails the run",
+    (w) => Reflect.deleteProperty(step(w, "changes", "record"), "continue-on-error"),
+  ],
+  [
+    "Q1: the record step runs before the size step",
     (w) => {
-      w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+      const [moved] = w.jobs.changes.steps.splice(place(w, "changes", "record"), 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "size"), 0, moved!);
+    },
+  ],
+  ["Q1: the record names the branch's head, not the merge commit", (w) => (recordEnv(w)["TESTED"] = env.HEAD)],
+  [
+    "Q1: the record reads next from the first pass, not the size step",
+    (w) => (recordEnv(w)["NEXT"] = `\${{ steps.diff.outputs.next }}`),
+  ],
+  [
+    "Q1: the record reads filter from the first pass, not the parser's",
+    (w) => (recordEnv(w)["FILTER"] = `\${{ steps.diff.outputs.filter }}`),
+  ],
+  ["Q1: the record says check ran", (w) => (recordEnv(w)["CHECK"] = "true")],
+  ["Q1: the record loses its build flag", (w) => Reflect.deleteProperty(recordEnv(w), "BUILD")],
+  ["Q1: the record step gets the token", (w) => (recordEnv(w)["GITHUB_TOKEN"] = token)],
+  [
+    "Q1: the record step reads one more value than changes exposes",
+    (w) => (recordEnv(w)["RUNNER_TEMP"] = `\${{ github.workspace }}`),
+  ],
+  ["Q1: the record's upload is gone", (w) => w.jobs.changes.steps.splice(place(w, "changes", "upload the record"), 1)],
+  [
+    "Q1: the upload comes before the record",
+    (w) => {
+      const [moved] = w.jobs.changes.steps.splice(place(w, "changes", "upload the record"), 1);
+      w.jobs.changes.steps.splice(place(w, "changes", "record"), 0, moved!);
+    },
+  ],
+  ["Q1: the upload runs with no name", (w) => Reflect.deleteProperty(step(w, "changes", "upload the record"), "if")],
+  [
+    "Q1: a failed upload fails the run",
+    (w) => Reflect.deleteProperty(step(w, "changes", "upload the record"), "continue-on-error"),
+  ],
+  ["Q1: the upload takes a fixed name", (w) => (uploadWith(w)["name"] = "tested")],
+  ["Q1: the upload keeps the record forever", (w) => Reflect.deleteProperty(uploadWith(w), "retention-days")],
+  ["Q1: a rerun's upload fails on the name its first attempt left", (w) => (uploadWith(w)["overwrite"] = false)],
+  [
+    "Q1: a second upload of the record",
+    (w) => {
+      const upload = structuredClone(step(w, "changes", "upload the record"));
+      w.jobs.changes.steps.splice(place(w, "changes", "upload the record") + 1, 0, upload);
+    },
+  ],
+  // Q1: every job tests the tree the record names, `github.sha`'s, so no checkout is told another
+  // commit or repository; and the record's upload is the only upload, since `matched` trusts any
+  // artifact of the record's name.
+  ...(
+    [
+      ["changes", "ref", `\${{ github.event.pull_request.head.sha }}`],
+      ["check", "ref", `\${{ github.event.pull_request.head.ref }}`],
+      ["check", "repository", `\${{ github.event.pull_request.head.repo.full_name }}`],
+      ["ci-required", "ref", "main"],
+    ] as const
+  ).map(([job, key, value]): [string, (w: Workflow) => void] => [
+    `Q1: ${job}'s checkout is told its ${key}`,
+    (w) => {
+      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      (checkout["with"] as Record<string, unknown>)[key] = value;
     },
   ]),
+  ...(["typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+    `Q1: ${job} checks out the branch's head`,
+    (w) => {
+      stepsOf(w, job).unshift({
+        name: "checkout",
+        uses: "actions/checkout@v7",
+        with: { ref: `\${{ github.event.pull_request.head.sha }}`, "persist-credentials": false },
+      });
+    },
+  ]),
+  [
+    "Q1: next uploads an artifact too",
+    (w) => {
+      const upload = { name: "results", uses: "actions/upload-artifact@v7", with: { name: "next", path: "next.json" } };
+      stepsOf(w, "next").splice(place(w, "next", "shard times"), 0, upload);
+    },
+  ],
+  [
+    "Q1: check uploads an artifact with another owner's action",
+    (w) => {
+      const upload = { name: "upload", uses: "someone/upload-artifact@v1", with: { name: "tested-a-b", path: "x" } };
+      stepsOf(w, "check").splice(place(w, "check", "field rows"), 0, upload);
+    },
+  ],
+  // Q1 beside TT2: the one other upload is a test leg's timings file, exactly TT2's, in a test job.
+  // Anything else is still refused, and no allowed upload can carry a record's `tested-` name.
+  [
+    "Q1: typecheck uploads an artifact, before its stop step",
+    (w) => {
+      const upload = { name: "upload", uses: "actions/upload-artifact@v7", with: { name: "typecheck", path: "x" } };
+      stepsOf(w, "typecheck").splice(-1, 0, upload);
+    },
+  ],
+  [
+    "Q1: typecheck uploads a timings file, outside the test jobs",
+    (w) => stepsOf(w, "typecheck").splice(-1, 0, timings()),
+  ],
+  ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    const upload = (w: Workflow) => (stepsOf(w, job) as Timed[]).find((s) => s["name"] === "timings")!;
+    return [
+      [
+        `Q1: ${job}'s timings upload is named as a tested-tree record`,
+        (w) => (upload(w).with!["name"] = `tested-\${{ github.sha }}-\${{ github.event.pull_request.base.sha }}`),
+      ],
+      [`Q1: ${job}'s timings upload overwrites an artifact of its name`, (w) => (upload(w).with!["overwrite"] = true)],
+      [
+        `Q1: ${job}'s timings upload takes another file`,
+        (w) => (upload(w).with!["path"] = `\${{ runner.temp }}/x.json`),
+      ],
+    ];
+  }),
+  // M1: a push the merge queue already tested asks GitHub from changes' classify step alone. The
+  // token is the workflow's (F3's plants hold its map), since changes' stop step needs it whole.
+  [
+    "M1: classify has no token",
+    (w) => delete (step(w, "changes", "classify").env as Record<string, string>)["GITHUB_TOKEN"],
+  ],
+  [
+    "M1: classify takes the token from secrets",
+    (w) =>
+      ((step(w, "changes", "classify").env as Record<string, string>)["GITHUB_TOKEN"] = `\${{ secrets.GITHUB_TOKEN }}`),
+  ],
+  [
+    "M1: the parser's pass gets the token too",
+    (w) => ((step(w, "changes", "parser pass").env as Record<string, string>)["GITHUB_TOKEN"] = token),
+  ],
+  [
+    "M1: the row check gets the token too",
+    (w) => ((step(w, "check", "field rows").env as Record<string, string>)["GITHUB_TOKEN"] = token),
+  ],
+  // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
+  // 0536: `labeled` is how the `visual` label starts the visual legs.
+  ...["opened", "synchronize", "reopened", "ready_for_review", "labeled"].map(
+    (type): [string, (w: Workflow) => void] => [
+      `pull requests lose the ${type} trigger`,
+      (w) => {
+        w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+      },
+    ],
+  ),
+  // Ticket 988: a pull request ignores exactly changes.mjs's `ignored`, and no other trigger ignores
+  // a path.
+  [
+    "pull requests ignore one more path",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = [...ignored, "apps/**"];
+    },
+  ],
+  [
+    "pull requests ignore one path fewer",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = ignored.slice(1);
+    },
+  ],
+  [
+    "pull requests lose the ignore list",
+    (w) => {
+      // JSON.stringify leaves an undefined key out, as a deleted one.
+      w.on.pull_request["paths-ignore"] = undefined;
+    },
+  ],
+  [
+    "pull requests ignore every plan file, a brief folder's included",
+    (w) => {
+      w.on.pull_request["paths-ignore"] = ["docs/plan/**", ...ignored.slice(2)];
+    },
+  ],
+  [
+    "a push to main ignores the same paths",
+    (w) => {
+      Object.assign(w.on.push, { "paths-ignore": [...ignored] });
+    },
+  ],
+  [
+    "the merge queue's group ignores the same paths",
+    (w) => {
+      Object.assign(w.on.merge_group, { "paths-ignore": [...ignored] });
+    },
+  ],
   [
     "the merge queue's group stops running the checks",
     (w) => {
@@ -515,9 +740,33 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   [
-    "the promises gate skips on the check flag",
+    "the build skips on the check flag",
     (w) => {
-      step(w, "check", "promises")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+      step(w, "check", "build")["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+    },
+  ],
+  // 0533: the promises gate tests today's pipeline code, so no step runs it, under any spelling or
+  // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
+  // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
+  // next job's are also held by the build-flag law and next's own command law.
+  ...[
+    { name: "promises", if: build, run: "pnpm promises gate" },
+    { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
+    { name: "promises", run: "pnpm -s promises gate" },
+    { name: "promises", run: "pnpm run promises confirm ship" },
+    { name: "promises", run: "node packages/promises/src/main.ts gate" },
+    { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
+  ].map((planted): [string, (w: Workflow) => void] => [
+    `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
+    (w) => {
+      // Before the stop step, which stays last (F1).
+      w.jobs.check.steps.splice(-1, 0, planted);
+    },
+  ]),
+  [
+    "T6: the next job runs today's promise checks",
+    (w) => {
+      w.jobs.next.steps.splice(place(w, "next", "shard times"), 0, { name: "promises", run: "pnpm promises" });
     },
   ],
   [
@@ -535,95 +784,141 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "the classifier is not told the draft",
     (w) => {
-      for (const classifier of [step(w, "changes", "classify"), step(w, "field", "classify")]) {
-        Object.assign(classifier, { env });
-      }
+      Object.assign(step(w, "changes", "classify"), { env });
     },
   ],
-  [
-    "L1: main loses lane exclude",
+  // 0533: no event runs the tests of today's version or its app end to end, and 0539: none runs a
+  // tooling test. T1: no output of changes can start them, and every vitest call names only next/'s
+  // projects. T2: no job runs today's app. Each plant puts back one way those tests ran before, or a
+  // new spelling of one. Source plants, each run once on workflow-lint.ts and restored: drop T1's
+  // outputs check (red: the today, e2e and test flags back), drop T2's loop (red: every e2e plant),
+  // drop T1's vitest loop (red: the old test job and each typecheck plant below; next's step plants
+  // stay held by next's own command law).
+  ...goneFlags.map((flag): [string, (w: Workflow) => void] => [
+    `T1: changes exposes the ${flag} flag again`,
     (w) => {
-      const rest = step(w, "test", "test");
-      const lines = rest.run.split("\n");
-      lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
-      rest.run = lines.join("\n");
-    },
-  ],
-  [
-    "L2: two lane workers",
-    (w) => {
-      const lanes = step(w, "test", LANES);
-      lanes.run = lanes.run.replace("--maxWorkers=1", "--maxWorkers=2");
-    },
-  ],
-  [
-    "L3: failure skips rest",
-    (w) => {
-      step(w, "test", "test").if = "";
-    },
-  ],
-  [
-    "L3: rest before lanes",
-    (w) => {
-      w.jobs.test.steps.reverse();
-    },
-  ],
-  [
-    "L3: failure skips advice",
-    (w) => {
-      step(w, "test", "shard times").if = "";
-    },
-  ],
-  // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
-  [
-    "T1: the lane tests run with no file of today's version changed",
-    (w) => {
-      step(w, "test", LANES).if = "";
-    },
-  ],
-  [
-    "T1: today's tests run with no file of today's version changed",
-    (w) => {
-      step(w, "test", "test").if = "!cancelled()";
-    },
-  ],
-  [
-    "T2: the tooling tests are gone",
-    (w) => {
-      w.jobs.test.steps.splice(place(w, "test", "tooling tests"), 1);
-    },
-  ],
-  [
-    "T2: the tooling tests run beside today's",
-    (w) => {
-      step(w, "test", "tooling tests").if = "!cancelled()";
-    },
-  ],
-  [
-    "T3: the tooling tests run today's packages' tests",
-    (w) => {
-      const tooling = step(w, "test", "tooling tests");
-      tooling.run = tooling.run.replace(" --exclude 'packages/**'", "");
-    },
-  ],
-  ...[LANES, "test", "tooling tests"].map((named, index): [string, (w: Workflow) => void] => [
-    `T4: test step ${index} reads its base from a pull request alone`,
-    (w) => {
-      const found = step(w, "test", named);
-      found.env = { ...found.env!, BASE: `\${{ github.event.pull_request.base.sha }}` };
+      w.jobs.changes.outputs[flag] = `\${{ steps.diff.outputs.${flag} }}`;
     },
   ]),
   [
-    "changes hides the today flag",
+    "T1: the test job is back as it was before 0539, the tooling tests on two machines",
     (w) => {
-      delete (w.jobs.changes.outputs as Record<string, string>)["today"];
+      Object.assign(w.jobs, {
+        test: {
+          needs: "changes",
+          if: guard("next"),
+          "timeout-minutes": 30,
+          strategy: { "fail-fast": false, matrix: { shard: [1, 2] } },
+          steps: [
+            { name: "install", run: "pnpm install --frozen-lockfile" },
+            { name: "tooling tests", env: { ...testEnv, SHARD: `\${{ matrix.shard }}/2` }, run: tooling },
+            stop,
+          ],
+        },
+      });
+      w.jobs["ci-required"].needs.push("test");
     },
   ],
-  [
-    "L4: nonexistent lane filter",
+  // In the typecheck job, before its stop step (F1): no other law lists its steps whole, so T1 alone
+  // rejects these. In check, its own command law would hold them too.
+  ...(
+    [
+      ["today's tests are back, on the today flag", "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'"],
+      [
+        "the lane tests are back, one file at a time",
+        "pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --maxWorkers=1 --exclude 'next/**'",
+      ],
+      ["the tooling project runs in typecheck", 'pnpm exec vitest run --project tooling --shard "$SHARD"'],
+      ["the tooling project runs in typecheck, spelled with =", "pnpm exec vitest run --project=tooling"],
+      ["the tooling project beside next's", "pnpm exec vitest run --project next --project tooling"],
+      ["CI's own tests run by path, every project", "pnpm exec vitest run .github/ci/"],
+      ["the root test script, every project", "pnpm test .github/ci/"],
+      ["the root test script, run", "pnpm run test"],
+      ["vitest through npx", "npx vitest run oxlint-plugins/"],
+      ["the today project", "pnpm exec vitest run --project today"],
+      // Fix round 1. The first T1 read one line at a time and knew only `vitest` and `pnpm … test`.
+      // Run on it, 16 of the plants from here on were not rejected, the job-env one below included;
+      // it already rejected the rest, kept as spellings.
+      ["a line continuation adds the tooling project", "pnpm exec vitest run --project next \\\n  --project tooling\n"],
+      ["pnpm's alias t", "pnpm t"],
+      ["pnpm's alias tst", "pnpm tst"],
+      ["pnpm test after a flag with a value", "pnpm --dir . test"],
+      ["pnpm test after a short flag with a value", "pnpm -C . test"],
+      ["npm test", "npm test"],
+      ["npm's alias t", "npm t"],
+      ["npm run test", "npm run test"],
+      ["yarn test", "yarn test"],
+      ["a test script of its own name", "pnpm test:tooling"],
+      ["vitest through npx alone", "npx vitest"],
+      ["vitest from a path into node_modules", "node node_modules/vitest/vitest.mjs run --project tooling"],
+      [
+        "a command substitution adds the tooling project",
+        "pnpm exec vitest run --project next $(echo --project tooling)",
+      ],
+      [
+        "a backquoted substitution adds the tooling project",
+        "pnpm exec vitest run --project next `echo --project tooling`",
+      ],
+      ["an expression adds the tooling project", `pnpm exec vitest run --project next \${{ '--project tooling' }}`],
+      ["a script's arguments add the tooling project", 'pnpm exec vitest run --project next "$@"'],
+      [
+        "another config, whose projects could hold anything",
+        "pnpm exec vitest run --project next --config tooling.config.ts",
+      ],
+      ["another root", "pnpm exec vitest run --project next --root .github/ci"],
+      ["a second command on the same line", "pnpm exec vitest run --project next; pnpm exec vitest run .github/ci/"],
+      [
+        "a variable the step sets to the tooling project",
+        "pnpm exec vitest run --project next $EXTRA",
+        { EXTRA: "--project tooling" },
+      ],
+      [
+        "next's shard variable set to the tooling project",
+        'pnpm exec vitest run --project next --shard "$SHARD"',
+        { SHARD: "--project tooling" },
+      ],
+      ["next's filter variable read where no step sets it", "pnpm exec vitest run --project next $FILTER"],
+    ] as const
+  ).map((planted): [string, (w: Workflow) => void] => [
+    `T1: ${planted[0]}`,
     (w) => {
-      const lanes = step(w, "test", LANES);
-      lanes.run = lanes.run.replaceAll(LANE_FILTER, "missing/lane.");
+      const env = planted.length === 3 ? { env: planted[2] } : {};
+      stepsOf(w, "typecheck").splice(-1, 0, { name: "planted", run: planted[1], ...env });
+    },
+  ]),
+  [
+    "T1: the job's env sets the runner's temp folder that a vitest call reads",
+    (w) => {
+      Object.assign(w.jobs.next, { env: { RUNNER_TEMP: "--project tooling" } });
+    },
+  ],
+  // 0536: today's tests and the tooling tests are projects of their own, so a second `--project`, or
+  // none at all, runs them in next's vitest step. next's own command law holds these too.
+  ...["today", "tooling"].map((project): [string, (w: Workflow) => void] => [
+    `T1: next's vitest step runs the ${project} project's tests too`,
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = found.run.replace("--project next ", `--project next --project ${project} `);
+    },
+  ]),
+  [
+    "T1: next's vitest step runs every project",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = found.run.replace("--project next ", "");
+    },
+  ],
+  ["T2: the e2e job is back", todaysE2e({ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" })],
+  ["T2: the e2e job is back, from the app's folder", todaysE2e({ name: "e2e", run: "cd apps/fabrika && node e2e.ts" })],
+  [
+    "T2: the ruler's end to end is back, with the folder as its working directory",
+    todaysE2e({ name: "ruler", run: "node ruler-e2e.ts", "working-directory": "apps/fabrika" }),
+  ],
+  [
+    "T2: check runs today's app end to end",
+    (w) => {
+      // Before the stop step, which stays last (F1).
+      w.jobs.check.steps.splice(-1, 0, { run: "pnpm --filter @kampus/fabrika-app-old e2e -- --aria" });
     },
   ],
   ...extraCommands.map((added): [string, (w: Workflow) => void] => [
@@ -698,10 +993,93 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ]),
   [
-    "review: Chromium path next/ apps",
+    "review: Chromium path next/ **",
     (w) => {
       const chromium = step(w, "next", "chromium");
-      chromium.if = chromium.if!.replace("next/apps", "next/ apps");
+      chromium.if = chromium.if!.replace("next/**", "next/ **");
+    },
+  ],
+  // 0536, E10 and E11. Each plant was run once on the real check.yaml too, and restored.
+  [
+    "E10: the full fallback alone, as before 0536, so the merge queue starts the visual legs",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(nextLegs(2))}') }}`;
+    },
+  ],
+  [
+    "E10: the full fallback runs on main too, as before the schedule",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        `(github.event_name == 'push' || ${visualLabel})`,
+      );
+    },
+  ],
+  [
+    "E10: the full fallback runs in the merge queue",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        `(github.event_name == 'merge_group' || ${visualLabel})`,
+      );
+    },
+  ],
+  [
+    "E10: the full fallback runs on any pull request",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualLabel,
+        "github.event_name == 'pull_request'",
+      );
+    },
+  ],
+  [
+    "E10: the plain fallback holds a visual leg",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = sizedLegs(nextLegs(2), ["e2e-1", "1", "2", "3", "4", "5"]);
+    },
+  ],
+  [
+    "E11: the vitest step runs next-integration too",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "--project next --project next-integration ");
+    },
+  ],
+  [
+    "E11: the vitest step loses its project, so it runs every one",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "");
+    },
+  ],
+  [
+    "E11: main runs next-integration through an env, as the bridge before the schedule did",
+    (w) => {
+      const found = step(w, "next", "vitest");
+      found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      (found["env"] as Record<string, string>)["PROJECTS"] =
+        `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
+    },
+  ],
+  [
+    "the visual label's run no longer cancels the run it repeats",
+    (w) => {
+      w.concurrency["cancel-in-progress"] =
+        `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`;
+    },
+  ],
+  [
+    "every label's run cancels the run before it",
+    (w) => {
+      w.concurrency["cancel-in-progress"] =
+        `\${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || github.event.action == 'labeled') }}`;
+    },
+  ],
+  [
+    "changes' size step is not told the visual label",
+    (w) => {
+      Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, string>, "VISUAL");
     },
   ],
   [
@@ -1006,68 +1384,186 @@ const plants: [string, (workflow: Workflow) => void][] = [
       Object.assign(step(w, "next", "vitest"), { if: "false" });
     },
   ],
-  // S1, the legs job and next's sized matrix (legs.ts). Each is red alone in every generated
-  // workflow. The size step without its event check would size the merge queue and main. Source
-  // plants, each run once on workflow-lint.ts and restored: drop S1's check of every legs step's
-  // `if` (red: sizes the merge queue and main, sizes the reader tests, installs on every run); drop
-  // the sizer's clause from the gated `if` (red: every generated workflow).
+  // S1, changes' size step and next's sized matrix (legs.ts), once the legs job (ticket 985). Each
+  // is red alone in every generated workflow. The size step without its event check would size the
+  // merge queue and main. Source plants, each run once on workflow-lint.ts and restored: drop the
+  // rule that the size step follows the parser's pass (red: sizing, install and all, before it);
+  // each gated job on its own flag alone (red: every generated workflow).
   ...(
     [
-      ["next needs only changes", (w) => (w.jobs.next.needs = "changes")],
-      ["next needs legs first", (w) => (w.jobs.next.needs = ["legs", "changes"])],
-      ["next ignores legs's no", (w) => (w.jobs.next.if = guard("next"))],
+      ["next needs legs too", (w) => (w.jobs.next.needs = ["changes", "legs"])],
+      [
+        "next waits on a legs answer",
+        (w) => (w.jobs.next.if = `${guard("next").slice(0, -3)} && needs.legs.outputs.next != 'false' }}`),
+      ],
       [
         "next matrix with no fallback",
-        (w) => (w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.legs.outputs.shards) }}`),
+        (w) => (w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards) }}`),
       ],
       [
         "next matrix from another output",
-        (w) => (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(".shards", ".e2e")),
+        (w) => (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(".shards", ".files")),
+      ],
+      [
+        "next matrix from the old legs job",
+        (w) =>
+          (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+            "needs.changes",
+            "needs.legs",
+          )),
       ],
       ["next matrix as a plain list", (w) => Object.assign(w.jobs.next.strategy.matrix, { shard: nextLegs(2) })],
-      ["legs needs nothing", (w) => Reflect.deleteProperty(w.jobs.legs, "needs")],
-      ["legs runs only on success", (w) => (w.jobs.legs.if = "success()")],
-      ["legs has no if", (w) => Reflect.deleteProperty(w.jobs.legs, "if")],
-      ["legs ignores its failure", (w) => Object.assign(w.jobs.legs, { "continue-on-error": true })],
-      ["legs loses an output", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "e2e")],
-      ["legs adds an output", (w) => (w.jobs.legs.outputs["more"] = `\${{ steps.size.outputs.more }}`)],
-      ["legs output from another step", (w) => (w.jobs.legs.outputs["shards"] = `\${{ steps.diff.outputs.shards }}`)],
+      ["changes loses a sizing output", (w) => Reflect.deleteProperty(w.jobs.changes.outputs, "e2e-legs")],
+      ["changes adds an output", (w) => (w.jobs.changes.outputs["more"] = `\${{ steps.size.outputs.more }}`)],
       [
-        "legs sizes the merge queue and main",
+        "changes takes shards from another step",
+        (w) => (w.jobs.changes.outputs["shards"] = `\${{ steps.diff.outputs.shards }}`),
+      ],
+      [
+        "changes' next ignores the size step",
+        (w) => (w.jobs.changes.outputs["next"] = `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`),
+      ],
+      // 0534: the merge queue and main size their legs too, from their own base, so none of the three
+      // runs the whole suite. Each plant puts back a piece of the pull-request-only shape.
+      [
+        "the size step sizes pull requests alone, so the queue and main run the whole suite",
         (w) =>
-          (step(w, "legs", "size")["if"] = String(step(w, "legs", "size")["if"]).replace(
-            " && github.event_name == 'pull_request'",
+          (step(w, "changes", "size")["if"] =
+            `${String(step(w, "changes", "size")["if"])} && github.event_name == 'pull_request'`),
+      ],
+      [
+        "the sizing install runs on pull requests alone",
+        (w) =>
+          (step(w, "changes", "install for sizing")["if"] =
+            `${String(step(w, "changes", "install for sizing")["if"])} && github.event_name == 'pull_request'`),
+      ],
+      [
+        "the size step's base is a pull request's alone",
+        (w) =>
+          ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
+            `\${{ github.event.pull_request.base.sha }}`),
+      ],
+      [
+        "the size step's base skips the merge queue's group",
+        (w) =>
+          ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
+            `\${{ github.event.pull_request.base.sha || github.event.before }}`),
+      ],
+      ["changes drops the size step's base", (w) => Reflect.deleteProperty(w.jobs.changes.outputs, "base")],
+      [
+        "changes takes the base from the classify step",
+        (w) => (w.jobs.changes.outputs["base"] = `\${{ steps.diff.outputs.base }}`),
+      ],
+      [
+        "the end-to-end legs narrow on pull requests alone, so the queue and main run every end-to-end file",
+        (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = changedOnPullRequests),
+      ],
+      [
+        "the end-to-end legs narrow from the event's base, even when the size step did not size them",
+        (w) =>
+          ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] =
+            `\${{ format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before) }}`),
+      ],
+      [
+        "the end-to-end legs never narrow",
+        (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = ""),
+      ],
+      // Ticket 997: a run of the reader tests alone is sized too, so a queue group of 11 reader
+      // files starts one leg, not five. Each plant puts back the old guard that skipped it.
+      [
+        "the size step skips the reader tests, so they start the full matrix",
+        (w) =>
+          (step(w, "changes", "size")["if"] =
+            `${String(step(w, "changes", "size")["if"])} && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'`),
+      ],
+      [
+        "the sizing install skips the reader tests",
+        (w) =>
+          (step(w, "changes", "install for sizing")["if"] =
+            `${String(step(w, "changes", "install for sizing")["if"])} && (steps.same.outputs.filter || steps.diff.outputs.filter) == 'next/'`),
+      ],
+      [
+        "the setup skips the reader tests",
+        (w) =>
+          (step(w, "changes", "parser node")["if"] =
+            `${probe} || (steps.diff.outputs.next != 'false' && steps.diff.outputs.filter == 'next/')`),
+      ],
+      [
+        "the size step has no budget",
+        (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, unknown>, "BUDGET"),
+      ],
+      [
+        "the size step's budget is text",
+        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: "240" }),
+      ],
+      [
+        "the size step's budget is zero",
+        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: 0 }),
+      ],
+      [
+        "the size step reads the first pass alone",
+        (w) =>
+          (step(w, "changes", "size")["if"] = String(step(w, "changes", "size")["if"]).replaceAll(
+            "steps.same.outputs.next || ",
             "",
           )),
       ],
+      ["sizing installs on every run", (w) => Reflect.deleteProperty(step(w, "changes", "install for sizing"), "if")],
+      ["the size step fails the job", (w) => Reflect.deleteProperty(step(w, "changes", "size"), "continue-on-error")],
       [
-        "legs sizes the reader tests",
-        (w) =>
-          (step(w, "legs", "size")["if"] = String(step(w, "legs", "size")["if"]).replace(
-            " && (needs.changes.outputs.filter || 'next/') == 'next/'",
-            "",
-          )),
+        "sizing's install fails the job",
+        (w) => Reflect.deleteProperty(step(w, "changes", "install for sizing"), "continue-on-error"),
       ],
-      ["legs installs on every run", (w) => Reflect.deleteProperty(step(w, "legs", "install"), "if")],
-      ["legs size step fails the job", (w) => Reflect.deleteProperty(step(w, "legs", "size"), "continue-on-error")],
-      ["legs install fails the job", (w) => Reflect.deleteProperty(step(w, "legs", "install"), "continue-on-error")],
-      ["legs runs another script", (w) => (step(w, "legs", "size")["run"] = "node .github/ci/legs.ts --all")],
-      ["legs size step renamed", (w) => (step(w, "legs", "size")["id"] = "sizes")],
-      ["legs installs with scripts", (w) => (step(w, "legs", "install")["run"] = "pnpm install --frozen-lockfile")],
       [
-        "legs size step on the merge queue's base",
+        "the size step runs another script",
+        (w) => (step(w, "changes", "size")["run"] = "node .github/ci/legs.ts --all"),
+      ],
+      ["the size step renamed", (w) => (step(w, "changes", "size")["id"] = "sizes")],
+      [
+        "sizing installs with scripts",
+        (w) => (step(w, "changes", "install for sizing")["run"] = "pnpm install --frozen-lockfile"),
+      ],
+      [
+        "the size step before the parser's pass",
+        (w) => {
+          const [size] = w.jobs.changes.steps.splice(place(w, "changes", "size"), 1);
+          w.jobs.changes.steps.splice(place(w, "changes", "parser pass"), 0, size!);
+        },
+      ],
+      [
+        "sizing, install and all, before the parser's pass",
+        (w) => {
+          const moved = w.jobs.changes.steps.splice(place(w, "changes", "install for sizing"), 2);
+          w.jobs.changes.steps.splice(place(w, "changes", "parser pass"), 0, ...moved);
+        },
+      ],
+      [
+        "the size step on the merge queue's base",
         (w) =>
-          Object.assign(step(w, "legs", "size")["env"] as Record<string, string>, {
+          Object.assign(step(w, "changes", "size")["env"] as Record<string, string>, {
             BASE: `\${{ github.event.merge_group.base_sha }}`,
           }),
       ],
       [
-        "legs size step without its filter",
-        (w) => Reflect.deleteProperty(step(w, "legs", "size")["env"] as Record<string, string>, "FILTER"),
+        "the size step without its filter",
+        (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, string>, "FILTER"),
       ],
       [
-        "ci-required does not need legs",
-        (w) => (w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((job) => job !== "legs")),
+        "the size step on the first pass's filter",
+        (w) =>
+          Object.assign(step(w, "changes", "size")["env"] as Record<string, string>, {
+            FILTER: `\${{ steps.diff.outputs.filter || 'next/' }}`,
+          }),
+      ],
+      ["the setup skips sizing", (w) => (step(w, "changes", "parser pnpm")["if"] = probe)],
+      [
+        "a legs job comes back",
+        (w) => {
+          Object.assign(w.jobs, {
+            legs: { needs: "changes", "timeout-minutes": 5, steps: [{ run: "node .github/ci/legs.ts" }] },
+          });
+          w.jobs["ci-required"].needs.push("legs");
+        },
       ],
     ] as [string, (w: Workflow) => unknown][]
   ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
@@ -1132,24 +1628,58 @@ const plants: [string, (workflow: Workflow) => void][] = [
       Object.assign(w.jobs.changes, { if: "false" });
     },
   ],
-  [
-    "field ignores failure",
+  // F1 to F3, the field row check inside check (ticket 985). Source plants, each run once on
+  // workflow-lint.ts and restored: the rows anywhere in check (red: before lint); F3 dropped (red: a legs job, a field job comes back).
+  ...(
+    [
+      [
+        "the row check ignores failure",
+        (w) => Object.assign(step(w, "check", "field rows"), { "continue-on-error": true }),
+      ],
+      [
+        "the row check runs before lint",
+        (w) => {
+          const [rows] = w.jobs.check.steps.splice(place(w, "check", "field rows"), 1);
+          w.jobs.check.steps.splice(place(w, "check", "lint"), 0, rows!);
+        },
+      ],
+      [
+        "the row check skips after a failure",
+        (w) => (step(w, "check", "field rows")["if"] = `\${{ needs.changes.outputs.field != 'false' }}`),
+      ],
+      ["the row check runs on the check flag", (w) => (step(w, "check", "field rows")["if"] = checkFlag)],
+      [
+        "the row check without its base",
+        (w) => Reflect.deleteProperty(step(w, "check", "field rows")["env"] as Record<string, string>, "BASE"),
+      ],
+      ["the row check bypassed", (w) => (step(w, "check", "field rows")["run"] = "echo passed")],
+      ["the row check twice", (w) => w.jobs.check.steps.push({ ...step(w, "check", "field rows") })],
+      ["check runs only on the check flag", (w) => (w.jobs.check.if = guard("check"))],
+      [
+        "rows alone install everything",
+        (w) => w.jobs.check.steps.splice(place(w, "check", "install the row check"), 1),
+      ],
+      ["the row install runs with lint", (w) => (step(w, "check", "install the row check")["if"] = checkFlag)],
+      ["the full install runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "install"), "if")],
+      ["lint runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "lint"), "if")],
+      ["the ratchet runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "lists only shrink"), "if")],
+      ["check checks out no history", (w) => (step(w, "check", "checkout")["with"] = {})],
+      [
+        "a field job comes back",
+        (w) => {
+          Object.assign(w.jobs, {
+            field: { "timeout-minutes": 5, steps: [{ run: "node .github/ci/field-check.ts" }] },
+          });
+          w.jobs["ci-required"].needs.push("field");
+        },
+      ],
+    ] as [string, (w: Workflow) => unknown][]
+  ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
+    fault,
     (w) => {
-      Object.assign(w.jobs.field, { "continue-on-error": true });
+      mutate(w);
     },
-  ],
-  [
-    "checker ignores failure",
-    (w) => {
-      Object.assign(step(w, "field", "row check"), { "continue-on-error": true });
-    },
-  ],
-  [
-    "missing field setup",
-    (w) => {
-      w.jobs.field.steps.splice(place(w, "field", "pnpm"), 1);
-    },
-  ],
+  ]),
   [
     "unconditional check",
     (w) => {
@@ -1162,18 +1692,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.if = "";
     },
   ],
-  [
-    "missing e2e dependency",
-    (w) => {
-      w.jobs.e2e.needs = "";
-    },
-  ],
-  [
-    "failure skips tests",
-    (w) => {
-      w.jobs.test.if = "needs.changes.outputs.test == 'true'";
-    },
-  ],
+
   [
     "classifier bypass",
     (w) => {
@@ -1272,10 +1791,10 @@ const plants: [string, (workflow: Workflow) => void][] = [
       });
     },
   ],
-  ["legs hides its files", (w) => Reflect.deleteProperty(w.jobs.legs.outputs, "files")],
+  ["changes hides its files", (w) => Reflect.deleteProperty(w.jobs.changes.outputs, "files")],
   [
-    "legs takes its files from another step",
-    (w) => (w.jobs.legs.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
+    "changes takes its files from another step",
+    (w) => (w.jobs.changes.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
   ],
   ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
     [
@@ -1343,48 +1862,18 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   [
-    "field waits",
-    (w) => {
-      Object.assign(w.jobs.field, { needs: "changes" });
-    },
-  ],
-  [
-    "field unconditional install",
-    (w) => {
-      Object.assign(step(w, "field", "install"), { if: "true" });
-    },
-  ],
-  [
-    "field bypass",
-    (w) => {
-      Object.assign(step(w, "field", "row check"), { run: "echo passed" });
-    },
-  ],
-  [
     "next job excludes next",
     (w) => {
       step(w, "next", "vitest").run += " --exclude 'next/**'";
     },
   ],
-  ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
-    `exclusion branch ${branch}`,
+  // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
+  ...(["changes", "check", "typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+    `ci-required does not need ${job}`,
     (w) => {
-      const rest = step(w, "test", "test");
-      const lines = rest.run.split("\n");
-      const line = [1, 3, 6][branch]!;
-      lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      rest.run = lines.join("\n");
+      w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
     },
   ]),
-  // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
-  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e"] as const).map(
-    (job): [string, (w: Workflow) => void] => [
-      `ci-required does not need ${job}`,
-      (w) => {
-        w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
-      },
-    ],
-  ),
   // The lane reads the typecheck job's answer alone (0133), so the typecheck lives there only.
   [
     "the typecheck job runs no typecheck",
@@ -1441,36 +1930,16 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e", "ci-required"] as const).map(
-    (job): [string, (w: Workflow) => void] => [
-      `${job} without a time limit`,
-      (w) => {
-        Object.assign(w.jobs[job], { "timeout-minutes": undefined });
-      },
-    ],
-  ),
+  ...(["changes", "check", "typecheck", "next", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+    `${job} without a time limit`,
+    (w) => {
+      Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+    },
+  ]),
   [
     "a time limit past the default",
     (w) => {
-      w.jobs.test["timeout-minutes"] = 360;
-    },
-  ],
-  [
-    "duplicate forced tests",
-    (w) => {
-      step(w, "test", "test").run = step(w, "test", "test").run.replace(
-        " --exclude apps/fabrika/src/bundles.test.ts",
-        "",
-      );
-    },
-  ],
-  [
-    "forced tests on all shards",
-    (w) => {
-      step(w, "test", "test").run = step(w, "test", "test").run.replace(
-        `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-        "if true; then",
-      );
+      w.jobs.next["timeout-minutes"] = 360;
     },
   ],
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
@@ -1535,21 +2004,21 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "F1: the stop step force-cancels, which takes ci-required down with the run",
     (w) => {
-      stepsOf(w, "e2e").at(-1)!["run"] =
+      stepsOf(w, "check").at(-1)!["run"] =
         'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"';
     },
   ],
   [
     "F1: the stop step comes before the job's last step, so that step's failure stops nothing",
     (w) => {
-      const list = stepsOf(w, "test");
+      const list = stepsOf(w, "next");
       list.splice(-2, 2, list.at(-1)!, list.at(-2)!);
     },
   ],
   [
     "F1: a second cancel step, with no guard for main",
     (w) => {
-      stepsOf(w, "test").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
+      stepsOf(w, "next").splice(-1, 0, { if: `\${{ failure() }}`, run: stop.run });
     },
   ],
   // Every job here pins its own `if`, so F2 is for a job added later; this one is right in all else.
@@ -1583,13 +2052,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "F3: a job sets its own token, which drops the workflow's actions: write",
     (w) => {
-      Object.assign(w.jobs.legs, { permissions: { contents: "read" } });
+      Object.assign(w.jobs.changes, { permissions: { actions: "read", contents: "read" } });
     },
   ],
   // F4: a checkout that keeps the token in .git/config hands the `actions: write` token to every
   // test and install script after it. One plant per job with a checkout, and one that sets it true.
   // Plant, run once on workflow-lint.ts and restored: F4 dropped (red on each of these).
-  ...(["changes", "field", "legs", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+  ...(["changes", "check", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
     `F4: ${job}'s checkout keeps the token in .git/config`,
     (w) => {
       const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
@@ -1599,9 +2068,64 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "F4: a checkout sets persist-credentials to true",
     (w) => {
-      const checkout = stepsOf(w, "field")[0]!;
+      const checkout = stepsOf(w, "check")[0]!;
       (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
     },
+  ],
+  // TT1 and TT2: every test leg writes its time table and uploads its timings file. Each plant was
+  // also run once on workflow-lint.ts with its rule dropped, and that turned it red.
+  ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    const steps = (w: Workflow) => stepsOf(w, job) as Timed[];
+    const named = (w: Workflow, name: string) => steps(w).find((s) => s["name"] === name)!;
+    const table = (w: Workflow) => named(w, "time table");
+    const upload = (w: Workflow) => named(w, "timings");
+    return [
+      [`TT1: ${job} drops its time table`, (w) => void steps(w).splice(place(w, job, "time table"), 1)],
+      [`TT1: ${job}'s time table skips a red leg`, (w) => (table(w).if = "success()")],
+      [`TT1: ${job}'s time table skips a canceled leg`, (w) => (table(w).if = "!cancelled()")],
+      [`TT1: ${job}'s time table can fail the job`, (w) => Reflect.deleteProperty(table(w), "continue-on-error")],
+      [`TT1: ${job}'s time table has no time limit`, (w) => Reflect.deleteProperty(table(w), "timeout-minutes")],
+      [`TT1: ${job}'s time table has no job id`, (w) => Reflect.deleteProperty(table(w).env!, "JOB_ID")],
+      [
+        `TT1: ${job}'s time table reads the old tooling legs' report`,
+        (w) => (table(w).env!["REPORT"] = `\${{ runner.temp }}/tooling.json`),
+      ],
+      [
+        `TT1: ${job}'s time table comes before shard times, so it misses that step`,
+        (w) => {
+          const [moved] = steps(w).splice(place(w, job, "time table"), 1);
+          steps(w).splice(place(w, job, "shard times"), 0, moved!);
+        },
+      ],
+      [`TT1: ${job} runs its time table twice`, (w) => void steps(w).splice(-1, 0, structuredClone(table(w)))],
+      [`TT2: ${job} drops its timings upload`, (w) => void steps(w).splice(place(w, job, "timings"), 1)],
+      [
+        `TT2: ${job}'s timings lose the attempt, so a rerun's upload clashes`,
+        (w) => (upload(w).with!["name"] = `timings-\${{ github.job }}-\${{ matrix.shard }}`),
+      ],
+      [`TT2: ${job}'s timings skip a red leg`, (w) => (upload(w).if = "success()")],
+      [`TT2: ${job}'s timings can fail the job`, (w) => Reflect.deleteProperty(upload(w), "continue-on-error")],
+      [`TT2: ${job}'s timings have no time limit`, (w) => Reflect.deleteProperty(upload(w), "timeout-minutes")],
+      [
+        `TT2: ${job}'s timings upload before the time table writes them`,
+        (w) => {
+          const [moved] = steps(w).splice(place(w, job, "timings"), 1);
+          steps(w).splice(place(w, job, "time table"), 0, moved!);
+        },
+      ],
+    ];
+  }),
+  // M1: the time table's exact step, in a test job, is the one test step that gets the token. The
+  // same command elsewhere, or with one more variable, does not. The typecheck plant passed the M1
+  // that let any step whose command is the time table's have the token.
+  ["M1: shard times gets the token too", (w) => (step(w, "next", "shard times").env = { GITHUB_TOKEN: token })],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w) => stepsOf(w, "typecheck").splice(-1, 0, tableElsewhere()),
+  ],
+  [
+    "M1: next's time table carries a loader beside the token",
+    (w) => ((stepsOf(w, "next").find((s) => s["name"] === "time table") as Timed).env!["NODE_OPTIONS"] = loader),
   ],
 ];
 
@@ -1774,6 +2298,85 @@ it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, 
   }
 });
 
+// Ticket 988. A pull request whose every path matches check.yaml's `paths-ignore` starts no run, so
+// each such path must be one changes.mjs already runs no heavy job for: every job changes.mjs
+// names stays off, on a draft and on a ready pull request. Only the field flag
+// may be on, for a row, and `pnpm lint` checks rows (field-check.ts --local). The paths are made
+// from each pattern, each `*` any name without a `/` as in GitHub's filters (the lint allows no
+// other wildcard), with the repo's own tracked files that match. Plants, each run once on
+// changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
+const globOf = (glob: string) =>
+  new RegExp(
+    `^${glob
+      .split("*")
+      .map((part) => part.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`))
+      .join("[^/]*")}$`,
+  );
+
+const ignoredBy = (path: string) => ignored.some((glob) => globOf(glob).test(path));
+const fill = fc.string({ maxLength: 12 }).filter((text) => !text.includes("/") && !text.includes("\0"));
+
+const fromGlob = fc.constantFrom(...ignored).chain((glob) => {
+  const [first = "", ...rest] = glob.split("*");
+  return fc
+    .array(fill, { minLength: rest.length, maxLength: rest.length })
+    .map((fills) => rest.reduce((path, part, i) => `${path}${fills[i]}${part}`, first));
+});
+
+const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+  .stdout.split("\0")
+  .filter((path) => path !== "" && ignoredBy(path));
+
+it("ticket 988: every path a pull request ignores runs no heavy job in changes.mjs, on a draft and a ready one", () => {
+  expect(tracked.length).toBeGreaterThan(0);
+  fc.assert(
+    fc.property(
+      fc.array(fc.oneof(fromGlob, fc.constantFrom(...tracked)), { minLength: 1, maxLength: 4 }),
+      fc.boolean(),
+      (paths, draft) => {
+        expect(paths.every(ignoredBy)).toBe(true);
+        // Every job but the field rows' is off, whatever jobs changes.mjs grows or drops.
+        const { field, ...heavy } = jobs(paths, "pull_request", draft);
+        expect(Object.keys(heavy).length).toBeGreaterThan(0);
+        expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);
+        expect(field).toBe(paths.some(isFieldPath));
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // Pull request 1248, the waste ticket 988 names: one lane plan and two finding rows.
+        [
+          [
+            "docs/plan/lanes/t290-s2-PLAN.md",
+            "field/findings/2026-11-14-a-row.json",
+            "field/findings/2026-11-14-another-row.json",
+          ],
+          true,
+        ],
+        [["docs/plan/.md", "field/runs/.json"], false],
+      ],
+    },
+  );
+});
+
+it("pinned: ticket 988's list leaves out what changes.mjs or a reader still checks", () => {
+  // A folder a program reads, skill prose, the old logs, a row of the wrong kind and a nested plan
+  // folder all start the run: each is outside the list.
+  for (const path of [
+    "docs/plan/brief/x.md",
+    "docs/plan/lanes/prompts/x.md",
+    ".agents/skills/lead/SKILL.md",
+    "field/runs.jsonl",
+    "field/findings/x.md",
+    "field/findings/a/b.json",
+    "docs/plan/x.ts",
+    "AGENTS.md",
+  ]) {
+    expect(ignoredBy(path), path).toBe(false);
+  }
+});
+
 // F1, ticket 990. The stop step is invisible to every other law, so a job without it gets exactly
 // the one error that names that job, and a job that has it gains no error from the others.
 it.each(stopping)("F1: %s without its stop step is named by that one error", (job) => {
@@ -1810,39 +2413,20 @@ it("format: the checked-in workflow passes the same wiring lint", () => {
   expect(lint(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"))).toEqual([]);
 });
 
-it("L5: lane selection and rest exclusion agree on today's test paths", () => {
-  // Vitest includes .test.ts only; next/ is excluded by both commands.
-  // Plant: lane*.test.ts also excludes lane-fixture.test.ts.
-  const real = globSync(["packages/**/*.test.ts", "apps/**/*.test.ts", ".github/**/*.test.ts"]);
-  const made = fc
-    .stringMatching(/^[a-z][a-z.-]{0,30}$/)
-    .chain((name) =>
-      fc.constantFrom(
-        `${LANE_FILTER}${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/lane-${name}.test.ts`,
-        `stages/lane/${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/${name}.test.ts`,
-      ),
-    );
-  fc.assert(
-    fc.property(fc.oneof(fc.constantFrom(...real), made), (path) => {
-      expect(inLaneStep(path), path).toBe(matchesGlob(path, LANE_GLOB));
-    }),
-    {
-      ...options,
-      examples: [
-        ["packages/pipeline/src/stages/pipeline/lane-fixture.test.ts"],
-        [`${LANE_FILTER}x.y.test.ts`],
-        ["stages/lane/lane.test.ts"],
-      ],
-    },
-  );
-});
-
 // The caches: saved on main only, the shared setup never saves, full-history checkouts are
 // blobless, and the typecheck's buildinfo cache keys on the lockfile and every tsconfig.
 type Step = Record<string, unknown> & { with?: Record<string, unknown> };
-type Jobs = Record<string, { steps: Step[]; strategy?: { matrix: Record<string, unknown> } }>;
+
+type Jobs = Record<
+  string,
+  {
+    steps: Step[];
+    strategy?: { matrix: Record<string, unknown> };
+    outputs?: Record<string, string>;
+    needs?: string | string[];
+  }
+>;
+
 type Files = { workflows: Record<string, Parsed>; action: Parsed; workspace: Parsed; typecheck: string };
 type Parsed = Record<string, unknown> & { jobs: Jobs; runs: { steps: Step[] } };
 
@@ -1928,9 +2512,10 @@ for (const [name, plant, error] of [
   [
     "C3: a full-history checkout with every blob",
     (f: Files) => {
-      delete step(checkYaml(f), "test", "checkout").with!["filter"];
+      const steps = checkYaml(f).jobs["next"]!.steps;
+      delete steps.find((s) => String(s["uses"]).startsWith("actions/checkout@"))!.with!["filter"];
     },
-    "check.yaml: test's full-history checkout is blobless (filter: blob:none)",
+    "check.yaml: next's full-history checkout is blobless (filter: blob:none)",
   ],
   [
     "C4: a restore prefix without the lockfile and tsconfig hash",
@@ -1979,33 +2564,172 @@ for (const [name, plant, error] of [
   });
 }
 
-// T5 and T6 on the checked-in check.yaml: each plant gives its one error.
+// T1, T2 and T6 on the checked-in check.yaml: each plant puts back one piece of how today's tests
+// ran before 0533, or the tooling tests before 0539, and gives its one error.
 for (const [name, plant, error] of [
   [
-    "T5: six machines on every flag",
+    "T1: the today flag back on changes",
     (w: Parsed) => {
-      w.jobs["test"]!.strategy!.matrix["shard"] = [1, 2, 3, 4, 5, 6];
+      w.jobs["changes"]!.outputs = { ...w.jobs["changes"]!.outputs, today: `\${{ steps.diff.outputs.today }}` };
     },
-    "check.yaml: T5: six machines for today's tests, two when only the tooling tests run",
+    "check.yaml: S1: changes exposes its flags, filter and the size step's outputs, and nothing else",
   ],
   [
-    "T5: the tooling step dividing by six on two machines",
+    "T1: the test flag back on changes",
     (w: Parsed) => {
-      (step(w, "test", "tooling tests")["env"] as Record<string, string>)["SHARD"] = `\${{ matrix.shard }}/6`;
+      w.jobs["changes"]!.outputs = { ...w.jobs["changes"]!.outputs, test: `\${{ steps.diff.outputs.test }}` };
     },
-    "check.yaml: T5: each test step's SHARD divides by its flag's machine count",
+    "check.yaml: S1: changes exposes its flags, filter and the size step's outputs, and nothing else",
   ],
   [
-    "T6: apt only when the tooling tests run",
+    "T1: the tooling tests back in the typecheck job, before its stop step",
     (w: Parsed) => {
-      step(w, "test", "apt packages")["if"] = `\${{ needs.changes.outputs.today == 'false' }}`;
+      w.jobs["typecheck"]!.steps.splice(-1, 0, {
+        name: "tooling tests",
+        env: { SHARD: "1/1" },
+        run: 'pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests',
+      });
     },
-    "check.yaml: T6: apt runs on the today flag, before today's tests",
+    "check.yaml: T1: typecheck runs no tooling test (0539)",
+  ],
+  [
+    "T2: the e2e job back, with its place in ci-required's needs",
+    (w: Parsed) => {
+      // With the stop step last, as every job but ci-required ends (F1).
+      const run = { run: "pnpm --filter @kampus/fabrika-app-old e2e" };
+      Object.assign(w.jobs, {
+        e2e: { needs: "changes", "timeout-minutes": 25, steps: [run, w.jobs["check"]!.steps.at(-1)] },
+      });
+      w.jobs["ci-required"]!.needs = [...[w.jobs["ci-required"]!.needs ?? []].flat(), "e2e"];
+    },
+    "check.yaml: T2: e2e runs nothing of today's app",
+  ],
+  [
+    "T6: the promises gate back in check, on the check flag, before the field rows",
+    (w: Parsed) => {
+      // On the check flag like every lint step, and before the rows, so check's own step law (F1)
+      // has nothing to say.
+      w.jobs["check"]!.steps.splice(place(w, "check", "field rows"), 0, {
+        name: "promises",
+        if: checkFlag,
+        env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
+        run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nelse\n  pnpm promises gate\nfi\n',
+      });
+    },
+    "check.yaml: T6: check runs no promise check of today's version",
   ],
 ] as const) {
-  it(`${name} is named by its one error`, () => {
+  it(`scenario: ${name} is named by its one error`, () => {
+    // scenario: the real workflow with one of the old pieces planted back, so the lint's own words
+    // for each are read here.
     const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
     plant(workflow);
     expect(lint(JSON.stringify(workflow))).toEqual([error]);
   });
 }
+
+it("T1 (0536): the tooling project, the schedule's tooling job's one project, holds no glob of today's trees or of next/", () => {
+  // A project ignores `--exclude`, so the project's own globs are what keeps today's tests and next/'s
+  // out of scheduled.yaml's tooling job (SC8). Plant, run once on vitest.config.ts and restored: add
+  // "apps/*/src/**/*.test.ts" to the tooling project (red).
+  const tooling = projects.find((project) => project.test.name === "tooling");
+  expect(tooling).toBeDefined();
+  expect(tooling!.test.include.length).toBeGreaterThan(0);
+  expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+});
+
+// T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its
+// one vitest call runs inside next/ with no `--project`, which only `working-directory` makes safe.
+const hostPath = ".github/workflows/host.yaml";
+const hostYaml = () => parse(readFileSync(new URL("../workflows/host.yaml", import.meta.url), "utf8"));
+const l13 = (w: Parsed) => step(w, "launchd", "L13");
+const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
+
+it("scenario: the checked-in host.yaml runs no tooling test", () => {
+  expect(lintNoTooling(hostPath, JSON.stringify(hostYaml()))).toEqual([]);
+});
+
+for (const [name, plant] of [
+  [
+    "its vitest call runs from the repository's root",
+    (w: Parsed) => void Reflect.deleteProperty(l13(w), "working-directory"),
+  ],
+  ["its folder climbs out of next/", (w: Parsed) => void (l13(w)["working-directory"] = "next/../.github/ci")],
+  ["its script changes folder first", (w: Parsed) => void (l13(w)["run"] = `cd ../..\n${String(l13(w)["run"])}`)],
+  [
+    "its root climbs out of next/",
+    (w: Parsed) => void (l13(w)["run"] = String(l13(w)["run"]).replace("--root e2e", "--root ../../.github/ci")),
+  ],
+  [
+    "a second step runs the tooling project from the root",
+    (w: Parsed) =>
+      void w.jobs["launchd"]!.steps.push({ name: "tooling", run: "pnpm exec vitest run --project tooling" }),
+  ],
+] as const) {
+  it(`scenario: host.yaml where ${name} is named by its one error`, () => {
+    const workflow: Parsed = hostYaml();
+    plant(workflow);
+    expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
+  });
+}
+
+it("scenario: a workflow that no pull request or merge queue starts is no merge line, so T1 leaves it", () => {
+  const workflow: Parsed = hostYaml();
+  workflow["on"] = { workflow_dispatch: {} };
+  workflow.jobs["launchd"]!.steps.push({ name: "tooling", run: "pnpm exec vitest run --project tooling" });
+  expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([]);
+  workflow["on"] = ["merge_group"];
+  expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
+});
+
+// TT1 and TT2 on the checked-in check.yaml: the lint's own words for each, one error each.
+for (const [name, plant, error] of [
+  [
+    "TT1: next's time table skips a red leg",
+    (w: Parsed) => {
+      step(w, "next", "time table")["if"] = "success()";
+    },
+    "check.yaml: TT1: next ends its commands with the time table step once, on every result, never failing the job, reading next.json",
+  ],
+  [
+    // A change to its `with:` is Q1's too (the scenario after this block), so this one keeps it.
+    "TT2: next's timings skip a red leg",
+    (w: Parsed) => {
+      step(w, "next", "timings")["if"] = "success()";
+    },
+    "check.yaml: TT2: next uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",
+  ],
+  [
+    "M1: typecheck runs the time table's command with the token and a loader beside it",
+    (w: Parsed) => {
+      // Before its stop step, which stays last (F1).
+      w.jobs["typecheck"]!.steps.splice(-1, 0, tableElsewhere());
+    },
+    "check.yaml: M1: only changes' classify step and the test jobs' time tables get the token",
+  ],
+  [
+    "Q1: typecheck uploads a timings file, outside the test jobs",
+    (w: Parsed) => {
+      // Before its stop step, which stays last (F1).
+      w.jobs["typecheck"]!.steps.splice(-1, 0, timings());
+    },
+    "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",
+  ],
+] as const) {
+  it(`scenario: ${name} is named by its one error`, () => {
+    const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+    plant(workflow);
+    expect(lint(JSON.stringify(workflow))).toEqual([error]);
+  });
+}
+
+it("scenario: Q1 and TT2: a timings upload named as a tested-tree record is refused by both", () => {
+  // `matched` (changes.mjs) trusts an artifact by its `tested-<tree>-<base>` name from a green run,
+  // so a timings upload under that name could stand in for a record.
+  const workflow: Parsed = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  (step(workflow, "next", "timings")["with"] as Record<string, unknown>)["name"] = `tested-\${{ github.sha }}-base`;
+  expect(lint(JSON.stringify(workflow))).toEqual([
+    "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",
+    "check.yaml: TT2: next uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",
+  ]);
+});
