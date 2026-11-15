@@ -6,7 +6,7 @@ import { parse } from "yaml";
 import { projects } from "../../vitest.config.ts";
 import { ignored, jobs } from "./changes.mjs";
 import { isFieldPath } from "./field-check.ts";
-import { cacheFiles, lintCaches, lintWorkflow as lint } from "./workflow-lint.ts";
+import { cacheFiles, lintCaches, lintNoTooling, lintWorkflow as lint } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -756,13 +756,62 @@ const plants: [string, (workflow: Workflow) => void][] = [
       ["the root test script, run", "pnpm run test"],
       ["vitest through npx", "npx vitest run oxlint-plugins/"],
       ["the today project", "pnpm exec vitest run --project today"],
+      // Fix round 1. The first T1 read one line at a time and knew only `vitest` and `pnpm … test`.
+      // Run on it, 16 of the plants from here on were not rejected, the job-env one below included;
+      // it already rejected the rest, kept as spellings.
+      ["a line continuation adds the tooling project", "pnpm exec vitest run --project next \\\n  --project tooling\n"],
+      ["pnpm's alias t", "pnpm t"],
+      ["pnpm's alias tst", "pnpm tst"],
+      ["pnpm test after a flag with a value", "pnpm --dir . test"],
+      ["pnpm test after a short flag with a value", "pnpm -C . test"],
+      ["npm test", "npm test"],
+      ["npm's alias t", "npm t"],
+      ["npm run test", "npm run test"],
+      ["yarn test", "yarn test"],
+      ["a test script of its own name", "pnpm test:tooling"],
+      ["vitest through npx alone", "npx vitest"],
+      ["vitest from a path into node_modules", "node node_modules/vitest/vitest.mjs run --project tooling"],
+      [
+        "a command substitution adds the tooling project",
+        "pnpm exec vitest run --project next $(echo --project tooling)",
+      ],
+      [
+        "a backquoted substitution adds the tooling project",
+        "pnpm exec vitest run --project next `echo --project tooling`",
+      ],
+      ["an expression adds the tooling project", `pnpm exec vitest run --project next \${{ '--project tooling' }}`],
+      ["a script's arguments add the tooling project", 'pnpm exec vitest run --project next "$@"'],
+      [
+        "another config, whose projects could hold anything",
+        "pnpm exec vitest run --project next --config tooling.config.ts",
+      ],
+      ["another root", "pnpm exec vitest run --project next --root .github/ci"],
+      ["a second command on the same line", "pnpm exec vitest run --project next; pnpm exec vitest run .github/ci/"],
+      [
+        "a variable the step sets to the tooling project",
+        "pnpm exec vitest run --project next $EXTRA",
+        { EXTRA: "--project tooling" },
+      ],
+      [
+        "next's shard variable set to the tooling project",
+        'pnpm exec vitest run --project next --shard "$SHARD"',
+        { SHARD: "--project tooling" },
+      ],
+      ["next's filter variable read where no step sets it", "pnpm exec vitest run --project next $FILTER"],
     ] as const
-  ).map(([label, run]): [string, (w: Workflow) => void] => [
-    `T1: ${label}`,
+  ).map((planted): [string, (w: Workflow) => void] => [
+    `T1: ${planted[0]}`,
     (w) => {
-      w.jobs.typecheck.steps.splice(-1, 0, { name: "planted", run });
+      const env = planted.length === 3 ? { env: planted[2] } : {};
+      stepsOf(w, "typecheck").splice(-1, 0, { name: "planted", run: planted[1], ...env });
     },
   ]),
+  [
+    "T1: the job's env sets the runner's temp folder that a vitest call reads",
+    (w) => {
+      Object.assign(w.jobs.next, { env: { RUNNER_TEMP: "--project tooling" } });
+    },
+  ],
   // 0536: today's tests and the tooling tests are projects of their own, so a second `--project`, or
   // none at all, runs them in next's vitest step. next's own command law holds these too.
   ...["today", "tooling"].map((project): [string, (w: Workflow) => void] => [
@@ -2431,4 +2480,48 @@ it("T1 (0536): the tooling project, the schedule's tooling job's one project, ho
   expect(tooling).toBeDefined();
   expect(tooling!.test.include.length).toBeGreaterThan(0);
   expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+});
+
+// T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its
+// one vitest call runs inside next/ with no `--project`, which only `working-directory` makes safe.
+const hostPath = ".github/workflows/host.yaml";
+const hostYaml = () => parse(readFileSync(new URL("../workflows/host.yaml", import.meta.url), "utf8"));
+const l13 = (w: Parsed) => step(w, "launchd", "L13");
+const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
+
+it("scenario: the checked-in host.yaml runs no tooling test", () => {
+  expect(lintNoTooling(hostPath, JSON.stringify(hostYaml()))).toEqual([]);
+});
+
+for (const [name, plant] of [
+  [
+    "its vitest call runs from the repository's root",
+    (w: Parsed) => void Reflect.deleteProperty(l13(w), "working-directory"),
+  ],
+  ["its folder climbs out of next/", (w: Parsed) => void (l13(w)["working-directory"] = "next/../.github/ci")],
+  ["its script changes folder first", (w: Parsed) => void (l13(w)["run"] = `cd ../..\n${String(l13(w)["run"])}`)],
+  [
+    "its root climbs out of next/",
+    (w: Parsed) => void (l13(w)["run"] = String(l13(w)["run"]).replace("--root e2e", "--root ../../.github/ci")),
+  ],
+  [
+    "a second step runs the tooling project from the root",
+    (w: Parsed) =>
+      void w.jobs["launchd"]!.steps.push({ name: "tooling", run: "pnpm exec vitest run --project tooling" }),
+  ],
+] as const) {
+  it(`scenario: host.yaml where ${name} is named by its one error`, () => {
+    const workflow: Parsed = hostYaml();
+    plant(workflow);
+    expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
+  });
+}
+
+it("scenario: a workflow that no pull request or merge queue starts is no merge line, so T1 leaves it", () => {
+  const workflow: Parsed = hostYaml();
+  workflow["on"] = { workflow_dispatch: {} };
+  workflow.jobs["launchd"]!.steps.push({ name: "tooling", run: "pnpm exec vitest run --project tooling" });
+  expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([]);
+  workflow["on"] = ["merge_group"];
+  expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
 });

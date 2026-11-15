@@ -24,8 +24,10 @@ const E2E = "next/apps/fabrika/e2e";
  * in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
  * attempt 1 of runs 43601966383 (job 132468657925), 43601964962 (job 132468687674) and 43605298688
  * (job 132478645693), the median of the three, from Vitest's printed Duration per file.
- * A file with no row is placed by the fallback at the median measured time; CI's `shard-times`
- * step prints its real seconds for a later row.
+ * A file with no row is placed by the fallback at the median measured time. For a next/ file, the
+ * `shard-times` step of check.yaml's next job prints its real seconds for a later row. No CI step
+ * prints a tooling file's since 0539 took the tooling tests off the merge line: its seconds are in
+ * the Vitest report the schedule's tooling legs upload (`results-tooling-1` and `-2`).
  */
 export const measured: Record<string, number> = {
   ".agents/skills/lead/scripts/box.test.ts": 348.7,
