@@ -7,8 +7,8 @@
 // brain as `code.failed {hash: null, reason: "bundle", path, line}`, its `path` relative to the
 // watcher's root.
 //
-// These start workerd, a port, Chromium and a file watcher. They run through the exam's e2e runner
-// (`node next/apps/fabrika/e2e.ts`), one file at a time, never in a sandbox that refuses them.
+// These start workerd, a port, Chromium and a file watcher, so the file is a visual test (0536): the
+// `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";

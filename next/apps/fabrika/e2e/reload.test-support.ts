@@ -1,4 +1,4 @@
-// P15 slice 1, next/. The real hot-reload path's world for `reload.test.ts`: a fixture copy of the
+// P15 slice 1, next/. The real hot-reload path's world for `reload.visual.test.ts`: a fixture copy of the
 // counter (the real `next/programs/counter` files are only read), a scoped home with its own key and
 // port, the instance built and started as dev.ts does it with the copy selected, the watcher on the
 // copy, and P12's browser protocol driver. Every folder, instance, watcher, child and browser is
