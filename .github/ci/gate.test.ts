@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { DateTime } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -21,7 +22,7 @@ const options = { seed: 119120, numRuns: 100 };
 const MINUTE = 60_000;
 const BASE = Date.parse("2026-11-15T14:00:00Z");
 /** A time `minutes` after BASE, as GitHub writes one. */
-const at = (minutes: number) => new Date(BASE + minutes * MINUTE).toISOString();
+const at = (minutes: number) => DateTime.formatIso(DateTime.makeUnsafe(BASE + minutes * MINUTE));
 
 type Event = "push" | "schedule" | "workflow_dispatch";
 
