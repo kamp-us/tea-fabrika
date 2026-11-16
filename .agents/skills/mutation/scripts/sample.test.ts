@@ -609,9 +609,9 @@ describe("T568 the sample reads the quest's own lines from its base, today's too
         );
 
         expect(ran.status, ran.stderr).toBe(0);
+
         // SAFETY: sample.ts prints each range as a JSON string, joined by
         // commas, so the bracketed text is an array of strings.
-
         return new Set((JSON.parse(`[${ran.stdout.trim()}]`) as string[]).map((r) => r.split(":")[0]));
       };
 

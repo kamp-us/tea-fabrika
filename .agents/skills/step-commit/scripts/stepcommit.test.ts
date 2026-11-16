@@ -779,8 +779,8 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       step: Owner;
       only: boolean;
     };
-    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
 
+    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
 
     const cases: Case[] = [

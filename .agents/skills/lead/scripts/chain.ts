@@ -155,9 +155,9 @@ const HERE = import.meta.dirname;
 export const STEPS = ["tests", "build", "mutation", "review"] as const;
 
 export type StepName = (typeof STEPS)[number];
+
 // SAFETY: widening STEPS' literal tuple to readonly strings only lets `includes` take any
 // string; the array is only read.
-
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
 
 /** A quest's name, as its state files and its pin folder carry it. */
@@ -167,9 +167,9 @@ const QUEST_NAME = /^[a-z0-9][a-z0-9-]*$/;
 export const QUEST_STEPS = ["tests", "build", "review"] as const;
 
 export type QuestStep = (typeof QUEST_STEPS)[number];
+
 // SAFETY: widening QUEST_STEPS to readonly strings only lets `includes` take any string, and
 // the guard's own check is what narrows `s`.
-
 const isQuestStep = (s: string): s is QuestStep => (QUEST_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits

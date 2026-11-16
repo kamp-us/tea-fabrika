@@ -2474,9 +2474,9 @@ const main = () => {
   const env = loadEnv();
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
+
   // SAFETY: usage() above exits the process unless `step` is one of STEPS and `agent` one of
   // AGENTS, so both casts below hold.
-
   const prepared = prepare(env, {
     quest,
     step: step as StepName,

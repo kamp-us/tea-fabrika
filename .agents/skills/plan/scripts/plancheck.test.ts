@@ -548,8 +548,8 @@ describe("plancheck, today's tooling", () => {
     };
 
     type Wrap = keyof typeof wraps;
-    // SAFETY: `Object.keys` of the literal `wraps` lists exactly its own keys, the Wrap type.
 
+    // SAFETY: `Object.keys` of the literal `wraps` lists exactly its own keys, the Wrap type.
     const wrap = fc.constantFrom(...(Object.keys(wraps) as Wrap[]));
 
     // Any letter case, as a plan writer might type it.

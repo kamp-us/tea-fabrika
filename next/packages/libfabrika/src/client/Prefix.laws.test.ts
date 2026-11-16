@@ -396,8 +396,8 @@ const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
 
 const focused = (w: World) => w.view.workspaces[0]!.focus;
-// SAFETY: every `sent` entry is the `m` of a send to tezgah's pid, and the window writes tezgah only `did` Msgs.
 
+// SAFETY: every `sent` entry is the `m` of a send to tezgah's pid, and the window writes tezgah only `did` Msgs.
 const dids = (sent: World["sent"]) => sent.map((x) => x.m as Did);
 
 /** The gap the frame draws between two parts, and its padding: 0492's 4px divider (plan amendment 7). */

@@ -2115,8 +2115,8 @@ describe("T621 the fixture's git shim, today's tooling", () => {
       cd: (dir: string, to: string) => ({ cwd: join(dir, to), C: [] }),
       symlink: (dir: string, to: string) => ({ cwd: dir, C: [["-C", join(dir, "link", to)]] }),
     };
-    // SAFETY: `Object.keys` of the literal `spellings` lists exactly its own keys.
 
+    // SAFETY: `Object.keys` of the literal `spellings` lists exactly its own keys.
     const spelling = fc.constantFrom(...(Object.keys(spellings) as Array<keyof typeof spellings>));
 
     fc.assert(
