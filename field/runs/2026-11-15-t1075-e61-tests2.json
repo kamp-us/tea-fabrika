@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e61-tests2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:01:11-08:00",
+  "ended": "2026-11-15T22:09:30-08:00",
+  "parent": "2026-11-15-t1075-e61-tests1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests step of slice E61 (ticket 1075, check preferNamespaceImport), in our tooling, for the merge session's ruling that the three settings no-restricted-imports groups in .oxlintrc.json say \"!effect/*\", not \"!effect/**\", so effect/unstable/** stays closed, with a plant per banned module in barrel and subpath form. No config change in this step. Added one law, the describe block \"T753 L15 settings files import only Effect, one subpath deep\" in oxlint-plugins/plants.test.ts: 25 scenario rows planted at the real config paths (settings/Starts.ts, settings/RecordedStart.ts, cloudflare/SettingsRuntime.ts) through one oxlint run of next/apps/fabrika/src/exam/plant.ts. Each contract file refuses Layer, ManagedRuntime and ScopedCache from the barrel and from their own subpath (12 rows, green now), refuses effect/unstable/http and effect/unstable/http/HttpClient (4 rows, red now), and takes the barrel Context and effect/Schema (4 rows, green). SettingsRuntime.ts refuses the same two unstable imports (2 rows, red now) and takes the barrel Layer, effect/ScopedCache and effect/Effect (3 rows, green). Red now, 6 rows: expected false to be true, the unstable import is not refused, because \"!effect/**\" lets every depth through. A dry run of the ruling's fix (\"!effect/**\" to \"!effect/*\" in both groups, undone by copy) turned all 25 rows green, so the build is one config edit. Also added the three core fields tokens, tools and minutes as null to field/runs/2026-11-15-t1075-e61-tests1.json, which the field check refused without them; no value changed. The three hits kept for a new seam (cloudflare/control.ts:9, cloudflare/readers.laws.test.ts:13, cloudflare/SettingsRuntime.ts:8) were not touched. Hits: met 0 in this step, fixed 0; the config hit is left for the build. Tests: oxlint-plugins/plants.test.ts whole, 255 passed and the 6 new red rows, at head 1dd7406 plus this change; pnpm lint green; ratchet exit 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Found on the way: the groups' \"!effect\" negation is matched case-insensitively against any path segment, so an import of evil/effect or @other/pkg/Effect passes \"SettingsRuntime imports only Effect\", and effect/Effect is let through by \"!effect\" alone. Reported as one finding row to the lead, not fixed here. The settings-holder row for effect/Effect cannot catch a dropped subpath negation for that reason; the effect/ScopedCache row does.",
+  "plants": [
+    {
+      "law": "T753 L15 settings files import only Effect, one subpath deep",
+      "plant": "\"Layer\" dropped from the contracts' importNames in .oxlintrc.json: the two barrel Layer rows (Starts.ts, RecordedStart.ts) are not refused",
+      "result": "red"
+    },
+    {
+      "law": "T753 L15 settings files import only Effect, one subpath deep",
+      "plant": "the effect/ScopedCache path entry dropped from the contracts' paths: the two subpath ScopedCache rows are not refused",
+      "result": "red"
+    },
+    {
+      "law": "T753 L15 settings files import only Effect, one subpath deep",
+      "plant": "the \"!effect/**\" negation dropped from SettingsRuntime's group: the allowed effect/ScopedCache row is refused",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

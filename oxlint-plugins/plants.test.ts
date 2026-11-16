@@ -22,7 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
@@ -463,6 +463,69 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
   }
 
   expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
+});
+
+// T753 L15 through ticket 1075 (E61): the settings contracts and the shared settings holder import
+// Effect by namespace from its one-level subpaths (`effect/Context`), and nothing deeper, so
+// `effect/unstable/**` stays closed (`"!effect/*"`, not `"!effect/**"`). A contract still never
+// imports Layer, ManagedRuntime or ScopedCache, from the barrel or from its own subpath (0095).
+// scenario: literal import paths at the real config paths are the rule's inputs; one oxlint run
+// lints every planted file, and each row reads its own line.
+// Plants, run once: drop `"Layer"` from the contracts' `importNames` and the barrel Layer rows are
+// green where they must be refused (red); drop the `effect/ScopedCache` path entry and the subpath
+// ScopedCache rows are red; drop the subpath negation from SettingsRuntime's group and its allowed
+// `effect/ScopedCache` row is red. With the ruling's `"!effect/*"` in all three groups, every row is
+// green.
+describe("T753 L15 settings files import only Effect, one subpath deep", () => {
+  const contracts = [
+    "next/packages/libfabrika/src/settings/Starts.ts",
+    "next/packages/libfabrika/src/settings/RecordedStart.ts",
+  ];
+  const holder = "next/packages/libfabrika/src/cloudflare/SettingsRuntime.ts";
+  type Row = { readonly file: string; readonly text: string; readonly refused: boolean };
+  const contractRows = (file: string): readonly Row[] => [
+    ...["Layer", "ManagedRuntime", "ScopedCache"].flatMap((name) => [
+      { file, text: `import { ${name} } from "effect";`, refused: true },
+      { file, text: `import * as ${name}Module from "effect/${name}";`, refused: true },
+    ]),
+    { file, text: 'import * as HttpClient from "effect/unstable/http/HttpClient";', refused: true },
+    { file, text: 'import { HttpServer } from "effect/unstable/http";', refused: true },
+    { file, text: 'import { Context } from "effect";', refused: false },
+    { file, text: 'import * as Schema from "effect/Schema";', refused: false },
+  ];
+  const holderRows: readonly Row[] = [
+    { file: holder, text: 'import * as HttpClient from "effect/unstable/http/HttpClient";', refused: true },
+    { file: holder, text: 'import { HttpServer } from "effect/unstable/http";', refused: true },
+    // The holder builds the runtime, so Layer and ScopedCache are its to import.
+    { file: holder, text: 'import { Layer } from "effect";', refused: false },
+    { file: holder, text: 'import * as ScopedCache from "effect/ScopedCache";', refused: false },
+    { file: holder, text: 'import * as Effect from "effect/Effect";', refused: false },
+  ];
+  const rows = [...contracts.flatMap(contractRows), ...holderRows];
+  const files = [...contracts, holder];
+  const lineOf = (row: Row) => rows.filter((r) => r.file === row.file).indexOf(row) + 1;
+  let result: Awaited<ReturnType<typeof lintCopies>>;
+
+  beforeAll(async () => {
+    result = await lintCopies(
+      Object.fromEntries(
+        files.map((file) => [
+          file,
+          `${rows
+            .filter((r) => r.file === file)
+            .map((r) => r.text)
+            .join("\n")}\n`,
+        ]),
+      ),
+    );
+  });
+
+  it.each(rows.map((row) => [row.file, row.text, row] as const))(
+    "scenario: in %s, `%s` is refused exactly when it must be",
+    (_file, _text, row) => {
+      expect(result("eslint(no-restricted-imports)", row.file).includes(lineOf(row))).toBe(row.refused);
+    },
+  );
 });
 
 // scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.
