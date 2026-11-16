@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Predicate,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -301,11 +313,7 @@ export const suite = (driver: Driver) =>
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
           expect(replies(s, change)[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
           const first = s.letters.filter(
-            (l) =>
-              l.name === `merger:${change}.${change}` &&
-              typeof l.m === "object" &&
-              l.m !== null &&
-              Reflect.get(l.m, "type") === "land",
+            (l) => l.name === `merger:${change}.${change}` && Predicate.hasProperty(l.m, "type") && l.m.type === "land",
           );
           expect(first).toHaveLength(1);
           expect(first[0]?.m).toMatchObject({ type: "land", change, ref: String(change), reply: "queue:1" });

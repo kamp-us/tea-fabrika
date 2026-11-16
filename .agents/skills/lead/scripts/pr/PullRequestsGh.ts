@@ -4,7 +4,7 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";
-import { type Detail, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
+import { type Detail, Patch, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
 
 /** The most pull requests one `all` read takes; a repo with this many fails it, never cuts it. */
 export const LIMIT = 5000;
@@ -38,6 +38,9 @@ const Viewed = Schema.fromJsonString(
 );
 
 const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
+
+/** One line of the files list as `patches` asks jq to print it. */
+const PatchRow = Schema.fromJsonString(Patch);
 
 /**
  * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
@@ -184,6 +187,27 @@ export const layer = (
         return out.split("\n").filter((path) => path !== "");
       });
 
+      // The same paged list, one JSON line per file. GitHub leaves `patch` out for a file it will not show.
+      const patches = Effect.fn("PullRequestsGh.patches")(function* (number: number) {
+        const out = yield* gh([
+          "api",
+          "--paginate",
+          `repos/${repo}/pulls/${number}/files`,
+          "--jq",
+          ".[] | {path: .filename, patch: (.patch // null)}",
+        ]);
+        return yield* Effect.forEach(
+          out.split("\n").filter((row) => row !== ""),
+          (row) =>
+            Schema.decodeUnknownEffect(PatchRow)(row).pipe(
+              Effect.mapError(
+                () => new PullRequestsError({ reason: "gh api pulls/files answered a shape we do not read" }),
+              ),
+            ),
+          { concurrency: "unbounded" },
+        );
+      });
+
       const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
         const id = (yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"])).trim();
 
@@ -196,6 +220,6 @@ export const layer = (
 
       const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
 
-      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, arm, admin });
+      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
     }),
   );

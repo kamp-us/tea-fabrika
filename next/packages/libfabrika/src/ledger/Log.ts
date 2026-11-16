@@ -140,6 +140,16 @@ export const Entry = Schema.Struct({
 export type Entry = typeof Entry.Type;
 
 /**
+ * Returns the bytes an entry is charged for: the UTF-8 length of the whole encoded entry as
+ * JSON, its identifiers, clocks and body included.
+ *
+ * @stability unstable
+ * @category encoding
+ */
+export const encodedBytes = (entry: Entry): number =>
+  new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(entry))).length;
+
+/**
  * Schema for an entry as its SQLite row holds it: the same fields, with the body as JSON text.
  *
  * @stability unstable
@@ -158,6 +168,8 @@ export const Row = Schema.Struct({ ...Entry.fields, body: Schema.fromJsonString(
  * `seen_ahead` when `seen` is past the log's head, `id_reused` when the stream holds that id with
  * other content, and `too_big` when the row would pass `ROW_BYTES`. `forbidden` is never the
  * referee's own answer: a service above it gives it for a write that is not the writer's to make.
+ * `quota` is not its own answer either: the write policy gives it when the writer's program has
+ * used up its room.
  *
  * @stability unstable
  * @category schemas
@@ -174,6 +186,7 @@ export const Appended = Schema.TaggedUnion({
       "too_big",
       // Not the ledger's own answer: a writer above it refused a write that is not its to make.
       "forbidden",
+      "quota",
     ]),
   },
 });

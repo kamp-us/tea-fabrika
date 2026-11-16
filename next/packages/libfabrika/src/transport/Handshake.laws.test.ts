@@ -23,7 +23,7 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Predicate, Schema } from "effect";
 import { type Handshake, handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -230,9 +230,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         }
 
         if (next._tag === "failed" && prev._tag !== "failed") {
-          expect(m.type === "hello_err" && Reflect.get(Object(m["error"]), "_tag") === "key", `${label} failed`).toBe(
-            true,
-          );
+          expect(m.type === "hello_err" && Predicate.isTagged(m["error"], "key"), `${label} failed`).toBe(true);
         }
 
         // The door's admission, answered to the live `initialize`, admits, and keeps the person it
