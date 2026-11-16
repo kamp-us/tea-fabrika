@@ -1424,7 +1424,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
               const model =
                 checkpoint === null
                   ? timerMachine.init(null, stubCtxThrowingProxy<unknown>())[0]
-                  : Schema.decodeUnknownSync(TimerModel)(checkpoint);
+                  : yield* Schema.decodeUnknownEffect(TimerModel)(checkpoint);
               expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
               expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
             }

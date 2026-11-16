@@ -904,12 +904,13 @@ describe("P11 program contract and p22 refusal", () => {
         (value) =>
           Effect.promise(async () => {
             const { Write } = await import("./Program.ts");
-            const decode = Schema.decodeUnknownSync(Write);
+            const decode = Schema.decodeUnknownResult(Write);
             expect(decode({ _tag: "own", event: { _tag: "polled", changed: false } })).toMatchObject({
-              _tag: "own",
+              _tag: "Success",
+              success: { _tag: "own" },
             });
-            expect(() => decode({ _tag: "caused", event: { _tag: "saved" } })).toThrow();
-            expect(() => decode({ _tag: "caused", parent: value, event: { _tag: "saved" } })).toThrow();
+            expect(Result.isFailure(decode({ _tag: "caused", event: { _tag: "saved" } }))).toBe(true);
+            expect(Result.isFailure(decode({ _tag: "caused", parent: value, event: { _tag: "saved" } }))).toBe(true);
           }),
         { concurrency: 1, discard: true },
       ),

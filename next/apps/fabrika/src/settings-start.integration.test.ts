@@ -147,7 +147,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   processes.push({
                     port,
                     held: loaded.snapshot,
-                    saved: JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot)),
+                    saved: JSON.stringify(yield* Schema.encodeEffect(Snapshot.Snapshot)(loaded.snapshot)),
                   });
                 });
 
@@ -161,7 +161,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   yield* begin(a.env);
                 } else if (processes.length > 0) {
                   const p = processes[a.which % processes.length]!;
-                  const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
+                  const replayed = yield* Schema.decodeUnknownEffect(Snapshot.Snapshot)(JSON.parse(p.saved));
                   expect(replayed.values["instance.port"]).toBe(p.port);
                   // The process's own value never moves, though files changed since it began.
                   expect(p.held.values["instance.port"]).toBe(p.port);
@@ -228,7 +228,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                   env: { [field]: word },
                   version: "0.0.0",
                 });
-                return JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot));
+                return JSON.stringify(yield* Schema.encodeEffect(Snapshot.Snapshot)(loaded.snapshot));
               }),
             ).pipe(Effect.provide(services)),
           );

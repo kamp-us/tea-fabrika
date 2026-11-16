@@ -147,8 +147,8 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const home = yield* childHome([]);
           const first = yield* Scope.make();
           const instance: Instance = yield* Scope.provide(first)(home.boot);
-          yield* Effect.promise(async () => {
-            const started = await instance.project(PROJECT).start(
+          const started = yield* Effect.promise(() =>
+            instance.project(PROJECT).start(
               {
                 _tag: "first",
                 id: "start-starter:1",
@@ -156,8 +156,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 code: { program: "p42/starter", hash: home.hashes.starter },
               },
               home.from,
-            );
-            const starter = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+            ),
+          );
+          const starter = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started))
+            .process;
+          yield* Effect.promise(async () => {
             const window = await client(instance, home.key, "member");
 
             try {
@@ -273,7 +276,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
             ProjectService.use((p) => p.route(agent, "process.send", letter(boot, "agent-inc", { type: "inc" }))),
           );
           expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });
-          const incoming = Schema.decodeUnknownSync(
+          const incoming = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ id: Schema.String, envelope: Schema.Struct({ id: Schema.String }) }),
           )(fixture.delivered.at(-1));
           // The founder removes the agent before the step that the input causes runs.

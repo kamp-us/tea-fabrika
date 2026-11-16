@@ -329,7 +329,7 @@ const projectSecrets = Effect.fnUntraced(function* (
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
     const saved = starts.filter((row) => row._tag === "started");
     expect(saved, "L11: the failing path follows a committed child start").toHaveLength(1);
-    pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(saved[0]?.body).process;
+    pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(saved[0]?.body)).process;
   });
   const remaining = new Set<ChildFailure>(
     path === "descriptor"
@@ -810,7 +810,8 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           ).toEqual([
             {
               descriptor: {
-                id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
+                id: (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(committed[0]?.body))
+                  .process,
                 name: child.name,
                 program: "p42/child",
                 build: CODE.child.hash,

@@ -837,9 +837,9 @@ it.effect.prop(
             );
           }
 
-          const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
-            w.files.get(file) ?? "{}",
-          );
+          const saved = yield* Schema.decodeUnknownEffect(
+            Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+          )(w.files.get(file) ?? "{}");
           const refused = saved.port !== undefined && !Schema.is(Declarations.port.schema)(saved.port);
           const entries: Array<{ readonly level: string; readonly text: string }> = [];
           const logger = Logger.layer([

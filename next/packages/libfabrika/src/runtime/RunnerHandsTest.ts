@@ -855,7 +855,7 @@ const walk = (
           const cmd = { type: "hands", command: Command.cases.git_version.make({}) };
           const body =
             cell.pick % 2 === 0
-              ? { type: "hands_ok", cmd, value: Schema.encodeSync(TaskResult)(cell.other), at: 0 }
+              ? { type: "hands_ok", cmd, value: yield* Schema.encodeEffect(TaskResult)(cell.other), at: 0 }
               : {
                   type: "hands_err",
                   cmd,

@@ -37,6 +37,7 @@ import {
 } from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
@@ -49,7 +50,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -439,11 +440,16 @@ const world = Effect.fnUntraced(function* (
         yield* controls.notify(client, news);
       }),
     audit: (_process: string, message: unknown) =>
-      Effect.sync(() => {
-        const checked = Schema.decodeUnknownSync(Schema.toType(Input))(message);
+      Effect.gen(function* () {
+        const checked = yield* Schema.decodeUnknownEffect(Schema.toType(Input))(message).pipe(
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Input({ cause: Redacted.make(cause) }) }),
+          ),
+        );
         // The approval's answer is deliberately public metadata; the text of a comment is content.
+        // Encoding the value just decoded cannot fail unless the schema is broken, so that is a defect.
         return checked._tag === "approve"
-          ? Schema.encodeSync(Schema.toCodecJson(Input))(checked)
+          ? yield* Effect.orDie(Schema.encodeEffect(Schema.toCodecJson(Input))(checked))
           : { type: checked._tag };
       }),
     inputs: {
@@ -1169,7 +1175,7 @@ describe("T843 sender budget, next/", () => {
         if (Result.isFailure(sent)) {
           // The public completion reports how much the connection holds after a full disk.
           expect(sent.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
-          const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(sent.failure);
+          const failed = yield* Schema.decodeUnknownEffect(Schema.Struct({ held: Schema.Int }))(sent.failure);
           expect(failed.held).toBeLessThanOrEqual(2);
         }
 
@@ -1282,7 +1288,7 @@ describe("T843 sender budget, next/", () => {
 
               if (Result.isFailure(result)) {
                 expect(result.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
-                const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(result.failure);
+                const failed = yield* Schema.decodeUnknownEffect(Schema.Struct({ held: Schema.Int }))(result.failure);
                 expect(failed.held).toBeLessThanOrEqual(2);
               }
 
@@ -3588,7 +3594,7 @@ describe("P10 inputs, retries and signer", () => {
           const until = REFUSED_HOUR + w.settings.rateLimit.window;
           expect(object.gateway_limits).toEqual([{ sender: w.window.fingerprint, until, value: expect.any(String) }]);
           expect(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(object.gateway_limits![0]!.value),
+            yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(object.gateway_limits![0]!.value),
           ).toEqual({
             v: 1,
             build: w.settings.build,

@@ -531,7 +531,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   ).toMatchObject({ _tag: "online" });
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
-    return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
+    return (yield* Schema.decodeUnknownEffect(View)(yield* process(store, (p) => p.open("audit")))).view;
   });
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
   const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {

@@ -84,7 +84,7 @@ describe("shared Worker settings reader, next/", () => {
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               // A byte size is saved as its JSON spelling and read back as a byte count.
-              brainMemory: Schema.decodeUnknownSync(Schema.toCodecJson(Schema.ByteSize))(
+              brainMemory: yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.ByteSize))(
                 current.settings.values["desktop.brain-memory"],
               ),
               brainGrace: current.settings.values["desktop.brain-grace"],
@@ -97,8 +97,10 @@ describe("shared Worker settings reader, next/", () => {
               // P34c: the three quota settings. A byte size inside them is saved as its text and
               // read back with its declaration's schema.
               writes: current.settings.values["limits.writes"],
-              storage: Schema.decodeUnknownSync(Declarations.storage.schema)(current.settings.values["limits.storage"]),
-              recovery: Schema.decodeUnknownSync(Declarations.recovery.schema)(
+              storage: yield* Schema.decodeUnknownEffect(Declarations.storage.schema)(
+                current.settings.values["limits.storage"],
+              ),
+              recovery: yield* Schema.decodeUnknownEffect(Declarations.recovery.schema)(
                 current.settings.values["limits.recovery"],
               ),
             });

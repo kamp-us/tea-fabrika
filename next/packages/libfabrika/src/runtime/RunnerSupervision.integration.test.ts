@@ -888,7 +888,9 @@ describe("P34 runner supervision", () => {
                     );
                     const deadline =
                       path === "after_down"
-                        ? Schema.decodeUnknownSync(Schema.Struct({ until: Schema.Int }))(tripped.at(-1)?.body).until
+                        ? (yield* Schema.decodeUnknownEffect(Schema.Struct({ until: Schema.Int }))(
+                            tripped.at(-1)?.body,
+                          )).until
                         : 100;
                     // Each crash's successor takes the next ID; A was the first.
                     crashes = path === "after_down" ? w.controls.steps.length : 1;

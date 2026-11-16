@@ -561,7 +561,7 @@ describe("L13: notices name their process", () => {
             Effect.gen(function* () {
               const w = yield* world();
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-              const [, [pid]] = Schema.decodeUnknownSync(
+              const [, [pid]] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
               )(yield* placings(w));
               const client = yield* admit(w);
@@ -588,7 +588,7 @@ describe("L13: notices name their process", () => {
                 yield* settle;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
-                const { result } = Schema.decodeUnknownSync(
+                const { result } = yield* Schema.decodeUnknownEffect(
                   Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
                 )(opened);
                 // Ticket 866 saves wake 0 and delivers timer {at: 0}. That is a requested wake,
@@ -629,7 +629,7 @@ describe("L13: notices name their process", () => {
               Effect.gen(function* () {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-                const [, [pid]] = Schema.decodeUnknownSync(
+                const [, [pid]] = yield* Schema.decodeUnknownEffect(
                   Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
                 )(yield* placings(w));
                 const client = yield* admit(w);
@@ -689,7 +689,7 @@ describe("L13: notices name their process", () => {
                 expect(views.length).toBe(theirs.length);
 
                 for (const [i, h] of views.entries()) {
-                  const news = Schema.decodeUnknownSync(Notice)(h.news);
+                  const news = yield* Schema.decodeUnknownEffect(Notice)(h.news);
                   expect(news.params.pid, "a notice names its process").toBe(pid);
                   expect(without(news.params), "the update reached the client unchanged").toEqual(
                     without(Object(theirs[i]!.news)),

@@ -716,10 +716,13 @@ const worldOn = async (
       ),
       Layer.succeed(WatcherManager, {
         publish: (client: string, update: WatcherUpdate) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             const updates = published.get(client) ?? [];
+            // A view the runner published that is not a Model is a bug under test, so it stays a defect.
             const decoded =
-              update.type === "whole" ? { ...update, view: Schema.decodeUnknownSync(Model)(update.view) } : update;
+              update.type === "whole"
+                ? { ...update, view: yield* Effect.orDie(Schema.decodeUnknownEffect(Model)(update.view)) }
+                : update;
             updates.push(structuredClone(decoded));
             published.set(client, updates);
           }),
@@ -1475,16 +1478,16 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                   });
 
                   if (mode === "tagged") {
-                    const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ error: DiskError }) }))(
-                      answers[0]!.body,
-                    );
+                    const saved = yield* Schema.decodeUnknownEffect(
+                      Schema.Struct({ m: Schema.Struct({ error: DiskError }) }),
+                    )(answers[0]!.body);
                     expect(saved.m.error).toBeInstanceOf(DiskError);
                   }
 
                   if (mode === "class") {
-                    const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ value: WorkValue }) }))(
-                      answers[0]!.body,
-                    );
+                    const saved = yield* Schema.decodeUnknownEffect(
+                      Schema.Struct({ m: Schema.Struct({ value: WorkValue }) }),
+                    )(answers[0]!.body);
                     expect(saved.m.value).toEqual(new WorkValue({ n: value }));
                   }
 

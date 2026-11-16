@@ -238,7 +238,9 @@ const healthRows = (home: string) =>
           );
 
           for (const row of rows) {
-            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row));
+            found.push(
+              yield* Schema.decodeUnknownEffect(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row),
+            );
           }
         }
       }

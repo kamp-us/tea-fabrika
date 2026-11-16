@@ -300,7 +300,7 @@ const replyCase = (
         const runner = yield* ProgramRunner;
         const store = yield* ProcessStore;
         const ledger = yield* Ledger;
-        const incoming = Schema.decodeUnknownSync(Incoming)({
+        const incoming = yield* Schema.decodeUnknownEffect(Incoming)({
           id: letter,
           envelope: {
             id: inputId,

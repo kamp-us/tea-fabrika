@@ -294,7 +294,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
           const signer: Identity = {
             fingerprint: key.fingerprint,
             raw: key.raw,
-            line: Schema.decodeUnknownSync(KeyLine)(key.line),
+            line: yield* Schema.decodeUnknownEffect(KeyLine)(key.line),
             found: "reused",
             sign: (bytes) => Effect.sync(() => key.sign(bytes)),
           };
