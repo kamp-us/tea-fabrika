@@ -24,7 +24,20 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Function,
+  Layer,
+  Option,
+  Predicate,
+  Random,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
@@ -74,6 +87,18 @@ const decodeFrame = Schema.decodeUnknownOption(Call);
 
 /** One sent frame as the whole JSON value the page wrote, every key kept. */
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
+/** The fields of a frame's params these laws read, each as loose as the page wrote it. */
+const Params = Schema.Struct({
+  pid: Schema.optionalKey(Schema.Unknown),
+  stream: Schema.optionalKey(Schema.Unknown),
+  signed: Schema.optionalKey(Schema.Unknown),
+  tab: Schema.optionalKey(Schema.Unknown),
+});
+
+/** A frame's params, decoded once: a value that is not an object, or lacks a field, reads it as undefined. */
+const paramsIn = (params: unknown): typeof Params.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Params)(params), () => ({}));
 
 /** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
 const asksHello = Schema.is(
@@ -1084,7 +1109,8 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           if (thrown !== null) {
             const failures = rows.filter((r) => r.record._tag === "failure" && r.record.op === "connect");
             expect(failures.length, "the throw left no failure row").toBeGreaterThan(0);
-            expect(Schema.is(ErrorClass)(Reflect.get(failures.at(-1)!.record, "error"))).toBe(true);
+            const failure = failures.at(-1)!.record;
+            expect(failure._tag === "failure" && Schema.is(ErrorClass)(failure.error)).toBe(true);
             expect(
               rows.find((r) => r.record._tag === "connect" && r.record.dial === thrown)?.record,
               "the throw did not close its dial with 1006",
@@ -1225,8 +1251,8 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         yield* door.tick(0);
         yield* Scope.close(scope, Exit.void);
         const hello = door.sent.flatMap((t) => Option.toArray(decodeFrame(t))).find((f) => f.method === "initialize");
-        const signed = String(Reflect.get(Object(hello?.params), "signed") ?? "");
-        const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
+        const signed = String(paramsIn(hello?.params).signed ?? "");
+        const tab = String(paramsIn(hello?.params).tab ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
         expect(
           door.sent.some((t) => forms(s.body).some((form) => t.includes(form))),
@@ -1242,7 +1268,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
             own.map((span) => ({
               name: span.name,
               attributes: [...span.attributes],
-              events: Reflect.get(span, "events") ?? [],
+              events: (Predicate.hasProperty(span, "events") ? span.events : undefined) ?? [],
             })),
           ),
           urls: JSON.stringify([...urls, ...urls.map((u) => decodeURIComponent(u))]),
@@ -1342,21 +1368,21 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }
               : { method: "process.monitor", params: { ref: call["ref"], pid: call["pid"] } };
           expect(
-            door.sent.map((t) => decodeJson(t)).filter((f) => Reflect.get(Object(f), "id") === w.id),
+            door.sent.map((t) => decodeJson(t)).filter((f) => Predicate.hasProperty(f, "id") && f.id === w.id),
             `the frame of write ${w.id}`,
           ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
         }
 
         expect(
-          waits.map((w) => Reflect.get(w.call, "stream")),
+          waits.map((w) => (w.call._tag === "wait" ? w.call.stream : undefined)),
           "the wait is on the dial's own tab's inbox",
         ).toContain(`client:${tab}/inbox`);
         const monitored = frames.findIndex((f) => f.method === "process.monitor");
         const opened = frames.findIndex((f) => f.method === "view.open");
-        expect(Reflect.get(Object(frames[monitored]?.params), "pid"), "the monitor names the read's pid").toBe(pid);
+        expect(paramsIn(frames[monitored]?.params).pid, "the monitor names the read's pid").toBe(pid);
         expect(opened, "the open went out").toBeGreaterThan(-1);
         expect(monitored, "the monitor goes before the open").toBeLessThan(opened);
-        expect(Reflect.get(Object(frames[opened]?.params), "pid")).toBe(pid);
+        expect(paramsIn(frames[opened]?.params).pid).toBe(pid);
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 12 } },
@@ -1399,7 +1425,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
         const streams = door.sent
           .flatMap((text) => Option.toArray(decodeFrame(text)))
           .filter((frame) => frame.method === "ledger.read")
-          .map((frame) => String(Reflect.get(Object(frame.params), "stream")));
+          .map((frame) => String(paramsIn(frame.params).stream));
         expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);
         expect(streams, "L10: a window with the tezgah option reads none of the given tiles").not.toContain(
           "processes/checklist:1",
