@@ -6,7 +6,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Layer, Result as R, Schema, Stream } from "effect";
+import { Effect, Layer, Result as R, Schema, Stream, String as Str, pipe } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -220,7 +220,7 @@ export const layer = Layer.effect(
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
           Stream.mapError((cause) => new TasksError({ reason: "storage", cause })),
-          Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
+          Stream.mapEffect((name) => read(pipe(name, Str.slice(PREFIX.length)))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),
     };

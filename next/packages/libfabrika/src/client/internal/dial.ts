@@ -5,7 +5,7 @@
  *
  * @internal
  */
-import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
+import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream, String as Str, pipe } from "effect";
 import { Socket } from "effect/socket";
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
@@ -115,7 +115,7 @@ export const dialer =
         };
         const key = yield* identity;
         yield* dialWait(tries);
-        const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
+        const url = `${pipe(options.origin, Str.replace(/^http/, "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
         const connection = yield* Socket.fromWebSocket(acquire(options.sockets, url));
         const pull = yield* Socket.readerString(connection).pipe(
           Effect.catch((error) =>

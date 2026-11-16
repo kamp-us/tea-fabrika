@@ -20,6 +20,8 @@ import {
   Scope,
   Stream,
   SubscriptionRef,
+  String as Str,
+  pipe,
 } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
@@ -85,7 +87,7 @@ const sample = (pid: number) =>
         return yield* new ControlError({ reason: "sample" });
       }
 
-      return Number(text.trim()) * 1024;
+      return Number(Str.trim(text)) * 1024;
     }),
   ).pipe(Effect.mapError((cause) => new ControlError({ reason: "sample", cause })));
 
@@ -99,7 +101,11 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
   return {
     checksums: {
-      sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
+      sha256: Uint8Array.from(
+        Option.getOrElse(pipe(sha256, Str.match(/../g)), (): Array<string> => []).map((byte) =>
+          Number.parseInt(byte, 16),
+        ),
+      ).buffer,
     },
   };
 });

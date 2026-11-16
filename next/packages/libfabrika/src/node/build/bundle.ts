@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import { Cause, Effect, Exit, Path, String as Str, pipe } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
   rolldown,
@@ -120,7 +120,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
         // Rolldown has already embedded file names in the message before calling onLog.
         for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
           if (file !== undefined) {
-            message = message.replaceAll(file, relative(file));
+            message = pipe(message, Str.replaceAll(file, relative(file)));
           }
         }
 

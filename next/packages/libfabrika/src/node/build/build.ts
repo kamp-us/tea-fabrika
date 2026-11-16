@@ -9,7 +9,7 @@
  * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Context, Effect, Exit, FileSystem, Option, Path, Schema, String as Str, pipe } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -97,7 +97,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
 
-  if (selected.startsWith(".") || path.isAbsolute(selected)) {
+  if (pipe(selected, Str.startsWith(".")) || path.isAbsolute(selected)) {
     return Option.none<string>();
   }
 
@@ -124,9 +124,9 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 });
 
 const contentType = (file: string): AssetType | undefined =>
-  file.endsWith(".js")
+  pipe(file, Str.endsWith(".js"))
     ? "text/javascript; charset=utf-8"
-    : file.endsWith(".css")
+    : pipe(file, Str.endsWith(".css"))
       ? "text/css; charset=utf-8"
       : undefined;
 
@@ -164,7 +164,7 @@ const stylesheets = (
 ): Plugin => ({
   name: "fabrika-css",
   load(id) {
-    if (!id.endsWith(".css")) {
+    if (!pipe(id, Str.endsWith(".css"))) {
       return;
     }
 
@@ -203,7 +203,7 @@ const embed = (tables: Tables): Plugin => {
         return `\0${BUILT_MODULE}`;
       }
 
-      if (id.startsWith(TEXT)) {
+      if (pipe(id, Str.startsWith(TEXT))) {
         return id;
       }
     },
@@ -212,8 +212,8 @@ const embed = (tables: Tables): Plugin => {
         return code;
       }
 
-      if (id.startsWith(TEXT)) {
-        return { code: texts[Number(id.slice(TEXT.length))] ?? "", moduleType: "text" };
+      if (pipe(id, Str.startsWith(TEXT))) {
+        return { code: texts[Number(pipe(id, Str.slice(TEXT.length)))] ?? "", moduleType: "text" };
       }
     },
   };
@@ -234,18 +234,18 @@ const browserOnly: Plugin = {
     }
   },
   transform(code, id) {
-    if (id.includes("/effect/dist/") && code.includes(NODE_PROBE)) {
-      return { code: code.replace(NODE_PROBE, "undefined") };
+    if (pipe(id, Str.includes("/effect/dist/")) && pipe(code, Str.includes(NODE_PROBE))) {
+      return { code: pipe(code, Str.replace(NODE_PROBE, "undefined")) };
     }
   },
 };
 
 /** Text that cannot end the element it sits in. */
-const inert = (text: string): string => text.replaceAll("</", "<\\/");
+const inert = (text: string): string => pipe(text, Str.replaceAll("</", "<\\/"));
 
 /** Text that cannot leave the attribute it sits in. */
 const attribute = (text: string): string =>
-  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  pipe(text, Str.replaceAll("&", "&amp;"), Str.replaceAll('"', "&quot;"), Str.replaceAll("<", "&lt;"));
 
 /** The tab's page: every stylesheet embedded in order, and the script at `/window.js`, which `build`
  *  names for the rows the tab records. No other request: the icon is empty. */
@@ -432,7 +432,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     transform(code, id) {
       inputs?.set(id, code);
 
-      if (!id.endsWith(".tsx")) {
+      if (!pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -538,7 +538,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   const compiler: Plugin = {
     name: "fabrika-compiler",
     transform(code, id) {
-      if (!id.endsWith(".tsx")) {
+      if (!pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -562,12 +562,12 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   );
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
-  const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);
+  const generated = (name: string) => path.join(from, `window.${pipe(name, Str.replace("/", "."))}.generated.ts`);
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
-      if (id.startsWith(WINDOW)) {
-        return generated(id.slice(WINDOW.length));
+      if (pipe(id, Str.startsWith(WINDOW))) {
+        return generated(pipe(id, Str.slice(WINDOW.length)));
       }
     },
     load(id) {

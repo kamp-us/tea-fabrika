@@ -1,4 +1,4 @@
-import { Clock, Effect, Option, Stream } from "effect";
+import { Clock, Effect, Option, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process";
 import { Result } from "../../../tasks/Task.ts";
@@ -29,7 +29,7 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 /** stdout as UTF-8 with one trailing newline dropped, or "" when it is not UTF-8. */
 const version = (chunks: ReadonlyArray<Uint8Array>) =>
   Effect.try(() => utf8.decode(joined(chunks))).pipe(
-    Effect.map((text) => (text.endsWith("\n") ? text.slice(0, -1) : text)),
+    Effect.map((text) => (pipe(text, Str.endsWith("\n")) ? pipe(text, Str.slice(0, -1)) : text)),
     Effect.orElseSucceed(() => ""),
   );
 

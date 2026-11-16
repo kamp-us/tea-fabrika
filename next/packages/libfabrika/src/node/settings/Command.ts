@@ -6,7 +6,7 @@
  *
  * @stability unstable
  */
-import { Config, Console, Effect, Path } from "effect";
+import { Config, Console, Effect, Path, String as Str } from "effect";
 import { Command, Flag } from "effect/cli";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -80,6 +80,6 @@ export const make = (options: { readonly version: string }) =>
           yield* Console.error(warning);
         }
 
-        yield* Console.log(report.trimEnd());
+        yield* Console.log(Str.trimEnd(report));
       }),
   ).pipe(Command.withDescription("Print the settings this fabrika reads, with their origins and defaults."));

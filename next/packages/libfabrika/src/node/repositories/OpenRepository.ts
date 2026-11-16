@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { DateTime, Effect, Redacted, Schema } from "effect";
+import { DateTime, Effect, Redacted, Schema, String as Str, pipe } from "effect";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -46,18 +46,19 @@ const documentFailed = (cause: Files.SettingsError) => {
     ...Declarations.all.declarations.flatMap((d) => [`--${d.path}`, d.env]),
   ];
   const label = labels.find((name) =>
-    [":", ", line ", " could not be read."].some((suffix) => cause.message.startsWith(`${name}${suffix}`)),
+    [":", ", line ", " could not be read."].some((suffix) => pipe(cause.message, Str.startsWith(`${name}${suffix}`))),
   );
-  const line = label === undefined ? undefined : /^, line ([0-9]+):/.exec(cause.message.slice(label.length))?.[1];
+  const line =
+    label === undefined ? undefined : /^, line ([0-9]+):/.exec(pipe(cause.message, Str.slice(label.length)))?.[1];
   const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
-  const detail = label === undefined ? "" : cause.message.slice(location.length + 2);
+  const detail = label === undefined ? "" : pipe(cause.message, Str.slice(location.length + 2));
   const keys = Declarations.all.declarations.flatMap((d) =>
     d.segments.map((_, n) => d.segments.slice(0, n + 1).join(".")),
   );
   const key =
     cause.reason === "version"
       ? Declarations.version.path
-      : keys.find((name) => detail.startsWith(`${name} =`) || detail.startsWith(`${name} is `));
+      : keys.find((name) => pipe(detail, Str.startsWith(`${name} =`)) || pipe(detail, Str.startsWith(`${name} is `)));
   const explanation = {
     syntax: "Invalid TOML.",
     unknown: "Unknown setting. Run fabrika settings to list the allowed keys.",
@@ -154,7 +155,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const snapshot: Open.CheckedSelection = {
     ...prepared.snapshot,
     repository,
-    label: `Repository ${prepared.snapshot.key.slice(0, 12)}`,
+    label: `Repository ${pipe(prepared.snapshot.key, Str.slice(0, 12))}`,
     settings: prepared.settings,
     person: options.actor,
   };

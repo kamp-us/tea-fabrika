@@ -10,7 +10,7 @@
  *
  * @stability unstable
  */
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, String as Str, pipe, Option } from "effect";
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
 
@@ -23,17 +23,21 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 // lightningcss names the bad token in its message; the build's errors name what is broken.
 const refusal = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
+  const known = pipe(
+    message,
+    Str.match(/(?:unsupported @import condition|stylesheet [^:]*)$/),
+    Option.flatMapNullishOr((found) => found[0]),
+  );
 
-  if (known !== undefined) {
-    return new BuildError({ reason: "bundle", message: known, cause: error });
+  if (Option.isSome(known)) {
+    return new BuildError({ reason: "bundle", message: known.value, cause: error });
   }
 
-  if (message.includes("BadString")) {
+  if (pipe(message, Str.includes("BadString"))) {
     return new BuildError({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
   }
 
-  if (message.includes("BadUrl")) {
+  if (pipe(message, Str.includes("BadUrl"))) {
     return new BuildError({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
   }
 
@@ -45,8 +49,11 @@ const refusal = (error: unknown) => {
 const offsets = (text: string) => {
   const starts = [0];
 
-  for (const m of text.matchAll(/\r\n|[\n\r\f]/g)) {
-    starts.push(m.index + m[0].length);
+  // Effect's matchAll types a match's index as optional; a matchAll match always has one.
+  for (const m of pipe(text, Str.matchAll(/\r\n|[\n\r\f]/g))) {
+    if (m.index !== undefined) {
+      starts.push(m.index + m[0].length);
+    }
   }
 
   return ({ line, column }: { readonly line: number; readonly column: number }) =>
@@ -105,7 +112,7 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
 
   for (const start of imports) {
     const end = Math.min(text.length, ...starts.filter((next) => next > start));
-    const bare = yield* Effect.try({ try: () => bareLayer(text.slice(start, end)), catch: refusal });
+    const bare = yield* Effect.try({ try: () => bareLayer(pipe(text, Str.slice(start, end))), catch: refusal });
 
     if (bare) {
       return yield* new BuildError({ reason: "bundle", message: unsupported });
