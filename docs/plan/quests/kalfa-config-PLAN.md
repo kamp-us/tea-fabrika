@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0556, 0557, 0113, 0069; body 04214636e811
+Approved by the lead agent, builds 0585, 0556, 0557, 0113, 0069; body 317fe648c7e8
 Plancheck-Version: 3
 
 # Plan: fabrika's settings engine becomes @kalfa/config, named by its app, so kalfa tooling reads .kalfa and KALFA_* (ticket 1076)
