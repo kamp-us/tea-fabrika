@@ -10,6 +10,7 @@ import { dirname, join, matchesGlob, relative, resolve } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
 
 const ROOT = join(import.meta.dirname, "..", "..");
+
 const PLUGIN = "@effect/language-service";
 
 export type Options = Readonly<Record<string, unknown>>;
@@ -84,12 +85,16 @@ export const merge = (base: Options, child: Options): Options => ({
 export const blockOf = (path: string): Block => {
   const config = readConfig(path);
   const dir = dirname(path);
+
   const parent: Block =
     typeof config.extends === "string" ? blockOf(resolve(dir, config.extends)) : { options: {}, overrides: [] };
+
   const plugin = list(record(config.compilerOptions).plugins)
     .map(record)
     .find((entry) => entry.name === PLUGIN);
+
   const { overrides, ...options } = record(plugin);
+
   const own = list(overrides)
     .map(record)
     .map((override) => ({
@@ -104,6 +109,7 @@ export const blockOf = (path: string): Block => {
 
 export const matches = (dir: string, globs: ReadonlyArray<string>, file: string): boolean => {
   const path = relative(dir, file).replaceAll("\\", "/");
+
   return globs.some((glob) => matchesGlob(path, glob));
 };
 
