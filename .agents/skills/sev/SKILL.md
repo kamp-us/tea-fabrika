@@ -40,14 +40,16 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 - Only the owner raises to sev0. When it looks like one, tell him in one line that a sev0 may fit,
   and why. Do not argue the level while it is on; that goes in the write-up after (PagerDuty says
   the same: https://docs.pagerduty.com/ops-guides/incident-response-guide/severity-levels).
-- **It looks like a sev1, but no issue is open** (for example main went red between two 3-hour
-  runs): start the full run by hand, `gh workflow run scheduled.yaml --ref main`, so the check opens
+- **It looks like a sev1, but no issue is open** (for example main went red between two full
+  runs; they start on a push to main and hourly, [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)):
+  start the full run by hand, `gh workflow run scheduled.yaml --ref main`, so the check opens
   its issue itself. Never open, close or label a `ci-scheduled` issue by hand.
 
 ## sev1
 
-- **What counts:** an open `ci-scheduled` issue. "Scheduled CI is red on main" is the 3-hour run's
-  ([0534](../../../.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md)); "CI
+- **What counts:** an open `ci-scheduled` issue. "Scheduled CI is red on main" is the full run's
+  ([0534](../../../.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md), its
+  start moved by [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)); "CI
   speed: a stage is over its goal" is the daily check's (0541). `status` lists them.
 - **What the lead does:** the response only. Find each cause the same day and ticket it. Put each
   fix first on the merge line, ahead of other changes. The queue no longer runs the full suite
