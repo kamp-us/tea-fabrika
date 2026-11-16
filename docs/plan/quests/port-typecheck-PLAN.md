@@ -37,10 +37,15 @@ https://github.com/kamp-us/tea-fabrika/pull/1419 (merged as `5c1e6b0`, after the
 So this plans against 1419's merged script, its six laws in `scripts/typecheck.integration.test.ts`,
 and its `FABRIKA_TYPECHECK_COMPILER` lines in `scripts/caps.test.ts`. Every line cited is read there.
 
-Builds [0113](../../../.decisions/0113-no-shell-or-python-scripts.md) (port behind services, each
-with a real layer and a test layer) under
-[0410](../../../.decisions/0410-the-machine-caps-live-in-code.md) (the caps are code) and
-[0012](../../../.decisions/0012-twelve-agents-at-once.md) (one typecheck at a time). Reads
+Builds three decisions: [0113](../../../.decisions/0113-no-shell-or-python-scripts.md) (port
+behind services, each with a real layer and a test layer),
+[0410](../../../.decisions/0410-the-machine-caps-live-in-code.md) with its 2026-11-15 amendment
+(the caps are code, and the typecheck lock may be a pid lock at the same single path, merged in
+https://github.com/kamp-us/tea-fabrika/pull/1509), and
+[0033](../../../.decisions/0033-agents-code-follows-next-rules.md) (lead tooling follows `next/`'s
+rules). `records.ts resolve 0113 0410 0033` (2026-11-16): all three accepted; 0033 is amended by
+0070 and 0113. It holds [0012](../../../.decisions/0012-twelve-agents-at-once.md) (one typecheck at
+a time). Reads
 [0040](../../../.decisions/0040-existing-tools-before-hand-written.md) with
 [0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
 [0054](../../../.decisions/0054-read-upstream-before-patching-it.md),
@@ -57,19 +62,11 @@ with a real layer and a test layer) under
 
 ## Doubts, at the top
 
-1. **The lock stops being the OS's.** Node has no `flock` (checked: `fs.flock` is undefined on Node
-   26.13.0). The plan picks a pid lock file, broken under a second lock when its holder is dead, as
-   Mercurial does. 0410's text says "one fixed OS lock" that "releases it when its last holder
-   exits, a crash included". The pick keeps the second half (a dead holder's lock is taken at once)
-   but not the first. That is a new design call and goes to the owner (open question 1). Lean: the
-   pid lock, 75%. The doubt is experiment 71, which ruled a pid file out for builders and took
-   `flock` through a perl one-liner instead.
-2. **A worktree whose `node_modules` is a broken link can no longer repair itself.** Today's script
-   is shell and Python and needs no `node_modules`. The port imports Effect, which Node loads from
-   the worktree's own `node_modules`, so a broken link fails before any line of the port runs. The
-   law for it stays green only because it runs the main checkout's script in another folder (open
-   question 2). Lean: say so in one line and keep the working-link repair, 70%.
-3. **A wrapper stopped with SIGTERM now ends its compile.** Today the compiler keeps the lock and
+The two questions this plan once held open are answered (see "Answered questions"): the lock is a
+pid lock at the same single path, by 0410's amendment, and a worktree whose `node_modules` is a
+broken link gets one line and exit 1.
+
+1. **A wrapper stopped with SIGTERM now ends its compile.** Today the compiler keeps the lock and
    runs on alone when the Python wrapper is stopped. Effect's scoped child is stopped and waited for
    when the program is interrupted. No law covers SIGTERM to the holder. Call: take the Effect
    behavior, 75%, since an orphaned 8-core compile is the very thing the lock exists to stop.
@@ -80,7 +77,7 @@ with a real layer and a test layer) under
   `FABRIKA_TYPECHECK_LOCK`), made atomically with `link()` from a temp file that already holds
   `<pid>\n`. A holder is alive while `kill(pid, 0)` does not say ESRCH and the process started before
   the label was written. A dead holder's lock is broken only under a second lock,
-  `<lock>.break`, as Mercurial's `lock.py` does. While a command runs, its pid is written in
+  `<lock>.break`, as Mercurial's `lock.py` does, which 0410's 2026-11-15 amendment allows. While a command runs, its pid is written in
   `<lock>.child`, so a compiler that outlives a killed wrapper still holds the lock. Source:
   Mercurial 7.2.4, `mercurial/lock.py` (`_trylock`, `_testlock`) and `posix.py` (`testpid`), read
   from the PyPI source tarball on 2026-11-16.
@@ -383,8 +380,8 @@ Notes:
   shows that the path reaches `hold`, which also answers
   `field/findings/2026-11-14-typecheck-lock-path-has-no-law.json` (I3 already reads the file at the
   named path). A process-level form would take the machine's real lock and wait behind a real
-  typecheck mid-law, which is ticket 1008's flake. Call, 80%; the doubt is whether `loosening.sh`
-  reads it as a narrowing, and the lead's hand check decides that.
+  typecheck mid-law, which is ticket 1008's flake. The lead checked this change to E1 ("R4 gives
+  every shell one fixed lock file") by hand: it is not a loosening.
 - **0113's "laws run on the test layer without a real process":** N1 to N4 do. E2 to E6, I1 to I6,
   N5 and N6 are the small real set. N5 and N6 start real processes but only short `node`, `pgrep`
   and `ps` runs; if the tests step finds they need the `.integration.` name under
@@ -445,7 +442,7 @@ Notes:
 | `.agents/skills/build/SKILL.md:57, 62`, `tests/SKILL.md:130`, `mutation/SKILL.md:192` | `typecheck.ts`; line 62 says it takes the one lock |
 | `.agents/skills/lead/scripts/skillscheck.sh:19`, `skillscheck.test.ts:415` | the pinned caps sentence names `typecheck.ts` |
 | `docs/direction/skills-hold-only-judgment.md:30` | names `typecheck.ts` and "one fixed lock" instead of "one fixed OS lock" |
-| `.decisions/0410-the-machine-caps-live-in-code.md:24` | not edited by the build; its OS-lock line waits on open question 1, and an amendment is the owner's, with `/adr` |
+| `.decisions/0410-the-machine-caps-live-in-code.md:24` | not edited: its 2026-11-15 amendment (pull request 1509) already allows the pid lock at the same single path |
 | `.decisions/0113-no-shell-or-python-scripts.md:28, 80` | not edited: a count on a date |
 | `experiments/272`, `282`, `283`, `296` | not edited: records of what was true then |
 | `field/runs/2026-11-15-typecheck-lock-linux-fix1.json`, `field/findings/2026-11-14-typecheck-lock-path-has-no-law.json` | not edited: rows are only added |
@@ -534,8 +531,8 @@ Estimate: 6 steps, $42
 - `field/runs/` rows for each step, the plan's included.
 - No new word for `.glossary/TERMS.md`: lock, stale lock, break a lock and holder are the industry's
   words (Mercurial's, above).
-- When open question 1 is answered, 0410's lock line gets its amendment with `/adr`, in its own docs
-  pull request.
+- 0410's lock line already has its amendment (2026-11-15, pull request 1509); this pull request
+  writes no decision.
 
 ## What this cannot tell us
 
@@ -549,24 +546,31 @@ Estimate: 6 steps, $42
   a real linked worktree would.
 - The old-branch overlap is reasoned from the code, not measured.
 
+## Answered questions
+
+1. **May the typecheck lock stop being an OS lock?** Yes. 0410's amendment of 2026-11-15, merged in
+   https://github.com/kamp-us/tea-fabrika/pull/1509, records the lead's ruling: "one fixed OS lock"
+   may become a pid lock at the same single path, following Mercurial's repository lock
+   (`mercurial/lock.py`, read at 7.2.4). The lock is made atomically and names its holder's pid, and
+   a dead holder's lock is broken only while a `.break` lock is held. 0410's rule holds as written,
+   one type check at a time across shells, held in code; only the mechanism changes, and a branch
+   still on the old lock does not wait on the new one until it merges main. This plan builds that
+   lock, with the running command's pid in `.child`. What it gives up against `flock`, accepted with
+   the ruling: release is the next taker's, after a `kill(pid, 0)` and a start-time read, not the
+   kernel's; a pid reused within 2 s of its label is not told apart; a command's own children that
+   outlive both it and the wrapper are not covered (on the laptop the compiler wait still sees a
+   `tsgo`); and old-branch `flock` runs do not see it. Experiment 71's perl `flock` road is not
+   taken.
+2. **A worktree whose `node_modules` is a broken link:** the lead's answer keeps today's form for a
+   `node_modules` the script cannot use: one line, exit 1. Today the script removes the link and
+   installs offline, but the port cannot load Effect there. `scripts/typecheck.ts` loads the program
+   with one dynamic import, marked as an edge, and on a failed load prints
+   `typecheck: cannot load the typecheck's modules from node_modules; run pnpm install --offline --frozen-lockfile`
+   and exits 1. The working-link repair stays automatic. No node-only first stage is built.
+
 ## Open questions
 
-1. **May the typecheck lock stop being an OS lock?** 0410 says one fixed OS lock released by the
-   kernel; the port's pick is Mercurial's pid lock, broken under `.break`, with the running command's
-   pid in `.child`. What is lost against `flock`: release is no longer the kernel's but the next
-   taker's, after a `kill(pid, 0)` and a start-time read; a pid reused within 2 s of its label is
-   not told apart; a command's own children that outlive both it and the wrapper are not covered
-   (on the laptop the compiler wait still sees a `tsgo`); and old-branch `flock` runs do not see it.
-   The other road is experiment 71's: `flock` taken by a perl one-liner that `exec`s
-   `node scripts/typecheck.ts`, so the kernel lock and old branches both hold, at the cost of perl,
-   a second language in a string, and the waiter's line written in perl. Lean: the pid lock, 75%,
-   and 0410's line amended to "one fixed lock whose dead holder's claim is broken at once".
-2. **A worktree whose `node_modules` is a broken link:** today the script removes the link and
-   installs offline; the port cannot load Effect there. Lean: `scripts/typecheck.ts` loads the
-   program with one dynamic import, marked as an edge, and on a failed load prints
-   `typecheck: cannot load the typecheck's modules from node_modules; run pnpm install --offline --frozen-lockfile`
-   and exits 1; the working-link repair stays automatic, 70%. The other way: a node-only first stage
-   that repairs before loading Effect, which needs the lock in two languages' worth of code.
+None.
 
 ## Findings
 
