@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e43-review1",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1473",
+  "started": "2026-11-15T21:16:20-08:00",
+  "ended": "2026-11-15T21:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of 2d0fe20, judgment slice E43 of the Effect-check sweep (missingPipeableSignature), in next/ and our tooling: merge-ready, no finding row. The build wraps 16 exported libfabrika functions in Function.dual (Layout split, focus, remove, rects, neighbor; Fold shut, lengths, drawn, fold; Keys.route; WindowMachine.lastCursor; Access.admitted; TaskAccess owns and select; Rebac.recheck; Trace.partName). Each body is unchanged apart from indentation, each arity equals the old fixed argument count, and no function had an optional argument except rects, whose dual decides by a predicate on the first argument (a string tile id or an object with parts is a layout; a size has neither), so rects(layout, size), rects(layout, size, options) and Layout.neighbor's own rects(layout, size) stay data-first. Fold.shut's recursive call passes two arguments, so it stays data-first. No caller changed and none passes these functions as callbacks. No disable or @effect-diagnostics comment, no lock line, no tsconfig change, nothing in PR 1366's 63 files, loosening.sh 0 hits, and the branch merges clean with origin/main d3a444edf. The counts add up: tests 154 exam (72+53+11+11+4+2+1) and 151 product (86+37+11+10+4+3), build 135 left (86+11+4+10+3+21). My recount of libfabrika's own project at this head finds 58 hits in the slice's libfabrika folders, the plan's 74 less the 16 fixed. Every commit on the branch, not only the build commit, carries a Co-authored-by trailer for Claude added by the commit script; noted, not fixed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Ran on Node 26.13.0 at 2d0fe20, one file at a time: tezgah/Layout.laws (4), tezgah/Fold.laws (2), client/Keys.laws (6), client/Tezgah.laws (10), client/WindowMachine.laws (51), gateway/TaskAccess (2), permissions/Rebac (4), access/Access (36), access/AccessMachine.laws (8), client/HandsMachine.laws (3), tuval window/Layout.laws (3), telemetry/Records.integration (22), all green; one pnpm typecheck, green. A scratch script compared data-first and piped forms of rects (tile and container, with and without gap), split, neighbor, fold, shut and lengths: equal in each. Plants by reading: a rects predicate that is always false makes Layout.laws' rects(layout, size, {gap}) return a function, red; a plain arity of 2 would keep every data-first call green but misread a piped rects(size, options), which no caller and no law uses, so the piped form has no law. The build row lists the left hits by class only. The 31 product hits left in the slice's libfabrika folders at this head, all judged honestly classed: Id.ts:124, access/AccessFold.ts:45, ci/Ci.ts:64, client/Keys.ts:112, 134, 144, client/WindowMachine.ts:2057, client/internal/dial.ts:86, desktop/BrainServiceManaged.ts:252, gateway/RateLimiterSql.ts:108, gateway/Tasks.ts:55, node/build/compiler.ts:68, 274, node/dev/dev.fixture.ts:18, node/dev/local-dev.ts:143, node/launchd/BrainControlLaunchd.ts:360, node/launchd/BrainServiceLaunchd.ts:24, permissions/internal/evaluate.ts:30, proof.ts:40, relationsTable.ts:26, 71, telemetry/Records.ts:355, telemetry/internal/measurements.ts:42, 56, 100, 140, 174, 187, tezgah/Workspace.ts:213, transport/Hello.ts:30, transport/internal/binary.ts:33 (paths under next/packages/libfabrika/src/). Not run: any .visual. test, the full --changed run.",
+  "step": "review"
+}
