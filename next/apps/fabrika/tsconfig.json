@@ -37,21 +37,21 @@
               }
             }
           },
-          // These folders: instanceOfSchema (E10).
-          {
-            "include": ["src/*.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "instanceOfSchema": "error"
-              }
-            }
-          },
           // These folders: catchToOrElseSucceed (E9).
           {
             "include": ["e2e/**/*.ts", "src/exam/**/*.ts"],
             "options": {
               "diagnosticSeverity": {
                 "catchToOrElseSucceed": "error"
+              }
+            }
+          },
+          // These folders: instanceOfSchema (E10).
+          {
+            "include": ["src/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "instanceOfSchema": "error"
               }
             }
           },

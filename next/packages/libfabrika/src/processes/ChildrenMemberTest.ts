@@ -117,11 +117,11 @@ const gateway = (inputs: ReadonlyMap<string, Input>) =>
         const input = parent === null ? undefined : inputs.get(parent);
 
         if (input === undefined || input.process !== process) {
-          return Effect.succeed(Option.none());
+          return Effect.succeedNone;
         }
 
         return input.state === "live"
-          ? Effect.succeed(Option.some(input.sender))
+          ? Effect.succeedSome(input.sender)
           : Effect.fail(new SendersError({ reason: input.state }));
       }),
   });

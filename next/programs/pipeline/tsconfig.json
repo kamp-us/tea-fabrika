@@ -8,7 +8,8 @@
       // The globs read from this folder. One entry per set of folders; its comment names its checks.
       "overrides": [
         // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5),
-        // schemaClassMissingBrand (E6), unnecessaryArrowBlock (E8).
+        // schemaClassMissingBrand (E6), unnecessaryArrowBlock (E8), preferSucceedSomeOrNone
+        // (E12).
         {
           "include": ["**/*.ts"],
           "options": {
@@ -16,7 +17,8 @@
               "schemaNumber": "error",
               "preferTypedSchemaDecoder": "error",
               "schemaClassMissingBrand": "error",
-              "unnecessaryArrowBlock": "error"
+              "unnecessaryArrowBlock": "error",
+              "preferSucceedSomeOrNone": "error"
             }
           }
         }

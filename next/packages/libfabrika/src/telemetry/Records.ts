@@ -182,7 +182,7 @@ const walk = Effect.fnUntraced(function* (
     return yield* Effect.flatMap(ask(calls(chain, at)), (answer) =>
       Lookup.match(answer, {
         found: ({ content }) => Effect.succeed(Option.fromNullOr(content)),
-        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeed(Option.none())),
+        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeedNone),
       }),
     );
   });

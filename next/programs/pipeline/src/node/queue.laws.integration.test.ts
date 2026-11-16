@@ -198,7 +198,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants, fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws pin `StartGrant`, so the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         // T1041: mail.unread's largest value, so no law here meets a full inbox.
         ProgramMailLedger.layer({

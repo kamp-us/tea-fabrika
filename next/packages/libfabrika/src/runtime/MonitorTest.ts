@@ -357,7 +357,7 @@ const host = Effect.fnUntraced(function* (
     MonitorsLedger.layer({ fabrika: FABRIKA }).pipe(
       Layer.provide(RelationsMemory.layer(ROWS)),
       // No reader input here carries a member's sender: each watch is checked against the reader's own member.
-      Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+      Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
     ),
   ).pipe(
     Layer.provideMerge(

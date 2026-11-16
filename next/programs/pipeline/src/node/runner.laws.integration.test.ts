@@ -40,7 +40,7 @@ import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { FileSystem, Path } from "effect";
 import type { Redacted } from "effect";
-import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -119,7 +119,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws grant no start, and the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),

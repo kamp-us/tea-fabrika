@@ -71,6 +71,15 @@
               }
             }
           },
+          // These folders: preferSucceedSomeOrNone (E12).
+          {
+            "include": ["src/processes/**/*.ts", "src/runtime/**/*.ts", "src/telemetry/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "preferSucceedSomeOrNone": "error"
+              }
+            }
+          },
           // These folders: catchToOrElseSucceed (E9).
           {
             "include": ["src/node/**/*.ts", "src/transport/**/*.ts"],
