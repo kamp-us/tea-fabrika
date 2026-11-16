@@ -36,33 +36,28 @@ auto-merge, approve, close, or mark ready. End the body with:
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
-**Fixes.** Three ways, and only these three (owner rulings):
+**Fixes.** Use whatever tool is fastest and correct (owner ruling, 2026-11-16): the Edit tool, the
+checker's quick fix through the client on this branch, a lint autofix through `pnpm format`, or a
+script or codemod you write. What stays:
 
-1. The Effect checker's own quick fix, through its language server, with the client on this
-   branch. It applies the server's own edit for one hit at a time, exactly as sent:
+- **A script or codemod lives in your scratchpad, never in the repo** (0113: no new shell or Python
+  script enters it), and is never committed.
+- **The PR says what changed and how:** per check, how many hits each tool fixed, and the files.
+  For the quick-fix client, its `CHANGE <file>:<line>: <title>` lines are that list:
 
-   ```bash
-   git fetch -q origin fabrikalfa/twin-tools && git show FETCH_HEAD:checkerfix.mjs > "$SCRATCH/checkerfix.mjs"
-   # from the package folder whose tsconfig turns the check on for these files:
-   node "$SCRATCH/checkerfix.mjs" <check> . <file>... | tee -a "$SCRATCH/checkerfix.log"
-   ```
+  ```bash
+  git fetch -q origin fabrikalfa/twin-tools && git show FETCH_HEAD:checkerfix.mjs > "$SCRATCH/checkerfix.mjs"
+  # from the package folder whose tsconfig turns the check on (write the lock first):
+  node "$SCRATCH/checkerfix.mjs" <check> . <file>... | tee -a "$SCRATCH/checkerfix.log"
+  ```
 
-   `$SCRATCH` is your scratchpad folder; the client never enters the repo. The check must already
-   be at `error` for those files, so write the lock first. Each `CHANGE <file>:<line>: <title>`
-   line it prints is one change: the PR lists every one of them, by file and hit.
-   **The dropped-comment check is required:** the fix can drop a comment inside a block it
-   rewrites. After every run, read `git diff` for every removed comment line (an
-   `oxlint-disable-next-line` above all) and put each back where it belongs, by hand.
-2. An editor-style edit with the Edit tool, one hit at a time, making exactly the change the
-   check's message names. The PR lists these separately as hand edits, with their count.
+- **Read your whole diff before you commit.** The checker's quick fix can drop a comment inside a
+  block it rewrites, and a script can hit lines it should not: put back every lost comment line (an
+  `oxlint-disable-next-line` above all) and undo every change that is not a fix of your check.
+- Laws and lint pass, and the review reads the whole diff.
 
-3. A lint rule's safe autofix, applied by `pnpm format`, as E1 did (pull request 1426), only when
-   the rule has its laws and plants in the same pull request and the review reads the whole
-   diff. A new rule written for this is the tests step's work, with its laws first.
-
-Then `pnpm format`. Anything else that edits files stays banned: no find-and-replace
-script, no other tool run over the tree. If the right fix is not clear, or it would change
-behavior a law should hold, do not fix that hit: list it in RESULT and in the PR.
+Then `pnpm format`. If the right fix is not clear, or it would change behavior a law should hold,
+do not fix that hit: list it in RESULT and in the PR.
 
 **Never:** a disable or `@effect-diagnostics` comment on wrong code, a list entry that lets broken
 code pass, a loosened law, a `warning` level, `oxlint-tsgolint` (refused; do not work around it),
