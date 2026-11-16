@@ -57,8 +57,13 @@ const rejecting = <A>(failure: unknown): A =>
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
 const fake = <A>(value: object): A => value as A;
 
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
 /** Every client the shared callback serves, built on a rejecting platform object. */
-const clients = (failure: unknown): Record<string, Record<string, (...args: Array<never>) => unknown>> => ({
+const clients = (failure: unknown): Record<string, Record<string, Member>> => ({
   project: ProjectClient.make(rejecting(failure)),
   process: ProcessClient.make(rejecting(failure)),
   gateway: GatewayClient.make(rejecting(failure)),
@@ -76,6 +81,14 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
 // the fetcher fails typed with the rejection as its cause. Plant: `unreachable(error.cause)`.
 const throughStub = (client: string, method: string) =>
   client === "process" || (client === "gateway" && method !== "fetch");
+
+/** Runs one client member: a call is given `request`, and an Effect member runs as it is. */
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
+  Effect.isEffect(member)
+    ? member
+    : typeof member === "function"
+      ? Reflect.apply(member, undefined, [request])
+      : Effect.die(`no client member: ${String(member)}`);
 
 /** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
 const kept = (client: string, method: string, cause: unknown) => {
@@ -107,18 +120,16 @@ describe("T695, the platform clients keep what the platform rejected with", () =
       Effect.gen(function* () {
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
-          expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
-
+          expect(
+            typeof method === "function" || Effect.isEffect(method),
+            `${call.client}.${call.method} is a call or an Effect`,
+          ).toBe(true);
           // A real Request, so a client that hands `fetch` to a typed stub has one to read.
-          const error = yield* Effect.flip(
-            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
-              new Request("http://127.0.0.1:8787/client/a/b"),
-            ),
-          );
-
+          const error = yield* Effect.flip(run(method, new Request("http://127.0.0.1:8787/client/a/b")));
           expect(error).toBeInstanceOf(LedgerError);
-          expect(error.reason).toBe("unreachable");
-          expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
+          const lost = error instanceof LedgerError ? error : undefined;
+          expect(lost?.reason).toBe("unreachable");
+          expect(kept(call.client, call.method, lost?.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
             failure,
           );
         }

@@ -35,7 +35,12 @@ const rejecting = <A>(fault: unknown, own: object = {}) =>
           },
   }) as A;
 
-const clients = (fault: Error) => ({
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
+const clients = (fault: Error): Record<string, Record<string, Member>> => ({
   Project: ProjectClient.make(rejecting(fault)),
   Process: ProcessClient.make(rejecting(fault)),
   Gateway: GatewayClient.make(rejecting(fault)),
@@ -46,6 +51,14 @@ const clients = (fault: Error) => ({
 const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, service]) =>
   Object.keys(service).map((method) => `${client}.${method}`),
 );
+
+/** Runs one client member: a call is given `request`, and a member that is an Effect runs as it is. */
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
+  Effect.isEffect(member)
+    ? member
+    : typeof member === "function"
+      ? Reflect.apply(member, undefined, [request])
+      : Effect.die(`no client member: ${String(member)}`);
 
 it.effect.prop(
   "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
@@ -58,15 +71,10 @@ it.effect.prop(
     Effect.gen(function* () {
       const [client = "", method = ""] = Str.split(call, ".");
       const kind = faults.find((fault) => fault.name === name)!;
-
-      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
-        clients(kind.make(text)),
-        client,
-      );
-
+      const member = clients(kind.make(text))[client]?.[method];
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
+      const error = yield* Effect.flip(run(member, new Request("http://127.0.0.1:8787/client/a/b")));
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);

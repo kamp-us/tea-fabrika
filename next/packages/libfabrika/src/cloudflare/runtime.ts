@@ -844,7 +844,7 @@ const projectLedger = (
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
   ).pipe(Layer.provideMerge(ProjectQuotas.project(sql, `brain:${name}`, input)), Layer.provide(bell));
-  const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
+  const starts = SettingsStartsLedger.fromLedger.pipe(Layer.provide(ledgerLayer));
   return { sql, turn, write, ledgerLayer, starts };
 };
 
@@ -2268,9 +2268,15 @@ const processLogic = Effect.fnUntraced(function* (
   const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
-  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage, accounting }), Mailbox.layer).pipe(
-    Layer.provideMerge(base),
-  );
+  // ProcessStore takes `sync` as a call, so each runtime and its tests can hand it their own.
+  const all = Layer.mergeAll(
+    ProcessStore.layer(sql, {
+      process: saved.id,
+      storage: { put: storage.put, sync: () => storage.sync, get: storage.get },
+      accounting,
+    }),
+    Mailbox.layer,
+  ).pipe(Layer.provideMerge(base));
   const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
   const store = Context.get(services, ProcessStore),
     sink = Context.get(services, SpanSink);
@@ -2377,7 +2383,7 @@ const processLogic = Effect.fnUntraced(function* (
       // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>
         (at === null
-          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
+          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm)))
           : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(1, at)))))
         ).pipe(Effect.orDie),
     }),
