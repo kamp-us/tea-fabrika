@@ -3,6 +3,9 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 
@@ -27,7 +30,7 @@ if (files.length === 0) {
   process.exit(2);
 }
 
-try {
+const lintCss = async (): Promise<void> => {
   // `code` avoids glob expansion; the empty ignore file prevents .stylelintignore taking effect.
   const config = await stylelint.resolveConfig(join(ROOT, files[0] ?? ""), { configFile });
 
@@ -37,7 +40,7 @@ try {
 
   const counts = new Map<string, { fires: number; known: Set<string> }>();
 
-  for (const rule of Object.keys(config.rules ?? {})) {
+  for (const rule of Rec.keys(config.rules ?? {})) {
     if (rule.startsWith("fabrika/")) {
       counts.set(rule, { fires: 0, known: new Set() });
     }
@@ -116,7 +119,13 @@ try {
 
   console.log(`stylelint: ${files.length} files, ${blocks} blocking`);
   process.exitCode = blocks === 0 ? 0 : 1;
-} catch (error) {
-  console.error(`stylelint did not finish in ${relative(ROOT, configFile)}: ${String(error)}`);
+};
+
+const finished = await Effect.runPromise(
+  Effect.result(Effect.tryPromise({ try: lintCss, catch: (error) => String(error) })),
+);
+
+if (Result.isFailure(finished)) {
+  console.error(`stylelint did not finish in ${relative(ROOT, configFile)}: ${finished.failure}`);
   process.exitCode = 2;
 }

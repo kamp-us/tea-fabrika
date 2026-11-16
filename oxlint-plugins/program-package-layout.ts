@@ -3,6 +3,8 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -66,7 +68,7 @@ const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
     : Array.isArray(x)
       ? x.flatMap((target) => conditionPaths(target, path))
       : map(x)
-        ? Object.entries(x).flatMap(([condition, target]) =>
+        ? Rec.toEntries(x).flatMap(([condition, target]) =>
             condition === "types" ? [] : conditionPaths(target, [...path, condition]),
           )
         : [];
@@ -78,7 +80,7 @@ const targetStrings = (x: unknown): string[] =>
     : Array.isArray(x)
       ? x.flatMap(targetStrings)
       : map(x)
-        ? Object.entries(x).flatMap(([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
+        ? Rec.toEntries(x).flatMap(([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
 // The platform's own import names, as decision 0042 lists them
@@ -112,7 +114,7 @@ type Names = {
 const aliasTargets = (names: Names, name: string): string[] =>
   !name.startsWith("#")
     ? []
-    : Object.entries(names.aliases).flatMap(([key, target]) => {
+    : Rec.toEntries(names.aliases).flatMap(([key, target]) => {
         if (key === name) {
           return targetStrings(target);
         }
@@ -273,14 +275,14 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const at = relative(root, file);
-    let text: string;
+    const read = Result.try(() => readFileSync(file, "utf8"));
 
-    try {
-      text = readFileSync(file, "utf8");
-    } catch {
+    if (Result.isFailure(read)) {
       unjudged.push(`'${at}' cannot be read`);
       return;
     }
+
+    const text = read.success;
 
     const parsed = parseSync(file, text);
 
@@ -512,17 +514,17 @@ export const programPackageLayout: CreateRule = {
     }
 
     const root = matched[1];
-    let manifest: unknown;
+    const read = Result.try((): unknown => JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
 
-    try {
-      manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-    } catch {
+    if (Result.isFailure(read)) {
       return {
         Program(node) {
           context.report({ node, message: "Cannot read the program package.json." });
         },
       };
     }
+
+    const manifest = read.success;
 
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every
@@ -535,14 +537,14 @@ export const programPackageLayout: CreateRule = {
         ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap((field) => {
           const listed = map(manifest) ? manifest[field] : undefined;
 
-          return map(listed) ? Object.keys(listed) : [];
+          return map(listed) ? Rec.keys(listed) : [];
         }),
       ),
     };
-    const keys = map(raw) ? Object.keys(raw) : [];
+    const keys = map(raw) ? Rec.keys(raw) : [];
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
-      map(raw) && Object.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
+      map(raw) && Rec.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per
     // subpath the package's own exports still offer there.
@@ -629,7 +631,7 @@ export const programPackageLayout: CreateRule = {
     }
 
     // './window' is judged for Worker code like every other subpath.
-    const subpaths = Object.keys(exports).filter((key) => key.startsWith("./"));
+    const subpaths = Rec.keys(exports).filter((key) => key.startsWith("./"));
     const windowTargets = "./window" in exports ? resolveKey("./window") : [];
     const real = (paths: readonly (string | undefined)[]) =>
       paths.flatMap((path) => (path === undefined || declaration(path) ? [] : [path]));

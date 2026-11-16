@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).

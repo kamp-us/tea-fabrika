@@ -2,7 +2,8 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Schema, type Scope, Record as Rec } from "effect";
+import { Duration, Effect, FileSystem, Layer, Schema, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";

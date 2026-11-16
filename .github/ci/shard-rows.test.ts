@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";

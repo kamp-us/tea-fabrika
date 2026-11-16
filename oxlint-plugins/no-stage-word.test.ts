@@ -1,5 +1,5 @@
 import type { Context } from "@oxlint/plugins";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

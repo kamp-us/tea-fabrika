@@ -2,7 +2,8 @@
 // `verdict` on fixed clocks; the read laws write a made-up BOXES folder in a temp folder and set
 // Effect's test clock: no real quest, box or process is read or touched.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope, Record as Rec } from "effect";
+import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

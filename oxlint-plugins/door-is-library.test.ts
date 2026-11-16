@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 

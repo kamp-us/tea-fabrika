@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's M1: changes' classify step and the test jobs' time
 // tables are the steps but the stop steps that get the token.
 import { map, type Rule, steps, TOKEN } from "./shared.ts";

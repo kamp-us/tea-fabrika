@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect, it } from "vitest";
 

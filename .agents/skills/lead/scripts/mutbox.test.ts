@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream, Record as Rec } from "effect";
+import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";

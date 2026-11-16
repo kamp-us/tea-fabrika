@@ -10,6 +10,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -45,7 +47,7 @@ const read = (file: string): Manifest => {
 
   const deps = FIELDS.flatMap((field) => {
     const map = manifest[field];
-    return isMap(map) ? Object.keys(map) : [];
+    return isMap(map) ? Rec.keys(map) : [];
   });
   return { name: typeof manifest["name"] === "string" ? manifest["name"] : null, deps };
 };
@@ -111,13 +113,9 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
+const ran = Result.try(run);
 
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
+const result = Result.isFailure(ran) ? fail(`could not read: ${String(ran.failure)}`) : ran.success;
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";

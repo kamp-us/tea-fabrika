@@ -1,6 +1,6 @@
 // L12, next/. The lint rule owns contract shape; behavior lives in the desktop laws.
 import { join } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";

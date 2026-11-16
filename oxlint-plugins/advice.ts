@@ -4,7 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {

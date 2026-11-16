@@ -14,6 +14,8 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -72,12 +74,12 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
     const written = manifest({ name: `@p16/${name}`, type: "module", exports });
     writeFileSync(join(scratch, pkg, "package.json"), typeof written === "string" ? written : JSON.stringify(written));
 
-    for (const [path, text] of Object.entries(sources)) {
+    for (const [path, text] of Rec.toEntries(sources)) {
       mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
       writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
     }
 
-    for (const [path, target] of Object.entries(links)) {
+    for (const [path, target] of Rec.toEntries(links)) {
       const at = join(scratch, pkg, path);
       mkdirSync(dirname(at), { recursive: true });
       symlinkSync(relative(dirname(at), join(scratch, pkg, target)), at);
@@ -85,7 +87,7 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
 
     // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
     // outside it is outside the rule too.
-    return Object.keys(sources)
+    return Rec.keys(sources)
       .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"))
       .map((path) => `${pkg}/${path}`);
   });
@@ -119,17 +121,17 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
       const found: Finding[] = [];
 
       for (const file of files) {
-        try {
+        const ran = Result.try(() =>
           tester.run(CODE, recording(found, file), {
             valid: [{ code: readFileSync(join(scratch, file), "utf8"), filename: join(scratch, file) }],
             invalid: [],
-          });
-        } catch (error) {
-          // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
-          // parse, so that file has no finding here either; the law's oxlint run checks the same.
-          if (!(error instanceof Error && error.message === "Parsing failed")) {
-            throw error;
-          }
+          }),
+        );
+
+        // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
+        // parse, so that file has no finding here either; the law's oxlint run checks the same.
+        if (Result.isFailure(ran) && !(ran.failure instanceof Error && ran.failure.message === "Parsing failed")) {
+          throw ran.failure;
         }
       }
 
@@ -292,7 +294,7 @@ describe("fabrika/program-package-layout", () => {
             exports = {
               ".": {
                 types: { import: "./src/types.ts", default: declaration },
-                ...Object.fromEntries(
+                ...Rec.fromEntries(
                   conditions.map((condition) => [
                     condition,
                     {
@@ -720,7 +722,7 @@ describe("fabrika/program-package-layout", () => {
         fc.constantFrom(...links),
         fc.constantFrom(...entries),
         fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
-        fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
+        fc.constantFrom(...(Rec.keys(manifests) as (keyof typeof manifests)[])),
         (
           name,
           [workerKey, windowKey, helperKey],
@@ -804,7 +806,7 @@ describe("fabrika/program-package-layout", () => {
               "array condition": [workerKey, { [workerKey]: { [condition]: [worker] } }],
               "array dot": [".", { ".": { [condition]: [worker], [beside]: "./src/program.ts" } }],
               "fixed pattern": [`${workerKey}/*`, { [`${workerKey}/*`]: worker }],
-              "null pattern": ["./*", { "./*": "./src/*.ts", ...Object.fromEntries(shut.map((key) => [key, null])) }],
+              "null pattern": ["./*", { "./*": "./src/*.ts", ...Rec.fromEntries(shut.map((key) => [key, null])) }],
               window: ["./window", { "./window": worker }],
               "window tsx": ["./window", { "./window": worker }],
             },
@@ -864,7 +866,7 @@ describe("fabrika/program-package-layout", () => {
                   manifest: (fields) => ({
                     ...manifests[manifest](fields),
                     ...declared,
-                    ...(Object.keys(aliases).length === 0 ? {} : { imports: aliases }),
+                    ...(Rec.keys(aliases).length === 0 ? {} : { imports: aliases }),
                   }),
                   links: symlinks,
                 },

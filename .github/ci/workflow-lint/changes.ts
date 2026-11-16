@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
 import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";

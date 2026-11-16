@@ -9,6 +9,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -29,7 +31,7 @@ const isMap = (value: unknown): value is Record<string, unknown> =>
 /** One line per name in `map` whose version does not pass. */
 const refused = (file: string, field: string, map: unknown): readonly string[] =>
   isMap(map)
-    ? Object.entries(map)
+    ? Rec.toEntries(map)
         .filter(([, version]) => !passes(version))
         .map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`)
     : [];
@@ -59,7 +61,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
   return [
     ...refused(file, "catalog", catalog),
     ...(isMap(catalogs)
-      ? Object.entries(catalogs).flatMap(([name, map]) => refused(file, `catalogs.${name}`, map))
+      ? Rec.toEntries(catalogs).flatMap(([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
   ];
@@ -74,7 +76,7 @@ const root = process.argv[2] ?? join(import.meta.dirname, "..");
 
 const tracked = spawnSync(
   "git",
-  ["ls-files", "-z", "--", ...Object.keys(READERS).flatMap((name) => [name, `**/${name}`])],
+  ["ls-files", "-z", "--", ...Rec.keys(READERS).flatMap((name) => [name, `**/${name}`])],
   {
     cwd: root,
     encoding: "utf8",
@@ -101,13 +103,14 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
 const results = files.map(attempt);
 const lines = results.flatMap((result) => result.lines);

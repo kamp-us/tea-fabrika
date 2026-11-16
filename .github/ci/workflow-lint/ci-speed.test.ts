@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintCiSpeed } from "./ci-speed.ts";

@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // `fabrika/no-wall-clock` through the repo's real config: next/'s product code reads the time through
 // Effect's `Clock` or `DateTime`, never the platform's clock. Each planted file sits at a generated
 // path, so the config's globs are under test with the rule.

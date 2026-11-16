@@ -1,5 +1,7 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */
@@ -41,7 +43,7 @@ export const isStop = (step: Record<string, unknown>) =>
   compact(step["if"]) === STOP.if &&
   JSON.stringify(step["env"]) === JSON.stringify(STOP.env) &&
   step["run"] === STOP.run &&
-  Object.keys(step).length === Object.keys(STOP).length;
+  Rec.keys(step).length === Rec.keys(STOP).length;
 
 // The CLI's `gh run cancel`, and the REST API's `cancel` and `force-cancel` calls on a run.
 const CANCEL = /\brun\s+cancel\b|\/(?:force-)?cancel\b/;
@@ -114,14 +116,14 @@ export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
 export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
-const parsed = (text: string | undefined): unknown[] => {
-  try {
-    const value: unknown = JSON.parse(text ?? "");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-};
+const parsed = (text: string | undefined): unknown[] =>
+  Result.getOrElse(
+    Result.try((): unknown[] => {
+      const value: unknown = JSON.parse(text ?? "");
+      return Array.isArray(value) ? value : [];
+    }),
+    (): unknown[] => [],
+  );
 
 /**
  * next's matrix, `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:

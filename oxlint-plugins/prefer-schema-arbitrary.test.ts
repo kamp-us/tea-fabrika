@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";

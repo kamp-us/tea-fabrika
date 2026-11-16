@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";

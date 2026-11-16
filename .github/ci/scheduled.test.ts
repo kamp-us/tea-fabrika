@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";

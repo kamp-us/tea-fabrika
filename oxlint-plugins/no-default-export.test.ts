@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.

@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
 //   - `fabrika/modules`, hand-written, since no existing rule says these four: no module re-exports

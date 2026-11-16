@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
 import {

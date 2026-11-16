@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "workspace-reach.ts");

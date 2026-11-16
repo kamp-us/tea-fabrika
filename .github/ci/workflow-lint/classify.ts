@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
 import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";

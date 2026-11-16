@@ -4,7 +4,7 @@
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
 import { join } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";

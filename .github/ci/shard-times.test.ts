@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";

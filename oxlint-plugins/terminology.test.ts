@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 // Ticket 688, next/. Decision 0091: a folder of libfabrika is a module and its rank is a layer, so
 // the old words do not come back as names in next/. oxlint's own `eslint/id-denylist` holds it
 // (0040), from `.oxlintrc.json`'s `next/**` override, and this suite plants each edge case of the

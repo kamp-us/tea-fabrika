@@ -7,7 +7,8 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema, Record as Rec } from "effect";
+import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };

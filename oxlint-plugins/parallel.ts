@@ -16,8 +16,9 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream, Record as Rec } from "effect";
+import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 
 /** A piece of a part's output, and the stream it went to. */
 type Piece = { readonly to: "stdout" | "stderr"; readonly bytes: Uint8Array };

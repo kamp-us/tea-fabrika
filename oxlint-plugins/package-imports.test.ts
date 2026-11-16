@@ -5,7 +5,7 @@
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
 import { join } from "node:path";
-import { Record as Rec } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";

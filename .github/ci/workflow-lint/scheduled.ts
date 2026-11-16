@@ -1,4 +1,6 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -94,15 +96,13 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(source.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
   const errors: string[] = [];
@@ -115,7 +115,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC1. A schedule and a hand start, nothing else: no pull request, queue or push runs the whole
   // suite (0534's binding constraint). The cron line is the interval, a setting.
   const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+  require(JSON.stringify(Rec.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
     crons.length === 1 &&
     typeof map(crons[0])["cron"] === "string", "SC1: it runs on one schedule and by hand, on no other event");
   // SC2. One run at a time, and a running one is never cut short.
@@ -136,7 +136,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       issues: "write",
     }), "SC3: the report job's token reads actions and contents and writes issues, nothing more");
 
-  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== VERDICT)) {
+  for (const [name, job] of Rec.toEntries(jobs).filter(([name]) => name !== VERDICT)) {
     require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which cannot cancel a run`);
   }
 
@@ -144,7 +144,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // cancels the run (a canceled run ends `cancelled`, never `failure`), no other job runs on
   // `always()`, every job has a time limit, and no checkout keeps the token in .git/config. The test
   // job's limit is an expression by its leg's suite, and SC13 pins it exactly.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     const limit = map(job)["timeout-minutes"];
     require((typeof limit === "number" && limit > 0 && limit < 360) ||
       (name === TESTS_JOB && typeof limit === "string"), `SC4: ${name} sets timeout-minutes`);
@@ -171,7 +171,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // and its failure shows: it is the job that fails for a red run. It and the time tables are the
   // steps that get the token.
   const report = map(jobs[VERDICT]),
-    others = Object.keys(jobs).filter((name) => name !== VERDICT);
+    others = Rec.keys(jobs).filter((name) => name !== VERDICT);
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
@@ -183,14 +183,14 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // from its name's shard, so no job sets a `name` of its own.
   const env = {
     ...REPORT_ENV,
-    ...Object.fromEntries(
-      (Object.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
+    ...Rec.fromEntries(
+      (Rec.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
         `LIMIT_${suite.toUpperCase()}`,
         limitOf(jobs, suite),
       ]),
     ),
   };
-  require(Object.values(jobs).every(
+  require(Rec.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
   require(judged.length === 1 &&
@@ -200,7 +200,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     judged[0]?.["continue-on-error"] ===
       undefined, `SC5: the report runs ${REPORT} once, with the needs, the results, the token and each suite's time limit, and its failure shows`);
   // The legs' time tables read their own job's steps with it too (TT1 pins their env).
-  require(Object.values(jobs).every((job) =>
+  require(Rec.values(jobs).every((job) =>
     steps(map(job)).every(
       (s) => s === judged[0] || s["run"] === TIME_TABLE || !/github\.token|secrets\./.test(JSON.stringify(s)),
     ),
@@ -213,12 +213,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // more at once than it has legs, and stops its other legs once one failed, which leaves the run's
   // conclusion `failure`.
   require(JSON.stringify(others) === JSON.stringify([TESTS_JOB]) &&
-    Object.entries(jobs).every(
+    Rec.toEntries(jobs).every(
       ([name, job]) => name === TESTS_JOB || !("strategy" in map(job)),
     ), `SC6: every test leg is in one matrix, the ${TESTS_JOB} job, so its first red leg stops all the others`);
   let machines = 0;
 
-  for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
+  for (const [name, job] of Rec.toEntries(jobs).map(([name, job]) => [name, map(job)] as const)) {
     const strategy = map(job["strategy"]);
     const most = strategy["max-parallel"];
 
@@ -301,7 +301,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
   for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
-    const found = Object.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
+    const found = Rec.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
