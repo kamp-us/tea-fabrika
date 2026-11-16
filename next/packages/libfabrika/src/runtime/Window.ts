@@ -5,6 +5,7 @@
  */
 import type { Machine } from "@demlik/tea/effect";
 import type { Schema } from "effect";
+import { Function } from "effect";
 import type { Program } from "./Program.ts";
 
 // --- A program's window -------------------------------------------------------------------------
@@ -107,10 +108,21 @@ export type WindowRegistration<P extends AnyProgram, View = unknown, T extends A
  * @stability unstable
  * @category constructors
  */
-export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = never>(
-  _program: P,
-  registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
-): WindowRegistration<P, View, T> => registration;
+export const defineWindow: {
+  <P extends AnyProgram, View, T extends AnyTile = never>(
+    registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
+  ): (program: P) => WindowRegistration<P, View, T>;
+  <P extends AnyProgram, View, T extends AnyTile = never>(
+    program: P,
+    registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
+  ): WindowRegistration<P, View, T>;
+} = Function.dual(
+  2,
+  <P extends AnyProgram, View, T extends AnyTile = never>(
+    _program: P,
+    registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
+  ): WindowRegistration<P, View, T> => registration,
+);
 
 /**
  * Returns the Msg a key command sends: the input named after the program's dot, with no fields.

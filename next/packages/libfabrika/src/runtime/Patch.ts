@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import { Result, Schema, Function } from "effect";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -90,11 +90,14 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
  * @stability unstable
  * @category combinators
  */
-export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
+export const diff: {
+  (after: unknown): (before: unknown) => ReadonlyArray<Patch>;
+  (before: unknown, after: unknown): ReadonlyArray<Patch>;
+} = Function.dual(2, (before: unknown, after: unknown): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
   return out;
-};
+});
 
 const Operation = Schema.Union([
   Schema.Struct({ op: Schema.Literal("add"), path: Schema.String, value: Schema.Json }),
@@ -119,7 +122,10 @@ const invalid = () => Result.fail("bad_patch" as const);
  * @stability unstable
  * @category combinators
  */
-export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {
+export const apply: {
+  (ops: unknown): (before: unknown) => Result.Result<Schema.Json, "bad_patch">;
+  (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch">;
+} = Function.dual(2, (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {
   const decoded = decodeOps(ops);
   const json = decodeJson(before);
 
@@ -199,4 +205,4 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
   }
 
   return Result.succeed(root);
-};
+});

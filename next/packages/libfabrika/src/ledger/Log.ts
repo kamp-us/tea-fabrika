@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema, Function } from "effect";
 import { ParentText, Rev } from "../Rev.ts";
 
 export {
@@ -92,6 +92,11 @@ export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | 
   return { ...from, sentAt, traceId: span.traceId };
 });
 
+const lineForBody = <A extends { readonly _tag: string } & Schema.JsonObject>(
+  from: Omit<Line, "_tag" | "body">,
+  { _tag, ...body }: A,
+) => ({ ...from, _tag, body });
+
 /**
  * Builds a line from a value a schema made: the value's `_tag` becomes the line's case, and its
  * other fields the body.
@@ -99,10 +104,15 @@ export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | 
  * @stability unstable
  * @category constructors
  */
-export const lineFor = <A extends { readonly _tag: string } & Schema.JsonObject>(
-  from: Omit<Line, "_tag" | "body">,
-  { _tag, ...body }: A,
-) => ({ ...from, _tag, body });
+export const lineFor: {
+  <A extends { readonly _tag: string } & Schema.JsonObject>(
+    entry: A,
+  ): (from: Omit<Line, "_tag" | "body">) => ReturnType<typeof lineForBody<A>>;
+  <A extends { readonly _tag: string } & Schema.JsonObject>(
+    from: Omit<Line, "_tag" | "body">,
+    entry: A,
+  ): ReturnType<typeof lineForBody<A>>;
+} = Function.dual(2, lineForBody);
 
 /**
  * Returns an entry as the value its schema made, the reverse of `lineFor`: the body's fields with

@@ -1,4 +1,4 @@
-import { Equal, Predicate, Result } from "effect";
+import { Equal, Predicate, Result, Function } from "effect";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;
@@ -51,17 +51,26 @@ interface Splice extends Range {
 }
 
 /** @internal */
-export const prefix = (parent: Path, path: Path): boolean =>
-  parent.length <= path.length && parent.every((key, i) => key === path[i]);
+export const prefix: {
+  (path: Path): (parent: Path) => boolean;
+  (parent: Path, path: Path): boolean;
+} = Function.dual(
+  2,
+  (parent: Path, path: Path): boolean => parent.length <= path.length && parent.every((key, i) => key === path[i]),
+);
 
 const same = (left: Path, right: Path): boolean => left.length === right.length && prefix(left, right);
 
 /** @internal */
-export const read = (value: unknown, path: Path): unknown =>
+export const read: {
+  (path: Path): (value: unknown) => unknown;
+  (value: unknown, path: Path): unknown;
+} = Function.dual(2, (value: unknown, path: Path): unknown =>
   path.reduce<unknown>(
     (parent, key) => (Predicate.hasProperty(parent, key) && Object.hasOwn(parent, key) ? parent[key] : undefined),
     value,
-  );
+  ),
+);
 
 const equal = (left: unknown, right: unknown): boolean => {
   if (Predicate.isDate(left) || Predicate.isDate(right)) {
@@ -99,7 +108,10 @@ const retained = (text: string, index: Index, range: Range): string =>
     .join("");
 
 /** @internal */
-export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<void, Refusal> => {
+export const check: {
+  (path: ReadonlyArray<string>): (index: Index) => Result.Result<void, Refusal>;
+  (index: Index, path: ReadonlyArray<string>): Result.Result<void, Refusal>;
+} = Function.dual(2, (index: Index, path: ReadonlyArray<string>): Result.Result<void, Refusal> => {
   let line = 1;
 
   for (let i = 0; i <= path.length; i++) {
@@ -125,7 +137,7 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
   }
 
   return Result.succeed(undefined);
-};
+});
 
 const commentEdits = (text: string, index: Index, assignment: Assignment, removed: Range): Array<Splice> => {
   const comments = retained(text, index, removed);
@@ -141,7 +153,10 @@ const commentEdits = (text: string, index: Index, assignment: Assignment, remove
 };
 
 /** @internal */
-export const remove = (text: string, index: Index, path: ReadonlyArray<string>): Result.Result<string, Refusal> => {
+export const remove: {
+  (index: Index, path: ReadonlyArray<string>): (text: string) => Result.Result<string, Refusal>;
+  (text: string, index: Index, path: ReadonlyArray<string>): Result.Result<string, Refusal>;
+} = Function.dual(3, (text: string, index: Index, path: ReadonlyArray<string>): Result.Result<string, Refusal> => {
   const checked = check(index, path);
 
   if (Result.isFailure(checked)) {
@@ -171,7 +186,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
   const candidate = apply(text, edits);
   // Removing the last assignment must not turn its preceding separator into a final newline.
   return Result.succeed(!text.endsWith("\n") && candidate.endsWith("\n") ? `${candidate} ` : candidate);
-};
+});
 
 const insertLine = (text: string, at: number, content: string): string => {
   const eol = ending(text);
@@ -181,65 +196,84 @@ const insertLine = (text: string, at: number, content: string): string => {
 };
 
 /** @internal */
-export const set = (
-  text: string,
-  index: Index,
-  path: ReadonlyArray<string>,
-  value: unknown,
-  rendered: string,
-  keys: ReadonlyArray<string>,
-): Result.Result<string, Refusal> => {
-  const checked = check(index, path);
+export const set: {
+  (
+    index: Index,
+    path: ReadonlyArray<string>,
+    value: unknown,
+    rendered: string,
+    keys: ReadonlyArray<string>,
+  ): (text: string) => Result.Result<string, Refusal>;
+  (
+    text: string,
+    index: Index,
+    path: ReadonlyArray<string>,
+    value: unknown,
+    rendered: string,
+    keys: ReadonlyArray<string>,
+  ): Result.Result<string, Refusal>;
+} = Function.dual(
+  6,
+  (
+    text: string,
+    index: Index,
+    path: ReadonlyArray<string>,
+    value: unknown,
+    rendered: string,
+    keys: ReadonlyArray<string>,
+  ): Result.Result<string, Refusal> => {
+    const checked = check(index, path);
 
-  if (Result.isFailure(checked)) {
-    return Result.fail<Refusal>(checked.failure);
-  }
-
-  const assignment = index.assignments.find((candidate) => same(candidate.path, path));
-
-  if (assignment) {
-    if (equal(read(index.value, path), value)) {
-      return Result.succeed(text);
+    if (Result.isFailure(checked)) {
+      return Result.fail<Refusal>(checked.failure);
     }
 
-    return Result.succeed(
-      apply(text, [
-        { ...assignment.value, text: rendered },
-        ...commentEdits(text, index, assignment, assignment.value),
-      ]),
-    );
-  }
+    const assignment = index.assignments.find((candidate) => same(candidate.path, path));
 
-  const parent = [...index.inlines]
-    .filter((inline) => prefix(inline.path, path))
-    .sort((a, b) => b.path.length - a.path.length)[0];
+    if (assignment) {
+      if (equal(read(index.value, path), value)) {
+        return Result.succeed(text);
+      }
 
-  if (parent) {
-    const at = parent.end - 1;
-    const last = parent.members.at(-1);
-    const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
-    return Result.succeed(
-      apply(text, [
-        {
-          start: at,
-          end: at,
-          text: `${separator}${keys.slice(parent.path.length).join(".")} = ${rendered}`,
-        },
-      ]),
-    );
-  }
+      return Result.succeed(
+        apply(text, [
+          { ...assignment.value, text: rendered },
+          ...commentEdits(text, index, assignment, assignment.value),
+        ]),
+      );
+    }
 
-  const parentPath = path.slice(0, -1);
+    const parent = [...index.inlines]
+      .filter((inline) => prefix(inline.path, path))
+      .sort((a, b) => b.path.length - a.path.length)[0];
 
-  if (parentPath.length > 0 && read(index.value, parentPath) === undefined) {
-    return Result.succeed(
-      insertLine(text, text.length, `[${keys.slice(0, -1).join(".")}]${ending(text)}${keys.at(-1)} = ${rendered}`),
-    );
-  }
+    if (parent) {
+      const at = parent.end - 1;
+      const last = parent.members.at(-1);
+      const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
+      return Result.succeed(
+        apply(text, [
+          {
+            start: at,
+            end: at,
+            text: `${separator}${keys.slice(parent.path.length).join(".")} = ${rendered}`,
+          },
+        ]),
+      );
+    }
 
-  const section =
-    [...index.sections]
-      .filter((candidate) => prefix(candidate.path, parentPath))
-      .sort((a, b) => b.path.length - a.path.length)[0] ?? index.sections[0];
-  return Result.succeed(insertLine(text, section.end, `${keys.slice(section.path.length).join(".")} = ${rendered}`));
-};
+    const parentPath = path.slice(0, -1);
+
+    if (parentPath.length > 0 && read(index.value, parentPath) === undefined) {
+      return Result.succeed(
+        insertLine(text, text.length, `[${keys.slice(0, -1).join(".")}]${ending(text)}${keys.at(-1)} = ${rendered}`),
+      );
+    }
+
+    const section =
+      [...index.sections]
+        .filter((candidate) => prefix(candidate.path, parentPath))
+        .sort((a, b) => b.path.length - a.path.length)[0] ?? index.sections[0];
+    return Result.succeed(insertLine(text, section.end, `${keys.slice(section.path.length).join(".")} = ${rendered}`));
+  },
+);

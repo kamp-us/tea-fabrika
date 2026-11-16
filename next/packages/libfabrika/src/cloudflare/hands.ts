@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Function } from "effect";
 import { HandsTasks, HandsTasksError, Reply } from "../runtime/HandsTasks.ts";
 import { ProjectClient } from "./platform.ts";
 import { type Env, projectStub, rpc } from "./runtime.ts";
@@ -25,7 +25,10 @@ const unavailable = (cause: unknown) => new HandsTasksError({ reason: "unavailab
  * @stability unstable
  * @category layers
  */
-export const handsLayer = (env: Env, project: string): Layer.Layer<HandsTasks> =>
+export const handsLayer: {
+  (project: string): (env: Env) => Layer.Layer<HandsTasks>;
+  (env: Env, project: string): Layer.Layer<HandsTasks>;
+} = Function.dual(2, (env: Env, project: string): Layer.Layer<HandsTasks> =>
   Layer.succeed(
     HandsTasks,
     HandsTasks.of({
@@ -39,4 +42,5 @@ export const handsLayer = (env: Env, project: string): Layer.Layer<HandsTasks> =
         return yield* decodeReply(reply).pipe(Effect.mapError(unavailable));
       }),
     }),
-  );
+  ),
+);

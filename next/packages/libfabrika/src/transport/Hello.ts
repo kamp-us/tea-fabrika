@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result, Schema, Function } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
@@ -27,10 +27,13 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
  * @stability unstable
  * @category combinators
  */
-export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
+export const selectVersion: {
+  (server: ReadonlyArray<number>): (client: ReadonlyArray<number>) => number | null;
+  (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null;
+} = Function.dual(2, (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
   const shared = client.filter((v) => server.includes(v));
   return shared.length === 0 ? null : Math.max(...shared);
-};
+});
 
 const decodeUrl = Schema.decodeUnknownResult(Schema.URLFromString);
 

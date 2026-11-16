@@ -6,7 +6,7 @@
  * @stability unstable
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
-import { Cause, Effect, Option, Result, Schema } from "effect";
+import { Cause, Effect, Option, Result, Schema, Function, Predicate } from "effect";
 import * as Redacted from "effect/Redacted";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
@@ -249,43 +249,52 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
  * @stability unstable
  * @category constructors
  */
-export const nodeExecution = (declared: unknown, build = "node"): Execution => {
-  const pure = Effect.fromResult(stepper(declared)).pipe(
-    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
-  );
-  const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
-    pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
-  return {
-    init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
-    step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
-    fresh: Effect.fn("execution.fresh")((model, msg) =>
-      pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.fresh(model, msg)))),
-    ),
-    update: Effect.fn("execution.update")((model, msg) =>
-      pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.update(model, msg)))),
-    ),
-    audit: Effect.fn("execution.audit")((msg) =>
-      pure.pipe(
-        Effect.mapError((cause) => new Audit.AuditError({ reason: new Audit.Input({ cause: Redacted.make(cause) }) })),
-        Effect.flatMap((pure) => Effect.fromResult(Audit.select(pure.program, msg))),
+export const nodeExecution: {
+  (build?: string): (declared: unknown) => Execution;
+  (declared: unknown, build?: string): Execution;
+} = Function.dual(
+  // A piped call starts with the build, a string; a declared program is never one.
+  (args) => !Predicate.isString(args[0]),
+  (declared: unknown, build = "node"): Execution => {
+    const pure = Effect.fromResult(stepper(declared)).pipe(
+      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+    );
+    const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
+      pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
+    return {
+      init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
+      step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
+      fresh: Effect.fn("execution.fresh")((model, msg) =>
+        pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.fresh(model, msg)))),
       ),
-    ),
-    fold: Effect.fn("execution.fold")((model, msg) => run("saved_letter", (pure) => pure.fold(model, msg))),
-    upgrade: Effect.fn("execution.upgrade")((saved) =>
-      run("saved_state", (pure) => Saved.upgrade(saved, pure.program.state, build)),
-    ),
-    reply: Effect.fn("execution.reply")((cmd, outcome) =>
-      run("step", (pure) => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
-    ),
-    admit: Effect.fn("execution.admit")((m) => run("step", (pure) => admits(pure.program.inputs, m))),
-    check: Effect.fn("execution.check")((kind, event) =>
-      run("step", (pure) => {
-        const policy = pure.program.writes[kind];
-        return policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event));
-      }),
-    ),
-  };
-};
+      update: Effect.fn("execution.update")((model, msg) =>
+        pure.pipe(Effect.flatMap((pure) => Effect.fromResult(pure.update(model, msg)))),
+      ),
+      audit: Effect.fn("execution.audit")((msg) =>
+        pure.pipe(
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Input({ cause: Redacted.make(cause) }) }),
+          ),
+          Effect.flatMap((pure) => Effect.fromResult(Audit.select(pure.program, msg))),
+        ),
+      ),
+      fold: Effect.fn("execution.fold")((model, msg) => run("saved_letter", (pure) => pure.fold(model, msg))),
+      upgrade: Effect.fn("execution.upgrade")((saved) =>
+        run("saved_state", (pure) => Saved.upgrade(saved, pure.program.state, build)),
+      ),
+      reply: Effect.fn("execution.reply")((cmd, outcome) =>
+        run("step", (pure) => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
+      ),
+      admit: Effect.fn("execution.admit")((m) => run("step", (pure) => admits(pure.program.inputs, m))),
+      check: Effect.fn("execution.check")((kind, event) =>
+        run("step", (pure) => {
+          const policy = pure.program.writes[kind];
+          return policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event));
+        }),
+      ),
+    };
+  },
+);
 
 class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
   method: Schema.String,

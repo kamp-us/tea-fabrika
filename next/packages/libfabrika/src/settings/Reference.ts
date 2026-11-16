@@ -7,7 +7,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
@@ -73,7 +73,10 @@ const sorted = <A>(group: Setting.Group<A>) => [...group.declarations].sort((a, 
  * @stability unstable
  * @category constructors
  */
-export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row> =>
+export const rows: {
+  <A>(snapshot: Snapshot): (group: Setting.Group<A>) => Array<Row>;
+  <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>;
+} = Function.dual(2, <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row> =>
   sorted(group).map((d) => ({
     path: d.path,
     value: snapshot.values[d.path] ?? encoded(d),
@@ -83,7 +86,8 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
     scope: d.scope,
     reload: d.reload,
     since: d.since,
-  }));
+  })),
+);
 
 /**
  * Returns a warning for each explicitly set row whose `since` release is newer than `minimum`.
@@ -95,10 +99,14 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
  * @stability unstable
  * @category combinators
  */
-export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
+export const warnings: {
+  (minimum: string): (rows: ReadonlyArray<Row>) => Array<Warning>;
+  (rows: ReadonlyArray<Row>, minimum: string): Array<Warning>;
+} = Function.dual(2, (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
   rows
     .filter((row) => row.origin._tag !== "default" && newer(row.since, minimum))
-    .map((row) => ({ path: row.path, since: row.since, minimum }));
+    .map((row) => ({ path: row.path, since: row.since, minimum })),
+);
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */
 const escape = (text: string) => text.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&").replace(/^(\s*\d+)\./gm, "$1\\.");

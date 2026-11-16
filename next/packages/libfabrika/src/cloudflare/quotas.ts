@@ -6,6 +6,7 @@
  * @stability unstable
  */
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -23,16 +24,7 @@ type Values = Parameters<typeof QuotaSettings.limits>[0];
 
 const Send = Schema.TaggedStruct("send", { m: Schema.Json });
 
-/**
- * Layer that provides `Quotas` and the ledger's `WritePolicy` over the Project's own store, with
- * the limits of the start's checked settings. Provide it beneath the Project's ledger layers, so
- * every append and transaction is admitted. A store that refuses the accounting tables fails the
- * build with the ledger's `storage` error, which carries no storage text.
- *
- * @stability unstable
- * @category layers
- */
-export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ readonly values: Values }, E>) =>
+const projectBody = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ readonly values: Values }, E>) =>
   Layer.effectContext(
     Effect.flatMap(settings, ({ values }) =>
       Layer.build(QuotasSql.layer(sql, { brain, limits: QuotaSettings.limits(values) })).pipe(
@@ -42,6 +34,27 @@ export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ re
   );
 
 /**
+ * Layer that provides `Quotas` and the ledger's `WritePolicy` over the Project's own store, with
+ * the limits of the start's checked settings. Provide it beneath the Project's ledger layers, so
+ * every append and transaction is admitted. A store that refuses the accounting tables fails the
+ * build with the ledger's `storage` error, which carries no storage text.
+ *
+ * @stability unstable
+ * @category layers
+ */
+export const project: {
+  <E>(
+    brain: string,
+    settings: Effect.Effect<{ readonly values: Values }, E>,
+  ): (sql: Sql) => ReturnType<typeof projectBody<E>>;
+  <E>(
+    sql: Sql,
+    brain: string,
+    settings: Effect.Effect<{ readonly values: Values }, E>,
+  ): ReturnType<typeof projectBody<E>>;
+} = Function.dual(3, projectBody);
+
+/**
  * Creates one registered name's accounting port in its Process object's own store, with the
  * Process recovery allowance of the start's checked settings. Its tables and fault slot are
  * created here, before the name does any work.
@@ -49,11 +62,15 @@ export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ re
  * @stability unstable
  * @category constructors
  */
-export const process = (sql: Sql, name: string, values: Values): Effect.Effect<Accounting, QuotasError> =>
+export const process: {
+  (name: string, values: Values): (sql: Sql) => Effect.Effect<Accounting, QuotasError>;
+  (sql: Sql, name: string, values: Values): Effect.Effect<Accounting, QuotasError>;
+} = Function.dual(3, (sql: Sql, name: string, values: Values): Effect.Effect<Accounting, QuotasError> =>
   Effect.try({
     try: () => QuotasSql.accounting(sql, { name, limits: QuotaSettings.limits(values).recovery.process }),
     catch: (cause) => new QuotasError({ reason: new Storage({ cause }) }),
-  });
+  }),
+);
 
 /**
  * Returns the line a delivered input's message is saved as in its name's inbox. The inbox append
@@ -116,16 +133,29 @@ export const admitsInput = Effect.fnUntraced(function* (
  * @stability unstable
  * @category combinators
  */
-export const runtimeAppend = <A, E, R>(
-  stream: string,
-  life: Effect.Effect<unknown, unknown>,
-  work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Effect.gen(function* () {
-    const quotas = yield* Effect.serviceOption(Quotas);
-    const known = Option.isSome(quotas) && Option.isSome(yield* Effect.option(life));
-    return yield* Option.isSome(quotas) && known ? quotas.value.runtime(stream, work) : work;
-  });
+export const runtimeAppend: {
+  <A, E, R>(
+    life: Effect.Effect<unknown, unknown>,
+    work: Effect.Effect<A, E, R>,
+  ): (stream: string) => Effect.Effect<A, E, R>;
+  <A, E, R>(
+    stream: string,
+    life: Effect.Effect<unknown, unknown>,
+    work: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R>;
+} = Function.dual(
+  3,
+  <A, E, R>(
+    stream: string,
+    life: Effect.Effect<unknown, unknown>,
+    work: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R> =>
+    Effect.gen(function* () {
+      const quotas = yield* Effect.serviceOption(Quotas);
+      const known = Option.isSome(quotas) && Option.isSome(yield* Effect.option(life));
+      return yield* Option.isSome(quotas) && known ? quotas.value.runtime(stream, work) : work;
+    }),
+);
 
 /**
  * Runs Project work asked by a process's Process object as that process's program writing its own
@@ -135,10 +165,14 @@ export const runtimeAppend = <A, E, R>(
  * @stability unstable
  * @category combinators
  */
-export const own = <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+export const own: {
+  <A, E, R>(work: Effect.Effect<A, E, R>): (process: string) => Effect.Effect<A, E, R>;
+  <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+} = Function.dual(2, <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.flatMap(Effect.serviceOption(Quotas), (quotas) =>
     Option.isSome(quotas) ? quotas.value.own(process, work) : work,
-  );
+  ),
+);
 
 /**
  * Runs a process's own checked write, asked of the Project by its Process object, as that
@@ -148,10 +182,14 @@ export const own = <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Eff
  * @stability unstable
  * @category combinators
  */
-export const ownWrite = <E, R>(process: string, work: Effect.Effect<Appended, E, R>): Effect.Effect<Appended, E, R> =>
+export const ownWrite: {
+  <E, R>(work: Effect.Effect<Appended, E, R>): (process: string) => Effect.Effect<Appended, E, R>;
+  <E, R>(process: string, work: Effect.Effect<Appended, E, R>): Effect.Effect<Appended, E, R>;
+} = Function.dual(2, <E, R>(process: string, work: Effect.Effect<Appended, E, R>): Effect.Effect<Appended, E, R> =>
   own(process, work).pipe(
     Effect.catchIf(
       (error) => error instanceof LedgerError && error.cause instanceof QuotaRefused,
       () => Effect.succeed(Appended.cases.refused.make({ reason: "quota" })),
     ),
-  );
+  ),
+);

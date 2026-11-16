@@ -8,7 +8,7 @@
  * @stability unstable
  */
 import type { Config } from "effect";
-import { ConfigProvider, Effect, Schema, SchemaIssue, String as Str } from "effect";
+import { ConfigProvider, Effect, Schema, SchemaIssue, String as Str, Function } from "effect";
 import { refused, SettingsError, STOP } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
@@ -115,7 +115,10 @@ export const env = (record: Readonly<Record<string, string>>): Source => ({
  * @stability unstable
  * @category constructors
  */
-export const file = (name: string, document: TomlDocument): Source => ({
+export const file: {
+  (document: TomlDocument): (name: string) => Source;
+  (name: string, document: TomlDocument): Source;
+} = Function.dual(2, (name: string, document: TomlDocument): Source => ({
   provider: ConfigProvider.fromUnknown(document.value, { preserveEmptyStrings: true }),
   origin: (path) =>
     Origin.cases.file.make({
@@ -123,7 +126,7 @@ export const file = (name: string, document: TomlDocument): Source => ({
       line:
         document.spans.find((s) => s.path.length === path.length && s.path.every((p, n) => p === path[n]))?.line ?? 0,
     }),
-});
+}));
 
 const location = (origin: Origin) =>
   origin._tag === "file" ? `${origin.file}, line ${origin.line}` : origin._tag === "default" ? "default" : origin.name;

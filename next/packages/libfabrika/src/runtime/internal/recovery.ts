@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import { ProcessId } from "../../ProcessId.ts";
 
 /** @internal */
@@ -120,7 +120,10 @@ export const JournalState = Schema.Struct({
  * receipt equal to its row is skipped. A changed one adds the difference in bytes, and a new one
  * also adds its key, `name` and letter, as the row's own bytes.
  */
-export const changes = (name: string, rows: ReadonlyMap<string, string>, receipts: Iterable<Receipt>): Changes => {
+export const changes: {
+  (rows: ReadonlyMap<string, string>, receipts: Iterable<Receipt>): (name: string) => Changes;
+  (name: string, rows: ReadonlyMap<string, string>, receipts: Iterable<Receipt>): Changes;
+} = Function.dual(3, (name: string, rows: ReadonlyMap<string, string>, receipts: Iterable<Receipt>): Changes => {
   const changed: Array<{ readonly letter: string; readonly text: string }> = [];
   let growth = 0;
 
@@ -137,4 +140,4 @@ export const changes = (name: string, rows: ReadonlyMap<string, string>, receipt
   }
 
   return { changed, growth };
-};
+});

@@ -3,12 +3,15 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, Function, Predicate } from "effect";
 import type { Sql } from "../Sql.ts";
 import { committedEntries, headPlace, ledgerStore, policyFor } from "./internal/ledgerStore.ts";
 import { Doorbell } from "./Ledger.ts";
 import { Referee, Selection } from "./Referee.ts";
 import { WritePolicy } from "./WritePolicy.ts";
+
+const accountingEntriesBody = (sql: Sql, selection: Selection = Selection.cases.all.make({ after: 0 })) =>
+  committedEntries(sql, selection);
 
 /**
  * Returns the committed entries in `sql` that `selection` names, oldest first, or none before the
@@ -18,8 +21,16 @@ import { WritePolicy } from "./WritePolicy.ts";
  * @stability unstable
  * @category getters
  */
-export const accountingEntries = (sql: Sql, selection: Selection = Selection.cases.all.make({ after: 0 })) =>
-  committedEntries(sql, selection);
+export const accountingEntries: {
+  (selection?: Selection): (sql: Sql) => ReturnType<typeof accountingEntriesBody>;
+  (sql: Sql, selection?: Selection): ReturnType<typeof accountingEntriesBody>;
+} = Function.dual(
+  // A direct call starts with the database, which has exec; a piped one with the selection, or nothing.
+  (args) => Predicate.hasProperty(args[0], "exec"),
+  accountingEntriesBody,
+);
+
+const nextPlaceBody = (sql: Sql, stream: string, now: number) => headPlace(sql, stream, now);
 
 /**
  * Returns the place the next entry appended to `stream` would get at the referee's time `now`: its
@@ -29,7 +40,10 @@ export const accountingEntries = (sql: Sql, selection: Selection = Selection.cas
  * @stability unstable
  * @category getters
  */
-export const nextPlace = (sql: Sql, stream: string, now: number) => headPlace(sql, stream, now);
+export const nextPlace: {
+  (stream: string, now: number): (sql: Sql) => ReturnType<typeof nextPlaceBody>;
+  (sql: Sql, stream: string, now: number): ReturnType<typeof nextPlaceBody>;
+} = Function.dual(3, nextPlaceBody);
 
 /**
  * Layer that provides `Referee` on the given `Sql`. An append is decided and written in one SQL

@@ -3,10 +3,15 @@
  *
  * @stability unstable
  */
-import { Context, Effect, type Layer } from "effect";
+import { Context, Effect, type Layer, Function } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { settingsWire } from "./runtime.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
+
+const makeBody = <I, S, E>(service: Context.Key<I, S>, ready: Layer.Layer<I, E>) =>
+  settingsWire(SettingsRuntime.runtime(ready).contextEffect).contextEffect.pipe(
+    Effect.map((services) => Context.get(services, service)),
+  );
 
 /**
  * Creates the Effect an object's Layer reads its service through.
@@ -24,10 +29,10 @@ import * as SettingsRuntime from "./SettingsRuntime.ts";
  * @stability unstable
  * @category constructors
  */
-export const make = <I, S, E>(service: Context.Key<I, S>, ready: Layer.Layer<I, E>) =>
-  settingsWire(SettingsRuntime.runtime(ready).contextEffect).contextEffect.pipe(
-    Effect.map((services) => Context.get(services, service)),
-  );
+export const make: {
+  <I, S, E>(ready: Layer.Layer<I, E>): (service: Context.Key<I, S>) => ReturnType<typeof makeBody<I, S, E>>;
+  <I, S, E>(service: Context.Key<I, S>, ready: Layer.Layer<I, E>): ReturnType<typeof makeBody<I, S, E>>;
+} = Function.dual(2, makeBody);
 
 /**
  * Creates an object's request slot from a handler of the platform's own `Request` and `Response`.

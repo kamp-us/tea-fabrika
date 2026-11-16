@@ -7,7 +7,7 @@
  *
  * @stability unstable
  */
-import { Config, Schema, String as Str } from "effect";
+import { Config, Schema, String as Str, Function } from "effect";
 
 /**
  * The two settings files: the person's own, and the repo's.
@@ -82,9 +82,8 @@ export interface Setting<
  * @stability unstable
  * @category constructors
  */
-export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope>(
-  path: string,
-  options: {
+export const make: {
+  <C extends Schema.Codec<any, unknown>, const S extends Scope>(options: {
     readonly schema: C;
     readonly default: NoInfer<C["Type"]>;
     readonly format?: Format;
@@ -92,28 +91,54 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
     readonly scope: S;
     readonly reload: Reload;
     readonly since: string;
-  },
-): Setting<C["Type"], S, C> => {
-  // Effect reads a string path as one key, so the dotted path is split here.
-  const segments = path.split(".");
-  const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
-  // Config treats a container supplied to a scalar schema as absent. Before defaulting,
-  // check every provider shape so a present value, including [], stays a failure.
-  const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
-  const config = Config.schema(options.schema, segments).pipe(
-    Config.orElse((error) => {
-      if (error.cause._tag === "SourceError") {
-        return Config.fail(error.cause);
-      }
+  }): (path: string) => Setting<C["Type"], S, C>;
+  <C extends Schema.Codec<any, unknown>, const S extends Scope>(
+    path: string,
+    options: {
+      readonly schema: C;
+      readonly default: NoInfer<C["Type"]>;
+      readonly format?: Format;
+      readonly doc: string;
+      readonly scope: S;
+      readonly reload: Reload;
+      readonly since: string;
+    },
+  ): Setting<C["Type"], S, C>;
+} = Function.dual(
+  2,
+  <C extends Schema.Codec<any, unknown>, const S extends Scope>(
+    path: string,
+    options: {
+      readonly schema: C;
+      readonly default: NoInfer<C["Type"]>;
+      readonly format?: Format;
+      readonly doc: string;
+      readonly scope: S;
+      readonly reload: Reload;
+      readonly since: string;
+    },
+  ): Setting<C["Type"], S, C> => {
+    // Effect reads a string path as one key, so the dotted path is split here.
+    const segments = path.split(".");
+    const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
+    // Config treats a container supplied to a scalar schema as absent. Before defaulting,
+    // check every provider shape so a present value, including [], stays a failure.
+    const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
+    const config = Config.schema(options.schema, segments).pipe(
+      Config.orElse((error) => {
+        if (error.cause._tag === "SourceError") {
+          return Config.fail(error.cause);
+        }
 
-      return Config.schema(present, segments).pipe(
-        Config.flatMap(() => Config.fail(error.cause)),
-        Config.withDefault(options.default),
-      );
-    }),
-  );
-  return Object.assign(config, { ...options, format: options.format ?? "json", path, segments, env });
-};
+        return Config.schema(present, segments).pipe(
+          Config.flatMap(() => Config.fail(error.cause)),
+          Config.withDefault(options.default),
+        );
+      }),
+    );
+    return Object.assign(config, { ...options, format: options.format ?? "json", path, segments, env });
+  },
+);
 
 /**
  * A Config of a whole record of settings, with its declarations beside it.

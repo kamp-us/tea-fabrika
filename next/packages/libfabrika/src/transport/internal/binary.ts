@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, Function } from "effect";
 import { Base64 } from "effect/encoding";
 
 /** @internal */
@@ -30,7 +30,10 @@ export const field = (value: Uint8Array | string): Bytes => {
 };
 
 /** @internal */
-export const same = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+export const same: {
+  (b: Uint8Array): (a: Uint8Array) => boolean;
+  (a: Uint8Array, b: Uint8Array): boolean;
+} = Function.dual(2, (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i]));
 
 /** @internal */
 export const reader = (bytes: Uint8Array) => {

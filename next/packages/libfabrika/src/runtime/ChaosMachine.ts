@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 import * as Chaos from "./Chaos.ts";
 import * as ChaosSchedule from "./ChaosSchedule.ts";
@@ -309,7 +310,11 @@ export const wake = (model: Model): number | null =>
  * @stability unstable
  * @category validation
  */
-export const refuse = (model: Model, msg: Msg): { readonly reason: string } | null =>
+export const refuse: {
+  (msg: Msg): (model: Model) => { readonly reason: string } | null;
+  (model: Model, msg: Msg): { readonly reason: string } | null;
+} = Function.dual(2, (model: Model, msg: Msg): { readonly reason: string } | null =>
   msg.type === "start" && (unfinished(model.phase) || model.number === Number.MAX_SAFE_INTEGER)
     ? { reason: "active" }
-    : null;
+    : null,
+);

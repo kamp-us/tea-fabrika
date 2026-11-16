@@ -5,7 +5,7 @@
  *
  * @stability unstable
  */
-import { Option, Result, Schema } from "effect";
+import { Option, Result, Schema, Function } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 
 /**
@@ -32,6 +32,9 @@ export const Part = Schema.Struct({
  */
 export const Chunk = Schema.Struct({ type: Schema.NonEmptyString, items: Schema.Array(Schema.Json), part: Part });
 
+const inputBody = <const T extends string, S extends Schema.Top>(type: T, item: S) =>
+  Schema.Struct({ type: Schema.Literal(type), items: Schema.Array(item), part: Part });
+
 /**
  * Returns the reader's typed input for one chunked port: letters of `type` whose items decode
  * with `item`.
@@ -39,8 +42,10 @@ export const Chunk = Schema.Struct({ type: Schema.NonEmptyString, items: Schema.
  * @stability unstable
  * @category schemas
  */
-export const input = <const T extends string, S extends Schema.Top>(type: T, item: S) =>
-  Schema.Struct({ type: Schema.Literal(type), items: Schema.Array(item), part: Part });
+export const input: {
+  <const T extends string, S extends Schema.Top>(item: S): (type: T) => ReturnType<typeof inputBody<T, S>>;
+  <const T extends string, S extends Schema.Top>(type: T, item: S): ReturnType<typeof inputBody<T, S>>;
+} = Function.dual(2, inputBody);
 
 /**
  * Error for an item whose letter alone is over the chunk size, so the send cannot be cut.
@@ -72,7 +77,10 @@ const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).
  * @stability unstable
  * @category constructors
  */
-export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig> => {
+export const cut: {
+  (size: number): (send: Send) => Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig>;
+  (send: Send, size: number): Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig>;
+} = Function.dual(2, (send: Send, size: number): Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig> => {
   const letter = (items: ReadonlyArray<Schema.Json>, seq: number, last: boolean): Chunk => ({
     type: send.type,
     items,
@@ -126,7 +134,7 @@ export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArr
   }
 
   return Result.succeed(chunks);
-};
+});
 
 /**
  * Joins chunks back into their send's items.

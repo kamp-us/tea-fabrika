@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Function } from "effect";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
 import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
@@ -117,212 +117,233 @@ const generationIn = (value: unknown): number | null => (typeof value === "numbe
  * @stability unstable
  * @category constructors
  */
-export const recoveryStore = <S extends Kept>(
-  sql: Sql,
-  options: {
+export const recoveryStore: {
+  <S extends Kept>(options: {
     readonly name: string;
     readonly capacity: number;
     readonly schema: Journal<S>;
     readonly accounting?: Accounting;
-  },
-): Store<S> => {
-  // The journal row keeps its receipts apart, so it is checked whole only once they are merged back.
-  const Row = Schema.fromJsonString(Schema.Struct(options.schema.fields));
-  const decodeRow = Schema.decodeUnknownSync(Row);
-  const decode = (text: unknown) => {
-    const row = decodeRow(text);
-    return { ...row, ...kept(row) };
-  };
-  const encode = Schema.encodeUnknownSync(Row);
-  const check = Schema.decodeUnknownSync(options.schema);
-  const tables = () => {
-    for (const query of TABLES) {
-      sql.exec(query);
-    }
-  };
-  // The store's own error, thrown in the step, passes through; anything else is kept under a reason.
-  const failed = (error: unknown) =>
-    Schema.is(RecoveryStoreError)(error)
-      ? error
-      : new RecoveryStoreError({
-          reason: Schema.isSchemaError(error) ? new BadRow({ cause: error }) : new Storage({ cause: error }),
-        });
-  // A read changes no row, so it is charged nothing and fails only with the store's own error.
-  const read = <A>(f: () => A) =>
-    Effect.try({
-      try: () => {
-        tables();
-        return f();
-      },
-      catch: failed,
-    });
-  // A write runs under the account's guard, so a recovery charge that does not fit fails by name.
-  const stored = <A>(f: () => A) =>
-    Effect.try({
-      try: () => {
-        tables();
-        return options.accounting === undefined ? f() : options.accounting.protect(f);
-      },
-      catch: (error) =>
-        error instanceof QuotasError ? new RecoveryStoreError({ reason: new Quota({ cause: error }) }) : failed(error),
-    });
-  /**
-   * What this store last read or wrote for its name: the generation it saw, null before any save
-   * counted one, and each receipt row's text.
-   */
-  type Known = { readonly generation: number | null; readonly receipts: ReadonlyMap<string, string> };
-  // A copy of committed rows, never control state: it only decides how many rows a save reads.
-  let known: Known | null = null;
-  /**
-   * The known receipt rows, or one read of the name's receipt rows when none are known or any save
-   * that wrote a row since, this store's or another's, moved the generation.
-   */
-  const rows = (generation: number | null): ReadonlyMap<string, string> =>
-    known !== null && known.generation === generation
-      ? known.receipts
-      : new Map(
-          sql
-            .exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name)
-            .map((row) => [String(row.letter), String(row.value)]),
-        );
-  const readJournal = () => sql.exec(JOURNAL, options.name)[0];
-  const snapshot = (row = readJournal()) => {
-    if (row === undefined) {
-      return null;
-    }
-
-    const saved = decode(row.value);
-
-    if (saved.name !== options.name) {
-      throw misplaced();
-    }
-
-    return saved;
-  };
-  const load = read(() => {
-    const journalRow = readJournal();
-    const saved = snapshot(journalRow);
-
-    if (saved === null) {
-      return null;
-    }
-
-    const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
-    const texts = new Map<string, string>();
-
-    for (const row of sql.exec(
-      "SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid",
-      options.name,
-    )) {
-      const receipt = receiptFor(row.value, row.letter);
-      receipts.set(receipt.letter, receipt);
-      texts.set(receipt.letter, String(row.value));
-    }
-
-    const loaded = check({ ...saved, receipts: [...receipts.values()] });
-    known = { generation: generationIn(journalRow?.generation), receipts: texts };
-    return loaded;
-  });
-  const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
-    return yield* read(() => {
-      const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", options.name, letter);
-
-      // Read old single-row snapshots until their next atomic save splits the receipts.
+  }): (sql: Sql) => Store<S>;
+  <S extends Kept>(
+    sql: Sql,
+    options: {
+      readonly name: string;
+      readonly capacity: number;
+      readonly schema: Journal<S>;
+      readonly accounting?: Accounting;
+    },
+  ): Store<S>;
+} = Function.dual(
+  2,
+  <S extends Kept>(
+    sql: Sql,
+    options: {
+      readonly name: string;
+      readonly capacity: number;
+      readonly schema: Journal<S>;
+      readonly accounting?: Accounting;
+    },
+  ): Store<S> => {
+    // The journal row keeps its receipts apart, so it is checked whole only once they are merged back.
+    const Row = Schema.fromJsonString(Schema.Struct(options.schema.fields));
+    const decodeRow = Schema.decodeUnknownSync(Row);
+    const decode = (text: unknown) => {
+      const row = decodeRow(text);
+      return { ...row, ...kept(row) };
+    };
+    const encode = Schema.encodeUnknownSync(Row);
+    const check = Schema.decodeUnknownSync(options.schema);
+    const tables = () => {
+      for (const query of TABLES) {
+        sql.exec(query);
+      }
+    };
+    // The store's own error, thrown in the step, passes through; anything else is kept under a reason.
+    const failed = (error: unknown) =>
+      Schema.is(RecoveryStoreError)(error)
+        ? error
+        : new RecoveryStoreError({
+            reason: Schema.isSchemaError(error) ? new BadRow({ cause: error }) : new Storage({ cause: error }),
+          });
+    // A read changes no row, so it is charged nothing and fails only with the store's own error.
+    const read = <A>(f: () => A) =>
+      Effect.try({
+        try: () => {
+          tables();
+          return f();
+        },
+        catch: failed,
+      });
+    // A write runs under the account's guard, so a recovery charge that does not fit fails by name.
+    const stored = <A>(f: () => A) =>
+      Effect.try({
+        try: () => {
+          tables();
+          return options.accounting === undefined ? f() : options.accounting.protect(f);
+        },
+        catch: (error) =>
+          error instanceof QuotasError
+            ? new RecoveryStoreError({ reason: new Quota({ cause: error }) })
+            : failed(error),
+      });
+    /**
+     * What this store last read or wrote for its name: the generation it saw, null before any save
+     * counted one, and each receipt row's text.
+     */
+    type Known = { readonly generation: number | null; readonly receipts: ReadonlyMap<string, string> };
+    // A copy of committed rows, never control state: it only decides how many rows a save reads.
+    let known: Known | null = null;
+    /**
+     * The known receipt rows, or one read of the name's receipt rows when none are known or any save
+     * that wrote a row since, this store's or another's, moved the generation.
+     */
+    const rows = (generation: number | null): ReadonlyMap<string, string> =>
+      known !== null && known.generation === generation
+        ? known.receipts
+        : new Map(
+            sql
+              .exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name)
+              .map((row) => [String(row.letter), String(row.value)]),
+          );
+    const readJournal = () => sql.exec(JOURNAL, options.name)[0];
+    const snapshot = (row = readJournal()) => {
       if (row === undefined) {
-        return snapshot()?.receipts.find((r) => r.letter === letter) ?? null;
+        return null;
       }
 
-      return receiptFor(row.value, letter);
-    });
-  });
-  const save = (value: unknown) =>
-    Effect.clockWith((clock) =>
-      stored(() => {
-        const saved = check(value);
+      const saved = decode(row.value);
 
-        if (saved.name !== options.name) {
-          throw misplaced();
+      if (saved.name !== options.name) {
+        throw misplaced();
+      }
+
+      return saved;
+    };
+    const load = read(() => {
+      const journalRow = readJournal();
+      const saved = snapshot(journalRow);
+
+      if (saved === null) {
+        return null;
+      }
+
+      const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
+      const texts = new Map<string, string>();
+
+      for (const row of sql.exec(
+        "SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid",
+        options.name,
+      )) {
+        const receipt = receiptFor(row.value, row.letter);
+        receipts.set(receipt.letter, receipt);
+        texts.set(receipt.letter, String(row.value));
+      }
+
+      const loaded = check({ ...saved, receipts: [...receipts.values()] });
+      known = { generation: generationIn(journalRow?.generation), receipts: texts };
+      return loaded;
+    });
+    const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
+      return yield* read(() => {
+        const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", options.name, letter);
+
+        // Read old single-row snapshots until their next atomic save splits the receipts.
+        if (row === undefined) {
+          return snapshot()?.receipts.find((r) => r.letter === letter) ?? null;
         }
 
-        const text = encode({ ...saved, receipts: [] });
-        const committed = sql.transaction(() => {
-          const old = readJournal();
-          const journal = textIn(old?.value);
-          const generation = generationIn(old?.generation);
-          // Omitted receipts are retained, including during migration from the old snapshot.
-          const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
+        return receiptFor(row.value, letter);
+      });
+    });
+    const save = (value: unknown) =>
+      Effect.clockWith((clock) =>
+        stored(() => {
+          const saved = check(value);
 
-          for (const receipt of saved.receipts) {
-            receipts.set(receipt.letter, receipt);
+          if (saved.name !== options.name) {
+            throw misplaced();
           }
 
-          const prior = rows(generation);
-          const { changed, growth: added } = changes(options.name, prior, receipts.values());
-          // A save that writes no row leaves the generation as it was, so it writes nothing at all.
-          const writes = changed.length > 0 || journal !== text;
-          // The first save that writes adds its generation row: the name, and an integer of up to 8 bytes.
-          const counted = writes && generation === null ? bytes(options.name) + 8 : 0;
-          const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added + counted;
-          const next: Known = {
-            generation: writes ? (generation ?? 0) + 1 : generation,
-            receipts: new Map([...prior, ...changed.map((c) => [c.letter, c.text] as const)]),
-          };
+          const text = encode({ ...saved, receipts: [] });
+          const committed = sql.transaction(() => {
+            const old = readJournal();
+            const journal = textIn(old?.value);
+            const generation = generationIn(old?.generation);
+            // Omitted receipts are retained, including during migration from the old snapshot.
+            const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
 
-          if (sql.size() + growth > options.capacity) {
-            throw new RecoveryStoreError({ reason: new Storage({ cause: undefined }) });
-          }
+            for (const receipt of saved.receipts) {
+              receipts.set(receipt.letter, receipt);
+            }
 
-          // The journal's own rows are charged, its receipts and the journal row. The generation row
-          // is bookkeeping: its bytes are in `growth`, and it adds no write of its own.
-          const previous = old === undefined ? null : decode(old.value);
-          options.accounting?.change(
-            "journal",
-            changed.length + (journal === text ? 0 : 1),
-            growth,
-            clock.currentTimeMillisUnsafe(),
-            recoveryState(saved) || recoveryState(previous),
-          );
+            const prior = rows(generation);
+            const { changed, growth: added } = changes(options.name, prior, receipts.values());
+            // A save that writes no row leaves the generation as it was, so it writes nothing at all.
+            const writes = changed.length > 0 || journal !== text;
+            // The first save that writes adds its generation row: the name, and an integer of up to 8 bytes.
+            const counted = writes && generation === null ? bytes(options.name) + 8 : 0;
+            const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added + counted;
+            const next: Known = {
+              generation: writes ? (generation ?? 0) + 1 : generation,
+              receipts: new Map([...prior, ...changed.map((c) => [c.letter, c.text] as const)]),
+            };
 
-          for (const receipt of changed) {
-            sql.exec(
-              "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
-              options.name,
-              receipt.letter,
-              receipt.text,
+            if (sql.size() + growth > options.capacity) {
+              throw new RecoveryStoreError({ reason: new Storage({ cause: undefined }) });
+            }
+
+            // The journal's own rows are charged, its receipts and the journal row. The generation row
+            // is bookkeeping: its bytes are in `growth`, and it adds no write of its own.
+            const previous = old === undefined ? null : decode(old.value);
+            options.accounting?.change(
+              "journal",
+              changed.length + (journal === text ? 0 : 1),
+              growth,
+              clock.currentTimeMillisUnsafe(),
+              recoveryState(saved) || recoveryState(previous),
             );
-          }
 
-          if (journal !== text) {
-            sql.exec(
-              "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
-              options.name,
-              text,
-            );
-          }
+            for (const receipt of changed) {
+              sql.exec(
+                "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
+                options.name,
+                receipt.letter,
+                receipt.text,
+              );
+            }
 
-          if (writes) {
-            sql.exec(
-              "INSERT INTO process_recovery_generation (name,generation) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET generation=excluded.generation",
-              options.name,
-              next.generation,
-            );
-          }
+            if (journal !== text) {
+              sql.exec(
+                "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+                options.name,
+                text,
+              );
+            }
 
-          return next;
-        });
-        // Only rows that committed are kept, so a refused or cut save leaves `known` as it was.
-        known = committed;
+            if (writes) {
+              sql.exec(
+                "INSERT INTO process_recovery_generation (name,generation) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET generation=excluded.generation",
+                options.name,
+                next.generation,
+              );
+            }
+
+            return next;
+          });
+          // Only rows that committed are kept, so a refused or cut save leaves `known` as it was.
+          known = committed;
+        }),
+      );
+    return {
+      load,
+      save: Effect.fn("recovery.save")(save),
+      receipt,
+      input: Effect.fn("recovery.input")(function* (letter: string) {
+        return (yield* receipt(letter))?.input ?? null;
       }),
-    );
-  return {
-    load,
-    save: Effect.fn("recovery.save")(save),
-    receipt,
-    input: Effect.fn("recovery.input")(function* (letter: string) {
-      return (yield* receipt(letter))?.input ?? null;
-    }),
-  };
-};
+    };
+  },
+);
 
 /**
  * Service that keeps one registered name's recovery journal and its receipts in the object's own

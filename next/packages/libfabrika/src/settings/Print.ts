@@ -7,6 +7,7 @@
  *
  * @stability unstable
  */
+import { Function } from "effect";
 import type { Row, Warning } from "./Reference.ts";
 import type { Origin } from "./Sources.ts";
 
@@ -29,7 +30,10 @@ const indent = (text: string) => text.replace(/\n/g, "\n  ");
  * @stability unstable
  * @category combinators
  */
-export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {
+export const report: {
+  (options: { readonly all: boolean }): (rows: ReadonlyArray<Row>) => string;
+  (rows: ReadonlyArray<Row>, options: { readonly all: boolean }): string;
+} = Function.dual(2, (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {
   const shown = rows.filter((row) => options.all || row.origin._tag !== "default");
   const blocks = shown.map((row) =>
     [
@@ -42,7 +46,7 @@ export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolea
   const hidden = rows.length - shown.length;
   const rest = hidden === 0 ? [] : [`Keys left at their defaults: ${hidden}. fabrika settings --all shows them.`];
   return `${[...blocks, ...rest].join("\n\n")}\n`;
-};
+});
 
 /**
  * Formats each warning as one line, to print apart from the report.
