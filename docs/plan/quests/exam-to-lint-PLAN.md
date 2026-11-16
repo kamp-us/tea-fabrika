@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0591, 0590, 0579; body 7292fedef1c2
 Plancheck-Version: 3
 
 # Plan: the exam's code-shape checks become lint rules, a text-reading law declares `reads:`, and the `readers` list goes (0591)
