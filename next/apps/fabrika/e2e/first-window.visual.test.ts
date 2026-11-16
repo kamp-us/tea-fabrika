@@ -580,7 +580,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const pid = resolveName(
                   yield* r.read(`processes/${NAME}`),
                   NAME,
-                  (by) => by === "brain" || by.startsWith("brain:"),
+                  (by) => by === "brain" || pipe(by, Str.startsWith("brain:")),
                 );
                 expect(pid, "the checklist's live process has a span chain").not.toBeNull();
                 const spans = [...(yield* r.spans()), ...(yield* r.spans(Chain.cases.job.make({ process: pid! })))];

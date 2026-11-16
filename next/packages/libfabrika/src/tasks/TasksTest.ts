@@ -123,6 +123,9 @@ export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   return item;
 };
 
+/** The same process id with its last character flipped: "0" becomes "1", anything else "0". */
+const flipLast = (id: string): string => `${pipe(id, Str.slice(0, -1))}${pipe(id, Str.endsWith("0")) ? "1" : "0"}`;
+
 /** One field of a request changed to another valid value: same id, different bytes. */
 export const changedRequest = (request: Request, pick: number, other: Request): Request => {
   const field = choose(["target", "process", "name", "program", "needs", "build", "settings", "parent"] as const, pick);
@@ -133,7 +136,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
   }
 
   if (field === "process") {
-    const flipped = request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+    const flipped = flipLast(request.process);
     return { ...request, process: differs(request.process, other.process, flipped) };
   }
 
@@ -781,10 +784,7 @@ const walk = (
           // Another process generation, such as a successor, never takes this result.
           const saved = on(["finished", "collected"]);
           const other = choose(tape.requests, cell.variant).process;
-          const process =
-            other === saved.request.process
-              ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
-              : other;
+          const process = other === saved.request.process ? flipLast(saved.request.process) : other;
           refused(
             yield* tasks((j) =>
               j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
@@ -1051,7 +1051,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           const call = <A, E>(f: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
             Tasks.use(f).pipe(Effect.provide(life));
           const wanted = a.request.process;
-          const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+          const other = flipLast(wanted);
           const said = { ...a.recorded, seen: 0 };
           const expected = new Map<string, Task>();
 
