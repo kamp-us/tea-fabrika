@@ -34,8 +34,8 @@ import { ChildProcess } from "effect/process";
 export const LATE = 2 * 60 * 60 * 1000;
 
 export const Beat = Schema.TaggedUnion({
-  ok: { lastPass: Schema.NullOr(Schema.Number), merges: Schema.Number },
-  late: { lastPass: Schema.NullOr(Schema.Number), merges: Schema.Number, oldest: Schema.Number },
+  ok: { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite },
+  late: { lastPass: Schema.NullOr(Schema.Finite), merges: Schema.Finite, oldest: Schema.Finite },
 });
 export type Beat = typeof Beat.Type;
 

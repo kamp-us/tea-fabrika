@@ -168,7 +168,7 @@ const Woke = Schema.Struct({ rev: Rev });
 const Listed = Schema.Struct({ tasks: Schema.Array(Schema.Struct(Pointer)), rev: Rev });
 const TakeReply = Schema.TaggedUnion({ idle: {}, assigned: { task: Task }, refused: { reason: Schema.String } });
 const Admitted = Schema.Struct({ identity: Schema.Struct({ key: Schema.String }) });
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 const Nonce = Schema.Struct({ nonce: Schema.String });
 
 const Rpc = Schema.Struct({

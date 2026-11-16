@@ -59,7 +59,7 @@ const Act = Schema.TaggedUnion({
 });
 
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
-const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Number });
+const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Finite });
 
 const Shown = {
   link: Link,
@@ -80,7 +80,7 @@ const clickFields = { key: Schema.String, cmd: Id.Cmd };
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("link"), link: Link }),
-  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("clients"), clients: Schema.Array(Client) }),
   Schema.Struct({ type: Schema.Literal("approve"), ...clickFields }),
   Schema.Struct({ type: Schema.Literal("deny"), ...clickFields }),
@@ -93,7 +93,7 @@ const Msg = Schema.Union([
     reason: Schema.Literals(["declined", "unavailable"]),
   }),
   Schema.Struct({ type: Schema.Literal("open_browser"), cmd: Id.Cmd }),
-  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("open_window") }),
   Schema.Struct({ type: Schema.Literal("quit") }),
 ]);

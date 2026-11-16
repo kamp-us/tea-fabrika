@@ -5,7 +5,7 @@ import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
-  cancel: { id: Schema.Number },
+  cancel: { id: Schema.Finite },
 });
 export type Call = typeof Call.Type;
 

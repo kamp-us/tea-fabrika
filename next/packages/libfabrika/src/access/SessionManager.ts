@@ -174,7 +174,7 @@ const InputRecord = Schema.Struct({
   digest: Schema.String,
   traceId: Schema.String,
   span: Span,
-  arrivedAt: Schema.Number,
+  arrivedAt: Schema.Finite,
 });
 type InputRecord = typeof InputRecord.Type;
 const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });

@@ -9,12 +9,12 @@ import { Effect, Exit, Option, Predicate, Result, Schema, Semaphore } from "effe
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
-const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
+const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Finite }, parked: {} });
 const Retry = Schema.Struct({ reason: RateRefusal.fields.reason, retryAfter: RateRefusal.fields.retryAfter });
 
 const Request = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   method: Schema.String,
   params: Schema.Unknown,
 });

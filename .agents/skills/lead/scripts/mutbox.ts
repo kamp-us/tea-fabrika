@@ -110,7 +110,7 @@ class Stuck extends Schema.TaggedError<Stuck>()("Stuck", {
 /** A command passed its time limit and was stopped; nothing it would have said was read. */
 export class CallTimeout extends Schema.TaggedError<CallTimeout>()("CallTimeout", {
   command: Schema.String,
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
 }) {}
 
 /** The one line a timed-out call leaves in a report. Pure. */
@@ -230,7 +230,7 @@ export const runArgs = (ask: {
   "/usr/local/bin/mutbox-entry",
 ];
 
-const Position = Schema.Struct({ line: Schema.Number, column: Schema.Number });
+const Position = Schema.Struct({ line: Schema.Finite, column: Schema.Finite });
 
 const mutantFields = {
   mutatorName: Schema.String,
@@ -246,14 +246,14 @@ const Report = Schema.Struct({
 const Tested = Schema.Struct({ ...mutantFields, fileName: Schema.String });
 
 const Sample = Schema.Struct({
-  seed: Schema.Number,
+  seed: Schema.Finite,
   ranges: Schema.Array(Schema.String),
-  total: Schema.Number,
-  selected: Schema.Number,
-  left: Schema.Number,
+  total: Schema.Finite,
+  selected: Schema.Finite,
+  left: Schema.Finite,
   /** Every changed file's mutants and how many were selected; a sampler from before ticket 655 has none. */
   files: Schema.optional(
-    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Number, selected: Schema.Number })),
+    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Finite, selected: Schema.Finite })),
   ),
 });
 
@@ -299,10 +299,10 @@ const Manifest = Schema.Struct({
 /** One mutant's answer, as the report gives it to a reader. */
 const Row = Schema.Struct({
   file: Schema.String,
-  line: Schema.Number,
-  column: Schema.Number,
-  endLine: Schema.Number,
-  endColumn: Schema.Number,
+  line: Schema.Finite,
+  column: Schema.Finite,
+  endLine: Schema.Finite,
+  endColumn: Schema.Finite,
   mutator: Schema.String,
   replacement: Schema.String,
   status: Schema.String,
@@ -311,13 +311,13 @@ type Row = typeof Row.Type;
 
 const Arm = Schema.Struct({
   /** run.sh's exit code: 0, or 124 when its five minutes ran out. */
-  exit: Schema.Number,
+  exit: Schema.Finite,
   /** `report`: Stryker finished. `events`: the cap stopped it, and this is what it kept. */
   from: Schema.Literals(["report", "events", "nothing"]),
-  counts: Schema.Record(Schema.String, Schema.Number),
-  tested: Schema.Number,
+  counts: Schema.Record(Schema.String, Schema.Finite),
+  tested: Schema.Finite,
   /** Selected mutants the cap stopped before they were tested. */
-  unreached: Schema.Number,
+  unreached: Schema.Finite,
   survivors: Schema.Array(Row),
 });
 type Arm = typeof Arm.Type;
@@ -334,14 +334,14 @@ const Summary = Schema.Struct({
   image: Schema.NullOr(Schema.String),
   network: Schema.Literal("none"),
   limits: Schema.Struct({
-    cpus: Schema.Number,
+    cpus: Schema.Finite,
     memory: Schema.String,
-    pids: Schema.Number,
-    seconds: Schema.Number,
+    pids: Schema.Finite,
+    seconds: Schema.Finite,
   }),
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
   /** From the container's own cgroup: `memory.peak` and `cpu.stat`. */
-  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Number, cpuSeconds: Schema.Number })),
+  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Finite, cpuSeconds: Schema.Finite })),
   related: Schema.Array(Schema.String),
   /** Related tests left out before the run, each with why. They did not run. */
   excluded: Schema.Array(Named),

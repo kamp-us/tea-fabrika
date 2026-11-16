@@ -21,7 +21,7 @@ const FIELDS = "databaseId,workflowName,event,headBranch,headSha,status,conclusi
 const Listed = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
-      databaseId: Schema.Number,
+      databaseId: Schema.Finite,
       workflowName: Schema.String,
       event: Schema.String,
       headBranch: Schema.String,
