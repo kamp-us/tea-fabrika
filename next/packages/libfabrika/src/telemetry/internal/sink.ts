@@ -16,13 +16,19 @@ const Ended = Schema.Struct({
 /** @internal */
 export type Ended = typeof Ended.Type;
 
+/** The newest hour a sized commit reached: `-Infinity` before the first, so any hour is newer. */
+const Checked = Schema.Union([
+  Schema.Finite,
+  Schema.declare((input): input is number => input === Number.NEGATIVE_INFINITY),
+]);
+
 /** `clean` and `failed` hold no spans, `holding` and `reported` hold at least one. A failure awaits
- *  a flush in `failed` and `holding`. `checked` is the newest hour a sized commit reached. */
+ *  a flush in `failed` and `holding`. */
 const Model = Schema.TaggedUnion({
-  clean: { checked: Schema.Finite },
-  failed: { checked: Schema.Finite },
-  holding: { checked: Schema.Finite, spans: Schema.NonEmptyArray(Ended) },
-  reported: { checked: Schema.Finite, spans: Schema.NonEmptyArray(Ended) },
+  clean: { checked: Checked },
+  failed: { checked: Checked },
+  holding: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
+  reported: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
 });
 type Model = typeof Model.Type;
 
