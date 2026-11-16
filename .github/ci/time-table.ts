@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { Console, type Duration, Effect, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -282,19 +282,27 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       try: () => {
         const text = markdown(timings);
         writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${JSON.stringify(timings)}\n`);
-        console.log(text);
-
-        if (env["GITHUB_STEP_SUMMARY"]) {
-          appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
-        }
+        return text;
       },
       catch: (cause) => new Unread({ cause }),
-    });
+    }).pipe(
+      Effect.tap((text) => Console.log(text)),
+      Effect.flatMap((text) =>
+        Effect.try({
+          try: () => {
+            if (env["GITHUB_STEP_SUMMARY"]) {
+              appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
+            }
+          },
+          catch: (cause) => new Unread({ cause }),
+        }),
+      ),
+    );
 
   await Effect.runPromise(
     collect(env, process.cwd(), io).pipe(
       Effect.flatMap(write),
-      Effect.catch((error) => Effect.sync(() => console.log(`time-table: unavailable: ${reasonOf(error.cause)}`))),
+      Effect.catch((error) => Console.log(`time-table: unavailable: ${reasonOf(error.cause)}`)),
     ),
   );
   process.exitCode = 0;

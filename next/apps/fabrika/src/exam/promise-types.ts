@@ -1,7 +1,7 @@
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Console, Effect, FileSystem, Path } from "effect";
 import * as ts from "typescript/unstable/ast";
 import {
   API,
@@ -314,10 +314,10 @@ const main = Effect.gen(function* () {
       }
 
       for (const f of findings.values()) {
-        console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.reason}`);
+        yield* Console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.reason}`);
       }
 
-      console.info(`lint:promise-types: ${findings.size} findings`);
+      yield* Console.info(`lint:promise-types: ${findings.size} findings`);
       process.exitCode = findings.size === 0 ? 0 : 1;
     } finally {
       snapshot.dispose();

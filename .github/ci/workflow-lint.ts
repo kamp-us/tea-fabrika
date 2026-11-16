@@ -3,7 +3,8 @@
 // order their messages print, and is what `pnpm lint` calls.
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
+import { Console, Effect } from "effect";
+import { parseDocument } from "yaml";
 import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";
 import { checkJob } from "./workflow-lint/check-job.ts";
@@ -50,15 +51,14 @@ const CHECK_RULES: readonly Rule[] = [
 ];
 
 export const lintWorkflow = (text: string): string[] => {
-  let source: unknown;
+  // `parse` throws the first of these errors; the document keeps them, so none is thrown here.
+  const document = parseDocument(text);
 
-  try {
-    source = parse(text);
-  } catch {
+  if (document.errors.length > 0) {
     return ["check.yaml: invalid YAML"];
   }
 
-  const workflow = map(source);
+  const workflow = map(document.toJS());
   const errors: string[] = [];
   const require: Require = (holds, reason) => {
     if (!holds) {
@@ -73,52 +73,56 @@ export const lintWorkflow = (text: string): string[] => {
   return errors;
 };
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
-    const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    const check = read(".github/workflows/check.yaml");
-    const files = cacheFiles(read);
-    const errors = [
-      ...lintWorkflow(check),
-      ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
-      // T1 on the other workflows a pull request or the merge queue starts; lintWorkflow holds check.yaml.
-      ...Object.entries(files.workflows)
-        .filter(([path]) => path !== ".github/workflows/check.yaml")
-        .flatMap(([path, text]) => lintNoTooling(path, text)),
-      ...lintIssues(files.workflows),
-      ...lintCaches(files),
-      ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
-    ];
+/** Every law over the workflows and the files they name; throws when one could not be read. */
+const lintRepo = (): readonly string[] => {
+  const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+  const check = read(".github/workflows/check.yaml");
+  const files = cacheFiles(read);
+  const errors = [
+    ...lintWorkflow(check),
+    ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
+    // T1 on the other workflows a pull request or the merge queue starts; lintWorkflow holds check.yaml.
+    ...Object.entries(files.workflows)
+      .filter(([path]) => path !== ".github/workflows/check.yaml")
+      .flatMap(([path, text]) => lintNoTooling(path, text)),
+    ...lintIssues(files.workflows),
+    ...lintCaches(files),
+    ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+  ];
 
-    const manifest: unknown = JSON.parse(read("package.json"));
+  const manifest: unknown = JSON.parse(read("package.json"));
 
-    const lint = String(map(map(manifest)["scripts"])["lint"]);
+  const lint = String(map(map(manifest)["scripts"])["lint"]);
 
-    if (!lint.includes("node .github/ci/workflow-lint.ts")) {
-      errors.push("pnpm lint must run workflow-lint.ts");
-    }
-
-    // A pull request of ignored paths starts no run, so its rows are checked only here.
-    if (!lint.includes("node .github/ci/field-check.ts --local")) {
-      errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
-    }
-
-    if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {
-      errors.push("full lint must use the shared tracked-file check");
-    }
-
-    if (existsSync(new URL("./pnpm-lock.yaml", import.meta.url))) {
-      errors.push("CI uses the workspace lockfile, never a second one");
-    }
-
-    for (const error of errors) {
-      console.error(error);
-    }
-
-    console.log(`workflow-lint: ${errors.length} errors`);
-    process.exitCode = errors.length === 0 ? 0 : 1;
-  } catch {
-    console.error("workflow-lint: input could not be read");
-    process.exitCode = 2;
+  if (!lint.includes("node .github/ci/workflow-lint.ts")) {
+    errors.push("pnpm lint must run workflow-lint.ts");
   }
+
+  // A pull request of ignored paths starts no run, so its rows are checked only here.
+  if (!lint.includes("node .github/ci/field-check.ts --local")) {
+    errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
+  }
+
+  if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {
+    errors.push("full lint must use the shared tracked-file check");
+  }
+
+  if (existsSync(new URL("./pnpm-lock.yaml", import.meta.url))) {
+    errors.push("CI uses the workspace lockfile, never a second one");
+  }
+
+  return errors;
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const run = Effect.try(lintRepo).pipe(
+    Effect.flatMap((errors) =>
+      Effect.forEach(errors, (error) => Console.error(error), { concurrency: 1, discard: true }).pipe(
+        Effect.andThen(Console.log(`workflow-lint: ${errors.length} errors`)),
+        Effect.as(errors.length === 0 ? 0 : 1),
+      ),
+    ),
+    Effect.catch(() => Console.error("workflow-lint: input could not be read").pipe(Effect.as(2))),
+  );
+  process.exitCode = Effect.runSync(run);
 }

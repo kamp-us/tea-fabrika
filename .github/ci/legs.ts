@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Console, Effect } from "effect";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -259,8 +260,7 @@ if (import.meta.main) {
   const note = sized
     ? `legs: ${vitestNote} on ${legs.vitest} legs of at most ${limit.vitest} s, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
     : `legs: the full matrix, on ${run.event || "an unknown event"} with all of next/${validSha(run.base) ? "" : " and no base commit"}`;
-  console.log(note);
-  console.log(lines.join("\n"));
+  Effect.runSync(Console.log(note).pipe(Effect.andThen(Console.log(lines.join("\n")))));
   const output = process.env["GITHUB_OUTPUT"];
 
   if (output !== undefined && output !== "") {

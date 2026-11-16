@@ -9,6 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { Console, Effect } from "effect";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -84,12 +85,6 @@ const tracked = spawnSync(
 
 const files = tracked.stdout.split("\0").filter((file) => file !== "");
 
-// No file read must never read as clean.
-if (tracked.status !== 0 || files.length === 0) {
-  console.error(`exact-versions: git found no files to check.\n${tracked.stderr}`);
-  process.exit(2);
-}
-
 const check = (file: string): readonly string[] => {
   const read = READERS[basename(file)];
 
@@ -101,30 +96,41 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
+const attempt = (file: string) =>
+  Effect.try({
+    try: (): { readonly lines: readonly string[]; readonly broken: boolean } => ({ lines: check(file), broken: false }),
+    catch: (error) => `${file}: could not read: ${String(error)}`,
+  }).pipe(Effect.catch((line) => Effect.succeed({ lines: [line], broken: true })));
+
+/** The run, from what git listed: it prints what it refuses and answers the exit code. */
+const main = Effect.gen(function* () {
+  // No file read must never read as clean.
+  if (tracked.status !== 0 || files.length === 0) {
+    yield* Console.error(`exact-versions: git found no files to check.\n${tracked.stderr}`);
+    return 2;
   }
-};
 
-const results = files.map(attempt);
-const lines = results.flatMap((result) => result.lines);
+  // One file at a time, as git listed them: the lines print in that order.
+  const results = yield* Effect.forEach(files, attempt, { concurrency: 1 });
+  const lines = results.flatMap((result) => result.lines);
 
-for (const line of lines) {
-  console.error(line);
-}
+  for (const line of lines) {
+    yield* Console.error(line);
+  }
 
-if (results.some((result) => result.broken)) {
-  process.exit(2);
-}
+  if (results.some((result) => result.broken)) {
+    return 2;
+  }
 
-if (lines.length > 0) {
-  console.error(
-    `exact-versions: ${lines.length} not exact. Write the version itself, or \`catalog:\` with the exact version in the catalog. See docs/direction/pin-exact-versions.md.`,
-  );
-  process.exit(1);
-}
+  if (lines.length > 0) {
+    yield* Console.error(
+      `exact-versions: ${lines.length} not exact. Write the version itself, or \`catalog:\` with the exact version in the catalog. See docs/direction/pin-exact-versions.md.`,
+    );
+    return 1;
+  }
 
-console.log(`exact-versions: ${files.length} files, every version exact`);
+  yield* Console.log(`exact-versions: ${files.length} files, every version exact`);
+  return 0;
+});
+
+process.exitCode = Effect.runSync(main);

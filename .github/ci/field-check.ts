@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Console, Effect, Option, Schema } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
@@ -29,13 +30,9 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+/** The JSON a text holds, or `undefined` when it holds none. */
+const parse = (text: string): unknown =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(text));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -228,26 +225,34 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
     }));
 };
 
+/** Checks the added rows and prints each finding; answers the exit code, or fails when git or a row could not be read. */
 const main = (local: boolean) => {
   const base = process.env["BASE"] ?? "";
   const head = process.env["HEAD"] ?? "";
   const event = process.env["EVENT"] ?? "";
-  let total = 0;
+  return Effect.gen(function* () {
+    let total = 0;
+    let exitCode = 0;
+    const inputs = yield* Effect.try(() =>
+      local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event),
+    );
 
-  for (const input of local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event)) {
-    const report = checkFile(input.file, input.base, input.head);
-    total += report.added;
+    for (const input of inputs) {
+      const report = yield* Effect.try(() => checkFile(input.file, input.base, input.head));
+      total += report.added;
 
-    for (const message of report.annotations) {
-      console.log(message);
+      for (const message of report.annotations) {
+        yield* Console.log(message);
+      }
+
+      if (report.exitCode !== 0) {
+        exitCode = report.exitCode;
+      }
     }
 
-    if (report.exitCode !== 0) {
-      process.exitCode = report.exitCode;
-    }
-  }
-
-  console.log(`field: ${total} added rows checked`);
+    yield* Console.log(`field: ${total} added rows checked`);
+    return exitCode;
+  });
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -255,18 +260,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // base and head, and check's shallow checkout holds no origin/main.
   const local = process.argv.includes("--local");
 
-  if (local && process.env["GITHUB_ACTIONS"] === "true") {
-    console.log("field: this CI run's field job checks the added rows");
-  } else {
-    try {
-      main(local);
-    } catch {
-      console.error(
-        local
-          ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
-          : "field: history or input could not be read; validation did not finish",
-      );
-      process.exitCode = 2;
-    }
-  }
+  const run =
+    local && process.env["GITHUB_ACTIONS"] === "true"
+      ? Console.log("field: this CI run's field job checks the added rows").pipe(Effect.as(0))
+      : main(local).pipe(
+          Effect.catch(() =>
+            Console.error(
+              local
+                ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
+                : "field: history or input could not be read; validation did not finish",
+            ).pipe(Effect.as(2)),
+          ),
+        );
+  process.exitCode = Effect.runSync(run);
 }

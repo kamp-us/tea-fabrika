@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Console, Effect } from "effect";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;
@@ -44,18 +45,17 @@ export const staleRows = (table: Readonly<Record<string, number>>, real: readonl
 export const rowLine = (row: Row): string => `  ${JSON.stringify(row.path)}: ${row.seconds.toFixed(1)},`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  for (const path of process.argv.slice(2)) {
-    try {
-      const rows = reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd());
-
-      for (const row of staleRows(measured, rows)) {
-        console.log(
+  /** The advice for one report: each row that differs, or a line saying the report could not be read. */
+  const advice = (path: string) =>
+    Effect.try(() => staleRows(measured, reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd()))).pipe(
+      Effect.map((rows) =>
+        rows.flatMap((row) => [
           `::warning::shard table differs by more than ${LIMIT} s: ${row.path.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`,
-        );
-        console.log(rowLine(row));
-      }
-    } catch {
-      console.log("shard-times: report unavailable; no timing advice for this report");
-    }
-  }
+          rowLine(row),
+        ]),
+      ),
+      Effect.orElseSucceed(() => ["shard-times: report unavailable; no timing advice for this report"]),
+      Effect.flatMap((lines) => Effect.forEach(lines, (line) => Console.log(line), { concurrency: 1, discard: true })),
+    );
+  Effect.runSync(Effect.forEach(process.argv.slice(2), advice, { concurrency: 1, discard: true }));
 }

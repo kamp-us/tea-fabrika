@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { Console, Effect } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -56,14 +57,8 @@ const tracked = spawnSync("git", ["ls-files", "-z", "--", "package.json", "**/pa
   maxBuffer: 2 ** 30,
 });
 
-const fail = (why: string): never => {
-  console.error(`workspace-reach: ${why}`);
-  process.exit(2);
-};
-
-if (tracked.status !== 0) {
-  fail(`git could not list files.\n${tracked.stderr}`);
-}
+/** Says why the run could not read, and answers its exit code. */
+const fail = (why: string) => Console.error(`workspace-reach: ${why}`).pipe(Effect.as(2));
 
 const run = (): { readonly unreached: readonly string[]; readonly total: number } => {
   const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
@@ -111,23 +106,27 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
-
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
-
-if (result.unreached.length > 0) {
-  for (const line of result.unreached) {
-    console.error(`${line}: no app, tool or root reaches it`);
+/** The run: it prints each package nothing reaches and answers the exit code. */
+const main = Effect.gen(function* () {
+  if (tracked.status !== 0) {
+    return yield* fail(`git could not list files.\n${tracked.stderr}`);
   }
 
-  console.error(
-    `workspace-reach: ${result.unreached.length} unreached. Delete the package, or name it as a dependency where it is used (decision 0003).`,
-  );
-  process.exit(1);
-}
+  const result = yield* Effect.try({ try: run, catch: (error) => `could not read: ${String(error)}` });
 
-console.log(`workspace-reach: ${result.total} packages, every one reached`);
+  if (result.unreached.length > 0) {
+    for (const line of result.unreached) {
+      yield* Console.error(`${line}: no app, tool or root reaches it`);
+    }
+
+    yield* Console.error(
+      `workspace-reach: ${result.unreached.length} unreached. Delete the package, or name it as a dependency where it is used (decision 0003).`,
+    );
+    return 1;
+  }
+
+  yield* Console.log(`workspace-reach: ${result.total} packages, every one reached`);
+  return 0;
+}).pipe(Effect.catch(fail));
+
+process.exitCode = Effect.runSync(main);

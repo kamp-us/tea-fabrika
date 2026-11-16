@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Console, Effect } from "effect";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -71,10 +72,14 @@ export const main = (rows: readonly string[], write: (line: string) => void, tab
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
-  const write = (line: string) => console.error(line);
+  const lines: string[] = [];
+  const write = (line: string) => {
+    lines.push(line);
+  };
   // The full-depth table is judged the same way: a renamed file must not keep a row in either.
   process.exitCode = Math.max(
     main(stale(measured, files), write),
     main(stale(full, files), write, "vitest.shards.full.json"),
   );
+  Effect.runSync(Effect.forEach(lines, (line) => Console.error(line), { concurrency: 1, discard: true }));
 }

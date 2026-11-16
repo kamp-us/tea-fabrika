@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Console, Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -930,8 +930,10 @@ describe("P16 copied-file real instance, serial", () => {
     const path = process.env.P16_LOCAL_BAR;
 
     if (!path) {
-      console.log(
-        "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
+      Effect.runSync(
+        Console.log(
+          "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
+        ),
       );
       return;
     }
@@ -943,13 +945,15 @@ describe("P16 copied-file real instance, serial", () => {
     const { programs } = await import("./table.ts");
     const windowed = exportsWindow(join(APP, "src"), programs);
     localBar(bar, digest, !process.env.CI, windowed);
-    console.log(
-      JSON.stringify({
-        law: "T10",
-        base: bar.base.map(readings),
-        head: bar.head.map(readings),
-        sizes: bar.sizes,
-      }),
+    Effect.runSync(
+      Console.log(
+        JSON.stringify({
+          law: "T10",
+          base: bar.base.map(readings),
+          head: bar.head.map(readings),
+          sizes: bar.sizes,
+        }),
+      ),
     );
     expect(() =>
       localBar(

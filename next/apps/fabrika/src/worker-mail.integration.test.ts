@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Console, Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -173,11 +173,13 @@ const mailDiagnostics = () => {
 
     try {
       value = await call();
-      console.error("T880 observation", JSON.stringify({ label, start, end: stamp(), value }, null, 2));
+      Effect.runSync(Console.error("T880 observation", JSON.stringify({ label, start, end: stamp(), value }, null, 2)));
     } catch (error) {
-      console.error(
-        "T880 observation",
-        JSON.stringify({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" }),
+      Effect.runSync(
+        Console.error(
+          "T880 observation",
+          JSON.stringify({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" }),
+        ),
       );
     }
 
@@ -189,7 +191,7 @@ const mailDiagnostics = () => {
     capture: async (instance: Instance, requester: string, responder: string) => {
       const frozen = frames.slice();
       note("failure", { requester, responder });
-      console.error("T880 diagnostics", JSON.stringify({ version: "next", frozen, events }, null, 2));
+      Effect.runSync(Console.error("T880 diagnostics", JSON.stringify({ version: "next", frozen, events }, null, 2)));
 
       for (const name of ["requester:1", "responder:1"]) {
         for (const stream of [`${name}/inbox`, `${name}/outbox`, `processes/${name}`]) {
@@ -595,7 +597,7 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
       } catch (error) {
         if (fixture.diagnostics !== undefined) {
           await fixture.diagnostics.capture(instance, requester, responder).catch(() => {
-            console.error("T880 diagnostic capture failed; rethrowing the original W2 failure");
+            Effect.runSync(Console.error("T880 diagnostic capture failed; rethrowing the original W2 failure"));
           });
         }
 

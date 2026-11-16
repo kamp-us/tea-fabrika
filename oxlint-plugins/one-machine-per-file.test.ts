@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Console, Effect } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -478,7 +479,7 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
     );
     expect(report.number_of_files).toBeGreaterThan(0);
     const hits = report.diagnostics.filter((d) => d.code === CODE);
-    console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length }));
+    Effect.runSync(Console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length })));
     expect(hits).toEqual([]);
   } finally {
     rmSync(scratch, { recursive: true, force: true });

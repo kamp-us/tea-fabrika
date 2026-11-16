@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:36:20-08:00",
+  "ended": "2026-11-15T21:01:35-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of slice E47 of the Effect-checker sweep (ticket 1075), in next/ and our tooling: globalConsole and globalConsoleInEffect, a judgment slice that fixes code and adds no lock line (owner ruling). Counted with only the two checks at error through --lspconfig on .agents, .github/ci, oxlint-plugins and next/apps/fabrika at origin/main e613fa45b: 99 hits (82 globalConsole, 17 globalConsoleInEffect), the same as the plan: .agents 41, oxlint-plugins 30, .github/ci 20, app:src 6, app:exam 2. None is in a file of pull request 1366. 58 hits sit in exam paths; this step fixed 51 by hand, all with Effect's Console, so every line still goes to the same stream with the same text: in Effect code by yield* Console (promise-types.ts, time-table.ts); in a plain script by running its output as one Effect program at the script's edge that answers the exit code, in place of process.exit (lint.ts, exact-versions.ts, stylelint.ts, workspace-reach.ts, field-check.ts, workflow-lint.ts, shard-times.ts, shard-rows.ts, legs.ts); in a test by Effect.runSync(Console.x) at the line (one-machine-per-file.test.ts and the two next/ integration tests). An Effect import brings fabrika/no-raw-try-catch, no-throw-in-effect-gen and no-effect-promise onto the file, so the try/catch blocks in those scripts became Effect.try, stylelint's throws a typed Unfinished error, field-check's JSON parse a Schema decode, and workflow-lint's YAML parse parseDocument with its errors list. 7 exam-path hits are left: changes.mjs 1, required.mjs 2, scheduled.mjs 2 and gitignore.mjs 1 run on the runner's own Node with no install, so effect cannot load there; program-package-layout.test.ts 1 holds a law helper's try/catch that the Effect import would make a lint error. The 41 .agents hits (chain.ts 12, drive.ts 8, gc.ts 20, flow/walk.ts 1) are product files for the build. Recount after: 48 (41 .agents, 7 left). No law was added or changed: the plan's L1 lock waits for the one lock PR, and no fix changed a shape a law reads.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Cost seen: an effect barrel import adds about 250 ms to each start of a short script. oxlint-plugins/exact-versions.test.ts, which starts the script 56 times, went from 7.75 s to 21.7 s; with subpath imports it took 12.4 s, which the barrel form call 2 sets for tooling would refuse. Ran at the uncommitted tree on e613fa45b: the narrow laws of every touched file (7 .github/ci files, 173 tests; 9 oxlint-plugins files, 389 tests; next/apps/fabrika/src/exam/no-promises.integration.test.ts, 15 tests), all green; pnpm lint green; one pnpm typecheck green after two fixes of my own (Schema.UnknownFromJsonString has no type in effect 4.1.3's dist, and an untyped Effect.try catch); the ratchet exits 0. Not run: worker-mail.integration.test.ts and instance-one-file.integration.test.ts, which start real instances. Each script edge with no law was run by hand: field-check outside git exits 2 with its message, shard-times on a missing and a stale report, shard-rows exits 0, and legs.ts prints the same bytes as on main.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/exact-versions.test.ts",
+      "plant": "main answers 0 where it found a version that is not exact",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/exact-versions.test.ts",
+      "plant": "each refused line printed to stdout in place of stderr",
+      "result": "green"
+    },
+    {
+      "law": "oxlint-plugins/stylelint.test.ts",
+      "plant": "a run that did not finish answers 0 in place of 2",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/workspace-reach.test.ts",
+      "plant": "a package nothing reaches answers 0 in place of 1",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts",
+      "plant": "lint.ts answers 0 when a finding blocks",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/field-check.test.ts",
+      "plant": "a row report's nonzero exit code dropped",
+      "result": "green"
+    },
+    {
+      "law": ".github/ci/workflow-lint.test.ts",
+      "plant": "the run answers 0 when a law reports an error",
+      "result": "green"
+    },
+    {
+      "law": ".github/ci/shard-rows.test.ts",
+      "plant": "the stale row lines never printed",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}
