@@ -7,10 +7,13 @@
 // box.sh sources first: MAIN, BOXES. One result line on stdout; exit 0, 1 (kept) or 2 (bad name or
 // usage), as box.sh's Python gave.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Console, Effect, Layer, Option } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";
 import * as Remove from "./box/Remove.ts";
 import * as RunsProcess from "./box/RunsProcess.ts";
+
+/** One variable of this process's environment, read through Config; unset is `undefined`. */
+const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
 const setExit = (code: number) =>
   Effect.sync(() => {
@@ -18,8 +21,10 @@ const setExit = (code: number) =>
   });
 
 const rm = Effect.fn("box.rm")(function* (name: string) {
-  const main = process.env.MAIN;
-  const boxes = process.env.BOXES;
+  // An empty variable stays empty, as a read of process.env gave it: only an unset one keeps the box.
+  const { main, boxes } = yield* Config.all({ main: text("MAIN"), boxes: text("BOXES") }).parse(
+    ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+  );
 
   if (main === undefined || boxes === undefined) {
     yield* Console.log(`kept box ${name}: inspection or removal failed`);

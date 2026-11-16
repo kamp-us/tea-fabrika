@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Config, ConfigProvider, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -1825,13 +1825,23 @@ const backstopFor = (plan: string, brief: string) =>
     return backstop;
   });
 
+/**
+ * One variable of this process's environment, read through Config when it runs; unset is
+ * `undefined`, and an empty one stays empty, as a read of process.env gave it.
+ */
+const variable = (name: string) =>
+  Config.String(name)
+    .pipe(Config.option, Config.map(Option.getOrUndefined))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+
 /** A limit's override from the environment, when set and a number. */
 const overridden =
   (ref: Context.Reference<number>, name: string) =>
-  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E, never> => {
-    const v = Number(process.env[name]);
-    return process.env[name] !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
-  };
+  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E | Config.ConfigError, never> =>
+    Effect.flatMap(variable(name), (set) => {
+      const v = Number(set);
+      return set !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
+    });
 
 /** The last line of a quest that never started: its pin could not be made or read. */
 const unpinned = (reason: string, quest?: string) => {
