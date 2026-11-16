@@ -1859,7 +1859,13 @@
         "eslint/no-restricted-imports": [
           "error",
           {
-            "patterns": [{ "group": ["**", "!effect", "!effect/*"], "message": "SettingsRuntime imports only Effect." }]
+            "patterns": [
+              {
+                "group": ["**", "!effect", "!effect/[A-Z]*"],
+                "caseSensitive": true,
+                "message": "SettingsRuntime imports only Effect."
+              }
+            ]
           }
         ]
       }
@@ -1889,12 +1895,13 @@
                 "group": [
                   "**",
                   "!effect",
-                  "!effect/*",
+                  "!effect/[A-Z]*",
                   "!./Start.ts",
                   "!./Starts.ts",
                   "!./Snapshot.ts",
                   "!./Declarations.ts"
                 ],
+                "caseSensitive": true,
                 "message": "Settings contracts use Effect and settings-owned types only."
               }
             ]
