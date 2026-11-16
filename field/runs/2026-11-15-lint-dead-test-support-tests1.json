@@ -4,7 +4,7 @@
   "ticket": "lint-dead-test-support",
   "pr": null,
   "started": null,
-  "ended": "2026-11-15T23:47:40-08:00",
+  "ended": "2026-11-15T23:53:07-08:00",
   "parent": null,
   "active": null,
   "role": "tests",
@@ -32,6 +32,6 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "Start time was not read at the start, so it is null; the first planted file in the scratch folder is from 2026-11-15T23:43:44-08:00. Each plant ran once on a copy of node-kinds.json and the real file was restored by copy; git status shows no change to it. The config entry is the build step's: node-kinds.json is an exam path in exam-paths.json. The field example is next/packages/libfabrika/src/Id.test-support.ts:generatorWith on branch fabrikalfa/mock-lib-top-s1. Tests ran with nice -n 15 pnpm exec vitest run --maxWorkers=3 on the one new file only.",
+  "note": "Start time was not read at the start, so it is null; the first planted file in the scratch folder is from 2026-11-15T23:43:44-08:00. Each plant ran once on a copy of node-kinds.json and the real file was restored by copy; git status shows no change to it. node-kinds.json is an exam path in exam-paths.json, and stepcommit.sh refuses a build commit of an exam path (a build may not commit exam paths; answer send to tests), so the tests step commits the config entry too, in its own second commit after the laws were seen red on main: the two default groups written again plus test-support-module. At that head all three laws and next/apps/fabrika/src/exam/node-kinds.test.ts pass, and pnpm lint:dead passes (unreachable ledger: PASS, 3 recorded findings, none new; the ledger is unchanged). No build step is needed. The field example is next/packages/libfabrika/src/Id.test-support.ts:generatorWith on branch fabrikalfa/mock-lib-top-s1. Tests ran with nice -n 15 pnpm exec vitest run --maxWorkers=3 on the one new file only.",
   "step": "tests"
 }
