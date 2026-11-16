@@ -1,7 +1,7 @@
 ---
 id: 0227
 title: In next/, saved state carries its shape's number v, its build and a chain of named upgrades, and older code meeting state from a newer fabrika stops and changes nothing
-status: accepted
+status: amended-in-part by [0572](0572-pre-release-shape-change-wipes-data.md)
 date: 2026-11-01
 tags: [saved-state, upgrades, versions, build, hot-reload, restart, next]
 ---
@@ -57,3 +57,7 @@ declares a chain of named upgrades, one per number; the schema is still the last
 - Built in `runtime/State.ts`.
 - Why only 60%: most shape changes may be additive, which needs no number. If in Tier 1's first two
   weeks no process crosses two shapes at once, reopen it for the schema alone.
+
+## Amendments
+
+- 2026-11-15: set aside until the first release by [0572](0572-pre-release-shape-change-wipes-data.md): before then a saved-shape change wipes the data, with no upgrade chain. After the first release is not decided.

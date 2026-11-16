@@ -352,7 +352,7 @@ describe("T877 public TOML edits, next/", () => {
           const l = layout(seed);
           const array = (value: unknown, marker: string) => `[${literal(value)}, "# string text", ${marker}${l.eol}]`;
           const keys = members.map((_, i) => segments[i]!);
-          let markers = members.map((_, i) => `# member-${i}-雪`);
+          const markers = members.map((_, i) => `# member-${i}-雪`);
           let inline = `{ ${members
             .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
             .join(", ")} }`;
@@ -371,7 +371,8 @@ describe("T877 public TOML edits, next/", () => {
             inline = `{ ${head}, child${l.space}${inline}, ${tail} }`;
             model = { before: [first, "# string text"], child: model, after: [last, "# string text"] };
             paths = paths.map((path) => ["child", ...path]);
-            markers = [before, ...markers, after];
+            markers.unshift(before);
+            markers.push(after);
           }
 
           const prefix = `# first-雪${l.eol}`;
