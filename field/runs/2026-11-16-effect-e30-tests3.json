@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-tests3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:43:24-08:00",
+  "ended": "2026-11-15T21:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step, round 3, for judgment slice E30 of the Effect-check sweep (strictEffectProvide), in next/. The hit next/packages/libfabrika/src/node/build/bundle.ts:92 provides Path.layer inside the library; the checker's fix stands, so the caller provides Path. Every test that calls bundle directly now provides the platform layer NodePath.layer from @effect/platform-node at its own run edge: four calls in next/packages/libfabrika/src/node/build/build-assets.integration.test.ts (the dynamic-import and acquisition-failure law, and both branches of the failed-and-interrupted cleanup law) and the C1 law in next/packages/libfabrika/src/node/build/error-cause.integration.test.ts. No assertion changed and no law was loosened: each still runs the real bundle and checks the same output. bundle.ts was not touched; the build step drops its provide next. The other callers of bundle are in build.ts, whose functions already require Path from their callers, so their tests need no change. Hits: met 1 (bundle.ts:92, a product file), fixed 0 here, left 1 for the build, waiting on 1366 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8.6,
+  "note": "Ran at head 2cf58c1 plus this change: both integration files passed before the plant (4 and 25 laws) and again with the build's change planted in bundle.ts (the provide dropped, so bundle requires Path), which is the state the build will leave. pnpm format passed; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 and the exam ratchet are reported in the step's result. No pnpm typecheck in this step.",
+  "plants": [
+    {
+      "law": "C1: a bundle whose plugin throws keeps Rolldown's rejection as the cause",
+      "plant": "bundle.ts:92 drops Effect.provide(Path.layer) and the test drops its NodePath.layer provide, so nobody provides Path",
+      "result": "red"
+    },
+    {
+      "law": "cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles",
+      "plant": "bundle.ts:92 drops Effect.provide(Path.layer) and the test drops its NodePath.layer provides at the failing-bundle and cleanup calls, so nobody provides Path",
+      "result": "red"
+    },
+    {
+      "law": "C1 and every build-assets law, with only bundle.ts:92's provide dropped and the test edges kept",
+      "plant": "bundle.ts:92 becomes yield* Path.Path, the build's planned change",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { NodeServices } from "@effect/platform-node";
+import { NodePath, NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
@@ -544,7 +544,9 @@ describe("P16 cleanup and recording", () => {
             },
           });
           const { bundle } = await import("./bundle.ts");
-          const output = await Effect.runPromise(bundle(entry, []).pipe(Effect.withTracer(tracer)));
+          const output = await Effect.runPromise(
+            bundle(entry, []).pipe(Effect.withTracer(tracer), Effect.provide(NodePath.layer)),
+          );
           expect(output.output.filter((item) => item.type === "chunk")).toHaveLength(1);
           expect(spans.find((span) => span.name === "build.bundle")?.attributes.get("phase")).toBe("bundle");
           const native = await vi.importActual<Roll>("rolldown");
@@ -558,7 +560,9 @@ describe("P16 cleanup and recording", () => {
 
           try {
             const failing = await import("./bundle.ts");
-            expect(await Effect.runPromise(Effect.result(failing.bundle(entry, [])))).toMatchObject({
+            expect(
+              await Effect.runPromise(Effect.result(failing.bundle(entry, [])).pipe(Effect.provide(NodePath.layer))),
+            ).toMatchObject({
               _tag: "Failure",
               failure: { _tag: "BuildError", reason: "bundle" },
             });
@@ -781,7 +785,7 @@ describe("P16 cleanup and recording", () => {
             const { bundle } = await import("./bundle.ts");
 
             if (interrupt) {
-              const fiber = Effect.runFork(bundle(entry, []));
+              const fiber = Effect.runFork(bundle(entry, []).pipe(Effect.provide(NodePath.layer)));
 
               try {
                 await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
@@ -789,7 +793,9 @@ describe("P16 cleanup and recording", () => {
                 await Effect.runPromise(Fiber.interrupt(fiber));
               }
             } else {
-              expect(await Effect.runPromise(Effect.result(bundle(entry, [])))).toMatchObject({
+              expect(
+                await Effect.runPromise(Effect.result(bundle(entry, [])).pipe(Effect.provide(NodePath.layer))),
+              ).toMatchObject({
                 _tag: "Failure",
                 failure: { _tag: "BuildError" },
               });

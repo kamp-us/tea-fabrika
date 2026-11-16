@@ -4,6 +4,7 @@
 // `:71` (a selected package's manifest) and `:273` and `:283` (listed files and the Compiler ledger);
 // `css.ts:24`, `:28`, `:32` and `:35`, the four branches of the stylesheet refusal, through both of
 // its callers; `bundle.ts:47`, a Rolldown build that rejects.
+import { NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
@@ -181,6 +182,6 @@ describe("T695, a Rolldown build keeps what it rejected with", () => {
         const error = yield* Effect.flip(bundle({ main: "virtual:cause-probe" }, [plugin], { phase: "program" }));
         expect(error.reason).toBe("bundle");
         expect(error.cause, "the cause is what Rolldown rejected with").toBeDefined();
-      }),
+      }).pipe(Effect.provide(NodePath.layer)),
   );
 });
