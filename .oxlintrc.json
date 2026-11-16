@@ -2933,6 +2933,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/**",

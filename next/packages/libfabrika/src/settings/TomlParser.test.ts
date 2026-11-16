@@ -242,11 +242,13 @@ const Group = Schema.Struct({ name: Name, elements: Schema.Array(Element).check(
 
 // Every run holds these as array names, each with a table and an array inside its last element.
 const hostile = ["__proto__", "constructor", "toString"] as const;
+
 const prototype = Object.getOwnPropertyNames(Object.prototype).sort();
 
 // The model keeps every key as an own key, as a parsed document must.
 const own = <A>(table: object, key: string, value: A): A => {
   Object.defineProperty(table, key, { value, enumerable: true, writable: true, configurable: true });
+
   return value;
 };
 
@@ -316,11 +318,13 @@ it.effect.prop(
   ({ groups, leaves }) =>
     Effect.gen(function* () {
       const toml = yield* Toml;
+
       const nested = {
         leaves: [],
         sub: { name: "toString", leaves },
         items: { name: "constructor", elements: [leaves, leaves] },
       } as const;
+
       // The hostile arrays come first, so a drawn group of the same name is the one left out.
       const w = arrays([...hostile.map((name) => ({ name, elements: [{ leaves }, nested] })), ...groups]);
       const parsed = yield* toml.parse(w.text);

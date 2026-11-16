@@ -224,6 +224,7 @@ export const brainGrace = Setting.make("desktop.brain-grace", {
 });
 
 const KIB = 1_024;
+
 const MIB = 1_024 * KIB;
 
 const Unread = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16_384 })).annotate({
