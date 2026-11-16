@@ -8,6 +8,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import { Arbitrary, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import { spoken } from "./spoken.ts";
 
 const SEED = 119120;
@@ -25,13 +28,13 @@ const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
  * row's place so a handle has one or more digits.
  */
 const page = (tiles: typeof Tiles.Type, said: typeof Said.Type, pick: number) => {
-  const rows = tiles.map((t, i) => ({ ...t, id: `tile_${i + 1}`, name: `${NAMES[i]!}:1` }));
-  const desk = rows.map((t, i) => ({
+  const rows = Arr.map(tiles, (t, i) => ({ ...t, id: `tile_${i + 1}`, name: `${NAMES[i]!}:1` }));
+  const desk = Arr.map(rows, (t, i) => ({
     id: t.id,
     program: `${PACKS[(pick + i) % PACKS.length]!}/${NAMES[i]!}`,
     n: i + 1 + (pick % 40),
   }));
-  const messages = said.messages.map((x, i) => ({ ...x, tile: rows[(pick + i) % rows.length]!.id }));
+  const messages = Arr.map(said.messages, (x, i) => ({ ...x, tile: rows[(pick + i) % rows.length]!.id }));
   return { m: { tiles: rows, said: { ...said, messages } }, desk };
 };
 
@@ -41,7 +44,10 @@ type DeskTile = Page["desk"][number];
 const lookup =
   (p: Page) =>
   (id: string): DeskTile | null =>
-    p.desk.find((t) => t.id === id) ?? null;
+    Option.getOrElse(
+      Arr.findFirst(p.desk, (t) => t.id === id),
+      () => null,
+    );
 
 /** What the test expects an end to be said as: the guideline's words, written out here by hand. */
 const endLine = (t: DeskTile) => `${t.program.slice(t.program.indexOf("/") + 1)} in t${t.n} ended`;
@@ -53,9 +59,15 @@ describe("the polite region says the current burst as one line", () => {
     ({ tiles, said, pick }) => {
       const p = page(tiles, said, pick);
       const words = spoken(p.m, lookup(p), () => null);
-      const ends = new Set(p.m.said.messages.filter((x) => x._tag === "ended").map((x) => x.tile));
+      const ends = new Set(
+        Function.pipe(
+          p.m.said.messages,
+          Arr.filter((x) => x._tag === "ended"),
+          Arr.map((x) => x.tile),
+        ),
+      );
 
-      for (const t of p.desk.filter((t) => !ends.has(t.id))) {
+      for (const t of Arr.filter(p.desk, (t) => !ends.has(t.id))) {
         expect(words.includes(endLine(t)), `${endLine(t)} was said, and no end of it is in the burst`).toBe(false);
       }
 
@@ -65,13 +77,13 @@ describe("the polite region says the current burst as one line", () => {
       }
 
       // Each message's own words, as the region says it alone, appear in order, one line.
-      const parts = p.m.said.messages.map((x) =>
+      const parts = Arr.map(p.m.said.messages, (x) =>
         spoken({ ...p.m, said: { id: p.m.said.id, messages: [x] } }, lookup(p), () => null),
       );
-      expect(words, "the burst as one line, in order").toBe(parts.join(", "));
+      expect(words, "the burst as one line, in order").toBe(Arr.join(parts, ", "));
       expect(words.includes("\n"), "the burst is one line").toBe(false);
 
-      for (const [x, part] of p.m.said.messages.map((x, i) => [x, parts[i]!] as const)) {
+      for (const [x, part] of Arr.map(p.m.said.messages, (x, i) => [x, parts[i]!] as const)) {
         const tile = lookup(p)(x.tile)!;
 
         if (x._tag === "ended") {
@@ -94,14 +106,14 @@ describe("the polite region says the current burst as one line", () => {
     "property: some generated pages hold bursts of two or more, ends of more than one reason, handles of two digits, and an ended tile no message names, so the law above can see each",
     { list: Arbitrary.array(Arbitrary.schema(Schema.Tuple([Tiles, Said, Pick])), { minLength: 30, maxLength: 30 }) },
     ({ list }) => {
-      const pages = list.map(([tiles, said, pick]) => page(tiles, said, pick));
-      const ends = pages.flatMap((p) => p.m.said.messages.filter((x) => x._tag === "ended"));
-      expect(pages.some((p) => p.m.said.messages.length >= 2)).toBe(true);
-      expect(new Set(ends.map((x) => x.reason._tag)).size, "ends of more than one reason").toBeGreaterThan(1);
-      expect(pages.some((p) => p.desk.some((t) => t.n >= 10))).toBe(true);
+      const pages = Arr.map(list, ([tiles, said, pick]) => page(tiles, said, pick));
+      const ends = Arr.flatMap(pages, (p) => Arr.filter(p.m.said.messages, (x) => x._tag === "ended"));
+      expect(Arr.some(pages, (p) => p.m.said.messages.length >= 2)).toBe(true);
+      expect(new Set(Arr.map(ends, (x) => x.reason._tag)).size, "ends of more than one reason").toBeGreaterThan(1);
+      expect(Arr.some(pages, (p) => Arr.some(p.desk, (t) => t.n >= 10))).toBe(true);
       expect(
-        pages.some((p) =>
-          p.m.tiles.some((t) => t.reach._tag === "ended" && !p.m.said.messages.some((x) => x.tile === t.id)),
+        Arr.some(pages, (p) =>
+          Arr.some(p.m.tiles, (t) => t.reach._tag === "ended" && !Arr.some(p.m.said.messages, (x) => x.tile === t.id)),
         ),
       ).toBe(true);
       return true;

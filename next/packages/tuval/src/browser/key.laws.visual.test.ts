@@ -17,6 +17,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect } from "effect";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -127,7 +129,11 @@ const stored = (page: Page) =>
     page.evaluate(async () => {
       const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
       const hex = (b: ArrayBufferLike | ArrayBufferView) =>
-        [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+        Function.pipe(
+          [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)],
+          Arr.map((x) => x.toString(16).padStart(2, "0")),
+          Arr.join(""),
+        );
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
@@ -140,7 +146,11 @@ const stored = (page: Page) =>
         } else if (typeof v === "string") {
           out.push({
             kind: "string",
-            hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
+            hex: Function.pipe(
+              [...new TextEncoder().encode(v)],
+              Arr.map((x) => x.toString(16).padStart(2, "0")),
+              Arr.join(""),
+            ),
           });
         } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
@@ -225,9 +235,9 @@ describe("L3: the browser key store", () => {
                         const first = yield* Effect.forEach(pages, (p) => current(p, null), {
                           concurrency: "unbounded",
                         });
-                        const prints = new Set(first.map((a) => a.ok?.fingerprint));
+                        const prints = new Set(Arr.map(first, (a) => a.ok?.fingerprint));
                         expect(prints.size, "racing tabs made more than one key").toBe(1);
-                        expect(first.filter((a) => a.ok?.found === "created")).toHaveLength(1);
+                        expect(Arr.filter(first, (a) => a.ok?.found === "created")).toHaveLength(1);
                         seen.created++;
                         let stored_ = first[0]!.ok!.fingerprint;
                         const removed: Array<string> = [];
@@ -277,7 +287,7 @@ describe("L3: the browser key store", () => {
                         }
 
                         const rest = yield* stored(pages[0]!);
-                        expect(rest.filter((v) => v.kind === "key:private").length).toBeGreaterThan(0);
+                        expect(Arr.filter(rest, (v) => v.kind === "key:private").length).toBeGreaterThan(0);
 
                         for (const v of rest) {
                           expect(

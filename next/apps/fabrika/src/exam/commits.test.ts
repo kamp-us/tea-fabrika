@@ -1,7 +1,7 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Option } from "effect";
+import { Array as Arr, Option, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -78,9 +78,9 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
 
 const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => ({
   head: "head",
-  changed: commits.flatMap((c) => c.paths),
+  changed: Arr.flatMap(commits, (c) => c.paths),
   commits,
-  notes: commits.flatMap((c) => (c.signed === null ? [] : [c.signed])),
+  notes: Arr.flatMap(commits, (c) => (c.signed === null ? [] : [c.signed])),
   ...more,
 });
 
@@ -109,7 +109,7 @@ const ask = (paths: string[]): Answer => ({ _tag: "ask", to: "owner", for: "exam
 
 const examPaths = fc
   .uniqueArray(filename, { minLength: 1, maxLength: 8 })
-  .map((names) => names.map((name) => `next/${name}.test.ts`));
+  .map((names) => Arr.map(names, (name) => `next/${name}.test.ts`));
 
 describe("signedText", () => {
   // format: v2 is the byte-exact text existing step signatures verify against.
@@ -210,7 +210,7 @@ const key = fc
     minLength: 43,
     maxLength: 43,
   })
-  .map((chars) => `AAAAC3NzaC1lZDI1NTE5AAAAI${chars.join("")}`);
+  .map((chars) => `AAAAC3NzaC1lZDI1NTE5AAAAI${Arr.join(chars, "")}`);
 
 const line = (principal: string, key: string, ns = "fabrika-step") =>
   `${principal} namespaces="${ns}" ssh-ed25519 ${key}`;
@@ -222,14 +222,14 @@ const keyFile = fc
     fc.boolean(),
   )
   .chain(([keys, people, newline]) => {
-    const lines = keys.map((key, i) =>
+    const lines = Arr.map(keys, (key, i) =>
       i < 3 ? line(ROLES[i]!, key) : i < 6 ? line(`person:${people[i - 3]}`, key, "git") : line(ROLES[i % 3]!, key),
     );
     return fc.shuffledSubarray(lines, { minLength: lines.length, maxLength: lines.length }).map((ordered) => ({
       keys,
       people,
       lines: ordered,
-      text: ordered.join("\n") + (newline ? "\n" : ""),
+      text: Arr.join(ordered, "\n") + (newline ? "\n" : ""),
     }));
   });
 
@@ -239,11 +239,11 @@ describe("keysProblem (p87, p87b)", () => {
     fc.assert(
       fc.property(keyFile, (file) => {
         expect(keysProblem(file.text)).toBeNull();
-        const steps = file.keys.slice(0, 3).map((key, i) => line(ROLES[i]!, key));
-        expect(keysProblem(steps.join("\n"))).toBeNull();
-        expect(keysProblem([...steps, line("build", file.keys[3]!)].join("\n"))).toBeNull();
+        const steps = Arr.map(file.keys.slice(0, 3), (key, i) => line(ROLES[i]!, key));
+        expect(keysProblem(Arr.join(steps, "\n"))).toBeNull();
+        expect(keysProblem(Arr.join([...steps, line("build", file.keys[3]!)], "\n"))).toBeNull();
         expect(
-          keysProblem([...steps, line(`person:${file.people[0]}Az09._:-`, file.keys[3]!, "git")].join("\n")),
+          keysProblem(Arr.join([...steps, line(`person:${file.people[0]}Az09._:-`, file.keys[3]!, "git")], "\n")),
         ).toBeNull();
       }),
       runs,
@@ -273,7 +273,7 @@ describe("keysProblem (p87, p87b)", () => {
         for (const bad of badLines) {
           const lines = [...file.lines];
           lines.splice(at % lines.length, 0, bad);
-          expect(keysProblem(lines.join("\n"))).toBe(`refused line ${JSON.stringify(bad)}`);
+          expect(keysProblem(Arr.join(lines, "\n"))).toBe(`refused line ${JSON.stringify(bad)}`);
         }
       }),
       runs,
@@ -283,21 +283,25 @@ describe("keysProblem (p87, p87b)", () => {
   it("P09: ambiguous principals, reused keys, wrong namespaces and missing roles fail with a reason", () => {
     fc.assert(
       fc.property(keyFile, id, role, (file, name, step) => {
-        const steps = file.keys.slice(0, 3).map((key, i) => line(ROLES[i]!, key));
+        const steps = Arr.map(file.keys.slice(0, 3), (key, i) => line(ROLES[i]!, key));
         const person = line(`person:${name}`, file.keys[3]!, "git");
         const files = [
           null,
-          [...steps, line("build", file.keys[0]!)].join("\n"),
-          [...steps, line(`owner:${name}`, file.keys[3]!)].join("\n"),
-          [...steps, line(`personish:${name}`, file.keys[3]!, "git")].join("\n"),
-          [...steps, line(step, file.keys[3]!, "git")].join("\n"),
-          [...steps, line(`person:${name}`, file.keys[3]!)].join("\n"),
-          steps.filter((_, i) => ROLES[i] !== step).join("\n"),
-          [...steps, person, line(`person:${name}`, file.keys[4]!, "git")].join("\n"),
-          [...steps, line(`person:${name}`, file.keys[0]!, "git")].join("\n"),
-          [...steps, person, line(`person:${name}:other`, file.keys[3]!, "git")].join("\n"),
-          ...["", `${name},*`, `${name}*`, `${name}?`, `!${name}`].map((bad) =>
-            [...steps, person, line(`person:${bad}`, file.keys[4]!, "git")].join("\n"),
+          Arr.join([...steps, line("build", file.keys[0]!)], "\n"),
+          Arr.join([...steps, line(`owner:${name}`, file.keys[3]!)], "\n"),
+          Arr.join([...steps, line(`personish:${name}`, file.keys[3]!, "git")], "\n"),
+          Arr.join([...steps, line(step, file.keys[3]!, "git")], "\n"),
+          Arr.join([...steps, line(`person:${name}`, file.keys[3]!)], "\n"),
+          pipe(
+            steps,
+            Arr.filter((_, i) => ROLES[i] !== step),
+            Arr.join("\n"),
+          ),
+          Arr.join([...steps, person, line(`person:${name}`, file.keys[4]!, "git")], "\n"),
+          Arr.join([...steps, line(`person:${name}`, file.keys[0]!, "git")], "\n"),
+          Arr.join([...steps, person, line(`person:${name}:other`, file.keys[3]!, "git")], "\n"),
+          ...Arr.map(["", `${name},*`, `${name}*`, `${name}?`, `!${name}`], (bad) =>
+            Arr.join([...steps, person, line(`person:${bad}`, file.keys[4]!, "git")], "\n"),
           ),
         ];
 
@@ -319,7 +323,7 @@ describe("exam paths and scope", () => {
         fc.array(filename, { maxLength: 5 }),
         fc.integer({ min: 0, max: 32 }),
         (name, dirs, control) => {
-          const folder = dirs.length === 0 ? "" : `${dirs.join("/")}/`;
+          const folder = dirs.length === 0 ? "" : `${Arr.join(dirs, "/")}/`;
 
           for (const path of [
             "exam-paths.json",
@@ -354,7 +358,7 @@ describe("exam paths and scope", () => {
   it("P11: only a next/ file or exam path brings any generated change into scope", () => {
     fc.assert(
       fc.property(fc.array(filename, { maxLength: 10 }), filename, (names, name) => {
-        const outside = names.map((n) => `docs/${n}.md`);
+        const outside = Arr.map(names, (n) => `docs/${n}.md`);
         expect(inScope(outside, EXAM)).toBe(false);
         expect(inScope([...outside, `next/${name}.ts`], EXAM)).toBe(true);
         expect(inScope([...outside, "boundary-rules.json"], EXAM)).toBe(true);
@@ -367,7 +371,7 @@ describe("exam paths and scope", () => {
   it("P12: generated exam lists decode, and the real list protects every listed check", () => {
     fc.assert(
       fc.property(fc.array(fc.record({ glob: filename, reason: fc.string() })), filename, (rows, name) => {
-        const encoded = rows.map(({ glob, reason }) =>
+        const encoded = Arr.map(rows, ({ glob, reason }) =>
           Object.fromEntries([
             ["glob", glob],
             ["why", reason],
@@ -375,7 +379,7 @@ describe("exam paths and scope", () => {
         );
         expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
         const list = Option.getOrThrow(decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")));
-        expect(list.every((row) => row.reason.length > 0)).toBe(true);
+        expect(Arr.every(list, (row) => row.reason.length > 0)).toBe(true);
         const isExam = examMatcher(list);
 
         for (const path of [
@@ -404,7 +408,7 @@ const route = fc
   .tuple(fc.uniqueArray(sha, { minLength: 4, maxLength: 10 }), ticket, fc.array(role, { minLength: 10, maxLength: 10 }))
   .map(([trees, ticket, roles]) => {
     const versions = { tests: 0, build: 0, lead: 0 };
-    const notes = trees.slice(1).map((to, i): Note => ({
+    const notes = Arr.map(trees.slice(1), (to, i): Note => ({
       _tag: "attested",
       step: roles[i]!,
       ticket,
@@ -414,7 +418,7 @@ const route = fc
       key: `key-${i}`,
       sig: `sig-${i}`,
     }));
-    return { trees, notes, commits: notes.map((n) => commit(n)) };
+    return { trees, notes, commits: Arr.map(notes, (n) => commit(n)) };
   });
 
 describe("check (p83 to p86)", () => {
@@ -422,7 +426,7 @@ describe("check (p83 to p86)", () => {
   it("P13: any chain signed by its step keys passes and names its ticket", () => {
     fc.assert(
       fc.property(route, filename, ({ notes, commits }, name) => {
-        expect(check(pr(commits.map((c) => ({ ...c, paths: [`next/${name}.ts`] }))), EXAM)).toEqual({
+        expect(check(pr(Arr.map(commits, (c) => ({ ...c, paths: [`next/${name}.ts`] }))), EXAM)).toEqual({
           ticket: notes[0]!.ticket,
           answers: [DONE],
         });
@@ -436,7 +440,7 @@ describe("check (p83 to p86)", () => {
       fc.property(route, examPaths, ({ notes }, paths) => {
         const n = notes[0]!;
         const c = commit(n, paths);
-        const wrongRole = ROLES.find((step) => step !== n.step)!;
+        const wrongRole = Option.getOrThrow(Arr.findFirst(ROLES, (step) => step !== n.step));
 
         for (const bad of [
           { ...c, signed: null },
@@ -448,8 +452,8 @@ describe("check (p83 to p86)", () => {
           expect(answers(pr([bad], { changed: [] }))).toEqual([stuck("unsigned_commit", c.sha)]);
         }
 
-        const unsigned = notes.map((n) => ({ ...commit(n), signed: null }));
-        expect(answers(pr(unsigned))).toEqual(unsigned.map((c) => stuck("unsigned_commit", c.sha)));
+        const unsigned = Arr.map(notes, (n) => ({ ...commit(n), signed: null }));
+        expect(answers(pr(unsigned))).toEqual(Arr.map(unsigned, (c) => stuck("unsigned_commit", c.sha)));
       }),
       runs,
     );
@@ -502,10 +506,10 @@ describe("check (p83 to p86)", () => {
     const drops = fc.array(fc.boolean(), { minLength: 10, maxLength: 10 });
     fc.assert(
       fc.property(route, sha, drops, ({ commits }, head, drop) => {
-        const mixed = commits.map((c, i) => (drop[i] === true ? { ...c, signed: null } : c));
-        const reasons = answers(pr(mixed, { head })).flatMap((a) => (a._tag === "stuck" ? [a.reason] : []));
+        const mixed = Arr.map(commits, (c, i) => (drop[i] === true ? { ...c, signed: null } : c));
+        const reasons = Arr.flatMap(answers(pr(mixed, { head })), (a) => (a._tag === "stuck" ? [a.reason] : []));
         expect(reasons).not.toContain("broken_chain");
-        expect(reasons).toEqual(mixed.flatMap((c) => (c.signed === null ? ["unsigned_commit"] : [])));
+        expect(reasons).toEqual(Arr.flatMap(mixed, (c) => (c.signed === null ? ["unsigned_commit"] : [])));
       }),
       runs,
     );
@@ -522,14 +526,14 @@ describe("newest links (p89)", () => {
     );
     fc.assert(
       fc.property(ordered, role, (r, step) => {
-        const notes = r.notes.map((n) => ({ ...n, step }));
+        const notes = Arr.map(r.notes, (n) => ({ ...n, step }));
         // Give each original link a unique version even if its original role differed.
-        const unique = notes.map((n) => ({ ...n, version: r.trees.indexOf(n.to) }));
+        const unique = Arr.map(notes, (n) => ({ ...n, version: r.trees.indexOf(n.to) }));
         const expected = unique.at(-1)!.version === unique.length ? new Set() : new Set([step]);
         expect(
           staleSteps(
             notes[0]!.ticket,
-            unique.map((n) => signed(n)),
+            Arr.map(unique, (n) => signed(n)),
             unique,
           ),
         ).toEqual(expected);
@@ -556,7 +560,7 @@ describe("newest links (p89)", () => {
           stuck("stale_link", newest.sha, { step }),
           stuck("stale_link", older.sha, { step }),
         ]);
-        const absent = ROLES.find((r) => r !== step)!;
+        const absent = Option.getOrThrow(Arr.findFirst(ROLES, (r) => r !== step));
         expect(answers(pr([c], { notes: [signed(n), signed({ ...n, step: absent })] }))).toEqual([
           stuck("stale_link", "head", { step: absent }),
         ]);
@@ -568,15 +572,12 @@ describe("newest links (p89)", () => {
   it("P20: invalid and other-ticket notes never stale a valid ordered chain", () => {
     fc.assert(
       fc.property(route, ({ notes, commits }) => {
-        const noise = notes.flatMap((n) => [
+        const noise = Arr.flatMap(notes, (n) => [
           signed({ ...n, version: n.version + 100 }, null),
-          signed(
-            { ...n, version: n.version + 100 },
-            ROLES.find((r) => r !== n.step)!,
-          ),
+          signed({ ...n, version: n.version + 100 }, Option.getOrThrow(Arr.findFirst(ROLES, (r) => r !== n.step))),
           signed({ ...n, version: n.version + 100, ticket: `${n.ticket}0` }),
         ]);
-        expect(answers(pr(commits, { notes: [...noise, ...notes.map((n) => signed(n))] }))).toEqual([DONE]);
+        expect(answers(pr(commits, { notes: [...noise, ...Arr.map(notes, (n) => signed(n))] }))).toEqual([DONE]);
         expect(staleSteps(notes[0]!.ticket, [], [])).toEqual(new Set());
       }),
       runs,
@@ -621,7 +622,7 @@ const chainData = fc
     base: base!,
     squash: squash!,
     other: other!,
-    rows: r.notes.map((n) => logged(n, base!, squash!)),
+    rows: Arr.map(r.notes, (n) => logged(n, base!, squash!)),
     trees: new Map([
       [base!, r.trees[0]!],
       [squash!, r.trees.at(-1)!],
@@ -657,7 +658,10 @@ describe("chain (p86 and p89 after merge)", () => {
           [],
           d.rows.slice(1),
           [{ ...first, signer: null }, ...d.rows.slice(1)],
-          [{ ...first, signer: ROLES.find((r) => r !== first.link.step)! }, ...d.rows.slice(1)],
+          [
+            { ...first, signer: Option.getOrThrow(Arr.findFirst(ROLES, (r) => r !== first.link.step)) },
+            ...d.rows.slice(1),
+          ],
           [{ ...first, link: { ...first.link, from: d.other } }, ...d.rows.slice(1)],
           [...d.rows.slice(0, -1), { ...last, link: { ...last.link, to: d.other } }],
           [first, { ...second, link: { ...second.link, from: d.other } }, ...d.rows.slice(2)],
@@ -714,7 +718,7 @@ describe("chain (p86 and p89 after merge)", () => {
           expect(chain(d.squash, d.rows, d.trees, placed)).toEqual([stuck("broken_chain", d.squash)]);
         }
 
-        const rows = d.rows.map((r, i) =>
+        const rows = Arr.map(d.rows, (r, i) =>
           i === at % d.rows.length ? { ...r, link: { ...r.link, base: d.other } } : r,
         );
         expect(chain(d.squash, rows, d.trees, d.placed)).toEqual([stuck("broken_chain", d.squash)]);
@@ -918,8 +922,8 @@ describe("trusted config files", () => {
 
 const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).chain((folders) =>
   fc.record({
-    left: fc.constant(folders.slice(0, 1).map((f) => ({ glob: `${f}/**`, reason: "" }))),
-    right: fc.constant(folders.slice(1, -1).map((f) => ({ glob: `${f}/**`, reason: "" }))),
+    left: fc.constant(Arr.map(folders.slice(0, 1), (f) => ({ glob: `${f}/**`, reason: "" }))),
+    right: fc.constant(Arr.map(folders.slice(1, -1), (f) => ({ glob: `${f}/**`, reason: "" }))),
     paths: fc.array(
       fc.tuple(fc.constantFrom(...folders), filename).map(([f, n]) => `${f}/${n}.ts`),
       { minLength: 1, maxLength: 8 },
@@ -927,7 +931,7 @@ const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).cha
   }),
 );
 
-const refusals = (cs: Commit[], main = EXAM) => check(pr(cs), main).answers.filter((a) => a._tag === "stuck");
+const refusals = (cs: Commit[], main = EXAM) => Arr.filter(check(pr(cs), main).answers, (a) => a._tag === "stuck");
 
 describe("0053 parent exam lists", () => {
   // Plant: use main's matcher, or union main and parent.
@@ -935,7 +939,7 @@ describe("0053 parent exam lists", () => {
     fc.assert(
       fc.property(anyNote, parentLists, (n, { left, right, paths }) => {
         const c = { ...commit({ ...n, step: "build" }, paths), exam: left };
-        const matched = paths.filter(examMatcher(left)).sort();
+        const matched = Arr.filter(paths, examMatcher(left)).sort();
         const expected = matched.length ? [stuck("build_touched_exam", c.sha, { paths: matched })] : [];
         expect(refusals([c], examMatcher(right))).toEqual(expected);
         expect(refusals([c], examMatcher(left))).toEqual(expected);
@@ -948,17 +952,17 @@ describe("0053 parent exam lists", () => {
     fc.assert(
       fc.property(route, parentLists, ({ commits }, { left, right, paths }) => {
         const main = examMatcher(right);
-        const matched = [...new Set(paths.filter(main))].sort();
+        const matched = [...new Set(Arr.filter(paths, main))].sort();
 
         for (const exam of [left, right]) {
           const result = check(
             pr(
-              commits.map((c) => ({ ...c, exam, paths: ["unrelated/file.ts"] })),
+              Arr.map(commits, (c) => ({ ...c, exam, paths: ["unrelated/file.ts"] })),
               { changed: paths },
             ),
             main,
           );
-          expect(result.answers.filter((a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
+          expect(Arr.filter(result.answers, (a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
         }
       }),
       runs,
@@ -968,8 +972,12 @@ describe("0053 parent exam lists", () => {
   it("t3: missing build list fails closed even without paths", () => {
     fc.assert(
       fc.property(route, fc.array(filename), ({ commits }, paths) => {
-        const cs = commits.map((c) => ({ ...c, paths, exam: c.signed?.note.step === "build" ? null : c.exam }));
-        const expected = cs.filter((c) => c.signed?.note.step === "build").map((c) => stuck("no_exam_list", c.sha));
+        const cs = Arr.map(commits, (c) => ({ ...c, paths, exam: c.signed?.note.step === "build" ? null : c.exam }));
+        const expected = pipe(
+          cs,
+          Arr.filter((c) => c.signed?.note.step === "build"),
+          Arr.map((c) => stuck("no_exam_list", c.sha)),
+        );
         expect(refusals(cs)).toEqual(expected);
       }),
       runs,
@@ -992,11 +1000,11 @@ describe("0053 parent exam lists", () => {
   it("t5: non-build commits ignore missing parent lists", () => {
     fc.assert(
       fc.property(route, ({ commits }) => {
-        const cs = commits.filter((c) => c.signed?.note.step !== "build");
-        const people = commits.map((c): Commit => ({ ...c, signed: null, person: true }));
+        const cs = Arr.filter(commits, (c) => c.signed?.note.step !== "build");
+        const people = Arr.map(commits, (c): Commit => ({ ...c, signed: null, person: true }));
 
         for (const group of [cs, people]) {
-          expect(refusals(group.map((c) => ({ ...c, exam: null })))).toEqual(refusals(group));
+          expect(refusals(Arr.map(group, (c) => ({ ...c, exam: null })))).toEqual(refusals(group));
         }
       }),
       runs,
@@ -1006,12 +1014,12 @@ describe("0053 parent exam lists", () => {
   it("t6: another commit list cannot change this commit answer", () => {
     fc.assert(
       fc.property(route, parentLists, ({ commits }, { left, right, paths }) => {
-        const cs = commits.slice(0, 5).map((c) => ({ ...c, paths, exam: left }));
+        const cs = Arr.map(commits.slice(0, 5), (c) => ({ ...c, paths, exam: left }));
 
         for (let i = 0; i < cs.length; i++) {
-          const changed = cs.map((c, j) => ({ ...c, exam: i === j ? right : left }));
-          expect(refusals(changed).filter((a) => a.sha !== cs[i]?.sha)).toEqual(
-            refusals(cs).filter((a) => a.sha !== cs[i]?.sha),
+          const changed = Arr.map(cs, (c, j) => ({ ...c, exam: i === j ? right : left }));
+          expect(Arr.filter(refusals(changed), (a) => a.sha !== cs[i]?.sha)).toEqual(
+            Arr.filter(refusals(cs), (a) => a.sha !== cs[i]?.sha),
           );
         }
       }),

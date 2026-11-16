@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -71,13 +72,14 @@ describe("person git signatures (p83b)", () => {
         const r = new Repo(PERSON_KEYS);
         const unsigned = r.change("a.ts");
         acceptPgp(r);
-        const decoys = ["xgpgsig", "gpgsig-sha256", `x-${name}`].map(
+        const decoys = Arr.map(
+          ["xgpgsig", "gpgsig-sha256", `x-${name}`],
           (header) => `${header} -----BEGIN SSH SIGNATURE-----`,
         );
         const pgp = ["gpgsig -----BEGIN PGP SIGNATURE-----", " fixture", " -----END PGP SIGNATURE-----"];
         const raw = r
           .git("cat-file", "commit", unsigned)
-          .replace("\n\n", ["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""].join("\n"));
+          .replace("\n\n", Arr.join(["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""], "\n"));
         const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
         expect(verifyCommit(r, c)).toBe(0);
         const out = r.check([], r.base, c);
@@ -105,12 +107,13 @@ describe("person git signatures (p83b)", () => {
             const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
             const sig = "-----BEGIN SSH SIGNATURE-----\n";
             const decoy = `x-${name} ${value}${lineBreak}${header} ${sig.trimEnd()}`;
-            const pgp = [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"].join(
+            const pgp = Arr.join(
+              [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"],
               "\n",
             );
             const raw = r
               .git("cat-file", "commit", unsigned)
-              .replace("\n\n", () => `\n${(before ? [decoy, pgp] : [pgp, decoy]).join("\n")}\n\n`);
+              .replace("\n\n", () => `\n${Arr.join(before ? [decoy, pgp] : [pgp, decoy], "\n")}\n\n`);
             const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
             expect(verifyCommit(r, c)).toBe(0);
             r.git("update-ref", "refs/heads/pr", c);

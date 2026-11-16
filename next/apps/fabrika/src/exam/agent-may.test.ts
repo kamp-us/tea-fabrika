@@ -22,7 +22,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 
@@ -497,7 +497,7 @@ const paths = [
 ];
 
 const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoor | null => {
-  if (!paths.some((p) => files.has(p))) {
+  if (!Arr.some(paths, (p) => files.has(p))) {
     return null;
   }
 
@@ -557,7 +557,7 @@ it.effect.prop(
         }
       }
 
-      if (!paths.some((p) => found.has(p))) {
+      if (!Arr.some(paths, (p) => found.has(p))) {
         ctx.skip("not built: P25 agent policy");
       }
 
@@ -577,7 +577,7 @@ it.effect.prop(
         { name: "uncheck", readOnly: false, personOnly: false },
         { name: "left", readOnly: true, personOnly: false },
         { name: "items", readOnly: true, personOnly: false },
-        ...personInputs.map((name) => ({ name, readOnly: false, personOnly: true })),
+        ...Arr.map(personInputs, (name) => ({ name, readOnly: false, personOnly: true })),
       ]);
       yield* installedRefusal(policy, `planted.${c.unknown}`, c.body);
 

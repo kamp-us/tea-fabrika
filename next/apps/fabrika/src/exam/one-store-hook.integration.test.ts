@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
@@ -22,85 +23,112 @@ const TEST = "next/programs/counter/src/view.test.ts";
 const TSX_TEST = "next/programs/counter/src/view.test.tsx";
 const OUTSIDE = "programs/counter/src/view.tsx";
 
-const forbidden = [
-  'import * as React from "react";', // 1
-  'import {useSyncExternalStore} from "react";', // 2
-  'import {useSyncExternalStore as useStore} from "react";', // 3
-  'import {useSyncExternalStore as useShim} from "use-sync-external-store/shim";', // 4
-  "declare const store: {read: () => number; listen: (f: () => void) => () => void};", // 5
-  "export const read = () => React.useSyncExternalStore(store.listen, store.read);", // 6
-  "export const kept = [useSyncExternalStore, useStore, useShim];", // 7
-].join("\n");
+const forbidden = Arr.join(
+  [
+    'import * as React from "react";', // 1
+    'import {useSyncExternalStore} from "react";', // 2
+    'import {useSyncExternalStore as useStore} from "react";', // 3
+    'import {useSyncExternalStore as useShim} from "use-sync-external-store/shim";', // 4
+    "declare const store: {read: () => number; listen: (f: () => void) => () => void};", // 5
+    "export const read = () => React.useSyncExternalStore(store.listen, store.read);", // 6
+    "export const kept = [useSyncExternalStore, useStore, useShim];", // 7
+  ],
+  "\n",
+);
 
-const passes = [
-  'import {type ViewHandle, useRuntime} from "@demlik/tea/react";',
-  'declare const run: ViewHandle<{views: {counter: {count: number}}}, {type: "inc"}>;',
-  "export const Counter = () => {",
-  "\tconst [view, send] = useRuntime(run, (model) => model.views.counter);",
-  '\treturn <button onClick={() => send({type: "inc"})}>{view.count}</button>;',
-  "};",
-].join("\n");
+const passes = Arr.join(
+  [
+    'import {type ViewHandle, useRuntime} from "@demlik/tea/react";',
+    'declare const run: ViewHandle<{views: {counter: {count: number}}}, {type: "inc"}>;',
+    "export const Counter = () => {",
+    "\tconst [view, send] = useRuntime(run, (model) => model.views.counter);",
+    '\treturn <button onClick={() => send({type: "inc"})}>{view.count}</button>;',
+    "};",
+  ],
+  "\n",
+);
 
-const runtime = [
-  'import {type ViewHandle, useRuntime} from "@demlik/tea/react";', // 1
-  'import * as tea from "@demlik/tea/react";', // 2
-  'declare const run: ViewHandle<{count: number}, {type: "inc"}>;', // 3
-  "export const Bare = () => { useRuntime(run); return null; };", // 4
-  "export const Voided = () => { void useRuntime(run); return null; };", // 5
-  "export const Member = () => { tea.useRuntime(run); return null; };", // 6
-  "export const VoidMember = () => { void tea.useRuntime(run); return null; };", // 7
-].join("\n");
+const runtime = Arr.join(
+  [
+    'import {type ViewHandle, useRuntime} from "@demlik/tea/react";', // 1
+    'import * as tea from "@demlik/tea/react";', // 2
+    'declare const run: ViewHandle<{count: number}, {type: "inc"}>;', // 3
+    "export const Bare = () => { useRuntime(run); return null; };", // 4
+    "export const Voided = () => { void useRuntime(run); return null; };", // 5
+    "export const Member = () => { tea.useRuntime(run); return null; };", // 6
+    "export const VoidMember = () => { void tea.useRuntime(run); return null; };", // 7
+  ],
+  "\n",
+);
 
-const model = [
-  'import {useModel} from "@kampus/tuval";', // 1
-  "declare const store: {read: () => number; listen: (f: () => void) => () => void};", // 2
-  "export const Bare = () => { useModel(store); return null; };", // 3
-  "export const Voided = () => { void useModel(store); return null; };", // 4
-].join("\n");
+const model = Arr.join(
+  [
+    'import {useModel} from "@kampus/tuval";', // 1
+    "declare const store: {read: () => number; listen: (f: () => void) => () => void};", // 2
+    "export const Bare = () => { useModel(store); return null; };", // 3
+    "export const Voided = () => { void useModel(store); return null; };", // 4
+  ],
+  "\n",
+);
 
 // Declarations keep the import and member checks from masking a missed dropped value.
-const otherHooks = [
-  "declare const run: unknown;", // 1
-  "declare const useMachine: (run: unknown) => unknown;", // 2
-  "declare const useSyncExternalStore: (run: unknown) => unknown;", // 3
-  "export const Machine = () => { useMachine(run); return null; };", // 4
-  "export const VoidMachine = () => { void useMachine(run); return null; };", // 5
-  "export const Store = () => { useSyncExternalStore(run); return null; };", // 6
-  "export const VoidStore = () => { void useSyncExternalStore(run); return null; };", // 7
-].join("\n");
+const otherHooks = Arr.join(
+  [
+    "declare const run: unknown;", // 1
+    "declare const useMachine: (run: unknown) => unknown;", // 2
+    "declare const useSyncExternalStore: (run: unknown) => unknown;", // 3
+    "export const Machine = () => { useMachine(run); return null; };", // 4
+    "export const VoidMachine = () => { void useMachine(run); return null; };", // 5
+    "export const Store = () => { useSyncExternalStore(run); return null; };", // 6
+    "export const VoidStore = () => { void useSyncExternalStore(run); return null; };", // 7
+  ],
+  "\n",
+);
 
-const otherCalls = [
-  'import {useEffect} from "react";',
-  'import {useSyncExternalStore} from "./local-store.ts";',
-  "export const kept = [useEffect, useSyncExternalStore];",
-  "declare const helper: () => number;",
-  "declare const makeHook: () => () => number;",
-  "export const Other = () => { helper(); makeHook()(); helper; return null; };",
-].join("\n");
+const otherCalls = Arr.join(
+  [
+    'import {useEffect} from "react";',
+    'import {useSyncExternalStore} from "./local-store.ts";',
+    "export const kept = [useEffect, useSyncExternalStore];",
+    "declare const helper: () => number;",
+    "declare const makeHook: () => () => number;",
+    "export const Other = () => { helper(); makeHook()(); helper; return null; };",
+  ],
+  "\n",
+);
 
-const computed = [
-  "declare const useRuntime: string;",
-  "declare const useSyncExternalStore: string;",
-  "declare const hooks: Record<string, (run: unknown) => unknown>;",
-  "declare const run: unknown;",
-  "export const Indexed = () => { hooks[useRuntime](run); return hooks[useSyncExternalStore](run); };",
-  'export const Literal = () => { hooks["useRuntime"](run); return hooks["useSyncExternalStore"](run); };',
-].join("\n");
+const computed = Arr.join(
+  [
+    "declare const useRuntime: string;",
+    "declare const useSyncExternalStore: string;",
+    "declare const hooks: Record<string, (run: unknown) => unknown>;",
+    "declare const run: unknown;",
+    "export const Indexed = () => { hooks[useRuntime](run); return hooks[useSyncExternalStore](run); };",
+    'export const Literal = () => { hooks["useRuntime"](run); return hooks["useSyncExternalStore"](run); };',
+  ],
+  "\n",
+);
 
-const privateCalls = [
-  "export class Store {",
-  "\t#useRuntime = () => null;",
-  "\t#useSyncExternalStore = () => null;",
-  "\tread() { this.#useRuntime(); return this.#useSyncExternalStore(); }",
-  "}",
-].join("\n");
+const privateCalls = Arr.join(
+  [
+    "export class Store {",
+    "\t#useRuntime = () => null;",
+    "\t#useSyncExternalStore = () => null;",
+    "\tread() { this.#useRuntime(); return this.#useSyncExternalStore(); }",
+    "}",
+  ],
+  "\n",
+);
 
-const unary = [
-  'import {useRuntime} from "@demlik/tea/react";',
-  "declare const run: unknown;",
-  "export const Negated = () => { !useRuntime(run); return null; };",
-  "export const Type = () => { typeof useRuntime(run); return null; };",
-].join("\n");
+const unary = Arr.join(
+  [
+    'import {useRuntime} from "@demlik/tea/react";',
+    "declare const run: unknown;",
+    "export const Negated = () => { !useRuntime(run); return null; };",
+    "export const Type = () => { typeof useRuntime(run); return null; };",
+  ],
+  "\n",
+);
 
 describe("one-store-hook", async () => {
   const all = await plant({

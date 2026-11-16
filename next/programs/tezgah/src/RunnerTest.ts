@@ -12,7 +12,7 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Predicate, Schema, type Scope } from "effect";
+import { Array as Arr, Effect, Option, Predicate, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -71,13 +71,18 @@ type View = typeof View.Type;
 const order = (node: unknown): ReadonlyArray<string> =>
   Predicate.isString(node)
     ? [node]
-    : Predicate.hasProperty(node, "parts") && Array.isArray(node.parts)
-      ? node.parts.flatMap((p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
+    : Predicate.hasProperty(node, "parts") && Arr.isArray(node.parts)
+      ? Arr.flatMap(node.parts, (p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
       : [];
 
 const tilesOn = (v: View, n: number) => {
-  const space = v.workspaces.find((w) => w.n === n);
-  return space === undefined ? [] : order(space.layout).flatMap((id) => v.tiles.filter((t) => t.id === id));
+  return Option.match(
+    Arr.findFirst(v.workspaces, (w) => w.n === n),
+    {
+      onNone: () => [],
+      onSome: (space) => Arr.flatMap(order(space.layout), (id) => Arr.filter(v.tiles, (t) => t.id === id)),
+    },
+  );
 };
 
 const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
@@ -126,7 +131,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
     expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
     yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
-      tilesOn(v, n).some((t) => t.id === tile),
+      Arr.some(tilesOn(v, n), (t) => t.id === tile),
     );
     return;
   }
@@ -142,8 +147,8 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   }
 
   expect(answer._tag).toBe("accepted");
-  yield* until(`the close of ${from.id}`, readView(live), (v) => !tilesOn(v, n).some((t) => t.id === from.id));
-  const others = before.tiles.filter((t) => t.id !== from.id);
+  yield* until(`the close of ${from.id}`, readView(live), (v) => !Arr.some(tilesOn(v, n), (t) => t.id === from.id));
+  const others = Arr.filter(before.tiles, (t) => t.id !== from.id);
 
   seen[from.child ? "child" : "other"]++;
 

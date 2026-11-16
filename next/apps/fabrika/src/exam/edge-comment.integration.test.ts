@@ -5,7 +5,7 @@
 // `next/` file that is not a test, so the list of edge files cannot come back through the config.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Array as Arr, Option, Schema, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -61,17 +61,23 @@ const UNUSED = at("unused");
 describe("edge-comment", async () => {
   const all = await plant({
     ...Object.fromEntries(
-      Object.entries(CASES).map(([name, [comment, line]]) => [at(name), [...PRELUDE, comment, line].join("\n")]),
+      Arr.map(Object.entries(CASES), ([name, [comment, line]]) => [
+        at(name),
+        Arr.join([...PRELUDE, comment, line], "\n"),
+      ]),
     ),
-    [UNUSED]: [
-      ...PRELUDE,
-      "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below",
-      "export const a = 1;",
-    ].join("\n"),
+    [UNUSED]: Arr.join(
+      [
+        ...PRELUDE,
+        "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below",
+        "export const a = 1;",
+      ],
+      "\n",
+    ),
   });
 
   it("refuses each wrong edge comment, at the top of the file", () => {
-    const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
+    const refused = Arr.filter(Object.entries(CASES), ([, [, , no]]) => no);
     expect(refused).toHaveLength(8);
 
     for (const [name] of refused) {
@@ -80,7 +86,7 @@ describe("edge-comment", async () => {
   });
 
   it("passes a right one for each rule and for both, and leaves other comments alone", () => {
-    const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
+    const passed = Arr.filter(Object.entries(CASES), ([, [, , no]]) => !no);
     expect(passed).toHaveLength(4);
 
     for (const [name] of passed) {
@@ -146,10 +152,12 @@ describe(".oxlintrc.json", () => {
   const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
   const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
   const off = (setting: unknown): boolean =>
-    setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
+    setting === "off" || setting === 0 || (Arr.isArray(setting) && off(setting[0]));
 
   it("turns the three rules on in next/**", () => {
-    const next = config.overrides.find((o) => o.files.length === 1 && o.files[0] === "next/**");
+    const next = Option.getOrUndefined(
+      Arr.findFirst(config.overrides, (o) => o.files.length === 1 && o.files[0] === "next/**"),
+    );
 
     for (const rule of RULES) {
       expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
@@ -157,13 +165,13 @@ describe(".oxlintrc.json", () => {
   });
 
   it("turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
-    const loosened = config.overrides.filter((o) => RULES.some((rule) => off(o.rules[rule])));
+    const loosened = Arr.filter(config.overrides, (o) => Arr.some(RULES, (rule) => off(o.rules[rule])));
 
     for (const o of loosened) {
-      expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
+      expect(Arr.filter(o.files, (f) => !TESTS.includes(f))).toEqual([]);
     }
 
-    expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
+    expect(Arr.filter(config.ignorePatterns, (p) => p.startsWith("next"))).toEqual([]);
   });
 
   // `.agents/` is held to next/'s rules (0033) by the three laws below. One override, the mirror,
@@ -175,14 +183,19 @@ describe(".oxlintrc.json", () => {
   // The mirror is every override whose paths are all in `.agents/` and none is a test path.
   const agents = (path: string): boolean => path.startsWith(".agents/");
   const test = (path: string): boolean => /\.test\.|Test\.|\.test-support\./.test(path);
-  const mirror = (o: (typeof config.overrides)[number]): boolean => o.files.every(agents) && !o.files.some(test);
+  const mirror = (o: (typeof config.overrides)[number]): boolean =>
+    Arr.every(o.files, agents) && !Arr.some(o.files, test);
   const LEVELS: Readonly<Record<string, string>> = { 0: "off", 1: "warn", 2: "error" };
   const level = (setting: unknown): string =>
-    Array.isArray(setting) ? level(setting[0]) : (LEVELS[String(setting)] ?? String(setting));
+    Arr.isArray(setting) ? level(setting[0]) : (LEVELS[String(setting)] ?? String(setting));
 
   it("pinned: the .agents/ override repeats the next/** rule block exactly (0033)", () => {
-    const next = config.overrides.filter((o) => o.files.length === 1 && o.files[0] === "next/**");
-    const mirrors = config.overrides.filter(mirror).map((o) => [o.files, o.rules]);
+    const next = Arr.filter(config.overrides, (o) => o.files.length === 1 && o.files[0] === "next/**");
+    const mirrors = pipe(
+      config.overrides,
+      Arr.filter(mirror),
+      Arr.map((o) => [o.files, o.rules]),
+    );
 
     // One expect for the count, the files and the rules, so a failure shows all three at once.
     expect(next).toHaveLength(1);
@@ -195,22 +208,27 @@ describe(".oxlintrc.json", () => {
   // same kind: a test path when the override's `.agents/` paths are all test paths, a non-test path
   // otherwise, so a rule turned off for next/'s tests never excuses `.agents/`'s code.
   it("pinned: every other override naming .agents/ gives next/ the same level for each rule (0033)", () => {
-    const unmatched = config.overrides
-      .filter((o) => o.files.some(agents) && !mirror(o))
-      .flatMap((o) => {
-        const tests = o.files.filter(agents).every(test);
-        return Object.entries(o.rules)
-          .filter(
+    const unmatched = pipe(
+      config.overrides,
+      Arr.filter((o) => Arr.some(o.files, agents) && !mirror(o)),
+      Arr.flatMap((o) => {
+        const tests = pipe(o.files, Arr.filter(agents), Arr.every(test));
+        return pipe(
+          Object.entries(o.rules),
+          Arr.filter(
             ([rule, setting]) =>
-              !config.overrides.some(
+              !Arr.some(
+                config.overrides,
                 (n) =>
-                  n.files.some((f) => f.startsWith("next/") && test(f) === tests) &&
+                  Arr.some(n.files, (f) => f.startsWith("next/") && test(f) === tests) &&
                   rule in n.rules &&
                   level(n.rules[rule]) === level(setting),
               ),
-          )
-          .map(([rule, setting]) => [o.files.join(", "), rule, level(setting)]);
-      });
+          ),
+          Arr.map(([rule, setting]) => [Arr.join(o.files, ", "), rule, level(setting)]),
+        );
+      }),
+    );
 
     expect(unmatched).toEqual([]);
   });
@@ -218,13 +236,17 @@ describe(".oxlintrc.json", () => {
   // 0033's binding rule, which the level match above does not hold alone: no override turns a rule
   // off for `.agents/`'s code, only for its tests. The mirror is held to `next/**` by its own law.
   it("pinned: no override turns a rule off for a non-test .agents/ path (0033)", () => {
-    const offs = config.overrides
-      .filter((o) => o.files.some((f) => agents(f) && !test(f)) && !mirror(o))
-      .flatMap((o) =>
-        Object.entries(o.rules)
-          .filter(([, setting]) => off(setting))
-          .map(([rule]) => [o.files.join(", "), rule]),
-      );
+    const offs = pipe(
+      config.overrides,
+      Arr.filter((o) => Arr.some(o.files, (f) => agents(f) && !test(f)) && !mirror(o)),
+      Arr.flatMap((o) =>
+        pipe(
+          Object.entries(o.rules),
+          Arr.filter(([, setting]) => off(setting)),
+          Arr.map(([rule]) => [Arr.join(o.files, ", "), rule]),
+        ),
+      ),
+    );
 
     expect(offs).toEqual([]);
   });

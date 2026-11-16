@@ -8,7 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
-import { Schema } from "effect";
+import { Array as Arr, Option, Schema, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -26,34 +26,39 @@ const Kinds = Schema.fromJsonString(
 );
 
 // The repository's own tracked list, read as text: a reader, which 0536 keeps on pull requests.
-// oxlint-disable-next-line fabrika/integration-test-name -- git ls-files only reads the repository's own index
-const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" })
-  .stdout.split("\0")
-  .filter((p) => p !== "");
+const tracked = Arr.filter(
+  // oxlint-disable-next-line fabrika/integration-test-name -- git ls-files only reads the repository's own index
+  spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" }).stdout.split("\0"),
+  (p) => p !== "",
+);
 
-const packages = tracked
-  .filter((p) => p.endsWith("package.json"))
-  .map((p) => dirname(p))
-  .sort((a, b) => b.length - a.length);
+const packages = pipe(
+  tracked,
+  Arr.filter((p) => p.endsWith("package.json")),
+  Arr.map((p) => dirname(p)),
+).sort((a, b) => b.length - a.length);
 
 /** A path inside its nearest package, as code-graph matches a convention's glob against it. */
 const inPackage = (path: string) => {
-  const dir = packages.find((d) => d === "." || path.startsWith(`${d}/`)) ?? ".";
+  const dir = Option.getOrElse(
+    Arr.findFirst(packages, (d) => d === "." || path.startsWith(`${d}/`)),
+    () => ".",
+  );
   return dir === "." ? path : path.slice(dir.length + 1);
 };
 
-const sources = tracked.filter((p) => p.startsWith("next/") && CODE.test(p) && !TEST.test(p));
+const sources = Arr.filter(tracked, (p) => p.startsWith("next/") && CODE.test(p) && !TEST.test(p));
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** A file's text with every comment blanked, so a name in a comment is no binding. */
 const code = (path: string) => {
   const text = read(path);
   const { comments } = parseSync(path, text);
-  return comments.reduce((out, c) => out.slice(0, c.start) + " ".repeat(c.end - c.start) + out.slice(c.end), text);
+  return Arr.reduce(comments, text, (out, c) => out.slice(0, c.start) + " ".repeat(c.end - c.start) + out.slice(c.end));
 };
 
 const exported = (path: string) =>
-  parseSync(path, read(path)).module.staticExports.flatMap((e) => e.entries.map((x) => x.exportName.name));
+  Arr.flatMap(parseSync(path, read(path)).module.staticExports, (e) => Arr.map(e.entries, (x) => x.exportName.name));
 
 /** What is wrong with one names file, as one line per problem; empty when every name is real. */
 const problems = (text: string) => {
@@ -61,25 +66,29 @@ const problems = (text: string) => {
   const found: string[] = [];
 
   for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
-    const homes = tracked.filter((p) => CODE.test(p) && !TEST.test(p) && matchesGlob(inPackage(p), files));
+    const homes = Arr.filter(tracked, (p) => CODE.test(p) && !TEST.test(p) && matchesGlob(inPackage(p), files));
 
     if (homes.length === 0) {
       found.push(`${name}: its glob ${files} matches no file`);
       continue;
     }
 
-    const names = new Set(homes.flatMap(exported));
-    const others = sources.filter((p) => !homes.includes(p)).map(code);
+    const names = new Set(Arr.flatMap(homes, exported));
+    const others = pipe(
+      sources,
+      Arr.filter((p) => !homes.includes(p)),
+      Arr.map(code),
+    );
 
     for (const binding of exports) {
       if (!names.has(binding)) {
-        found.push(`${name}: ${binding} is not exported by ${homes.join(", ")}`);
+        found.push(`${name}: ${binding} is not exported by ${Arr.join(homes, ", ")}`);
       }
 
       const literal = new RegExp(`(["'\`])${binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1`);
 
-      if (!others.some((text) => literal.test(text))) {
-        found.push(`${name}: ${binding} is bound by no string in next/ outside ${homes.join(", ")}`);
+      if (!Arr.some(others, (text) => literal.test(text))) {
+        found.push(`${name}: ${binding} is bound by no string in next/ outside ${Arr.join(homes, ", ")}`);
       }
     }
   }

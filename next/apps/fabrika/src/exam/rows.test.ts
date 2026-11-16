@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Array as Arr, Schema, pipe } from "effect";
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
 
@@ -71,22 +71,32 @@ describe("the rule file's rows give a file its row", () => {
   };
   const weight = (pattern: string): number => {
     const segments = pattern.split("/");
-    const count = (keep: (segment: string) => boolean) => segments.filter(keep).length;
+    const count = (keep: (segment: string) => boolean) => Arr.filter(segments, keep).length;
     // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
     return (
       count((s) => s !== "**") * 1_000_000 +
       count((s) => !s.includes("*")) * 1_000 +
-      [...pattern].filter((c) => c !== "*" && c !== "/").length
+      Arr.filter([...pattern], (c) => c !== "*" && c !== "/").length
     );
   };
   const expected = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
-    const found = rows.flatMap((row) =>
-      row.paths
-        .filter((pattern) => claims(pattern.split("/"), path.split("/")))
-        .map((pattern) => ({ name: row.name, weight: weight(pattern) })),
+    const found = Arr.flatMap(rows, (row) =>
+      pipe(
+        row.paths,
+        Arr.filter((pattern) => claims(pattern.split("/"), path.split("/"))),
+        Arr.map((pattern) => ({ name: row.name, weight: weight(pattern) })),
+      ),
     );
-    const top = Math.max(...found.map((f) => f.weight));
-    return [...new Set(found.filter((f) => f.weight === top).map((f) => f.name))].sort();
+    const top = Math.max(...Arr.map(found, (f) => f.weight));
+    return [
+      ...new Set(
+        pipe(
+          found,
+          Arr.filter((f) => f.weight === top),
+          Arr.map((f) => f.name),
+        ),
+      ),
+    ].sort();
   };
 
   const folder = fc.constantFrom("src", "app", "data", "door", "runtime", "internal");
@@ -102,13 +112,13 @@ describe("the rule file's rows give a file its row", () => {
         nil: undefined,
       }),
     )
-    .map(([folders, last]) => [...folders, ...(last === undefined ? [] : [last])].join("/"));
+    .map(([folders, last]) => Arr.join([...folders, ...(last === undefined ? [] : [last])], "/"));
   const rows: fc.Arbitrary<ReadonlyArray<Row>> = fc
     .array(fc.array(pattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
-    .map((each) => each.map((paths, n) => ({ name: `row-${n}`, paths })));
+    .map((each) => Arr.map(each, (paths, n) => ({ name: `row-${n}`, paths })));
   const path = fc
     .tuple(fc.array(folder, { minLength: 1, maxLength: 4 }), file)
-    .map(([folders, last]) => [...folders, last].join("/"));
+    .map(([folders, last]) => Arr.join([...folders, last], "/"));
 
   // Plant: pick the first row whose pattern matches, in the rule file's order, and not the most
   // specific. Then `src/runtime/ProcessStore*` in a later row loses to `src/runtime` in an earlier

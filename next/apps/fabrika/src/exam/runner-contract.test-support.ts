@@ -31,7 +31,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Array as Arr, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -260,7 +260,9 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         yield* runner.due(at);
       }),
     receipts: () =>
-      sql.exec("SELECT value FROM process_receipts WHERE name=?", name).map((row) => JSON.parse(String(row.value))),
+      Arr.map(sql.exec("SELECT value FROM process_receipts WHERE name=?", name), (row) =>
+        JSON.parse(String(row.value)),
+      ),
     dead: () => sql.exec("SELECT * FROM entries WHERE stream LIKE '%/dead'"),
     down: () => sql.exec("SELECT * FROM entries WHERE \"_tag\"='down'"),
   };

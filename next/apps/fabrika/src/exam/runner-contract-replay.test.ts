@@ -12,7 +12,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import {
@@ -160,7 +160,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
   return {
     connect,
     deliveries: () => deliveries,
-    bindings: () => sql.exec("SELECT value FROM gateway_bindings").map((r) => JSON.parse(String(r.value))),
+    bindings: () => Arr.map(sql.exec("SELECT value FROM gateway_bindings"), (r) => JSON.parse(String(r.value))),
   };
 });
 
@@ -357,7 +357,7 @@ it.effect.prop(
       unchanged(before, yield* w.rows());
       expect(w.dead()).toEqual([]);
       expect(w.down()).toEqual([]);
-      expect(w.receipts().every((r) => r.tries === 0)).toBe(true);
+      expect(Arr.every(w.receipts(), (r) => r.tries === 0)).toBe(true);
     }),
   opts,
 );

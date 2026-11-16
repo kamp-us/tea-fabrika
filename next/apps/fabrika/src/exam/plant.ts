@@ -3,7 +3,7 @@
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
 // `next/**` globs meet them as they would meet the real file. Nothing is written inside the repo.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
@@ -44,10 +44,10 @@ export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.lin
     lint(files).pipe(
       Effect.map(
         (all) => (code: string, file: string) =>
-          all
-            .filter((f) => f.code === code && f.file === file)
-            .sort((a, b) => a.line - b.line)
-            .map(show),
+          Arr.map(
+            Arr.filter(all, (f) => f.code === code && f.file === file).sort((a, b) => a.line - b.line),
+            show,
+          ),
       ),
       Effect.provide(NodeServices.layer),
     ),
@@ -94,7 +94,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));
   }
 
-  return report.diagnostics.map((d): Fire => ({
+  return Arr.map(report.diagnostics, (d): Fire => ({
     code: d.code ?? "",
     file: d.filename,
     line: d.labels?.[0]?.span.line ?? 0,

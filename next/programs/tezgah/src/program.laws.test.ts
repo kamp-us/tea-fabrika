@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Array as Arr, Option, Result, Schema, pipe } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -71,8 +71,9 @@ const isNode = (u: unknown): u is Node =>
     u !== null &&
     "dir" in u &&
     "parts" in u &&
-    Array.isArray(u.parts) &&
-    u.parts.every(
+    Arr.isArray(u.parts) &&
+    Arr.every(
+      u.parts,
       (p: unknown) =>
         typeof p === "object" &&
         p !== null &&
@@ -111,7 +112,7 @@ type Tile = View["tiles"][number];
 
 /** Reading order: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => order(p.inner));
+  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => order(p.inner));
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
@@ -187,9 +188,9 @@ type Event = {
 };
 
 const spaceWith = (v: View, tile: string): Space | undefined =>
-  v.workspaces.find((w) => order(w.layout).includes(tile));
+  Option.getOrUndefined(Arr.findFirst(v.workspaces, (w) => order(w.layout).includes(tile)));
 
-const live = (v: View): ReadonlyArray<string> => v.workspaces.flatMap((w) => order(w.layout));
+const live = (v: View): ReadonlyArray<string> => Arr.flatMap(v.workspaces, (w) => order(w.layout));
 
 /** A world at the program's real init, through the stepper. */
 const begin = (p: Stepper): World => {
@@ -216,7 +217,7 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
     // L11's program half: every view decodes as a client reads it, `child` and all.
     w.view = Schema.decodeUnknownSync(View)(s.view);
     const cmds = s.cmds as ReadonlyArray<Cmd>;
-    w.stops.push(...cmds.filter((c) => c.type === "stop_child"));
+    w.stops.push(...Arr.filter(cmds, (c) => c.type === "stop_child"));
     return { before, after: w.view, result: { _tag: "stepped" }, cmds };
   }
 
@@ -224,7 +225,7 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
 };
 
 const via = { _tag: "key", keys: "ctrl+b %" };
-const starts = (cmds: ReadonlyArray<Cmd>) => cmds.filter((c) => c.type === "start_child");
+const starts = (cmds: ReadonlyArray<Cmd>) => Arr.filter(cmds, (c) => c.type === "start_child");
 
 /** The answer a start gets: `started`, or for an attach maybe the boot list's `already_started`. */
 const started = (cmd: Cmd, kind: "started" | "already_started", w: World) => {
@@ -251,15 +252,17 @@ type Kind =
 /** One move of `kind`, picked from what is possible in `w`, or null when nothing of that kind is. */
 const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
   const tiles = live(w.view);
-  const pending = new Set(w.waiting.flatMap((x) => (x._tag === "split" ? [x.from] : [])));
-  const ids = new Set([...tiles, ...w.waiting.map((x) => x.tile)]);
+  const pending = new Set(Arr.flatMap(w.waiting, (x) => (x._tag === "split" ? [x.from] : [])));
+  const ids = new Set([...tiles, ...Arr.map(w.waiting, (x) => x.tile)]);
   w.at++;
 
   switch (kind) {
     case "attach": {
-      const free = [1, 2, 3].filter(
+      const free = Arr.filter(
+        [1, 2, 3],
         (n) =>
-          !w.view.workspaces.some((s) => s.n === n) && !w.waiting.some((x) => x._tag === "attach" && x.workspace === n),
+          !Arr.some(w.view.workspaces, (s) => s.n === n) &&
+          !Arr.some(w.waiting, (x) => x._tag === "attach" && x.workspace === n),
       );
       const n = free[pick % Math.max(free.length, 1)];
 
@@ -316,7 +319,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
     case "close_waiting":
     case "close": {
-      const free = tiles.filter((t) => (kind === "close") !== pending.has(t));
+      const free = Arr.filter(tiles, (t) => (kind === "close") !== pending.has(t));
       const from = free[pick % Math.max(free.length, 1)];
 
       if (from === undefined) {
@@ -334,7 +337,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
         return null;
       }
 
-      w.waiting = w.waiting.filter((x) => x !== waiting);
+      w.waiting = Arr.filter(w.waiting, (x) => x !== waiting);
 
       if (kind === "refuse") {
         const error = { _tag: (["forbidden", "bad_name", "name_taken"] as const)[pick % 3] };
@@ -363,7 +366,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
         return null;
       }
 
-      w.stops = w.stops.filter((c) => c !== cmd);
+      w.stops = Arr.filter(w.stops, (c) => c !== cmd);
       const msg =
         pick % 3 === 0
           ? { type: "stop_child_err", cmd, error: { _tag: "noproc" }, at: w.at }
@@ -374,12 +377,14 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
     case "attach_reused": {
       // An attach of a new workspace whose first tile id is already a live tile's, or a waiting
       // start's: a reused id, which would put one tile on two workspaces.
-      const free = [1, 2, 3, 4].filter(
+      const free = Arr.filter(
+        [1, 2, 3, 4],
         (n) =>
-          !w.view.workspaces.some((s) => s.n === n) && !w.waiting.some((x) => x._tag === "attach" && x.workspace === n),
+          !Arr.some(w.view.workspaces, (s) => s.n === n) &&
+          !Arr.some(w.waiting, (x) => x._tag === "attach" && x.workspace === n),
       );
       const n = free[pick % Math.max(free.length, 1)];
-      const known = pick % 2 === 0 ? tiles : w.waiting.map((x) => x.tile);
+      const known = pick % 2 === 0 ? tiles : Arr.map(w.waiting, (x) => x.tile);
       const reused = known[(pick >> 1) % Math.max(known.length, 1)];
 
       if (n === undefined || reused === undefined) {
@@ -426,7 +431,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 /** fc.commands over the walk: each command is one kind, run only where the world allows it. */
 const tape = (kinds: ReadonlyArray<Kind>, most: number) =>
   fc.commands(
-    kinds.map((kind) =>
+    Arr.map(kinds, (kind) =>
       fc.nat().map((pick): fc.Command<{ events: Array<Event> }, { p: Stepper; w: World }> => ({
         check: () => true,
         run: (m, r) => {
@@ -473,7 +478,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
         (cmds) => {
           const events = walk(p, cmds);
           expect(
-            events.slice(0, 2).map((e) => [e.result._tag, starts(e.cmds).length, live(e.after).length]),
+            Arr.map(events.slice(0, 2), (e) => [e.result._tag, starts(e.cmds).length, live(e.after).length]),
             "L6: each walk's attach asks for one start and shows nothing, and its answer makes workspace 1's one tile",
           ).toEqual([
             ["stepped", 1, 0],
@@ -497,7 +502,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             if (e.waiting?._tag === "split" && e.answer === "started") {
               seen.placed++;
               const { tile, dir, cmd, space: home } = e.waiting;
-              const was = e.before.workspaces.find((s) => s.id === home);
+              const was = Option.getOrUndefined(Arr.findFirst(e.before.workspaces, (s) => s.id === home));
               // Plan amendment (a): a split whose tile was closed while its start waited is placed
               // after the workspace's focused tile instead.
               const gone = !live(e.before).includes(e.waiting.from);
@@ -526,7 +531,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
               expect(shown.indexOf(tile), `L6: ${tile} follows ${from} in reading order`).toBe(shown.indexOf(from) + 1);
               expect(now?.focus, "L6: focus moves to the new tile").toBe(tile);
               expect(now?.recent[0], "L6: the new tile is the newest in recent").toBe(tile);
-              const made = e.after.tiles.find((t) => t.id === tile);
+              const made = Option.getOrUndefined(Arr.findFirst(e.after.tiles, (t) => t.id === tile));
               expect(
                 made,
                 "L6: the new tile shows the started process, as tezgah's child, with no cursor",
@@ -536,14 +541,14 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
                 child: true,
                 cursor: null,
               });
-              expect(new Set(e.after.tiles.map((t) => t.n)).size, "L6: each tile has its own t<n>").toBe(
+              expect(new Set(Arr.map(e.after.tiles, (t) => t.n)).size, "L6: each tile has its own t<n>").toBe(
                 e.after.tiles.length,
               );
 
               for (const space of e.after.workspaces) {
                 if (space.id !== now?.id) {
                   expect(space, "L6: another workspace is untouched").toEqual(
-                    e.before.workspaces.find((s) => s.id === space.id),
+                    Option.getOrUndefined(Arr.findFirst(e.before.workspaces, (s) => s.id === space.id)),
                   );
                 }
               }
@@ -552,14 +557,14 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             if (e.waiting?._tag === "attach" && e.answer !== undefined && e.answer !== "refused") {
               seen.attached++;
               const { workspace, tile } = e.waiting;
-              const space = e.after.workspaces.find((s) => s.n === workspace);
+              const space = Option.getOrUndefined(Arr.findFirst(e.after.workspaces, (s) => s.n === workspace));
               expect(space, "L6: an attach's answer makes its workspace with its one tile, focused").toMatchObject({
                 layout: e.waiting.tile,
                 focus: e.waiting.tile,
                 recent: [e.waiting.tile],
               });
               expect(
-                e.after.tiles.find((t) => t.id === tile),
+                Option.getOrUndefined(Arr.findFirst(e.after.tiles, (t) => t.id === tile)),
                 "L6: the first tile shows its start",
               ).toMatchObject({
                 shows: e.waiting.cmd["name"],
@@ -568,9 +573,10 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             }
 
             if (e.result._tag === "stepped") {
-              expect([...e.after.tiles.map((t) => t.id)].sort(), `${e.move}: the tiles are the layouts' tiles`).toEqual(
-                [...live(e.after)].sort(),
-              );
+              expect(
+                [...Arr.map(e.after.tiles, (t) => t.id)].sort(),
+                `${e.move}: the tiles are the layouts' tiles`,
+              ).toEqual([...live(e.after)].sort());
             }
           }
         },
@@ -580,7 +586,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     // Every case of the law was walked: a split asked, refused, placed, placed after the focused
     // tile once its own tile closed (plan amendment (a)), and a workspace attached.
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `L6: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -611,9 +617,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             }
 
             expect(e.result._tag, `L7: ${e.move} is taken`).toBe("stepped");
-            const now = e.after.workspaces.find((s) => s.id === space.id)!;
+            const now = Option.getOrThrow(Arr.findFirst(e.after.workspaces, (s) => s.id === space.id));
             expect(order(now.layout), `L7: ${e.from} leaves and the rest keep their order`).toEqual(
-              was.filter((t) => t !== e.from),
+              Arr.filter(was, (t) => t !== e.from),
             );
             const i = was.indexOf(e.from);
             const heir = was[i + 1] ?? was[i - 1];
@@ -623,7 +629,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             );
             expect(now.recent, "L7: recent drops the closed tile").not.toContain(e.from);
             expect(
-              e.after.tiles.map((t) => t.id),
+              Arr.map(e.after.tiles, (t) => t.id),
               "L7: the closed tile leaves the tiles",
             ).not.toContain(e.from);
           }
@@ -632,7 +638,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `L7: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -645,17 +651,17 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
         tape(["attach", "answer", "split_right", "split_down", "answer", "close", "close", "stop"], 30),
         (cmds) => {
           for (const e of walk(p, cmds)) {
-            const stops = e.cmds.filter((c) => c.type === "stop_child");
+            const stops = Arr.filter(e.cmds, (c) => c.type === "stop_child");
 
             if (!e.move.startsWith("close") || e.from === undefined || e.result._tag !== "stepped") {
               expect(stops, `L8: ${e.move} stops nothing`).toEqual([]);
               continue;
             }
 
-            const tile: Tile = e.before.tiles.find((t) => t.id === e.from)!;
+            const tile: Tile = Option.getOrThrow(Arr.findFirst(e.before.tiles, (t) => t.id === e.from));
             seen[tile.child ? "child" : "other"]++;
             expect(
-              stops.map((c) => c["name"]),
+              Arr.map(stops, (c) => c["name"]),
               tile.child
                 ? `L8: a close of tezgah's child ${tile.shows} stops it`
                 : `L8: a close of ${tile.shows} stops nothing`,
@@ -666,7 +672,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 100 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `L8: the walks closed both kinds ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -756,7 +762,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `L9: the walks met every refusal ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -860,8 +866,8 @@ const focusMove = (
     return null;
   }
 
-  const others = tiles.filter((t) => !order(space.layout).includes(t));
-  const near = order(space.layout).filter((t) => t !== from);
+  const others = Arr.filter(tiles, (t) => !order(space.layout).includes(t));
+  const near = Arr.filter(order(space.layout), (t) => t !== from);
   const far = c.kind === "focus_far";
   const pool = far ? [...others, typeId("tile", 80_000 + (c.pick % 997))] : near;
   const to = pool[(c.pick >> 4) % Math.max(pool.length, 1)];
@@ -910,7 +916,14 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
 /** tezgah's focus commands, from its one commands table, and the click's move. */
 const focusCommands = async () => {
   const { commands } = await loadCommands();
-  return [...commands.map((c) => c.does as string).filter((d) => d.startsWith("tezgah.focus_")), CLICK];
+  return [
+    ...pipe(
+      commands,
+      Arr.map((c) => c.does as string),
+      Arr.filter((d) => d.startsWith("tezgah.focus_")),
+    ),
+    CLICK,
+  ];
 };
 
 describe("Desk S3: focus moves at the program", () => {
@@ -918,7 +931,8 @@ describe("Desk S3: focus moves at the program", () => {
   // moves from this table, so every row is also a command tezgah's did takes, between any two tiles.
   it("S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and tezgah's did takes each, and the click's, from any tile to another", async () => {
     const { commands } = await loadCommands();
-    const boundKeys = (does: string) => commands.find((c) => c.does === does)?.keys ?? [];
+    const boundKeys = (does: string) =>
+      Option.getOrUndefined(Arr.findFirst(commands, (c) => c.does === does))?.keys ?? [];
     // The plan's default key rows for S3 ("The shape", tezgah's commands table).
     const want: Readonly<Record<string, ReadonlyArray<string>>> = {
       "tezgah.focus_next": ["<prefix>o", "f6"],
@@ -954,7 +968,7 @@ describe("Desk S3: focus moves at the program", () => {
 
           const tiles = live(w.view);
           const a = tiles[from % tiles.length]!;
-          const others = tiles.filter((t) => t !== a);
+          const others = Arr.filter(tiles, (t) => t !== a);
           const b = others[to % others.length]!;
           const e = take(
             p,
@@ -1021,17 +1035,17 @@ describe("Desk S3: focus moves at the program", () => {
             seen.stale += before.focus === e.from ? 0 : 1;
             expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
             expect(e.cmds, `S3: ${e.move} asks for no Cmd`).toEqual([]);
-            const now = e.after.workspaces.find((s) => s.id === before.id)!;
+            const now = Option.getOrThrow(Arr.findFirst(e.after.workspaces, (s) => s.id === before.id));
             expect(now.focus, `S3: ${e.move} focuses its to`).toBe(e.to);
             expect(now.recent, `S3: ${e.move} puts its to first in recent, the rest in their order`).toEqual([
               e.to,
-              ...before.recent.filter((t) => t !== e.to),
+              ...Arr.filter(before.recent, (t) => t !== e.to),
             ]);
             expect(now.layout, `S3: ${e.move} changes no layout`).toEqual(before.layout);
 
-            for (const space of e.after.workspaces.filter((s) => s.id !== before.id)) {
+            for (const space of Arr.filter(e.after.workspaces, (s) => s.id !== before.id)) {
               expect(space, "S3: another workspace is untouched").toEqual(
-                e.before.workspaces.find((s) => s.id === space.id),
+                Option.getOrUndefined(Arr.findFirst(e.before.workspaces, (s) => s.id === space.id)),
               );
             }
 
@@ -1051,7 +1065,7 @@ describe("Desk S3: focus moves at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `S3: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -1085,7 +1099,7 @@ describe("Desk S3: focus moves at the program", () => {
 
             for (const [i, m] of moves.entries()) {
               const from = tiles[m.from % tiles.length]!;
-              const to = tiles.filter((t) => t !== from)[m.to % (tiles.length - 1)]!;
+              const to = Arr.filter(tiles, (t) => t !== from)[m.to % (tiles.length - 1)]!;
               const name = does[m.does % does.length]!;
               const e = take(
                 p,

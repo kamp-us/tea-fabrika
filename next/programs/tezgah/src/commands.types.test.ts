@@ -14,7 +14,7 @@
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { Binding } from "@kampus/libfabrika";
 import * as Keys from "@kampus/libfabrika/client/Keys";
-import { Result } from "effect";
+import { Array as Arr, Result } from "effect";
 import * as fc from "fast-check";
 import { commands } from "./commands.ts";
 import type { tezgahMachine } from "./program.ts";
@@ -44,7 +44,7 @@ describe("L19: every tezgah command is named tezgah.<word> and carries a word an
       fc.property(fc.constantFrom(...PLATFORMS), fc.constantFrom(...OSES), (platform, os) => {
         const backend = Keys.backend(platform, os);
         const shipped = Keys.ship(commands, backend);
-        const names = shipped.map((c) => c.does);
+        const names = Arr.map(shipped, (c) => c.does);
         expect(new Set(names).size, `L19: ${platform} on ${os} is shipped each command once`).toBe(names.length);
         expect(names, `L19: ${platform} on ${os} is shipped the slice's three commands`).toEqual(
           expect.arrayContaining(["tezgah.split_right", "tezgah.split_down", "tezgah.close"]),
@@ -57,9 +57,9 @@ describe("L19: every tezgah command is named tezgah.<word> and carries a word an
         }
 
         expect(
-          shipped.map((c) => [c.does, c.word, c.label]),
+          Arr.map(shipped, (c) => [c.does, c.word, c.label]),
           `L19: ${platform} on ${os} is shipped every command`,
-        ).toEqual(commands.map((c) => [c.does, c.word, c.label]));
+        ).toEqual(Arr.map(commands, (c) => [c.does, c.word, c.label]));
         expect(Result.isSuccess(Keys.load(shipped, backend)), `L19: the rows load on ${platform} on ${os}`).toBe(true);
       }),
       { seed: 119120, numRuns: PLATFORMS.length * OSES.length * 3 },

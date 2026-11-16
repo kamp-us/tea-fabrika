@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e28-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:12-08:00",
+  "ended": "2026-11-15T21:06:29-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E28 of the Effect-check sweep (preferEffectArray), in next/: app:exam, tuval, prog:tezgah and prog:checklist. Counted with only preferEffectArray at error through --lspconfig: 816 hits in the four folders, 764 in exam paths (580, 69, 61, 54) and 52 in product files, none in a file of pull request 1366. Fixed all 764 exam-path hits and added no lock line, as the owner ruled for judgment slices. The checker has no quick fix for this check (the quick-fix client fixed 0 of 50 on one file), so a ts-morph codemod in the scratch folder did 722 (calls to Arr.*, chains to pipe), a second scratch script did 18 find sites with a plain shape (! to Option.getOrThrow, ?? to Option.getOrElse, ?. to Option.getOrUndefined), and 24 were done by hand, each keeping what the site answered. Two type errors in the codemod's output were fixed by hand. No law's assertion changed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 34,
+  "note": "Checks: pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the exam ratchet pass; per-package tsc for the four packages has 0 errors; the 19 changed plain test files pass (124 passed, 6 skipped by their own guards) and the 25 changed .integration. files pass (308), the four commits-git ones after installing openssh-client in the box for ssh-keygen. vitest --changed origin/main: 105 files passed, 1 failed, the .visual. key.laws test, because the box's Playwright has no matching browser build (chromium_headless_shell-1248 missing); not caused by this change and not to be run in this box. Recount: 0 preferEffectArray hits left in exam paths of the four folders; missedPipeableOpportunity, preferBarrelImport, preferEffectString, preferEffectRecord and tuval's preferNamespaceImport hold main's counts.",
+  "step": "tests"
+}

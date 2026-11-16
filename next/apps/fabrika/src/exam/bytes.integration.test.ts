@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Array as Arr, Effect, FileSystem, Option, Path, Schema, pipe } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -39,7 +39,11 @@ type Observed = {
 const observations = vi.hoisted(() => ({ builds: [] as Observed[] }));
 
 const moduleReport = (modules: ReadonlyArray<string>): string =>
-  modules.map((id) => `P8 module: ${JSON.stringify(id)}\n`).join("");
+  pipe(
+    modules,
+    Arr.map((id) => `P8 module: ${JSON.stringify(id)}\n`),
+    Arr.join(""),
+  );
 
 it("L7: module reports keep every id on its own line below 4096 characters", () => {
   // fast-check stresses list size and control characters beyond Effect's default string generator.
@@ -48,8 +52,8 @@ it("L7: module reports keep every id on its own line below 4096 characters", () 
       const report = moduleReport(modules);
       const lines = report === "" ? [] : report.trimEnd().split("\n");
       expect(lines).toHaveLength(modules.length);
-      expect(lines.every((line) => line.length <= 4096)).toBe(true);
-      expect(lines.map((line) => JSON.parse(line.slice("P8 module: ".length)))).toEqual(modules);
+      expect(Arr.every(lines, (line) => line.length <= 4096)).toBe(true);
+      expect(Arr.map(lines, (line) => JSON.parse(line.slice("P8 module: ".length)))).toEqual(modules);
     }),
     {
       seed: 119120,
@@ -70,7 +74,7 @@ vi.mock("rolldown", async (original) => {
         name: "p8-passive-observer",
         generateBundle(_options, output) {
           const ids = new Set(this.getModuleIds());
-          const modules = [...ids].map((id) => {
+          const modules = Arr.map([...ids], (id) => {
             const info = this.getModuleInfo(id);
 
             if (info === null) {
@@ -85,7 +89,7 @@ vi.mock("rolldown", async (original) => {
               code: info.code ?? "",
             };
           });
-          const chunks = Object.values(output).flatMap((o) =>
+          const chunks = Arr.flatMap(Object.values(output), (o) =>
             o.type === "chunk"
               ? [
                   {
@@ -102,21 +106,21 @@ vi.mock("rolldown", async (original) => {
           // Rolldown 1.2.13 has no Rollup isExternal field. Its external edges have no
           // parsed module; retain those resolved IDs alongside emitted imports.
           for (const id of new Set([
-            ...modules.flatMap((m) => [...m.imports, ...m.dynamic]),
-            ...chunks.flatMap((c) => [...c.imports, ...c.dynamic]),
+            ...Arr.flatMap(modules, (m) => [...m.imports, ...m.dynamic]),
+            ...Arr.flatMap(chunks, (c) => [...c.imports, ...c.dynamic]),
           ])) {
             if (!ids.has(id)) {
               modules.push({ id, imports: [], dynamic: [], external: true, code: "" });
             }
           }
 
-          const assets = Object.values(output).flatMap((o) =>
+          const assets = Arr.flatMap(Object.values(output), (o) =>
             o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
           );
           observations.builds.push({ input: options.input, modules, chunks, assets });
         },
       };
-      const plugins: Array<RolldownPluginOption> = Array.isArray(options.plugins) ? options.plugins : [options.plugins];
+      const plugins: Array<RolldownPluginOption> = Arr.isArray(options.plugins) ? options.plugins : [options.plugins];
       return real.rolldown({ ...options, plugins: [...plugins, observer] });
     },
   };
@@ -125,8 +129,8 @@ vi.mock("rolldown", async (original) => {
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 128, concurrency: 1 } };
 
 const names = (graph: Observed) => [
-  ...graph.modules.flatMap((m) => [m.id, ...m.imports, ...m.dynamic]),
-  ...graph.chunks.flatMap((c) => [...c.imports, ...c.dynamic, ...c.modules]),
+  ...Arr.flatMap(graph.modules, (m) => [m.id, ...m.imports, ...m.dynamic]),
+  ...Arr.flatMap(graph.chunks, (c) => [...c.imports, ...c.dynamic, ...c.modules]),
 ];
 
 const mcp = (id: string) =>
@@ -142,34 +146,41 @@ const drawing = (id: string) =>
 const clean = (graph: Observed, forbidden: (id: string) => boolean) => {
   expect(graph.modules.length).toBeGreaterThan(0);
   expect(graph.chunks.length).toBeGreaterThan(0);
-  expect(names(graph).filter(forbidden)).toEqual([]);
+  expect(Arr.filter(names(graph), forbidden)).toEqual([]);
 };
 
 // libfabrika's one-file build: the brain imports its tables from this module, and each carried body
 // is one text module. Rolldown keeps a text module's code as the JSON string of its text.
 const TABLES = "\0virtual:fabrika-built";
 const TEXT = "\0fabrika-text:";
-const joined = (graph: Observed) => graph.chunks.map((c) => c.code).join("\n");
+
+const joined = (graph: Observed) =>
+  pipe(
+    graph.chunks,
+    Arr.map((c) => c.code),
+    Arr.join("\n"),
+  );
 
 const realBrain = (all: ReadonlyArray<Observed>) => {
-  const found = all.find((b) => typeof b.input === "string" && b.input.endsWith("/src/brain.ts"));
+  const found = Option.getOrThrowWith(
+    Arr.findFirst(all, (b) => typeof b.input === "string" && b.input.endsWith("/src/brain.ts")),
+    () => new Error("no actual P12 brain build observed"),
+  );
 
-  if (found === undefined) {
-    throw new Error("no actual P12 brain build observed");
-  }
-
-  expect(found.modules.some((m) => m.id.endsWith("/src/brain.ts"))).toBe(true);
-  expect(found.modules.some((m) => m.id === TABLES)).toBe(true);
+  expect(Arr.some(found.modules, (m) => m.id.endsWith("/src/brain.ts"))).toBe(true);
+  expect(Arr.some(found.modules, (m) => m.id === TABLES)).toBe(true);
   return found;
 };
 
 const carried = (brain: Observed) =>
-  brain.modules
-    .filter((m) => m.id.startsWith(TEXT))
-    .map((m) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(m.code));
+  pipe(
+    brain.modules,
+    Arr.filter((m) => m.id.startsWith(TEXT)),
+    Arr.map((m) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(m.code)),
+  );
 
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
-const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => c.code), ...graph.assets];
+const emitted = (graph: Observed) => [joined(graph), ...Arr.map(graph.chunks, (c) => c.code), ...graph.assets];
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
 // P14 slice 1: a tab's own call, the one whose input is exactly the tab entry the build was given.
 const tabCall = (entry: string | undefined) => (graph: Observed) => entry !== undefined && graph.input === entry;
@@ -181,7 +192,7 @@ const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 const isWindow = (graph: Observed) =>
   typeof graph.input === "object" &&
   graph.input !== null &&
-  Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
+  Arr.every(Object.values(graph.input), (v) => typeof v === "string" && v.startsWith("fabrika:window:"));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
 // output of an observed program, window or tab call, so no carried script escapes its own graph's check.
@@ -194,16 +205,16 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
   }
 
   const texts = carried(brain),
-    others = all.filter((g) => g !== brain);
+    others = Arr.filter(all, (g) => g !== brain);
   expect(texts).toHaveLength(Object.keys(built.programs).length + Object.keys(built.assets).length);
 
   for (const text of texts) {
-    expect(others.some((g) => (isProgram(g) || isWindow(g) || isTab(g)) && emitted(g).includes(text))).toBe(true);
+    expect(Arr.some(others, (g) => (isProgram(g) || isWindow(g) || isTab(g)) && emitted(g).includes(text))).toBe(true);
   }
 
   for (const program of Object.values(built.programs)) {
     expect(texts).toContain(program.source);
-    expect(others.some((g) => isProgram(g) && joined(g) === program.source)).toBe(true);
+    expect(Arr.some(others, (g) => isProgram(g) && joined(g) === program.source)).toBe(true);
   }
 
   for (const [route, asset] of Object.entries(built.assets)) {
@@ -211,15 +222,15 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 
     if (tab !== undefined && TAB_ROUTES.includes(route)) {
       // The tab's script and page come from the tab's own call and from no other.
-      expect(others.some((g) => isTab(g) && emitted(g).includes(asset.body))).toBe(true);
-      expect(others.filter((g) => !isTab(g) && emitted(g).includes(asset.body))).toEqual([]);
+      expect(Arr.some(others, (g) => isTab(g) && emitted(g).includes(asset.body))).toBe(true);
+      expect(Arr.filter(others, (g) => !isTab(g) && emitted(g).includes(asset.body))).toEqual([]);
     } else {
-      expect(others.some((g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
+      expect(Arr.some(others, (g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
     }
   }
 
   if (tab !== undefined) {
-    expect(all.filter(isTab), "one observed call built the tab").toHaveLength(1);
+    expect(Arr.filter(all, isTab), "one observed call built the tab").toHaveLength(1);
     expect(Object.keys(built.assets)).toEqual(expect.arrayContaining([...TAB_ROUTES]));
   }
 
@@ -244,7 +255,7 @@ it.effect(
       process.stdout.write(
         `P14 tab: page ${new TextEncoder().encode(built.assets["/index.html"]?.body ?? "").byteLength} bytes; script ${new TextEncoder().encode(built.assets["/window.js"]?.body ?? "").byteLength} bytes\n`,
       );
-      expect(observed.filter(isProgram)).toHaveLength(Object.keys(built.programs).length);
+      expect(Arr.filter(observed, isProgram)).toHaveLength(Object.keys(built.programs).length);
       const bytes = yield* fs.readFileString(built.brain);
       expect(bytes).toBe(joined(brain));
 
@@ -256,7 +267,9 @@ it.effect(
       process.stdout.write(`P8 brain: ${new TextEncoder().encode(bytes).byteLength} bytes\n`);
       process.stdout.write(
         moduleReport(
-          observed.flatMap((g) => g.modules.map((m) => (path.isAbsolute(m.id) ? path.relative(root, m.id) : m.id))),
+          Arr.flatMap(observed, (g) =>
+            Arr.map(g.modules, (m) => (path.isAbsolute(m.id) ? path.relative(root, m.id) : m.id)),
+          ),
         ),
       );
       // Plant against the graph of this actual build, never against a substitute entry.
@@ -273,12 +286,12 @@ it.effect(
           },
         ],
       };
-      expect(() => checkBuild([...observed.filter((g) => g !== brain), planted], built)).toThrow();
-      expect(() => realBrain(observed.filter((g) => g !== brain))).toThrow("no actual P12 brain");
+      expect(() => checkBuild([...Arr.filter(observed, (g) => g !== brain), planted], built)).toThrow();
+      expect(() => realBrain(Arr.filter(observed, (g) => g !== brain))).toThrow("no actual P12 brain");
       // A carried program whose own call went unobserved fails: its graph was never checked.
       expect(() =>
         checkBuild(
-          observed.filter((g) => !isProgram(g)),
+          Arr.filter(observed, (g) => !isProgram(g)),
           built,
         ),
       ).toThrow();
@@ -351,9 +364,9 @@ it.effect(
     Effect.gen(function* () {
       const control = yield* windowBuild(`export const view = () => "p8-clean-window";`);
       const brain = checkBuild(control.observed, control.built);
-      expect(control.observed.filter(isWindow)).toHaveLength(1);
-      expect(Object.values(control.built.assets).some((a) => a.body.includes("p8-clean-window"))).toBe(true);
-      expect(carried(brain).some((t) => t.includes("p8-clean-window"))).toBe(true);
+      expect(Arr.filter(control.observed, isWindow)).toHaveLength(1);
+      expect(Arr.some(Object.values(control.built.assets), (a) => a.body.includes("p8-clean-window"))).toBe(true);
+      expect(Arr.some(carried(brain), (t) => t.includes("p8-clean-window"))).toBe(true);
 
       // Plant: the window imports the MCP SDK. The brain's own graph names only text modules, so
       // a brain-only check passes; the whole build's check must fail on the window's call.
@@ -361,13 +374,13 @@ it.effect(
         `import {client} from "@modelcontextprotocol/sdk/client"; export const view = () => client;`,
       );
       const plantedBrain = realBrain(planted.observed);
-      expect(carried(plantedBrain).some((t) => t.includes("p8-mcp-marker"))).toBe(true);
+      expect(Arr.some(carried(plantedBrain), (t) => t.includes("p8-mcp-marker"))).toBe(true);
       expect(() => clean(plantedBrain, mcp)).not.toThrow();
       expect(() => checkBuild(planted.observed, planted.built)).toThrow();
       // Without the window call observed, a clean carried text has no checked origin and fails too.
       expect(() =>
         checkBuild(
-          control.observed.filter((g) => !isWindow(g)),
+          Arr.filter(control.observed, (g) => !isWindow(g)),
           control.built,
         ),
       ).toThrow();
@@ -390,9 +403,9 @@ it.effect.prop(
       checkBuild(tab.observed, tab.built, tab.entry);
       const page = tab.built.assets["/index.html"];
       expect(page?.type).toBe("text/html; charset=utf-8");
-      const call = tab.observed.find(tabCall(tab.entry))!;
+      const call = Option.getOrThrow(Arr.findFirst(tab.observed, tabCall(tab.entry)));
       expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
-      expect(tab.observed.filter(isWindow)).toHaveLength(1);
+      expect(Arr.filter(tab.observed, isWindow)).toHaveLength(1);
     }).pipe(Effect.provide(NodeServices.layer)),
   { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) } },
 );
@@ -421,16 +434,21 @@ const graphShape = (g: BundleGraph) => {
   }
 
   const depth = Math.max(least, Math.min(g.depth, g.modules - 1));
-  const fan = [g.imports, 1, 2].find((f) => capacity(depth, f) >= g.modules) ?? 2;
+  const fan = Option.getOrElse(
+    Arr.findFirst([g.imports, 1, 2], (f) => capacity(depth, f) >= g.modules),
+    () => 2,
+  );
   const level = [0],
     children: Array<Array<number>> = [[]];
 
   for (let i = 1; i < g.modules; i++) {
-    const parent = i <= depth ? i - 1 : level.findIndex((l, j) => l < depth && (children[j]?.length ?? 0) < fan);
-
-    if (parent < 0) {
-      throw new Error("graph shape has no room");
-    }
+    const parent =
+      i <= depth
+        ? i - 1
+        : Option.getOrThrowWith(
+            Arr.findFirstIndex(level, (l, j) => l < depth && (children[j]?.length ?? 0) < fan),
+            () => new Error("graph shape has no room"),
+          );
 
     level.push((level[parent] ?? 0) + 1);
     children.push([]);
@@ -448,7 +466,7 @@ it.prop(
     expect(shape.children).toHaveLength(g.modules);
     expect(Math.max(...shape.level)).toBe(shape.depth);
     expect(shape.depth).toBe(Math.max(Math.ceil(Math.log2(g.modules + 1)) - 1, Math.min(g.depth, g.modules - 1)));
-    expect(shape.children.every((c) => c.length <= Math.min(2, shape.fan))).toBe(true);
+    expect(Arr.every(shape.children, (c) => c.length <= Math.min(2, shape.fan))).toBe(true);
     expect(graphShape({ ...g, modules: 8, depth: 0 }).depth).toBe(3);
     expect(graphShape({ ...g, modules: 4, depth: 3 }).depth).toBe(3);
     expect(graphShape({ ...g, modules: 8, depth: 3 }).children).toHaveLength(8);
@@ -472,13 +490,15 @@ it.effect.prop(
           modules = g.modules;
 
         for (let i = 0; i < modules; i++) {
-          const next = (shape.children[i] ?? [])
-            .map((child) =>
+          const next = pipe(
+            shape.children[i] ?? [],
+            Arr.map((child) =>
               style === "dynamic"
                 ? `export const next${child} = () => import("./m${child}.ts");`
                 : `export {text as next${child}} from "./m${child}.ts";`,
-            )
-            .join("\n");
+            ),
+            Arr.join("\n"),
+          );
           yield* fs.writeFileString(
             path.join(folder, `m${i}.ts`),
             `export const text = ${JSON.stringify(g.text)}; ${next}`,
@@ -499,7 +519,12 @@ it.effect.prop(
           "@modelcontextprotocol/client/stdio",
           "@kampus/libfabrika/mcp",
           "@kampus/libfabrika/mcp/client",
-          `@kampus/libfabrika/mcp/${Array.from(g.text, (c) => c.codePointAt(0)!.toString(16)).join("-") || "serve"}/client`,
+          `@kampus/libfabrika/mcp/${
+            Arr.join(
+              Array.from(g.text, (c) => c.codePointAt(0)!.toString(16)),
+              "-",
+            ) || "serve"
+          }/client`,
           "micromark/lib/parse",
           "mdast-util-from-markdown",
           "@pierre/highlights",

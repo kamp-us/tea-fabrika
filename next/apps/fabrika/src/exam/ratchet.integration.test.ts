@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Array as Arr, Effect, Schema, pipe } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -32,7 +32,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
         });
 
         if (out.status !== 0) {
-          throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+          throw new Error(`git ${Arr.join(args, " ")}: ${out.stderr}`);
         }
 
         return out.stdout.trim();
@@ -58,10 +58,11 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
   );
 
   const jsonLines = (stdout: string) =>
-    stdout
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
-      .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line));
+    pipe(
+      stdout.split("\n"),
+      Arr.filter((line) => line.startsWith("{")),
+      Arr.map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line)),
+    );
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
     Effect.gen(function* () {
@@ -87,7 +88,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("head");
       const out = ratchet(base);
       expect(out.status).toBe(0);
-      expect(jsonLines(out.stdout)).toEqual(LISTS.map((list) => ({ _tag: "done", file: list.file })));
+      expect(jsonLines(out.stdout)).toEqual(Arr.map(LISTS, (list) => ({ _tag: "done", file: list.file })));
     }),
   );
 

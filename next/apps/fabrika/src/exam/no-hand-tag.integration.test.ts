@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 // `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass.
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -7,26 +8,32 @@ const FIRES = "next/packages/libfabrika/src/coordination/fires.ts";
 const PASSES = "next/packages/libfabrika/src/coordination/passes.ts";
 const LOG = "next/packages/libfabrika/src/ledger/Log.ts";
 
-const fires = [
-  'import {Schema} from "effect";', // 1
-  'export const a = {_tag: "x"};', // 2
-  'export type X = {readonly _tag: "x"};', // 3
-  'export const S = Schema.Struct({_tag: Schema.Literal("x")});', // 4
-  'export const b = {"_tag": "y"};', // 5
-  'export class C { readonly _tag = "c"; }', // 6
-  "export const d = (_tag: string) => ({_tag});", // 7
-].join("\n");
+const fires = Arr.join(
+  [
+    'import {Schema} from "effect";', // 1
+    'export const a = {_tag: "x"};', // 2
+    'export type X = {readonly _tag: "x"};', // 3
+    'export const S = Schema.Struct({_tag: Schema.Literal("x")});', // 4
+    'export const b = {"_tag": "y"};', // 5
+    'export class C { readonly _tag = "c"; }', // 6
+    "export const d = (_tag: string) => ({_tag});", // 7
+  ],
+  "\n",
+);
 
-const passes = [
-  'import {Schema} from "effect";',
-  "export const Fault = Schema.TaggedUnion({x: {}, abort: {name: Schema.String}});",
-  'export const fault = Fault.cases.abort.make({name: "counter:1"});',
-  "declare const value: typeof Fault.Type;",
-  'export const a = value._tag === "x";',
-  "export const {_tag} = value;",
-  'export const b = {type: "plus"};',
-  'export const Send = Schema.TaggedStruct("send", {m: Schema.Unknown});',
-].join("\n");
+const passes = Arr.join(
+  [
+    'import {Schema} from "effect";',
+    "export const Fault = Schema.TaggedUnion({x: {}, abort: {name: Schema.String}});",
+    'export const fault = Fault.cases.abort.make({name: "counter:1"});',
+    "declare const value: typeof Fault.Type;",
+    'export const a = value._tag === "x";',
+    "export const {_tag} = value;",
+    'export const b = {type: "plus"};',
+    'export const Send = Schema.TaggedStruct("send", {m: Schema.Unknown});',
+  ],
+  "\n",
+);
 
 describe("no-hand-tag", async () => {
   const all = await plant({

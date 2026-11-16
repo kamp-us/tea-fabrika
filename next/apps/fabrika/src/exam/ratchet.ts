@@ -14,7 +14,7 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Array as Arr, Console, Effect, Exit, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = "0".repeat(40);
@@ -38,14 +38,14 @@ type Renames = ReadonlyMap<string, string>;
 const lintKeys = (text: string, renames: Renames = new Map()) =>
   Schema.decodeUnknownEffect(LintRows)(text).pipe(
     Effect.map(({ entries }) =>
-      entries.map((row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
+      Arr.map(entries, (row) => JSON.stringify([renames.get(row.file) ?? row.file, row.rule, row.code])),
     ),
   );
 
 // code-graph's ids name a file too, but no rename reaches them here: they are matched as written.
 const deadKeys = (text: string, _renames?: Renames) =>
   Schema.decodeUnknownEffect(DeadRows)(text).pipe(
-    Effect.map(({ entries }) => entries.map((row) => JSON.stringify([row.scope, row.kind, row.id]))),
+    Effect.map(({ entries }) => Arr.map(entries, (row) => JSON.stringify([row.scope, row.kind, row.id]))),
   );
 
 /** One list file, and the key its own reader matches a row on. */
@@ -69,7 +69,7 @@ export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>):
     left.set(key, (left.get(key) ?? 0) + 1);
   }
 
-  return head.filter((key) => {
+  return Arr.filter(head, (key) => {
     const n = left.get(key) ?? 0;
     left.set(key, n - 1);
     return n <= 0;
@@ -141,7 +141,7 @@ const must = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   const r = yield* git(args);
 
   if (r.code !== 0) {
-    return yield* new Failed({ message: `git ${args.join(" ")}: ${r.err.trim()}` });
+    return yield* new Failed({ message: `git ${Arr.join(args, " ")}: ${r.err.trim()}` });
   }
 
   return r.out;
@@ -174,7 +174,7 @@ const annotation = (answer: Answer, sha: string) => {
     answer.reason === "not_a_list"
       ? `${answer.file} does not read as a list at HEAD.`
       : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (0524): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
-  return [`::error file=${answer.file}::${escape([head, ...answer.rows].join("\n"))}`];
+  return [`::error file=${answer.file}::${escape(Arr.join([head, ...answer.rows], "\n"))}`];
 };
 
 const main = Effect.gen(function* () {
@@ -207,9 +207,10 @@ const main = Effect.gen(function* () {
   // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
   // part that kept its text (0536 split five files this way): its rows are read under that name too.
   // A row left at the old path as well is still counted as added, so a copy cannot hide a new row.
-  const moved = (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])))
-    .split("\0")
-    .filter((part) => part !== "");
+  const moved = Arr.filter(
+    (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"]))).split("\0"),
+    (part) => part !== "",
+  );
   const renames = new Map<string, string>();
 
   for (let i = 0; i + 2 < moved.length; i += 3) {

@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import { Array as Arr, Option, Result, Schema, pipe } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -88,12 +88,20 @@ const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % M
 
 /** The next move, read off the model reached: a move that has nothing to act on is a timer. */
 const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: number): Msg => {
-  const here = m.items.map((i) => i.name);
-  const free = names.filter((n) => !here.includes(n));
-  const unchecked = m.items.filter((i) => i.state._tag !== "checked").map((i) => i.name);
-  const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
-  const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
-  const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
+  const here = Arr.map(m.items, (i) => i.name);
+  const free = Arr.filter(names, (n) => !here.includes(n));
+  const unchecked = pipe(
+    m.items,
+    Arr.filter((i) => i.state._tag !== "checked"),
+    Arr.map((i) => i.name),
+  );
+  const checked = pipe(
+    m.items,
+    Arr.filter((i) => i.state._tag === "checked"),
+    Arr.map((i) => i.name),
+  );
+  const wakes = Arr.flatMap(m.items, (i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
+  const wake = Arr.some(m.items, (i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
   const timer: Msg = {
     type: "timer",
     at: wake,
@@ -161,21 +169,21 @@ const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
     case "add":
       return [...prev.items, { name: msg.name, state: { _tag: "new" } }];
     case "rename":
-      return prev.items.map((i) => (i.name === msg.name ? { ...i, name: msg.to } : i));
+      return Arr.map(prev.items, (i) => (i.name === msg.name ? { ...i, name: msg.to } : i));
     case "remove":
-      return prev.items.filter((i) => i.name !== msg.name);
+      return Arr.filter(prev.items, (i) => i.name !== msg.name);
     case "check":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.name === msg.name && i.state._tag !== "checked"
           ? { name: i.name, state: { _tag: "checked", note: msg.note ?? null } }
           : i,
       );
     case "uncheck":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.name === msg.name && i.state._tag === "checked" ? { name: i.name, state: { _tag: "new" } } : i,
       );
     case "timer":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.state._tag === "new"
           ? { name: i.name, state: { _tag: "open", since: msg.arrivedAt } }
           : i.state._tag === "open" && msg.arrivedAt >= i.state.since + DAY
@@ -191,7 +199,7 @@ const byName = (items: ReadonlyArray<Item>) =>
 
 /** What the plan's `refuse` sketch says of one fresh input (A1: no `verify`). */
 const reason = (m: Model, msg: Fresh): string | null => {
-  const has = (name: string) => m.items.some((i) => i.name === name);
+  const has = (name: string) => Arr.some(m.items, (i) => i.name === name);
 
   if (msg.type === "add") {
     return has(msg.name) ? "taken" : null;
@@ -209,7 +217,7 @@ const reason = (m: Model, msg: Fresh): string | null => {
 const reached = (machine: ChecklistMachine) =>
   walked(machine, 4).chain(({ names, model }) => {
     const any = fc.constantFrom(...names);
-    const here = model.items.map((i) => i.name);
+    const here = Arr.map(model.items, (i) => i.name);
     const name =
       here.length === 0
         ? any
@@ -222,11 +230,15 @@ const reached = (machine: ChecklistMachine) =>
       }));
   });
 
-const left = (m: Model) => m.items.filter((i) => i.state._tag !== "checked").length;
+const left = (m: Model) => Arr.filter(m.items, (i) => i.state._tag !== "checked").length;
 
 /** Each item as the plan's view shows it, from the independent record: its note only when checked. */
 const shownBy = (m: Model) =>
-  m.items.map((i) => ({ name: i.name, state: i.state._tag, note: i.state._tag === "checked" ? i.state.note : null }));
+  Arr.map(m.items, (i) => ({
+    name: i.name,
+    state: i.state._tag,
+    note: i.state._tag === "checked" ? i.state.note : null,
+  }));
 
 /** A walk's Msgs with the record the plan's table folds from them, step by step, beside the real models. */
 const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
@@ -352,8 +364,8 @@ describe("ticket 806 the checklist's laws", () => {
       {},
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
-        const since = next.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
-        const want = next.items.some((i) => i.state._tag === "new")
+        const since = Arr.flatMap(next.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
+        const want = Arr.some(next.items, (i) => i.state._tag === "new")
           ? 0
           : since.length === 0
             ? null
@@ -374,7 +386,7 @@ describe("ticket 806 the checklist's laws", () => {
           asked: fc.integer(),
         })
         .map(({ pick, offset, asked }) => {
-          const open = w.model.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+          const open = Arr.flatMap(w.model.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
           const since = at(open, pick) ?? w.clock;
           return { model: w.model, arrivedAt: since + DAY + offset, asked };
         }),
@@ -384,7 +396,7 @@ describe("ticket 806 the checklist's laws", () => {
         const [next] = applyCell(checklistMachine, model, { type: "timer", at: asked, arrivedAt: time });
 
         for (const [n, item] of model.items.entries()) {
-          const now = next.items.find((i) => i.name === item.name)?.state;
+          const now = Option.getOrUndefined(Arr.findFirst(next.items, (i) => i.name === item.name))?.state;
           const s = item.state;
           expect(now, `item ${n} after a timer at ${time}`).toEqual(
             s._tag === "new"
@@ -436,7 +448,7 @@ describe("ticket 806 the checklist's laws", () => {
       {},
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
-        const done = next.items.length > 0 && next.items.every((i) => i.state._tag === "checked");
+        const done = next.items.length > 0 && Arr.every(next.items, (i) => i.state._tag === "checked");
         const out = finished(next);
 
         if (!done) {
@@ -446,7 +458,7 @@ describe("ticket 806 the checklist's laws", () => {
         return (
           (out !== null &&
             JSON.stringify(roundTrip(out)) === JSON.stringify(out) &&
-            JSON.stringify([...out.items].sort()) === JSON.stringify(next.items.map((i) => i.name).sort())) ||
+            JSON.stringify([...out.items].sort()) === JSON.stringify(Arr.map(next.items, (i) => i.name).sort())) ||
           `not finished, or not a Done of every item: ${JSON.stringify(out)}`
         );
       },
@@ -484,7 +496,7 @@ describe("ticket 806 the checklist's laws", () => {
           // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
           const items: ReadonlyArray<Item> =
             record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
-          const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
+          const wrong = Arr.map(items, (i, n) => (n === pick % items.length ? broken(i) : i));
           expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
         }
 

@@ -8,7 +8,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Path, Schema, Stream, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";
 import { API } from "typescript/unstable/sync";
@@ -61,14 +61,18 @@ const outside = Effect.fnUntraced(function* (
   tracked: ReadonlyArray<string>,
 ) {
   const path = yield* Path.Path;
-  const configs = packages.map((p) => path.join(root, p, "tsconfig.json"));
+  const configs = Arr.map(packages, (p) => path.join(root, p, "tsconfig.json"));
   const taken = yield* snapshot(yield* api(root), configs);
 
-  return packages.flatMap((p, i): Array<Gap> => {
+  return Arr.flatMap(packages, (p, i): Array<Gap> => {
     const config = configs[i];
     const project = config === undefined ? undefined : taken.getProject(config);
-    const held = new Set(project?.program.getSourceFileNames().map((f) => path.relative(root, f)) ?? []);
-    return tracked.filter((f) => f.startsWith(`${p}/`) && !held.has(f)).map((file) => ({ package: p, file }));
+    const held = new Set(Arr.map(project?.program.getSourceFileNames() ?? [], (f) => path.relative(root, f)));
+    return pipe(
+      tracked,
+      Arr.filter((f) => f.startsWith(`${p}/`) && !held.has(f)),
+      Arr.map((file) => ({ package: p, file })),
+    );
   });
 }, Effect.scoped);
 
@@ -94,7 +98,7 @@ const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
     return yield* new GitFailed({ code });
   }
 
-  return out.split("\0").filter((f) => TYPESCRIPT.test(f));
+  return Arr.filter(out.split("\0"), (f) => TYPESCRIPT.test(f));
 }, Effect.scoped);
 
 /** Every `next/<group>/<name>` folder that holds a package manifest, with its manifest's scripts. */
@@ -134,15 +138,21 @@ it.effect(
       const tracked = yield* trackedTypeScript(root);
 
       expect(packages.length).toBeGreaterThan(0);
-      expect(packages.filter((p) => p.typecheck !== TYPECHECK).map((p) => p.dir)).toEqual([]);
-      expect(tracked.filter((f) => !packages.some((p) => f.startsWith(`${p.dir}/`)))).toEqual([]);
+      expect(
+        pipe(
+          packages,
+          Arr.filter((p) => p.typecheck !== TYPECHECK),
+          Arr.map((p) => p.dir),
+        ),
+      ).toEqual([]);
+      expect(Arr.filter(tracked, (f) => !Arr.some(packages, (p) => f.startsWith(`${p.dir}/`)))).toEqual([]);
 
       const gaps = yield* outside(
         root,
-        packages.map((p) => p.dir),
+        Arr.map(packages, (p) => p.dir),
         tracked,
       );
-      expect(gaps.map((g) => `${g.package}: ${g.file}`)).toEqual([]);
+      expect(Arr.map(gaps, (g) => `${g.package}: ${g.file}`)).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );
@@ -204,9 +214,11 @@ const plantTypeError = Effect.fnUntraced(function* (planted: Plant) {
 
   const { program } = project;
   const held = program.getSourceFileNames().includes(file);
-  const diagnostics = [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
-    .filter((d) => d.fileName === file)
-    .map((d) => ({ code: d.code, line: text.slice(0, d.pos).split("\n").length }));
+  const diagnostics = pipe(
+    [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()],
+    Arr.filter((d) => d.fileName === file),
+    Arr.map((d) => ({ code: d.code, line: text.slice(0, d.pos).split("\n").length })),
+  );
   return { held, diagnostics };
 }, Effect.scoped);
 
@@ -247,7 +259,7 @@ const Scoped = fc.record({
         name: fc.stringMatching(segment),
         ext: fc.constantFrom(".ts", ".tsx"),
       })
-      .map(({ under, dirs, name, ext }) => [...(under ? ["src"] : []), ...dirs, `${name}${ext}`].join("/")),
+      .map(({ under, dirs, name, ext }) => Arr.join([...(under ? ["src"] : []), ...dirs, `${name}${ext}`], "/")),
     { minLength: 1, maxLength: 12 },
   ),
 });
@@ -277,12 +289,12 @@ it.effect(
                 yield* fs.writeFileString(full, "export {};\n");
               }
 
-              const tracked = files.map((f) => `${pkg}/${f}`);
+              const tracked = Arr.map(files, (f) => `${pkg}/${f}`);
               const gaps = yield* outside(at, [pkg], tracked);
-              expect(gaps.map((g) => g.file).sort()).toEqual(
-                tracked.filter((f) => !f.startsWith(`${pkg}/src/`)).sort(),
+              expect(Arr.map(gaps, (g) => g.file).sort()).toEqual(
+                Arr.filter(tracked, (f) => !f.startsWith(`${pkg}/src/`)).sort(),
               );
-              expect(gaps.every((g) => g.package === pkg)).toBe(true);
+              expect(Arr.every(gaps, (g) => g.package === pkg)).toBe(true);
             }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
           ),
         ),

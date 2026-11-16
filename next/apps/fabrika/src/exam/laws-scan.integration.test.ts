@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Array as Arr, Effect, pipe } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 const PBT = "@demlik/tea/pbt";
@@ -26,7 +26,7 @@ const PBT = "@demlik/tea/pbt";
 const codeFiles = (dir: string): ReadonlyArray<string> =>
   !existsSync(dir)
     ? []
-    : readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    : Arr.flatMap(readdirSync(dir, { withFileTypes: true }), (entry) => {
         const path = join(dir, entry.name);
 
         if (!entry.isDirectory()) {
@@ -39,35 +39,39 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 
 /** The names a file imports from, read from lines that start with `import` and name a `from`. */
 const importsInFile = (file: string): ReadonlyArray<string> =>
-  [...readFileSync(file, "utf8").matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm)].flatMap((m) =>
+  Arr.flatMap([...readFileSync(file, "utf8").matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm)], (m) =>
     m[1] === undefined ? [] : [m[1]],
   );
 
 /** Each machine under `next`, with the laws files beside it: `<name>.laws.test.ts` and the like. */
 const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly laws: ReadonlyArray<string> }> => {
   const files = codeFiles(next);
-  return files
-    .filter((file) => !/\.test\.tsx?$/.test(file) && readFileSync(file, "utf8").includes("defineMachine("))
-    .map((machine) => {
+  return pipe(
+    files,
+    Arr.filter((file) => !/\.test\.tsx?$/.test(file) && readFileSync(file, "utf8").includes("defineMachine(")),
+    Arr.map((machine) => {
       const stem = basename(machine).replace(/\.tsx?$/, "");
-      const laws = files.filter(
+      const laws = Arr.filter(
+        files,
         (file) =>
           dirname(file) === dirname(machine) &&
           basename(file).startsWith(`${stem}.`) &&
           basename(file).endsWith(".laws.test.ts"),
       );
-      return { path: relative(next, machine).split(sep).join("/"), laws };
-    })
-    .sort((a, b) => (a.path < b.path ? -1 : 1));
+      return { path: Arr.join(relative(next, machine).split(sep), "/"), laws };
+    }),
+  ).sort((a, b) => (a.path < b.path ? -1 : 1));
 };
 
-const hasPbt = (laws: ReadonlyArray<string>) => laws.some((file) => importsInFile(file).includes(PBT));
+const hasPbt = (laws: ReadonlyArray<string>) => Arr.some(laws, (file) => importsInFile(file).includes(PBT));
 
 /** Each file under `next` that makes a machine and has no laws file beside it using tea's pbt. */
 const lawless = (next: string): ReadonlyArray<string> =>
-  machines(next)
-    .filter((m) => !hasPbt(m.laws))
-    .map((m) => m.path);
+  pipe(
+    machines(next),
+    Arr.filter((m) => !hasPbt(m.laws)),
+    Arr.map((m) => m.path),
+  );
 
 const SYNC_TEST = "syncTest(";
 const LEFT_OUT = /\/\/[ \t]*sync test left out:[ \t]*\S/;
@@ -77,15 +81,17 @@ const LEFT_OUT = /\/\/[ \t]*sync test left out:[ \t]*\S/;
  * names its reason for leaving it out. A machine with no laws is `lawless`'s, not this list's.
  */
 const unsynced = (next: string): ReadonlyArray<string> =>
-  machines(next)
-    .filter((m) => hasPbt(m.laws))
-    .filter((m) =>
-      m.laws.every((file) => {
+  pipe(
+    machines(next),
+    Arr.filter((m) => hasPbt(m.laws)),
+    Arr.filter((m) =>
+      Arr.every(m.laws, (file) => {
         const text = readFileSync(file, "utf8");
         return !text.includes(SYNC_TEST) && !LEFT_OUT.test(text);
       }),
-    )
-    .map((m) => m.path);
+    ),
+    Arr.map((m) => m.path),
+  );
 
 describe("the real next/", () => {
   it("has laws beside every machine", () => {
