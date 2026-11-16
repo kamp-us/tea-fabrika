@@ -78,6 +78,8 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         used.add(id);
         return id;
       };
+      // A host refuses a change it does not know with an answer of its own, never with nothing (0568).
+      const missing = (change: number) => new Error(`the scripted host has no change ${change}`);
       const failure = (call: Call) =>
         Effect.suspend(() => {
           calls.push(call);
@@ -117,7 +119,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: undefined }) }));
+                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
                 }
 
                 if (found.state !== "open") {
@@ -166,7 +168,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: undefined }) }));
+                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
                 }
 
                 if (found.state === "draft" || found.state === "closed") {

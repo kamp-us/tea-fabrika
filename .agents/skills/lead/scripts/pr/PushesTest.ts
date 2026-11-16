@@ -1,57 +1,32 @@
-// PushesTest.layer: the Pushes service in memory. A leak grep refuses or passes as told, and each
-// push that passes moves the branch on a remote kept in memory, as `origin` would. `calls` keeps
-// every call in order, so a test can read that the grep ran before the push.
-import { Effect, Layer } from "effect";
-import { LeakGrepRefused, Pushes, PushRefused } from "./Pushes.ts";
+// PushesTest.layer: the Pushes service in memory, built on the Recorder (0579). A leak grep refuses
+// or passes as told, and each push that passes moves the branch on a remote kept in memory, as
+// `origin` would. The Recorder keeps every call in order, with all its args, so a test reads that
+// the grep ran before the push with `Recorder.calls(Pushes)`, inside the layer it provided.
+import { Recorder } from "@kampus/vitest";
+import { Effect, type Layer } from "effect";
+import { Pushes } from "./Pushes.ts";
 
 export type Remote = {
   /** Each branch on the remote, and the head it points at. */
   readonly branches: Map<string, string>;
-  readonly calls: Array<string>;
 };
 
-export const remote = (): Remote => ({ branches: new Map(), calls: [] });
+export const remote = (): Remote => ({ branches: new Map() });
 
-export type Failing = {
-  readonly leak?: string;
-  readonly leakChange?: string;
-  readonly leakText?: string;
-  readonly push?: string;
-};
+/** The methods that refuse, each with the error it refuses with. A refused push moves no branch. */
+export type Failing = Recorder.Fails<Pushes["Service"]>;
 
-export const layer = (r: Remote, failing: Failing = {}): Layer.Layer<Pushes> =>
-  Layer.succeed(
+export const layer = (r: Remote, fails: Failing = {}): Layer.Layer<Pushes | Recorder.Recorded<Pushes>> =>
+  Recorder.layer(
     Pushes,
-    Pushes.of({
-      leakGrep: (_dir, head) =>
-        Effect.suspend(() => {
-          r.calls.push(`leakgrep ${head}`);
-          return failing.leak === undefined ? Effect.void : Effect.fail(new LeakGrepRefused({ reason: failing.leak }));
-        }),
-      leakChange: (_dir, head) =>
-        Effect.suspend(() => {
-          r.calls.push(`leakchange ${head}`);
-          return failing.leakChange === undefined
-            ? Effect.void
-            : Effect.fail(new LeakGrepRefused({ reason: failing.leakChange }));
-        }),
-      leakText: (_dir, text) =>
-        Effect.suspend(() => {
-          r.calls.push(`leaktext ${text}`);
-          return failing.leakText === undefined
-            ? Effect.void
-            : Effect.fail(new LeakGrepRefused({ reason: failing.leakText }));
-        }),
+    {
+      leakGrep: () => Effect.void,
+      leakChange: () => Effect.void,
+      leakText: () => Effect.void,
       push: (_dir, branch, head) =>
-        Effect.suspend(() => {
-          r.calls.push(`push ${branch} ${head}`);
-
-          if (failing.push !== undefined) {
-            return Effect.fail(new PushRefused({ reason: failing.push }));
-          }
-
+        Effect.sync(() => {
           r.branches.set(branch, head);
-          return Effect.void;
         }),
-    }),
+    },
+    { fails },
   );
