@@ -426,7 +426,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklistMachine, checklist } = await load();
     const port = checklist.inputs.left;
     // The query takes no input: its schema is `Null`, and its answer reads the view alone.
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
     propertyInvariant(
       checklistMachine,
       {},
@@ -451,7 +451,7 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
     const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeUnknownSync(Done)(Schema.encodeUnknownSync(Done)(d));
+    const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
     propertyInvariant(
       checklistMachine,
       {},
@@ -479,7 +479,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklist } = await load();
     const port = checklist.inputs.items;
     expect(port._tag).toBe("read");
-    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
     fc.assert(
       fc.property(walked(checklist.machine), ({ msgs }) => {
         for (const { model, record } of folded(checklist.machine, msgs)) {
@@ -512,7 +512,7 @@ describe("ticket 806 the checklist's laws", () => {
         }
 
         for (const msg of msgs) {
-          expect(Schema.decodeUnknownSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
+          expect(Schema.decodeSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
         }
       }),
       { seed: SEED, numRuns: RUNS },
@@ -522,7 +522,7 @@ describe("ticket 806 the checklist's laws", () => {
       // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
       // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
       const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
-      expect(Schema.decodeUnknownSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
+      expect(Schema.decodeSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
     }
   });
 

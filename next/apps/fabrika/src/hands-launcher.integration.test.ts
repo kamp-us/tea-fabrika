@@ -24,13 +24,13 @@
 // Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
 // file on every start. S2, print the stored JWK in the `online` line.
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Node crypto makes the test person's key; it never touches a file or an account
-import { DatabaseSync } from "node:sqlite"; // edge: S2 reads the journal file's rows as stored, below any layer of ours
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -55,7 +55,7 @@ const NAME = "hands-launcher";
 
 /** The launcher's stdout protocol, as the plan writes it. */
 const Line = Schema.TaggedUnion({
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });
@@ -134,8 +134,8 @@ type Seen = {
   readonly stderr: Array<string>;
   readonly d: string;
   readonly fingerprints: ReadonlyArray<string>;
-  readonly task: typeof Task.Type;
-  readonly taskAfterRestart: typeof Task.Type;
+  readonly task: Task;
+  readonly taskAfterRestart: Task;
   readonly journal: Record<string, unknown>;
   readonly brain: unknown;
 };
@@ -282,11 +282,7 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-
-        const stored = Schema.decodeUnknownSync(Stored)(
-          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
-        );
-
+        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
         expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
@@ -359,18 +355,20 @@ const flow = Effect.fnUntraced(
       }),
     );
 
-    const db = new DatabaseSync(path.join(hands, "hands", "journal.sqlite"), { readOnly: true });
-
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all()
-      .map((row) => String(row["name"]));
-
-    const journal = Object.fromEntries(
-      tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
+    // S2 reads the journal file's rows as stored, below any layer of ours. The hands own it, so it
+    // opens read-only, with nothing set.
+    const journal = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
+          Effect.orDie,
+        );
+        const tables = db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+          .all()
+          .map((row) => String(row["name"]));
+        return Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
+      }),
     );
-
-    db.close();
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
 
     return {

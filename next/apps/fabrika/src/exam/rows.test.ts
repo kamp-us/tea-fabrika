@@ -13,7 +13,7 @@ const RuleFile = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       paths: Schema.Array(Schema.String),
-      layer: Schema.optionalKey(Schema.Number),
+      layer: Schema.optionalKey(Schema.Finite),
     }),
   ),
 });

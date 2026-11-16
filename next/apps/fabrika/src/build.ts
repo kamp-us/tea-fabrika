@@ -58,8 +58,10 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
-      Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
-      Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
+      Effect.mapBoth({
+        onFailure: (cause) => new BuildError({ reason: "read", cause }),
+        onSuccess: (found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test.")),
+      }),
     ));
 
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {

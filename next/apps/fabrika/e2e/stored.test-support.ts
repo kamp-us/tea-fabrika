@@ -58,13 +58,13 @@ const scan = (
 
       for (const name of yield* fs.readDirectory(dir, { recursive: true })) {
         const file = path.join(dir, name);
-        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (info === undefined || info.type !== "File" || keys.includes(file)) {
           continue;
         }
 
-        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (bytes !== undefined) {
           const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
@@ -141,7 +141,7 @@ const scan = (
             if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
               const value = Schema.decodeUnknownSync(Schema.String)(row.value);
 
-              const { armored, ...rest } = Schema.decodeUnknownSync(
+              const { armored, ...rest } = Schema.decodeSync(
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(value);
 

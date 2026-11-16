@@ -1,8 +1,8 @@
 // P17b slice 1, next/. Runtime's suite on real SQLite; every connection and folder is scoped.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -34,13 +34,13 @@ const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-history-" });
-  const file = path.join(folder, "history.sqlite");
 
-  return Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
-}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+  return path.join(folder, "history.sqlite");
+}).pipe(
+  Effect.map((file) => TestDatabase.make(file).pipe(Effect.map(nodeSql))),
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
 
 const process = "process_0000000000e008000000000000";
 
@@ -221,7 +221,7 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
-          return yield* Effect.fail(lower);
+          return yield* lower;
         }
 
         const captured = yield* ledger.wait(stream, after);

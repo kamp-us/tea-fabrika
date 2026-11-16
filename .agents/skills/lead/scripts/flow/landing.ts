@@ -103,7 +103,7 @@ export const leakOutcome = (ran: Ran): Outcome.Outcome =>
 
 /** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
 export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
-  e instanceof LeakGrepRefused
+  Schema.is(LeakGrepRefused)(e)
     ? Outcome.ask(`the leak grep refused before the queue: ${e.reason}`)
     : Outcome.stuck(`not added to the merge queue: ${e.reason}`);
 

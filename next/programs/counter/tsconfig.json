@@ -1,12 +1,29 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    // A program imports Effect from the barrel, `import { Effect } from "effect"` (0577).
     "plugins": [
       {
         "name": "@effect/language-service",
+        // A program imports Effect from the barrel, `import { Effect } from "effect"` (0577).
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error" }
+        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
+          // (E8), runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error",
+                "unnecessaryArrowBlock": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          }
+        ]
       }
     ],
     // The window export is React in a browser tab; the program entry reaches neither.

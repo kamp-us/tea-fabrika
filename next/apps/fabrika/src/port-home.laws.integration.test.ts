@@ -37,14 +37,13 @@
 import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
-// edge: Effect SQL has no read-only open of another process's SQLite file, which the T833 law reads
-import { DatabaseSync } from "node:sqlite";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
@@ -141,7 +140,7 @@ const identity = (key: typeof TestKey.Type) => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -169,7 +168,7 @@ const press = Effect.fnUntraced(function* (
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(id.fingerprint)}/${tab}`);
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
-          frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
+          frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
 
@@ -233,7 +232,7 @@ const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
   press(instance, key, pid, letter, { type: "inc" }).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
-        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Number }) }) }),
+        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Finite }) }) }),
       ),
     ),
     Effect.map((answer) => answer.result.view.count),
@@ -331,7 +330,7 @@ const observe = Effect.fnUntraced(function* (instance: any) {
   }
 
   // Through JSON and back, so a live answer compares as the saved one reads from its file.
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Seen))(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(Seen))(
     JSON.stringify({
       table: rows.map((row) => ({ name: row.name, process: row.process })).sort((a, b) => a.name.localeCompare(b.name)),
       streams,
@@ -347,7 +346,7 @@ const reopened = Effect.gen(function* () {
     yield* fs.exists(path.join(FIXTURE, "saved.json")),
     "no saved home in fixtures/next/port-home: save one with T502_PORT_HOME=write, on the commit before the slice's product code",
   ).toBe(true);
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
   const seen = yield* open(home, saved.founding, observe);
@@ -397,7 +396,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     }
 
     const text = yield* fs.readFileString(full);
-    const resource = yield* Schema.decodeUnknownEffect(Resource)(text);
+    const resource = yield* Schema.decodeEffect(Resource)(text);
     const props = resource["props"];
     const main = Predicate.isObject(props) && "main" in props ? props.main : undefined;
 
@@ -541,7 +540,7 @@ const SavedProcess = Schema.Struct({
 
 const Descriptors = Schema.Array(Schema.Struct({ value: Schema.fromJsonString(SavedProcess) }));
 
-const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Number) }));
+const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Finite) }));
 
 const Checkpoints = Schema.Array(
   Schema.Struct({
@@ -558,7 +557,7 @@ const Markers = Schema.Array(Schema.Struct({ value: Schema.Uint8Array }));
 
 const Lines = Schema.Array(
   Schema.Struct({
-    rev: Schema.Number,
+    rev: Schema.Finite,
     stream: Schema.String,
     _tag: Schema.String,
     build: Schema.String,
@@ -590,19 +589,20 @@ const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
       continue;
     }
 
-    const raw = yield* Effect.acquireUseRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, file), { readOnly: true })),
-      (db) =>
+    const raw = yield* TestDatabase.open(path.join(home, file), { readOnly: true }).pipe(
+      Effect.orDie,
+      Effect.flatMap((db) =>
         Effect.sync(() =>
           db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
             ? null
             : db.prepare(query).all(),
         ),
-      (db) => Effect.sync(() => db.close()),
+      ),
+      Effect.scoped,
     );
 
     if (raw !== null) {
-      found.push({ file, rows: yield* Schema.decodeUnknownEffect(rows)(raw) });
+      found.push({ file, rows: yield* Schema.decodeEffect(rows)(raw) });
     }
   }
 
@@ -691,7 +691,7 @@ const writtenBy = Effect.fnUntraced(function* (
 const reopenedOnItsCode = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
 
@@ -805,7 +805,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
 const upgradedOnItsCode = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-u-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
 

@@ -4,8 +4,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
+import * as ScopedRef from "effect/ScopedRef";
 import * as SessionManagerTest from "../../access/SessionManagerTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
@@ -17,30 +18,17 @@ const open = Effect.gen(function* () {
   );
 
   const path = join(folder, "session.db");
-
-  const handle = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(path);
-
-      return { db, sql: nodeSql(db) };
-    }),
-    (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
-  );
+  const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
+  const held = yield* ScopedRef.fromAcquire(connect);
 
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
-    exec: (query, ...params) => handle.sql.exec(query, ...params),
-    transaction: (step) => handle.sql.transaction(step),
-    size: () => handle.sql.size(),
+    exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
+    transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
+    size: () => ScopedRef.getUnsafe(held).size(),
   };
 
-  const reopen = Effect.sync(() => {
-    handle.db.close();
-    handle.db = new DatabaseSync(path);
-    handle.sql = nodeSql(handle.db);
-  });
-
-  return { sql, reopen } satisfies SessionManagerTest.Store;
+  return { sql, reopen: ScopedRef.set(held, connect) } satisfies SessionManagerTest.Store;
 });
 
 SessionManagerTest.suite(open);

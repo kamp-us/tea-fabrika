@@ -158,7 +158,7 @@ export const layer = (options: { readonly file: string }) =>
         }
 
         const text = yield* fs.readFileString(file).pipe(Effect.mapError(failure("read")));
-        const stored = yield* Schema.decodeUnknownEffect(StoredJson)(text).pipe(Effect.mapError(damaged("read")));
+        const stored = yield* Schema.decodeEffect(StoredJson)(text).pipe(Effect.mapError(damaged("read")));
 
         return Option.some(yield* load(stored, "read"));
       });

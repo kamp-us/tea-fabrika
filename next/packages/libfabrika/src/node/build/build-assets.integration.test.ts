@@ -640,8 +640,8 @@ describe("P16 cleanup and recording", () => {
               const f = fixture("View", value);
               previous(f, value);
 
-              const entered = Effect.runSync(Deferred.make<void>()),
-                release = Effect.runSync(Deferred.make<void>());
+              const entered = Deferred.makeUnsafe<void>(),
+                release = Deferred.makeUnsafe<void>();
 
               let fired = false;
               const builder = await load();
@@ -656,14 +656,12 @@ describe("P16 cleanup and recording", () => {
                   if (interrupt) {
                     yield* Deferred.await(release);
                   } else {
-                    return yield* Effect.fail(
-                      PlatformError.systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "rename",
-                        description: "planted publication failure",
-                      }),
-                    );
+                    return yield* PlatformError.systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      description: "planted publication failure",
+                    });
                   }
                 });
 
@@ -736,7 +734,7 @@ describe("P16 cleanup and recording", () => {
             async (value, delays) => {
               const f = fixture("View", value),
                 good = `last-good-${value}`,
-                entered = Effect.runSync(Deferred.make<void>()),
+                entered = Deferred.makeUnsafe<void>(),
                 pending: Fiber.Fiber<unknown, unknown>[] = [];
 
               previous(f, good);
@@ -832,7 +830,7 @@ describe("P16 cleanup and recording", () => {
             let closed = false,
               opened = false;
 
-            const entered = Effect.runSync(Deferred.make<void>());
+            const entered = Deferred.makeUnsafe<void>();
             vi.doMock("rolldown", () => ({
               ...native,
               rolldown: async (options: RolldownOptions) => {
@@ -897,7 +895,7 @@ describe("P16 cleanup and recording", () => {
           const native = await vi.importActual<Roll>("rolldown"),
             closed: boolean[] = [];
 
-          const entered = Effect.runSync(Deferred.make<void>());
+          const entered = Deferred.makeUnsafe<void>();
           let fired = false;
           vi.doMock("rolldown", () => ({
             ...native,

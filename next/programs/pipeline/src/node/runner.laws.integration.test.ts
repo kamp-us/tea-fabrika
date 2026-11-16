@@ -1,5 +1,3 @@
-// edge: Effect has no node:sqlite driver for the Sql contract
-import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { expect } from "@effect/vitest";
 import type { Ci } from "@kampus/libfabrika/ci/Ci";
@@ -38,9 +36,10 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { FileSystem, Path } from "effect";
 import type { Redacted } from "effect";
-import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -130,7 +129,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws grant no start, and the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
@@ -213,7 +212,7 @@ const life = Effect.fnUntraced(function* (
         Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
       ),
     model: Effect.map(checkpoint, (saved) =>
-      saved === null ? null : Schema.decodeUnknownSync(program.state.schema)(saved.saved.model),
+      saved === null ? null : Schema.decodeSync(program.state.schema)(saved.saved.model),
     ),
   };
 });
@@ -242,7 +241,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: serial,
         input,
@@ -322,12 +321,7 @@ const open = Effect.gen(function* () {
   const opened = new Map<string, Sql>();
 
   const connect = Effect.fnUntraced(function* (part: string) {
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${part}.db`))),
-      (handle) => Effect.sync(() => handle.close()),
-    ).pipe(Scope.provide(scope));
-
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+    const db = yield* TestDatabase.make(path.join(folder, `${part}.db`)).pipe(Scope.provide(scope));
     opened.set(part, nodeSql(db));
   });
 

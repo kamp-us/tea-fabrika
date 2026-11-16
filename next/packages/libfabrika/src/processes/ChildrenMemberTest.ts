@@ -117,7 +117,7 @@ const from = (parent: string | null): From => ({
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** An input the test delivered, as the gateway keeps it. */
-type Input = { readonly process: string; readonly sender: typeof Sender.Type; state: "live" | "removed" | "ended" };
+type Input = { readonly process: string; readonly sender: Sender; state: "live" | "removed" | "ended" };
 
 /** The gateway's answer, from the inputs the test delivered: none unless the input was delivered to that process. */
 const gateway = (inputs: ReadonlyMap<string, Input>) =>
@@ -127,11 +127,11 @@ const gateway = (inputs: ReadonlyMap<string, Input>) =>
         const input = parent === null ? undefined : inputs.get(parent);
 
         if (input === undefined || input.process !== process) {
-          return Effect.succeed(Option.none());
+          return Effect.succeedNone;
         }
 
         return input.state === "live"
-          ? Effect.succeed(Option.some(input.sender))
+          ? Effect.succeedSome(input.sender)
           : Effect.fail(new SendersError({ reason: input.state }));
       }),
   });
@@ -255,7 +255,7 @@ const world = Effect.fnUntraced(function* (
     );
 
   /** Delivers an input to `process` as the gateway would, and answers its id. */
-  const deliver = (process: string, sender: typeof Sender.Type) => {
+  const deliver = (process: string, sender: Sender) => {
     const id = `in-${process}-${++n}`;
     inputs.set(id, { process, sender, state: "live" });
 
@@ -362,7 +362,7 @@ const pick = <A>(items: ReadonlyArray<A>, n: number): A => {
 };
 
 /** The member a case's requester was started by, never the sender itself (0170: the sender wins). */
-const recordedFor = (c: SenderCase): typeof Sender.Type | undefined => {
+const recordedFor = (c: SenderCase): Sender | undefined => {
   switch (c.recorded) {
     case "none":
       return undefined;

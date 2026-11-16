@@ -77,7 +77,7 @@ export const layer = Layer.effect(
         const events: Array<Event> = [];
         const selections = new Map<string, typeof Event.cases.selected.Type>();
         const traces = new Map<string, string>();
-        let repository: (typeof Event.Type)["repository"] | undefined;
+        let repository: Event["repository"] | undefined;
 
         for (const row of rows) {
           const event = yield* Schema.decodeUnknownEffect(Event)(valueFor(row), { onExcessProperty: "error" }).pipe(

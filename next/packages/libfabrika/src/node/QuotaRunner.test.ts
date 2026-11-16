@@ -48,7 +48,7 @@ const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person
 const Model = Schema.Struct({
   count: Schema.Int,
   replies: Schema.Int,
-  wake: Schema.NullOr(Schema.Number),
+  wake: Schema.NullOr(Schema.Finite),
   text: Schema.String,
 });
 
@@ -56,8 +56,8 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("inc"), text: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("throw") }),
   Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
   Schema.Struct({ ...Down.fields, type: Schema.Literal("DOWN") }),
 ]);
 
@@ -276,7 +276,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       return yield* (yield* runner(name)).msg({
         id,
         envelope: {
-          id: Schema.decodeUnknownSync(InputId)(envelope),
+          id: Schema.decodeSync(InputId)(envelope),
           by: person,
           arrivedAt: yield* Clock.currentTimeMillis,
           input: m,

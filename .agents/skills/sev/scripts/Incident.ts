@@ -42,9 +42,9 @@ export const owed = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<Pul
 
 /** One pull request the lead walks after a sev0, and how its branch stands to main. */
 export const Walk = Schema.TaggedUnion({
-  behind: { pr: Schema.Number, branch: Schema.String, commits: Schema.Number },
-  holds: { pr: Schema.Number, branch: Schema.String },
-  unknown: { pr: Schema.Number, branch: Schema.String, reason: Schema.String },
+  behind: { pr: Schema.Finite, branch: Schema.String, commits: Schema.Finite },
+  holds: { pr: Schema.Finite, branch: Schema.String },
+  unknown: { pr: Schema.Finite, branch: Schema.String, reason: Schema.String },
 });
 
 export type Walk = typeof Walk.Type;

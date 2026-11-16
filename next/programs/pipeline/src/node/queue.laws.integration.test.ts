@@ -1,5 +1,3 @@
-// edge: Effect has no node:sqlite driver for Sql.
-import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
@@ -35,6 +33,7 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import type { Redacted } from "effect";
 import {
   Clock,
@@ -107,12 +106,7 @@ const stores = Effect.gen(function* () {
       return;
     }
 
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${encodeURIComponent(part)}.db`))),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Scope.provide(scope));
-
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+    const db = yield* TestDatabase.make(path.join(folder, `${encodeURIComponent(part)}.db`)).pipe(Scope.provide(scope));
     held.set(part, nodeSql(db));
   });
 
@@ -217,7 +211,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants, fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws pin `StartGrant`, so the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         // T1041: mail.unread's largest value, so no law here meets a full inbox.
         ProgramMailLedger.layer({
@@ -380,7 +374,7 @@ const open = Effect.fnUntraced(function* (
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: n,
         input,
@@ -461,9 +455,7 @@ const open = Effect.fnUntraced(function* (
     );
 
     const model =
-      checkpoint === null
-        ? null
-        : Schema.decodeUnknownSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
+      checkpoint === null ? null : Schema.decodeSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
 
     return {
       model,

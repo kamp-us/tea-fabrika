@@ -1,5 +1,4 @@
 // Ticket 884, next/: runs the inbox program's suite on SQLite, as checklist-runner does (0062).
-import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous handle for ledger transactions
 import { NodeServices } from "@effect/platform-node";
 import type { inbox } from "@kampus/inbox";
 import * as RunnerTest from "@kampus/inbox/RunnerTest";
@@ -17,6 +16,7 @@ import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "inbox:1";
@@ -59,10 +59,7 @@ const managerLayer = (sql: Sql) =>
   ).pipe(Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))));
 
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
+  TestDatabase.make(file).pipe(Effect.map(nodeSql));
 
 const session = Effect.fnUntraced(function* (
   files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>,

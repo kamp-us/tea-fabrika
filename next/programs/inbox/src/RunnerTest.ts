@@ -60,7 +60,7 @@ export const suite = (open: Open) =>
             expect(yield* session.letters, "a refused input saves no letter").toEqual(letters);
 
             // The ledger saves JSON, where both arrivedAt and fact.rev lose negative zero's sign.
-            const savedRow = Schema.decodeUnknownSync(Schema.fromJsonString(Row))(
+            const savedRow = Schema.decodeSync(Schema.fromJsonString(Row))(
               JSON.stringify(Row.cases.added.make(fields)),
             );
 

@@ -14,16 +14,16 @@ import { Option, Schema } from "effect";
 
 const Side = Schema.Struct({
   name: Schema.String,
-  startLoc: Schema.Struct({ line: Schema.Number }),
-  endLoc: Schema.Struct({ line: Schema.Number }),
+  startLoc: Schema.Struct({ line: Schema.Int }),
+  endLoc: Schema.Struct({ line: Schema.Int }),
 });
 
 /** One clone as jscpd's json reporter writes it: its two sides, its size, and whether the base had it. */
 const Clone = Schema.Struct({
   firstFile: Side,
   secondFile: Side,
-  lines: Schema.Number,
-  tokens: Schema.Number,
+  lines: Schema.Int,
+  tokens: Schema.Int,
   isNew: Schema.optionalKey(Schema.Boolean),
 });
 

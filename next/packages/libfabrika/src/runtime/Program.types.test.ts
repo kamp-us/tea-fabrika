@@ -94,10 +94,9 @@ function authoringTypeErrors() {
   Program.make({ ...fields, view: (m) => ({ count: m.count }) });
   Program.make({
     ...fields,
-    view: (m) => {
+    view: (m) =>
       // @ts-expect-error The model comes from the machine, not this callback.
-      return { count: m.missing };
-    },
+      ({ count: m.missing }),
   });
   // @ts-expect-error Another model's selector cannot widen the machine's model.
   Program.make({ ...fields, view: (m: { other: string }) => ({ other: m.other }) });

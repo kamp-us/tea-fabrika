@@ -28,9 +28,9 @@ type Command = ReturnType<
 >;
 
 const id = (n: number) =>
-  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
-const process = Schema.decodeUnknownSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
+const process = Schema.decodeSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
 const target = Fabrika.Chaos.Target.make({
   program: "fabrika/checklist",
@@ -50,9 +50,7 @@ const starts = fc.record({
       name: `checklist:${n}`,
       client: `client:${n}`,
       key: `public:${n}`,
-      process: Schema.decodeUnknownSync(Fabrika.Id.Process)(
-        `process_0000000000e008${n.toString(16).padStart(12, "0")}`,
-      ),
+      process: Schema.decodeSync(Fabrika.Id.Process)(`process_0000000000e008${n.toString(16).padStart(12, "0")}`),
     }),
   ),
   most: fc.integer({ min: 1, max: 12 }),
@@ -173,7 +171,7 @@ it("brands and public Model/Msg schemas stay exact through the program", () => {
   expectTypeOf<Extract<Msg, { type: "start" }>["id"]>().toEqualTypeOf<typeof Fabrika.Chaos.ExperimentId.Type>();
   expectTypeOf<typeof Fabrika.Incoming.Type.envelope.id>().toEqualTypeOf<typeof Fabrika.Id.Input.Type>();
   // Slice 1's ProcessId is still a checked string, pending the shared ID conversion.
-  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<typeof Fabrika.Chaos.Target.Type>();
+  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<Fabrika.Chaos.Target>();
   fc.assert(
     fc.property(starts, (start) => {
       expect(Schema.is(Fabrika.ChaosMachine.Msg)({ type: "start", ...start })).toBe(true);

@@ -204,7 +204,9 @@ const examIn = Effect.fn("typecheck.examIn")(function* (main: string, paths: Rea
 });
 
 /** The job has not ended, or GitHub did not answer: the poll tries again. */
-class Pending extends Schema.TaggedError<Pending>()("Pending", { reason: Schema.String }) {}
+class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbol }>()("Pending", {
+  reason: Schema.String,
+}) {}
 
 /** Wait for the job at `head` to end, then read it; never fails. */
 export const wait = Effect.fn("typecheck.wait")(

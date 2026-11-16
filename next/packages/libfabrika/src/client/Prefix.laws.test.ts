@@ -299,7 +299,7 @@ const online = (world: World, i: number) => {
 const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
 
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,
@@ -360,7 +360,7 @@ const press = (w: World, i: number, key: string) => {
   return { cmds, sent: w.sent.slice(before) };
 };
 
-const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: typeof Prefix.Type }).prefix;
+const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix }).prefix;
 
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
 
@@ -771,9 +771,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
 
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
  *  but the focused one drawn under 220x120. */
-const stripCount = (view: TezgahView, size: Size) => {
-  return foldedAt(view.workspaces[0]!, size).strips.size;
-};
+const stripCount = (view: TezgahView, size: Size) => foldedAt(view.workspaces[0]!, size).strips.size;
 
 describe("Desk S4 L32: a split's letter never carries a fold", () => {
   it("L32 (the split path): in a window whose size folds some of its tiles, every letter its keys send tezgah, a split or a close, carries only did's keys and nothing about folds or strips", () => {

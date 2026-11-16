@@ -6,7 +6,7 @@
 // `make`, `Permission`, `provide`, `recheck` and `Denied`, and never `mint`, which stays in
 // `internal/proof.ts`. A right's class is the context tag of its proof (phoenix's capability, 0107).
 import { expectTypeOf, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
+import type * as Effect from "effect/Effect";
 import type * as Result from "effect/Result";
 import { Model, StartProgram } from "./Model.ts";
 import * as Rebac from "./Rebac.ts";
@@ -27,9 +27,7 @@ type OtherProof = Passed<ReturnType<typeof Other.within>>;
 
 /** The values the assertions read. Never called: its body is checked by the compiler only. */
 const shapes = (proof: StartProof, other: OtherProof) => {
-  const needs = Effect.gen(function* () {
-    return yield* StartProgram;
-  });
+  const needs = StartProgram;
 
   return {
     needs,
@@ -70,7 +68,7 @@ const undeclared = () => {
 };
 
 /** L7's ways to make a proof without a check. Never called. */
-const forged = (sender: typeof Sender.Type, tuples: Tuples) => {
+const forged = (sender: Sender, tuples: Tuples) => {
   // @ts-expect-error a proof is never an object literal: its brand is a symbol only the module holds.
   const literal: StartProof = { sender, permission: "start", object: "fabrika:demo" };
   // @ts-expect-error `mint` stays in internal/proof.ts; the module's front file does not export it.

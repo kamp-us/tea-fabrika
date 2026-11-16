@@ -17,6 +17,9 @@ const LIBRARY = "@kampus/libfabrika";
 
 const VITEST = "@kampus/vitest";
 
+/** The test primitives' SQLite module, read through its own subpath (ticket 1029). */
+const TEST_DATABASE = `${VITEST}/TestDatabase`;
+
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
 
@@ -47,7 +50,7 @@ const TABLE: { scope: string; parts: Part[] } = {
     {
       name: "library suites",
       files: ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-      may: [VITEST],
+      may: [VITEST, TEST_DATABASE],
       tests: [LIBRARY, VITEST],
     },
     { name: "library", files: ["next/packages/libfabrika/**"], may: [], tests: [LIBRARY, VITEST] },
@@ -84,7 +87,7 @@ const TABLE: { scope: string; parts: Part[] } = {
     {
       name: "program suites",
       files: ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-      may: [LIBRARY, VITEST],
+      may: [LIBRARY, VITEST, TEST_DATABASE],
     },
     { name: "program", files: ["next/programs/**"], may: [LIBRARY] },
   ],
@@ -354,7 +357,9 @@ const SUITE_PLACES = ["library suites", "program suites"] as const;
 const pathAt = new Map(PLACES);
 
 // Plant, run once and recorded in PR 1274: give the library and program parts' `may` in
-// `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red.
+// `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red. Ticket 1029
+// draws the SQLite module's subpath too; its plant, run once and restored: leave it out of the
+// "program suites" `may` in `.oxlintrc.json` (red: a program suite's import of it fired).
 it("the library's and a program's code may not import the test primitives, and their shared suites may", async () => {
   let n = 0;
   const cases = new Map<string, Case>();
@@ -363,12 +368,17 @@ it("the library's and a program's code may not import the test primitives, and t
     fc.property(
       fc.oneof(
         ...[...CODE_PLACES, ...SUITE_PLACES].map((place) =>
-          fc.tuple(fc.constant(place), pathAt.get(place)!, fc.nat({ max: FORMS.length - 1 })),
+          fc.tuple(
+            fc.constant(place),
+            pathAt.get(place)!,
+            fc.nat({ max: FORMS.length - 1 }),
+            fc.constantFrom(VITEST, TEST_DATABASE),
+          ),
         ),
       ),
-      ([place, path, form]) => {
+      ([place, path, form, name]) => {
         const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
-        const one: Case = { text: `${FORMS[form]!(VITEST, 0)}\n`, lines: refused ? [1] : [] };
+        const one: Case = { text: `${FORMS[form]!(name, 0)}\n`, lines: refused ? [1] : [] };
         check(path, one);
         cases.set(numbered(path, n), one);
         seen.add(place);
@@ -380,9 +390,13 @@ it("the library's and a program's code may not import the test primitives, and t
       numRuns: 200,
       examples: [
         // pinned: the review of PR 1274 named this file, which lint let import the test package.
-        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0]],
-        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0]],
-        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0]],
+        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0, VITEST]],
+        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0, VITEST]],
+        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, VITEST]],
+        // Ticket 1029 moves this test kit onto the SQLite module, so its suites' part must take it.
+        [["library suites", "next/packages/libfabrika/src/node/RecordPart.test-support.ts", 0, TEST_DATABASE]],
+        [["library", "next/packages/libfabrika/src/node/NodeSqlite.ts", 0, TEST_DATABASE]],
+        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, TEST_DATABASE]],
       ],
     },
   );

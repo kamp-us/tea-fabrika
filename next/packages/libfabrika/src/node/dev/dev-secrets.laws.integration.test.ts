@@ -9,6 +9,7 @@ import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -38,7 +39,7 @@ import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
-class CallError extends Schema.TaggedError<CallError>()("CallError", {
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
   cause: Schema.Unknown,
 }) {}
 
@@ -183,7 +184,7 @@ const flow = async (sample: Flow) => {
   };
 
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-    const call = Schema.decodeUnknownSync(
+    const call = Schema.decodeSync(
       Schema.fromJsonString(
         Schema.Struct({
           target: Schema.String,
@@ -357,7 +358,7 @@ const flow = async (sample: Flow) => {
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
-                Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
+                Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
                 ),
               ).toEqual({ token: bearer });
@@ -492,14 +493,18 @@ const flow = async (sample: Flow) => {
     }
 
     outputs.measurements.push(...measurements(gatewayDb));
-    const nodeDb = new DatabaseSync(join(home, "brain.records.sqlite"));
-
-    try {
-      outputs.measurements.push(...measurements(nodeDb));
-      outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
-    } finally {
-      nodeDb.close();
-    }
+    // The brain's span queue is the product's file, so the test opens it as it is and closes it after.
+    await Effect.runPromise(
+      TestDatabase.open(join(home, "brain.records.sqlite")).pipe(
+        Effect.flatMap((nodeDb) =>
+          Effect.sync(() => {
+            outputs.measurements.push(...measurements(nodeDb));
+            outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
+          }),
+        ),
+        Effect.scoped,
+      ),
+    );
 
     outputs.journal.push(journalDb.prepare("SELECT * FROM entries").all());
     expect(parts.size).toBeGreaterThan(0);

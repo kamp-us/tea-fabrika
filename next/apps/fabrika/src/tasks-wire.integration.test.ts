@@ -75,7 +75,7 @@ const identity = () => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Json),
   result: Schema.optionalKey(Schema.Json),
@@ -100,7 +100,7 @@ const socket = Effect.fnUntraced(function* (
     Effect.sync(() => {
       const ws = new WebSocket(`${url.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
       ws.addEventListener("message", (event) => {
-        const f = Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data));
+        const f = Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data));
         frames.push(f);
         Queue.offerUnsafe(inbox, f);
       });
@@ -127,7 +127,7 @@ const socket = Effect.fnUntraced(function* (
     while (true) {
       const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
 
-      if (frame instanceof Closed) {
+      if (Schema.is(Closed)(frame)) {
         return yield* frame;
       }
 
@@ -142,7 +142,7 @@ const socket = Effect.fnUntraced(function* (
   do {
     const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
 
-    if (frame instanceof Closed) {
+    if (Schema.is(Closed)(frame)) {
       return yield* frame;
     }
 
@@ -300,7 +300,7 @@ it.live(
       const first = yield* socket(url, hands, "first");
       expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
 
-      const taken = Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.Literal("assigned"), task: Task }))(
+      const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
 

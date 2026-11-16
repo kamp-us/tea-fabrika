@@ -1716,7 +1716,7 @@ const frameRuns = { arbitrary: { seed: SEED, runs: 300, size: 200 } };
 
 /** The id of a JSON-RPC answer, read as the door wrote it. */
 const answerId = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ id: Schema.Union([Schema.String, Schema.Number]) })),
+  Schema.fromJsonString(Schema.Struct({ id: Schema.Union([Schema.String, Schema.Finite]) })),
 );
 
 /** What a frame on `prev` did, beside what its owner says it must do, with a label for a failure. */
@@ -1874,7 +1874,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
       const pool = live.length > 0 && cut % 2 === 0 ? live : events.map((_, i) => i);
       const k = pool[cut % pool.length]!;
       const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
-      const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(machine.model))(saved);
+      const loaded = Schema.decodeSync(Schema.fromJsonString(machine.model))(saved);
       let [s] = machine.init(loaded, ctx);
       expect(s, "the saved Model did not load back as it was, with an empty region").toEqual(mounted(events[k]!.next));
       // The loaded run's region lacks the burst said before the cut, until the uncut run's burst ends.
@@ -1951,8 +1951,7 @@ const Wire = {
   }),
   entries: Schema.Struct({
     entries: Schema.Array(
-      Schema.Struct({
-        _tag: Schema.Literal("started"),
+      Schema.TaggedStruct("started", {
         by: Schema.Literal("brain"),
         body: Schema.Struct({ process: Schema.String, name: Schema.Literal("checklist:1") }),
         rev: Schema.Int,
@@ -1961,8 +1960,8 @@ const Wire = {
   }),
   opened: Schema.Struct({ rev: Schema.Int, view: ListView }),
   sent: Schema.Union([
-    Schema.Struct({ _tag: Schema.Literal("accepted"), rev: Schema.Int, pos: Schema.Int }),
-    Schema.Struct({ _tag: Schema.Literal("refused"), reason: Schema.String }),
+    Schema.TaggedStruct("accepted", { rev: Schema.Int, pos: Schema.Int }),
+    Schema.TaggedStruct("refused", { reason: Schema.String }),
   ]),
   whole: Schema.Struct({ rev: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), view: ListView }),
   patch: Schema.Struct({ base: Schema.Int, rev: Schema.Int }),
@@ -2621,7 +2620,7 @@ const follow = (list: ReadonlyArray<FollowChoice>, each: (e: FollowEvent) => voi
         }
 
         w.cuts++;
-        const [loaded] = machine.init(Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(next)), ctx);
+        const [loaded] = machine.init(Schema.decodeSync(save)(Schema.encodeSync(save)(next)), ctx);
         expect(loaded, "a saved Model did not load back as it was, with an empty region").toEqual(mounted(next));
 
         return loaded;
@@ -3215,7 +3214,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const online = reached.filter((s) => s.link._tag === "online");
         const pool = online.length > 0 && cut % 4 !== 0 ? online : reached;
         const saved = pool[cut % pool.length]!;
-        const load = () => Schema.decodeUnknownSync(save)(Schema.encodeSync(save)(saved));
+        const load = () => Schema.decodeSync(save)(Schema.encodeSync(save)(saved));
 
         const [home] = machine.init(load(), ctx);
         seen.burst += saved.said.messages.length > 0 ? 1 : 0;
@@ -3943,7 +3942,7 @@ type FocusWorld = DeskWorld & {
 const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
 
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

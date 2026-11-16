@@ -46,7 +46,7 @@ const readModel = (path: string) =>
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs.readFileString(path);
 
-    return Schema.decodeUnknownSync(Schema.fromJsonString(FlowMachine.Model))(text);
+    return Schema.decodeSync(Schema.fromJsonString(FlowMachine.Model))(text);
   });
 
 const three = Flow.make("three", [Step.act("a"), Step.check("b"), Step.act("c")]);

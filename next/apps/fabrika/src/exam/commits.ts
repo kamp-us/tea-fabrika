@@ -400,7 +400,9 @@ export const chain = (
 
 // The edge: git and ssh-keygen through effect/process, and the files a run reads and writes.
 
-class Failed extends Schema.TaggedError<Failed>()("Failed", { message: Schema.String }) {}
+class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol }>()("Failed", {
+  message: Schema.String,
+}) {}
 
 const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
   return yield* s.pipe(Stream.decodeText(), Stream.mkString);

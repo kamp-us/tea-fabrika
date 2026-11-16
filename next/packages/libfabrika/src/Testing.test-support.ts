@@ -9,7 +9,7 @@ import * as fc from "fast-check";
 const SEED = 119120;
 
 /** fast-check's own failure report, with its counterexample, as a law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
+class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()("PropertyFailed", {
   cause: Schema.Defect(),
 }) {}
 

@@ -23,7 +23,10 @@ const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled"
 
 const word = fc.string();
 
-class TailImportError extends Schema.TaggedError<TailImportError>()("TailImportError", { cause: Schema.Defect() }) {}
+class TailImportError extends Schema.TaggedError<TailImportError, { readonly brand: unique symbol }>()(
+  "TailImportError",
+  { cause: Schema.Defect() },
+) {}
 
 const event = fc.record({
   method: fc.option(fc.oneof(fc.constantFrom(...methods), word), { nil: null }),

@@ -28,7 +28,7 @@ export const Status = Schema.TaggedUnion({
  *
  * @category errors
  */
-export class Command extends Schema.TaggedError<Command>()("Command", {
+export class Command extends Schema.TaggedError<Command, { readonly brand: unique symbol }>()("Command", {
   code: Schema.optionalKey(Schema.Int),
   signal: Schema.optionalKey(
     Schema.Literals([
@@ -79,30 +79,39 @@ export class Command extends Schema.TaggedError<Command>()("Command", {
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Service-manager output, or a job value, that cannot be read or written without guessing.
  *
  * @category errors
  */
-export class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { cause: Schema.Defect() }) {}
+export class Unsupported extends Schema.TaggedError<Unsupported, { readonly brand: unique symbol }>()("Unsupported", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The job or its file belongs to another configuration, or the home is not canonical.
  *
  * @category errors
  */
-export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", { cause: Schema.Defect() }) {}
+export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Lower controller failure, preserving its protected cause.
  *
  * @category errors
  */
-export class BrainControlError extends Schema.TaggedError<BrainControlError>()("BrainControlError", {
-  reason: Schema.Union([Command, Storage, Unsupported, Conflict]),
-}) {}
+export class BrainControlError extends Schema.TaggedError<BrainControlError, { readonly brand: unique symbol }>()(
+  "BrainControlError",
+  {
+    reason: Schema.Union([Command, Storage, Unsupported, Conflict]),
+  },
+) {}
 
 /**
  * Operations on one checked installation.

@@ -1,8 +1,9 @@
 // T641 slice 1: the stores `RecordPartTest.suite` runs on, over node:sqlite (0061, 0062). This module
 // owns the driver, so the raw handle stays here: the suite sees only `Sql`, and each handle and
 // folder is acquired in a scope that gives it back.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
+import type { DatabaseSync } from "node:sqlite"; // edge: the lifecycle laws watch the driver's own handle
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -20,20 +21,21 @@ export type Event =
 export type Watch = (event: Event) => void;
 
 const handle = (file: string, watch: Watch) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      watch({ step: "opening", file });
-      const db = new DatabaseSync(file);
-      watch({ step: "opened", file, db });
-
-      return db;
-    }),
-    (db) =>
+  Effect.gen(function* () {
+    yield* Effect.sync(() => watch({ step: "opening", file }));
+    const db = yield* TestDatabase.make(file);
+    yield* Effect.sync(() => watch({ step: "opened", file, db }));
+    // Finalizers run last added first, so this one closes the handle before `make`'s own release,
+    // which then finds it closed, and the closed step is seen after the close.
+    yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         db.close();
         watch({ step: "closed", file, db });
       }),
-  );
+    );
+
+    return db;
+  });
 
 const store = (file: string, watch: Watch): RecordPartTest.Store => ({
   use: (body) => Effect.scoped(Effect.flatMap(handle(file, watch), (db) => body(nodeSql(db)))),

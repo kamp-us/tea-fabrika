@@ -9,7 +9,7 @@ import { BrainControl, BrainControlError, Command, Status } from "./BrainControl
 import { BrainProbe, BrainProbeError, Unreachable, Foreign, Readiness, Children, Cleanup } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
 
-export const spec = Schema.decodeUnknownSync(BrainSpec)({
+export const spec = Schema.decodeSync(BrainSpec)({
   home: "/test/p19/home",
   executable: "/test/p19/Electron",
   args: ["/test/p19/brain.mjs"],
@@ -28,7 +28,7 @@ export const loaded = (value: BrainSpec = spec, pid: number | null = 81) =>
     pid,
   });
 
-export const foreign = loaded(Schema.decodeUnknownSync(BrainSpec)({ ...spec, args: [...spec.args, "foreign"] }));
+export const foreign = loaded(Schema.decodeSync(BrainSpec)({ ...spec, args: [...spec.args, "foreign"] }));
 
 const World = Schema.Struct({
   job: Status,
@@ -104,12 +104,13 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
       ),
     ),
     cleanup: invoke("cleanup").pipe(
-      Effect.mapError((cause) => BrainProbeError.make({ reason: Cleanup.make({ cause }) })),
-      Effect.map(() =>
-        world.children === "gone" && world.listener === "waiting"
-          ? Children.cases.gone.make({})
-          : Children.cases.waiting.make({}),
-      ),
+      Effect.mapBoth({
+        onFailure: (cause) => BrainProbeError.make({ reason: Cleanup.make({ cause }) }),
+        onSuccess: () =>
+          world.children === "gone" && world.listener === "waiting"
+            ? Children.cases.gone.make({})
+            : Children.cases.waiting.make({}),
+      }),
     ),
   });
 

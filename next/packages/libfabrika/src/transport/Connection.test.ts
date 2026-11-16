@@ -595,7 +595,7 @@ const admittedTotals = (log: ReadonlyArray<Event>) => {
 // parse, then the Request schema; and the old object, `in` and string checks for the reason.
 const OldRequest = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   method: Schema.String,
   params: Schema.Unknown,
 });
