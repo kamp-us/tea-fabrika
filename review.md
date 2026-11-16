@@ -1,7 +1,7 @@
 # Review step for one slice
 
 Use the review skill (`.agents/skills/review/SKILL.md`), read-only apart from your field row.
-Review the whole diff of your branch against `origin/main`, against its approved plan (named in
+Read the whole diff of your branch, every line, quick-fix changes included, against `origin/main`, against its approved plan (named in
 your brief) and the decisions it builds. Check every hit against the check's named fix, every
 hand edit, every comment line the quick fix might have dropped, every ignore or disable line,
 the lock globs (do they cover exactly the folders at zero, nothing in 1366's files, nothing in

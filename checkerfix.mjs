@@ -1,7 +1,8 @@
 // Applies the Effect checker's own quick fix for one check, through its language server.
 // Usage: node checkerfix.mjs <check> <project dir with tsconfig.json> <file>...
 // The check must already be on (at error) for the files in that project's tsconfig.
-// Prints, per file, how many hits were fixed and which hits had no quick fix (left as they are).
+// Prints one line per change it made (file, line, the server's fix title), for the PR's list,
+// then, per file, which hits had no quick fix (left as they are).
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -51,6 +52,7 @@ for (const f of files) {
     const edits = fix && [...Object.entries(fix.edit.changes ?? {}), ...(fix.edit.documentChanges ?? []).map((c) => [c.textDocument.uri, c.edits])];
     if (!fix || edits.some(([u]) => u !== uri)) { skipped.push({ key: key(hit), line: hit.range.start.line + 1, why: fix ? "fix edits another file" : "no quick fix" }); continue; }
     text = applyEdits(text, edits.flatMap(([, e]) => e)); version++; fixed++;
+    console.log(`CHANGE ${f}:${hit.range.start.line + 1}: ${fix.title}`);
     send({ jsonrpc: "2.0", method: "textDocument/didChange", params: { textDocument: { uri, version }, contentChanges: [{ text }] } });
   }
   if (fixed > 0) writeFileSync(path, text);
