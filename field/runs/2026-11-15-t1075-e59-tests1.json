@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e59-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T20:46:32-08:00",
+  "ended": "2026-11-15T20:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E59 of the Effect-checker sweep (ticket 1075, plan docs/plan/quests/effect-sweep-PLAN.md on fabrikalfa/effect-sweep), in next/: the check globalTimers in app:e2e and lib:cloudflare. Counted with only globalTimers at error through --lspconfig on next/apps/fabrika/tsconfig.json and next/packages/libfabrika/tsconfig.json: 2 hits in the row's folders, both in exam paths (test files), none in a PR 1366 file (checked against its 58 files). Fixed both by hand edit: next/apps/fabrika/e2e/instance.visual.test.ts:31, pause is Effect.runPromise(Effect.sleep(\"25 millis\")), the same 25 ms timer; next/packages/libfabrika/src/cloudflare/fetch.test.ts:236, the zero-delay yield is Effect.runPromise(Effect.yieldNow), which is what Effect.sleep(0) answers in effect 4.1.3 (Clock.sleepMillis returns yieldNow for 0), one scheduler turn through setImmediate. Effect.sleep(0) was tried first and refused by fabrika/no-numeric-duration, so yieldNow names the yield with no bare number. Recount: lib:cloudflare 0, app:e2e 0; the app's other 18 globalTimers hits are all in app:src, slice E97 (after 1366). No law is added, removed or narrowed; no lock line, no LOCKED row, no tsconfig change (owner ruling for judgment slices). Tests run at the pre-commit tree on base 37db01a: fetch.test.ts 9 of 9 green. instance.visual.test.ts was not run (a .visual. test starts a browser; the step rules forbid it here). No product file has a hit, so no build step is needed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Checks: pnpm format clean; pnpm lint's oxlint part 0 blocking after the yieldNow change; ratchet.ts exit 0. Per check for the sweep PR body: globalTimers, hits met 2, fixed by quick fix 0, hand edits 2, left 0, waiting on 1366 0.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "fetch.test.ts: requests that arrive before any read of the recorded start has finished each read for themselves, and a finished read serves the later ones",
+      "plant": "fetch.ts httpContext shares one read still under way across requests (a WeakMap of in-flight promises); falsified after 1 test, expected held to have a length of 2 but got 1",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

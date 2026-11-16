@@ -28,7 +28,7 @@ const children: Array<ChildProcess> = [],
   ports: Array<Effect.Effect<void>> = [],
   browsers: Array<Browser> = [];
 
-const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+const pause = () => Effect.runPromise(Effect.sleep("25 millis"));
 
 afterEach(async () => {
   for (const b of browsers.splice(0)) {

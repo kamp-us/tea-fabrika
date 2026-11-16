@@ -233,7 +233,7 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await new Promise((settle) => setTimeout(settle, 0));
+          await Effect.runPromise(Effect.yieldNow);
           expect(answered).toHaveLength(done + 1);
         }
 
