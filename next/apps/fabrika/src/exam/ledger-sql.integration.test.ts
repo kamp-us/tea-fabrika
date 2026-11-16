@@ -1,7 +1,7 @@
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";

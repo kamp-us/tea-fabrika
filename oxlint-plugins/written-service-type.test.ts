@@ -7,7 +7,7 @@ import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 import { writtenServiceType } from "./written-service-type.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.

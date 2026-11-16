@@ -3,7 +3,7 @@
 // under an inline edge comment on the line above it.
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "import(no-default-export)";
 

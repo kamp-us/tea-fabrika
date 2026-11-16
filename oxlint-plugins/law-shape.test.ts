@@ -34,8 +34,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { dirname, join, resolve } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { MESSAGE, TYPE_MESSAGE } from "./law-shape.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(law-shape)";
 const ROOT = resolve(import.meta.dirname, "..");

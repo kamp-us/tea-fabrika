@@ -1,6 +1,6 @@
 // `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass.
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const CODE = "fabrika(no-hand-tag)";
 const FIRES = "next/packages/libfabrika/src/coordination/fires.ts";

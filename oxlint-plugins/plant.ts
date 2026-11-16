@@ -1,4 +1,4 @@
-// Lints planted files the way `pnpm lint` does, for the exam's rule tests. The files go into a
+// Lints planted files the way `pnpm lint` does, for the rules' own tests in this folder. The files go into a
 // fresh folder that holds the repo's own `.oxlintrc.json` and its plugin folder, at the paths they are
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
 // `next/**` globs meet them as they would meet the real file. Nothing is written inside the repo.
@@ -39,7 +39,6 @@ type Fires<A> = (code: string, file: string) => readonly A[];
 export function plant(files: Files): Promise<Fires<number>>;
 export function plant<A>(files: Files, show: (fire: Fire) => A): Promise<Fires<A>>;
 export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.line): Promise<Fires<unknown>> {
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits this test helper's Promise
   return Effect.runPromise(
     lint(files).pipe(
       Effect.map(
@@ -57,7 +56,7 @@ export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.lin
 const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const ROOT = path.resolve(import.meta.dirname, "../../../../..");
+  const ROOT = path.resolve(import.meta.dirname, "..");
   // The real path: on a Mac the temp folder is behind a link, and oxlint matches globs on the real one.
   const at = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "exam-" }));
   yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));

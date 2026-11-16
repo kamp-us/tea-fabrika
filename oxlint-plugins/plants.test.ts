@@ -23,9 +23,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
-import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
+import { plant as lintCopies } from "./plant.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");

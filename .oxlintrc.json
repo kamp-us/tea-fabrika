@@ -698,7 +698,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -916,7 +916,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1015,7 +1015,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1233,7 +1233,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1367,7 +1367,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1444,7 +1444,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1499,7 +1499,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1552,7 +1552,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1816,7 +1816,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1969,7 +1969,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2090,7 +2090,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2199,7 +2199,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {

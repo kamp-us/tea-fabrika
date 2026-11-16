@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const CODE = "fabrika(edge-comment)";
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");

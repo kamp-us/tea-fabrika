@@ -17,7 +17,7 @@
     "lint:dead": "NODE_OPTIONS=--max-old-space-size=6144 code-graph . --unreachable --ci --node-kinds node-kinds.json",
     "lint:compiler": "node next/apps/fabrika/src/exam/compiler.ts",
     "lint:twin": "node next/apps/fabrika/src/exam/twin.ts",
-    "lint:promise-types": "node next/apps/fabrika/src/exam/promise-types.ts",
+    "lint:promise-types": "node oxlint-plugins/promise-types.ts",
     "tokens": "node packages/fabrika-design/src/build/tokens.ts",
     "commits": "node next/apps/fabrika/src/exam/commits.ts",
     "format": "node oxlint-plugins/format.ts && node oxlint-plugins/lint.ts --fix && node oxlint-plugins/format.ts",

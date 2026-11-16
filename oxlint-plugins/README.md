@@ -369,7 +369,7 @@ Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words
 
 The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
-Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests sit beside each rule in this folder, one `<rule>.test.ts` each, and use `plant.ts`, which lints each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file. They were the exam's tests in `next/apps/fabrika/src/exam/` until 0591 moved them here: no shape check stays in the exam folder.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -544,11 +544,11 @@ stays red until the builder removes those imports.
 It reads the installed providers, prints the finding count and exits nonzero for any
 finding. Its generated plants stay in `twin.test.ts`, with seed 119120.
 
-`pnpm lint:promise-types` adds types to `no-promises`. TypeScript 7.0.2's installed
+`pnpm lint:promise-types` (`promise-types.ts`, here) adds types to `no-promises`. TypeScript 7.0.2's installed
 sync API resolves every `next/` project. Calls, returns and function parameters may
 not carry a Promise or a function returning one outside a marked edge line. Type
 declarations, tests, test support files and today's code are left alone. The scanner does not emit code
-or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
+or run type diagnostics. `promise-types.test.ts` plants imported aliases, inferred
 returns, generic thunks, object methods and line-local edge comments. An edge comment
 covers only the next physical line. History: the initial P12 head scan at `4577f6b0`
 found 103 lines. It recorded false alarms inside wrapped statements whose first line
@@ -638,7 +638,7 @@ The rule stays an **error**. The remaining finding is PR 1's red. It needs no
 advice exception in the lint runner. The seven advice diagnostics in this scan
 are from the existing advice rules.
 
-The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
+The planted test is `effect-functions.test.ts`, beside the rule.
 Nine rejected fixture sites are real violations. Seven allowed forms cover
 inner spans, consumed streams, named functions, untraced helpers, forwarding
 and one-use callbacks. Other fixtures check aliases, today's code and test span

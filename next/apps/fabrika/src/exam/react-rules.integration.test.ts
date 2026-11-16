@@ -1,7 +1,7 @@
 // React's own rules (exam item 13, C2, C3 and C6): `react/refs`, `react/immutability` and
 // `react/display-name` block in next/'s `.tsx` files, tests left out.
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const FIRES = "next/packages/tuval/src/window/fires.tsx";
 const PASSES = "next/packages/tuval/src/window/passes.tsx";

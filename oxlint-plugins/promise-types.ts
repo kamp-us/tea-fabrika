@@ -292,7 +292,7 @@ export const checkPromiseTypes = (
 const main = Effect.gen(function* () {
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
-  const root = path.resolve(import.meta.dirname, "../../../../..");
+  const root = path.resolve(import.meta.dirname, "..");
   const api = new API({ cwd: root });
 
   try {

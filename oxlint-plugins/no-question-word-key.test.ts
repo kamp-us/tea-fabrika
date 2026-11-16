@@ -1,8 +1,8 @@
 import type { Context, ESTree } from "@oxlint/plugins";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noQuestionWordKey } from "./no-question-word-key.ts";
+import { plant } from "./plant.ts";
 
 // oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
 const NATIVE = "eslint(id-denylist)";

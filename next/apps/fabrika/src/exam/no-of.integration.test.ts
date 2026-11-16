@@ -1,7 +1,7 @@
 // `no-of` (exam item 4): no bare `of` and no `xOf` name declared in next/; a use passes. A module's
 // top-level exported `of` passes and a named import of `of` fires (0029).
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const CODE = "fabrika(no-of)";
 const FIRES = "next/packages/tuval/src/desktop/fires.ts";

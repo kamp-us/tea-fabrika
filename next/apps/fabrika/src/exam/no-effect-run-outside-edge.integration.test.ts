@@ -2,7 +2,7 @@
 // There is no list of edge files (owner, 2026-11-05; Tier 1, P35), so each run fires at every one of
 // the 18 paths that list once named, and passes only where an edge comment stands over it.
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const CODE = "fabrika(no-effect-run-outside-edge)";
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";

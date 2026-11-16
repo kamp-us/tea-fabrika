@@ -1,7 +1,7 @@
 // T502 PR 2, next/. The installed no-restricted-imports rule handles this shape.
 import { it, expect } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 it.effect.prop(
   "object contracts load only Alchemy; erased types do not load services",

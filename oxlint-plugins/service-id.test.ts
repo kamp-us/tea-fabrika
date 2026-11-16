@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(service-id)";
 const P = "@kampus/libfabrika";

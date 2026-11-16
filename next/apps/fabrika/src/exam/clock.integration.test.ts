@@ -1,7 +1,7 @@
 // The clock in a view (C1, owner 2026-11-05): React's `react/purity` refuses a clock or random read
 // in render and allows one in a handler; our `no-clock-in-view` refuses both.
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const PURITY = "react(purity)";
 const CLOCK = "fabrika(no-clock-in-view)";

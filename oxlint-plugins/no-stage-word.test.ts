@@ -1,8 +1,8 @@
 import type { Context } from "@oxlint/plugins";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStageWord } from "./no-stage-word.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-stage-word)";
 const runs = { seed: 681080, numRuns: 12 };

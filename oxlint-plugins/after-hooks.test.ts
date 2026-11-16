@@ -4,7 +4,7 @@
 // generated path, so the config's globs are under test with the rule.
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "vitest(no-hooks)";
 const runs = { seed: 119120, numRuns: 12 };

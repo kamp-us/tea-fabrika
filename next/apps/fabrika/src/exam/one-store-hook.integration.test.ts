@@ -4,7 +4,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const CODE = "fabrika(one-store-hook)";

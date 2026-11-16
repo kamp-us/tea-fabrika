@@ -8,8 +8,8 @@ import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { packageImports } from "./package-imports.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(package-imports)";
 const LIBRARY = "@kampus/libfabrika";

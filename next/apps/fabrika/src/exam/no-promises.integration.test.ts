@@ -9,8 +9,8 @@ import { API } from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
 // them, and the Effect ones pass. Both checks limit an edge comment to the next physical line.
 import { describe, expect, it } from "vitest";
-import { plant } from "./plant.ts";
-import { checkPromiseTypes } from "./promise-types.ts";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
+import { checkPromiseTypes } from "../../../../../oxlint-plugins/promise-types.ts";
 
 const CODE = "fabrika(no-promises)";
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";

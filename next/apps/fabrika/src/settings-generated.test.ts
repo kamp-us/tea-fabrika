@@ -20,7 +20,7 @@ import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
 import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { plant } from "./exam/plant.ts";
+import { plant } from "../../../../oxlint-plugins/plant.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };

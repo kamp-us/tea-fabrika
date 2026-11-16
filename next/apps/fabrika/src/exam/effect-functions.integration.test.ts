@@ -2,8 +2,8 @@
 import { Effect, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { plant } from "../../../../../oxlint-plugins/plant.ts";
 import { asks } from "./edges.ts";
-import { plant } from "./plant.ts";
 
 const CODE = "fabrika(effect-functions)";
 const FILE = "next/packages/libfabrika/src/data/tracing.ts";
