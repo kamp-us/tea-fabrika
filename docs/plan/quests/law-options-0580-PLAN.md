@@ -346,6 +346,102 @@ settings/StartsTest.ts                       1  slice 3: in pull request 1366's 
 - The app's runtime laws file (`runtime.laws.integration`, in `next/apps/fabrika/src/`) imports only `stopOnAbort` for its own
   hand runners. It is the app folder's sweep, so `stopOnAbort` stays in libfabrika until then.
 
+### Slice 2 amendment: a record names the file that declares its law (2026-11-16)
+
+Slice 2's tests step (row `field/runs/2026-11-16-law-options-0580-slice2-tests.json`) moved the 22
+calls and left two reds outside slice 2's files. The plant check gave 9 `not_recorded` and 1
+`unclaimed`: `plant.ts` and `Plants.records` name a law by the test file that runs it, and four
+shared suites (`LedgerTurnEndTest.ts`, `RelationsTest.ts`, `ProgramMailReadsTest.ts`,
+`RecoveryStoreReadsTest.ts`) declare their laws in one file and run them from another, while
+`plant-check.ts` keys a law by the file that declares it. And `lint:layers` fails on
+`RelationsTest.ts:13`, since the `next-permissions` row of `layer-rules.json` does not list
+`next-vitest`. The lead's two calls, 2026-11-16, written here and not reopened:
+
+1. **Option (a): the record names the declaring file.** `plant.ts` and `Plants.records` record the
+   file that declares a law, not the file that runs it. `.github/ci/plant-check.ts` stays exactly as
+   it is: the merge session ruled that no CI gate changes during the sev0. This also keeps each
+   record naming the place its law lives, which is what a reader of a run row looks for.
+2. **The `next-vitest` import in the `next-permissions` row is a config line,** owned by the build.
+   But the repo's exam list holds `layer-rules.json` ("which way imports may point"), and both
+   `plancheck.sh` and `stepcommit.sh` refuse an exam path owned by any step but tests. So the files
+   table gives the line to the tests step, which writes it in its commit; the build writes no exam
+   path. If the lead wants the build to own it, the exam list needs a change first, which this plan
+   does not make.
+
+**Where the declaring file comes from.** vitest 5.0.5 has no task field that names it. Its
+`location` (set only with `includeTaskLocation`) is `{ line, column }` with no file, and its runner
+fills it from a stack trace, keeping only the frame whose file is the running test file
+(`findTestFileStackTrace(currentTestFilepath, ...)` in the installed `vitest/dist/chunks/run.*.js`).
+For a shared suite that frame is the runner's `suite(...)` call, the wrong file. So the package's
+`it` does what vitest's runner does, one step higher: when a member registers a law, it reads one
+stack trace and keeps the first frame outside the package's own `src/`, and writes that file into
+`meta`. `Plants.records` then reads it.
+
+```ts
+// next/packages/vitest/src/Law.ts, the change, a sketch.
+declare module "vitest" {
+  interface TaskMeta {
+    plant?: string;
+    label?: Label;
+    /** New: the absolute path of the file whose call declared this law, read at registration. */
+    file?: string;
+  }
+}
+
+/** The file of the first stack frame outside this package's `src/`: the module that called `it`. */
+const declaredIn = (): string | undefined => { /* new Error().stack, as vitest's runner reads it */ };
+
+// Each member adds it beside toTestOptions(options), which stays pure:
+// tester(name, self, { ...test, meta: { ...test.meta, file: declaredIn() } })
+
+// next/packages/vitest/src/Plants.ts, the change.
+export interface Test {
+  readonly type: "test";
+  readonly name: string;
+  readonly meta: { readonly plant?: string | undefined; readonly file?: string | undefined };
+  readonly result?: { readonly state: string } | undefined;
+}
+// records: file: fromRoot(law.meta.file ?? file.filepath, root)
+```
+
+- **The stack is read the way vitest's runner reads it:** `Error.stackTraceLimit` raised for one
+  `new Error()` and put back, as `run.*.js` does around its own `STACK_TRACE_ERROR`. A frame's file
+  is a plain path or a `file://` URL; both are read. The tests run on Node only (V8 frames), and the
+  package runs no browser pool, so one frame format is enough. My call, 80%.
+- **`meta.file` falls back to the test file** when a law has none, so a law registered some other
+  way still gets a record. Every law with a `plant` comes through the package's `it`, so a record
+  of a planted law always has it. My call, 80%.
+- **`plant.ts` changes only in what it says:** its `<file>` argument is the file to run (a shared
+  suite's runner), and the record it prints names the declaring file, which can be another file.
+  Its refusals still name the file it ran.
+- **The new law runs on a stand-in.** Its fixture is a law declared in one fixture file and run from
+  another, beside `laws.fixture.ts`, so it runs on every pull request (0581). Neither name ends in
+  `Test.ts`, so `changes.mjs`'s `lawFile` and the plant check do not read the fixtures as law files.
+  The two real suites are red now through their runner files, `Relations.integration.test.ts` and
+  `ProgramMailReads.integration.test.ts`: the tests step runs `plant.ts` on both and writes both
+  printed records in its row, showing the runner's path. They are not kept as a law because those
+  runners open SQLite on disk (0536). My call, 80%.
+- **A suite run from two runners** prints two records with the same declaring file and title. The
+  plant check matches either, so nothing double counts.
+- **The `reach` helper.** Slice 2's tests step wrote a small `reach` helper (the coverage check,
+  run once with vitest's `onTestFinished`) into 11 files, since the plan gave it no shared file. It
+  stays as it is in this amendment. The one review judges whether it should be one shared
+  test-support file, and a move, if the review asks for one, is its own fix round.
+- **Is any of this a setting?** No. Where a law is declared is a fact of the code, not a choice.
+- **The 9 suite records are printed again after the build.** A record that names the declaring file
+  can only come from `plant.ts` once the build's change is in, so the build step, as its own proof,
+  plants each of the 9 suite laws' breaks as the slice-2 tests row states them, runs `plant.ts` from
+  the runner file, restores the product file by copy, and writes the 9 new records in its own row.
+  The slice-2 tests row is in this pull request and not merged, and the plant check reads it as an
+  added row: its one record that names a file on the package's `it`
+  (`LedgerTurnReads.test.ts`, "T1041 L7 ledger ...", declared in `LedgerTurnEndTest.ts`) is the
+  `unclaimed` refusal, so the build takes that one record line out of that row and says so in its
+  own. The other 8 name `.integration.test.ts` runners, which are not on the package's `it`, so the
+  check does not read them; they stay as written. My call, 80%: the doubt is whether the lead would
+  rather the tests step reprint them in a second tests round after the build.
+- **What fact is lost if not recorded now:** none. A record's `file` is new in this quest, and no
+  merged row names a runner file.
+
 ### Stacking
 
 This plan needs nothing from the `@kalfa/config` plan: no `kalfa/` folder, no `kalfa/*` workspace
@@ -446,6 +542,9 @@ it.effect("the bundle holds no node: import", body, {
 | A file on `@effect/vitest` keeps its title labels | lint | lint | report every title label as an error |
 | Slice 2: each of the 22 moved properties keeps its claim and turns red under its recorded plant | test | fc.commands: and each file's own fast-check inputs, seed 119120, default runs as before | each law's own plant, run with `plant.ts` |
 | Slice 2: under its plant, each moved property reports the same counterexample and replay path as the old `property` call (0579's same first failing case) | test | fc.commands: and each file's own fast-check inputs, kept unchanged, seed 119120, default runs as before | wrap the one input in `fc.record` in the fast-check path, so the draws shift |
+| Slice 2 amendment: a law declared in one file and run from another is recorded by `plant.ts` under the file that declares it; red now, and seen red through `RelationsTest.ts` and `ProgramMailReadsTest.ts` run from their runner files | test | scenario: one law declared in a fixture file and run from a second fixture file, since where a law is declared is one fact of the module graph, not a value to generate | record the running file in place of the declaring one (`Plants.records` reads `file.filepath` and leaves `meta.file` unread) |
+| Slice 2 amendment: `Plants.records` names each record's file from the law's `meta.file`, relative to the root, and from its test file when `meta.file` is unset | test | fc.array: vitest task trees as before, with `meta.file` set on some laws, 100 runs | read `file.filepath` for every law |
+| Slice 2 amendment: `lint:layers` passes with `RelationsTest.ts` importing `@kampus/vitest` | lint | lint | take `next-vitest` out of the `next-permissions` row again |
 | Slice 3: a call of `property` from `Testing.test-support.ts` no longer counts as a property | lint | lint | keep `SHARED` in `law-shape.ts` |
 
 No law here needs a real resource: the moved `.integration.` files were integration before, and
@@ -497,6 +596,15 @@ any of it.
 | `next/packages/libfabrika/src/settings/StartsTest.ts` | tests | slice 3, after pull request 1366 | tests |
 | `next/packages/libfabrika/src/Testing.test-support.ts` | tests | slice 3: `property` goes; `stopOnAbort` stays for the app's sweep | tests |
 | `next/packages/libfabrika/package.json` | build | slice 2: depends on `@kampus/vitest` where it does not yet | 1 |
+| `next/packages/vitest/src/Law.ts` | build | slice 2 amendment: `declaredIn`, and each member writes the declaring file into `meta.file` at registration; the `TaskMeta` widening gains `file` | 25 |
+| `next/packages/vitest/src/Plants.ts` | build | slice 2 amendment: `Test.meta` gains `file`; a record's file is `meta.file`, else the test file | 6 |
+| `.agents/skills/tests/scripts/plant.ts` | build | slice 2 amendment: its doc says `<file>` is the file to run and the record names the declaring file | docs |
+| `layer-rules.json` | tests | slice 2 amendment: the `next-permissions` row imports `next-vitest`; a build-owned config line by the lead's call, owned by tests here because the exam list holds the file | 1 |
+| `.agents/skills/tests/scripts/plant.test.ts` | tests | slice 2 amendment: the declaring-file law | tests |
+| `.agents/skills/tests/scripts/fixtures/plant/shared.fixture.ts` | tests | slice 2 amendment: new: a law with a plant, declared inside an exported suite function | tests |
+| `.agents/skills/tests/scripts/fixtures/plant/runs-shared.fixture.ts` | tests | slice 2 amendment: new: runs that suite | tests |
+| `next/packages/vitest/src/Plants.test.ts` | tests | slice 2 amendment: the generator sets `meta.file` on some laws, and the model reads it | tests |
+| `field/runs/2026-11-16-law-options-0580-slice2-tests.json` | build | slice 2 amendment: its one `LedgerTurnReads.test.ts` record of a suite law goes, replaced by the build row's 9 reprinted records | docs |
 
 The libfabrika test files' new dependency is already there: 110 files in `next/` import
 `@kampus/vitest` today. `next/AGENTS.md`'s libfabrika test: none of these is product code.
@@ -513,7 +621,19 @@ The libfabrika test files' new dependency is already there: 110 files in `next/`
 4. **Slice 2**, its own pull request: the tests step moves the 22 calls in 13 files, keeping each
    fast-check input and seed 119120 with the ordering reason line, runs each plant on the old call
    and the moved one, checks the counterexamples match (0579), and records each plant with
-   `plant.ts`; the plant check blocks on its own first real pull request. One review.
+   `plant.ts`; the plant check blocks on its own first real pull request. Done at `6c965ca17`,
+   with two reds left outside its files (the amendment above). Slice 2 then goes on:
+   1. **Tests:** the declaring-file law and its fixtures, seen red for the right reason (the record
+      names the running fixture), with its plant; `plant.ts` run from `Relations.integration.test.ts`
+      and `ProgramMailReads.integration.test.ts`, both printed records in the row; the widened
+      `Plants.records` law; and the `layer-rules.json` line, so `lint:layers` passes.
+   2. **Build:** `declaredIn` and `meta.file` in `Law.ts`, the record's file in `Plants.ts`, the
+      `plant.ts` doc; then the 9 suite records printed again and the one stale record taken out of
+      the slice-2 tests row, until the plant check and every law are green. `plant-check.ts` is not
+      touched (the sev0 ruling).
+   3. **One review** by an Opus agent of the whole slice-2 diff, which also judges the `reach`
+      helper copied into 11 files and whether it should be one shared test-support file. It stays as
+      it is until then.
 5. **Slice 3**, after pull request 1366 merges: `StartsTest.ts` moves, `property` and `SHARED` go.
    One review.
 
@@ -525,7 +645,9 @@ the typecheck.
 1. Slice 1, the options, the record and the check: 770 lines (builder 370, tests-owned code 400,
    the parsed-code compare included), plus about 720 test lines; 18 files; about 3 agent hours.
 2. Slice 2, the property runner's 13 files: 260 lines, all tests, the reason lines included; 14
-   files; about 1.5 agent hours, with the before-and-after plant runs.
+   files; about 1.5 agent hours, with the before-and-after plant runs. The amendment adds 32
+   lines (build 31, the `layer-rules.json` line 1), plus about 60 test and fixture lines; 9 more
+   files; about 1 agent hour for its tests and build steps, the 9 reprinted plants included.
 3. Slice 3, after 1366: 60 lines; 3 files; about 0.5 agent hours.
 
 Sure of slice 2's and 3's size at 80%: each call site is about ten lines. Slice 1 at 65%: the
@@ -533,7 +655,10 @@ check's parsed-code compare and its rename pairing are the doubt, and a send-bac
 the recent rows in `field/runs/`: a tests step about $6, a build about $2.30, a review about $3.60,
 a fix round about $4.20, at list price.
 
-Estimate: 8 steps, $36
+The amendment adds one tests step and one build step to slice 2, about $8.30 at those prices,
+sure at 80%: the stack read is small, and the 9 reprinted plants are the doubt.
+
+Estimate: 10 steps, $45
 
 ## Records
 
@@ -541,7 +666,24 @@ Estimate: 8 steps, $36
 - `field/README.md` gains the `file` key of a plant record.
 - No amendment to 0579: slice 2 keeps its "same first failing case" rule as written.
 - This step's own rows: `field/runs/2026-11-15-law-options-0580-plan.json` (round 1) and
-  `field/runs/2026-11-15-law-options-0580-plan-fix.json` (this fix round).
+  `field/runs/2026-11-15-law-options-0580-plan-fix.json` (the fix round), and
+  `field/runs/2026-11-16-law-options-0580-plan-amend.json` (the slice-2 amendment).
+- The lead's two calls of 2026-11-16 are written in
+  [the amendment](#slice-2-amendment-a-record-names-the-file-that-declares-its-law-2026-11-16):
+  option (a), and the `next-vitest` line as a config line. `plant-check.ts` is unchanged by the
+  merge session's sev0 ruling that no CI gate changes during the sev0.
+
+## Existing tools
+
+- `declaredIn` in `next/packages/vitest/src/Law.ts` (slice 2 amendment, a new function in a file
+  that exists): searched vitest 5.0.5's task fields and Node API, `@effect/vitest` 4.1.3, `effect`
+  4.1.3, the lockfile and npm. vitest's `location` gives only the line and column in the running
+  file (its `findTestFileStackTrace`), so it cannot name a shared suite's file; vitest's own stack
+  parser is not in its package exports (`.`, `./node`, `./config`, `./runtime`, `./worker` and the
+  browser and type entries). `error-stack-parser-es@1.0.5` is in the lockfile, but only as
+  `youch-core`'s dependency: making it a direct one moves the lockfile in a sev0 slice for one frame
+  read, and on V8 a frame's file is one match at the end of the line. So it is hand-written, about
+  ten lines. My call, 80%.
 
 ## What this cannot tell
 
@@ -551,6 +693,9 @@ Estimate: 8 steps, $36
   request, and is fixed in the check that day.
 - Whether the parse finds every law. `law-shape`'s own reach (a helper that wraps `it`, a title not
   written out) is the check's reach too: under-reporting, the safe side.
+- Whether `declaredIn` names the right file for a law registered through a helper that wraps the
+  package's `it`: it names the helper's file. The plant check's parse sees the same helper call and
+  no literal title there, so the two agree, on the safe side. No law here tests that case.
 - Whether the fast-check path's timeout behavior matches `@effect/vitest`'s exactly. Both stop at the
   timeout; only the laws above test ours.
 - Whether every moved law draws the same cases on every run. Same engine, seed and arbitrary say it
