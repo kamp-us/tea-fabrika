@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Duration, Effect, Result, Schedule, Schema, pipe, String as Str } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -84,8 +84,12 @@ const Report = Schema.Struct({
 
 /** An error's message on one line, short enough for a table's note. */
 export const reasonOf = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
-  "no reason given";
+  pipe(
+    error instanceof Error ? error.message : String(error),
+    Str.replaceAll(/\s+/g, " "),
+    Str.trim,
+    Str.slice(0, 300),
+  ) || "no reason given";
 
 const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", reason });
 
@@ -140,7 +144,7 @@ export const fileName = (leg: Pick<Leg, "job" | "leg">): string => `timings-${le
 const seconds = (step: Step): number | null =>
   step.start === null || step.end === null ? null : (Date.parse(step.end) - Date.parse(step.start)) / 1000;
 
-const cell = (text: string) => text.replaceAll("|", "\\|").replaceAll(/\s+/g, " ").trim();
+const cell = (text: string) => pipe(text, Str.replaceAll("|", "\\|"), Str.replaceAll(/\s+/g, " "), Str.trim);
 
 const table = (header: readonly string[], right: readonly number[], rows: readonly (readonly string[])[]) =>
   [

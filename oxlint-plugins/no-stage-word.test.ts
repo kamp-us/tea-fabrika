@@ -1,4 +1,5 @@
 import type { Context } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -19,7 +20,7 @@ const neighbor = fc.oneof(fc.constantFrom("backstage", "stagecoach", "instance",
 const style = fc.constantFrom("camel", "pascal", "snake", "upper", "kebab", "path", "dot", "space");
 const IDENTIFIER_STYLES = new Set(["camel", "pascal", "snake", "upper"]);
 
-const upper = (word: string) => word[0]!.toUpperCase() + word.slice(1);
+const upper = (word: string) => pipe(word[0]!, Str.toUpperCase) + pipe(word, Str.slice(1));
 
 const join = (words: readonly string[], spelling: string) => {
   switch (spelling) {
@@ -30,7 +31,7 @@ const join = (words: readonly string[], spelling: string) => {
     case "snake":
       return words.join("_");
     case "upper":
-      return words.map((word) => word.toUpperCase()).join("_");
+      return words.map((word) => pipe(word, Str.toUpperCase)).join("_");
     case "kebab":
       return words.join("-");
     case "path":
@@ -194,7 +195,7 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
         const sep = windows ? "\\" : "/";
         const cwd = (windows ? "C:" : "") + sep + root.join(sep) + (slash ? sep : "");
         const relative = `${[top, ...rest].join(sep)}.ts`;
-        const filename = absolute ? `${cwd.replace(/[\\/]$/, "")}${sep}${relative}` : relative;
+        const filename = absolute ? `${pipe(cwd, Str.replace(/[\\/]$/, ""))}${sep}${relative}` : relative;
         // The scope check reads only the two paths; the rest of the Context is never touched for it.
         const context: Pick<Context, "cwd" | "filename"> = { cwd, filename };
         const visitor = noStageWord.create(context as Context);

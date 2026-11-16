@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { pipe, String as Str } from "effect";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect, it } from "vitest";
 
@@ -75,7 +76,7 @@ const lint = async (file: string, codeFilename?: string) => {
   expect(result.parseErrors, "The plant must be valid CSS").toEqual([]);
   expect(result.invalidOptionWarnings, "The real config must have valid options").toEqual([]);
   expect(
-    result.warnings.filter((warning) => warning.text.startsWith("Unknown rule")),
+    result.warnings.filter((warning) => pipe(warning.text, Str.startsWith("Unknown rule"))),
     "PR 3's CSS rules must be implemented and registered",
   ).toEqual([]);
   return result.warnings;
@@ -241,7 +242,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
     const base = await rootConfig();
     expect(
       Object.keys(base.rules ?? {})
-        .filter((rule) => rule.startsWith("fabrika/"))
+        .filter((rule) => pipe(rule, Str.startsWith("fabrika/")))
         .sort(),
     ).toEqual(RULES.map(({ name }) => `fabrika/${name}`).sort());
     const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.css"], {
@@ -249,7 +250,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
       encoding: "utf8",
     });
     expect(tracked.status).toBe(0);
-    const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+    const files = pipe(tracked.stdout, Str.split("\0")).filter((path) => pipe(path, Str.endsWith(".css")));
     expect(files.length).toBeGreaterThan(0);
 
     for (const file of files) {
@@ -292,7 +293,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
 const trackedFiles = (folder: string) => {
   const listed = spawnSync("git", ["ls-files", "-z", "--", folder], { cwd: ROOT, encoding: "utf8" });
   expect(listed.status, listed.stderr).toBe(0);
-  return listed.stdout.split("\0").filter((file) => file !== "");
+  return pipe(listed.stdout, Str.split("\0")).filter((file) => file !== "");
 };
 
 // The runner gets a real git index and its own root config. It imports the actual config and

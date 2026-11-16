@@ -14,6 +14,7 @@
 // call of 2026-11-14 and still make one through Effect's FileSystem. Whether a temp folder alone is
 // a real resource under 0536 is the owner's to rule; until then this rule holds the other kinds.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 /** What a call drives, by the module its name came from, and the names in that module that open it. */
@@ -53,7 +54,7 @@ export const integrationTestName: CreateRule = {
   create(context) {
     const file = pathIn(context);
 
-    if (!file.startsWith("next/") || !/\.test\.tsx?$/.test(file) || NAMED.test(file)) {
+    if (!pipe(file, Str.startsWith("next/")) || !/\.test\.tsx?$/.test(file) || NAMED.test(file)) {
       return {};
     }
 
@@ -62,11 +63,11 @@ export const integrationTestName: CreateRule = {
     const spaces = new Map<string, (typeof OPENERS)[number]>();
     const launchers = new Set<string>();
     const sqlite = new Set<string>();
-    const base = file.replace(/\.test\.(tsx?)$/, "");
+    const base = pipe(file, Str.replace(/\.test\.(tsx?)$/, ""));
     const report = (node: Node, call: string, drives: string) =>
       context.report({
         node,
-        message: `\`${call}\` drives ${drives}, a real resource, so this file runs on the 3-hour schedule, never on a pull request (0536): name it \`${base.split("/").pop()}.integration.test.ts\`, or \`.visual.test.ts\` for a browser or Electron, beside the module it tests. Or run the law on the interface's in-memory layer.`,
+        message: `\`${call}\` drives ${drives}, a real resource, so this file runs on the 3-hour schedule, never on a pull request (0536): name it \`${pipe(base, Str.split("/")).pop()}.integration.test.ts\`, or \`.visual.test.ts\` for a browser or Electron, beside the module it tests. Or run the law on the interface's in-memory layer.`,
       });
 
     return {

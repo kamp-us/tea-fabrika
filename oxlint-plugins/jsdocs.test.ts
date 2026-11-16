@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -94,7 +95,7 @@ type Piece = {
   readonly at: (n: number, block: string | null) => number | null;
 };
 
-const lineCount = (text: string | null): number => (text === null ? 0 : text.split("\n").length);
+const lineCount = (text: string | null): number => (text === null ? 0 : pipe(text, Str.split("\n")).length);
 
 /** A statement under its block: the export is the first line after the block. */
 const under = (body: (n: number) => string): Piece => ({
@@ -167,7 +168,7 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
           pieces.forEach(({ kind, state: s, gap }, n) => {
             const piece: Piece = PIECES[kind];
             const block = blockFor(s);
-            const shown = block === null ? null : `${block}\n${gap}`.replace(/\n$/, "");
+            const shown = block === null ? null : pipe(`${block}\n${gap}`, Str.replace(/\n$/, ""));
             const text = piece.text(n, shown);
             const at = piece.at(n, shown);
 
@@ -396,7 +397,7 @@ const publicFiles = (dir: string): ReadonlyArray<string> =>
       return name === "internal" ? [] : publicFiles(full);
     }
 
-    return name.endsWith(".ts") ? [full] : [];
+    return pipe(name, Str.endsWith(".ts")) ? [full] : [];
   });
 
 type Report = {
@@ -469,7 +470,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
       return (Array.isArray(setting) ? setting[0] : setting) === "warn";
     })
     .flatMap(({ files }) => files)
-    .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
+    .map((glob) => ({ folder: pipe(glob, Str.replace(/\/\*\*?$/, "")), deep: pipe(glob, Str.endsWith("/**")) }));
   const on = [
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,

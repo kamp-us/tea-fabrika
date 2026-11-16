@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
+import { pipe, String as Str } from "effect";
 import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
@@ -72,7 +73,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   for (const step of changeSteps.filter(
     (s) =>
       (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
-      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+      (typeof s["run"] === "string" && pipe(s["run"], Str.startsWith("pnpm install"))),
   )) {
     const forSizing = step["run"] === "pnpm install --frozen-lockfile --ignore-scripts";
     const before = forSizing ? sizing : same;
@@ -86,7 +87,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
       (forSizing
         ? SIZED
         : compact(
-            String(step["run"] ?? "").includes("--filter") ? PROBE : SETUP,
+            pipe(String(step["run"] ?? ""), Str.includes("--filter")) ? PROBE : SETUP,
           )), "S1: changes' setup runs for the parser or for sizing, each install on its own guard");
   }
 

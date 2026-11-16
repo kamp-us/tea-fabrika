@@ -21,6 +21,7 @@
 // own config.
 import { matchesGlob } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 interface Part {
@@ -64,7 +65,7 @@ const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
 
 /** The name is one of these packages, or a subpath of one. */
 const within = (packages: ReadonlyArray<string>, name: string): boolean =>
-  packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+  packages.some((pkg) => name === pkg || pipe(name, Str.startsWith(`${pkg}/`)));
 
 /** A plain string a module source holds: a literal, or a template with no `${}`. */
 const written = (source: Node | null | undefined): string | null => {
@@ -139,7 +140,7 @@ export const packageImports: CreateRule = {
     const check = (source: Node | null | undefined) => {
       const name = written(source);
 
-      if (name === null || source == null || !name.startsWith(table.scope) || takes(name)) {
+      if (name === null || source == null || !pipe(name, Str.startsWith(table.scope)) || takes(name)) {
         return;
       }
 

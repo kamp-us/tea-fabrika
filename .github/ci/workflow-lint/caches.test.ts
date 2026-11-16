@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./caches.ts";
@@ -134,7 +135,7 @@ for (const [name, plant, error] of [
     "C3: a full-history checkout with every blob",
     (f: Files) => {
       const steps = checkYaml(f).jobs["next"]!.steps;
-      delete steps.find((s) => String(s["uses"]).startsWith("actions/checkout@"))!.with!["filter"];
+      delete steps.find((s) => pipe(String(s["uses"]), Str.startsWith("actions/checkout@")))!.with!["filter"];
     },
     "check.yaml: next's full-history checkout is blobless (filter: blob:none)",
   ],
@@ -163,7 +164,7 @@ for (const [name, plant, error] of [
   [
     "C4: a buildinfo folder the cache does not hold",
     (f: Files) => {
-      f.typecheck = f.typecheck.replace("node_modules/.cache/tsc/", "node_modules/.cache/tsc-old/");
+      f.typecheck = pipe(f.typecheck, Str.replace("node_modules/.cache/tsc/", "node_modules/.cache/tsc-old/"));
     },
     "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc-old in each pnpm-workspace.yaml package glob, in its order",
   ],

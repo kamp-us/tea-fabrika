@@ -1,5 +1,5 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { type Duration, Effect, Option, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {
@@ -73,7 +73,7 @@ const env = {
   GITHUB_WORKFLOW: "check",
   GITHUB_EVENT_NAME: "pull_request",
   GITHUB_JOB: "next",
-  HEAD: "a".repeat(40),
+  HEAD: pipe("a", Str.repeat(40)),
   LEG: "3",
   JOB_ID: "131255816934",
   REPORT: "/runner/temp/next.json",
@@ -92,14 +92,14 @@ const leg = { run: "1", attempt: "1", workflow: "check", event: "push", sha: "s"
 
 /** A table's body rows under `heading`, the header and its rule left out. */
 const rowsUnder = (text: string, heading: string): string[] => {
-  const after = text.slice(text.indexOf(heading));
-  const lines = after.split("\n").filter((line) => line.startsWith("| "));
+  const after = pipe(text, Str.slice(pipe(text, Str.indexOf(heading), Option.getOrThrow)));
+  const lines = pipe(after, Str.split("\n")).filter((line) => pipe(line, Str.startsWith("| ")));
   const end = lines.findIndex((line, i) => i > 1 && line === "| File | Seconds | Tests | Result |");
   return lines.slice(2, end < 0 ? undefined : end);
 };
 
 // A time as the jobs API writes it, to the second: 2026-11-14T10:00:00Z.
-const iso = (seconds: number) => new Date(seconds * 1000).toISOString().replace(".000Z", "Z");
+const iso = (seconds: number) => pipe(new Date(seconds * 1000).toISOString(), Str.replace(".000Z", "Z"));
 
 // A jobs API step: started or not, ended or not, with a conclusion once GitHub gives one. Names are
 // single-spaced, so a table cell holds them as they are.
@@ -196,7 +196,7 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
       expect(text).toContain(`${rows.length} files, ${total.toFixed(1)} s in all. The ${count} slowest:`);
       const byPath = new Map(rows.map((file) => [file.path, file]));
       const listed = rowsUnder(text, "### Slowest test files").map((line) =>
-        byPath.get(line.split(" | ")[0]!.slice(2))!,
+        byPath.get(pipe(pipe(line, Str.split(" | "))[0]!, Str.slice(2)))!,
       );
       expect(listed).toHaveLength(count);
 
@@ -218,7 +218,7 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
   // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
   const report = { testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)] };
   const timings = await timingsOf(
-    { ...env, GITHUB_SHA: "m".repeat(40) },
+    { ...env, GITHUB_SHA: pipe("m", Str.repeat(40)) },
     io(
       () => job,
       () => JSON.stringify(report),
@@ -229,7 +229,7 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
     attempt: "1",
     workflow: "check",
     event: "pull_request",
-    sha: "a".repeat(40),
+    sha: pipe("a", Str.repeat(40)),
     job: "next",
     leg: "3",
     steps: readSteps(job),
@@ -272,9 +272,11 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
       expect(timings.steps._tag).toBe("unavailable");
       expect(timings.files._tag).toBe("unavailable");
       const text = markdown(timings);
-      expect(text.match(/^Unavailable: /gm)).toHaveLength(2);
+      expect(pipe(text, Str.match(/^Unavailable: /gm), Option.getOrNull)).toHaveLength(2);
       expect(markdown({ ...timings, steps: read })).toContain("| Set up job | success | 2 |");
-      expect(markdown({ ...timings, steps: read }).match(/^Unavailable: /gm)).toHaveLength(1);
+      expect(pipe(markdown({ ...timings, steps: read }), Str.match(/^Unavailable: /gm), Option.getOrNull)).toHaveLength(
+        1,
+      );
     }),
     options,
   );
@@ -369,17 +371,17 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
         steps: { _tag: "read", rows },
         files: { _tag: "read", rows: names.map((path) => ({ path, seconds: 1, tests: 1, result: "passed" })) },
       });
-      const lines = text
-        .split("\n")
-        .filter((line) => line.startsWith("| ") && !/^\| ---:?(?: \| ---:?)* \|$/.test(line));
+      const lines = pipe(text, Str.split("\n")).filter(
+        (line) => pipe(line, Str.startsWith("| ")) && !/^\| ---:?(?: \| ---:?)* \|$/.test(line),
+      );
       expect(lines).toHaveLength(2 + names.length + Math.min(names.length, SLOWEST));
 
       for (const line of lines) {
-        const cells = line.split(/(?<!\\)\|/).length - 2;
+        const cells = pipe(line, Str.split(/(?<!\\)\|/)).length - 2;
         expect([3, 4]).toContain(cells);
       }
 
-      expect(text.split("\n")[0]).toBe("## Time table: a\\|b, leg 1 2");
+      expect(pipe(text, Str.split("\n"))[0]).toBe("## Time table: a\\|b, leg 1 2");
     }),
     options,
   );

@@ -38,6 +38,7 @@
 // This repo's own rule, not a copy. It blocks. Its fires when it was
 // added are in oxlint-plugins/README.md.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { below, dotted, grouped, isWritten, type Node, quoted } from "./match.ts";
 
 const SECRET =
@@ -89,7 +90,7 @@ export const noSecretEnv: CreateRule = {
           name = node.property.name;
         } else if (node.computed) {
           const raw = quoted(node.property);
-          name = raw === null ? null : raw.slice(1, -1);
+          name = raw === null ? null : pipe(raw, Str.slice(1, -1));
         }
 
         if (name === null || !isSecret(name) || onlyAsksIfSet(node)) {

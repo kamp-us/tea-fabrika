@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
 // flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
+import { pipe, String as Str } from "effect";
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
@@ -45,13 +46,15 @@ export const checkJob: Rule = ({ jobs }, require) => {
     checkSteps.some(
       (s) => s["run"] === "pnpm install --frozen-lockfile",
     ), "F1: check installs everything for lint, and only the CI package for rows alone");
-  const checkout = checkSteps.find((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  const checkout = checkSteps.find(
+    (s) => typeof s["uses"] === "string" && pipe(s["uses"], Str.startsWith("actions/checkout@")),
+  );
   require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the row check diffs");
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
   // pass with a grown list; a first push's zeros map to no base, as for the test steps.
   const ratchets = checkSteps.filter(
-    (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
+    (step) => typeof step["run"] === "string" && pipe(step["run"], Str.includes("next/apps/fabrika/src/exam/ratchet")),
   );
   require(ratchets.length === 1 &&
     ratchets[0]?.["run"] === RATCHET &&

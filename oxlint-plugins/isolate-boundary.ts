@@ -1,13 +1,17 @@
 // U11. Syntax only: platform names stay at the Cloudflare edge. Aliases need review.
 // Edge cases: types, optional members, literal computed members, comments, strings, app handoff.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { pathIn } from "./match.ts";
 
 export const isolateBoundary: CreateRule = {
   create(context) {
     const file = pathIn(context);
 
-    if (!file.startsWith("next/") || file.startsWith("next/packages/libfabrika/src/cloudflare/")) {
+    if (
+      !pipe(file, Str.startsWith("next/")) ||
+      pipe(file, Str.startsWith("next/packages/libfabrika/src/cloudflare/"))
+    ) {
       return {};
     }
 

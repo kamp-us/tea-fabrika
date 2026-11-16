@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintCiSpeed } from "./ci-speed.ts";
@@ -58,7 +59,7 @@ for (const [name, plant, error] of [
   [
     "K5: no issue",
     (w: SpeedFile) =>
-      void (speedStep(w, "measure")["run"] = String(speedStep(w, "measure")["run"]).replace(" --issue", "")),
+      void (speedStep(w, "measure")["run"] = pipe(String(speedStep(w, "measure")["run"]), Str.replace(" --issue", ""))),
     "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash",
   ],
   [

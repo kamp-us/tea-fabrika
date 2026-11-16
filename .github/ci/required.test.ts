@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
@@ -184,8 +185,8 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
   expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(5);
-  expect(run(good.replace('"next":{"result":"success"', '"next":{"result":"failure"')).status).toBe(1);
+  expect(pipe(ok.stdout, Str.trim, Str.split("\n"))).toHaveLength(5);
+  expect(run(pipe(good, Str.replace('"next":{"result":"success"', '"next":{"result":"failure"'))).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
 });

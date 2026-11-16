@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import {
   env,
   place,
@@ -96,7 +97,7 @@ const plants: Plant[] = [
   ).map(([job, key, value]): [string, (w: Workflow) => void] => [
     `Q1: ${job}'s checkout is told its ${key}`,
     (w) => {
-      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      const checkout = stepsOf(w, job).find((s) => pipe(String(s["uses"]), Str.startsWith("actions/checkout@")))!;
       (checkout["with"] as Record<string, unknown>)[key] = value;
     },
   ]),

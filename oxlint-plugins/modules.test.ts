@@ -12,6 +12,7 @@
 // A law about the whole file (a folder nobody listed, a file name) may report on any line, so those
 // cases ask only whether the rule fired. A law about one statement names its line. Line 1 of every
 // planted file is a comment, so no statement shares a line with a whole-file report.
+import { pipe, String as Str } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
@@ -39,7 +40,7 @@ const restricted = "eslint(no-restricted-imports)";
 const fileCase = "unicorn(filename-case)";
 
 const file = (...lines: ReadonlyArray<string>): string => ["// planted", ...lines, ""].join("\n");
-const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
+const pascal = (name: string): string => `${pipe(name, Str.slice(0, 1), Str.toUpperCase)}${pipe(name, Str.slice(1))}`;
 const own = "export const own = 1;";
 
 describe("fabrika/modules: no module file re-exports another module's names", async () => {

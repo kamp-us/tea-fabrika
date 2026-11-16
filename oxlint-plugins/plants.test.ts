@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { pipe, String as Str } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -308,7 +309,7 @@ const firesInPlanted = (file: string, code: string): readonly number[] =>
 
 /** In process, RuleTester: our own rule refuses exactly the lines it must. */
 const inProcess = (p: Plant, { file, text, want }: ReturnType<typeof write>) => {
-  const rule = fabrika.rules[p.code.replace(/^fabrika\((.*)\)$/, "$1")]!;
+  const rule = fabrika.rules[pipe(p.code, Str.replace(/^fabrika\((.*)\)$/, "$1"))]!;
   const filename = relative(ROOT, file);
   tester.run(p.code, rule, {
     valid: want.length === 0 ? [{ code: text, filename }] : [],
@@ -334,7 +335,7 @@ describe("each rule refuses what it is there to refuse", () => {
   );
 
   it.each(ours)("%s", (_code, p, at) => {
-    if (p.code.startsWith("fabrika(")) {
+    if (pipe(p.code, Str.startsWith("fabrika("))) {
       inProcess(p, at);
     }
 
@@ -511,7 +512,7 @@ const isReflectGet = (entry: unknown): boolean =>
  * a file of that folder's own. A glob that names a file, not a folder, is answered unchanged.
  */
 const plantPath = (glob: string): string => {
-  const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
+  const folder = pipe(glob, Str.replace(/(\/\*\*)?\/\*\*?$/, ""));
   return folder === glob ? glob : `${folder}/planted.ts`;
 };
 
@@ -557,8 +558,8 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       expect(globs.map(({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+      expect(globs.some(({ glob, level }) => pipe(glob, Str.startsWith("next/")) && level === "deny")).toBe(true);
+      expect(globs.some(({ glob, level }) => pipe(glob, Str.startsWith("next/")) && level === "warn")).toBe(true);
 
       const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
       const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
@@ -670,7 +671,7 @@ describe("an ignore comment names its rules and says why", () => {
     ["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
     ["JSX", `export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`],
   ])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
-    const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
+    const out = run(`bare-${pipe(name, Str.replaceAll(/\W/g, "-"))}.tsx`, text);
     expect(out.stdout).toContain("fabrika(no-bare-disable)");
     expect(out.status).toBe(1);
   });

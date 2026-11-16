@@ -2,6 +2,7 @@
 // warn override still names the folder (0523). Match written schema evidence, never record keys or
 // capitalized names. Scope variables identify imports, aliases and callback inputs without types.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const constructors = new Set([
@@ -130,8 +131,8 @@ export const preferSchemaArbitrary: CreateRule = {
       const name = moduleName(node.callee);
       return (
         name !== undefined &&
-        ((name.from === "effect" && name.name.startsWith("Schema.")) || name.from === "effect/Schema") &&
-        checks.has(name.name.split(".").at(-1) ?? "")
+        ((name.from === "effect" && pipe(name.name, Str.startsWith("Schema."))) || name.from === "effect/Schema") &&
+        checks.has(pipe(name.name, Str.split(".")).at(-1) ?? "")
       );
     };
     const schema = (node: Node, seen = new Set<Binding>()): string | undefined => {
@@ -149,8 +150,8 @@ export const preferSchemaArbitrary: CreateRule = {
         const origin = moduleName(node);
         return origin &&
           origin.from !== "fast-check" &&
-          (origin.from !== "effect" || origin.name.startsWith("Schema.")) &&
-          (!origin.from.startsWith("effect/") || origin.from === "effect/Schema")
+          (origin.from !== "effect" || pipe(origin.name, Str.startsWith("Schema."))) &&
+          (!pipe(origin.from, Str.startsWith("effect/")) || origin.from === "effect/Schema")
           ? name
           : undefined;
       }
@@ -166,8 +167,8 @@ export const preferSchemaArbitrary: CreateRule = {
 
       if (origin) {
         return origin.from === "fast-check" ||
-          (origin.from === "effect" && !origin.name.startsWith("Schema.")) ||
-          (origin.from.startsWith("effect/") && origin.from !== "effect/Schema")
+          (origin.from === "effect" && !pipe(origin.name, Str.startsWith("Schema."))) ||
+          (pipe(origin.from, Str.startsWith("effect/")) && origin.from !== "effect/Schema")
           ? undefined
           : name;
       }
@@ -203,7 +204,7 @@ export const preferSchemaArbitrary: CreateRule = {
           const importedName = moduleName(part);
           return (
             importedName &&
-            ((importedName.from === "effect" && importedName.name.startsWith("Schema.")) ||
+            ((importedName.from === "effect" && pipe(importedName.name, Str.startsWith("Schema."))) ||
               importedName.from === "effect/Schema")
           );
         })

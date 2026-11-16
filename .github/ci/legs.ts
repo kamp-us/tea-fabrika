@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pipe, String as Str } from "effect";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -81,7 +82,7 @@ export const limits = (minutes: number, budget: number): Limits => ({
 export const budgetOf = (value: string | undefined): number => {
   const seconds = Number(value);
 
-  if (value === undefined || value.trim() === "" || !Number.isFinite(seconds) || seconds <= 0) {
+  if (value === undefined || pipe(value, Str.trim) === "" || !Number.isFinite(seconds) || seconds <= 0) {
     throw new Error(`legs: BUDGET must be a positive number of seconds, not ${JSON.stringify(value)}`);
   }
 

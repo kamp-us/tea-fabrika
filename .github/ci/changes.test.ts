@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -182,7 +183,7 @@ it("skill scripts run check and typecheck; other version flags follow their read
         // A Markdown file beside a script is still script input, even though prose is quiet.
         expect(
           ci.classify(
-            scripts.map((path) => path.replace(/\.[^.]+$/, ".md")),
+            scripts.map((path) => pipe(path, Str.replace(/\.[^.]+$/, ".md"))),
             "pull_request",
           ),
         ).toEqual({ ...heavy, next: false, field: false, build: false });
@@ -190,9 +191,9 @@ it("skill scripts run check and typecheck; other version flags follow their read
         expect(flags).toEqual({
           check: true,
           typecheck: true,
-          next: others.some((p) => p.startsWith("next/")),
+          next: others.some((p) => pipe(p, Str.startsWith("next/"))),
           field: false,
-          build: others.some((p) => !p.startsWith("next/")),
+          build: others.some((p) => !pipe(p, Str.startsWith("next/"))),
         });
       },
     ),
@@ -211,7 +212,7 @@ it("other skill-tree paths still run check and typecheck, next only for .claude/
       expect(ci.classify(paths, "pull_request")).toMatchObject({
         check: true,
         typecheck: true,
-        ...(paths.some((p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
+        ...(paths.some((p) => pipe(p, Str.startsWith(".claude/skills/"))) ? { next: true } : {}),
         build: false,
       });
     }),
@@ -316,56 +317,64 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
           calls.push(args);
           return {
             status: 0,
-            stdout: args[0] === "merge-base" ? `${"a".repeat(40)}\n` : `${paths.join("\0")}\0`,
+            stdout: args[0] === "merge-base" ? `${pipe("a", Str.repeat(40))}\n` : `${paths.join("\0")}\0`,
           };
         };
-        expect(ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", run)).toEqual(paths);
-        expect(calls[0]).toEqual(["merge-base", "b".repeat(40), "c".repeat(40)]);
-        expect(calls[1]).toEqual(["diff", "--no-renames", "--name-only", "-z", "a".repeat(40), "c".repeat(40), "--"]);
+        expect(ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "pull_request", run)).toEqual(paths);
+        expect(calls[0]).toEqual(["merge-base", pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40))]);
+        expect(calls[1]).toEqual([
+          "diff",
+          "--no-renames",
+          "--name-only",
+          "-z",
+          pipe("a", Str.repeat(40)),
+          pipe("c", Str.repeat(40)),
+          "--",
+        ]);
         expect(
-          ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", () => ({
+          ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "pull_request", () => ({
             status,
             stdout: "",
           })),
         ).toBeNull();
         expect(
-          ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", (args) =>
-            args[0] === "merge-base" ? { status: 0, stdout: "a".repeat(40) } : { status, stdout: "" },
+          ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "pull_request", (args) =>
+            args[0] === "merge-base" ? { status: 0, stdout: pipe("a", Str.repeat(40)) } : { status, stdout: "" },
           ),
         ).toBeNull();
-        expect(ci.readPaths("b".repeat(40), "c".repeat(40), "push", run)).toEqual(paths);
+        expect(ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "push", run)).toEqual(paths);
         expect(calls.at(-1)).toEqual([
           "diff",
           "--no-renames",
           "--name-only",
           "-z",
-          "b".repeat(40),
-          "c".repeat(40),
+          pipe("b", Str.repeat(40)),
+          pipe("c", Str.repeat(40)),
           "--",
         ]);
-        expect(ci.readPaths("--bad", "c".repeat(40), "pull_request", run)).toBeNull();
+        expect(ci.readPaths("--bad", pipe("c", Str.repeat(40)), "pull_request", run)).toBeNull();
         // A platform refusal has null stdout at runtime, despite Node's generic string type.
         expect(
-          ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", () =>
+          ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "pull_request", () =>
             spawnSync("git", ["status"], {
               cwd: join(tmpdir(), "t342-no-such-folder", old),
               encoding: "utf8",
             }),
           ),
         ).toBeNull();
-        expect(ci.readPaths("0".repeat(40), "c".repeat(40), "push", run)).toBeNull();
+        expect(ci.readPaths(pipe("0", Str.repeat(40)), pipe("c", Str.repeat(40)), "push", run)).toBeNull();
         // Zeros at either end are legal; only the all-zero SHA means no history.
-        const zeros = `0${"a".repeat(38)}0`;
+        const zeros = `0${pipe("a", Str.repeat(38))}0`;
         expect(ci.readPaths(zeros, zeros, "push", run)).toEqual(paths);
         // A merge base Git prints that is not a SHA cannot reach the diff.
         expect(
-          ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", (args) =>
+          ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "pull_request", (args) =>
             args[0] === "merge-base" ? { status: 0, stdout: "\n" } : run(args),
           ),
         ).toBeNull();
         // Empty output is no paths; output cut before its last NUL cannot skip.
         const answer = (stdout: string) =>
-          ci.readPaths("b".repeat(40), "c".repeat(40), "push", () => ({ status: 0, stdout }));
+          ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "push", () => ({ status: 0, stdout }));
         expect(answer("")).toEqual([]);
         expect(answer(paths.join("\0"))).toBeNull();
       },
@@ -500,8 +509,8 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
     throw new Error("git must not run");
   };
 
-  for (const base of ["0".repeat(40), ""]) {
-    const read = ci.readPaths(base, "c".repeat(40), "push", run);
+  for (const base of [pipe("0", Str.repeat(40)), ""]) {
+    const read = ci.readPaths(base, pipe("c", Str.repeat(40)), "push", run);
     expect(read).toBeNull();
     expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
   }
@@ -663,8 +672,10 @@ it("scenario: a merge queue's group reads its paths from its base, as a push doe
     calls.push(args);
     return { status: 0, stdout: "docs/a.md\0" };
   };
-  expect(ci.readPaths("b".repeat(40), "c".repeat(40), "merge_group", run)).toEqual(["docs/a.md"]);
-  expect(calls).toEqual([["diff", "--no-renames", "--name-only", "-z", "b".repeat(40), "c".repeat(40), "--"]]);
+  expect(ci.readPaths(pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "merge_group", run)).toEqual(["docs/a.md"]);
+  expect(calls).toEqual([
+    ["diff", "--no-renames", "--name-only", "-z", pipe("b", Str.repeat(40)), pipe("c", Str.repeat(40)), "--"],
+  ]);
 });
 
 // The plan for CI paths, case 4: no next/ test reads a file under .agents/skills/. Today's only
@@ -700,7 +711,7 @@ const experimentFile = fc
     fc.constantFrom("ts", "mjs", "json", "txt", "tsx"),
   )
   .map(([dirs, name, ext]) => ["experiments", ...dirs, `${name}.${ext}`].join("/"))
-  .filter((p) => !p.startsWith("experiments/177-themes/schemes/"));
+  .filter((p) => !pipe(p, Str.startsWith("experiments/177-themes/schemes/")));
 
 it("property: experiments files alone run check, and no typecheck or next", () => {
   fc.assert(
@@ -717,7 +728,7 @@ it("property: experiments files alone run check, and no typecheck or next", () =
           ...off,
         });
         // The same files under another root still type-check and start next.
-        const moved = paths.map((p) => p.replace(/^experiments\//, `${root}/`));
+        const moved = paths.map((p) => pipe(p, Str.replace(/^experiments\//, `${root}/`)));
         expect(ci.jobs(moved, event, false)).toMatchObject({ check: true, typecheck: true, next: true });
       },
     ),
@@ -819,10 +830,10 @@ it("property: proven counts only for a next/ path that is in paths", () => {
       (paths, same, outside, event) => {
         // Every path of the run is offered as proven, with paths that are not in the run at all.
         const offered = [...same, ...outside, ...paths];
-        const counted = offered.filter((p) => p.startsWith("next/") && paths.includes(p));
+        const counted = offered.filter((p) => pipe(p, Str.startsWith("next/")) && paths.includes(p));
         expect(ci.scope(paths, event, offered)).toBe(ci.scope(paths, event, counted));
         // A non-next/ path that needs everything still needs everything when it is offered.
-        const old = paths.filter((p) => !p.startsWith("next/"));
+        const old = paths.filter((p) => !pipe(p, Str.startsWith("next/")));
         expect(ci.scope(old, event, old)).toBe(ci.scope(old, event));
       },
     ),
@@ -885,18 +896,18 @@ it("format: each entry of readers is a tracked path that holds a test file", () 
   for (const entry of ci.readers) {
     const listed = spawnSync("git", ["ls-files", "--", entry], { encoding: "utf8" });
     expect(listed.status, entry).toBe(0);
-    const tracked = listed.stdout.split("\n").filter(Boolean);
-    expect(entry.startsWith("next/"), entry).toBe(true);
+    const tracked = pipe(listed.stdout, Str.split("\n")).filter(Boolean);
+    expect(pipe(entry, Str.startsWith("next/")), entry).toBe(true);
     expect(
-      entry.endsWith("/") ? tracked.some((file) => /\.test\.tsx?$/.test(file)) : tracked.includes(entry),
+      pipe(entry, Str.endsWith("/")) ? tracked.some((file) => /\.test\.tsx?$/.test(file)) : tracked.includes(entry),
       entry,
     ).toBe(true);
-    expect(entry.endsWith("/") || /\.test\.tsx?$/.test(entry), entry).toBe(true);
+    expect(pipe(entry, Str.endsWith("/")) || /\.test\.tsx?$/.test(entry), entry).toBe(true);
   }
 });
 
 // The first pass and the `--same` pass, through `outputs`, the function the script prints.
-const sha = { base: "b".repeat(40), merged: "a".repeat(40), head: "c".repeat(40) };
+const sha = { base: pipe("b", Str.repeat(40)), merged: pipe("a", Str.repeat(40)), head: pipe("c", Str.repeat(40)) };
 
 /** A fake git: the merge base, the changed paths, and `diff` text for any other diff. */
 const git =
@@ -929,7 +940,7 @@ it("property: probe changes no flag: the first pass prints the same flags for an
       // A NUL ends a path in git's output, so no path holds one.
       fc
         .array(fc.oneof(known, next), { minLength: 1, maxLength: 10 })
-        .filter((list) => list.every((p) => !p.includes("\0"))),
+        .filter((list) => list.every((p) => !pipe(p, Str.includes("\0")))),
       fc.oneof(
         fc.string(),
         fc
@@ -986,7 +997,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
 
     const proved = await ci.outputs({ same: true, env, run, load: proves(() => true) });
     expect(proved).toMatchObject({ next: "true", filter: filterOf("readers") });
-    const one = await ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) });
+    const one = await ci.outputs({ same: true, env, run, load: proves((p) => !pipe(p, Str.endsWith("Wire.ts"))) });
     expect(one).toMatchObject({
       next: "true",
       filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
@@ -1006,8 +1017,8 @@ it("scenario: with no parser to import, --same prints what the first pass printe
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
 // main to the commit it tested, so a push and its queue run share their tree and their base tree;
 // then next would repeat that run, and skips. Every other case runs what `jobs` says.
-const tree = { base: "1".repeat(40), head: "2".repeat(40), other: "3".repeat(40) };
-const queue = { head: "d".repeat(40), base: "e".repeat(40) };
+const tree = { base: pipe("1", Str.repeat(40)), head: pipe("2", Str.repeat(40)), other: pipe("3", Str.repeat(40)) };
+const queue = { head: pipe("d", Str.repeat(40)), base: pipe("e", Str.repeat(40)) };
 
 /** The fake git above, plus the trees of the push's base and head. */
 const pushGit =
@@ -1086,7 +1097,7 @@ const pushEnv = envOf("push", false);
 
 const changedPaths = fc
   .array(known, { minLength: 1, maxLength: 10 })
-  .filter((list) => list.every((p) => !p.includes("\0")));
+  .filter((list) => list.every((p) => !pipe(p, Str.includes("\0"))));
 
 /** What a push prints, through `outputs`, with the fake git and a fake GitHub. */
 const pushed = (paths: readonly string[], fake: Fake, env: Record<string, string> = pushEnv) => {
@@ -1229,7 +1240,7 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
           Promise.resolve({
             ok: true,
             status: 200,
-            json: () => Promise.resolve(url.includes("/runs?") ? runs : commit),
+            json: () => Promise.resolve(pipe(url, Str.includes("/runs?")) ? runs : commit),
           }),
         );
         const printed = await ci.outputs({ same: false, env: runEnv, run: pushGit(paths), api });
@@ -1278,7 +1289,7 @@ it("property: a pull request never asks GitHub, a merge queue's group asks only 
 // tree from the head; `vouches` takes any conclusion, any workflow, a fork, `ci-required (draft)`
 // (which survived until the "draft's ci-required" fault and the scenario below), or reads no jobs;
 // `matched` reads an expired record; a matched group keeps check on; a group never asks.
-const pr = { merge: "f".repeat(40), base: "9".repeat(40) };
+const pr = { merge: pipe("f", Str.repeat(40)), base: pipe("9", Str.repeat(40)) };
 
 /** A selection as changes prints it: each flag "true" or "false", and the filter of its scope. */
 const printedOf = (selection: ci.Selection): Record<string, string> => ({
@@ -1314,7 +1325,7 @@ const recordEnv = (selection: ci.Selection, draft = false) => ({
   EVENT: "pull_request",
   DRAFT: String(draft),
   BASE: pr.base,
-  HEAD: "8".repeat(40),
+  HEAD: pipe("8", Str.repeat(40)),
   TESTED: pr.merge,
   ...printedOf(selection),
 });
@@ -1549,9 +1560,9 @@ it("property: a run records its trees only on a ready pull request whose printed
           EVENT: event,
           DRAFT: draft,
           BASE: pr.base,
-          HEAD: "8".repeat(40),
+          HEAD: pipe("8", Str.repeat(40)),
           // An all-zero commit is one git cannot read.
-          TESTED: readable ? pr.merge : "0".repeat(40),
+          TESTED: readable ? pr.merge : pipe("0", Str.repeat(40)),
           CHECK: shown.check,
           TYPECHECK: shown.typecheck,
           NEXT: shown.next,
@@ -1890,7 +1901,7 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   };
   const api = ci.github(runEnv, (url, init) => {
     asked.push({ url, auth: init.headers["authorization"] });
-    const kind = Object.keys(answers).find((key) => url.includes(`/${key}`));
+    const kind = Object.keys(answers).find((key) => pipe(url, Str.includes(`/${key}`)));
     return Promise.resolve({
       ok: kind !== undefined,
       status: kind === undefined ? 404 : 200,

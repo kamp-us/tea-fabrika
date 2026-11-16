@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -141,8 +142,8 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
           ]);
           const blocks = Number(parse) + Number(blocking) + Number(id);
           expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
-          expect(ran.stdout.includes(CODE)).toBe(parse);
-          expect(ran.stdout.includes(ID)).toBe(id);
+          expect(pipe(ran.stdout, Str.includes(CODE))).toBe(parse);
+          expect(pipe(ran.stdout, Str.includes(ID))).toBe(id);
           expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
           seen.add(`${parse}:${id}:${blocking}`);
         },

@@ -4,6 +4,7 @@
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -330,7 +331,7 @@ const file = (
   return { text: `${[...head, ...body].join("\n")}\n`, fires: fires.map((at) => head.length + at + 1) };
 };
 
-const Name = fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
+const Name = fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `${pipe(w[0]!, Str.toUpperCase)}${pipe(w, Str.slice(1))}Svc`);
 
 const services = fc.array(fc.record({ name: Name, success: fc.nat(), form: fc.nat(), spelling: fc.nat() }), {
   minLength: 1,

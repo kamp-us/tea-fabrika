@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -20,7 +21,7 @@ const RUNS = { seed: 119120, numRuns: 6 };
 const run = (parts: readonly string[], env: NodeJS.ProcessEnv = process.env) => {
   const cwd = mkdtempSync(join(home, "run-"));
   const ran = spawnSync(process.execPath, [SCRIPT, ...parts], { cwd, env, encoding: "utf8" });
-  return { status: ran.status, out: ran.stdout.split("\n"), err: ran.stderr.split("\n") };
+  return { status: ran.status, out: pipe(ran.stdout, Str.split("\n")), err: pipe(ran.stderr, Str.split("\n")) };
 };
 
 /** One generated part: how it ends, its lines on each stream, and its wait between them. */
@@ -63,7 +64,7 @@ const commands = (parts: readonly Part[]) =>
   );
 
 const header = (said: readonly string[], command: string) =>
-  said.findIndex((line) => line.startsWith(`> ${command} (`));
+  said.findIndex((line) => pipe(line, Str.startsWith(`> ${command} (`)));
 
 describe("parallel.ts, the runner pnpm lint goes through", () => {
   // Plant: end with `return;` in place of failing with the failed parts: exit 0, red.
@@ -132,7 +133,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
           return;
         }
 
-        const summary = ran.err.slice(ran.err.findIndex((line) => line.startsWith("parallel: ")));
+        const summary = ran.err.slice(ran.err.findIndex((line) => pipe(line, Str.startsWith("parallel: "))));
         expect(summary[0]).toMatch(
           new RegExp(`^parallel: ${failed.length} of ${given.length} parts failed in [\\d.]+ s:$`),
         );
@@ -176,7 +177,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
   it("scenario: a part that cannot start says so, and is named as failed", () => {
     const ran = run(["echo never"], { ...process.env, PATH: "" });
     expect(ran.status).toBe(1);
-    expect(ran.out.some((line) => line.startsWith("> echo never (could not start: "))).toBe(true);
+    expect(ran.out.some((line) => pipe(line, Str.startsWith("> echo never (could not start: ")))).toBe(true);
     expect(ran.err.at(-3)).toMatch(/^parallel: 1 of 1 parts failed in [\d.]+ s:$/);
   });
 });

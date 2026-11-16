@@ -1,5 +1,6 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const OWNERS = new Set([
@@ -11,7 +12,7 @@ const OWNERS = new Set([
 // Strip SQL comments before recognizing quoted or plain table names in table positions.
 const touchesLedger = (query: string) =>
   /\b(?:from|join|into|update|table(?:\s+if\s+(?:not\s+)?exists)?)\s+(?:main\s*\.\s*)?["`[]?(?:entries|rings)\b/i.test(
-    query.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, " "),
+    pipe(query, Str.replace(/\/\*[\s\S]*?\*\/|--[^\n]*/g, " ")),
   );
 
 export const noLedgerSql: CreateRule = {

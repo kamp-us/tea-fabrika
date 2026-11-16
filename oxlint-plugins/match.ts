@@ -3,6 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 
 type Source = Context["sourceCode"];
 export type Node = ESTree.Node;
@@ -93,15 +94,18 @@ export const grouped = (source: Source, node: Node): number => {
  * there. Run from anywhere else, no file is an edge, so the rule fires more, never less.
  */
 export const pathIn = (context: Context): string => {
-  const from = context.cwd.endsWith("/") ? context.cwd : `${context.cwd}/`;
-  return context.filename.startsWith(from) ? context.filename.slice(from.length) : context.filename;
+  const from = pipe(context.cwd, Str.endsWith("/")) ? context.cwd : `${context.cwd}/`;
+  return pipe(context.filename, Str.startsWith(from))
+    ? pipe(context.filename, Str.slice(from.length))
+    : context.filename;
 };
 
 /**
  * Whether a file is held to `next/`'s rules: `next/` itself, and the lead tooling under `.agents/`,
  * which agents read and copy (0033).
  */
-export const heldToNext = (file: string): boolean => file.startsWith("next/") || file.startsWith(".agents/");
+export const heldToNext = (file: string): boolean =>
+  pipe(file, Str.startsWith("next/")) || pipe(file, Str.startsWith(".agents/"));
 
 /** The local names a file imports from Effect: `Effect` in `import {Effect} from "effect"`. */
 export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
@@ -114,7 +118,7 @@ export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
 
     const from = statement.source.value;
 
-    if (from !== "effect" && !from.startsWith("effect/") && !from.startsWith("@effect/")) {
+    if (from !== "effect" && !pipe(from, Str.startsWith("effect/")) && !pipe(from, Str.startsWith("@effect/"))) {
       continue;
     }
 

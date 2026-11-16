@@ -6,6 +6,7 @@
 // `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -47,16 +48,20 @@ const record = (x: unknown): Record<string, unknown> =>
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
 
 /** Where a glob stops being fixed: the text before its first `*`. */
-const stem = (glob: string): string => glob.split("*")[0] ?? glob;
+const stem = (glob: string): string => pipe(glob, Str.split("*"))[0] ?? glob;
 
 /** `outer` reads every file `glob` reads: the same glob, or a `**` glob over a parent folder with the same ending. */
 const covers = (outer: string, glob: string): boolean => {
-  const [folder, ending] = outer.split("/**/");
-  return outer === glob || (ending !== undefined && glob.startsWith(`${folder}/`) && glob.endsWith(`/${ending}`));
+  const [folder, ending] = pipe(outer, Str.split("/**/"));
+  return (
+    outer === glob ||
+    (ending !== undefined && pipe(glob, Str.startsWith(`${folder}/`)) && pipe(glob, Str.endsWith(`/${ending}`)))
+  );
 };
 
 /** The two globs can read one file: one's fixed start lies inside the other's. */
-const touches = (a: string, b: string): boolean => stem(a).startsWith(stem(b)) || stem(b).startsWith(stem(a));
+const touches = (a: string, b: string): boolean =>
+  pipe(stem(a), Str.startsWith(stem(b))) || pipe(stem(b), Str.startsWith(stem(a)));
 
 const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => typeof item === "string");
 
@@ -114,7 +119,7 @@ const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<st
 it("pinned: law 6, every folder once listed for preferNamespaceImport still ends at error for effect, and so does the whole tree once listed", () => {
   // pinned: the folders listed on the day each slice landed, since a folder dropped in a merge is silent.
   const text = readFileSync(CONFIG, "utf8");
-  const whole = WHOLE.filter((glob) => text.includes(`"${glob}"`));
+  const whole = WHOLE.filter((glob) => pipe(text, Str.includes(`"${glob}"`)));
 
   expect(uncovered(text, [...LISTED, ...whole])).toEqual([]);
 });

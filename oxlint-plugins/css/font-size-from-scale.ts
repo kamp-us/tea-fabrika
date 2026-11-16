@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import valueParser from "postcss-value-parser";
 import { plugin } from "../css-support.ts";
 
@@ -10,7 +11,7 @@ const pixels = (nodes: valueParser.Node[]) => {
 
     const dimension = valueParser.unit(node.value);
 
-    if (dimension && dimension.unit.toLowerCase() === "px") {
+    if (dimension && pipe(dimension.unit, Str.toLowerCase) === "px") {
       found = true;
     }
   });
@@ -54,7 +55,7 @@ const fontSize = (all: valueParser.Node[]) => {
     }
 
     if (node.type === "word") {
-      if (node.value.toLowerCase() === "oblique") {
+      if (pipe(node.value, Str.toLowerCase) === "oblique") {
         const next = nodes[index + 1];
 
         if (next !== undefined && hasUnit([next], angle)) {
@@ -91,7 +92,7 @@ const fontSize = (all: valueParser.Node[]) => {
 
 export default plugin("font-size-from-scale", (root, fire) => {
   root.walkDecls((decl) => {
-    const property = decl.prop.toLowerCase();
+    const property = pipe(decl.prop, Str.toLowerCase);
 
     if (property !== "font-size" && property !== "font") {
       return;

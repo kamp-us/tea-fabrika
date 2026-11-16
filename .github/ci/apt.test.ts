@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import { expect, it, onTestFinished } from "vitest";
 
 // Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
@@ -114,7 +115,7 @@ const box = (files: Files, release = "noble") => {
     });
   const read = (name: keyof Files) => readFileSync(join(etc, name), "utf8");
   const has = (name: keyof Files) => existsSync(join(etc, name));
-  const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const calls = () => pipe(readFileSync(log, "utf8"), Str.split("\n")).filter(Boolean);
   const list = `mirror+file:${join(etc, "apt-mirrors.txt")}`;
   return { run, read, has, calls, list };
 };
@@ -131,7 +132,11 @@ const chain =
   "http://ftp.osuosl.org/pub/ubuntu/\tpriority:6\n";
 
 // The image points its main stanza at the mirror list and leaves security as it is.
-const imageSources = deb822.replace("http://azure.archive.ubuntu.com/ubuntu/", "mirror+file:/etc/apt/apt-mirrors.txt");
+const imageSources = pipe(
+  deb822,
+  Str.replace("http://azure.archive.ubuntu.com/ubuntu/", "mirror+file:/etc/apt/apt-mirrors.txt"),
+);
+
 const image = { "apt-mirrors.txt": mirrors, "sources.list.d/ubuntu.sources": imageSources };
 const install = ["install", "expect", "zsh"];
 const installCall = "install -y --no-install-recommends expect zsh";
@@ -153,7 +158,7 @@ it("scenario: Azure dead on update, it leaves the list, security reads the list,
   expect(apt.calls()).toEqual(["update", "update", installCall]);
   expect(apt.read("apt-mirrors.txt")).toBe(chain);
   expect(apt.read("sources.list.d/ubuntu.sources")).toBe(
-    imageSources.replace("http://security.ubuntu.com/ubuntu/", apt.list),
+    pipe(imageSources, Str.replace("http://security.ubuntu.com/ubuntu/", apt.list)),
   );
   expect(result.stdout).toContain("::warning::apt-get install failed or passed its limit, try 1 of 6");
   expect(result.stdout).toContain("::warning::dropping http://azure.archive.ubuntu.com/ubuntu/");
@@ -178,7 +183,9 @@ it("scenario: every Canonical host dead, try 4 passes on the first outside mirro
   const result = apt.run(install, ["update"], canonical);
   expect(result.status).toBe(0);
   expect(apt.calls()).toEqual(["update", "update", "update", "update", installCall]);
-  expect(apt.read("apt-mirrors.txt").split("\n")[0]).toBe("http://mirrors.edge.kernel.org/ubuntu/\tpriority:4");
+  expect(pipe(apt.read("apt-mirrors.txt"), Str.split("\n"))[0]).toBe(
+    "http://mirrors.edge.kernel.org/ubuntu/\tpriority:4",
+  );
 });
 
 it("scenario: every mirror dead, six tries, an error line and exit 1", () => {
@@ -194,9 +201,11 @@ it("scenario: no mirror list, deb822 sources read a list written from the chain"
   expect(apt.run(["update"], ["update"], canonical).status).toBe(0);
   expect(apt.calls()).toEqual(["update", "update", "update"]);
   expect(apt.read("sources.list.d/ubuntu.sources")).toBe(
-    deb822
-      .replace("http://azure.archive.ubuntu.com/ubuntu/", apt.list)
-      .replace("http://security.ubuntu.com/ubuntu/", apt.list),
+    pipe(
+      deb822,
+      Str.replace("http://azure.archive.ubuntu.com/ubuntu/", apt.list),
+      Str.replace("http://security.ubuntu.com/ubuntu/", apt.list),
+    ),
   );
   expect(apt.read("apt-mirrors.txt")).toBe(
     "http://mirrors.edge.kernel.org/ubuntu/\tpriority:3\n" +
@@ -213,7 +222,7 @@ it("scenario: no mirror list, one-line sources.list reads a list written from th
       `deb ${apt.list} jammy-updates main restricted\n` +
       `deb ${apt.list} jammy-security main restricted\n`,
   );
-  expect(apt.read("apt-mirrors.txt").split("\n")[0]).toBe("https://archive.ubuntu.com/ubuntu/\tpriority:2");
+  expect(pipe(apt.read("apt-mirrors.txt"), Str.split("\n"))[0]).toBe("https://archive.ubuntu.com/ubuntu/\tpriority:2");
 });
 
 // The deb822 file the fallback writes when no source names Ubuntu's archive.
@@ -277,7 +286,7 @@ it("scenario: fallback many times drops one mirror each, adds the outside ones o
 
   for (let i = 0; i < 7; i++) {
     apt.run(["fallback"]);
-    tops.push(apt.read("apt-mirrors.txt").split("\t")[0] ?? "");
+    tops.push(pipe(apt.read("apt-mirrors.txt"), Str.split("\t"))[0] ?? "");
   }
 
   expect(tops).toEqual([

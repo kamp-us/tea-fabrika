@@ -32,6 +32,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -81,7 +82,7 @@ const cases: readonly ((s: Spelling) => readonly [string, Fires])[] = [
   ({ title }) => [`it("${title}", () => {});`, MESSAGE],
   ({ label, reason }) => [`it("${label}: ${reason}", () => ${ok(label)});`, null],
   ({ label, reason }) => [`test("${label}: ${reason}", () => ${ok(label)});`, null],
-  ({ label, reason }) => [`it("${label.toUpperCase()}: ${reason}", () => ${ok(label)});`, MESSAGE],
+  ({ label, reason }) => [`it("${pipe(label, Str.toUpperCase)}: ${reason}", () => ${ok(label)});`, MESSAGE],
   ({ label }) => [`it("${label}:", () => ${ok(label)});`, MESSAGE],
   ({ id, label, reason }) => [`it("${id} ${label}: ${reason}", () => ${ok(label)});`, null],
   ({ id, label, reason }) => [`it.each([1])("${id} ${label}: ${reason} %s", (n) => ${ok(label)});`, null],

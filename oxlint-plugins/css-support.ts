@@ -1,5 +1,6 @@
 // Today's CSS rules share parsing and reporting, so the runner can count known debt too.
 import { relative } from "node:path";
+import { pipe, String as Str } from "effect";
 import valueParser from "postcss-value-parser";
 import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };
@@ -14,7 +15,7 @@ export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
 export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
 
 const place = (decl: Declaration) =>
-  `${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`;
+  `${file(decl)} ${decl.parent?.type === "rule" ? pipe(decl.parent.selector, Str.replace(/\s+/g, " "), Str.trim) : ""} { ${decl.prop} }`;
 
 export const generated = (decl: Declaration) => {
   if (file(decl) !== TOKENS) {
@@ -47,17 +48,17 @@ export const references = (decl: Declaration) => {
       return;
     }
 
-    if (node.value.toLowerCase() === "url") {
+    if (pipe(node.value, Str.toLowerCase) === "url") {
       return false;
     }
 
-    if (node.value.toLowerCase() !== "var") {
+    if (pipe(node.value, Str.toLowerCase) !== "var") {
       return;
     }
 
     const name = node.nodes.find((child) => child.type !== "space" && child.type !== "comment");
 
-    if (name?.type === "word" && name.value.startsWith("--")) {
+    if (name?.type === "word" && pipe(name.value, Str.startsWith("--"))) {
       found.push(name.value);
     }
   });
@@ -71,8 +72,8 @@ export const media = (decl: Declaration, feature: string, value: string) => {
   while (parent !== undefined) {
     if (
       parent.type === "atrule" &&
-      parent.name.toLowerCase() === "media" &&
-      parent.params.split(",").every((query) => condition.test(query) && !/\b(not|or)\b/i.test(query))
+      pipe(parent.name, Str.toLowerCase) === "media" &&
+      pipe(parent.params, Str.split(",")).every((query) => condition.test(query) && !/\b(not|or)\b/i.test(query))
     ) {
       return true;
     }

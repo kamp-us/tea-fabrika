@@ -50,6 +50,7 @@
 //
 // `modules.test.ts` plants each of these at its real path, with the repo's own config.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { pathIn } from "./match.ts";
 
 interface Lists {
@@ -78,7 +79,7 @@ const lists = (options: ReadonlyArray<unknown>): Lists | null => {
   }
 
   return {
-    src: given.src.replace(/\/+$/, ""),
+    src: pipe(given.src, Str.replace(/\/+$/, "")),
     modules: words("modules" in given ? given.modules : []),
     folders: words("folders" in given ? given.folders : []),
     files: words("files" in given ? given.files : []),
@@ -136,7 +137,7 @@ const held = (root: ReadonlyArray<string>): "an error" | "a service" | null => {
     return null;
   }
 
-  if (last.endsWith("Error")) {
+  if (pipe(last, Str.endsWith("Error"))) {
     return "an error";
   }
 
@@ -173,25 +174,25 @@ export const modules: CreateRule = {
 
     const file = pathIn(context);
 
-    if (!file.startsWith(`${given.src}/`)) {
+    if (!pipe(file, Str.startsWith(`${given.src}/`))) {
       return {};
     }
 
-    const parts = file.slice(given.src.length + 1).split("/");
+    const parts = pipe(file, Str.slice(given.src.length + 1), Str.split("/"));
     const [top = "", ...rest] = parts;
     const isTopFile = rest.length === 0;
-    const stem = top.split(".")[0] ?? "";
+    const stem = pipe(top, Str.split("."))[0] ?? "";
     const module = !isTopFile && given.modules.has(top) ? top : null;
     const isInternal = module !== null && rest.slice(0, -1).includes("internal");
     const isValues = isTopFile && given.values.has(stem);
 
     /** The other module a relative specifier points into, or `null`. */
     const otherModule = (specifier: string): string | null => {
-      if (module === null || !specifier.startsWith(".")) {
+      if (module === null || !pipe(specifier, Str.startsWith("."))) {
         return null;
       }
 
-      const [first] = normalize([...parts.slice(0, -1), ...specifier.split("/")]) ?? [];
+      const [first] = normalize([...parts.slice(0, -1), ...pipe(specifier, Str.split("/"))]) ?? [];
 
       return first !== undefined && first !== module && given.modules.has(first) ? first : null;
     };
@@ -199,7 +200,7 @@ export const modules: CreateRule = {
     const isTagged = (statement: ESTree.Node): boolean => {
       const doc = context.sourceCode
         .getCommentsBefore(statement)
-        .findLast((comment) => comment.type === "Block" && comment.value.startsWith("*"));
+        .findLast((comment) => comment.type === "Block" && pipe(comment.value, Str.startsWith("*")));
 
       return doc !== undefined && /@internal\b/.test(doc.value);
     };

@@ -10,11 +10,12 @@
 //
 // It sees no types: the same read through a helper in a `.ts` file passes. Report any miss.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { dotted } from "./match.ts";
 
 /** The written name without a leading `window.` or `globalThis.`. */
 const plain = (name: string | null): string | null =>
-  name === null ? null : name.replace(/^(?:window|globalThis)\./, "");
+  name === null ? null : pipe(name, Str.replace(/^(?:window|globalThis)\./, ""));
 
 /**
  * A rule that refuses `Date()`, `new Date()` with no arguments and each call `reads` names, with one

@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import { media, plugin } from "../css-support.ts";
 
 export default plugin("motion-under-guard", (root, fire) => {
@@ -8,7 +9,7 @@ export default plugin("motion-under-guard", (root, fire) => {
 
     const reduced = media(decl, "prefers-reduced-motion", "reduce");
 
-    if (reduced && /^(?:none|0s)$/i.test(decl.value.trim())) {
+    if (reduced && /^(?:none|0s)$/i.test(pipe(decl.value, Str.trim))) {
       return;
     }
 

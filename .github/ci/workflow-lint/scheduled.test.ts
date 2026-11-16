@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -76,7 +77,7 @@ const scheduled = fc
     for (const job of Object.values(w.jobs)) {
       for (const s of job.steps) {
         if (typeof s["if"] === "string") {
-          s["if"] = s["if"].replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`);
+          s["if"] = pipe(s["if"], Str.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`));
         }
       }
     }
@@ -254,8 +255,8 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC6: a red leg holds the others' runners", (w) => (w.jobs["tests"]!.strategy!["fail-fast"] = false)],
   // GitHub's fail fast reaches only the red leg's own matrix, so a second matrix runs on after a red
   // leg in the first: a red tooling leg would leave next's legs running, and the other way round.
-  ["SC6: the tooling legs in a job of their own", (w) => split(w, (shard) => shard.startsWith("tooling-"))],
-  ["SC6: the next legs in a job of their own", (w) => split(w, (shard) => !shard.startsWith("tooling-"))],
+  ["SC6: the tooling legs in a job of their own", (w) => split(w, (shard) => pipe(shard, Str.startsWith("tooling-")))],
+  ["SC6: the next legs in a job of their own", (w) => split(w, (shard) => !pipe(shard, Str.startsWith("tooling-")))],
   [
     "SC6: a new job, in the cap",
     (w) => {
@@ -295,9 +296,9 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC8: the tooling tests take the leg's whole name as their shard",
     (w) =>
-      (step(w, "tests", "tooling tests")["run"] = String(step(w, "tests", "tooling tests")["run"]).replace(
-        `"\${SHARD#tooling-}"`,
-        '"$SHARD"',
+      (step(w, "tests", "tooling tests")["run"] = pipe(
+        String(step(w, "tests", "tooling tests")["run"]),
+        Str.replace(`"\${SHARD#tooling-}"`, '"$SHARD"'),
       )),
   ],
   [
@@ -312,21 +313,21 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next narrows to what changed",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--shard", '--changed "$BASE" --shard');
+      s["run"] = pipe(String(s["run"]), Str.replace("--shard", '--changed "$BASE" --shard'));
     },
   ],
   [
     "SC7: next runs a list",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--shard", "$FILTER --shard");
+      s["run"] = pipe(String(s["run"]), Str.replace("--shard", "$FILTER --shard"));
     },
   ],
   [
     "SC7: the end-to-end legs narrow",
     (w) => {
       const s = step(w, "tests", "end to end");
-      s["run"] = String(s["run"]).replace("--project next-visual ", "--project next-visual --changed=main ");
+      s["run"] = pipe(String(s["run"]), Str.replace("--project next-visual ", "--project next-visual --changed=main "));
     },
   ],
   // 0536: a project, not a path, picks each leg's files. Each plant was run once on the real
@@ -335,30 +336,30 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "next/ ");
+      s["run"] = pipe(String(s["run"]), Str.replace("--project next --project next-integration ", "next/ "));
     },
   ],
   [
     "SC7: next drops next-integration, so the real-resource tests run nowhere",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace(" --project next-integration", "");
+      s["run"] = pipe(String(s["run"]), Str.replace(" --project next-integration", ""));
     },
   ],
   [
     "SC7: the end-to-end legs lose their project, so they run every next/ test",
     (w) => {
       const s = step(w, "tests", "end to end");
-      s["run"] = String(s["run"]).replace("--project next-visual ", "");
+      s["run"] = pipe(String(s["run"]), Str.replace("--project next-visual ", ""));
     },
   ],
   [
     "SC7: the end-to-end legs run the old runner, which 0536 removed",
     (w) => {
       const s = step(w, "tests", "end to end");
-      s["run"] = String(s["run"]).replace(
-        "pnpm exec vitest run --project next-visual ",
-        "node next/apps/fabrika/e2e.ts ",
+      s["run"] = pipe(
+        String(s["run"]),
+        Str.replace("pnpm exec vitest run --project next-visual ", "node next/apps/fabrika/e2e.ts "),
       );
     },
   ],
@@ -378,30 +379,33 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC8: tooling narrows to what changed",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--shard", '--changed "$BASE" --shard');
+      s["run"] = pipe(String(s["run"]), Str.replace("--shard", '--changed "$BASE" --shard'));
     },
   ],
   [
     "SC8: tooling runs today's tests too",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling", "--project tooling --project today");
+      s["run"] = pipe(String(s["run"]), Str.replace("--project tooling", "--project tooling --project today"));
     },
   ],
   [
     "SC8: tooling loses its project, so it runs every project",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling ", "");
+      s["run"] = pipe(String(s["run"]), Str.replace("--project tooling ", ""));
     },
   ],
   [
     "SC8: tooling leaves the trees out with --exclude, which a project ignores",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace(
-        "--project tooling ",
-        "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
+      s["run"] = pipe(
+        String(s["run"]),
+        Str.replace(
+          "--project tooling ",
+          "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
+        ),
       );
     },
   ],
@@ -528,11 +532,11 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
     "scheduled.yaml: SC6: every test leg is in one matrix, the tests job, so its first red leg stops all the others";
 
   const toolingApart = real();
-  split(toolingApart, (shard) => shard.startsWith("tooling-"));
+  split(toolingApart, (shard) => pipe(shard, Str.startsWith("tooling-")));
   expect(lint(toolingApart)).toContain(ONE);
 
   const nextApart = real();
-  split(nextApart, (shard) => !shard.startsWith("tooling-"));
+  split(nextApart, (shard) => !pipe(shard, Str.startsWith("tooling-")));
   expect(lint(nextApart)).toContain(ONE);
 
   // One more job beside the test job, even with no matrix, is not the one-matrix shape either.
@@ -599,8 +603,11 @@ it("property: the schedule's legs follow check.yaml's full matrix, so a new leg 
   fc.assert(
     fc.property(fc.integer({ min: 1, max: 4 }), (e2es) => {
       const legs = [...Array.from({ length: e2es }, (_, i) => `e2e-${i + 1}`), "1", "2", "3", "4", "5"];
-      const otherCheck = check.replace(`'["e2e-1","e2e-2","1","2","3","4","5"]'`, `'${JSON.stringify(legs)}'`);
-      expect(otherCheck.includes(JSON.stringify(legs)), "the plant found check.yaml's fallback").toBe(true);
+      const otherCheck = pipe(
+        check,
+        Str.replace(`'["e2e-1","e2e-2","1","2","3","4","5"]'`, `'${JSON.stringify(legs)}'`),
+      );
+      expect(pipe(otherCheck, Str.includes(JSON.stringify(legs))), "the plant found check.yaml's fallback").toBe(true);
       const errors = lintScheduled(read("scheduled.yaml"), otherCheck);
       expect(errors.length === 0).toBe(e2es === 2);
     }),

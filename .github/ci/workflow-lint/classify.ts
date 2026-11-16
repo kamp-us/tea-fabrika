@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
+import { pipe, String as Str } from "effect";
 import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";
 
 export const classifyStep: Rule = ({ jobs }, require) => {
@@ -21,7 +22,7 @@ export const classifyStep: Rule = ({ jobs }, require) => {
   require(list.some(
     (s) =>
       typeof s["uses"] === "string" &&
-      s["uses"].startsWith("actions/checkout@") &&
+      pipe(s["uses"], Str.startsWith("actions/checkout@")) &&
       map(s["with"])["fetch-depth"] === 0 &&
       !("if" in s),
   ), "changes checks out history");

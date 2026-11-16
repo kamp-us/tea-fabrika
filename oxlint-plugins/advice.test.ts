@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
+import { pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -96,7 +97,7 @@ describe("T930 L1 a fire advises only when it is one of the six and graded a war
 
           if (fire.code === "eslint(no-restricted-properties)" && fire.severity === "warning") {
             seen.parse ||= member === "JSON.parse";
-            seen.reflect ||= member?.startsWith("Reflect.") === true;
+            seen.reflect ||= member !== undefined && pipe(member, Str.startsWith("Reflect."));
           }
 
           expect(advises(fire)).toBe(want);
@@ -396,7 +397,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       // and lint.ts fails on a fire only when it blocks, so a jsdocs line that advises cannot fail it.
       if (folders.length > 0) {
         const warn = lint(...folders.map((folder) => `${folder}/Planted.ts`));
-        const lines = warn.out.split("\n").filter((line) => line.includes(" fabrika(jsdocs) "));
+        const lines = pipe(warn.out, Str.split("\n")).filter((line) => pipe(line, Str.includes(" fabrika(jsdocs) ")));
         expect(lines, warn.out).toHaveLength(2 * folders.length);
 
         for (const line of lines) {
@@ -405,7 +406,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
 
         for (const folder of folders) {
           expect(
-            lines.filter((line) => line.startsWith(`${folder}/Planted.ts:`)),
+            lines.filter((line) => pipe(line, Str.startsWith(`${folder}/Planted.ts:`))),
             folder,
           ).toHaveLength(2);
         }
@@ -442,7 +443,7 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
       .flatMap(({ files }) => files)
       .map((glob) => {
         expect(glob, "a jsdocs warn line names one folder").toMatch(/^next\/packages\/[^/*]+\/src(\/[^/*]+)?\/\*\*?$/);
-        return glob.replace(/\/\*\*?$/, "");
+        return pipe(glob, Str.replace(/\/\*\*?$/, ""));
       });
   } finally {
     done();
@@ -638,7 +639,7 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   // Plant: count every warning of the rule as holding the line, and the stale line is not named.
   it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
     const others = Object.fromEntries(
-      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+      Object.entries(planted("next/dirty")).filter(([path]) => !pipe(path, Str.endsWith("/parse.ts"))),
     );
     const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
     const held = repo(banned(), { ...planted("next/dirty"), "next/dirty/reflect.ts": REFLECTS });
@@ -661,7 +662,7 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
 });
 
 /** A file inside one folder glob of the config: `next/a/**` and `next/a/*` give `next/a/planted.ts`. */
-const inside = (glob: string): string => `${glob.replace(/(\/\*\*)?\/\*\*?$/, "")}/planted.ts`;
+const inside = (glob: string): string => `${pipe(glob, Str.replace(/(\/\*\*)?\/\*\*?$/, ""))}/planted.ts`;
 
 /** One option of the rule, named as oxlint names its fire: `JSON.parse`, or `setBounds` alone. */
 const nameOf = (entry: unknown): string => {
@@ -702,7 +703,8 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
         .filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get"))
         .flatMap(({ files }) => files);
       const blocks = settings.filter(
-        ({ files, names }) => names.includes("Reflect.get") && files.some((glob) => glob.startsWith("next/")),
+        ({ files, names }) =>
+          names.includes("Reflect.get") && files.some((glob) => pipe(glob, Str.startsWith("next/"))),
       );
       // Coverage: a block where JSON.parse blocks and one where it still advises.
       expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
@@ -715,7 +717,7 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
           const was = advised.some((warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
           expect(level, glob).toBe(was);
 
-          if (glob.startsWith("next/packages/libfabrika/src/client/")) {
+          if (pipe(glob, Str.startsWith("next/packages/libfabrika/src/client/"))) {
             expect(names, glob).toEqual(expect.arrayContaining(["Effect.retry", "Stream.retry"]));
           }
         }

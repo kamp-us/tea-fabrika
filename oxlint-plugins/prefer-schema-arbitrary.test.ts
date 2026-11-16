@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -91,7 +92,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
 
     const report = JSON.parse(ran.stdout) as { diagnostics: Diagnostic[] };
     expect(
-      report.diagnostics.filter((d) => d.code.includes("parse")),
+      report.diagnostics.filter((d) => pipe(d.code, Str.includes("parse"))),
       ran.stderr,
     ).toEqual([]);
     return { ran, hits: report.diagnostics.filter((d) => d.code === code) };

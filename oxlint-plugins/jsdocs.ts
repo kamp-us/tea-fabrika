@@ -46,6 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -68,7 +69,7 @@ type Verdict = "internal" | "reported" | "passed";
 /** A doc block, the text oxlint gives as its value plus the two ends Effect's grammar reads. */
 const raw = (comment: Comment): string => `/*${comment.value}*/`;
 
-const isDoc = (comment: Comment): boolean => comment.type === "Block" && comment.value.startsWith("*");
+const isDoc = (comment: Comment): boolean => comment.type === "Block" && pipe(comment.value, Str.startsWith("*"));
 
 const sinceOf = (options: ReadonlyArray<unknown>): Since => {
   const [given] = options;
@@ -108,7 +109,9 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
   const kept =
     since === "required"
       ? found
-      : found.filter((d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")));
+      : found.filter(
+          (d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && pipe(d.message, Str.endsWith("@since"))),
+        );
   const messages = kept.map((d) => d.message);
 
   if (since === "absent" && block.tags.some((tag) => tag.name === "since")) {

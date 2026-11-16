@@ -5,6 +5,7 @@
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -90,7 +91,7 @@ const TABLE: { scope: string; parts: Part[] } = {
 const within =
   (...packages: ReadonlyArray<string>) =>
   (name: string) =>
-    packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+    packages.some((pkg) => name === pkg || pipe(name, Str.startsWith(`${pkg}/`)));
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
@@ -276,7 +277,7 @@ const caseFor = (place: string, names: ReadonlyArray<readonly [string, number]>)
   return {
     text: `${names.map(([from, form], n) => FORMS[form]?.(from, n) ?? "").join("\n")}\n`,
     lines: names.flatMap(([from], n) =>
-      allows !== null && from.startsWith(TABLE.scope) && !allows(from) ? [n + 1] : [],
+      allows !== null && pipe(from, Str.startsWith(TABLE.scope)) && !allows(from) ? [n + 1] : [],
     ),
   };
 };
@@ -297,7 +298,7 @@ const check = (filename: string, { text: code, lines }: Case) => {
  * The path the one oxlint run reads case `n`'s file at: its name starts with the number, so its folder
  * and its ending (`Test.ts`, `.test-support.ts`) stay.
  */
-const numbered = (path: string, n: number) => path.replace(/\/([^/]+)$/, `/N${n}$1`);
+const numbered = (path: string, n: number) => pipe(path, Str.replace(/\/([^/]+)$/, `/N${n}$1`));
 
 // Plants, each run once and recorded in PR 1251: give the window part's `may` in `.oxlintrc.json`
 // `transport/Connection`; drop the library part's `tests` there; put the library part's glob back

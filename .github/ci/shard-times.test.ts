@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";
@@ -55,7 +56,9 @@ it("L11: printed rows round-trip paths and real seconds to one decimal", () => {
     fc.property(fc.string(), fc.double({ min: 0, max: 1e6, noNaN: true }), (path, seconds) => {
       const row: Row = { path, seconds };
       expect(rowLine(row)).toBe(`  ${JSON.stringify(path)}: ${seconds.toFixed(1)},`);
-      expect(JSON.parse(`{${rowLine(row).trim().slice(0, -1)}}`)).toEqual({ [path]: Number(seconds.toFixed(1)) });
+      expect(JSON.parse(`{${pipe(rowLine(row), Str.trim, Str.slice(0, -1))}}`)).toEqual({
+        [path]: Number(seconds.toFixed(1)),
+      });
     }),
     options,
   );

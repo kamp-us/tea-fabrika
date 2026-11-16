@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import {
   changedOnPullRequests,
   env,
@@ -44,7 +45,7 @@ const plants: Plant[] = [
       ["next needs legs too", (w) => (w.jobs.next.needs = ["changes", "legs"])],
       [
         "next waits on a legs answer",
-        (w) => (w.jobs.next.if = `${guard("next").slice(0, -3)} && needs.legs.outputs.next != 'false' }}`),
+        (w) => (w.jobs.next.if = `${pipe(guard("next"), Str.slice(0, -3))} && needs.legs.outputs.next != 'false' }}`),
       ],
       [
         "next matrix with no fallback",
@@ -52,14 +53,18 @@ const plants: Plant[] = [
       ],
       [
         "next matrix from another output",
-        (w) => (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(".shards", ".files")),
+        (w) =>
+          (w.jobs.next.strategy.matrix.shard = pipe(
+            w.jobs.next.strategy.matrix.shard,
+            Str.replace(".shards", ".files"),
+          )),
       ],
       [
         "next matrix from the old legs job",
         (w) =>
-          (w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-            "needs.changes",
-            "needs.legs",
+          (w.jobs.next.strategy.matrix.shard = pipe(
+            w.jobs.next.strategy.matrix.shard,
+            Str.replace("needs.changes", "needs.legs"),
           )),
       ],
       ["next matrix as a plain list", (w) => Object.assign(w.jobs.next.strategy.matrix, { shard: nextLegs(2) })],
@@ -153,9 +158,9 @@ const plants: Plant[] = [
       [
         "the size step reads the first pass alone",
         (w) =>
-          (step(w, "changes", "size")["if"] = String(step(w, "changes", "size")["if"]).replaceAll(
-            "steps.same.outputs.next || ",
-            "",
+          (step(w, "changes", "size")["if"] = pipe(
+            String(step(w, "changes", "size")["if"]),
+            Str.replaceAll("steps.same.outputs.next || ", ""),
           )),
       ],
       ["sizing installs on every run", (w) => Reflect.deleteProperty(step(w, "changes", "install for sizing"), "if")],

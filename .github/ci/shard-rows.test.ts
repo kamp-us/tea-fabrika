@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
@@ -65,7 +66,7 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
   fc.assert(
     fc.property(rows, ({ table, files }) => {
       const expected = Object.keys(table)
-        .filter((path) => path.startsWith("next/") && !files.includes(path))
+        .filter((path) => pipe(path, Str.startsWith("next/")) && !files.includes(path))
         .toSorted();
       expect(stale(table, files)).toEqual(expected);
       expect(stale(table, files.toReversed())).toEqual(expected);
@@ -96,7 +97,9 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
   expect(files.length).toBeGreaterThan(0);
   expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
   expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
-  expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
+  expect(files.filter((path) => pipe(path, Str.includes("/e2e/")) && !/\.integration\.test\.tsx?$/.test(path))).toEqual(
+    [],
+  );
   const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
   const selected = [
     "next/apps/toy/e2e/stored.integration.test.ts",
@@ -254,7 +257,9 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
         // The full-depth table's rows are named with their own file.
         const other: string[] = [];
         expect(main(rows, (line) => other.push(line), "vitest.shards.full.json")).toBe(rows.length === 0 ? 0 : 1);
-        expect(other).toEqual(lines.map((line) => line.replace(/vitest\.shards\.json$/, "vitest.shards.full.json")));
+        expect(other).toEqual(
+          lines.map((line) => pipe(line, Str.replace(/vitest\.shards\.json$/, "vitest.shards.full.json"))),
+        );
         const silent: string[] = [];
         expect(main([], (line) => silent.push(line))).toBe(0);
         expect(silent).toEqual([]);
@@ -290,9 +295,10 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
 it("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", async () => {
-  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
-    .stdout.split("\0")
-    .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+  const tracked = pipe(
+    spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" }).stdout,
+    Str.split("\0"),
+  ).filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
   const [memory, integration, visual] = await Promise.all(
     ["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name])),
   );
@@ -300,7 +306,9 @@ it("scenario: every tracked next/ test file is in exactly one of next, next-inte
   expect(new Set(all).size, "a file in two projects").toBe(all.length);
   expect(all.toSorted()).toEqual(tracked.toSorted());
   expect(
-    integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
+    integration!.every(
+      (path) => pipe(path, Str.endsWith(".integration.test.ts")) || pipe(path, Str.endsWith(".integration.test.tsx")),
+    ),
   ).toBe(true);
   expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
 });

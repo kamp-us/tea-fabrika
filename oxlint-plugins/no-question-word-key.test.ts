@@ -1,4 +1,5 @@
 import type { Context, ESTree } from "@oxlint/plugins";
+import { Option, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -36,12 +37,12 @@ const neighbor = fc.oneof(
       fc.array(fc.constantFrom("a", "é", "λ", "中", "_", "$"), { minLength: 1, maxLength: 3 }),
     )
     .map(([word, affix]) => `${affix.join("")}${word}`),
-  fc.constantFrom(...WORDS).map((word) => `${word[0]?.toUpperCase()}${word.slice(1)}`),
-  fc.constantFrom(...WORDS).map((word) => word.toUpperCase()),
+  fc.constantFrom(...WORDS).map((word) => Str.capitalize(word)),
+  fc.constantFrom(...WORDS).map((word) => pipe(word, Str.toUpperCase)),
 );
 
 const escaped = (key: string) =>
-  `"${Array.from({ length: key.length }, (_, i) => `\\u${key.charCodeAt(i).toString(16).padStart(4, "0")}`).join("")}"`;
+  `"${Array.from({ length: key.length }, (_, i) => `\\u${pipe(pipe(key, Str.charCodeAt(i), Option.getOrThrow).toString(16), Str.padStart(4, "0"))}`).join("")}"`;
 
 const parameterModifiers = [
   "public",
@@ -127,7 +128,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
             JSON.stringify(name),
             escaped(name),
             `[${JSON.stringify(name)}]`,
-            `[\`${escaped(name).slice(1, -1)}\`]`,
+            `[\`${pipe(escaped(name), Str.slice(1, -1))}\`]`,
           ];
 
           for (const [j, spelling] of literal.entries()) {
@@ -137,7 +138,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
           }
 
           if (isIdentifier(name)) {
-            for (const [j, spelling] of [name, escaped(name).slice(1, -1)].entries()) {
+            for (const [j, spelling] of [name, pipe(escaped(name), Str.slice(1, -1))].entries()) {
               for (const source of [...declarations(spelling, i * 10 + 5 + j), ...bindings(spelling, i * 10 + 5 + j)]) {
                 add(source, refused ? native : null);
               }
@@ -182,14 +183,14 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
 
         for (const path of [...held, ...today]) {
           files[path] = source(word);
-          files[path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`)] = source(JSON.stringify(word));
+          files[pipe(path, Str.replace(/(\.[a-z-]+)?\.tsx?$/, "-quoted$&"))] = source(JSON.stringify(word));
         }
 
         const result = await plant(files);
         const every = declarations(word, 0).map((_, n) => n + 1);
 
         for (const path of [...held, ...today]) {
-          const quoted = path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`);
+          const quoted = pipe(path, Str.replace(/(\.[a-z-]+)?\.tsx?$/, "-quoted$&"));
           const expected = held.includes(path) ? every : [];
           expect([...new Set(result(NATIVE, path))]).toEqual(expected);
           expect([...new Set(result(CUSTOM, quoted))]).toEqual(expected);
@@ -212,8 +213,8 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
           `import { ${word} as imported } from "./outside.ts";`,
           `const text = ${text} + imported;`,
           `const ${dynamic} = text;`,
-          `const a = {[${dynamic}]: text, [text]: text, [${JSON.stringify(word.slice(0, 2))} + ${JSON.stringify(word.slice(2))}]: text};`,
-          `const b = {[\`${word.slice(0, 2)}\${text}\`]: text};`,
+          `const a = {[${dynamic}]: text, [text]: text, [${JSON.stringify(pipe(word, Str.slice(0, 2)))} + ${JSON.stringify(pipe(word, Str.slice(2)))}]: text};`,
+          `const b = {[\`${pipe(word, Str.slice(0, 2))}\${text}\`]: text};`,
           `const c = {reason: text, ${near}: ${JSON.stringify(word)}, ${JSON.stringify(near)}: text};`,
           `const d = a.${word}; const e = a[${JSON.stringify(word)}]; const f = ${JSON.stringify(word)} in a;`,
           // An outside key read into a good local name is the edge 0081 allows.
@@ -222,7 +223,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
           `const g: A[${JSON.stringify(word)}] = borrowed; const h: ${near} = renamed;`,
           `const sql = "select * from rows ${word} id = ?";`,
           `// ${word} is an ordinary English word here`,
-          `type ${near[0]?.toUpperCase()}${near.slice(1)}Type = {${near}: string};`,
+          `type ${Str.capitalize(near)}Type = {${near}: string};`,
         ].join("\n");
         const result = await plant({ [PATH]: source });
         expect(result(NATIVE, PATH)).toEqual([]);

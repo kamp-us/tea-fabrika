@@ -16,6 +16,7 @@
 //
 // `.oxlintrc.json` turns it on in `next/**` and leaves tests out: a test may plant a broken view.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import type { Node } from "./match.ts";
 
 const STORE_HOOKS = new Set(["useModel", "useSyncExternalStore", "useRuntime", "useMachine"]);
@@ -60,7 +61,7 @@ export const oneStoreHook: CreateRule = {
       ImportDeclaration(node) {
         const from = node.source.value;
 
-        if (from.startsWith("use-sync-external-store")) {
+        if (pipe(from, Str.startsWith("use-sync-external-store"))) {
           context.report({ node, message: ONLY });
           return;
         }

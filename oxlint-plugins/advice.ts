@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import { pipe, String as Str } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -23,7 +24,7 @@ const ADVICE: ReadonlyMap<string, (fire: Fire) => boolean> = new Map([
   // Only the JSON.parse guard advises (0523). Any other entry of this rule, such as the Reflect ban
   // (0554), blocks at every level. Oxlint writes the fire's message itself, as
   // `'JSON.parse' is restricted from being used.`, and keeps the entry's own text apart as a hint.
-  ["eslint(no-restricted-properties)", (fire: Fire) => (fire.message ?? "").startsWith("'JSON.parse' ")],
+  ["eslint(no-restricted-properties)", (fire: Fire) => pipe(fire.message ?? "", Str.startsWith("'JSON.parse' "))],
   ["fabrika(jsdocs)", always],
   ["fabrika(law-shape)", always],
   ["fabrika(no-effect-promise)", always],
@@ -96,7 +97,7 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
 /** Each warn line no advice fire of its rule matches, and each one whose last part names a file. */
 export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale> =>
   lines.flatMap((line): ReadonlyArray<Stale> => {
-    if (!(line.glob.split("/").at(-1) ?? "").includes("*")) {
+    if (!pipe(pipe(line.glob, Str.split("/")).at(-1) ?? "", Str.includes("*"))) {
       return [{ _tag: "file", line }];
     }
 

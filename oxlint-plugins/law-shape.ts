@@ -33,13 +33,14 @@
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
 // is the safe side for a rule that blocks.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
 type Label = (typeof LABELS)[number];
 /** One leading ticket or law id, `T652 ` or `R3.1 `, may stand before the label (lead, 2026-11-11). */
 const ID = /^[A-Za-z0-9.]+ /;
-const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${LABELS.join("|")}):\\s*\\S`);
+const LABELED = new RegExp(`^(?:${pipe(ID.source, Str.slice(1))})?(${LABELS.join("|")}):\\s*\\S`);
 const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminates"]);
 /** The shared runner's module, by its last path segment: `../Testing.test-support.ts`, and its one export. */
 const SHARED = /(?:^|\/)Testing\.test-support\.ts$/;
@@ -129,14 +130,18 @@ const labelOf = (title: Node | undefined): Label | "none" | null => {
 
   // `format: ${x}` is labeled, with its reason in `x`. `${x}`, `form${x}` and `T652 ${x}` could
   // still become a label, so the source does not say. `the window ${x}` cannot.
-  const rest = head.replace(ID, "");
-  const started = LABELS.find((label) => head.startsWith(`${label}:`) || rest.startsWith(`${label}:`));
+  const rest = pipe(head, Str.replace(ID, ""));
+  const started = LABELS.find(
+    (label) => pipe(head, Str.startsWith(`${label}:`)) || pipe(rest, Str.startsWith(`${label}:`)),
+  );
 
   if (started !== undefined) {
     return started;
   }
 
-  return LABELS.some((label) => `${label}:`.startsWith(head) || `${label}:`.startsWith(rest)) ? null : "none";
+  return LABELS.some((label) => pipe(`${label}:`, Str.startsWith(head)) || pipe(`${label}:`, Str.startsWith(rest)))
+    ? null
+    : "none";
 };
 
 /** The calls of one `expectTypeOf(...)...` or `assertType(...)` chain, or `null` for any other expression. */

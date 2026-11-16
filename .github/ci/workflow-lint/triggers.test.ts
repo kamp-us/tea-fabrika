@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";
@@ -18,25 +19,27 @@ import { options, type Plant, rejects, type Workflow } from "./wiring.test-suppo
 // changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
 const globOf = (glob: string) =>
   new RegExp(
-    `^${glob
-      .split("*")
-      .map((part) => part.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`))
+    `^${pipe(glob, Str.split("*"))
+      .map((part) => pipe(part, Str.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`)))
       .join("[^/]*")}$`,
   );
 
 const ignoredBy = (path: string) => ignored.some((glob) => globOf(glob).test(path));
-const fill = fc.string({ maxLength: 12 }).filter((text) => !text.includes("/") && !text.includes("\0"));
+
+const fill = fc
+  .string({ maxLength: 12 })
+  .filter((text) => !pipe(text, Str.includes("/")) && !pipe(text, Str.includes("\0")));
 
 const fromGlob = fc.constantFrom(...ignored).chain((glob) => {
-  const [first = "", ...rest] = glob.split("*");
+  const [first = "", ...rest] = pipe(glob, Str.split("*"));
   return fc
     .array(fill, { minLength: rest.length, maxLength: rest.length })
     .map((fills) => rest.reduce((path, part, i) => `${path}${fills[i]}${part}`, first));
 });
 
-const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" })
-  .stdout.split("\0")
-  .filter((path) => path !== "" && ignoredBy(path));
+const tracked = pipe(spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" }).stdout, Str.split("\0")).filter(
+  (path) => path !== "" && ignoredBy(path),
+);
 
 it("ticket 988: every path a pull request ignores runs no heavy job in changes.mjs, on a draft and a ready one", () => {
   expect(tracked.length).toBeGreaterThan(0);
@@ -139,7 +142,10 @@ const plants: Plant[] = [
   [
     "pull requests ignore every plan file, a brief folder's included",
     (w) => {
-      w.on.pull_request["paths-ignore"] = ["docs/plan/**", ...ignored.filter((glob) => !glob.startsWith("docs/plan/"))];
+      w.on.pull_request["paths-ignore"] = [
+        "docs/plan/**",
+        ...ignored.filter((glob) => !pipe(glob, Str.startsWith("docs/plan/"))),
+      ];
     },
   ],
   [

@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -61,14 +62,14 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
         const { waived, blocks } = settle(entries, findings, at);
 
         for (const f of waived) {
-          expect(f.file.startsWith(at)).toBe(true);
+          expect(pipe(f.file, Str.startsWith(at))).toBe(true);
         }
 
-        for (const f of findings.filter((f) => !f.file.startsWith(at))) {
+        for (const f of findings.filter((f) => !pipe(f.file, Str.startsWith(at)))) {
           expect(blocks).toContain(f);
         }
 
-        expect(outside(entries, at)).toEqual(entries.filter((e) => !e.file.startsWith(at)));
+        expect(outside(entries, at)).toEqual(entries.filter((e) => !pipe(e.file, Str.startsWith(at))));
       }),
       options,
     );

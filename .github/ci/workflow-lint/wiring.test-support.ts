@@ -3,6 +3,7 @@
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored } from "../changes.mjs";
@@ -315,7 +316,7 @@ const valid = (label: string, extra: string) => ({
             TESTED: `\${{ github.sha }}`,
             ...Object.fromEntries(
               ["check", "typecheck", "field", "build"].map((key) => [
-                key.toUpperCase(),
+                pipe(key, Str.toUpperCase),
                 `\${{ steps.diff.outputs.${key} }}`,
               ]),
             ),
@@ -342,7 +343,7 @@ const valid = (label: string, extra: string) => ({
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
       needs: "changes",
-      if: `${guard("check").slice(0, -4)} || needs.changes.outputs.field != 'false') }}`,
+      if: `${pipe(guard("check"), Str.slice(0, -4))} || needs.changes.outputs.field != 'false') }}`,
       "timeout-minutes": 10,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },

@@ -16,7 +16,7 @@
 // (`.oxfmtrc.json`).
 import { constants } from "node:os";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream } from "effect";
+import { Console, Duration, Effect, Fiber, Result, Schema, Stdio, Stream, pipe, String as Str } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** A piece of a part's output, and the stream it went to. */
@@ -118,10 +118,10 @@ const print = Effect.fnUntraced(function* (ran: Ran) {
 /** A part's last line that is not empty, from stderr when it wrote any there, else from stdout. */
 const lastLine = (output: ReadonlyArray<Piece>): string | undefined => {
   const last = (to: Piece["to"]) =>
-    Buffer.concat(output.filter((piece) => piece.to === to).map((piece) => piece.bytes))
-      .toString("utf8")
-      .split("\n")
-      .findLast((line) => line.trim() !== "");
+    pipe(
+      Buffer.concat(output.filter((piece) => piece.to === to).map((piece) => piece.bytes)).toString("utf8"),
+      Str.split("\n"),
+    ).findLast((line) => pipe(line, Str.trim) !== "");
   return last("stderr") ?? last("stdout");
 };
 

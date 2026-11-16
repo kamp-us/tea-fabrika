@@ -19,6 +19,7 @@
 // Where it reports, and why there: at the very start of the file, with the real line in the message,
 // as `no-bare-disable` does. A report on the comment's own line could be silenced by a comment.
 import type { CreateRule } from "@oxlint/plugins";
+import { Option, pipe, String as Str } from "effect";
 
 const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
 
@@ -39,10 +40,10 @@ const problem = (comment: string): string | null => {
   }
 
   const [, form = "", rest = ""] = found;
-  const at = rest.search(REASON);
-  const rules = (at < 0 ? rest : rest.slice(0, at))
-    .split(",")
-    .map((rule) => rule.trim())
+  const at = pipe(rest, Str.search(REASON));
+  const head = Option.match(at, { onNone: () => rest, onSome: (end) => pipe(rest, Str.slice(0, end)) });
+  const rules = pipe(head, Str.split(","))
+    .map((rule) => pipe(rule, Str.trim))
     .filter((rule) => rule !== "");
 
   if (!rules.some((rule) => EDGE_RULES.has(rule))) {
@@ -57,7 +58,10 @@ const problem = (comment: string): string | null => {
     return "names a rule that is not an edge rule. Give that exception its own comment";
   }
 
-  const why = at < 0 ? "" : rest.slice(at).replace(REASON, "");
+  const why = Option.match(at, {
+    onNone: () => "",
+    onSome: (start) => pipe(rest, Str.slice(start), Str.replace(REASON, "")),
+  });
   return EDGE_WHY.test(why) ? null : "does not give its reason as `edge: <why>`";
 };
 

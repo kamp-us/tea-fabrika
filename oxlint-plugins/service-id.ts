@@ -30,6 +30,7 @@
 // Both diagnostics block since ticket 909: the replay found 1 fire, 1 true and 0 false alarms
 // (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 type Made = "Service" | "Reference";
@@ -42,7 +43,7 @@ const settings = (options: ReadonlyArray<unknown>): { readonly package: string; 
   }
 
   return typeof given.package === "string" && typeof given.src === "string"
-    ? { package: given.package, src: given.src.replace(/\/+$/, "") }
+    ? { package: given.package, src: pipe(given.src, Str.replace(/\/+$/, "")) }
     : null;
 };
 
@@ -111,13 +112,13 @@ export const serviceId: CreateRule = {
     const given = settings(context.options);
     const file = pathIn(context);
 
-    if (given === null || !file.startsWith(`${given.src}/`)) {
+    if (given === null || !pipe(file, Str.startsWith(`${given.src}/`))) {
       return {};
     }
 
-    const path = file.slice(given.src.length + 1).replace(/\.[^./]+$/, "");
+    const path = pipe(file, Str.slice(given.src.length + 1), Str.replace(/\.[^./]+$/, ""));
     const base = `${given.package}/${path}`;
-    const stem = path.split("/").at(-1) ?? "";
+    const stem = pipe(path, Str.split("/")).at(-1) ?? "";
 
     const resolve = (node: Node): Variable | undefined => {
       if (node.type !== "Identifier") {
@@ -195,7 +196,9 @@ export const serviceId: CreateRule = {
       const expected = named === undefined ? null : named === stem ? base : `${base}.${named}`;
       const fits =
         expected === null
-          ? text === base || (text.startsWith(`${base}.`) && /^[A-Za-z_$][\w$]*$/.test(text.slice(base.length + 1)))
+          ? text === base ||
+            (pipe(text, Str.startsWith(`${base}.`)) &&
+              /^[A-Za-z_$][\w$]*$/.test(pipe(text, Str.slice(base.length + 1))))
           : text === expected;
 
       if (!fits) {

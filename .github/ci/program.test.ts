@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import { transformSync } from "esbuild";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -151,11 +152,11 @@ const swap = (token: Token): string => {
       // The same value spelled another way is another program: literal text stays in the tree.
       return `0x${Number(token.text).toString(16)}`;
     case "string":
-      return token.text.replace(/["']$/, (quote) => `y${quote}`);
+      return pipe(token.text, Str.replace(/["']$/, "y$&"));
     case "template":
-      return token.text.replace(/`$/, "y`");
+      return pipe(token.text, Str.replace(/`$/, "y`"));
     case "regex":
-      return token.text.endsWith("g") ? `${token.text.slice(0, -1)}i` : `${token.text}m`;
+      return pipe(token.text, Str.endsWith("g")) ? `${pipe(token.text, Str.slice(0, -1))}i` : `${token.text}m`;
     case "mark":
       return token.text;
   }
@@ -346,8 +347,11 @@ it("scenario: a parse error on either side, or a parser that throws, is not the 
 // A second tool: esbuild with whitespace minified and no legal comments, as pull request 1165's
 // review checked. It normalizes literals (`0x10` becomes `16`), so it agrees only one way.
 const emit = (file: string, text: string) =>
-  transformSync(text, { loader: file.endsWith(".tsx") ? "tsx" : "ts", minifyWhitespace: true, legalComments: "none" })
-    .code;
+  transformSync(text, {
+    loader: pipe(file, Str.endsWith(".tsx")) ? "tsx" : "ts",
+    minifyWhitespace: true,
+    legalComments: "none",
+  }).code;
 
 it("property: when the program is the same, esbuild gives the same output for both sides", () => {
   fc.assert(
@@ -369,8 +373,8 @@ it("property: when the program is the same, esbuild gives the same output for bo
   );
 });
 
-const base = "b".repeat(40);
-const head = "c".repeat(40);
+const base = pipe("b", Str.repeat(40));
+const head = pipe("c", Str.repeat(40));
 
 type Status = "modified" | "changed" | "added" | "deleted" | "unread";
 

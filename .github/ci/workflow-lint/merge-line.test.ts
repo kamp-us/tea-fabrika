@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { projects } from "../../../vitest.config.ts";
@@ -61,7 +62,7 @@ const plants: Plant[] = [
     { name: "promises", run: "node packages/promises/src/main.ts gate" },
     { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
   ].map((planted): [string, (w: Workflow) => void] => [
-    `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
+    `T6: check runs today's promise checks again: ${pipe(planted.run, Str.split("\n"))[0]}`,
     (w) => {
       // Before the stop step, which stays last (F1).
       w.jobs.check.steps.splice(-1, 0, planted);
@@ -184,14 +185,14 @@ const plants: Plant[] = [
     `T1: next's vitest step runs the ${project} project's tests too`,
     (w) => {
       const found = step(w, "next", "vitest");
-      found.run = found.run.replace("--project next ", `--project next --project ${project} `);
+      found.run = pipe(found.run, Str.replace("--project next ", `--project next --project ${project} `));
     },
   ]),
   [
     "T1: next's vitest step runs every project",
     (w) => {
       const found = step(w, "next", "vitest");
-      found.run = found.run.replace("--project next ", "");
+      found.run = pipe(found.run, Str.replace("--project next ", ""));
     },
   ],
   ["T2: the e2e job is back", todaysE2e({ name: "e2e", run: "pnpm --filter @kampus/fabrika-app-old e2e" })],
@@ -305,7 +306,8 @@ for (const [name, plant] of [
   ["its script changes folder first", (w: Parsed) => void (l13(w)["run"] = `cd ../..\n${String(l13(w)["run"])}`)],
   [
     "its root climbs out of next/",
-    (w: Parsed) => void (l13(w)["run"] = String(l13(w)["run"]).replace("--root e2e", "--root ../../.github/ci")),
+    (w: Parsed) =>
+      void (l13(w)["run"] = pipe(String(l13(w)["run"]), Str.replace("--root e2e", "--root ../../.github/ci"))),
   ],
   [
     "a second step runs the tooling project from the root",

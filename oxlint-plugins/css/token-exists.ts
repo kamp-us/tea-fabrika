@@ -1,3 +1,4 @@
+import { pipe, String as Str } from "effect";
 import { generated, plugin, references, steps, tokens } from "../css-support.ts";
 
 export default plugin("token-exists", (root, fire) => {
@@ -8,7 +9,7 @@ export default plugin("token-exists", (root, fire) => {
 
     const local = new Set<string>();
     decl.parent?.each((node) => {
-      if (node.type === "decl" && node.prop.startsWith("--")) {
+      if (node.type === "decl" && pipe(node.prop, Str.startsWith("--"))) {
         local.add(node.prop);
       }
     });

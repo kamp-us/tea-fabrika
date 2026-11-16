@@ -1,9 +1,11 @@
+import { pipe, String as Str } from "effect";
 import valueParser from "postcss-value-parser";
 import { file, generated, media, plugin, WINDOW } from "../css-support.ts";
 
 // CSS Color 4 named colors, https://www.w3.org/TR/css-color-4/#named-colors.
 const colors = new Set(
-  `aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond
+  pipe(
+    `aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond
 blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson
 cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen
 darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey
@@ -17,17 +19,22 @@ mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyro
 navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred
 papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown
 salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen
-steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen`.split(/\s+/),
+steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen`,
+    Str.split(/\s+/),
+  ),
 );
 
 // Includes deprecated names, which remain system colors rather than design tokens.
 const system = new Set(
-  `accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas
+  pipe(
+    `accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas
 canvastext field fieldtext graytext highlight highlighttext linktext mark marktext selecteditem
 selecteditemtext visitedtext activeborder activecaption appworkspace background buttonhighlight
 buttonshadow captiontext inactiveborder inactivecaption inactivecaptiontext infobackground infotext
 menu menutext scrollbar threeddarkshadow threedface threedhighlight threedlightshadow threedshadow
-window windowframe windowtext`.split(/\s+/),
+window windowframe windowtext`,
+    Str.split(/\s+/),
+  ),
 );
 
 const functions = /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|device-cmyk|light-dark)$/i;
@@ -60,18 +67,20 @@ export default plugin("no-raw-color", (root, fire) => {
       return;
     }
 
-    const named = decl.prop.startsWith("--") || colorProperty.test(decl.prop.replace(/^-(?:webkit|moz|ms|o)-/i, ""));
+    const named =
+      pipe(decl.prop, Str.startsWith("--")) ||
+      colorProperty.test(pipe(decl.prop, Str.replace(/^-(?:webkit|moz|ms|o)-/i, "")));
     const forced = media(decl, "forced-colors", "active");
     let raw = false;
     const check = (nodes: valueParser.Node[], names: boolean) =>
       valueParser.walk(nodes, (node) => {
         if (node.type === "function") {
-          if (node.value.toLowerCase() === "url") {
+          if (pipe(node.value, Str.toLowerCase) === "url") {
             return false;
           }
 
           // light-dark selects values; its token-only form is fine.
-          if (functions.test(node.value) && node.value.toLowerCase() !== "light-dark") {
+          if (functions.test(node.value) && pipe(node.value, Str.toLowerCase) !== "light-dark") {
             raw = true;
           }
 
@@ -83,7 +92,7 @@ export default plugin("no-raw-color", (root, fire) => {
           return;
         }
 
-        const word = node.value.toLowerCase();
+        const word = pipe(node.value, Str.toLowerCase);
 
         if (
           /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(word) ||

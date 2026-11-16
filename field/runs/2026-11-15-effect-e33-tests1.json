@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e33-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:17-08:00",
+  "ended": "2026-11-15T20:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E33 of the Effect-check sweep (preferEffectString in oxlint-plugins/ and .github/ci/), in our tooling. Counted 676 hits with only this check at error through --lspconfig, matching the plan; all 676 sit in exam paths, none in PR 1366's files. Fixed 447: 427 by a scratch codemod (oxc-parser, never committed) that rewrites s.m(args) to pipe(s, Str.m(args)) with String as Str from the effect barrel and merges chains, and 20 by hand edits where Effect answers an Option (indexOf, search, match, charCodeAt), an optional chain, or a function replacer that a $& string says the same. The checker has no quick fix for this check. Left 229: 37 in three .mjs files that run on the runner's bare Node before any install, so they cannot import effect; 104 in 14 files where importing effect turns on our blocking no-raw-try-catch rule at a native try/catch; 82 in effect-jsdocs.ts, a port of Effect's own code whose header lists every change from upstream for the next bump's diff; 6 others (two matchAll whose Effect type drops the match index, indexOf with a start position, two function replacers with real logic, one optional chain in a template). No lock line, as the owner ruled for judgment slices.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "Every other check of the 135 at error, counted before and after over both tsconfigs: no new hit (strictBooleanExpressions fell by one). Comments compared per file through the parser before and after: none lost. Tests: the 67 test files of oxlint-plugins/ and .github/ci/ (1447 tests) passed at base f7169afe plus this diff; --changed was refused by the config as a broad run. Per-package tsc for both tooling folders passed; pnpm lint passed.",
+  "plants": [],
+  "step": "tests"
+}

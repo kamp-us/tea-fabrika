@@ -3,6 +3,7 @@
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -13,7 +14,7 @@ const SRC = "next/packages/libfabrika/src";
 const root = resolve(import.meta.dirname, "..");
 
 const word = fc.stringMatching(/^[a-z]{2,6}$/);
-const Pascal = word.map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
+const Pascal = word.map((w) => `${pipe(w[0]!, Str.toUpperCase)}${pipe(w, Str.slice(1))}Svc`);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
 const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
@@ -173,7 +174,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   ] as const;
 
   /** An old ID as it was written: bare names had the package in front. */
-  const written = (old: string) => (old.includes("/") ? old : `${P}/${old}`);
+  const written = (old: string) => (pipe(old, Str.includes("/")) ? old : `${P}/${old}`);
 
   it("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", async () => {
     const files = new Map<string, Array<readonly [string, boolean]>>();

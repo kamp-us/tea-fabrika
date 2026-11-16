@@ -5,6 +5,7 @@
 // the day the rule landed, which may only grow.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -222,7 +223,7 @@ it("scenario: the real config holds a static layer in each listed folder, and le
   // Only the real config holds the list, so one real lint run reads one planted file per listed
   // folder, saved or added since, and per left-out kind.
   const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
-  const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
+  const on = folders.map((folder) => pipe(folder, Str.replace(/\*\*$/, "planted/Planted.ts")));
   const off = [
     "next/packages/libfabrika/src/tasks/Planted.test.ts",
     "next/packages/libfabrika/src/tasks/Planted.test.tsx",

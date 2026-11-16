@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, expect, it } from "vitest";
@@ -142,14 +143,14 @@ it("fires before each piece with no blank line above it, unless both sides are o
             fixed += "\n";
             line++;
           } else if (!both && !short) {
-            expected.push(line + lead.split("\n").length - 1);
+            expected.push(line + pipe(lead, Str.split("\n")).length - 1);
             fixed += "\n";
           }
         }
 
         text += `${lead}${body}\n`;
         fixed += `${lead}${body}\n`;
-        line += `${lead}${body}`.split("\n").length;
+        line += pipe(`${lead}${body}`, Str.split("\n")).length;
       });
       const at = join(plant, `p${n++}.ts`);
       writeFileSync(at, text);
@@ -221,7 +222,7 @@ it("inside a block, fires before and after each control statement with no blank 
         const piece = inner(kind, i);
         text += `${piece}\n`;
         fixed += `${piece}\n`;
-        line += piece.split("\n").length;
+        line += pipe(piece, Str.split("\n")).length;
       });
       const last = statements.at(-1)!.kind;
 
@@ -273,7 +274,7 @@ it.each([
     [10],
   ],
 ])("%s", (name, text, expected) => {
-  const at = join(plant, `${name.replaceAll(/\W/g, "-")}.ts`);
+  const at = join(plant, `${pipe(name, Str.replaceAll(/\W/g, "-"))}.ts`);
   writeFileSync(at, text);
   expect(fires(at)).toEqual(expected);
 });

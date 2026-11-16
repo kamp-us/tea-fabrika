@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Option, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -30,11 +31,22 @@ import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8");
 const full: Legs = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
+
 // The size step's BUDGET setting, as check.yaml declares it once and the step passes it.
-const budget = budgetOf(String(workflow.match(/^ {10}BUDGET: (.*)$/m)?.[1]));
+const budget = budgetOf(
+  String(
+    pipe(
+      workflow,
+      Str.match(/^ {10}BUDGET: (.*)$/m),
+      Option.map((found) => found[1]),
+      Option.getOrUndefined,
+    ),
+  ),
+);
+
 const limit = limits(nextMinutes(workflow), budget);
 const options = { seed: 119120, numRuns: 100 };
-const base = "b".repeat(40);
+const base = pipe("b", Str.repeat(40));
 // A pull request that asked for its visual tests with the `visual` label, and one that did not (0536).
 const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
 const plainPr: Run = { ...pr, visual: false };
@@ -156,7 +168,13 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
         fc
           .tuple(
             fc.constantFrom("pull_request", "merge_group", "push"),
-            fc.constantFrom("", "0".repeat(40), "main", "b".repeat(39), "B".repeat(40)),
+            fc.constantFrom(
+              "",
+              pipe("0", Str.repeat(40)),
+              "main",
+              pipe("b", Str.repeat(39)),
+              pipe("B", Str.repeat(40)),
+            ),
             fc.boolean(),
           )
           .map(([event, sha, visual]): Run => ({ event, scope: "all", base: sha, visual })),
@@ -180,11 +198,11 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
       examples: [
         [
           { selected: { vitest: [], e2e: [] }, table: {} },
-          { event: "push", scope: "all", base: "0".repeat(40), visual: false },
+          { event: "push", scope: "all", base: pipe("0", Str.repeat(40)), visual: false },
         ],
         [
           { selected: { vitest: [], e2e: [] }, table: {} },
-          { event: "push", scope: "all", base: "0".repeat(40), visual: true },
+          { event: "push", scope: "all", base: pipe("0", Str.repeat(40)), visual: true },
         ],
       ],
     },
@@ -226,7 +244,7 @@ it("property: a sized pull request without the visual label starts no end-to-end
       const legs = size(plainPr, selected, full, limit, table);
       expect(legs.e2e).toBe(0);
       expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
-      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
+      expect(shards(legs).some((leg) => pipe(leg, Str.startsWith("e2e-")))).toBe(false);
     }),
     options,
   );
@@ -418,7 +436,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
 // Each plant was run once on legs.ts and restored; each turned its law red.
 
 /** The real reader test files, as Vitest matches changes' paths: the file's path holds one. */
-const readerFiles = () => vitest.filter((path) => readers.some((reader) => path.includes(reader)));
+const readerFiles = () => vitest.filter((path) => readers.some((reader) => pipe(path, Str.includes(reader))));
 
 it("property: a sized run's vitest files are what --changed picked and every reader test, each once", () => {
   // Plants: `[...changed].toSorted()` (red: a reader --changed missed is gone); the two lists joined
@@ -463,7 +481,7 @@ it("scenario: a change that picks every next/ file runs each reader once, on tod
 // A run legs.ts never sizes: all of next/ with no base commit to diff with, or off the merge line.
 const unsized = fc.constantFrom<Run>(
   { event: "merge_group", scope: "all", base: "", visual: false },
-  { event: "push", scope: "all", base: "0".repeat(40), visual: false },
+  { event: "push", scope: "all", base: pipe("0", Str.repeat(40)), visual: false },
   { event: "workflow_dispatch", scope: "readers", base, visual: true },
 );
 
@@ -471,7 +489,7 @@ const unsized = fc.constantFrom<Run>(
 const readersRun = fc
   .tuple(
     fc.constantFrom("pull_request", "merge_group", "push"),
-    fc.constantFrom(base, "", "0".repeat(40), "main"),
+    fc.constantFrom(base, "", pipe("0", Str.repeat(40)), "main"),
     fc.boolean(),
   )
   .map(([event, sha, visual]): Run => ({ event, scope: "readers", base: sha, visual }));
@@ -483,7 +501,7 @@ it("property: the size step prints files only on a sized run with a vitest leg, 
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
       const lines = outputs(run, legs, selected);
-      const files = lines.filter((line) => line.startsWith("files="));
+      const files = lines.filter((line) => pipe(line, Str.startsWith("files=")));
       const onLine = ["pull_request", "merge_group", "push"].includes(run.event);
       const listed =
         onLine &&
@@ -504,7 +522,7 @@ it("property: the size step prints the base only on a sized run with an end-to-e
   fc.assert(
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
-      const printed = outputs(run, legs, selected).filter((out) => out.startsWith("base="));
+      const printed = outputs(run, legs, selected).filter((out) => pipe(out, Str.startsWith("base=")));
       const sized = run.scope === "all" && /^[a-f0-9]{40}$/.test(run.base) && !/^0+$/.test(run.base);
       expect(printed).toEqual(sized && legs.e2e > 0 ? [`base=${run.base}`] : []);
     }),

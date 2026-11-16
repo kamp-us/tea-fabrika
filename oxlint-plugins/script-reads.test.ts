@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, type Scope } from "effect";
+import { Effect, FileSystem, Path, type Scope, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";
@@ -26,7 +26,7 @@ const forms = (from: string, path: string, form: number) => {
     `"${name}"`,
     `join(import.meta.dirname, "${name}")`,
     `. "$(dirname "$0")/${name}"`,
-    `"${posix.relative(posix.dirname(from), path).replace(/^(?!\.)/, "./")}"`,
+    `"${pipe(posix.relative(posix.dirname(from), path), Str.replace(/^(?!\.)/, "./"))}"`,
     `join(env.MAIN, "${path}")`,
   ][form]!;
 };
@@ -151,7 +151,9 @@ describe("reached", () => {
           const segments = [...Array.from({ length: ups }, () => ".."), ...middle, ...(name === null ? [] : [name])];
           // From the top a path starts with a name; a relative one starts with `./` or `../`.
           const text = top ? ["x", ...segments].join("/") : `${ups === 0 ? "./" : ""}${segments.join("/")}`;
-          const stack = top ? walk([], ["x", ...segments]) : walk(posix.dirname(script).split("/"), segments);
+          const stack = top
+            ? walk([], ["x", ...segments])
+            : walk(pipe(posix.dirname(script), Str.split("/")), segments);
           return { text, path: stack.join("/"), file: name !== null, above: stack[0] === ".." };
         });
         const tree = new Map([
@@ -315,7 +317,7 @@ describe("scriptReads", () => {
         // Each skill's tool table, plus a basename inside a longer word, which names no tool.
         const prose = (skill: string) =>
           files
-            .filter(({ path }) => skill === `${path.split("/").slice(0, 3).join("/")}/SKILL.md`)
+            .filter(({ path }) => skill === `${pipe(path, Str.split("/")).slice(0, 3).join("/")}/SKILL.md`)
             .map(({ path }) =>
               tools.has(path) ? `| \`${posix.basename(path)}\` | a tool |` : `prefix${posix.basename(path)}`,
             )
@@ -367,7 +369,7 @@ describe("load", () => {
         const { tree, exists, prose } = load(root);
         // Only files under a scripts/ folder, at any depth, each with its text.
         expect(Object.fromEntries(tree)).toEqual(
-          Object.fromEntries(Object.entries(written).filter(([file]) => file.startsWith(`${scripts}/`))),
+          Object.fromEntries(Object.entries(written).filter(([file]) => pipe(file, Str.startsWith(`${scripts}/`)))),
         );
         // A file exists; a folder and a missing path do not.
         expect(["data/rows.json", "data", "data/none.json", scripts].map(exists)).toEqual([true, false, false, false]);

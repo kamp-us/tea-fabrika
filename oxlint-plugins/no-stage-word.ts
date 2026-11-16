@@ -16,6 +16,7 @@
 // time (`"sta" + "ge"`), and a regular expression's pattern. No autofix: the rule cannot tell
 // `dev` from `instance`, or move a saved name.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };
@@ -32,7 +33,7 @@ const stageWords = (text: string): ReadonlyArray<{ readonly index: number; reado
 
   for (const run of text.matchAll(RUN)) {
     for (const part of run[0].matchAll(PART)) {
-      const word = part[0].toLowerCase();
+      const word = pipe(part[0], Str.toLowerCase);
 
       if (word === "stage" || word === "stages") {
         found.push({ index: run.index + part.index, length: part[0].length });
@@ -45,16 +46,16 @@ const stageWords = (text: string): ReadonlyArray<{ readonly index: number; reado
 
 /** The path from the top of the repo, with `/` between folders on any platform. */
 const relative = (context: Context): string => {
-  const file = pathIn(context).replaceAll("\\", "/");
-  const from = context.cwd.replaceAll("\\", "/").replace(/\/?$/, "/");
-  return file.startsWith(from) ? file.slice(from.length) : file;
+  const file = pipe(pathIn(context), Str.replaceAll("\\", "/"));
+  const from = pipe(context.cwd, Str.replaceAll("\\", "/"), Str.replace(/\/?$/, "/"));
+  return pipe(file, Str.startsWith(from)) ? pipe(file, Str.slice(from.length)) : file;
 };
 
 export const noStageWord: CreateRule = {
   create(context) {
     const file = relative(context);
 
-    if (!file.startsWith("next/")) {
+    if (!pipe(file, Str.startsWith("next/"))) {
       return {};
     }
 
@@ -95,7 +96,7 @@ export const noStageWord: CreateRule = {
 
     return {
       Program(node) {
-        if (stageWords(file.slice("next/".length)).length > 0) {
+        if (stageWords(pipe(file, Str.slice("next/".length))).length > 0) {
           context.report({
             loc: { start: START, end: START },
             message: `This file's path names stage: ${file}. ${MESSAGE}`,
@@ -105,7 +106,7 @@ export const noStageWord: CreateRule = {
         for (const comment of source.getAllComments()) {
           // The comment's text starts after its `//` or `/*`.
           const skip = DIRECTIVE.exec(comment.value)?.[0].length ?? 0;
-          const text = comment.value.slice(skip);
+          const text = pipe(comment.value, Str.slice(skip));
           lines(node, text, text, comment.range[0] + 2 + skip);
         }
       },
@@ -124,7 +125,7 @@ export const noStageWord: CreateRule = {
       },
       JSXText(node) {
         // The parser may leave `raw` out; the source between the node's ends is the same text.
-        const raw = node.raw ?? source.text.slice(node.range[0], node.range[1]);
+        const raw = node.raw ?? pipe(source.text, Str.slice(node.range[0], node.range[1]));
         lines(node, node.value, raw, node.range[0]);
       },
     };

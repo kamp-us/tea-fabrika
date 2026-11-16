@@ -10,6 +10,7 @@
 //
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.
+import { pipe, String as Str } from "effect";
 
 /** One finding, or one ledger entry: the same three keys. */
 export interface Finding {
@@ -30,11 +31,11 @@ export const LEDGERS: readonly Ledger[] = [
 ];
 
 /** A line of code as a ledger keys it: trimmed, each run of spaces one space. */
-export const fingerprint = (line: string): string => line.trim().replace(/\s+/g, " ");
+export const fingerprint = (line: string): string => pipe(line, Str.trim, Str.replace(/\s+/g, " "));
 
 /** The entries outside the ledger's folder: each one is refused, not read. */
 export const outside = (entries: readonly Finding[], root: string): readonly Finding[] =>
-  entries.filter((entry) => !entry.file.startsWith(root));
+  entries.filter((entry) => !pipe(entry.file, Str.startsWith(root)));
 
 const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]);
 
@@ -55,7 +56,7 @@ export const settle = (
   const open = new Map<string, number[]>();
 
   for (const [i, entry] of entries.entries()) {
-    if (entry.file.startsWith(root)) {
+    if (pipe(entry.file, Str.startsWith(root))) {
       open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
     }
   }

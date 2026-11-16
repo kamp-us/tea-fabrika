@@ -1,12 +1,13 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import { builtinModules } from "node:module";
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const builtins = new Set(builtinModules);
 
 const replacement = (module: string): string => {
-  switch (module.split("/")[0]) {
+  switch (pipe(module, Str.split("/"))[0]) {
     case "fs":
       return "effect/FileSystem (FileSystem)";
     case "path":
@@ -60,9 +61,9 @@ export const noNodeImports: CreateRule = {
         return;
       }
 
-      const module = value.replace(/^node:/, "");
+      const module = pipe(value, Str.replace(/^node:/, ""));
 
-      if (!value.startsWith("node:") && !builtins.has(module)) {
+      if (!pipe(value, Str.startsWith("node:")) && !builtins.has(module)) {
         return;
       }
 

@@ -22,6 +22,7 @@
 import { statSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import type { Node } from "./match.ts";
 
 const RELATIVE = /^\.\.?(?:\/|$)/;
@@ -43,7 +44,7 @@ const namesItsFile = (from: string, written: string): boolean => {
     return false;
   }
 
-  const stem = target.slice(0, -extname(target).length);
+  const stem = pipe(target, Str.slice(0, -extname(target).length));
   return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
 };
 

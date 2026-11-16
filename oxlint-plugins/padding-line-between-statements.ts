@@ -25,6 +25,7 @@
 // It has a whitespace autofix, which `pnpm format` applies: a newline after the line where the first
 // statement ends.
 import type { Context, CreateRule } from "@oxlint/plugins";
+import { Option, pipe, String as Str } from "effect";
 import type { Node } from "./match.ts";
 
 type Source = Context["sourceCode"];
@@ -131,10 +132,10 @@ const check = (
       continue;
     }
 
-    const between = source.text.slice(prev.range[1], next.range[0]);
-    const firstBreak = between.indexOf("\n");
+    const between = pipe(source.text, Str.slice(prev.range[1], next.range[0]));
+    const firstBreak = pipe(between, Str.indexOf("\n"));
 
-    if (firstBreak === -1) {
+    if (Option.isNone(firstBreak)) {
       continue;
     }
 
@@ -142,7 +143,7 @@ const check = (
       continue;
     }
 
-    report(prev, next, prev.range[1] + firstBreak + 1);
+    report(prev, next, prev.range[1] + firstBreak.value + 1);
   }
 };
 

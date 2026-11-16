@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -123,7 +124,7 @@ const plants: Plant[] = [
   ...(["changes", "check", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
     `F4: ${job}'s checkout keeps the token in .git/config`,
     (w) => {
-      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      const checkout = stepsOf(w, job).find((s) => pipe(String(s["uses"]), Str.startsWith("actions/checkout@")))!;
       Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
     },
   ]),

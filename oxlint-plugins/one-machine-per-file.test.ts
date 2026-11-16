@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -214,25 +215,27 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
       fc.constantFrom(...PURE_IMPORTS),
       (hasCall, exported, imports, pure) => {
         // Every line binds a unique name; the generated set may contain different spellings of Value.
-        const lines = [...imports, pure].map((s, i) => s.replaceAll("Value", `Value${i}`));
+        const lines = [...imports, pure].map((s, i) => pipe(s, Str.replaceAll("Value", `Value${i}`)));
         const errors = hasCall ? imports.map((_, i) => ({ line: i + 2, message: IO })) : [];
         check(
           [TEA, ...lines, hasCall ? `${exported ? "export " : ""}const m = Machine.make({});` : ""].join("\n"),
           errors,
         );
         check(
-          [TEA, ...lines.map((s) => s.replace("import ", "import type ")), "export const m = Machine.make({});"].join(
-            "\n",
-          ),
+          [
+            TEA,
+            ...lines.map((s) => pipe(s, Str.replace("import ", "import type "))),
+            "export const m = Machine.make({});",
+          ].join("\n"),
           [],
         );
         check(
           [
             TEA,
             ...lines.map((s) =>
-              s.startsWith("import {")
-                ? s.replace("import {", "import {type ").replaceAll(", ", ", type ")
-                : s.replace("import ", "import type "),
+              pipe(s, Str.startsWith("import {"))
+                ? pipe(s, Str.replace("import {", "import {type "), Str.replaceAll(", ", ", type "))
+                : pipe(s, Str.replace("import ", "import type ")),
             ),
             "const m = Machine.make({});",
           ].join("\n"),
@@ -427,7 +430,7 @@ it("scenario: L5 each real file copy refuses one added second export", async () 
   );
 
   for (const [p, s] of Object.entries(originals)) {
-    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
+    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), pipe(s, Str.split("\n")).length + 1]]);
   }
 });
 

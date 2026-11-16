@@ -1,5 +1,6 @@
 // P17's decode paths. Follow local aliases, including aliases of curried Schema decoders.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { ancestors, dotted, pathIn, type Node } from "./match.ts";
 
 const scoped =
@@ -253,10 +254,12 @@ export const outsideInputConstructor: CreateRule = {
         const args = node.arguments;
         const first = args[0];
         const curried = callee.type === "CallExpression" && sync.test(name(callee.callee) ?? "");
-        const type = call.split(".")[0] ?? "";
+        const type = pipe(call, Str.split("."))[0] ?? "";
         const added = /\/(?:data\/id|access\/Authorization|runtime\/(?:Nemesis|ChaosState))\.ts$/.test(pathIn(context));
         const constructor =
-          call.endsWith(".make") && !declarations.has(type) && (added || inputs.has(type) || inDecoder(node));
+          pipe(call, Str.endsWith(".make")) &&
+          !declarations.has(type) &&
+          (added || inputs.has(type) || inDecoder(node));
         const throwing = constructor || sync.test(call) || curried;
 
         if (!idMake && !throwing) {

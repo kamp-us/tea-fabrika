@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Schema, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -151,8 +151,8 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 it("a push keeps its two event trees and refuses failed diff, tree or blob reads", () => {
   fc.assert(
     fc.property(fc.string(), fc.string(), fc.boolean(), fc.boolean(), (baseText, headText, existed, remains) => {
-      const base = "b".repeat(40),
-        head = "c".repeat(40),
+      const base = pipe("b", Str.repeat(40)),
+        head = pipe("c", Str.repeat(40)),
         file = "field/notes.jsonl";
       const calls: string[][] = [];
       const run = (args: string[]) => {
@@ -164,7 +164,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
               ? (args[4] === base ? existed : remains)
                 ? `${file}\0`
                 : ""
-              : args[1]?.startsWith(base)
+              : args[1] !== undefined && pipe(args[1], Str.startsWith(base))
                 ? baseText
                 : headText;
         return { status: 0, stdout };
@@ -224,7 +224,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 
             expect(git(["add", "-A"]).status).toBe(0);
             expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
-            return git(["rev-parse", "HEAD"]).stdout.trim();
+            return pipe(git(["rev-parse", "HEAD"]).stdout, Str.trim);
           };
           expect(git(["init", "-q", "-b", "main"]).status).toBe(0);
           const runs = "field/runs.jsonl";
@@ -280,7 +280,7 @@ it("ticket 988: the local reader gives the field job's inputs once the tree is c
           const commit = (message: string) => {
             expect(git(["add", "-A"]).status).toBe(0);
             expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
-            return git(["rev-parse", "HEAD"]).stdout.trim();
+            return pipe(git(["rev-parse", "HEAD"]).stdout, Str.trim);
           };
           expect(git(["init", "-q", "-b", "main"]).status).toBe(0);
 
@@ -320,7 +320,7 @@ it("ticket 988: the local reader gives the field job's inputs once the tree is c
 
           write("docs/b.md", "not a row\n");
           const local = checker.readLocalFieldFiles("main", git);
-          const base = git(["rev-parse", "main"]).stdout.trim();
+          const base = pipe(git(["rev-parse", "main"]).stdout, Str.trim);
           const head = commit("the writer commits");
           const sorted = <A extends { file: string }>(inputs: readonly A[]) =>
             inputs.toSorted((a, b) => (a.file < b.file ? -1 : 1));
@@ -357,7 +357,7 @@ it("a run row written before the plan change passes without note", () => {
     Arbitrary.checkEffect(
       Arbitrary.all([Arbitrary.schema(Run), daysBack]),
       ([row, back]) => {
-        const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
+        const date = pipe(new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString(), Str.slice(0, 10));
         const old = Object.fromEntries(Object.entries(own({ ...row, date }, "run")).filter(([key]) => key !== "note"));
         const report = checker.checkFile(fileOf("runs"), "", `${JSON.stringify(old)}\n`);
         return report.exitCode === 0 && report.findings.every((f) => f._tag !== "error") && report.added === 1;
@@ -442,8 +442,11 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
         ];
         return (
           errors.every((bad) => checker.checkFile(fileOf("runs"), "", `${JSON.stringify(bad)}\n`).exitCode !== 0) &&
-          checker.checkFile(fileOf("runs"), "", JSON.stringify(row).replace(/"tokens":[^,}]*/, '"tokens":1e999'))
-            .exitCode !== 0
+          checker.checkFile(
+            fileOf("runs"),
+            "",
+            pipe(JSON.stringify(row), Str.replace(/"tokens":[^,}]*/, '"tokens":1e999')),
+          ).exitCode !== 0
         );
       },
       schemaOptions,
@@ -673,7 +676,7 @@ it("a finding's unusual sha, references and path, and a rating's unusual finding
           ["head", "ticket", "pr", "location"].every((field) => warned(found).includes(field)) &&
           warned(rating).includes("finding") &&
           pointed.every((report) => report.exitCode === 0 && !warned(report).includes("finding")) &&
-          found.annotations.every((a) => !a.includes(marker))
+          found.annotations.every((a) => !pipe(a, Str.includes(marker)))
         );
       },
       schemaOptions,
@@ -702,7 +705,7 @@ it("every line added to an old log fails at its head line, and an untouched one 
         expect(report.findings.map((f) => [f._tag, f.field, f.line])).toEqual(
           extra.map((_, i) => ["error", "row", base.length + i + 1]),
         );
-        expect(report.annotations.every((a) => a.includes(`field/${log}/<date>-<slug>.json`))).toBe(true);
+        expect(report.annotations.every((a) => pipe(a, Str.includes(`field/${log}/<date>-<slug>.json`)))).toBe(true);
         expect(checker.checkFile(file, text(base), text(base))).toMatchObject({ exitCode: 0, added: 0, findings: [] });
       },
     ),
@@ -826,8 +829,8 @@ it("the field job reads the old logs and every path in a log's folder", () => {
     ["tools/field/runs/2026-11-11-a.json", false],
   ];
   const paths = vectors.map(([path]) => path);
-  const base = "b".repeat(40),
-    head = "c".repeat(40);
+  const base = pipe("b", Str.repeat(40)),
+    head = pipe("c", Str.repeat(40));
   const run = (args: string[]) => ({
     status: 0,
     stdout:

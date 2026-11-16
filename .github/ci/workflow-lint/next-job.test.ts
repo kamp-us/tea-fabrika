@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -107,7 +108,7 @@ const plants: Plant[] = [
   [
     "review: SHARD matrix.sha rd",
     (w) => {
-      step(w, "next", "vitest").env!.SHARD = vitestShard().replace("matrix.shard", "matrix.sha rd");
+      step(w, "next", "vitest").env!.SHARD = pipe(vitestShard(), Str.replace("matrix.shard", "matrix.sha rd"));
     },
   ],
   ...(
@@ -120,14 +121,14 @@ const plants: Plant[] = [
     `review: ${label} guard matrix.sha rd`,
     (w) => {
       const found = step(w, "next", named);
-      found.if = found.if!.replace("matrix.shard", "matrix.sha rd");
+      found.if = pipe(found.if!, Str.replace("matrix.shard", "matrix.sha rd"));
     },
   ]),
   [
     "review: Chromium path next/ **",
     (w) => {
       const chromium = step(w, "next", "chromium");
-      chromium.if = chromium.if!.replace("next/**", "next/ **");
+      chromium.if = pipe(chromium.if!, Str.replace("next/**", "next/ **"));
     },
   ],
   // 0536, E10 and E11. Each plant was run once on the real check.yaml too, and restored.
@@ -140,27 +141,27 @@ const plants: Plant[] = [
   [
     "E10: the full fallback runs on main too, as before the schedule",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'push' || ${visualLabel})`,
+      w.jobs.next.strategy.matrix.shard = pipe(
+        w.jobs.next.strategy.matrix.shard,
+        Str.replace(visualLabel, `(github.event_name == 'push' || ${visualLabel})`),
       );
     },
   ],
   [
     "E10: the full fallback runs in the merge queue",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'merge_group' || ${visualLabel})`,
+      w.jobs.next.strategy.matrix.shard = pipe(
+        w.jobs.next.strategy.matrix.shard,
+        Str.replace(visualLabel, `(github.event_name == 'merge_group' || ${visualLabel})`),
       );
     },
   ],
   [
     "E10: the full fallback runs on any pull request",
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        "github.event_name == 'pull_request'",
+      w.jobs.next.strategy.matrix.shard = pipe(
+        w.jobs.next.strategy.matrix.shard,
+        Str.replace(visualLabel, "github.event_name == 'pull_request'"),
       );
     },
   ],
@@ -174,21 +175,21 @@ const plants: Plant[] = [
     "E11: the vitest step runs next-integration too",
     (w) => {
       const found = step(w, "next", "vitest");
-      found.run = String(found.run).replace("--project next ", "--project next --project next-integration ");
+      found.run = pipe(String(found.run), Str.replace("--project next ", "--project next --project next-integration "));
     },
   ],
   [
     "E11: the vitest step loses its project, so it runs every one",
     (w) => {
       const found = step(w, "next", "vitest");
-      found.run = String(found.run).replace("--project next ", "");
+      found.run = pipe(String(found.run), Str.replace("--project next ", ""));
     },
   ],
   [
     "E11: main runs next-integration through an env, as the bridge before the schedule did",
     (w) => {
       const found = step(w, "next", "vitest");
-      found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      found.run = pipe(String(found.run), Str.replace("--project next ", "$PROJECTS "));
       (found["env"] as Record<string, string>)["PROJECTS"] =
         `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
     },
@@ -197,7 +198,7 @@ const plants: Plant[] = [
     "review: edges event pull_ request",
     (w) => {
       const edges = step(w, "next", "edges");
-      edges.if = edges.if!.replace("pull_request", "pull_ request");
+      edges.if = pipe(edges.if!, Str.replace("pull_request", "pull_ request"));
     },
   ],
   // E1's legs (T967, after LE1). Each list is one fault, and the end-to-end step's `/N` is set to the
@@ -238,7 +239,7 @@ const plants: Plant[] = [
       setLegs(
         w,
         legsOf(w).filter(
-          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && pipe(l, Str.startsWith("e2e-"))).at(-1),
         ),
       );
     },
@@ -247,7 +248,7 @@ const plants: Plant[] = [
     "next adds an e2e leg and keeps its /N",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => typeof leg === "string" && pipe(leg, Str.startsWith("e2e-"))).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
       setLegs(w, legs);
     },
@@ -290,14 +291,14 @@ const plants: Plant[] = [
     `next end-to-end step loses ${flag}`,
     (w) => {
       const e2e = step(w, "next", "end to end");
-      e2e.run = e2e.run.replace(flag, "");
+      e2e.run = pipe(e2e.run, Str.replace(flag, ""));
     },
   ]),
   [
     "next end-to-end step passes the whole leg name",
     (w) => {
       const e2e = step(w, "next", "end to end");
-      e2e.run = e2e.run.replace(`"\${SHARD#e2e-}"`, '"$SHARD"');
+      e2e.run = pipe(e2e.run, Str.replace(`"\${SHARD#e2e-}"`, '"$SHARD"'));
     },
   ],
   // E2's guard: exactly `startsWith(matrix.shard, 'e2e-')`.
@@ -437,7 +438,7 @@ const plants: Plant[] = [
     `next loses ${flag}`,
     (w) => {
       const vitest = step(w, "next", "vitest");
-      vitest.run = vitest.run.replace(flag, "");
+      vitest.run = pipe(vitest.run, Str.replace(flag, ""));
     },
   ]),
   ...["missing", "duplicate", "before tests", "wrong report"].map((fault): [string, (w: Workflow) => void] => [
@@ -544,13 +545,13 @@ const plants: Plant[] = [
   [
     "next runs all of next/ whatever filter says",
     (w) => {
-      step(w, "next", "vitest").run = step(w, "next", "vitest").run.replace("$FILTER", "next/");
+      step(w, "next", "vitest").run = pipe(step(w, "next", "vitest").run, Str.replace("$FILTER", "next/"));
     },
   ],
   [
     "next quotes its path, so the reader paths are one argument",
     (w) => {
-      step(w, "next", "vitest").run = step(w, "next", "vitest").run.replace("$FILTER", '"$FILTER"');
+      step(w, "next", "vitest").run = pipe(step(w, "next", "vitest").run, Str.replace("$FILTER", '"$FILTER"'));
     },
   ],
   [
@@ -587,7 +588,7 @@ const plants: Plant[] = [
     "next's vitest step narrows legs's files with 1230's --changed",
     (w) => {
       const step = w.jobs.next.steps[0]!;
-      step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      step.run = pipe(step.run, Str.replace("$FILTER ", "$FILTER $CHANGED "));
       (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
     },
   ],
@@ -654,7 +655,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
       const env = step(w, "next", "vitest").env!;
 
       if (env.SHARD !== undefined) {
-        env.SHARD = env.SHARD.replace(/\|\| 5(\s*\}\})$/, "|| 6$1");
+        env.SHARD = pipe(env.SHARD, Str.replace(/\|\| 5(\s*\}\})$/, "|| 6$1"));
       }
     },
     "next's vitest step passes --shard <leg>/<the count of numbered legs>",
@@ -669,7 +670,10 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "the end-to-end step back on leg 1",
     (w) => {
-      step(w, "next", "end to end").if = step(w, "next", "end to end").if!.replace(onE2e, "matrix.shard == '1'");
+      step(w, "next", "end to end").if = pipe(
+        step(w, "next", "end to end").if!,
+        Str.replace(onE2e, "matrix.shard == '1'"),
+      );
     },
     `next runs ${e2eCommand} once, only on the e2e legs, with its pinned condition`,
   ],
@@ -686,7 +690,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "the e2e legs written out of order",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => typeof leg === "string" && pipe(leg, Str.startsWith("e2e-"))).length;
       legs.splice(0, count, ...legs.slice(0, count).toReversed());
 
       // One e2e leg cannot be out of order, so a second one comes first.

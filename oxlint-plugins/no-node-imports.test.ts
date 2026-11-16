@@ -1,6 +1,7 @@
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
 import { join } from "node:path";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -40,7 +41,7 @@ const cli = async (cases: ReadonlyMap<string, Case>) => {
 };
 
 /** The path the one oxlint run reads run `n`'s file at: its name gets the number, its folder stays. */
-const numbered = (path: string, n: number) => path.replace(/native/, `native${n}`);
+const numbered = (path: string, n: number) => pipe(path, Str.replace(/native/, `native${n}`));
 
 it("every native import form needs a nonempty reason on its own line, in product and exam code", async () => {
   let n = 0;
@@ -104,7 +105,7 @@ it("every native import form needs a nonempty reason on its own line, in product
             ` /* edge: ${reason} */`,
             ` // not edge: ${reason}`,
           ].map((mark, j) => {
-            const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
+            const unique = pipe(form, Str.replace(/\b(a|A|X|x)\b/g, `$&${i}_${j}`));
             return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
           }),
         );

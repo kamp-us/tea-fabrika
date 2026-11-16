@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
+import { pipe, String as Str } from "effect";
 import { parse } from "yaml";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
@@ -34,10 +35,8 @@ const ELSEWHERE = /(?:^|\s)(?:--config|-c|--root|-r|--dir|--workspace)(?:[=\s]|$
 
 /** A step's script as shell commands: `\`-continued lines joined, then cut at every separator. */
 const shellCommands = (script: string) =>
-  script
-    .replace(/\\\r?\n/g, " ")
-    .split(/\n|&&|\|\||[;&|]/)
-    .map((part) => part.trim())
+  pipe(script, Str.replace(/\\\r?\n/g, " "), Str.split(/\n|&&|\|\||[;&|]/))
+    .map((part) => pipe(part, Str.trim))
     .filter((part) => part !== "");
 
 /**
@@ -63,7 +62,7 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
         const folder = typeof step["working-directory"] === "string" ? step["working-directory"] : "";
         const inside =
           /^next\//.test(folder) &&
-          !folder.split("/").includes("..") &&
+          !pipe(folder, Str.split("/")).includes("..") &&
           !parts.some((part) => /^(?:cd|pushd)\b/.test(part));
         return parts
           .filter((part) => VITEST_CALL.test(part))
@@ -74,10 +73,11 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
               const runner = name === "RUNNER_TEMP" && !(name in set);
               return runner || (pinned !== undefined && pinned(env[name])) ? "" : whole;
             });
-            const projects = [...part.matchAll(/--project(?:=|\s+)(\S+)/g)].map((found) => found[1] ?? "");
+            const projects = [...pipe(part, Str.matchAll(/--project(?:=|\s+)(\S+)/g))].map((found) => found[1] ?? "");
             const named =
               projects.length > 0 && projects.every((project) => /^next(?:-|$)/.test(project)) && !ELSEWHERE.test(part);
-            const kept = inside && !part.split(/\s+/).some((word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
+            const kept =
+              inside && !pipe(part, Str.split(/\s+/)).some((word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
             return /[$`]/.test(bare) || !(named || kept);
           });
       }),

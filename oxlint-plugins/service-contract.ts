@@ -3,6 +3,7 @@
 // methods and fields, runtime exports, type-only imports, schema declarations, sibling layers.
 // Oxlint's restricted-imports cannot distinguish a service class from its implementation.
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe, String as Str } from "effect";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 const CONTRACT = /\/desktop\/(BrainService|BrainControl|BrainProbe)\.ts$/;
@@ -15,7 +16,7 @@ export const serviceContract: CreateRule = {
     const file = pathIn(context);
     const contract = CONTRACT.test(file);
 
-    if (!file.startsWith("next/packages/libfabrika/src/desktop/")) {
+    if (!pipe(file, Str.startsWith("next/packages/libfabrika/src/desktop/"))) {
       return {};
     }
 
@@ -28,10 +29,10 @@ export const serviceContract: CreateRule = {
 
       if (node.type === "CallExpression") {
         const name = dotted(node.callee);
-        return name !== null && schemas.has(name.split(".")[0] ?? "");
+        return name !== null && schemas.has(pipe(name, Str.split("."))[0] ?? "");
       }
 
-      return node.type === "MemberExpression" && schemas.has(dotted(node)?.split(".")[0] ?? "");
+      return node.type === "MemberExpression" && schemas.has(pipe(dotted(node) ?? "", Str.split("."))[0]);
     };
     return {
       ImportDeclaration(node) {

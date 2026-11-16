@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { Option, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
@@ -35,8 +36,8 @@ const tree = new Map(
     .map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
 
-const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
-const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
+const scripts = [...tree.keys()].filter((path) => !pipe(path, Str.endsWith(".test.ts")));
+const tests = [...tree.keys()].filter((path) => pipe(path, Str.endsWith(".test.ts")));
 
 // Independent expected readers: follow source names, not the derivation under test.
 // This intentionally shares its over-match of names in comments and fixture strings. A name may
@@ -47,7 +48,9 @@ const readers = new Map(
     const queue = [test];
 
     for (const path of queue) {
-      const names = new Set((tree.get(path) ?? "").match(/[\w.-]+\.(?:sh|py|mjs|ts|json)\b/g));
+      const names = new Set(
+        pipe(tree.get(path) ?? "", Str.match(/[\w.-]+\.(?:sh|py|mjs|ts|json)\b/g), Option.getOrNull),
+      );
 
       for (const script of scripts) {
         if (names.has(basename(script)) && !reached.has(script)) {
@@ -64,7 +67,7 @@ const readers = new Map(
 // Unreferenced scripts have no reader, as the plan's final limits section says.
 const readScripts = scripts.filter((script) => [...readers.values()].some((paths) => paths.has(script)));
 
-const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("/scripts/"));
+const markdown = files.filter((path) => pipe(path, Str.endsWith(".md")) && !pipe(path, Str.includes("/scripts/")));
 const options = { seed: 119120, numRuns: 20 };
 let vitest: Vitest;
 
@@ -134,15 +137,16 @@ describe("next workflow coverage", () => {
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const nextWorkflow = parse(workflow).jobs.next;
   const indices = vitestLegs(workflow);
-  const expression: string = nextWorkflow.steps.find((step: { run?: string }) =>
-    step.run?.startsWith("pnpm exec vitest run --project next $FILTER "),
+  const expression: string = nextWorkflow.steps.find(
+    (step: { run?: string }) =>
+      step.run !== undefined && pipe(step.run, Str.startsWith("pnpm exec vitest run --project next $FILTER ")),
   )?.env.SHARD;
   // The full matrix's count, the fallback in `/${{ needs.changes.outputs.vitest-legs || N }}`; a sized pull
   // request's own count is legs.ts's, whose split legs.test.ts covers.
   const denominator = Number(/\|\|\s*([1-9]\d*)\s*\}\}$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];
   let nextSpecs: TestSpecification[];
-  const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
+  const repoPath = (spec: TestSpecification) => pipe(relative(root, spec.moduleId), Str.replaceAll("\\", "/"));
   const partition = async (specs: TestSpecification[]) => {
     const kept: string[][] = [];
 
@@ -160,7 +164,9 @@ describe("next workflow coverage", () => {
   beforeAll(async () => {
     const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
     contexts.push(baseline);
-    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
+    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) =>
+      pipe(repoPath(spec), Str.startsWith("next/")),
+    );
 
     for (const index of indices) {
       contexts.push(
