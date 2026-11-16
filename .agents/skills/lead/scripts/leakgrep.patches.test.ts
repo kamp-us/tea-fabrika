@@ -124,6 +124,7 @@ const patchFile = fc
       ].map((text) => ({ text, added: false })),
       ...hunks.flat(),
     ]);
+
     return {
       lines: all.map(({ text }) => text),
       added: all.flatMap(({ added }, n) => (added ? [n] : [])),
