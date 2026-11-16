@@ -214,8 +214,16 @@ export class Locks extends Context.Service<
    `pid <n>` alone when `ps` cannot read the args), sleep 250 ms, go to 1.
 4. `stale`: take `<lock>.break` by the same `link` step. Inside it, look and `judge` again; if still
    stale, remove `<lock>` and `<lock>.child`, then release `.break` and go to 1 at once. If
-   `.break` is held by a live process, go to 3 without a line. A `.break` whose holder is gone is
-   removed directly: that only races if two breakers both died inside a few milliseconds.
+   `.break` is held by a live process, go to 3 without a line. A dead `.break` is broken the same
+   way, under `<lock>.break.break`: Mercurial's `_testlock` (`mercurial/lock.py`, read at 7.2.4)
+   takes `.break` as a lock itself, `lock(self.vfs, self.f + b'.break', timeout=0)`, so that lock's
+   own `_trylock` breaks a dead `.break` under its own `.break`, and `timeout=0` means a held one is
+   never waited on. (Amended 2026-11-16, fix round; see the amendment below.)
+
+   **Wrong** (the plan's first text, kept as a record): "A `.break` whose holder is gone is removed
+   directly: that only races if two breakers both died inside a few milliseconds." One dead breaker
+   is enough for two live holders; the review found it on 2026-11-16
+   (`field/runs/2026-11-16-t766-port-typecheck-review.json`).
 5. The scope's finalizer (after the child is waited for): remove `<lock>.child`, then read the
    label and remove it only if it is `<pid>\n`.
 
@@ -745,6 +753,114 @@ line is not changed: the new work is one more lint block and two small files.
   has no `exports`. The tests step's `pnpm lint` shows it.
 - The scratch run proved a one-tea program passes; it did not run `pnpm -r typecheck` with the new
   package, which the build and the lead do.
+
+## Amendment, 2026-11-16 (fix round): a dead `.break` is broken under its own `.break`
+
+**Why.** The one review, at `abfac52`, sent the quest back
+(`field/runs/2026-11-16-t766-port-typecheck-review.json`). Step 4 of "The lock" said a `.break`
+whose holder is gone may be removed directly, because "that only races if two breakers both died
+inside a few milliseconds". That is wrong: one dead breaker is enough. The review's order, with
+breaker D killed by SIGKILL while it held `<lock>.break`, the old holder gone, and two live takers
+B and C:
+
+1. C reads the dead `.break`: stale.
+2. B reads it too, removes it, and links its own `.break`.
+3. C removes B's live `.break` (the direct remove) and links its own.
+4. Under their own `.break`, each looks and sees the old label stale.
+5. B removes the label and links its own: B holds the lock.
+6. C removes B's live label and links its own: C holds it too. Two type checks run at once,
+   against 0410's rule.
+
+The review ran this on the tests' in-memory disk, ordered by `Deferred` gates: both `hold` calls
+returned. Law N3 kills only holders, never a breaker, so it cannot reach the case. The comment at
+`scripts/typecheck/LocksFile.ts:100` repeats the wrong claim; the build fixes it.
+
+**The lead's ruling.** Step 4's sentence becomes "a dead `.break` is broken the same way, under
+`<lock>.break.break`", as Mercurial does. In `mercurial/lock.py` at 7.2.4, `_testlock` (lines
+374-386) breaks a dead lock only inside `with lock(self.vfs, self.f + b'.break', timeout=0):`. That
+inner `lock` is a lock like any other, so its own `_trylock` (lines 297-343) meets a dead `.break`
+with EEXIST, calls its own `_testlock`, and breaks it under `.break.break`. `timeout=0` means a
+`.break` held by a live process is never waited on: the caller reports the lock held and tries
+again later. The old sentence stays in step 4, marked **Wrong**. Decision 0567 also covers these
+files: `records.ts resolve 0567 0033 0410` (2026-11-16) prints all three accepted. 0567 holds in
+"our tooling", 0033 puts lead tooling under `next/`'s rules, and the lead-tooling lint block
+already names `scripts/typecheck*`. The lead accepted that scope.
+
+This amendment replaces step 4 and the `LocksFile.ts` row where they differ. Everything else
+stands.
+
+```ts
+// scripts/typecheck/LocksFile.ts, sketch: breaking is the same step at every depth.
+// breakStale(path) takes `<path>.break` by the link step and, under it, removes `path` if it is
+// still stale. A dead `.break` is broken by breakStale(`<path>.break`), under `<path>.break.break`.
+const breakStale = (path: string): Effect.Effect<"busy" | "again", LockError> =>
+  Effect.gen(function* () {
+    const breaker = `${path}.break`;
+    if (!(yield* link(path, breaker))) {
+      return yield* Seen.match(yield* look(breaker, false), {
+        held: () => Effect.succeed("busy" as const), // a live breaker: never waited on, never removed
+        stale: () => breakStale(breaker).pipe(Effect.as("again" as const)), // was fs.remove(breaker)
+        free: () => Effect.succeed("again" as const),
+      });
+    }
+    // under our own `.break`: look again, remove `path` (and `.child` for the lock) if still stale;
+    // on the way out, remove `breaker` only if it still names this process, as step 5 does.
+  });
+```
+
+Traced on the fixed code, the same start: C and B both read the dead `.break`. B takes
+`.break.break`, looks at `.break` again (still stale), removes it, releases `.break.break`, and goes
+to step 1 of "The lock". C takes `.break.break` next and looks at `.break` again: it is now free or
+B's live one, so C removes nothing and goes back to step 1. Only one of them can link `.break`, so
+only one breaks the old label and only one holds the lock.
+
+### Laws, changed and new
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where |
+|---|---|---|---|---|
+| N7, new: a `.break` left by a dead breaker, a gone holder's label, and two live takers B and C, run in the review's order by `Deferred` gates on the in-memory FileSystem, never give two live holders: one `hold` returns, the other waits until it is released, then holds. Red on today's code at `e63d54c` | test | scenario: the review's order, 1 to 6 above | on the fixed code, put back `fs.remove(breaker)` for a stale `.break`: both hold, red | scripts/typecheck-lock.test.ts |
+| L3, new: no `scripts/typecheck*` file compares `_tag` by hand (0567); `anti-slop-effect/no-manual-tag-comparison` covers them | lint | lint | a `seen._tag === "held"` put back in `LocksFile.ts`: `pnpm lint` fails | .oxlintrc.json |
+
+No law is loosened or moved. N3 and N4 stay as written.
+
+### Who does what next
+
+- **The tests step** writes N7 in `scripts/typecheck-lock.test.ts` and shows it red on today's code.
+  It turns the 16 hand `_tag` comparisons in `scripts/typecheck.test.ts` (6) and
+  `scripts/typecheck-lock.test.ts` (10) into the unions' matchers or `Predicate.isTagged`. It adds
+  `scripts/typecheck.ts`, `scripts/typecheck/**`, `scripts/typecheck.test.ts` and
+  `scripts/typecheck-lock.test.ts` to the
+  `anti-slop-effect/no-manual-tag-comparison` block in `.oxlintrc.json` (L3). L3 is then red on
+  the 8 product hits, which are the build's. It runs L3's plant on a test file once and records it
+  in its row.
+- **The build** calls `breakStale(breaker)` in place of `fs.remove(breaker)` for a dead `.break`,
+  and never removes a live `.break` that is not its own: the release of `.break` removes it only
+  when it still names this process. It fixes the comment at `LocksFile.ts:100`. It turns the 8
+  product `_tag` comparisons into the unions' matchers (`Seen.match`, `Liveness.match`,
+  `Listing.match`) or `Predicate.isTagged`: `LocksFile.ts:19, 104, 108, 117, 168, 175`,
+  `Look.ts:84` and `Typecheck.ts:69`. `NodeModulesFs.ts:20` sits inside `Effect.catchIf`, which the
+  rule skips, and may stay. Then N7, N3, N4 and `pnpm lint` are green, and the build runs N7's
+  plant once and records it in its row.
+- **The same reviewer** rechecks (0177).
+
+### Files, amended
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| `scripts/typecheck-lock.test.ts` | tests | tests | N7, and its 10 comparisons matched |
+| `scripts/typecheck.test.ts` | tests | tests | its 6 comparisons matched |
+| `.oxlintrc.json` | tests | 3 | the `scripts/typecheck*` globs in the 0567 block (L3) |
+| `scripts/typecheck/LocksFile.ts` | build | 20 | `breakStale` at every depth, `.break` released only when its own, 6 comparisons matched |
+| `scripts/typecheck/Look.ts`, `scripts/typecheck/Typecheck.ts` | build | 4 | one comparison each matched |
+
+About 27 product lines more than "Size" says. The quest's budget line is not changed: this is the
+one fix round it priced.
+
+### What this amendment cannot tell us
+
+- Whether a chain of dead breakers deeper than one (`.break.break` left by a second SIGKILL) shows
+  up in practice. The recursion handles any depth; N7 runs one.
+- The Mercurial reading is from its source, not a run of Mercurial.
 
 ## Findings
 
