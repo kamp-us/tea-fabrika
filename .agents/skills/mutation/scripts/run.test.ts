@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 
 // Today's tooling. Only the labeled package-import scenario starts real Stryker.
 const script = join(import.meta.dirname, "run.sh");
+
 const root = join(import.meta.dirname, "../../../..");
+
 const options = { seed: 300, numRuns: 8 };
 
 const helper = String.raw`
@@ -61,8 +63,10 @@ type Inputs = { T?: string; BUILD?: string; RELATED?: string; IN_PLACE?: string;
 const fixture = (setup: Setup, inputs: Inputs) => {
   expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
   const dir = mkdtempSync(join(tmpdir(), "mut-command-"));
+
   const bin = join(dir, "bin"),
     temp = join(dir, "tmp");
+
   mkdirSync(bin);
   mkdirSync(temp);
   writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
@@ -88,6 +92,7 @@ const fixture = (setup: Setup, inputs: Inputs) => {
     join(dir, "vitest.config.ts"),
     'export const testConfig = {test: {include: ["all/**/*.test.ts"], exclude: ["keep-me"]}};\nexport default testConfig;\n',
   );
+
   return {
     dir,
     temp,
@@ -136,10 +141,12 @@ const run = (setup: Setup, inputs: Inputs) => {
       encoding: "utf8",
       timeout: 10_000,
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
     const sample = join(f.dir, "sample-calls.jsonl");
     const limits = join(f.dir, "limit-calls.jsonl");
+
     return {
       code: ran.status,
       text: ran.stdout + ran.stderr,
@@ -166,6 +173,7 @@ const run = (setup: Setup, inputs: Inputs) => {
 const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ESRCH") {
@@ -195,6 +203,7 @@ describe("mutation command, today's tooling", () => {
           .replace('"vitest/config"', JSON.stringify(import.meta.resolve("vitest/config"))),
       );
       const vite = createRequire(import.meta.resolve("vitest/package.json")).resolve("vite");
+
       const imported = spawnSync(
         process.execPath,
         [
@@ -220,6 +229,7 @@ console.log(JSON.stringify(resolved.test));
           },
         },
       );
+
       expect(imported.status, imported.stderr).toBe(0);
       expect(JSON.parse(imported.stdout)).toMatchObject({
         include: ["math.test.ts"],
@@ -266,10 +276,12 @@ console.log(JSON.stringify(resolved.test));
         }),
         ({ ticket, build, tests, line }) => {
           const range = `src/math.ts:${line}:0-${line}:30`;
+
           const got = run(
             { ...defaults, ranges: [JSON.stringify(range)] },
             { T: `${ticket}`, BUILD: build, RELATED: tests.join(",") },
           );
+
           expect(got.code, got.text).toBe(0);
           expect(got.invocation, "Stryker must start").toBeDefined();
           const call = got.invocation!;
@@ -296,6 +308,7 @@ console.log(JSON.stringify(resolved.test));
           ]);
           // Evaluate the emitted config with only its two imports replaced by local bindings.
           const source = call.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
+
           const config = new Function("base", "defineConfig", "process", source)(
             { test: { include: ["all/**/*.test.ts"], exclude: ["keep-me"] } },
             (x: unknown) => x,
@@ -309,6 +322,7 @@ console.log(JSON.stringify(resolved.test));
               hookTimeout: number;
             };
           };
+
           expect(config.test.include).toEqual(tests);
           expect(config.test.maxWorkers).toBe(1);
           expect(config.test.testTimeout).toBe(10_000);
@@ -342,13 +356,16 @@ console.log(JSON.stringify(resolved.test));
             { ...defaults, limit: { out: `${ms}\n`, exit: 0 } },
             { T: "605", BUILD: "abc1234", RELATED: "math.test.ts", BASELINE: baseline },
           );
+
           expect(got.code, got.text).toBe(0);
           expect(got.limits).toEqual([[".agents/skills/mutation/scripts/limit.ts", baseline]]);
           expect(got.invocation!.limit).toBe(String(ms));
           const source = got.invocation!.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
+
           const config = new Function("base", "defineConfig", "process", source)({ test: {} }, (x: unknown) => x, {
             env: { RELATED: "math.test.ts", TEST_LIMIT: got.invocation!.limit },
           }) as { test: { testTimeout: number; hookTimeout: number } };
+
           expect(config.test.testTimeout).toBe(ms);
           expect(config.test.hookTimeout).toBe(ms);
         },
@@ -369,6 +386,7 @@ console.log(JSON.stringify(resolved.test));
             { ...defaults, limit },
             { T: "605", BUILD: "abc1234", RELATED: "math.test.ts", BASELINE: "/out/baseline.json" },
           );
+
           expect(got.code).not.toBe(0);
           expect(got.invocation, "Stryker must not start").toBeUndefined();
           expect(got.configLeft).toBe(false);
@@ -461,6 +479,7 @@ console.log(JSON.stringify(resolved.test));
             encoding: "utf8",
             timeout: 10_000,
           });
+
           expect(ran.status, ran.stdout + ran.stderr).toBe(exit);
           pids = JSON.parse(readFileSync(join(f.dir, "pids.json"), "utf8"));
 
@@ -487,12 +506,14 @@ console.log(JSON.stringify(resolved.test));
     await fc.assert(
       fc.asyncProperty(fc.constantFrom("SIGTERM", "SIGINT"), async (signal) => {
         const f = fixture({ ...defaults, hold: true }, { T: "300", BUILD: "abc1234", RELATED: "math.test.ts" });
+
         const child = spawn("sh", [f.script], {
           cwd: f.dir,
           env: f.env,
           detached: true,
           stdio: ["ignore", "pipe", "pipe"],
         });
+
         let output = "";
         child.stdout.on("data", (data) => {
           output += data;
@@ -511,10 +532,12 @@ console.log(JSON.stringify(resolved.test));
           expect(existsSync(join(f.dir, "pids.json")), `Stryker child must have started: ${output}`).toBe(true);
           pids = JSON.parse(readFileSync(join(f.dir, "pids.json"), "utf8"));
           child.kill(signal);
+
           const code = await Promise.race([
             done,
             new Promise<string>((r) => setTimeout(() => r("still running"), 3_000)),
           ]);
+
           expect(code, output).not.toBe("still running");
           expect(code, output).not.toBe(0);
 
@@ -581,6 +604,7 @@ console.log(JSON.stringify(resolved.test));
       expect(emitted, "run.sh must emit the shared-config import").toBeDefined();
       const wrapper = join(dir, "vitest.mutation.config.ts");
       writeFileSync(wrapper, emitted!);
+
       const imported = spawnSync(
         process.execPath,
         [
@@ -594,6 +618,7 @@ console.log(JSON.stringify(resolved.test));
           env: { ...process.env, RELATED: "math.test.ts", TYPESAFE_API_KEY: undefined },
         },
       );
+
       expect(imported.status, imported.stderr).toBe(0);
       expect(JSON.parse(imported.stdout)).toEqual(["math.test.ts"]);
       rmSync(wrapper);
@@ -613,21 +638,27 @@ console.log(JSON.stringify(resolved.test));
           encoding: "utf8",
           timeout: 5_000,
         });
+
         expect(ran.status, ran.stderr).toBe(0);
+
         return ran.stdout.trim();
       };
+
       git("init", "-q");
       git("config", "user.name", "Fixture");
       git("config", "user.email", "fixture@example.test");
       git("add", "package.json", "src", "math.test.ts", "unrelated.test.ts", "vitest.config.ts");
       git("commit", "-qm", "fixture");
+
       // Record only this fixture's Node children, so a timeout never leaves Stryker behind.
       const pidFile = join(dir, "children.jsonl"),
         hook = join(dir, "record-child.mjs");
+
       writeFileSync(
         hook,
         'import {appendFileSync} from "node:fs";\nappendFileSync(process.env.T300_PID_FILE, JSON.stringify(process.pid) + "\\n");\n',
       );
+
       const child = spawn("sh", [command], {
         cwd: dir,
         stdio: ["ignore", "pipe", "pipe"],
@@ -643,19 +674,24 @@ console.log(JSON.stringify(resolved.test));
           NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${pathToFileURL(hook).href}`,
         },
       });
+
       let output = "",
         cap: ReturnType<typeof setTimeout> | undefined;
+
       child.stdout.on("data", (data) => {
         output += data;
       });
       child.stderr.on("data", (data) => {
         output += data;
       });
+
       const done = new Promise<number | null>((resolve, reject) => {
         child.once("exit", resolve);
         child.once("error", reject);
       });
+
       let status: number | null | "deadline";
+
       const children = () =>
         existsSync(pidFile)
           ? readFileSync(pidFile, "utf8")
@@ -704,9 +740,11 @@ console.log(JSON.stringify(resolved.test));
       const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : output;
       expect(status, log).toBe(0);
       const report = JSON.parse(readFileSync(join(dir, "mut-300/report.json"), "utf8"));
+
       const mutants = Object.values(report.files).flatMap(
         (f) => (f as { mutants: { status: string; killedBy?: string[]; coveredBy?: string[] }[] }).mutants,
       );
+
       expect(
         mutants.some((m) => ["Killed", "Survived", "Timeout"].includes(m.status)),
         log,

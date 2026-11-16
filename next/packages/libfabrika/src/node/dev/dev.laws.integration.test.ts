@@ -75,6 +75,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
                   const plugin = [...local.mapUnsafe.values()].find(
                     (value) => typeof value === "object" && value !== null && "sockets" in value,
                   ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
+
                   return plugin.start({ "fabrika-control": raw });
                 }),
               ),
@@ -86,6 +87,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
               Effect.provide(NodeServices.layer),
             ),
           );
+
           expect(Exit.isFailure(exit)).toBe(true);
           const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
           expect(Cause.hasDies(cause)).toBe(false);
@@ -107,7 +109,9 @@ it("the control plugin returns a typed error for malformed platform port data", 
 });
 
 type Step = ReturnType<typeof step.generate>["value"];
+
 const memoryBrake: Step = { rss: 600_000, exitCode: null, signal: "SIGTERM", delay: 250 };
+
 const crashBrake: Step = { rss: null, exitCode: 1, signal: null, delay: 0 };
 
 const sequence = fc.record({
@@ -120,14 +124,18 @@ it("every observed exit is durable once across restart or brake, with its reason
   await fc.assert(
     fc.asyncProperty(sequence, async ({ restarts, final, reason }) => {
       const platform = { rss: 0, samples: 0 };
+
       type Call = { target: string; project: string; name: string; method: string; args: unknown[] };
+
       const calls: Call[] = [];
       const spawned: Array<{ command: string; args: ReadonlyArray<unknown> }> = [];
       const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as { method: string };
+
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
         return Response.json(
           call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
@@ -139,11 +147,13 @@ it("every observed exit is durable once across restart or brake, with its reason
           Effect.scoped(
             Effect.gen(function* () {
               let observe: (event: RuntimeEvent) => void = () => {};
+
               let listen: Effect.Effect<unknown> = Effect.void;
               platform.rss = 0;
               // The first info call succeeds. Startup flush has no events until deployment yields.
               fetch.mockImplementation(async (_url, options) => {
                 const call = JSON.parse(bodyText(options)) as { method: string };
+
                 return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
               });
               yield* startDev({ name: "life-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
@@ -158,11 +168,13 @@ it("every observed exit is durable once across restart or brake, with its reason
               fetch.mockImplementation(async (_url, options) => {
                 const call = JSON.parse(bodyText(options)) as Call;
                 calls.push(call);
+
                 return Response.json(
                   call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
                 );
               });
               const outbox = yield* brainOutbox(home);
+
               const waitForEvent = (ready: (event: typeof BrainEvent.Type) => boolean) =>
                 Effect.gen(function* () {
                   // The event queue writes files asynchronously, outside the supplied clock.
@@ -177,6 +189,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                     yield* TestClock.withLive(Effect.sleep("10 millis"));
                   }
                 });
+
               const expected: Array<{
                 start: string;
                 reason: string;
@@ -184,6 +197,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                 signal: string | null;
                 bytes?: number;
               }> = [];
+
               const assertExits = Effect.gen(function* () {
                 const rows = yield* outbox.pending;
                 const exits = rows.filter((event) => event._tag === "exited");
@@ -273,6 +287,7 @@ it("every observed exit is durable once across restart or brake, with its reason
               rssLayer(
                 () => {
                   platform.samples++;
+
                   return platform.rss;
                 },
                 (command, args) => spawned.push({ command, args }),
@@ -283,18 +298,21 @@ it("every observed exit is durable once across restart or brake, with its reason
           ),
           { signal },
         );
+
         const pending = await Effect.runPromise(
           brainOutbox(home).pipe(
             Effect.flatMap((outbox) => outbox.pending),
             Effect.provide(NodeServices.layer),
           ),
         );
+
         expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
         fetch.mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options)) as Call;
           calls.push(call);
+
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
         });
         await Effect.runPromise(
@@ -349,6 +367,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           .filter(
             ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
           );
+
         expect(failed.length).toBeGreaterThan(0);
       } finally {
         fetch.mockRestore();
@@ -376,9 +395,13 @@ it("every observed exit is durable once across restart or brake, with its reason
 // Like workerd with a WebSocket open, the old process closes its control port on SIGTERM; whether it
 // then ends by itself is generated. The sampler, the grace and every call run on the test clock.
 const OLD = { pid: 27001, port: 27002 };
+
 const NEW = { pid: 27003, port: 27004 };
+
 const REPLACE = "replace-test";
+
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
+
 const install: Install = { id: "install-1", program: "p/replace", hash: "a".repeat(64), source: "", from: "watch" };
 
 const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
@@ -387,6 +410,7 @@ const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
 type Ended = Extract<RuntimeEvent, { readonly type: "exit" }>["exit"];
 
 type Sent = { readonly pid: number; readonly signal: string; readonly at: number };
+
 type Request = { readonly port: number; readonly method: string; readonly at: number };
 
 // A fact the driver writes to disk or a signal it sends after a write: polled on the real clock while
@@ -421,7 +445,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = Schema.decodeUnknownSync(Body)(bodyText(options));
+        const body = Schema.decodeSync(Body)(bodyText(options));
         const port = Number(new URL(String(url)).port);
         requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 
@@ -463,10 +487,12 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   );
 
   let observe: (event: RuntimeEvent) => void = () => {};
+
   let listen: (port: number) => Effect.Effect<unknown> = () => Effect.void;
   // Its own scope, so a law can stop the brain in the middle of a replace.
   const life = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(life, Exit.void));
+
   const dev = yield* startDev(
     { name: REPLACE, port: 18787, build: "test", home, memory: c.limit, grace: c.grace },
     (local) =>
@@ -488,15 +514,18 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
       ),
     ),
   );
+
   world.startup = false;
   const outbox = yield* brainOutbox(home);
   const first = (yield* outbox.last)!;
   const rows = outbox.pending.pipe(Effect.orDie);
+
   // The stand-in ends, Alchemy reports it, waits its backoff and starts the replacement.
   // A process that drains on SIGTERM exits by itself, as workerd does, so its exit names no signal.
   const replaced = Effect.fnUntraced(function* (signal: "SIGTERM" | "SIGKILL") {
     const exit: Ended =
       signal === "SIGKILL" ? { exitCode: null, signal, stderr: "" } : { exitCode: 0, signal: null, stderr: "" };
+
     observe({ type: "exit", worker: REPLACE, exit });
     observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
     observe({ type: "start", worker: REPLACE, pid: NEW.pid });
@@ -504,6 +533,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
       all.some((row) => row._tag === "started" && row.after === first),
     );
   });
+
   // Ticks the 1-second sampler until it sends its first signal, the start of the replace.
   const term = Effect.fnUntraced(function* () {
     // The sampler's first sleep may begin a tick late, so a few ticks bound the first sample.
@@ -519,10 +549,13 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
       (n) => n > 0,
     ).pipe(Effect.ignore);
     expect(signals[0], "the sampler signals the old process").toMatchObject({ pid: OLD.pid, signal: "SIGTERM" });
+
     return signals[0]!;
   });
+
   // What the runtime reports, as Alchemy's lifecycle hook hears it.
   const report = (event: RuntimeEvent) => observe(event);
+
   return { dev, life, home, signals, requests, world, first, rows, replaced, term, listen, observe: report };
 });
 
@@ -664,7 +697,9 @@ effectIt.effect.prop(
         // A call after the stop meets a stopped brain, which the stop law already covers.
         const moments = calls.map(share).filter((at) => ending === null || at < ending);
         const kills = ending === null || grace <= ending;
+
         type Move = { readonly at: number; readonly move: "call" | "kill" | "listen" | "stop" };
+
         const moves: Array<Move> = [
           ...moments.map((at): Move => ({ at, move: "call" })),
           ...(kills ? [{ at: grace, move: "kill" } satisfies Move] : []),
@@ -678,6 +713,7 @@ effectIt.effect.prop(
               a.at - b.at ||
               ["call", "kill", "listen", "stop"].indexOf(a.move) - ["call", "kill", "listen", "stop"].indexOf(b.move),
           );
+
         const made: Array<Called> = [];
         const ended = new Map<Called, { readonly at: number; readonly exit: Exit.Exit<unknown, unknown> }>();
 
@@ -736,6 +772,7 @@ effectIt.effect.prop(
         const offline = (exit: Exit.Exit<unknown, unknown>) => {
           const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
           const found = error?._tag === "Some" ? error.value : undefined;
+
           return Predicate.hasProperty(found, "cause") && Predicate.hasProperty(found.cause, "reason")
             ? found.cause.reason
             : found;
@@ -796,22 +833,26 @@ effectIt.effect.prop(
         if (first) {
           const fs = yield* FileSystem.FileSystem;
           const home = yield* fs.makeTempDirectoryScoped({ prefix: "mr-pid-" });
+
           const kill = yield* Effect.acquireRelease(
             Effect.sync(() => vi.spyOn(process, "kill").mockReturnValue(true)),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
+
           yield* Effect.acquireRelease(
             Effect.sync(() =>
               vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ value: null })),
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
+
           const exit = yield* startDev({ name: REPLACE, port: 18787, build: "test", home, ...BRAIN }, (local) =>
             Effect.gen(function* () {
               Context.get(local, RuntimeLifecycle)({ type: "start", worker: REPLACE, pid });
               yield* listenOn(local, OLD.port);
             }),
           ).pipe(Effect.provide(rssLayer(() => 600_000)), Effect.scoped, Effect.exit);
+
           const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : undefined;
           expect(error?._tag === "Some" ? error.value : exit).toMatchObject({
             _tag: "ControlError",
@@ -820,6 +861,7 @@ effectIt.effect.prop(
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
           expect(rows.filter((row) => row._tag === "started")).toEqual([]);
+
           return;
         }
 

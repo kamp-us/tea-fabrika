@@ -18,6 +18,7 @@ export const file = <A>(declaration: Setting.Setting<A>) => {
     declaration.format === "text"
       ? Schema.toCodecStringTree(declaration.schema)
       : Schema.toCodecJson(declaration.schema);
+
   return codec.pipe(
     Schema.annotateEncoded({
       description: declaration.doc,

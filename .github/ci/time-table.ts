@@ -13,10 +13,13 @@ import { type Duration, Effect, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
+
 /** How many test files the summary lists, slowest first. The artifact keeps them all. */
 export const SLOWEST = 10;
+
 /** How often to ask the jobs API before the steps before this one all show an end, 2 s apart. */
 export const TRIES = 5;
+
 export const PAUSE: Duration.Input = "2 seconds";
 
 /** One step of the job, as the jobs API gave it. `start` and `end` are null until it has them. */
@@ -92,6 +95,7 @@ const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", r
 /** The job's steps, in order, from a jobs API answer. */
 export const readSteps = (input: unknown): Section<Step> => {
   const decoded = Schema.decodeUnknownResult(Job)(input);
+
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
@@ -108,6 +112,7 @@ export const readSteps = (input: unknown): Section<Step> => {
 /** Each test file of a Vitest JSON report, its path from `root`. */
 export const readFiles = (input: unknown, root: string): Section<TestFile> => {
   const decoded = Schema.decodeUnknownResult(Report)(input);
+
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
@@ -131,6 +136,7 @@ export const settled = (steps: Section<Step>): boolean => {
   }
 
   const self = steps.rows.findIndex((step) => step.name === STEP);
+
   return self >= 0 && steps.rows.slice(0, self).every((step) => step.start === null || step.end !== null);
 };
 
@@ -160,6 +166,7 @@ const stepTable = (rows: readonly Step[]) =>
       .filter((step) => step.start !== null)
       .map((step) => {
         const took = seconds(step);
+
         return [step.name, step.result, took === null ? "-" : String(Math.round(took))];
       }),
   );
@@ -171,6 +178,7 @@ export const slowest = (rows: readonly TestFile[]): TestFile[] =>
 const fileTable = (rows: readonly TestFile[]) => {
   const total = rows.reduce((sum, file) => sum + file.seconds, 0);
   const listed = slowest(rows);
+
   return [
     `${rows.length} files, ${total.toFixed(1)} s in all. The ${listed.length} slowest:`,
     "",
@@ -201,7 +209,9 @@ export type Io = {
 };
 
 /** An input that could not be read: the network, GitHub's answer, a missing file or bad JSON. */
-export class Unread extends Schema.TaggedError<Unread>()("Unread", { cause: Schema.Defect() }) {}
+export class Unread extends Schema.TaggedError<Unread, { readonly brand: unique symbol }>()("Unread", {
+  cause: Schema.Defect(),
+}) {}
 
 const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
   run: env["GITHUB_RUN_ID"] ?? "",
@@ -255,6 +265,7 @@ export const collect = (
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const env = process.env;
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
+
   const io: Io = {
     job: (id) =>
       Effect.tryPromise({

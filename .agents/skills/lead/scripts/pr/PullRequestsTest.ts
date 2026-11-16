@@ -6,12 +6,13 @@ import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsEr
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
   draft: { branch: Schema.String, title: Schema.String },
-  edit: { number: Schema.Number, title: Schema.String, body: Schema.String },
-  ready: { number: Schema.Number },
-  enqueue: { number: Schema.Number, oid: Schema.String },
-  arm: { number: Schema.Number, oid: Schema.String },
-  admin: { number: Schema.Number, oid: Schema.String },
+  edit: { number: Schema.Finite, title: Schema.String, body: Schema.String },
+  ready: { number: Schema.Finite },
+  enqueue: { number: Schema.Finite, oid: Schema.String },
+  arm: { number: Schema.Finite, oid: Schema.String },
+  admin: { number: Schema.Finite, oid: Schema.String },
 });
+
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
@@ -48,6 +49,7 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
+
     return reason === undefined ? Effect.void : Effect.fail(PullRequestsError.make({ reason }));
   };
 
@@ -64,6 +66,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           const number = Math.max(0, ...w.prs.map((pr) => pr.number)) + 1;
           w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
           w.calls.push(Call.cases.draft.make({ branch, title: text.title }));
+
           return number;
         }),
       edit: (number, text) =>
@@ -84,6 +87,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       view: (number) =>
         Effect.flatMap(fails("view"), () => {
           const pr = w.prs.find((p) => p.number === number);
+
           return pr === undefined
             ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
             : Effect.succeed({

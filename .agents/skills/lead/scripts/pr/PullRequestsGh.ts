@@ -12,7 +12,7 @@ export const LIMIT = 5000;
 const Listed = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
-      number: Schema.Number,
+      number: Schema.Finite,
       headRefName: Schema.String,
       headRefOid: Schema.String,
       state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
@@ -25,7 +25,7 @@ const FIELDS = "number,headRefName,headRefOid,state,isDraft";
 
 const Viewed = Schema.fromJsonString(
   Schema.Struct({
-    number: Schema.Number,
+    number: Schema.Finite,
     headRefName: Schema.String,
     headRefOid: Schema.String,
     baseRefName: Schema.String,
@@ -110,9 +110,11 @@ export const layer = (
 
       const list = Effect.fn("PullRequestsGh.list")(function* (args: ReadonlyArray<string>) {
         const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
-        const rows = yield* Schema.decodeUnknownEffect(Listed)(out.trim() || "[]").pipe(
+
+        const rows = yield* Schema.decodeEffect(Listed)(out.trim() || "[]").pipe(
           Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
         );
+
         return rows.map((r): PullRequest => ({
           number: r.number,
           head: r.headRefName,
@@ -163,9 +165,11 @@ export const layer = (
 
       const view = Effect.fn("PullRequestsGh.view")(function* (number: number) {
         const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
-        const v = yield* Schema.decodeUnknownEffect(Viewed)(out).pipe(
+
+        const v = yield* Schema.decodeEffect(Viewed)(out).pipe(
           Effect.mapError(() => PullRequestsError.make({ reason: "gh pr view answered a shape we do not read" })),
         );
+
         return {
           number: v.number,
           head: v.headRefName,
@@ -184,6 +188,7 @@ export const layer = (
       // REST, paged: `gh pr view --json files` stops at 100 files.
       const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
+
         return out.split("\n").filter((path) => path !== "");
       });
 
@@ -196,10 +201,11 @@ export const layer = (
           "--jq",
           ".[] | {path: .filename, patch: (.patch // null)}",
         ]);
+
         return yield* Effect.forEach(
           out.split("\n").filter((row) => row !== ""),
           (row) =>
-            Schema.decodeUnknownEffect(PatchRow)(row).pipe(
+            Schema.decodeEffect(PatchRow)(row).pipe(
               Effect.mapError(() =>
                 PullRequestsError.make({ reason: "gh api pulls/files answered a shape we do not read" }),
               ),

@@ -25,10 +25,12 @@ const globOf = (glob: string) =>
   );
 
 const ignoredBy = (path: string) => ignored.some((glob) => globOf(glob).test(path));
+
 const fill = fc.string({ maxLength: 12 }).filter((text) => !text.includes("/") && !text.includes("\0"));
 
 const fromGlob = fc.constantFrom(...ignored).chain((glob) => {
   const [first = "", ...rest] = glob.split("*");
+
   return fc
     .array(fill, { minLength: rest.length, maxLength: rest.length })
     .map((fills) => rest.reduce((path, part, i) => `${path}${fills[i]}${part}`, first));

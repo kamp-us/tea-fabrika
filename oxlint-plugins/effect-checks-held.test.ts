@@ -16,7 +16,9 @@ import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const CHECK = "preferSchemaTaggedError";
+
 const SERVICE = "@effect/language-service";
 
 /** A JSON value from a parsed config, comments dropped. */
@@ -78,14 +80,17 @@ const lowered = (file: string, config: Record<string, unknown>): ReadonlyArray<s
   }
 
   const top = record(service.diagnosticSeverity)[CHECK];
+
   const overrides = list(service.overrides)
     .map(record)
     .flatMap((override, i) => {
       const severity = record(record(override.options).diagnosticSeverity);
+
       return CHECK in severity && severity[CHECK] !== "error"
         ? [`${file}: override ${i} sets ${CHECK} to ${String(severity[CHECK])}`]
         : [];
     });
+
   // Either switch lets an error of the check pass `tsc` with no level changed.
   const off = [
     ...(service.diagnostics === false ? [`${file}: ${SERVICE} sets diagnostics to false`] : []),
@@ -93,6 +98,7 @@ const lowered = (file: string, config: Record<string, unknown>): ReadonlyArray<s
       ? [`${file}: ${SERVICE} sets ignoreEffectErrorsInTscExitCode to true`]
       : []),
   ];
+
   return [...(top === "error" ? [] : [`${file}: ${CHECK} is ${String(top)}`]), ...overrides, ...off];
 };
 
@@ -100,6 +106,7 @@ it("L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfi
   const files = execFileSync("git", ["ls-files", "*tsconfig*.json"], { cwd: ROOT, encoding: "utf8" })
     .split("\n")
     .filter((file) => file !== "" && !file.startsWith("fixtures/"));
+
   // Coverage: the base and the projects that extend it, `next/` and the tooling among them.
   expect(files).toEqual(
     expect.arrayContaining([

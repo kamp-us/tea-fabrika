@@ -39,6 +39,7 @@ const imported = (variable: Variable | undefined): { readonly from: string; read
 
   if (spec.type === "ImportSpecifier") {
     const name = spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value);
+
     return { from: def.parent.source.value, name };
   }
 
@@ -83,6 +84,7 @@ export const noStaticLayer: CreateRule = {
     const isContext = (node: Node): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Context") || (at.from === "effect/Context" && at.name === "*"))
@@ -91,6 +93,7 @@ export const noStaticLayer: CreateRule = {
 
       if (node.type === "MemberExpression" && memberName(node) === "Context" && node.object.type === "Identifier") {
         const at = imported(resolve(node.object));
+
         return at?.from === "effect" && at.name === "*";
       }
 
@@ -110,6 +113,7 @@ export const noStaticLayer: CreateRule = {
 
         if (at.type === "Identifier") {
           const by = imported(resolve(at));
+
           return by?.from === "effect/Context" && by.name === "Service";
         }
       }

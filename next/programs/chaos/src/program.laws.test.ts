@@ -12,10 +12,15 @@ import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const options = { seed: SEED, numRuns: RUNS };
+
 type ChaosProgram = typeof chaos;
+
 type Model = typeof Fabrika.ChaosMachine.Model.Type;
+
 type Msg = typeof Fabrika.ChaosMachine.Msg.Type;
 
 type Command = ReturnType<
@@ -23,9 +28,9 @@ type Command = ReturnType<
 >;
 
 const id = (n: number) =>
-  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
-const process = Schema.decodeUnknownSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
+const process = Schema.decodeSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
 const target = Fabrika.Chaos.Target.make({
   program: "fabrika/checklist",
@@ -45,9 +50,7 @@ const starts = fc.record({
       name: `checklist:${n}`,
       client: `client:${n}`,
       key: `public:${n}`,
-      process: Schema.decodeUnknownSync(Fabrika.Id.Process)(
-        `process_0000000000e008${n.toString(16).padStart(12, "0")}`,
-      ),
+      process: Schema.decodeSync(Fabrika.Id.Process)(`process_0000000000e008${n.toString(16).padStart(12, "0")}`),
     }),
   ),
   most: fc.integer({ min: 1, max: 12 }),
@@ -66,6 +69,7 @@ const report = Fabrika.Chaos.Report.make({
 });
 
 const fired = Fabrika.Chaos.Fired.cases.fired.make({ hit: null });
+
 const json = (value: unknown) => JSON.stringify(value);
 
 const answer = (cmd: Command, at: number): Msg => {
@@ -118,13 +122,16 @@ const completed = (
   const msgs: Array<Msg> = [];
   const commands: Array<Command> = [];
   const ticks: Array<{ readonly at: number; readonly cmds: ReadonlyArray<Command>; readonly model: Model }> = [];
+
   const step = (msg: Msg) => {
     msgs.push(msg);
     const [next, out] = applyCell<Model, Msg, Command>(chaos.machine, model, msg);
     model = next;
     commands.push(...out);
+
     return out;
   };
+
   let pending = [...step({ type: "start", ...start })];
   let clock = 100;
 
@@ -164,7 +171,7 @@ it("brands and public Model/Msg schemas stay exact through the program", () => {
   expectTypeOf<Extract<Msg, { type: "start" }>["id"]>().toEqualTypeOf<typeof Fabrika.Chaos.ExperimentId.Type>();
   expectTypeOf<typeof Fabrika.Incoming.Type.envelope.id>().toEqualTypeOf<typeof Fabrika.Id.Input.Type>();
   // Slice 1's ProcessId is still a checked string, pending the shared ID conversion.
-  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<typeof Fabrika.Chaos.Target.Type>();
+  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<Fabrika.Chaos.Target>();
   fc.assert(
     fc.property(starts, (start) => {
       expect(Schema.is(Fabrika.ChaosMachine.Msg)({ type: "start", ...start })).toBe(true);
@@ -256,10 +263,12 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
         const replies = run.msgs.filter((m) => m.type.endsWith("_ok") || m.type.endsWith("_err"));
+
         const tail = arbMsgSequence(
           fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
           { minLength: 10, maxLength: 20 },
         );
+
         // Each cut is reached by folding the real machine; the tail names its actual old Cmds.
         fc.assert(
           fc.property(tail, (msgs) => {

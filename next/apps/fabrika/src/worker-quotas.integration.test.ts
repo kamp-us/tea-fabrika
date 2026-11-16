@@ -89,7 +89,7 @@ const identity = () => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -120,7 +120,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
-          frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
+          frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
       return socket;
@@ -136,7 +136,10 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
       "the signed client received no matching frame within 10 seconds",
     ).pipe(
-      Effect.flatMap((frame) => (frame === undefined ? Effect.die("the signed client closed") : Effect.succeed(frame))),
+      Effect.filterOrElse(
+        (frame): frame is typeof Frame.Type => frame !== undefined,
+        () => Effect.die("the signed client closed"),
+      ),
     );
   let serial = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {

@@ -132,6 +132,7 @@ const overridden = (node: Node): boolean => {
   }
 
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
+
   return after.some((property) => property.type === "Property" && keyName(property) === "numRuns");
 };
 
@@ -145,6 +146,7 @@ const isDraw = (property: Node): boolean => {
   }
 
   const callee = call.callee.type === "MemberExpression" ? call.callee.property : call.callee;
+
   return callee.type === "Identifier" && (callee.name === "sample" || callee.name === "statistics");
 };
 
@@ -152,6 +154,7 @@ const isDraw = (property: Node): boolean => {
 const inArbitrary = (property: Node): boolean => {
   const object = parentOf(property);
   const holder = object === null ? null : parentOf(object);
+
   return holder?.type === "Property" && holder.value === object && keyName(holder) === "arbitrary";
 };
 
@@ -204,6 +207,7 @@ export const runsFromDepth: CreateRule = {
                   ? specifier.imported.name
                   : String(specifier.imported.value)
                 : null;
+
             const variable = resolve(specifier.local);
 
             if (variable && (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))) {
@@ -234,6 +238,7 @@ export const runsFromDepth: CreateRule = {
         }
 
         const uses = new Map<Node, { readonly through: ReadonlySet<Variable>; readonly direct: boolean }>();
+
         const usesOf = (root: Node) => {
           const known = uses.get(root);
 
@@ -264,6 +269,7 @@ export const runsFromDepth: CreateRule = {
 
           const found = { through, direct };
           uses.set(root, found);
+
           return found;
         };
 
@@ -285,6 +291,7 @@ export const runsFromDepth: CreateRule = {
 
         const reaches = (root: Node): boolean => {
           const { through, direct } = usesOf(root);
+
           return direct || [...through].some((used) => reaching.has(used));
         };
 
@@ -343,8 +350,10 @@ export const runsFromDepth: CreateRule = {
           // function), or else the helper call it is handed to.
           const enclosing = [...declared].filter(([, node]) => around.includes(node));
           const call = around.find((node) => node.type === "CallExpression");
+
           const own =
             enclosing.length > 0 ? enclosing.some(([, node]) => reaches(node)) : call !== undefined && reaches(call);
+
           return (
             own ||
             tests.some((call) => reaches(call) && enclosing.some(([variable]) => usedThrough(call).has(variable)))

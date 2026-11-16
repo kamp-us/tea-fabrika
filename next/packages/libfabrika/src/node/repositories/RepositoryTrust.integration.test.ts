@@ -12,16 +12,19 @@ import type { Sql } from "../../Sql.ts";
 const open = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-trust-" });
   const file = path.join(root, "ledger.db");
   const connect = TestDatabase.make(file).pipe(Effect.map(nodeSql));
   const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the connection open now.
   const sql: Sql = {
     exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
     transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   return { sql, reopen: ScopedRef.set(held, connect) } satisfies RepositoryTrustTest.Store;
 }).pipe(Effect.orDie, Effect.provide(NodeServices.layer));
 

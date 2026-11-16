@@ -36,6 +36,7 @@ const inFolder = Effect.fnUntraced(function* (name: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t1029-" });
+
   return { dir, file: path.join(dir, name) };
 });
 
@@ -45,15 +46,18 @@ it.effect.prop(
   ({ name }) =>
     Effect.gen(function* () {
       const { file } = yield* inFolder(name);
+
       const db = yield* Effect.scoped(
         Effect.gen(function* () {
           const db = yield* TestDatabase.make(file);
           expect(db.isOpen).toBe(true);
           expect(db.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "memory" });
           expect(db.prepare("PRAGMA synchronous").get()).toEqual({ synchronous: 0 });
+
           return db;
         }),
       );
+
       expect(db.isOpen).toBe(false);
     }).pipe(Effect.provide(NodeServices.layer)),
   { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -140,13 +144,17 @@ it.effect.prop(
         Effect.gen(function* () {
           const db = yield* TestDatabase.open(file, { readOnly });
           expect(db.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+
           const write = yield* Effect.exit(
             Effect.try(() => db.prepare("INSERT INTO t (n, text) VALUES (?, ?)").run(row.n, row.text)),
           );
+
           expect(Exit.isFailure(write)).toBe(readOnly);
+
           return db;
         }),
       );
+
       expect(opened.isOpen).toBe(false);
 
       // A fresh connection after the close: the file is still WAL, and holds the row only if written.

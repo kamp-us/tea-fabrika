@@ -37,13 +37,16 @@ describe("stored", () => {
               Effect.gen(function* () {
                 const real = yield* FileSystem.FileSystem,
                   path = yield* Path.Path;
+
                 const dir = yield* real.makeTempDirectoryScoped({ prefix: "stored." });
                 const running = yield* Ref.make(true);
                 yield* real.makeDirectory(path.join(dir, "records"));
+
                 const write = (name: string, text: string) =>
                   real
                     .writeFileString(path.join(dir, `${name}.tmp`), text)
                     .pipe(Effect.andThen(real.rename(path.join(dir, `${name}.tmp`), path.join(dir, name))));
+
                 const last = (name: string) => JSON.stringify(`stopped_${secret}_${name}`);
 
                 for (const name of files) {
@@ -71,10 +74,12 @@ describe("stored", () => {
                       return names;
                     }),
                 };
+
                 const stop = Effect.forEach(files, (name) => write(name, last(name)), {
                   concurrency: 1,
                   discard: true,
                 }).pipe(Effect.andThen(Ref.set(running, false)));
+
                 const disk = yield* stored({ dir, stop }, new Map(), []).pipe(
                   Effect.provideService(FileSystem.FileSystem, fs),
                 );
@@ -99,6 +104,7 @@ describe("stored", () => {
             Effect.gen(function* () {
               const fs = yield* FileSystem.FileSystem,
                 path = yield* Path.Path;
+
               const dir = yield* fs.makeTempDirectoryScoped({ prefix: "stored." });
               const sentinel = `span_${secret}`;
               const db = yield* spanQueue(path.join(dir, "brain.records.sqlite"));
@@ -142,6 +148,7 @@ describe("stored", () => {
               Effect.gen(function* () {
                 const fs = yield* FileSystem.FileSystem,
                   path = yield* Path.Path;
+
                 const dir = yield* fs.makeTempDirectoryScoped({ prefix: "stored." });
                 const sentinel = `span_${secret}`;
                 yield* fs.makeDirectory(path.join(dir, "records"));
@@ -199,6 +206,7 @@ describe("stored", () => {
               Effect.gen(function* () {
                 const real = yield* FileSystem.FileSystem,
                   path = yield* Path.Path;
+
                 const dir = yield* real.makeTempDirectoryScoped({ prefix: "stored." });
                 const stopped = yield* Ref.make(false);
                 yield* real.makeDirectory(path.join(dir, "records"));
@@ -208,6 +216,7 @@ describe("stored", () => {
                 }
 
                 const target = path.join(dir, failing);
+
                 // Fails `method` on the one generated file, and only in the generated pass.
                 const fault = (file: string, called: "stat" | "readFile") =>
                   Effect.gen(function* () {
@@ -222,16 +231,20 @@ describe("stored", () => {
                       });
                     }
                   });
+
                 const fs: FileSystem.FileSystem = {
                   ...real,
                   stat: (file) => fault(file, "stat").pipe(Effect.andThen(real.stat(file))),
                   readFile: (file) => fault(file, "readFile").pipe(Effect.andThen(real.readFile(file))),
                 };
+
                 const exit = yield* stored({ dir, stop: Ref.set(stopped, true) }, new Map(), []).pipe(
                   Effect.provideService(FileSystem.FileSystem, fs),
                   Effect.exit,
                 );
+
                 const all = files.map((name) => `/${name}`).toSorted();
+
                 // What the scan did: the files each pass read, or the error it failed with.
                 const seen = Exit.match(exit, {
                   onSuccess: (disk) => ({
@@ -243,6 +256,7 @@ describe("stored", () => {
                   }),
                   onFailure: (cause) => {
                     const error = Cause.squash(cause);
+
                     return PlatformError.isPlatformError(error)
                       ? {
                           failed: error.reason._tag,

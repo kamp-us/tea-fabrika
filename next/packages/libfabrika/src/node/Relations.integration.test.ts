@@ -19,6 +19,7 @@ const store = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
   const db = yield* TestDatabase.make(paths.join(path, "ledger.db"));
+
   return { sql: nodeSql(db) } satisfies RelationsTest.Store;
 });
 

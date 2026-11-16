@@ -44,18 +44,24 @@ import { programs } from "./table.ts";
 // The brain fixture loads only in workerd, so this file imports its type alone, as
 // `tasks-wire.integration.test.ts` does, and names the task the fixture asks here.
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TASK = "hands-task";
+
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const SENT = "2026-11-15T10:00:00.000Z";
+
 const NAME = "hands-launcher";
 
 /** The launcher's stdout protocol, as the plan writes it. */
 const Line = Schema.TaggedUnion({
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });
+
 type Line = typeof Line.Type;
+
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(Line));
 
 /** The key file the plan stores: WebCrypto's JWK, its private half `d` and its public half `x`. */
@@ -67,6 +73,7 @@ const field = (v: string | Uint8Array) => {
   const b = Buffer.from(v);
   const n = Buffer.alloc(4);
   n.writeUInt32BE(b.length);
+
   return Buffer.concat([n, b]);
 };
 
@@ -74,8 +81,10 @@ const field = (v: string | Uint8Array) => {
 const person = () => {
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -88,8 +97,10 @@ const person = () => {
         field("sha512"),
         field(createHash("sha512").update(value).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packed = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -99,6 +110,7 @@ const person = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packed
         .toString("base64")
         .match(/.{1,70}/g)
@@ -122,8 +134,8 @@ type Seen = {
   readonly stderr: Array<string>;
   readonly d: string;
   readonly fingerprints: ReadonlyArray<string>;
-  readonly task: typeof Task.Type;
-  readonly taskAfterRestart: typeof Task.Type;
+  readonly task: Task;
+  readonly taskAfterRestart: Task;
   readonly journal: Record<string, unknown>;
   readonly brain: unknown;
 };
@@ -137,11 +149,13 @@ const launcher = Effect.fnUntraced(function* (
   errors: Seen["stderr"],
 ) {
   const lines = yield* Queue.unbounded<Line>();
+
   const handle = yield* ChildProcess.make(process.execPath, [script], {
     cwd,
     extendEnv: false,
     env: { FABRIKA_HOME: home, HOME: home, PATH: process.env.PATH ?? "" },
   });
+
   yield* handle.stdout.pipe(
     Stream.decodeText(),
     Stream.splitLines,
@@ -162,6 +176,7 @@ const launcher = Effect.fnUntraced(function* (
     Stream.runForEach((text) => Effect.sync(() => errors.push(text))),
     Effect.forkScoped,
   );
+
   const next = <T extends Line["_tag"]>(tag: T) =>
     Effect.gen(function* () {
       const tagged = (line: Line): line is Extract<Line, { readonly _tag: T }> => line._tag === tag;
@@ -174,6 +189,7 @@ const launcher = Effect.fnUntraced(function* (
         }
       }
     }).pipe(Effect.timeout("60 seconds"));
+
   return { handle, next };
 });
 
@@ -181,6 +197,7 @@ const flow = Effect.fnUntraced(
   function* () {
     const fs = yield* FileSystem.FileSystem,
       path = yield* Path.Path;
+
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "hands-launcher-" });
     const hands = path.join(home, "hands-home");
     yield* fs.makeDirectory(hands);
@@ -197,6 +214,7 @@ const flow = Effect.fnUntraced(
         `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
       ].join("\n"),
     );
+
     const built = yield* build({
       out: path.join(home, "dist"),
       root: path.resolve(app, "../../.."),
@@ -205,6 +223,7 @@ const flow = Effect.fnUntraced(
       chaos: false,
       files: [],
     });
+
     const oldHome = process.env.ALCHEMY_HOME;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
@@ -215,6 +234,7 @@ const flow = Effect.fnUntraced(
         }
       }),
     );
+
     const running = yield* localInstance(
       built,
       RecordWireTest.startupFixture({
@@ -226,6 +246,7 @@ const flow = Effect.fnUntraced(
         port: port.port,
       }),
     );
+
     const url = `http://127.0.0.1:${port.port}`;
     const project = running.project(NAME);
     // The task's requester is a started name: a finish wakes it (P39 slice 3).
@@ -251,6 +272,7 @@ const flow = Effect.fnUntraced(
     // The launcher's home: a fresh FABRIKA_HOME whose person file names the instance's port.
     yield* fs.writeFileString(path.join(hands, "fabrika.toml"), `[instance]\nport = ${port.port}\n`);
     const script = path.join(app, "hands.ts");
+
     const lines: Seen["lines"] = [],
       stderr: Seen["stderr"] = [];
 
@@ -260,12 +282,11 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-        const stored = Schema.decodeUnknownSync(Stored)(
-          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
-        );
+        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
         expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
+
         const value = grantText({
           id: "grant-hands",
           key: stored.jwk.x,
@@ -282,6 +303,7 @@ const flow = Effect.fnUntraced(
             has: ["git"],
           },
         });
+
         const reply = yield* call("grant failed", () =>
           fetch(`${url}/grant`, {
             method: "POST",
@@ -289,10 +311,12 @@ const flow = Effect.fnUntraced(
             body: JSON.stringify({ text: value, armored: root.sign(value) }),
           }),
         );
+
         expect(reply.ok, "E2: the person key's grant is accepted").toBe(true);
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
+
         let task = Schema.decodeUnknownSync(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
@@ -307,6 +331,7 @@ const flow = Effect.fnUntraced(
         // A SIGTERM, as launchd stops a job; the scope's close then reaps it.
         yield* one.handle.kill({ killSignal: "SIGTERM" });
         yield* one.handle.exitCode.pipe(Effect.ignore);
+
         return { fingerprint: waiting.fingerprint, d: stored.jwk.d, task };
       }),
     );
@@ -318,11 +343,14 @@ const flow = Effect.fnUntraced(
         const online = yield* two.next("online");
         // Time for a client that would take or run the task again to do so.
         yield* Effect.sleep("5 seconds");
+
         const task = Schema.decodeUnknownSync(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
+
         yield* two.handle.kill({ killSignal: "SIGTERM" });
         yield* two.handle.exitCode.pipe(Effect.ignore);
+
         return { fingerprint: online.fingerprint, task };
       }),
     );
@@ -342,6 +370,7 @@ const flow = Effect.fnUntraced(
       }),
     );
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
+
     return {
       lines,
       stderr,
@@ -395,6 +424,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                 Effect.gen(function* () {
                   const seen = yield* flow();
                   const secret = Buffer.from(seen.d, "base64url");
+
                   // Every form the private half could be written in.
                   const forms = [
                     seen.d,
@@ -404,6 +434,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     secret.toString("hex"),
                     encodeURIComponent(seen.d),
                   ];
+
                   const outputs: Record<string, unknown> = {
                     stdout: seen.lines,
                     stderr: seen.stderr,
@@ -411,6 +442,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     brain: seen.brain,
                     task: seen.task,
                   };
+
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
                   for (const [name, value] of Object.entries(outputs)) {

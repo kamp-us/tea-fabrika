@@ -24,7 +24,9 @@ import { DRIVES, type Tag } from "./starters.ts";
 const root = join(import.meta.dirname, "..");
 
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** How a file names what it imports: `{ x }`, `{ x as y }`, or `* as ns`. */
@@ -50,6 +52,7 @@ type Real = { readonly imports: ReadonlyArray<string>; readonly line: string };
 
 const one = (module: string, name: string, alias: string, line: (ref: string) => string) => (s: Spelling) => {
   const got = from(module, name, s, alias);
+
   return { imports: [got.line], line: line(got.ref) };
 };
 
@@ -98,6 +101,7 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     build: (s) => {
       const command = from("effect/process", "ChildProcess.make", s, "P");
       const layer = from("@effect/platform-node", "NodeServices.layer", s, "PN");
+
       return {
         imports: [command.line, layer.line],
         line: `const run = ${command.ref}("git", ["init"]).pipe(Effect.provide(${layer.ref}));`,
@@ -113,6 +117,7 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     build: (s: Spelling) => {
       const service = from("effect/process", "ChildProcessSpawner.ChildProcessSpawner", s, "P");
       const layer = from("@effect/platform-node", "NodeServices.layer", s, "PN");
+
       return {
         imports: [service.line, layer.line],
         line: `const run = Effect.gen(function* () { ${body(service.ref)}; }).pipe(Effect.provide(${layer.ref}));`,
@@ -152,6 +157,7 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
       build: (s: Spelling) => {
         const service = from("effect", "FileSystem.FileSystem", s, "E");
         const given = from("@effect/platform-node", layer, s, "PN");
+
         return {
           imports: [service.line, given.line],
           line: `const home = Effect.gen(function* () { const fs = yield* ${service.ref}; return yield* fs.${method}(); }).pipe(Effect.provide(${given.ref}));`,
@@ -172,8 +178,11 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
 ];
 
 const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
+
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}(?:\.laws)?$/);
+
 const end = fc.constantFrom(".ts", ".tsx");
+
 const spelling = fc.constantFrom<Spelling>("named", "renamed", "namespace");
 
 /** The file's text: its imports, then a law body with one line of setup before the line that starts the thing. */
@@ -301,6 +310,7 @@ const fires = (paths: readonly string[]) => {
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
+
   const found = new Map<string, number[]>();
 
   for (const d of report.diagnostics.filter((each) => each.code === "fabrika(integration-test-name)")) {

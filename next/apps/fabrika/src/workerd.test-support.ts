@@ -11,6 +11,7 @@ import { instanceDatabase } from "./instance-database.test-support.ts";
 
 const processes = Effect.gen(function* () {
   const ps = yield* ChildProcess.make("ps", ["-axo", "pid=,ppid=,command="]);
+
   return yield* ps.stdout.pipe(Stream.decodeText(), Stream.mkString);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
@@ -52,6 +53,7 @@ export const killWorkerd = Effect.fn("workerd.kill")(function* (parent: number) 
   const pid = yield* workerd(parent);
   // edge: Effect's ChildProcess signals only the processes it spawned, and this one is workerd's, found by `ps`
   yield* Effect.sync(() => process.kill(pid, "SIGKILL"));
+
   return pid;
 });
 
@@ -87,6 +89,7 @@ const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, nam
 
   // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
   const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
+
   return {
     journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,
     marker: kv === undefined ? undefined : Schema.decodeUnknownSync(Activity)(deserialize(kv.value as Uint8Array)),
@@ -140,11 +143,13 @@ export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: s
 
   // One captured identity, one interruption: the saved attempt wins over the marker, as in Runner.ts.
   const { journal, marker } = only;
+
   const letter =
     "attempt" in journal && journal.attempt.process === pid
       ? journal.attempt.letter
       : "_tag" in journal && journal._tag === "idle" && marker?._tag === "stepping" && marker.process === pid
         ? marker.letter
         : undefined;
+
   return letter === undefined ? Moment.cases.between.make({}) : Moment.cases.inside.make({ letter });
 }, Effect.provide(NodeServices.layer));

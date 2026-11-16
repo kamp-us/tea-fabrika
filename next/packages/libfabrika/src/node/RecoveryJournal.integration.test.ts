@@ -25,15 +25,18 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p34c2-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const path = join(folder, "store.db");
   const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
   const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
     transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   return { sql, reopen: ScopedRef.set(held, connect) } satisfies RecoveryJournalTest.Store;
 });
 
@@ -66,6 +69,7 @@ const rows = (sql: Sql): ReadonlyArray<RecoveryJournalTest.Row> =>
     ? []
     : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
         const row = decodeRow(raw);
+
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body };
       });
 

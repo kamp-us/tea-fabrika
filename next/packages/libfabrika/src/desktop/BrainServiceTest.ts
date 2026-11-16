@@ -35,6 +35,7 @@ export const timing = Effect.fn("BrainServiceTest.timing")(function* (flags: Rec
     repo: Sources.file("repo", { value: {}, spans: [] }),
     person: Sources.file("person", { value: {}, spans: [] }),
   });
+
   return yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto));
 });
 

@@ -45,6 +45,7 @@ const databases = Effect.gen(function* () {
       }
     }),
   );
+
   return (part: string): Sql => {
     const known = held.get(part);
 
@@ -56,6 +57,7 @@ const databases = Effect.gen(function* () {
     opened.push(db);
     const made = nodeSql(db);
     held.set(part, made);
+
     return made;
   };
 });

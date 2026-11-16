@@ -33,6 +33,7 @@ const handle = (file: string, watch: Watch) =>
         watch({ step: "closed", file, db });
       }),
     );
+
     return db;
   });
 
@@ -51,6 +52,7 @@ export const make =
           const path = yield* Path.Path;
           const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t641-" });
           watch({ step: "folder", path: folder });
+
           return store(path.join(folder, "part.sqlite"), watch);
         }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)));
 

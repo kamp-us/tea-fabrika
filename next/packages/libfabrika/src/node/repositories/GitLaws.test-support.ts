@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Git from "./Git.ts";
 
 const platform = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
+
 // The memory spawner sits over the platform's, which still runs every command that is not git.
 const memory = Layer.merge(platform, Git.layerMemory.pipe(Layer.provide(platform)));
 

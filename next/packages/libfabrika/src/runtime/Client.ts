@@ -48,6 +48,7 @@ export const Pending = Schema.TaggedUnion({
     traceId: Schema.optionalKey(Schema.String),
   },
 });
+
 export type Pending = typeof Pending.Type;
 
 /**
@@ -56,6 +57,7 @@ export type Pending = typeof Pending.Type;
  * @category schemas
  */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
+
 export type Shown = typeof Shown.Type;
 
 /**
@@ -72,6 +74,7 @@ export const Client = Schema.Struct({
   pending: Schema.Array(Pending),
   views: Schema.Record(Schema.String, Shown),
 });
+
 export type Client = typeof Client.Type;
 
 const emptyClient: Client = Client.make({ written: 0, seen: 0, pending: [], views: {} });
@@ -132,6 +135,7 @@ type Step = readonly [Client, ReadonlyArray<ReturnType<typeof ask>>];
 /** Reserves the next slot for a press on `pid`, with what this client showed and had read. */
 const press = (c: Client, input: { readonly pid: string; readonly m: unknown }): Client => {
   const m = Schema.decodeUnknownResult(Schema.Json)(input.m);
+
   const slot = Pending.cases.dating.make({
     n: c.written,
     pid: input.pid,
@@ -139,6 +143,7 @@ const press = (c: Client, input: { readonly pid: string; readonly m: unknown }):
     seen: c.seen,
     viewRev: c.views[input.pid]?.rev ?? 0,
   });
+
   return { ...c, written: c.written + 1, pending: [...c.pending, slot] };
 };
 
@@ -166,6 +171,7 @@ const dated = (
     sentAt: stamp.sentAt,
     ...(stamp.traceId === undefined ? {} : { traceId: stamp.traceId }),
   });
+
   return { ...c, pending: c.pending.map((p, i) => (i === at ? ready : p)) };
 };
 
@@ -176,6 +182,7 @@ const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag"
   }
 
   const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
+
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 
@@ -223,6 +230,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
 
   if (n.type === "whole") {
     const view = check(decode, n.view);
+
     return Result.isSuccess(view) ? [install(c, pid, { rev: n.rev, view: view.success }), []] : asked;
   }
 
@@ -241,6 +249,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
   }
 
   const next = Result.flatMap(apply(shown.view, n.patch), (candidate) => check(decode, candidate));
+
   return Result.isSuccess(next) ? [install(c, pid, { rev: n.rev, view: next.success }), []] : asked;
 };
 
@@ -275,6 +284,7 @@ export const clientMachineFor = (checks: ClientChecks) =>
 // --- Reads of the Model -------------------------------------------------------------------------
 
 type Ready = typeof Pending.cases.ready.Type;
+
 const isReady = (p: Pending): p is Ready => p._tag === "ready";
 
 /**
@@ -328,6 +338,7 @@ export const NameFold = Schema.Struct({
   live: Schema.NullOr(Schema.String),
   ended: Schema.NullOr(Schema.Struct({ pid: Schema.String, reason: ExitReason })),
 });
+
 export type NameFold = typeof NameFold.Type;
 
 /**
@@ -349,10 +360,12 @@ const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: stri
 
   if (entry._tag !== "exited") {
     const named = life.name === undefined || life.name === name;
+
     return { ...fold, after, live: named ? life.process : fold.live };
   }
 
   const reason = Schema.decodeUnknownOption(ExitReason)(life.reason);
+
   return {
     after,
     live: life.process === fold.live ? null : fold.live,

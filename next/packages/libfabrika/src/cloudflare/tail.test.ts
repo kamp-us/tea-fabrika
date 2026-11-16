@@ -18,10 +18,15 @@ const CODE = {
 
 // The product's own closed list, which the U10 format law pins word by word in IsolateUsage.test.ts.
 const methods = IsolateUsage.Method.literals;
+
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
+
 const word = fc.string();
 
-class TailImportError extends Schema.TaggedError<TailImportError>()("TailImportError", { cause: Schema.Defect() }) {}
+class TailImportError extends Schema.TaggedError<TailImportError, { readonly brand: unique symbol }>()(
+  "TailImportError",
+  { cause: Schema.Defect() },
+) {}
 
 const event = fc.record({
   method: fc.option(fc.oneof(fc.constantFrom(...methods), word), { nil: null }),
@@ -34,10 +39,12 @@ const event = fc.record({
 
 const loadTail = Effect.gen(function* () {
   const url = new URL("./tail.ts", import.meta.url).href;
+
   const api: typeof import("./tail.ts") = yield* Effect.tryPromise({
     try: () => import(/* @vite-ignore */ url),
     catch: (cause) => new TailImportError({ cause }),
   });
+
   return api.tail;
 });
 
@@ -56,17 +63,20 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               const tail = yield* loadTail;
               const calls: Array<{ object: string; rows: unknown }> = [];
               const spans: Array<Tracer.NativeSpan> = [];
+
               // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform namespace and Promise RPC are doubled
               const env = {
                 PROCESS: {
                   getByName: (object: string) => ({
                     usage: (rows: unknown) => {
                       calls.push({ object, rows });
+
                       return Promise.resolve();
                     },
                   }),
                 },
               } as unknown as Env;
+
               const items = events.map(({ method, outcome, cpuTime, wallTime, content, emptyEvent }) => ({
                 event: method === null ? (emptyEvent ? {} : null) : { rpcMethod: method },
                 outcome,
@@ -82,6 +92,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
                   throw new Error(content);
                 },
               }));
+
               yield* tail(
                 env,
                 { project: "project-test", name: "checklist:1", process: PROCESS },
@@ -95,6 +106,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
                       span: (options) => {
                         const span = new Tracer.NativeSpan(options);
                         spans.push(span);
+
                         return span;
                       },
                     }),
@@ -138,20 +150,25 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
             Effect.gen(function* () {
               const seen: Array<{ key: string; tails: ReadonlyArray<unknown> | undefined }> = [];
               const declaration = { name: "checklist", v: 1, inputs: {}, writes: {}, cmds: [] };
+
               // oxlint-disable-next-line fabrika/no-type-assertions -- recording Worker Loader implements only get and describe
               const loader = {
                 get: (key: string, code: () => { tails?: ReadonlyArray<unknown> }) => {
                   seen.push({ key, tails: code().tails });
+
                   return { getEntrypoint: () => ({ describe: () => Promise.resolve(declaration) }) };
                 },
               } as unknown as Parameters<typeof workerLoader>[0];
+
               const load = workerLoader(loader, {
                 checklist: CODE,
               }).load;
+
               const live = new Map([
                 ["checklist:1", 1],
                 ["checklist:2", 2],
               ]);
+
               const tails = new Map<number, BoundTail>();
               let next = 2;
 

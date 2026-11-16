@@ -13,7 +13,9 @@ import { Run } from "./WorkflowRuns.ts";
 import * as WorkflowRunsTest from "./WorkflowRunsTest.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
+
 const red = { number: 1300, title: "Scheduled CI is red on main", since: AT } satisfies Level.Alert;
+
 const slow = { number: 1301, title: "CI speed: a stage is over its goal", since: AT } satisfies Level.Alert;
 
 const home = Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix: "sev-" }));
@@ -72,9 +74,11 @@ describe("close", () => {
         Effect.gen(function* () {
           const dir = yield* home;
           const github = WorkflowRunsTest.world(runs);
+
           const prs = picks.map((p, i) =>
             pr(i + 1, runs.length === 0 ? stray : (runs[Math.abs(p.at) % runs.length]?.branch ?? stray), p.state),
           );
+
           const behind = Object.fromEntries(prs.map((p, i) => [p.oid, picks[i]?.behind ?? 0]));
           const prWorld = PullRequestsTest.world([...prs, pr(9999, stray)]);
 
@@ -117,6 +121,7 @@ describe("close", () => {
           yield* Level.write(dir, canceled(run(3, "fabrikalfa/b")));
           yield* Level.write(dir, canceled(run(4, "main")));
           yield* Level.write(dir, canceled(run(5, "fabrikalfa/gone")));
+
           const prs = PullRequestsTest.world([
             pr(10, "fabrikalfa/a"),
             pr(11, "fabrikalfa/b"),
@@ -149,9 +154,11 @@ describe("close", () => {
           const dir = yield* home;
           yield* Incident.open({ home: dir, reason: "slow", allow: [] }).pipe(Effect.provide(services({})));
           yield* Level.write(dir, canceled(run(1, "fabrikalfa/a")));
+
           const closed = yield* Incident.close(dir, "lead", Duration.zero).pipe(
             Effect.provide(services({ prs: PullRequestsTest.world([pr(10, "fabrikalfa/a")]) })),
           );
+
           expect(closed.walk).toEqual([
             Incident.Walk.cases.unknown.make({ pr: 10, branch: "fabrikalfa/a", reason: `unknown ${pr(10, "").oid}` }),
           ]);
@@ -190,6 +197,7 @@ describe("open, next, allow and status", () => {
           const again = yield* Effect.flip(
             Incident.open({ home: dir, reason: "again", allow: [] }).pipe(Effect.provide(layer)),
           );
+
           expect(again).toMatchObject({ _tag: "Refused" });
 
           yield* Incident.next(dir, "fabrikalfa/y");
@@ -261,6 +269,7 @@ describe("summary", () => {
       Level.Entry.cases.failed.make({ at: AT, call: "cancel", id: 3, reason: "gone" }),
       Level.Entry.cases.closed.make({ at: AT, by: "owner" }),
     ];
+
     expect(Incident.summary(entries)).toEqual([
       `${AT} opened by the owner: slow; allowed: fabrikalfa/a`,
       "  over ci-scheduled issues: 1300",

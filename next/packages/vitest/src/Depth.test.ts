@@ -49,6 +49,7 @@ it("a fast count above full, under LEAST, not whole, or a full under one fails a
     Counts.map(({ fast, full }) => ({ fast, full: full + 0.5 })),
     fc.integer({ min: -5, max: 0 }).map((full) => ({ fast: full, full })),
   );
+
   fc.assert(
     fc.property(Bad, fc.constantFrom("fast" as const, "full" as const), (runs, at) => {
       expect(() => runsAt(at, runs)).toThrow(/runsFor/);

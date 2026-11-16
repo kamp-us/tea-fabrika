@@ -20,10 +20,15 @@ import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "inbox:1";
+
 const BUILD = "inbox-build";
+
 const BRAIN = "SHA256:brain";
+
 const person = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
+
 const agent = Writer.cases.agent.make({ key: "SHA256:agent", for: "agent" });
+
 const recovered = Writer.cases.person.make({ key: "SHA256:recovered", for: "person" });
 
 const brainFrom = {
@@ -64,25 +69,31 @@ const session = Effect.fnUntraced(function* (
   const ledger = yield* files("ledger");
   const store = yield* files("process");
   const manager = yield* files("manager");
+
   const process = yield* ProcessManager.use((m) =>
     Effect.gen(function* () {
       yield* m.start(
         Start.cases.first.make({ id: `boot:${NAME}`, name: NAME, code: { program: program.name, hash: BUILD } }),
         brainFrom,
       );
+
       return (yield* m.status(NAME)).state.process;
     }),
   ).pipe(Effect.provide(managerLayer(manager)), Effect.orDie);
+
   const mail = Mailbox.layer.pipe(
     Layer.provideMerge(LedgerSql.layer(ledger, { reader: "inbox-law" }).pipe(Layer.provide(quiet))),
   );
+
   yield* LedgerTransaction.use((l) =>
     l.transact((turn) => turn.append(`${NAME}/inbox`, noticeId(initial.id), letterLine(brainFrom, initial))),
   ).pipe(Effect.provide(LedgerTransactionSql.layer(ledger).pipe(Layer.provide(quiet))), Effect.orDie);
+
   const checked = Layer.effect(
     CheckedWriter,
     Effect.gen(function* () {
       const mailbox = yield* Mailbox;
+
       return CheckedWriter.of({
         append: (i) =>
           mailbox.send(NAME, i.id, i.envelope.input, {
@@ -99,6 +110,7 @@ const session = Effect.fnUntraced(function* (
       });
     }),
   );
+
   return ProgramRunner.layer(
     { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
     { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
@@ -122,6 +134,7 @@ const open: RunnerTest.Open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t884-inbox-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
+
   return {
     start: (program: typeof inbox, initial: typeof inbox.msg.Type) =>
       Effect.flatMap(session(files, program, initial), (layer) => ProgramRunner.pipe(Effect.provide(layer))),

@@ -53,6 +53,7 @@ export const make = (file: string): Effect.Effect<DatabaseSync, never, Scope.Sco
     Effect.sync(() => {
       const db = new DatabaseSync(file);
       db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+
       return db;
     }),
     close,

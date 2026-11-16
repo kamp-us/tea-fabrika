@@ -50,8 +50,10 @@ const databases = Effect.gen(function* () {
   // handle is acquired into this scope, which closes it.
   const scope = yield* Effect.scope;
   const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
+
   const connect = (part: string) =>
     TestDatabase.make(join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+
   const handle = (part: string) => {
     const found = held.get(part);
 
@@ -61,10 +63,13 @@ const databases = Effect.gen(function* () {
 
     const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
+
     return ScopedRef.getUnsafe(made);
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -77,13 +82,17 @@ const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
+
   const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
     discard: true,
     concurrency: 1,
   });
+
   return { sql, reopen };
 });
 

@@ -25,12 +25,14 @@ const open = Effect.gen(function* () {
   const file = path.join(folder, "store.db");
   const connect = TestDatabase.make(file).pipe(Effect.map(nodeSql));
   const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the connection open now.
   const sql: Sql = {
     exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
     transaction: (work) => ScopedRef.getUnsafe(held).transaction(work),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   return { sql, reopen: ScopedRef.set(held, connect) } satisfies ReloadTest.Store;
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -60,6 +62,7 @@ const rows: ReloadTest.Rig["rows"] = (sql) =>
     ? []
     : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
         const row = decode(raw);
+
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body, build: row.build };
       });
 

@@ -2076,7 +2076,7 @@ describe("P34c live object accounting", () => {
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
           const { policy } = Schema.decodeUnknownSync(
             Schema.fromJsonString(
-              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Number }) }) }),
+              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
             ),
           )(journal?.value);
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(

@@ -15,7 +15,9 @@ import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
 
 const SEED = 119120;
+
 const QUEUE = "brain.records.sqlite";
+
 // One sorts before the queue's file and one after, so no law leans on the listing's order.
 const RECORDS = [".alchemy/record.sqlite", "records/record.sqlite"] as const;
 
@@ -152,6 +154,7 @@ describe("spanOutputs", () => {
                 }
 
                 let listings = 0;
+
                 const fs: FileSystem.FileSystem = {
                   ...real,
                   glob: (pattern, options) =>
@@ -168,6 +171,7 @@ describe("spanOutputs", () => {
                       return yield* real.glob(pattern, options);
                     }),
                 };
+
                 const outputs = yield* spanOutputs(home).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
                 expect(listings, "the flush landed during the read").toBeGreaterThanOrEqual(at);

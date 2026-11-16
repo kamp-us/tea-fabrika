@@ -14,7 +14,9 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t953-sender-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const db = yield* TestDatabase.make(join(folder, "session.db"));
+
   return { sql: nodeSql(db) } satisfies SessionSenderTest.Store;
 });
 

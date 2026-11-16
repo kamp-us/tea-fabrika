@@ -19,15 +19,18 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p39-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const path = join(folder, "ledger.db");
   const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
   const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
     transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   return { sql, reopen: ScopedRef.set(held, connect) } satisfies TestSuite.Store;
 });
 

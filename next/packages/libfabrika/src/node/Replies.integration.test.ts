@@ -22,6 +22,7 @@ import type { Sql } from "../Sql.ts";
 
 // The brain's own session, a process id it never starts.
 const SESSION = "process_0000000000e008000000000003";
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** One connection to a database file, closed with its scope. A test process never loses power, so
@@ -35,6 +36,7 @@ const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p13-replies-" });
+
   return (name: string) => connection(path.join(folder, `${name}.sqlite`));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -54,4 +56,5 @@ const services = (inbox: Sql, manager: Sql) =>
   );
 
 RepliesTest.suite(Effect.map(files, (open) => open("replies")));
+
 RunnerRepliesTest.suite({ files, services });

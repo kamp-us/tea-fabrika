@@ -4,6 +4,7 @@
 import * as Schema from "effect/Schema";
 
 const Text = Schema.NonEmptyString.check(Schema.isPattern(/^[^\p{Cc}]+$/u));
+
 const Absolute = Text.check(Schema.isPattern(/^\//u));
 
 const Home = Absolute.check(
@@ -24,7 +25,7 @@ const Home = Absolute.check(
  *
  * @category schemas
  */
-export class BrainSpec extends Schema.Opaque<BrainSpec>()(
+export class BrainSpec extends Schema.Opaque<BrainSpec, { readonly brand: unique symbol }>()(
   Schema.Struct({
     home: Home,
     executable: Absolute,

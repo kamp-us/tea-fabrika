@@ -28,6 +28,7 @@ const indent = (text: string) => text.replace(/\n/g, "\n  ");
  */
 export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {
   const shown = rows.filter((row) => options.all || row.origin._tag !== "default");
+
   const blocks = shown.map((row) =>
     [
       `${row.path} = ${JSON.stringify(row.value)}`,
@@ -36,8 +37,10 @@ export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolea
       `  ${indent(row.doc)}`,
     ].join("\n"),
   );
+
   const hidden = rows.length - shown.length;
   const rest = hidden === 0 ? [] : [`Keys left at their defaults: ${hidden}. fabrika settings --all shows them.`];
+
   return `${[...blocks, ...rest].join("\n\n")}\n`;
 };
 

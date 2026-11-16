@@ -92,6 +92,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
   // Config treats a container supplied to a scalar schema as absent. Before defaulting,
   // check every provider shape so a present value, including [], stays a failure.
   const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
+
   const config = Config.schema(options.schema, segments).pipe(
     Config.orElse((error) => {
       if (error.cause._tag === "SourceError") {
@@ -104,6 +105,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
       );
     }),
   );
+
   return Object.assign(config, { ...options, format: options.format ?? "json", path, segments, env });
 };
 

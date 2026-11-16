@@ -24,18 +24,23 @@ const store = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
   const handles: Array<DatabaseSync> = [];
+
   const connect = TestDatabase.make(paths.join(path, "ledger.db")).pipe(
     Effect.tap((db) => Effect.sync(() => handles.push(db))),
     Effect.map(nodeSql),
   );
+
   const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
     transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   const open = () => handles.filter((db) => db.isOpen).length;
+
   return { sql, reopen: ScopedRef.set(held, connect), probe: { open } } satisfies ChildrenTest.Store;
 });
 

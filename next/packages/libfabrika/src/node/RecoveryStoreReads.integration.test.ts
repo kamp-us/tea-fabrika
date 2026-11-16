@@ -13,8 +13,10 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t936-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   // A test process never loses power, so `TestDatabase.make` skips the sync (ticket 585, decision 0052).
   const db = yield* TestDatabase.make(join(folder, "store.db"));
+
   return nodeSql(db);
 });
 

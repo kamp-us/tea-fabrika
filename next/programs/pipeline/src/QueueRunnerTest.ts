@@ -115,6 +115,7 @@ const secret = Arbitrary.schema(
 ).pipe(
   Arbitrary.map(({ prefix, body, form }) => {
     const token = `${prefix}${body}`;
+
     return {
       token,
       text:
@@ -133,6 +134,7 @@ const cell = fc.record({
 type Cell = typeof cell extends fc.Arbitrary<infer A> ? A : never;
 
 const q5Runs = runsFor({ fast: 20, full: 200 });
+
 const s2Runs = 40;
 
 // Effect Arbitrary has no command-list generator. A generated seed draws fast-check's tape.
@@ -218,16 +220,20 @@ export const suite = (driver: Driver) =>
           const h = yield* driver.open();
           yield* h.allowStart(false);
           const answerIds: Array<string> = [];
+
           const inspect = (s: Snapshot, attempts: number, refused: number) => {
             const queue = s.starts.find((p) => p.name === "queue:1");
             expect(queue).toBeDefined();
             const inbox = s.letters.filter((l) => l.name === "queue:1");
+
             const requests = inbox.filter((l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["enqueue", "resume"]) }))(l.m),
             );
+
             const answers = inbox.filter((l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["start_child_ok", "start_child_err"]) }))(l.m),
             );
+
             expect(requests).toHaveLength(attempts);
             expect(answers.map((l) => l.id)).toEqual(requests.map((l) => `${queue?.process}/${l.pos}/0/answer`));
             expect(answers.slice(0, answerIds.length).map((l) => l.id)).toEqual(answerIds);
@@ -246,6 +252,7 @@ export const suite = (driver: Driver) =>
 
             expect(s.model?.attempt).toBe(attempts);
             expect(s.model?.late).toBe(0);
+
             return answers.map((l) => l.id);
           };
 
@@ -312,9 +319,11 @@ export const suite = (driver: Driver) =>
           expect(replies(s, change)).toHaveLength(1);
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
           expect(replies(s, change)[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
+
           const first = s.letters.filter(
             (l) => l.name === `merger:${change}.${change}` && Predicate.hasProperty(l.m, "type") && l.m.type === "land",
           );
+
           expect(first).toHaveLength(1);
           expect(first[0]?.m).toMatchObject({ type: "land", change, ref: String(change), reply: "queue:1" });
         }
@@ -437,11 +446,14 @@ export const suite = (driver: Driver) =>
                 ),
               { discard: true, concurrency: 1 },
             );
+
             const logger = Logger.map(Logger.formatSimple, (line) => {
               logs.push(line);
             });
+
             yield* Effect.gen(function* () {
               const h = yield* driver.open(Redacted.make(value.text));
+
               const inspect = Effect.gen(function* () {
                 const s = yield* h.snapshot;
                 driver.unleaked(
@@ -455,8 +467,10 @@ export const suite = (driver: Driver) =>
                   ],
                   [value.text, value.token],
                 );
+
                 return s;
               });
+
               // These faults are consumed before random moves may abandon the first child.
               yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
               yield* h.host.fail("update", { kind: "defect" });

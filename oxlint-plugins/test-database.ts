@@ -69,6 +69,7 @@ export const testDatabase: CreateRule = {
     /** Whether a name, where it is written, is one of these imports. */
     const isOneOf = (imports: ReadonlySet<Variable>, node: Node & { readonly name: string }): boolean => {
       const variable = resolve(node);
+
       return variable !== undefined && imports.has(variable);
     };
 
@@ -80,6 +81,7 @@ export const testDatabase: CreateRule = {
 
         for (const spec of node.specifiers) {
           const variable = resolve(spec.local);
+
           const imported =
             spec.type === "ImportSpecifier"
               ? spec.imported.type === "Identifier"
@@ -104,6 +106,7 @@ export const testDatabase: CreateRule = {
       "Program:exit"() {
         for (const node of news) {
           const callee = node.callee as Node;
+
           const named =
             callee.type === "Identifier"
               ? isOneOf(constructors, callee)

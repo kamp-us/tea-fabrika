@@ -25,12 +25,14 @@ export const layer = (model: Model): Layer.Layer<Branches> =>
         : Effect.succeed(model.branches),
       ahead: (tip) => {
         const n = model.ahead[tip];
+
         return n === undefined
           ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);
       },
       behind: (tip) => {
         const n = model.behind?.[tip];
+
         return n === undefined
           ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);

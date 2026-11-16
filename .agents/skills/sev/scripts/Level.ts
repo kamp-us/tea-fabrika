@@ -13,7 +13,9 @@ import { DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 // ---------------------------------------------------------------- the log
 
@@ -30,19 +32,19 @@ export const Entry = Schema.TaggedUnion({
     by: Schema.Literal("owner"),
     reason: Schema.String,
     allow: Branches,
-    issues: Schema.NullOr(Schema.Array(Schema.Number)),
+    issues: Schema.NullOr(Schema.Array(Schema.Finite)),
   },
   allowed: { at: Schema.String, branch: Schema.String },
   /** The allow list became `branch` alone; `before` is the list it replaced. */
   next: { at: Schema.String, branch: Schema.String, before: Branches },
   /** A cancel loop started, in process `pid`. */
-  looping: { at: Schema.String, pid: Schema.Number },
+  looping: { at: Schema.String, pid: Schema.Finite },
   canceled: { at: Schema.String, run: Run },
   /** A call to GitHub that failed; `id` is the run it was for, `null` for a list. */
   failed: {
     at: Schema.String,
     call: Schema.Literals(["unfinished", "cancel"]),
-    id: Schema.NullOr(Schema.Number),
+    id: Schema.NullOr(Schema.Finite),
     reason: Schema.String,
   },
   /** The loop ended: it saw the close (`loop`), or no loop answered the close in time (`close`). */
@@ -50,6 +52,7 @@ export const Entry = Schema.TaggedUnion({
   /** The sev0 ended: every fix merged (the lead says so), or the owner called it off. */
   closed: { at: Schema.String, by: Schema.Literals(["owner", "lead"]) },
 });
+
 export type Entry = typeof Entry.Type;
 
 // ---------------------------------------------------------------- the level
@@ -58,12 +61,14 @@ export type Entry = typeof Entry.Type;
 export const Sev0 = Schema.TaggedUnion({
   closed: {},
   /** `index` is the line of the log its `opened` is on, so a summary reads only this sev0. */
-  open: { since: Schema.String, reason: Schema.String, allow: Branches, index: Schema.Number },
+  open: { since: Schema.String, reason: Schema.String, allow: Branches, index: Schema.Finite },
 });
+
 export type Sev0 = typeof Sev0.Type;
 
 /** One open `ci-scheduled` issue: what keeps a sev1 on. `since` is when it was opened. */
-export const Alert = Schema.Struct({ number: Schema.Number, title: Schema.String, since: Schema.String });
+export const Alert = Schema.Struct({ number: Schema.Finite, title: Schema.String, since: Schema.String });
+
 export type Alert = typeof Alert.Type;
 
 /** The level CI is in now. */
@@ -72,6 +77,7 @@ export const Level = Schema.TaggedUnion({
   sev1: { issues: Schema.Array(Alert) },
   sev0: { since: Schema.String, reason: Schema.String, allow: Branches },
 });
+
 export type Level = typeof Level.Type;
 
 /** The level from the sev0 and the open issues: an open sev0 wins, then any open issue. */
@@ -148,10 +154,11 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
   }
 
   const lines = (yield* fs.readFileString(at)).split("\n").filter((line) => line !== "");
+
   return yield* Effect.forEach(
     lines,
     (line, index) =>
-      Schema.decodeUnknownEffect(EntryJson)(line).pipe(
+      Schema.decodeEffect(EntryJson)(line).pipe(
         Effect.mapError(() => Refused.make({ reason: `line ${index + 1} of ${at} is not one this script wrote` })),
       ),
     { concurrency: "unbounded" },
@@ -185,5 +192,6 @@ export const write = Effect.fn("Level.write")(function* (home: string, entry: En
 
   yield* fs.makeDirectory(home, { recursive: true });
   yield* fs.writeFileString(yield* file(home), `${Schema.encodeSync(EntryJson)(entry)}\n`, { flag: "a" });
+
   return next.success;
 });

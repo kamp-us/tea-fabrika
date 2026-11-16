@@ -20,6 +20,7 @@ const page = Effect.scoped(
     const booting = yield* start({ tiles: [], tezgah, window, origin, build, client });
     const run = yield* booting.ready;
     yield* mount(element, { run, machine: window, origin, windowFor, keys });
+
     return yield* Effect.never;
   }),
 ).pipe(

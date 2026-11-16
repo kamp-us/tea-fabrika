@@ -41,6 +41,7 @@ export const noThrowInEffectGen: CreateRule = {
             message:
               "Bare `throw` inside an `Effect.gen`/`Effect.fn` body is banned: a thrown exception escapes the `E` channel as an uncatchable defect (#2736). Fix: `yield* Effect.fail(new SomeError({...}))` (a `Schema.TaggedErrorClass` in the `E` channel) for a recoverable failure, or `yield* Effect.die(cause)` for a genuine defect. Exception: // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>.",
           });
+
           return;
         }
       },

@@ -28,6 +28,7 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
  */
 export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
   const shared = client.filter((v) => server.includes(v));
+
   return shared.length === 0 ? null : Math.max(...shared);
 };
 
@@ -62,6 +63,7 @@ export const sameOrigin = (a: {
   }
 
   const url = decodeUrl(a.origin);
+
   return (
     Result.isSuccess(url) &&
     (url.success.protocol === "https:" || url.success.protocol === "http:") &&
@@ -75,7 +77,7 @@ export type WebCryptoError = import("./internal/binary.ts").WebCryptoError;
 
 /** What `checkHello` answers: the admitted hello, or the refusal with its reason. */
 export const CheckedHello = Schema.TaggedUnion({
-  online: { identity: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
+  online: { identity: Who, version: Schema.Int, ping: Schema.Finite, hello: Hello },
   refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
 });
 
@@ -83,13 +85,16 @@ const no = (reason: string) => CheckedHello.cases.refused.make({ reason });
 
 const pingMs = (text: string, min: number, max: number): number => {
   const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(text);
+
   const scale = new Map([
     ["ms", 1],
     ["s", 1000],
     ["m", 60_000],
     ["h", 3_600_000],
   ]);
+
   const n = match === null ? min : Number(match[1]) * (scale.get(match[2] ?? "") ?? 1);
+
   return Math.max(min, Math.min(max, n));
 };
 
@@ -164,6 +169,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   field.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(field.buffer).setUint32(15, 32);
   field.set(raw.success, 19);
+
   const checked = yield* checkSshsig({
     text: helloText(a),
     armored: hello.signed,

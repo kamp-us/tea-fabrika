@@ -46,8 +46,10 @@ export const databases = Effect.gen(function* () {
   // A part is opened from a plain call, so its handle is acquired into this scope, which closes it.
   const scope = yield* Effect.scope;
   const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
+
   const connect = (part: string) =>
     TestDatabase.make(paths.join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+
   const handle = (part: string) => {
     const found = held.get(part);
 
@@ -58,11 +60,14 @@ export const databases = Effect.gen(function* () {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Sql is synchronous, and a part opens on its first call
     const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
+
     return ScopedRef.getUnsafe(made);
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
   const bytes = new TextEncoder();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -90,18 +95,24 @@ export const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
+
   const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
     discard: true,
     concurrency: 1,
   });
+
   const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
+
   const data = (sql: Sql) =>
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
+
   const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
       ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
@@ -126,6 +137,7 @@ export const databases = Effect.gen(function* () {
       Layer.provideMerge(Mailbox.layer),
       Layer.provideMerge(data(sql)),
     );
+
   const entries: StartChildTest.Store["entries"] = (names) =>
     Effect.forEach(
       ["processes", ...[...new Set(names)].flatMap((name) => [`processes/${name}`, `${name}/inbox`])],
@@ -136,9 +148,11 @@ export const databases = Effect.gen(function* () {
       Effect.provide(data(sql("ledger"))),
       Effect.orDie,
     );
+
   const tracer: StartChildTest.Store["tracer"] = (sql) =>
     Effect.map(Layer.build(SpanSink.layer(sql, { object: "p42-secrets" })), (context) =>
       Context.get(context, Tracer.Tracer),
     );
+
   return { sql, reopen, shared, entries, probe: { open }, tracer } satisfies StartChildTest.Store;
 });

@@ -60,6 +60,7 @@ type Role =
   | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
+
 const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
 
 const launchers = (browser: string) =>
@@ -69,7 +70,9 @@ const launchers = (browser: string) =>
   );
 
 const services: Role = { _tag: "layer", gives: ["process", "disk"] };
+
 const files: Role = { _tag: "layer", gives: ["disk"] };
+
 const spawner: Role = { _tag: "layer", gives: ["process"] };
 
 /** Each module whose names open a real thing, by the dotted path of the name inside the module. */
@@ -130,6 +133,7 @@ const LOCAL = /^(?:localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)$/;
 /** A URL outside this machine, from the literal start of a call's first argument. */
 const remote = (first: string | null): boolean => {
   const host = /^(?:https?|wss?):\/\/([^/:?#]+|\[[^\]]+\])/.exec(first ?? "")?.[1];
+
   return host !== undefined && !LOCAL.test(host);
 };
 
@@ -153,8 +157,10 @@ export const reader = <N>() => {
   // A global `fetch` to another machine, kept apart: a file that stubs `fetch` reaches nothing.
   const fetched: Array<Open<N>> = [];
   let stubbed = false;
+
   const open = (node: N, shown: string, tag: Tag, needs: Layer | null = null) =>
     found.push({ _tag: tag, call: shown, node, needs });
+
   const bind = (written: string, role: Role) => {
     bound.set(written, role);
 
@@ -164,10 +170,13 @@ export const reader = <N>() => {
       }
     }
   };
+
   const service = (written: string): Layer | null => {
     const role = bound.get(written);
+
     return role?._tag === "service" ? role.needs : null;
   };
+
   // A port's client call to a literal URL on another machine reaches the network.
   const opened = (tag: Tag, first: string | null): Tag => (tag === "port" && remote(first) ? "network" : tag);
 
@@ -234,6 +243,7 @@ export const reader = <N>() => {
     },
     opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> => {
       const all = stubbed ? found : [...found, ...fetched];
+
       return scope === "any" ? all : all.filter((one) => one.needs === null || provided.has(one.needs));
     },
   };
@@ -261,6 +271,7 @@ const receiver = (callee: Node): Receiver | null => {
 
   const service = yielded(callee.object);
   const written = dotted(callee.object);
+
   return service !== null ? { _tag: "yield", written: service } : written === null ? null : { _tag: "name", written };
 };
 
@@ -300,10 +311,12 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
   },
   CallExpression(node) {
     const { callee } = node;
+
     const method =
       callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
         ? callee.property.name
         : null;
+
     read.calls(node, dotted(callee), method, receiver(callee), literal(node.arguments[0]));
   },
 });

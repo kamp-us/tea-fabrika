@@ -14,7 +14,7 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import {
   Body,
   build,
@@ -61,7 +61,8 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+
   const founder = {
     name: "P8",
     person,
@@ -70,6 +71,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     by: "SHA256:exam-founder",
     build,
   };
+
   const env = Layer.mergeAll(
     ledger,
     ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
@@ -93,7 +95,9 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       Layer.provide(RateLimiterSql.layer(sql, { build, policy: { limit: 100_000, window: 60_000 } })),
     ),
   );
+
   let deliveries = 0;
+
   const layer = Gateway.layer({
     sql,
     founder,
@@ -112,6 +116,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     deliver: (_p, _envelope, _span, input) =>
       Effect.suspend(() => {
         deliveries++;
+
         return runner.msg(input);
       }),
     notify: () => Effect.void,
@@ -123,10 +128,12 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
+
   const connect = Effect.gen(function* () {
     const door = yield* Gateway.pipe(Effect.provide(layer)),
       client = yield* door.connect(),
       nonce = yield* door.challenge(client);
+
     const signed = yield* writeSshsig({
       text: `fabrika-hello\nhttps://fabrika.test/p8\nexam\n${nonce}`,
       line,
@@ -136,6 +143,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
           Effect.map((a) => new Uint8Array(a)),
         ),
     });
+
     expect(
       (yield* door.initialize(
         client,
@@ -155,8 +163,10 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
         { url: "https://fabrika.test/p8", tab: "exam", name: fingerprint },
       ))._tag,
     ).toBe("online");
+
     return { door, client };
   });
+
   return {
     connect,
     deliveries: () => deliveries,
@@ -211,6 +221,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const spy = { calls: 0 };
       const w = yield* world(makeProgram(() => replayRefuse(spy), true));
+
       const m = incoming(1, body),
         placed = yield* w.append(m);
 
@@ -221,8 +232,10 @@ it.effect.prop(
       yield* w.store.save({ saved: { v: 1, build, model: empty, after: 0 }, turn: null, cmds: [] }, [
         { id: m.id, rev: placed.rev, pos: placed.pos },
       ]);
+
       const before = yield* w.rows(),
         runner = yield* w.runner();
+
       failedAs(yield* Effect.exit(runner.open("watcher")), "saved_letter");
       unchanged(before, yield* w.rows());
       expect(w.updates).toEqual([]);
@@ -240,6 +253,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(makeProgram(() => null, true));
       yield* w.boot;
+
       const runner = yield* w.runner(),
         input = incoming(1, body);
 
@@ -279,9 +293,11 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(makeProgram(() => null, true));
       yield* w.boot;
+
       const runner = yield* w.runner(),
         sender = yield* openDoor(w, runner),
         first = yield* sender.connect;
+
       const request = {
         pid: process,
         letter: id("letter", 1),
@@ -334,6 +350,7 @@ it.effect.prop(
       const spy = { calls: 0 };
       const w = yield* world(makeProgram(() => replayRefuse(spy), true));
       yield* w.boot;
+
       const input = incoming(1, body),
         placed = yield* w.append(input);
 
@@ -344,8 +361,10 @@ it.effect.prop(
       yield* w.store.save({ saved: { v: 1, build, model: empty, after: 0 }, turn: null, cmds: [] }, [
         { id: input.id, rev: placed.rev, pos: placed.pos },
       ]);
+
       const before = yield* w.rows(),
         runner = yield* w.runner();
+
       failedAs(yield* Effect.exit(runner.open("watcher")), "saved_letter");
       expect(spy.calls).toBe(0);
       expect(w.down()).toEqual([]);

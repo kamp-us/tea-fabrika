@@ -87,6 +87,7 @@ const isTypeOfValue = (prev: Node, next: Node): boolean => {
 
 const isOverload = (prev: Node, next: Node): boolean => {
   const name = callable(prev);
+
   return name !== null && isSignature(prev) && callable(next) === name;
 };
 
@@ -156,6 +157,7 @@ export const paddingLineBetweenStatements: CreateRule = {
           "Leave a blank line before this statement: top-level statements, class members, and every if, loop, switch and try each stand apart (owner, 2026-11-09). Fix: `pnpm format` adds it.",
         fix: (fixer) => fixer.insertTextAfterRange([at, at], "\n"),
       });
+
     return {
       Program(node) {
         check(context.sourceCode, report, node.body, true);

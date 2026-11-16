@@ -123,6 +123,7 @@ type Observed = {
 
 const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
   const base = nodeSql(db);
+
   const sql: Sql = {
     ...base,
     exec: (query, ...args) => {
@@ -133,43 +134,52 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
       return base.exec(query, ...args);
     },
   };
+
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
   const transaction = LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet));
   const observations: Observed[] = [];
   let turns = 0;
+
   const observed = Layer.effect(
     LedgerTransaction,
     Effect.map(LedgerTransaction, (real) => ({
       transact: <A>(step: (turn: LedgerTurn) => A) =>
         real.transact((turn) => {
           const n = ++turns;
+
           return step({
             read: (stream, after) => {
               observations.push({ turn: n, op: "read", stream, after, inside: db.isTransaction });
+
               return turn.read(stream, after);
             },
             get: (stream, id) => {
               observations.push({ turn: n, op: "get", stream, inside: db.isTransaction });
+
               return turn.get(stream, id);
             },
             head: (stream) => {
               observations.push({ turn: n, op: "head", stream, inside: db.isTransaction });
+
               return turn.head(stream);
             },
             // T1041: the turn's position-only read, observed as the others are.
             end: (stream) => {
               observations.push({ turn: n, op: "end", stream, inside: db.isTransaction });
+
               return turn.end(stream);
             },
             append: (stream, id, value) => {
               observations.push({ turn: n, op: "append", stream, inside: db.isTransaction });
+
               return turn.append(stream, id, value);
             },
           });
         }),
     })),
   ).pipe(Layer.provide(transaction));
+
   const layer = Layer.mergeAll(
     ledger,
     observed,
@@ -178,6 +188,7 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
     RecordManager.memory(1024 * 1024),
     Archive.memory,
   );
+
   return { db, sql, path, observations, layer };
 };
 
@@ -185,6 +196,7 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
 const world = (path?: string, fail = false) =>
   Effect.gen(function* () {
     const file = path ?? join(yield* folder, "home.db");
+
     return worldOn(yield* TestDatabase.make(file), file, fail);
   });
 
@@ -286,9 +298,11 @@ describe("P17a, appendAdmitted", () => {
               const fresh = reopen ? yield* world(w.path) : w;
               yield* Effect.gen(function* () {
                 yield* TestClock.setTime(at);
+
                 const real = yield* LedgerTransaction,
                   entered = yield* Deferred.make<void>(),
                   release = yield* Deferred.make<void>();
+
                 const paused: typeof LedgerTransaction.Service = {
                   transact: (step) =>
                     Deferred.succeed(entered, undefined).pipe(
@@ -296,6 +310,7 @@ describe("P17a, appendAdmitted", () => {
                       Effect.andThen(real.transact(step)),
                     ),
                 };
+
                 const pending = yield* Effect.forkChild(
                   Effect.result(
                     appendAdmitted(old, { stream: "notes", id: "late", line: line(body) }).pipe(
@@ -303,6 +318,7 @@ describe("P17a, appendAdmitted", () => {
                     ),
                   ),
                 );
+
                 yield* Deferred.await(entered);
                 yield* remove();
                 yield* Deferred.succeed(release, undefined);
@@ -410,6 +426,7 @@ describe("P17a, appendAdmitted", () => {
           Effect.runPromise(
             Effect.flatMap(world(undefined, outcome === "storage"), (w) => {
               const marker = `p17-private-body-${text}`;
+
               return Effect.gen(function* () {
                 yield* boot;
                 yield* SpanSink.use((sink) => sink.flush);
@@ -427,12 +444,14 @@ describe("P17a, appendAdmitted", () => {
                 expect(Result.isSuccess(result)).toBe(outcome === "placed");
                 yield* SpanSink.use((sink) => sink.flush);
                 const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+
                 const operations = rows.filter(
                   (row) =>
                     Object.values(row.attributes).includes(id) &&
                     Object.values(row.attributes).includes("notes") &&
                     Object.values(row.attributes).includes(outcome),
                 );
+
                 expect(operations, "the operation's own ended span records its id, stream and outcome").toHaveLength(1);
 
                 for (const row of operations) {

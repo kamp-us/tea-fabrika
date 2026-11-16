@@ -15,6 +15,7 @@ const database = (path: string): Effect.Effect<RunnerInitTest.Database, never, S
   Effect.gen(function* () {
     const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
     const held = yield* ScopedRef.fromAcquire(connect);
+
     return {
       sql: {
         exec: (query: string, ...params: ReadonlyArray<SqlValue>) => ScopedRef.getUnsafe(held).exec(query, ...params),
@@ -30,6 +31,7 @@ const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t762-init-" });
+
   return (name: string) => database(path.join(folder, `${name}.db`));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 

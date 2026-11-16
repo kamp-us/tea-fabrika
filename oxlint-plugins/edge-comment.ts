@@ -24,7 +24,9 @@ const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika
 
 // No word boundary after the keyword: oxlint reads `oxlint-disablefoo` as naming a rule `foo`.
 const DISABLE = /^\s*(?:oxlint|eslint)-disable(-next-line|-line)?(.*)$/s;
+
 const REASON = /\s--\s+/;
+
 const EDGE_WHY = /^edge: \S/;
 
 const SHAPE = "`// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`";
@@ -40,6 +42,7 @@ const problem = (comment: string): string | null => {
 
   const [, form = "", rest = ""] = found;
   const at = rest.search(REASON);
+
   const rules = (at < 0 ? rest : rest.slice(0, at))
     .split(",")
     .map((rule) => rule.trim())
@@ -58,6 +61,7 @@ const problem = (comment: string): string | null => {
   }
 
   const why = at < 0 ? "" : rest.slice(at).replace(REASON, "");
+
   return EDGE_WHY.test(why) ? null : "does not give its reason as `edge: <why>`";
 };
 

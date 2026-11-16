@@ -41,6 +41,7 @@ export const noEffectPromise: CreateRule = {
 
         if (name === "Effect.tryPromise") {
           const [only] = node.arguments;
+
           const isObject =
             node.arguments.length === 1 && only?.type === "ObjectExpression" && grouped(context.sourceCode, only) === 0;
 

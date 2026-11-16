@@ -69,7 +69,11 @@ export type ConnectionShape = {
 };
 
 export class Project extends DurableObject<Project, ProjectShape>()("Project") {}
+
 export class Process extends DurableObject<Process, ProcessShape>()("Process") {}
+
 export class Connection extends DurableObject<Connection, ConnectionShape>()("Connection") {}
+
 export class RecordPart extends DurableObject<RecordPart, RecordShape>()("RecordPart") {}
+
 export class Brain extends Worker<Brain, Record<never, never>, RecordPart | Connection | Process>()("Brain") {}

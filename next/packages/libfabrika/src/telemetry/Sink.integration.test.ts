@@ -40,8 +40,9 @@ import { type Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-type ChainValue = typeof Chain.Type;
-type Row = typeof SpanRow.Type;
+type ChainValue = Chain;
+
+type Row = SpanRow;
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so each file is opened into the scope that asked for the folder: that scope closes each
@@ -63,6 +64,7 @@ const home = folder.pipe(
     const db = open("object.db");
     const parts = new Map<string, DatabaseSync>();
     const sqls = new Map<string, Sql>();
+
     const part = (name: string): Sql => {
       const known = sqls.get(name);
 
@@ -74,18 +76,26 @@ const home = folder.pipe(
       parts.set(name, made);
       const sql = nodeSql(made);
       sqls.set(name, sql);
+
       return sql;
     };
+
     const bytes = (marker: string) => readdirSync(dir).filter((file) => readFileSync(join(dir, file)).includes(marker));
+
     return { dir, db, sql: nodeSql(db), open, part, parts, bytes };
   }),
 );
 
 const OBJECT = Effect.runSync(processId);
+
 const P1 = OBJECT;
+
 const P2 = Effect.runSync(processId);
+
 const job = (process: string): ChainValue => ({ _tag: "job", process });
+
 const spans: ChainValue = { _tag: "spans" };
+
 const BIG = 1024 * 1024 * 1024;
 
 const world = (
@@ -137,6 +147,7 @@ const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
 const filling = (inner: Sql) => {
   let armed = 0;
   let inside = false;
+
   const sql: Sql = {
     exec: (query, ...params) => {
       if (!inside && armed > 0 && WRITE.test(query)) {
@@ -162,6 +173,7 @@ const filling = (inner: Sql) => {
     },
     size: () => inner.size(),
   };
+
   return { sql, arm: (times: number) => (armed = times) };
 };
 
@@ -170,6 +182,7 @@ const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex"
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256. */
 const bucket = () => {
   const files = new Map<string, Uint8Array>();
+
   const calls: BucketCalls = {
     put: (key, body, sha256) => {
       if (hex(body) !== sha256) {
@@ -177,13 +190,16 @@ const bucket = () => {
       }
 
       files.set(key, body.slice());
+
       return Promise.resolve();
     },
     head: (key) => {
       const body = files.get(key);
+
       return Promise.resolve(body === undefined ? null : { sha256: hex(body) });
     },
   };
+
   return { calls, files };
 };
 
@@ -236,10 +252,12 @@ describe("T246, P37 decodes TypeID process ids", () => {
                 sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
                 const exit = yield* Effect.exit(flush);
                 expect(Exit.isFailure(exit), "P37 must reject the stored process id before sending").toBe(true);
+
                 const error = Exit.match(exit, {
                   onFailure: Cause.squash,
                   onSuccess: () => undefined,
                 });
+
                 expect(error).toBeInstanceOf(SinkError);
                 expect(error).toMatchObject({ reason: "bad_row", held: 0 });
                 expect(count(db, "unsent")).toBe(1);
@@ -262,12 +280,14 @@ describe("p98, a span that ends is never dropped", () => {
   it.live("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", () =>
     Effect.gen(function* () {
       const { db, open } = yield* home;
+
       // Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
       const exit = Effect.runSyncExit(
         traced("runner.step", { "fab.process": P1 }, step("ledger.call")).pipe(
           Effect.provide(SpanSink.layer(nodeSql(db), { object: OBJECT })),
         ),
       );
+
       expect(Exit.isSuccess(exit)).toBe(true);
       db.close();
       const again = open("object.db");
@@ -365,12 +385,14 @@ describe("p98, a span that ends is never dropped", () => {
       // is the only place that says which object ended each one (review must-fix, p98).
       const one = yield* home;
       const two = yield* home;
+
       const ends = (sql: Sql, object: string, process: string) =>
         Effect.gen(function* () {
           yield* traced("runner.step", { "fab.process": process }, step("ledger.call"));
           yield* step("gateway.envelope", { "fab.n": 1 });
           expect(yield* flush).toEqual({ sent: 3 });
         }).pipe(Effect.provide(SpanSink.layer(sql, { object })));
+
       yield* Effect.gen(function* () {
         yield* ends(one.sql, OBJECT, P1);
         yield* ends(two.sql, P2, P2);
@@ -404,14 +426,17 @@ describe("p98, a span that ends is never dropped", () => {
   it.effect("a span's links stay on its row, in OTLP's link shape, their tags kept as a span's are", () =>
     Effect.gen(function* () {
       const { sql, bytes } = yield* home;
+
       const first = Tracer.externalSpan({
         traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
         spanId: "00f067aa0ba902b7",
       });
+
       const second = Tracer.externalSpan({
         traceId: "5bf92f3577b34da6a3ce929d0e0e4737",
         spanId: "10f067aa0ba902b8",
       });
+
       yield* Effect.gen(function* () {
         yield* Effect.void.pipe(
           Effect.withSpan("runner.step", {
@@ -459,10 +484,12 @@ describe("p98, a span that ends is never dropped", () => {
               }
 
               const real = yield* RecordManager;
+
               const down = {
                 ...real,
                 write: () => Effect.fail(new SinkError({ reason: value, held: 0 })),
               };
+
               const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
               expect(failed).toBeInstanceOf(SinkError);
               expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(4);
@@ -470,17 +497,18 @@ describe("p98, a span that ends is never dropped", () => {
 
               // The part takes the write, and the answer is lost on the way back.
               let lose = 1;
+
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: value, held: 0 }),
                     ),
+                  ),
               };
+
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(4);
               expect(yield* flush).toEqual({ sent: 4 });
@@ -671,19 +699,18 @@ describe("p98, a span that ends is never dropped", () => {
               const real = yield* RecordManager;
               // Part 0 takes both rows, and the answer is lost on the way back.
               let lose = 1;
+
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
-                          : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: "unreachable", held: 0 }),
                     ),
+                  ),
               };
+
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(2);
               // Part 0 is now past its 1-byte cap: the resend with one new row rolls it.
@@ -716,6 +743,7 @@ describe("p98, a span that ends is never dropped", () => {
             },
             size: () => 0,
           };
+
           return Effect.gen(function* () {
             expect(yield* traced("runner.step", { "fab.process": P1 }, Effect.succeed(7))).toBe(7);
             const error = yield* Effect.flip(flush);
@@ -731,6 +759,7 @@ describe("p98, a span that ends is never dropped", () => {
 
 // A-Sink's frame shapes are edge inputs; each carries its expected text independently of the sink.
 const FrameWord = Schema.String.check(Schema.isPattern(/^[a-z]{3,16}$/));
+
 const FramePosition = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2147483647 }));
 
 const FrameInput = Schema.Struct({
@@ -846,6 +875,7 @@ const frameCases = Arbitrary.schema(FrameInput).pipe(
       windows: `C:\\sink-${word}\\private`,
       bracket: `/sink ${word} (private)/folder`,
     }[rootKind];
+
     return {
       root,
       // A span's name can hold a slash, and a name is kept whole: S1 reads only the rest of its frame.
@@ -863,18 +893,22 @@ const storedStack = Effect.fnUntraced(function* (
   errors: ReadonlyArray<{ readonly message: string; readonly stack: string }>,
 ) {
   const { sql } = yield* walkHome;
+
   return yield* Effect.gen(function* () {
     const outer = errors.reduceRight<Error | undefined>((cause, { message, stack }) => {
       const error = cause === undefined ? new Error(message) : new Error(message, { cause });
       error.stack = stack;
+
       return error;
     }, undefined);
+
     const fail = Effect.fn("sink.frames")(function* () {
       return yield* Effect.sync(() => {
         // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- A-Sink exercises a thrown Error and its nested cause
         throw outer;
       });
     });
+
     const exit = yield* Effect.exit(fail());
     expect(Exit.isFailure(exit)).toBe(true);
 
@@ -890,6 +924,7 @@ const storedStack = Effect.fnUntraced(function* (
     const content = yield* RecordManager.use((records) => records.content(spans, row?.spanId ?? ""));
     expect(Option.isSome(content) && content.value._tag === "kept").toBe(true);
     const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+
     return { pretty, message };
   }).pipe(Effect.provide(world(sql)));
 });
@@ -1013,15 +1048,18 @@ const strayCases = Arbitrary.schema(StrayInput).pipe(
   Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
     const folder = `${before}${stray}${breaker}${after}`;
     const separator = prefix.endsWith("\\") ? "\\" : "/";
+
     const root = {
       posix: `/sink-${word}/${folder}/private`,
       url: `file:///sink-${word}/${folder}/private`,
       windows: `C:\\sink-${word}\\${folder}\\private`,
       relative: `${prefix}sink-${word}${separator}${folder}${separator}private`,
     }[rootKind];
+
     const generated = frames.map(({ shape, name, line, column }) =>
       frameText({ shape, name, line, column, root, word }),
     );
+
     return {
       root,
       slashed: frames.flatMap(({ shape, name }) =>
@@ -1128,6 +1166,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           ].join("\n"),
         },
       ]);
+
       const lines = message.split("\n").map((line) => line.trim());
       expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
       expect(lines.filter((line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
@@ -1146,6 +1185,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           stack: "Error: m\r\n    at fn (/root/a/b/c.ts:1:2)\r\n    at g (/root/x.ts:3:4)\r",
         })),
       );
+
       expect(message.match(/at fn \(c\.ts:1:2\)\r\n/g)).toHaveLength(3);
       expect(message.match(/at g \(x\.ts:3:4\)\r/g)).toHaveLength(3);
       expect(message).toContain("at g (x.ts:3:4)\r {");
@@ -1155,8 +1195,11 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 });
 
 const SECRET = "sk-p99-secret";
+
 const NOTE = "note-body-p99";
+
 const NOTE_TWO = "note-two-p99";
+
 const a = (n: number) => "a".repeat(n);
 
 class NoteError extends Error {
@@ -1173,6 +1216,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
         const day = Date.UTC(2026, 9, 23, 10);
         yield* Effect.gen(function* () {
           yield* TestClock.setTime(day);
+
           const thrown = yield* Effect.exit(
             traced(
               "runner.step",
@@ -1183,6 +1227,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }),
             ),
           );
+
           expect(Exit.isFailure(thrown)).toBe(true);
           yield* Effect.exit(
             traced("ledger.call", { "fab.process": P1 }, Effect.fail(new NoteError(`${NOTE_TWO} failed`))),
@@ -1244,6 +1289,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
   it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
     const key = fc.constantFrom(...Array.from({ length: 8 }, (_, n) => `fab.k${n}`));
+
     const value = fc.oneof(
       fc.string({ maxLength: 400 }),
       fc.integer(),
@@ -1255,9 +1301,10 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.constant(null),
       fc.bigInt(),
     );
+
     await fc.assert(
-      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
             yield* Effect.gen(function* () {
@@ -1298,8 +1345,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }
             }).pipe(Effect.provide(world(sql)));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
@@ -1381,6 +1428,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
         const exit = yield* Effect.exit(
           traced("runner.step", { "fab.process": P1 }, Effect.fail(new NoteError(a(1_100_000)))),
         );
+
         expect(Exit.isFailure(exit)).toBe(true);
         yield* flush;
         const [row] = yield* recorded(job(P1));
@@ -1404,7 +1452,9 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           _tag: tag,
           cause: new Error(`${NOTE_TWO}-${text}`),
         });
+
         const error = Object.assign(new Error(`${NOTE}-${text}`), { _tag: outer, reason });
+
         return Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
@@ -1430,9 +1480,11 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 // behavior. The walk reads what the calls so far have done before it picks the next one (0093);
 // the history it keeps is of spans ended, commits that landed and flushes tried, never the machine.
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }));
+
 const Call = Schema.Struct({ pick: Nat, word: Schema.String.check(Schema.isMaxLength(64)) });
 
 type Call = typeof Call.Type;
+
 type Public = "end" | "end_fails" | "flush" | "summaries" | "summaries_fail";
 
 /** What the calls so far did: spans held in memory, a failure no flush has reported yet, rows in
@@ -1480,15 +1532,19 @@ describe("T705, the sink's public calls keep their order through one machine", (
         const { sql, arm } = filling(real);
         yield* Effect.gen(function* () {
           const services = yield* Effect.context<SpanSink>();
+
           /** Ends one span outside any fiber: its rows are there the moment `runSync` returns. */
           const end = (n: number, word: string, fails: boolean) => {
             arm(fails ? 1 : 0);
+
             const exit = Effect.runSyncExit(
               step("runner.step", { "fab.n": n, "fab.word": word }).pipe(Effect.provideContext(services)),
             );
+
             arm(0);
             expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
           };
+
           const sent = () => recorded(spans).pipe(Effect.map((rows) => rows.length));
           end(-1, "warm", false);
           let seen: Seen = { held: [], unreported: false, unsent: 1, ended: [[-1, "warm"]] };
@@ -1600,6 +1656,7 @@ const spanFrames = (text: string) =>
     }
 
     const location = frame[2] ?? "";
+
     return [`${frame[1]} (${location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1)})`];
   });
 
@@ -1611,14 +1668,19 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
       Effect.gen(function* () {
         const { sql } = yield* walkHome;
         yield* Effect.gen(function* () {
-          class Typed extends Schema.TaggedError<Typed>()(sample.tag, { reason: Schema.String }) {}
+          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
+            reason: Schema.String,
+          }) {}
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
+
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
             return yield* new Typed({ reason: sample.reason });
           });
+
           const outermost = names
             .slice(0, -1)
             .reduceRight<() => Effect.Effect<never, Typed>>((inner, name) => Effect.fn(name)(() => inner()), innermost);
+
           const exit = yield* Effect.exit(outermost());
 
           if (!Exit.isFailure(exit)) {

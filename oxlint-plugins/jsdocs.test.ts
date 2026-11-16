@@ -14,11 +14,14 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { jsdocs } from "./jsdocs.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const RUNS = { seed: 119120, numRuns: 100 };
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
 
 type Since = "absent" | "required";
@@ -264,11 +267,13 @@ describe("law 4: tags pass only in the order of case 29, with @stability optiona
 
           const order = tags.map((tag) => TAGS.indexOf(tag));
           const ordered = order.every((rank, i) => i === 0 || (order[i - 1] ?? rank) < rank);
+
           const passes =
             ordered &&
             tags.includes("category") &&
             (!tags.includes("stability") || stability !== "solid") &&
             outside === undefined;
+
           const block = doc("A planted export.", ...(lines.length > 0 ? ["", ...lines] : []));
           const code = `${MODULE}\n${block}\nexport const v = 1;\n`;
           expectFires(code, passes ? [] : [lineCount(`${MODULE}\n${block}`) + 1]);
@@ -293,6 +298,7 @@ describe("law 5: a file with a checked export fires for its module block unless 
         ({ header, imports, module, first, exported }) => {
           const parts: string[] = [];
           let line = 1;
+
           const push = (text: string) => {
             parts.push(text);
             line += lineCount(text);
@@ -367,6 +373,7 @@ describe("law 6: a block with @internal takes its export out, and tags alone pas
               : kind === "tags alone"
                 ? doc("@category models")
                 : doc("@stability unstable", "@category models");
+
           const piece: Piece = PIECES[form];
           const text = piece.text(0, block);
           const at = piece.at(0, block) ?? 0;
@@ -444,11 +451,13 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
         rules: { "fabrika/jsdocs": ["error", { since: "required" }] },
       }),
     );
+
     const ran = spawnSync(
       join(ROOT, "node_modules", ".bin", "oxlint"),
       [`--config=${config}`, "--disable-nested-config", "--no-ignore", "--format=json", ...files],
       { cwd: src, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
+
     const report = JSON.parse(ran.stdout) as Report;
     const fired = new Map<string, number>();
 
@@ -473,6 +482,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
 describe("law 9: the real config turns the rule on for every next/packages folder's public files only", async () => {
   const SRC = "next/packages/libfabrika/src";
   const body = "export const planted = 1;\n";
+
   // Each jsdocs warn line of the config today, read from oxlint's own `--print-config`, so a fill
   // that deletes its line changes nothing here. A `/**` line covers its subfolders too.
   const printed = spawnSync(
@@ -480,16 +490,20 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
     { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
   );
+
   const config = JSON.parse(printed.stdout) as {
     readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
   };
+
   const warn = config.overrides
     .filter(({ rules }) => {
       const setting = rules["fabrika/jsdocs"];
+
       return (Array.isArray(setting) ? setting[0] : setting) === "warn";
     })
     .flatMap(({ files }) => files)
     .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
+
   const on = [
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
@@ -498,6 +512,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     ...warn.map(({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];
+
   const off = [
     // Five of the six kinds that are not public. The sixth, `fixtures/`, is also in the config's
     // `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no file there is ever linted.
@@ -518,6 +533,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
+
   const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
 
   // scenario: one real lint run over one planted file per kind, since only the real config holds the scope.

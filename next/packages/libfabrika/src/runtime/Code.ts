@@ -52,6 +52,7 @@ export const Install = Schema.Struct({
   source: Schema.String,
   from: From,
 });
+
 export type Install = typeof Install.Type;
 
 /**
@@ -65,6 +66,7 @@ export const Installed = Schema.TaggedUnion({
   failed: { reason: CodeEvent.cases["code.failed"].fields.reason },
   loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
 });
+
 export type Installed = typeof Installed.Type;
 
 /**

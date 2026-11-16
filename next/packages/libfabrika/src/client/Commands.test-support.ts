@@ -30,6 +30,7 @@ export const Event = Schema.TaggedUnion({
   saved: { task: Schema.String, entry: Schema.Unknown },
   crash: {},
 });
+
 export type Event = typeof Event.Type;
 
 /** What the fakes saw, and the cut armed now. */
@@ -81,6 +82,7 @@ const take = (s: Seen, op: Armed["op"], at: Cut): CutMode | null => {
   }
 
   s.armed = null;
+
   return armed.mode;
 };
 
@@ -129,6 +131,7 @@ export const cutJournal = (s: Seen) =>
     Journal,
     Effect.gen(function* () {
       const inner = yield* Journal;
+
       const around = <A>(op: "read" | "write", work: Effect.Effect<A, JournalError>, saved: () => void) =>
         Effect.gen(function* () {
           const before = take(s, op, "before");
@@ -155,6 +158,7 @@ export const cutJournal = (s: Seen) =>
 
           return value;
         });
+
       return {
         read: (task: string) => around("read", inner.read(task), () => {}),
         write: (task: string, entry: Parameters<typeof inner.write>[1]) =>
@@ -164,6 +168,7 @@ export const cutJournal = (s: Seen) =>
   );
 
 const isEntry = Schema.is(Entry);
+
 const interrupted = Result.cases.unknown.make({ reason: "interrupted" });
 
 /**

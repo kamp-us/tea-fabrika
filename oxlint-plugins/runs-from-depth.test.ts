@@ -14,7 +14,9 @@ const root = join(import.meta.dirname, "..");
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** Each form, one a line, with whether the rule reads its count as written. */
@@ -69,9 +71,11 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
     // A hundred runs' files report more than spawnSync's 1 MiB default holds, which cut the JSON short.
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
+
   const found = [...cases.keys()].map((file) => [
     file,
     report.diagnostics
@@ -79,6 +83,7 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
       .map((d) => d.labels[0]!.span.line)
       .sort((a, b) => a - b),
   ]);
+
   expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
 };
 
@@ -173,6 +178,7 @@ const inLaw = (count: number, io: boolean): Plant => [
 /** A count and an import, with the IO laws' lines that must fire. */
 const overIo = (count: number, [from, real]: (typeof IMPORTS)[number]): Plant => {
   const lines = ioForms(count, from, real);
+
   return [
     [IO_PRELUDE, ...lines.map(([line]) => line), ""].join("\n"),
     (held) => (held ? lines.flatMap(([, fires], i) => (fires ? [i + 2] : [])) : []),

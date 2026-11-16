@@ -85,12 +85,14 @@ describe("P12 local brain life", () => {
           Effect.gen(function* () {
             const sampled: Array<number> = [],
               requests: Array<unknown> = [];
+
             yield* checkMemory({
               pid,
               limit,
               sample: (pid: number) =>
                 Effect.sync(() => {
                   sampled.push(pid);
+
                   return bytes;
                 }),
               replace: (reason: unknown) =>
@@ -159,9 +161,11 @@ describe("P12 durable brain outbox", () => {
                   JSON.stringify(raw),
                 );
                 const outbox = yield* brainOutbox(folder);
+
                 return yield* outbox[reader];
               }).pipe(Effect.exit),
             );
+
             expect(Exit.isFailure(exit)).toBe(true);
             const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
             expect(Cause.hasDies(cause)).toBe(false);
@@ -186,10 +190,12 @@ describe("P12 durable brain outbox", () => {
             const files = new Map<string, string>();
             const calls: Array<unknown> = [];
             const joins: Array<ReadonlyArray<string>> = [];
+
             const note = (call: unknown) =>
               Effect.sync(() => {
                 calls.push(call);
               });
+
             const fs = FileSystem.layerNoop({
               exists: (path) => Effect.sync(() => files.has(path)),
               readFileString: (path) => Effect.sync(() => files.get(path) ?? ""),
@@ -198,6 +204,7 @@ describe("P12 durable brain outbox", () => {
                 Effect.acquireRelease(
                   Effect.sync((): FileSystem.File => {
                     calls.push(["open", path]);
+
                     return {
                       [FileSystem.FileTypeId]: FileSystem.FileTypeId,
                       stat: Effect.die("unused stat"),
@@ -224,16 +231,21 @@ describe("P12 durable brain outbox", () => {
                   files.delete(from);
                 }),
             });
+
             const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
             const paths = Layer.succeed(Path.Path, {
               ...path,
               join: (...parts) => {
                 joins.push(parts);
+
                 return path.join(...parts);
               },
             });
+
             const file = join(folder, "brain.pending.jsonl"),
               last = join(folder, "brain.last.json");
+
             const durable = (target: string, text: string) => [
               ["open", `${target}.tmp`],
               ["write", `${target}.tmp`, text],
@@ -244,8 +256,10 @@ describe("P12 durable brain outbox", () => {
               ["sync", folder],
               ["close", folder],
             ];
+
             const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
               rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);

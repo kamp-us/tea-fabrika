@@ -14,7 +14,9 @@ import { machine } from "./internal/open.ts";
  * @category models
  */
 export type CheckedSelection = import("./internal/open.ts").CheckedSelection;
+
 type Msg = typeof machine.msg.Type;
+
 type State = typeof machine.model.Type;
 
 /**
@@ -31,10 +33,12 @@ type State = typeof machine.model.Type;
  */
 export const session = Effect.fn("repositoryOpen.session")(function* () {
   const state = yield* Ref.make(machine.init(null, undefined)[0]);
+
   return {
     send: Effect.fn("repositoryOpen.send")(function* (msg: Msg): Effect.fn.Return<State> {
       return yield* Ref.modify(state, (current) => {
         const [next] = applyCell(machine, current, msg);
+
         return [next, next];
       });
     }),

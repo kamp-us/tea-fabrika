@@ -9,9 +9,13 @@ import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
+
 const arbitrary = { seed: SEED, runs: runsFor({ fast: 5, full: 25 }) };
+
 const NAME = "chaos:1";
+
 const TARGET = "checklist:1";
+
 type Runner = ProgramRunner["Service"];
 
 /** Each session is a new set of scoped connections to the same real database files. */
@@ -82,11 +86,14 @@ const uncertainExperiments = Arbitrary.flatMap(experiments, (input) =>
   Arbitrary.map(bounded(1, input.most + 1), (ordinal) => ({ ...input, most: input.most + 1, ordinal })),
 );
 
-const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
+const experimentId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
+
 const now = () => Effect.succeed(Outcome.ok(100));
+
 const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.ok));
+
 const phase = (raw: unknown) => Schema.decodeUnknownSync(chaos.state.schema)(raw);
 
 const target = (process: string) =>
@@ -104,11 +111,13 @@ const startTarget = Effect.fnUntraced(function* (world: World, checklist: unknow
   expect(added._tag).toBe("accepted");
   const checked = yield* session.runner.msg(world.letter(101, { type: "check", name: "task", note: "agent-note" }));
   expect(checked._tag).toBe("accepted");
+
   return target(session.process);
 });
 
 const nextDeadline = Effect.fnUntraced(function* (world: World) {
   const saved = yield* world.snapshot(NAME);
+
   return chaos.wake(phase(saved.model));
 });
 
@@ -141,16 +150,19 @@ export const suite = (open: Open, checklist: unknown) =>
                 const world = yield* open;
                 const binding = yield* startTarget(world, checklist);
                 const calls: Array<unknown> = [];
+
                 // The declaration always claims the qualified owner. Registration is trusted by the host.
                 const { runner } = yield* world.session(NAME, registered, chaos, {
                   now,
                   fire: (request) =>
                     Effect.sync(() => {
                       calls.push(request);
+
                       return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
                     }),
                   inspect: read(world, binding),
                 });
+
                 yield* runner.msg(
                   world.letter(1, {
                     type: "start",
@@ -170,9 +182,11 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.due(deadline);
                 const allowed = registered === chaos.name;
                 expect(calls).toHaveLength(allowed ? 1 : 0);
+
                 const answers = (yield* world.letters(NAME)).filter((letter) =>
                   Schema.is(Schema.Struct({ type: Schema.Literals(["fire_ok", "fire_err"]) }))(letter.m),
                 );
+
                 expect(answers).toHaveLength(1);
                 expect(answers[0]?.m).toMatchObject(
                   allowed
@@ -195,18 +209,22 @@ export const suite = (open: Open, checklist: unknown) =>
             const world = yield* open;
             const binding = yield* startTarget(world, checklist);
             const calls: Array<unknown> = [];
+
             const { runner, process } = yield* world.session(NAME, chaos.name, chaos, {
               now,
               fire: (request) =>
                 Effect.sync(() => {
                   calls.push(request);
+
                   return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
                 }),
               inspect: read(world, binding),
             });
+
             const before = yield* runner.open("watch");
             const unsafe = { ...binding, [collision]: collision === "name" ? NAME : process };
             expect(Schema.is(Chaos.Target)(unsafe), "the schema alone cannot check the trusted binding").toBe(true);
+
             const sent = yield* runner.msg(
               world.letter(1, {
                 type: "start",
@@ -217,6 +235,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 target: unsafe,
               }),
             );
+
             expect(sent._tag).toBe("refused");
             yield* runner.due(100_000_000);
             expect(calls).toEqual([]);
@@ -238,12 +257,14 @@ export const suite = (open: Open, checklist: unknown) =>
             const binding = yield* startTarget(world, checklist);
             const calls: Array<Chaos.Fire> = [];
             const published: Array<Update> = [];
+
             const observations: Array<{
               readonly request: Chaos.Fire;
               readonly model: ReturnType<typeof phase>;
               readonly pos: number | undefined;
               readonly view: number | undefined;
             }> = [];
+
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
@@ -256,10 +277,13 @@ export const suite = (open: Open, checklist: unknown) =>
                   view: published.at(-1)?.rev,
                 });
                 calls.push(request);
+
                 return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
               });
+
             const handlers = { now, fire, inspect: read(world, binding) };
             const start = { type: "start", id: experimentId, ...input, target: binding };
+
             // Only the declared start fields are sent; test controls are never program inputs.
             const startInput = {
               type: start.type,
@@ -275,6 +299,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers, (u) =>
                   Effect.sync(() => void published.push(u)),
                 );
+
                 yield* runner.open("watch");
                 expect((yield* runner.msg(world.letter(1, startInput)))._tag).toBe("accepted");
               }),
@@ -286,6 +311,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers, (u) =>
                     Effect.sync(() => void published.push(u)),
                   );
+
                   yield* runner.open("watch");
                   expect(calls).toHaveLength(ordinal - 1);
                   const deadline = yield* nextDeadline(world);
@@ -374,6 +400,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const binding = yield* startTarget(world, checklist);
             const entered = yield* Deferred.make<void>();
             const calls: Array<number> = [];
+
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
@@ -393,12 +420,15 @@ export const suite = (open: Open, checklist: unknown) =>
                     return yield* Effect.die(new TypeError("controlled outside failure"));
                   case "interrupted":
                     yield* Deferred.succeed(entered, undefined);
+
                     return yield* Effect.interrupt;
                   case "missing":
                     yield* Deferred.succeed(entered, undefined);
+
                     return yield* Effect.never;
                 }
               });
+
             const handlers = { now, fire, inspect: read(world, binding) };
             const uncertain = mode === "missing" || mode === "interrupted";
             // The random cut can be before, on or after the uncertain fault, including the final one.
@@ -477,6 +507,7 @@ export const suite = (open: Open, checklist: unknown) =>
               calls.filter((ordinal) => !uncertain || ordinal !== input.ordinal),
             );
             const letters = yield* world.letters(NAME);
+
             const result = letters
               .map((l) => l.m)
               .filter((m) =>
@@ -528,8 +559,9 @@ export const suite = (open: Open, checklist: unknown) =>
             const release = yield* Deferred.make<void>();
             const nextEntered = yield* Deferred.make<void>();
             const nextRelease = yield* Deferred.make<void>();
-            const nextId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
+            const nextId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
             const calls: Array<Chaos.Fire> = [];
+
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
@@ -560,9 +592,11 @@ export const suite = (open: Open, checklist: unknown) =>
 
                 return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
               });
+
             const handlers = {
               now: (raw: unknown) => {
                 const request = Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId }))(raw);
+
                 return Effect.succeed(
                   Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
                 );
@@ -570,6 +604,7 @@ export const suite = (open: Open, checklist: unknown) =>
               fire,
               inspect: read(world, binding),
             };
+
             const start = (id: typeof Chaos.ExperimentId.Type) => ({
               type: "start",
               id,
@@ -578,6 +613,7 @@ export const suite = (open: Open, checklist: unknown) =>
               gap: input.gap,
               target: binding,
             });
+
             const advance = Effect.fnUntraced(function* (runner: Runner, through: number) {
               while (true) {
                 const model = phase((yield* world.snapshot(NAME)).model);
@@ -633,23 +669,24 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.open("before-callback");
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(before);
 
-                const newer =
-                  delivery === "replaced"
-                    ? yield* Effect.gen(function* () {
-                        expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
-                        expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
-                        yield* advance(runner, input.ordinal - 1);
-                        const deadline = yield* nextDeadline(world);
+                let newer: Fiber.Fiber<
+                  Effect.Success<ReturnType<typeof runner.due>>,
+                  Effect.Error<ReturnType<typeof runner.due>>
+                > | null = null;
 
-                        if (deadline === null) {
-                          return yield* Effect.die(new Error("the new experiment lost its matching fault"));
-                        }
+                if (delivery === "replaced") {
+                  expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
+                  expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
+                  yield* advance(runner, input.ordinal - 1);
+                  const deadline = yield* nextDeadline(world);
 
-                        const pending = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
-                        yield* Deferred.await(nextEntered);
-                        return pending;
-                      })
-                    : null;
+                  if (deadline === null) {
+                    return yield* Effect.die(new Error("the new experiment lost its matching fault"));
+                  }
+
+                  newer = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
+                  yield* Deferred.await(nextEntered);
+                }
 
                 const current = phase((yield* world.snapshot(NAME)).model);
                 const count = calls.length;
@@ -702,6 +739,7 @@ export const suite = (open: Open, checklist: unknown) =>
             expect(calls.filter((c) => c.id === nextId).map((c) => c.ordinal)).toEqual(
               Array.from({ length: delivery === "replaced" ? input.most : 0 }, (_, n) => n + 1),
             );
+
             const late = (yield* world.letters(NAME)).filter((letter) =>
               Schema.is(
                 Schema.Struct({
@@ -709,6 +747,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 }),
               )(letter.m),
             );
+
             expect(late).toHaveLength(1);
             expect(late[0]?.m).toMatchObject({
               type: outcome === "off" || outcome === "failed" ? "fire_err" : "fire_ok",
@@ -735,6 +774,7 @@ export const suite = (open: Open, checklist: unknown) =>
           Effect.gen(function* () {
             const world = yield* open;
             const binding = yield* startTarget(world, checklist);
+
             const handlers: Readonly<Record<string, Handler<never>>> = {
               now,
               fire: () => Effect.succeed(Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }))),
@@ -745,6 +785,7 @@ export const suite = (open: Open, checklist: unknown) =>
                     )
                   : Effect.die(new RangeError("controlled check failure")),
             };
+
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
@@ -798,11 +839,13 @@ export const suite = (open: Open, checklist: unknown) =>
               )
                 .join("")
                 .slice(0, 80)}-end ?/+=%`;
+
               const world = yield* open;
               const binding = yield* startTarget(world, checklist);
               const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
               yield* body.runner.msg(world.letter(102, { type: "uncheck", name: "task" }));
               yield* body.runner.msg(world.letter(103, { type: "check", name: "task", note: marker }));
+
               const handlers: Readonly<Record<string, Handler<never>>> = {
                 now,
                 fire: () =>
@@ -823,6 +866,7 @@ export const suite = (open: Open, checklist: unknown) =>
                         ),
                 inspect: read(world, binding),
               };
+
               const { runner, recorded } = yield* world.session(NAME, chaos.name, chaos, handlers);
               yield* runner.open("watch");
               yield* runner.msg(
@@ -843,20 +887,24 @@ export const suite = (open: Open, checklist: unknown) =>
 
               yield* runner.due(deadline);
               const letters = yield* world.letters(NAME);
+
               const answers = letters.filter(
                 (l) =>
                   Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                  /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
+                  /_(ok|err)$/.test(Schema.decodeSync(Schema.Struct({ type: Schema.String }))(l.m).type),
               );
+
               expect(answers.length).toBeGreaterThanOrEqual(3);
 
               const view = (yield* runner.open("shown")).view;
               const report = yield* world.check(binding);
+
               const reasons = answers.map(
                 (a) =>
                   Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).reason ??
                   "ok",
               );
+
               expect(reasons).toHaveLength(answers.length);
               const { rows, health } = yield* recorded;
               const commands = rows.filter((row) => row.name === "runner.cmd");
@@ -873,6 +921,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 links: commands.map((row) => row.links),
                 health,
               };
+
               noLeak(outputs[output], marker, output);
 
               if (mode === "failed") {

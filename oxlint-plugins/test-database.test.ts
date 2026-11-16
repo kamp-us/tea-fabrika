@@ -17,7 +17,9 @@ const root = join(import.meta.dirname, "..");
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** How the file names the constructor: its import line, and the callee it writes. */
@@ -53,6 +55,7 @@ const ARGUMENT = fc.oneof(
 );
 
 const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
+
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}$/);
 
 /**
@@ -97,6 +100,7 @@ it('R1: new DatabaseSync(arg) from node:sqlite fires in a next/ test, suite or t
           "export const local = () => { class DatabaseSync { constructor(_file: string) {} } return new DatabaseSync(file); };",
           "",
         ].join("\n");
+
         const filename = join(root, path.path);
         const fires = from.sqlite && !argument.memory && path.held;
         tester.run("test-database", testDatabase, {
@@ -125,6 +129,7 @@ const fires = (paths: readonly string[]) => {
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
+
   const found = new Map<string, number[]>();
 
   for (const d of report.diagnostics.filter((each) => each.code === "fabrika(test-database)")) {
@@ -149,6 +154,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s tests, suites
       "export const made = TestDatabase.make(file);",
       "",
     ].join("\n");
+
     const held = ["src/opens.integration.test.ts", "src/OpensTest.ts", "src/opens.test-support.ts"];
     const files = [...held, "src/opens.ts"].map((name) => join(folder, name));
 

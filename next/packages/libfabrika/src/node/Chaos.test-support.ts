@@ -47,17 +47,21 @@ import { Chain } from "../telemetry/Trace.ts";
 import * as StepFaultTest from "./stepFault.test-support.ts";
 
 const brain = "SHA256:test-brain";
+
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 const build = "chaos-law";
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const person = Writer.cases.person.make({ key: "SHA256:test-person", for: "test-person" });
+
 export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "test-agent" });
 
 export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
-    id: Schema.decodeUnknownSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+    id: Schema.decodeSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
     by,
     arrivedAt: n,
     input,
@@ -98,11 +102,14 @@ const errors = { TypeError, RangeError, URIError };
 
 const faultControl = Effect.fnUntraced(function* () {
   const state = yield* Ref.make(StepFaultTest.controller.init(null, {})[0]);
+
   const send = (msg: typeof StepFaultTest.Msg.Type) =>
     Ref.modify(state, (previous) => {
       const [next] = applyCell(StepFaultTest.controller, previous, msg);
+
       return [[previous, next] as const, next];
     });
+
   return {
     arm: (name: string, letter: string, classes: ReadonlyArray<typeof StepFaultTest.ErrorClass.Type>) =>
       send({ type: "arm", name, letter, errors: classes }).pipe(Effect.asVoid),
@@ -162,10 +169,12 @@ export const open = Effect.gen(function* () {
     const flush = sink.flush.pipe(Effect.provide(Layer.merge(recordLayer, Archive.memory)));
     const alarms: Array<number | null> = [];
     const watches: Array<Update> = [];
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return CheckedWriter.of({
           append: (i) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -182,6 +191,7 @@ export const open = Effect.gen(function* () {
         });
       }),
     );
+
     const services = Layer.mergeAll(
       Layer.succeed(ProcessManager, processes),
       ProgramLoader.layer({ [programName]: program }, handlers),
@@ -198,13 +208,16 @@ export const open = Effect.gen(function* () {
       Layer.succeed(Recording, { flush }),
       before === undefined ? StepFaultNone.layer : Layer.succeed(StepFault, { before }),
     ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(ledgerLayer(ledger)))));
+
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: process, name, program: programName, build, owner: person },
         { recovery: { sql: store, name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provide(services)),
     );
+
     const live = Context.get(context, ProgramRunner);
+
     const runner = ProgramRunner.of({
       init: () => live.init().pipe(Effect.withTracer(tracer)),
       open: (client) => live.open(client).pipe(Effect.withTracer(tracer)),
@@ -214,14 +227,19 @@ export const open = Effect.gen(function* () {
       swap: (request) => live.swap(request).pipe(Effect.withTracer(tracer)),
       mailed: live.mailed.pipe(Effect.withTracer(tracer)),
     });
+
     const recorded = Effect.gen(function* () {
       yield* flush;
+
       const rows = yield* RecordManager.use((manager) =>
         Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
       ).pipe(Effect.provide(recordLayer));
+
       const health = spans.exec("SELECT * FROM measurements");
+
       return { rows, health };
     }).pipe(Effect.orDie);
+
     return { runner, process, alarms, watches, recorded };
   }, Effect.orDie);
 
@@ -231,10 +249,12 @@ export const open = Effect.gen(function* () {
         const sql = yield* files(`store-${name}`);
         const ledger = yield* files("ledger");
         const manager = yield* files("manager");
+
         const status = yield* ProcessManager.use((processes) => processes.status(name)).pipe(
           Effect.provide(managerLayer(manager)),
           Effect.orDie,
         );
+
         const checkpoint = yield* ProcessStore.use((store) => store.load).pipe(
           Effect.provide(ProcessStore.layer(sql, { process: status.state.process })),
           Effect.provide(ledgerLayer(ledger)),
@@ -253,6 +273,7 @@ export const open = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files("ledger");
+
         return yield* Mailbox.use((mailbox) => Stream.runCollect(mailbox.read(name, 0))).pipe(
           Effect.provide(Mailbox.layer.pipe(Layer.provide(ledgerLayer(sql)))),
           Effect.map((rows) => Array.from(rows)),
@@ -263,6 +284,7 @@ export const open = Effect.gen(function* () {
 
   const check = Effect.fnUntraced(function* (target: Parameters<Nemesis["Service"]["check"]>[0]) {
     const sql = yield* files("ledger");
+
     return yield* Nemesis.use((nemesis) => nemesis.check(target)).pipe(
       Effect.provide(
         NemesisLedger.layer(() => Effect.die("check never fires")).pipe(
@@ -277,14 +299,17 @@ export const open = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files("manager");
+
         return sql
           .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
           .map((row) => Schema.decodeUnknownSync(Row)(row));
       }),
     );
+
   const dead = Effect.scoped(
     Effect.gen(function* () {
       const sql = yield* files("manager");
+
       return sql
         .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
         .map((row) => Schema.decodeUnknownSync(Row)(row));

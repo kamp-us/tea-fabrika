@@ -11,7 +11,9 @@ import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "parallel.ts");
+
 const home = mkdtempSync(join(tmpdir(), "parallel-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const RUNS = { seed: 119120, numRuns: 6 };
@@ -20,6 +22,7 @@ const RUNS = { seed: 119120, numRuns: 6 };
 const run = (parts: readonly string[], env: NodeJS.ProcessEnv = process.env) => {
   const cwd = mkdtempSync(join(home, "run-"));
   const ran = spawnSync(process.execPath, [SCRIPT, ...parts], { cwd, env, encoding: "utf8" });
+
   return { status: ran.status, out: ran.stdout.split("\n"), err: ran.stderr.split("\n") };
 };
 
@@ -81,6 +84,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
   it("scenario: runs the parts at once: two parts that each wait for the other both pass", () => {
     const wait = (mine: string, theirs: string) =>
       `touch ${mine}; for i in $(seq 100); do [ -f ${theirs} ] && exit 0; sleep 0.1; done; exit 1`;
+
     const ran = run([wait("a", "b"), wait("b", "a")]);
     expect(ran.err).toEqual([""]);
     expect(ran.status).toBe(0);
@@ -129,6 +133,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
 
         if (failed.length === 0) {
           expect(ran.out.at(-2)).toMatch(new RegExp(`^parallel: ${given.length} parts passed in [\\d.]+ s$`));
+
           return;
         }
 
@@ -137,11 +142,14 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
           new RegExp(`^parallel: ${failed.length} of ${given.length} parts failed in [\\d.]+ s:$`),
         );
         const last = (i: number) => said[i]?.err.at(-1) ?? said[i]?.out.at(-1);
+
         const named = failed.flatMap((i) => {
           const line = last(i);
           const ended = `  ${given[i]} (failed, exit ${generated[i]?.code})`;
+
           return line === undefined ? [ended] : [ended, `    ${line}`];
         });
+
         expect(summary.slice(1)).toEqual([...named, ""]);
       }),
       RUNS,

@@ -72,6 +72,7 @@ const isDoc = (comment: Comment): boolean => comment.type === "Block" && comment
 
 const sinceOf = (options: ReadonlyArray<unknown>): Since => {
   const [given] = options;
+
   return typeof given === "object" && given !== null && "since" in given && given.since === "required"
     ? "required"
     : "absent";
@@ -104,6 +105,7 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
     since === "required"
       ? found
       : found.filter((d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")));
+
   const messages = kept.map((d) => d.message);
 
   if (since === "absent" && block.tags.some((tag) => tag.name === "since")) {
@@ -325,6 +327,7 @@ export const jsdocs: CreateRule = {
           node,
           message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @category (E6, 0023).`,
         });
+
         return "reported";
       }
 
@@ -344,6 +347,7 @@ export const jsdocs: CreateRule = {
           node,
           message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${all.join("; ")}.`,
         });
+
         return "reported";
       }
 
@@ -393,6 +397,7 @@ export const jsdocs: CreateRule = {
               const named = check(statement, exportedName(statement.exported), "namespace", {
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -410,6 +415,7 @@ export const jsdocs: CreateRule = {
               const named = check(specifier, exportedName(specifier.exported), "declaration", {
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -444,6 +450,7 @@ export const jsdocs: CreateRule = {
             consts(program.body[index - 1]).has(name)
           ) {
             checked++;
+
             return;
           }
 
@@ -472,6 +479,7 @@ export const jsdocs: CreateRule = {
           message:
             "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description, above the imports (E6, 0023).",
         });
+
         return;
       }
 
@@ -482,10 +490,12 @@ export const jsdocs: CreateRule = {
       }
 
       const tags = buildTags("module", loose.tags);
+
       const found = [
         ...(tags._tag === "Failure" ? tags.error.diagnostics : []),
         ...parseModuleExamples(loose).diagnostics,
       ];
+
       const problems = withSince(found, loose, since);
 
       if (problems.length > 0) {

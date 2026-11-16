@@ -12,14 +12,19 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { packageImports } from "./package-imports.ts";
 
 const CODE = "fabrika(package-imports)";
+
 const LIBRARY = "@kampus/libfabrika";
+
 const VITEST = "@kampus/vitest";
+
 /** The test primitives' SQLite module, read through its own subpath (ticket 1029). */
 const TEST_DATABASE = `${VITEST}/TestDatabase`;
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
@@ -120,6 +125,7 @@ const below = fc
   .map((folders) => folders.map((folder) => `${folder}/`).join(""));
 
 const program = fc.constantFrom("notes", "counter", "map");
+
 const ext = fc.constantFrom("ts", "tsx");
 
 /** Each place a file can sit, by its key in `ALLOWS`, and the paths there. */
@@ -275,6 +281,7 @@ type Case = { readonly text: string; readonly lines: ReadonlyArray<number> };
 
 const caseFor = (place: string, names: ReadonlyArray<readonly [string, number]>): Case => {
   const allows = ALLOWS[place] ?? null;
+
   return {
     text: `${names.map(([from, form], n) => FORMS[form]?.(from, n) ?? "").join("\n")}\n`,
     lines: names.flatMap(([from], n) =>
@@ -344,7 +351,9 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
 
 /** Where production code of ours sits, and where the suites that read the test depth sit. */
 const CODE_PLACES = ["library", "program"] as const;
+
 const SUITE_PLACES = ["library suites", "program suites"] as const;
+
 const pathAt = new Map(PLACES);
 
 // Plant, run once and recorded in PR 1274: give the library and program parts' `may` in

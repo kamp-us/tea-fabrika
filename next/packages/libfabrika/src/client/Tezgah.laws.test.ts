@@ -37,6 +37,7 @@ import {
 } from "./WindowMachine.ts";
 
 const SEED = 119120;
+
 /** JSON text, the only form a view takes on the wire. */
 const Json = Schema.fromJsonString(Schema.Unknown);
 
@@ -116,7 +117,7 @@ const both = (
   applyCell(tezgahMachine as never, m as never, msg as never) as never;
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: typeof TezgahView.Type): unknown =>
+const onWire = (view: TezgahView): unknown =>
   Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
 const text = (state: unknown) =>
@@ -139,6 +140,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
         { workspaces: [], tiles: [] },
       ].map(onWire);
+
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
       let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
       let shown = wires[0];
@@ -159,6 +161,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
       for (const { kind, skew, to } of walk) {
         const target = wires[to % wires.length];
         const rev = m.rev;
+
         const msg =
           kind === "whole"
             ? { type: "server", rev: rev + skew, view: target }
@@ -169,6 +172,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
                 : kind === "gap_rev"
                   ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
                   : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+
         const [next, cmds] = both(m, msg);
         const asks = cmds.filter((c) => c.type === "ask").length;
 
@@ -241,10 +245,15 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
 // (a ledger revision unlike the inbox position, as the brain's are), and sends its whole view to
 // every window that opened it. Records and writes are answered as soon as they are handed out.
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TEZGAH_PID = "process_of_tezgah";
+
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: PERSON, as: "window" } };
+
 const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
+
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
 /** How far a reply's ledger revision runs ahead of its inbox position: the ledger holds more. */
 const LEDGER = 1_000;
 
@@ -277,7 +286,9 @@ const ROWS: ReadonlyArray<Binding> = [
 // A Mac's browser keeps F6 for the page, so F6 and Shift-F6 are walked too (Chrome keeps F6 only on
 // Windows and Linux, the S2b backend rule).
 const BACKEND = Keys.backend("browser", "macos");
+
 const loadedTable = Keys.load(Keys.ship(ROWS, BACKEND), BACKEND);
+
 const TABLE = Result.isSuccess(loadedTable) ? loadedTable.success : null;
 
 const focusWindow = windowMachineFor({
@@ -309,6 +320,7 @@ const FOCUS_KEYS: ReadonlyArray<{
 ];
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
+
 type Call = { readonly _tag: string; readonly [key: string]: unknown };
 
 /** One move a window drew: where from and to, its command, the cursor the page last said in `from`
@@ -360,13 +372,15 @@ const tileRow = (id: string, n: number): Tile =>
 /** A workspace of 1 + cuts tiles, split by `cuts`, focus on the tile `focus` picks. */
 const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,
     focus: first,
     recent: [first],
   });
+
   const tiles: Array<Tile> = [tileRow(first, 1)];
 
   for (const [k, cut] of cuts.entries()) {
@@ -377,6 +391,7 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+
   return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
 };
 
@@ -384,6 +399,7 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
 const drawnSpace = (s: WindowModel) => {
   const client = s.tezgah?.client;
   const view = client === undefined ? null : optimisticState(client);
+
   return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
 };
 
@@ -425,6 +441,7 @@ const target = (s: WindowModel, to: (typeof FOCUS_KEYS)[number]["to"]): string |
 
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
+
   const found =
     to === "next"
       ? tiles[(i + 1) % tiles.length]
@@ -433,6 +450,7 @@ const target = (s: WindowModel, to: (typeof FOCUS_KEYS)[number]["to"]): string |
         : to === "last"
           ? space.recent[1]
           : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+
   return found === undefined || found === space.focus ? null : found;
 };
 
@@ -519,6 +537,7 @@ const arrive = (world: World, i: number) => {
     !tiles.includes(did.from as TileId)
   ) {
     w.replies.push({ id: letter.id, dial: letter.dial, pos: -1 });
+
     return;
   }
 
@@ -745,6 +764,7 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
       tab: `tab_${i + 1}`,
       tezgah: { workspace: 1 },
     } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
+
     world.wins.push({
       s,
       waiting: [...cmds],
@@ -778,6 +798,7 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
  *  past its position. */
 const answered = (w: Win, m: Move): boolean => {
   const pos = m.letter === null ? undefined : w.got.get(m.letter);
+
   return (m.letter !== null && w.refused.has(m.letter)) || (pos !== undefined && w.seen >= pos);
 };
 
@@ -799,6 +820,7 @@ const Pick = fc.record({
   pick: fc.nat(),
   cursor: Cursor,
 });
+
 type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
 
 const Desk = fc.record({
@@ -814,6 +836,7 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
   const w = world.wins[i]!;
   const space = drawnSpace(w.s);
   const tiles = space === null ? [] : Layout.order(space.layout);
+
   const options: Array<() => void> = [
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
@@ -824,6 +847,7 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
     ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
     ...(w.notices.length > 0 ? [() => notice(world, i, each)] : []),
   ];
+
   options[c.move % options.length]!();
 };
 
@@ -880,11 +904,13 @@ const walk = (desk: TezgahView, picks: ReadonlyArray<Pick>, each: (e: Event) => 
 
   // Half the walks end batched, half with views before replies (a jump back), by the picks' count.
   settle(world, each, picks.length % 2 === 0);
+
   return world;
 };
 
 /** A key that would hold a drawn focus beside the server state: the one thing L23 forbids. */
 type Stored = "focus" | "drawn" | `optimistic${string}` | `drawn${string}`;
+
 const STORED = /^(focus|drawn|optimistic)/;
 
 describe("Desk S3 L23: the window stores no optimistic focus", () => {
@@ -965,6 +991,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
             );
           }
         });
+
         const focus = world.view.workspaces[0]!.focus;
 
         for (const [i, w] of world.wins.entries()) {
@@ -1009,6 +1036,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
               readonly via?: { readonly _tag: string };
               readonly cursor?: string | null;
             };
+
             const move = world.wins[win]!.moves.find((x) => x.letter === call["letter"]);
             expect(move, `L24: window ${win}'s letter ${String(call["letter"])} is one of its moves`).toBeDefined();
             checked += move!.cursor === null ? 0 : 1;
@@ -1058,6 +1086,7 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
           for (const p of presses) {
             const before = drawnFocus(w.s);
             const moves = w.moves.length;
+
             const check = ({ m, next, cmds }: Event) => {
               if (m.type !== "key" && m.type !== "focus") {
                 return;
@@ -1113,13 +1142,17 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const rows = [new Map<string, number>(), new Map<string, number>()];
+
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, prev, next, cmds, world: at }) => {
           const w = at.wins[win]!;
+
           const focusRows = cmds.flatMap((c) => {
             const record =
               c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
+
             return record?._tag === "focus" ? [record] : [];
           });
+
           const before = new Set(waitingMoves(prev).map(letterIn));
           const after = new Set(waitingMoves(next).map(letterIn));
           const dropped = w.moves.filter((x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));
@@ -1179,6 +1212,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
         (d, picks) => {
           /** The splits the window minted, in order: the tile each leaves and its cursor then. */
           const due: Array<{ readonly from: string; readonly cursor: string | null }> = [];
+
           const each = ({ cmds }: Event) => {
             for (const c of cmds) {
               const call = c["call"] as Call | undefined;
@@ -1198,12 +1232,14 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
               );
             }
           };
+
           const world = makeWorld(makeDesk(d.cuts.slice(0, 2), d.focus), 1, () => {});
           const w = world.wins[0]!;
 
           for (const c of picks) {
             const space = drawnSpace(w.s)!;
             const tiles = Layout.order(space.layout);
+
             const options: Array<() => void> = [
               () => focusIn(world, 0, space.focus, CURSORS[c.pick % 3]!, each),
               () => focusIn(world, 0, tiles[c.pick % tiles.length]!, CURSORS[(c.pick >> 2) % 3]!, each),
@@ -1236,6 +1272,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
               },
               () => date(world, 0, each),
             ];
+
             options[c.move % options.length]!();
           }
 
@@ -1253,6 +1290,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
 describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
   it("L28 (the window's half, 0165): after every step, lastCursor of each drawn tile is the cursor the page last said in it in that window, a null included, else the cursor tezgah's view gives the tile", () => {
     const seen = { newer: 0, none: 0, view: 0 };
+
     /** Each drawn tile of each window lands where the page last said focus sat in it. */
     const check = (world: World) => {
       for (const w of world.wins) {
@@ -1276,6 +1314,7 @@ describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
         }
       }
     };
+
     fc.assert(
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const world = makeWorld(makeDesk(d.cuts, d.focus), 2, () => {});
@@ -1326,9 +1365,11 @@ const CHORDS: ReadonlyArray<ReadonlyArray<string>> = [
 ];
 
 const MOVES = new Set(FOCUS_KEYS.filter((k) => k.keys.length === 2).map((k) => k.keys[1]!));
+
 const SPLIT_KEYS = new Set(["%", '"', "|", "-"]);
 
 const Typed = fc.record({ chord: fc.nat(), reads: fc.nat() });
+
 type Typed = typeof Typed extends fc.Arbitrary<infer A> ? A : never;
 
 type Schedule = "apart" | "walked" | "burst";
@@ -1340,6 +1381,7 @@ const SCHEDULES: ReadonlyArray<Schedule> = ["walked", "burst"];
  *  handed over waiting in the run's line until the schedule reads them. */
 const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule) => {
   const letters: Array<unknown> = [];
+
   const each = (e: Event) => {
     for (const c of e.cmds) {
       const call = c["call"] as Call | undefined;
@@ -1349,14 +1391,17 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
       }
     }
   };
+
   const world = makeWorld(desk, 1, () => {});
   const w = world.wins[0]!;
   const line: Array<WindowMsg> = [];
+
   const read = (n: number) => {
     for (const m of line.splice(0, n)) {
       stepWin(world, 0, m, each);
     }
   };
+
   let unread: Unread = { from: w.s.presses, keys: [] };
   let at = 10;
   const handlings: Array<{ readonly key: string; readonly handling: Handling; readonly waiting: number }> = [];
@@ -1402,6 +1447,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
   }
 
   settle(world, each);
+
   return { handlings, world, letters, s: w.s };
 };
 
