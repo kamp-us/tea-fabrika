@@ -2,14 +2,17 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 
 const lines = (value: unknown) =>
   typeof value === "string"
-    ? value
-        .split("\n")
-        .map((line) => line.trim())
+    ? pipe(value, Str.split("\n"))
+        .map((line) => pipe(line, Str.trim))
         .filter((line) => line !== "")
     : [];
 
@@ -44,20 +47,21 @@ export const lintCaches = (files: CacheFiles): string[] => {
       errors.push(reason);
     }
   };
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
+  // Parsed in this order: the action, the workspace, then each workflow.
+  const parsed = Result.try(() => ({
+    action: map(parse(files.action)),
+    workspace: map(parse(files.workspace)),
+    workflows: Object.entries(files.workflows).map(([path, text]): [string, Record<string, unknown>] => [
+      path,
+      map(parse(text)),
+    ]),
+  }));
 
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
-
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["cache lint: a file is not valid YAML"];
   }
 
+  const { action, workspace, workflows } = parsed.success;
   const actionSteps = steps(map(action["runs"]));
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
   const perRef = workflows.filter(([, workflow]) => {
@@ -112,16 +116,19 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
   // (action.yml gives the seconds). Each save anywhere is on main.
   require(!actionSteps.some((step) =>
-    String(step["uses"]).startsWith("actions/cache"),
+    pipe(String(step["uses"]), Str.startsWith("actions/cache")),
   ), "the pnpm action caches nothing: a restored pnpm store cost more than its download");
 
   for (const [path, step] of everyStep.filter(([, s]) => uses(s, "actions/cache/save"))) {
     const condition = compact(step["if"]);
     require(condition === ON_MAIN ||
-      condition.startsWith(`${ON_MAIN}&&`), `${path}: a cache save runs on main only, its if starting ${ON_MAIN}`);
+      pipe(
+        condition,
+        Str.startsWith(`${ON_MAIN}&&`),
+      ), `${path}: a cache save runs on main only, its if starting ${ON_MAIN}`);
   }
 
-  const check = map(workflows.find(([path]) => path.endsWith("check.yaml"))?.[1]),
+  const check = map(workflows.find(([path]) => pipe(path, Str.endsWith("check.yaml")))?.[1]),
     jobs = map(check["jobs"]);
 
   // C3. A full-history checkout fetches every commit and tree, and only the head's files.
@@ -139,7 +146,21 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // paths are where scripts/typecheck.sh writes, one per workspace package glob.
   const typecheckSteps = steps(map(jobs["typecheck"]));
   const buildinfo = BUILDINFO.exec(files.typecheck)?.[1];
-  const folder = buildinfo?.slice(0, buildinfo.lastIndexOf("/"));
+  // With no "/", the folder is the path less its last character, as native slice(0, -1) gives.
+  const folder =
+    buildinfo === undefined
+      ? undefined
+      : pipe(
+          buildinfo,
+          Str.slice(
+            0,
+            pipe(
+              buildinfo,
+              Str.lastIndexOf("/"),
+              Option.getOrElse(() => -1),
+            ),
+          ),
+        );
   const globs = Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
   const paths = globs.map((glob) => `${String(glob)}/${folder}`);
   const keyStep = typecheckSteps.find((s) => s["id"] === "tsc-key");

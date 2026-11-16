@@ -2,6 +2,9 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;
@@ -45,16 +48,18 @@ export const rowLine = (row: Row): string => `  ${JSON.stringify(row.path)}: ${r
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   for (const path of process.argv.slice(2)) {
-    try {
+    const advised = Result.try(() => {
       const rows = reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd());
 
       for (const row of staleRows(measured, rows)) {
         console.log(
-          `::warning::shard table differs by more than ${LIMIT} s: ${row.path.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`,
+          `::warning::shard table differs by more than ${LIMIT} s: ${pipe(row.path, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"))}`,
         );
         console.log(rowLine(row));
       }
-    } catch {
+    });
+
+    if (Result.isFailure(advised)) {
       console.log("shard-times: report unavailable; no timing advice for this report");
     }
   }

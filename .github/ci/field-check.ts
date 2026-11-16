@@ -4,11 +4,14 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
 const lines = (text: string): string[] =>
-  text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
+  text === "" ? [] : pipe(pipe(text, Str.endsWith("\n")) ? pipe(text, Str.slice(0, -1)) : text, Str.split("\n"));
 
 export const selectAdded = (base: string, head: string): { line: number; text: string }[] => {
   const counts = new Map<string, number>();
@@ -29,22 +32,18 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
-  text
-    .replaceAll("%", "%25")
-    .replaceAll("\r", "%0D")
-    .replaceAll("\n", "%0A")
-    .replaceAll(":", "%3A")
-    .replaceAll(",", "%2C");
+  pipe(
+    text,
+    Str.replaceAll("%", "%25"),
+    Str.replaceAll("\r", "%0D"),
+    Str.replaceAll("\n", "%0A"),
+    Str.replaceAll(":", "%3A"),
+    Str.replaceAll(",", "%2C"),
+  );
 
 const annotation = (finding: Finding) =>
   `::${finding._tag} file=${escape(finding.file)},line=${finding.line}::${escape(finding.field)}: ${escape(finding.reason)}`;
@@ -127,7 +126,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   const day = row["date"];
 
-  if (name !== undefined && typeof day === "string" && !name.startsWith(`${day}-`)) {
+  if (name !== undefined && typeof day === "string" && !pipe(name, Str.startsWith(`${day}-`))) {
     findings.push(
       Finding.cases.warning.make({ file, line: 1, field: "date", reason: "differs from the file name's date" }),
     );
@@ -163,7 +162,7 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
 
     return result.stdout;
   };
-  const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
+  const from = event === "pull_request" ? pipe(read(["merge-base", base, head]), Str.trim) : base;
 
   if (!validSha(from)) {
     throw new Error("field: the merge base could not be read");
@@ -175,7 +174,8 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
     throw new Error("field: changed paths could not be read");
   }
 
-  const tree = (ref: string) => new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
+  const tree = (ref: string) =>
+    new Set(pipe(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]), Str.split("\0")));
   const before = tree(from),
     after = tree(head);
   return paths.filter(isFieldPath).map((file) => ({
@@ -185,7 +185,7 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
   }));
 };
 
-const names = (text: string) => text.split("\0").filter((name) => name !== "");
+const names = (text: string) => pipe(text, Str.split("\0")).filter((name) => name !== "");
 
 /**
  * The writer's copy of the field job: the rows this checkout adds to `main`, as they stand on disk,
@@ -204,8 +204,8 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
 
     return result.stdout;
   };
-  const root = read(["rev-parse", "--show-toplevel"]).trim();
-  const from = read(["merge-base", main, "HEAD"]).trim();
+  const root = pipe(read(["rev-parse", "--show-toplevel"]), Str.trim);
+  const from = pipe(read(["merge-base", main, "HEAD"]), Str.trim);
 
   if (!validSha(from)) {
     throw new Error("field: the merge base could not be read");
@@ -257,16 +257,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   if (local && process.env["GITHUB_ACTIONS"] === "true") {
     console.log("field: this CI run's field job checks the added rows");
-  } else {
-    try {
-      main(local);
-    } catch {
-      console.error(
-        local
-          ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
-          : "field: history or input could not be read; validation did not finish",
-      );
-      process.exitCode = 2;
-    }
+  } else if (Result.isFailure(Result.try(() => main(local)))) {
+    console.error(
+      local
+        ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
+        : "field: history or input could not be read; validation did not finish",
+    );
+    process.exitCode = 2;
   }
 }

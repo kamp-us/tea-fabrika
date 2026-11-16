@@ -10,6 +10,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -26,10 +29,7 @@ const isMap = (value: unknown): value is Record<string, unknown> =>
 /** A pnpm-workspace.yaml glob as a test on a folder: `*` is one path part, as pnpm reads it here. */
 const matcher = (glob: string): RegExp =>
   new RegExp(
-    `^${glob
-      .replace(/\/$/, "")
-      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, "[^/]+")}$`,
+    `^${pipe(glob, Str.replace(/\/$/, ""), Str.replace(/[.+?^${}()|[\]\\]/g, "\\$&"), Str.replace(/\*/g, "[^/]+"))}$`,
   );
 
 const root = process.argv[2] ?? join(import.meta.dirname, "..");
@@ -70,8 +70,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   const globs = isMap(workspace) && Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
   const members = globs.filter((g): g is string => typeof g === "string").map(matcher);
   const starts = STARTS.map(matcher);
-  const folders = tracked.stdout
-    .split("\0")
+  const folders = pipe(tracked.stdout, Str.split("\0"))
     .filter((file) => file !== "" && file !== "package.json")
     .map((file) => dirname(file))
     .filter((folder) => !LEFT_OUT.test(folder) && members.some((m) => m.test(folder)));
@@ -111,13 +110,10 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
-
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
+const result: ReturnType<typeof run> = Result.match(Result.try(run), {
+  onSuccess: (ran) => ran,
+  onFailure: (error) => fail(`could not read: ${String(error)}`),
+});
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {

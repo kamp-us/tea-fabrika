@@ -9,6 +9,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -82,7 +85,7 @@ const tracked = spawnSync(
   },
 );
 
-const files = tracked.stdout.split("\0").filter((file) => file !== "");
+const files = pipe(tracked.stdout, Str.split("\0")).filter((file) => file !== "");
 
 // No file read must never read as clean.
 if (tracked.status !== 0 || files.length === 0) {
@@ -101,13 +104,14 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
 const results = files.map(attempt);
 const lines = results.flatMap((result) => result.lines);

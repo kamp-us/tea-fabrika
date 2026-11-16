@@ -1,5 +1,8 @@
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */
@@ -57,7 +60,7 @@ export const steps = (job: Record<string, unknown>): Record<string, unknown>[] =
 
 export const commands = (job: Record<string, unknown>) =>
   steps(job).flatMap((step) =>
-    typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
+    typeof step["run"] === "string" ? pipe(step["run"], Str.split("\n")).map((line) => pipe(line, Str.trim)) : [],
   );
 
 export const compact = (value: unknown) => {
@@ -65,13 +68,14 @@ export const compact = (value: unknown) => {
     return "";
   }
 
-  const trimmed = value.trim();
-  const expression = trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
-  // Keep quoted strings and names intact. Only operator spacing cannot change meaning.
-  return expression.replace(
-    /'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
-    (match, operator: string | undefined) => operator ?? match,
-  );
+  const trimmed = pipe(value, Str.trim);
+  const expression =
+    pipe(trimmed, Str.startsWith("${{")) && pipe(trimmed, Str.endsWith("}}"))
+      ? pipe(trimmed, Str.slice(3, -2), Str.trim)
+      : trimmed;
+  // Keep quoted strings and names intact. Only operator spacing cannot change meaning. A match is
+  // either a quoted string ($1) or a spaced operator ($2); the group that did not match adds "".
+  return pipe(expression, Str.replace(/('(?:[^']|'')*')|\s*(==|!=|&&|\|\|)\s*/g, "$1$2"));
 };
 
 export const env = {
@@ -96,7 +100,7 @@ export const sameEntries = (left: readonly [string, unknown][], right: readonly 
   right.every(([key, value]) => left.some(([other, held]) => other === key && held === value));
 
 export const uses = (step: Record<string, unknown>, action: string) =>
-  typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
+  typeof step["uses"] === "string" && pipe(step["uses"], Str.startsWith(`${action}@`));
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 export const chromium =
@@ -115,12 +119,9 @@ export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.vi
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
-  try {
-    const value: unknown = JSON.parse(text ?? "");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
+  // Text that is not JSON reads as no legs, as a parsed value that is not a list does.
+  const value = Result.getOrUndefined(Result.try((): unknown => JSON.parse(text ?? "")));
+  return Array.isArray(value) ? value : [];
 };
 
 /**

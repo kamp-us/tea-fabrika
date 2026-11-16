@@ -2,6 +2,9 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parseSync } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
@@ -36,7 +39,7 @@ const declares = /^[\s*]*(?:global|globals|exported)\b/;
 const tool = (comment: Comment) =>
   tools.some((pattern) => pattern.test(comment.value)) ||
   // `/// <reference ... />` and its kin: TypeScript reads a triple-slash line as a directive.
-  (comment.type === "Line" && comment.value.startsWith("/")) ||
+  (comment.type === "Line" && pipe(comment.value, Str.startsWith("/"))) ||
   (comment.type === "Block" && declares.test(comment.value));
 
 /** The tree as text with every position dropped. `raw` stays, so `16` and `0x10` differ. */
@@ -72,16 +75,17 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
  * added, removed or changed.
  */
 const refusal = (name: string, before: string, after: string, parse: typeof parseSync): string | undefined => {
-  const options = { lang: name.endsWith(".tsx") ? "tsx" : "ts", sourceType: "module" } as const;
-  let old;
-  let fresh;
+  const options = { lang: pipe(name, Str.endsWith(".tsx")) ? "tsx" : "ts", sourceType: "module" } as const;
+  const parsed = Result.try({
+    try: () => ({ old: parse(name, before, options), fresh: parse(name, after, options) }),
+    catch: (error) => `the parser threw: ${error instanceof Error ? error.message : String(error)}`,
+  });
 
-  try {
-    old = parse(name, before, options);
-    fresh = parse(name, after, options);
-  } catch (error) {
-    return `the parser threw: ${error instanceof Error ? error.message : String(error)}`;
+  if (Result.isFailure(parsed)) {
+    return parsed.failure;
   }
+
+  const { old, fresh } = parsed.success;
 
   if (old.errors.length > 0 || fresh.errors.length > 0) {
     return `a parse error on the ${old.errors.length > 0 ? "old" : "new"} side`;
@@ -93,7 +97,7 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
 
   const changed = [...unmatched(old.comments, fresh.comments), ...unmatched(fresh.comments, old.comments)];
   const found = changed.find(tool);
-  return found === undefined ? undefined : `a tool comment changed: ${JSON.stringify(found.value.trim())}`;
+  return found === undefined ? undefined : `a tool comment changed: ${JSON.stringify(pipe(found.value, Str.trim))}`;
 };
 
 /**

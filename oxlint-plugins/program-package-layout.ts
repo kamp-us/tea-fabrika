@@ -3,6 +3,10 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -12,7 +16,7 @@ const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
 
 // A file a runtime may run as code: a JavaScript or TypeScript extension, or none at all. The rest
 // (CSS, JSON, an image) is an asset and holds no Worker code.
-const code = (file: string) => /\.[cm]?[jt]sx?$/.test(file) || !basename(file).includes(".");
+const code = (file: string) => /\.[cm]?[jt]sx?$/.test(file) || !pipe(basename(file), Str.includes("."));
 
 // A file oxlint lints, so a finding reported on it is seen.
 const lintable = (file: string) => /\.[cm]?[jt]sx?$/.test(file) && !declaration(file);
@@ -94,9 +98,9 @@ const runtimePackages = ["@alchemy.run/cloudflare-runtime", "@kampus/libfabrika/
 
 const worker = (name: string) =>
   [...platform, ...runtimePackages].some((known) =>
-    known.endsWith(":") || known.endsWith("/")
-      ? name.startsWith(known)
-      : name === known || name.startsWith(`${known}/`),
+    pipe(known, Str.endsWith(":")) || pipe(known, Str.endsWith("/"))
+      ? pipe(name, Str.startsWith(known))
+      : name === known || pipe(name, Str.startsWith(`${known}/`)),
   );
 
 // What the package's manifest says of the names its code links: its own `imports` aliases and the
@@ -110,22 +114,22 @@ type Names = {
 // condition, as `targetStrings` reads an export: the key itself, or each pattern key it matches,
 // with the match in every `*`.
 const aliasTargets = (names: Names, name: string): string[] =>
-  !name.startsWith("#")
+  !pipe(name, Str.startsWith("#"))
     ? []
     : Object.entries(names.aliases).flatMap(([key, target]) => {
         if (key === name) {
           return targetStrings(target);
         }
 
-        const [before = "", after = "", ...more] = key.split("*");
+        const [before = "", after = "", ...more] = pipe(key, Str.split("*"));
 
         return more.length === 0 &&
-          key.includes("*") &&
+          pipe(key, Str.includes("*")) &&
           name.length > before.length + after.length &&
-          name.startsWith(before) &&
-          name.endsWith(after)
+          pipe(name, Str.startsWith(before)) &&
+          pipe(name, Str.endsWith(after))
           ? targetStrings(target).map((path) =>
-              path.replaceAll("*", name.slice(before.length, name.length - after.length)),
+              pipe(path, Str.replaceAll("*", pipe(name, Str.slice(before.length, name.length - after.length)))),
             )
           : [];
       });
@@ -145,13 +149,13 @@ const packageOf = (name: string) => /^(?:@[^/]+\/)?[^/]+/.exec(name)?.[0] ?? nam
 // else, a missing file, an alias with no entry, an undeclared package or another scheme, is
 // unjudged.
 const known = (names: Names, name: string): boolean => {
-  if (name.startsWith("#")) {
+  if (pipe(name, Str.startsWith("#"))) {
     const targets = aliasTargets(names, name);
 
-    return targets.length > 0 && targets.every((target) => !target.startsWith("#") && known(names, target));
+    return targets.length > 0 && targets.every((target) => !pipe(target, Str.startsWith("#")) && known(names, target));
   }
 
-  return name.startsWith("node:") || (bare(name) && names.dependencies.has(packageOf(name)));
+  return pipe(name, Str.startsWith("node:")) || (bare(name) && names.dependencies.has(packageOf(name)));
 };
 
 // A side-effect import or empty value re-export still loads its target. Only erased links stop here.
@@ -250,7 +254,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
   const inside = (path: string) => {
     const at = relative(home, realpathSync(path));
 
-    return !at.startsWith("..") && !/(?:^|\/)node_modules(?:\/|$)/.test(at);
+    return !pipe(at, Str.startsWith("..")) && !/(?:^|\/)node_modules(?:\/|$)/.test(at);
   };
   // A dependency's code, by the path the resolver gives or the file it stands for.
   const modules = (path: string) =>
@@ -273,14 +277,14 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const at = relative(root, file);
-    let text: string;
+    const read = Result.try(() => readFileSync(file, "utf8"));
 
-    try {
-      text = readFileSync(file, "utf8");
-    } catch {
+    if (Result.isFailure(read)) {
       unjudged.push(`'${at}' cannot be read`);
       return;
     }
+
+    const text = read.success;
 
     const parsed = parseSync(file, text);
 
@@ -302,7 +306,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
           if (!known(names, name)) {
             unjudged.push(`'${at}' loads '${name}', which does not resolve`);
           }
-        } else if (name.startsWith(".") || inside(target) || !modules(target)) {
+        } else if (pipe(name, Str.startsWith(".")) || inside(target) || !modules(target)) {
           visit(target);
         }
       }
@@ -470,17 +474,20 @@ const sources = (root: string) => listing(root, ["node_modules", "dist"]);
 // output counts here, since a target may name it; a dependency folder counts only when the target
 // names it. A target without `*` maps every subpath to one file, so any one subpath stands for all.
 const matchesOf = (root: string, exportValue: unknown): string[] => {
-  const escape = (text: string) => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escape = (text: string) => pipe(text, Str.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
   return [
     ...new Set(
       targetStrings(exportValue).flatMap((target) => {
-        if (!target.includes("*")) {
+        if (!pipe(target, Str.includes("*"))) {
           return ["_"];
         }
 
-        const [before = "", ...rest] = target.split("*");
-        const folder = before.slice(0, before.lastIndexOf("/") + 1);
+        const [before = "", ...rest] = pipe(target, Str.split("*"));
+        const folder = pipe(
+          before,
+          Str.slice(0, pipe(before, Str.lastIndexOf("/"), Option.match({ onNone: () => 0, onSome: (at) => at + 1 }))),
+        );
         const skip = /(?:^|\/)node_modules\//.test(folder) ? [] : ["node_modules"];
         const files = listing(resolve(root, folder), skip).map((path) => `${folder}${path}`);
         const pattern = new RegExp(`^${escape(before)}(.+)${rest.map(escape).join("\\1")}$`);
@@ -512,17 +519,17 @@ export const programPackageLayout: CreateRule = {
     }
 
     const root = matched[1];
-    let manifest: unknown;
+    const read = Result.try((): unknown => JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
 
-    try {
-      manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-    } catch {
+    if (Result.isFailure(read)) {
       return {
         Program(node) {
           context.report({ node, message: "Cannot read the program package.json." });
         },
       };
     }
+
+    const manifest = read.success;
 
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every
@@ -542,7 +549,11 @@ export const programPackageLayout: CreateRule = {
     const keys = map(raw) ? Object.keys(raw) : [];
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
-      map(raw) && Object.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
+      map(raw) && Object.keys(raw).some((key) => pipe(key, Str.startsWith(".")))
+        ? raw
+        : raw === undefined
+          ? {}
+          : { ".": raw };
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per
     // subpath the package's own exports still offer there.
@@ -551,15 +562,15 @@ export const programPackageLayout: CreateRule = {
       const targets = targetStrings(exportValue);
       const target = (path: string) => targetResolver.sync(root, path).path;
 
-      if (!key.includes("*")) {
+      if (!pipe(key, Str.includes("*"))) {
         return targets.map(target);
       }
 
-      const [before = "", after = ""] = key.split("*");
+      const [before = "", after = ""] = pipe(key, Str.split("*"));
       const conditions = [options.conditionNames, ...conditionPaths(exportValue)];
 
       return matchesOf(root, exportValue).flatMap((match) => {
-        const own = targets.map((path) => target(path.replaceAll("*", match)));
+        const own = targets.map((path) => target(pipe(path, Str.replaceAll("*", match))));
         const real = new Set(own.flatMap((path) => (path === undefined ? [] : [realpathSync(path)])));
         // The subpath is this key's only if the package's exports answer with one of its own
         // targets: a null target or a more specific key takes it away. With no name to ask by,
@@ -567,7 +578,7 @@ export const programPackageLayout: CreateRule = {
         const offered =
           name === "" ||
           conditions.some((set) => {
-            const found = resolverFor(set).sync(root, `${name}${before.slice(1)}${match}${after}`).path;
+            const found = resolverFor(set).sync(root, `${name}${pipe(before, Str.slice(1))}${match}${after}`).path;
 
             return found !== undefined && real.has(realpathSync(found));
           });
@@ -588,7 +599,7 @@ export const programPackageLayout: CreateRule = {
       const at = relative(root, path);
 
       return (
-        !at.startsWith("..") &&
+        !pipe(at, Str.startsWith("..")) &&
         lintable(path) &&
         realpathSync(path) === join(realpathSync(root), at) &&
         !/(?:^|\/)(?:node_modules|fixtures)\//.test(at)
@@ -607,7 +618,10 @@ export const programPackageLayout: CreateRule = {
     };
 
     // Node refuses an exports object that mixes subpaths with conditions or other keys.
-    if (keys.some((key) => key.startsWith(".")) && keys.some((key) => key !== "." && !key.startsWith("./"))) {
+    if (
+      keys.some((key) => pipe(key, Str.startsWith("."))) &&
+      keys.some((key) => key !== "." && !pipe(key, Str.startsWith("./")))
+    ) {
       errors.push("Every export key is '.' or a subpath starting with './'.");
     }
 
@@ -629,7 +643,7 @@ export const programPackageLayout: CreateRule = {
     }
 
     // './window' is judged for Worker code like every other subpath.
-    const subpaths = Object.keys(exports).filter((key) => key.startsWith("./"));
+    const subpaths = Object.keys(exports).filter((key) => pipe(key, Str.startsWith("./")));
     const windowTargets = "./window" in exports ? resolveKey("./window") : [];
     const real = (paths: readonly (string | undefined)[]) =>
       paths.flatMap((path) => (path === undefined || declaration(path) ? [] : [path]));
@@ -656,7 +670,7 @@ export const programPackageLayout: CreateRule = {
       }
 
       // A pattern subpath may map to no file in one fallback target; a plain key may not.
-      if (key !== "./window" && !key.includes("*") && targets.includes(undefined)) {
+      if (key !== "./window" && !pipe(key, Str.includes("*")) && targets.includes(undefined)) {
         errors.push(`The '${key}' export must name a real file.`);
       }
     }

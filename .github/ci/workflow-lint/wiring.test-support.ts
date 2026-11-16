@@ -3,7 +3,8 @@
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored } from "../changes.mjs";
@@ -442,7 +443,10 @@ export const wiring = fc
 
       // The vitest step's guard and the three leg conditions, respaced around each operator.
       for (const guarded of ["vitest", "chromium", "end to end", "edges"].map((n) => step(clean, "next", n))) {
-        guarded.if = `\${{${gap}${guarded.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
+        // A step with no `if` keeps the `undefined` the optional chain gave here.
+        const spaced =
+          guarded.if === undefined ? undefined : pipe(guarded.if, Str.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`));
+        guarded.if = `\${{${gap}${spaced}${gap}}}`;
       }
 
       step(clean, "next", "shard times").if = `\${{${gap}!cancelled()${gap}}}`;

@@ -14,6 +14,9 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -74,7 +77,7 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
 
     for (const [path, text] of Object.entries(sources)) {
       mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
-      writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
+      writeFileSync(join(scratch, pkg, path), pipe(text, Str.replaceAll(HOME, home)));
     }
 
     for (const [path, target] of Object.entries(links)) {
@@ -86,7 +89,7 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
     // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
     // outside it is outside the rule too.
     return Object.keys(sources)
-      .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"))
+      .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !pipe(path, Str.startsWith("../")))
       .map((path) => `${pkg}/${path}`);
   });
 
@@ -119,17 +122,17 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
       const found: Finding[] = [];
 
       for (const file of files) {
-        try {
+        const ran = Result.try(() =>
           tester.run(CODE, recording(found, file), {
             valid: [{ code: readFileSync(join(scratch, file), "utf8"), filename: join(scratch, file) }],
             invalid: [],
-          });
-        } catch (error) {
-          // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
-          // parse, so that file has no finding here either; the law's oxlint run checks the same.
-          if (!(error instanceof Error && error.message === "Parsing failed")) {
-            throw error;
-          }
+          }),
+        );
+
+        // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
+        // parse, so that file has no finding here either; the law's oxlint run checks the same.
+        if (Result.isFailure(ran) && !(ran.failure instanceof Error && ran.failure.message === "Parsing failed")) {
+          throw ran.failure;
         }
       }
 
@@ -170,7 +173,7 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
     const findings = report.diagnostics.filter((d) => d.code === CODE);
     // Every finding sits in one plant's home; the rest of the scratch folder holds no source.
     expect(findings.filter((d) => !/^\d+\//.test(d.filename))).toEqual([]);
-    return plants.map((_, i) => findings.filter((d) => d.filename.startsWith(`${i}/`)));
+    return plants.map((_, i) => findings.filter((d) => pipe(d.filename, Str.startsWith(`${i}/`))));
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -191,8 +194,9 @@ const run = (name: string, exports: unknown, sources: Readonly<Record<string, st
 /** A plant's findings as one oxlint run and RuleTester can both say them: its home's number aside. */
 const plain = (found: readonly Finding[]) =>
   found
-    .map(({ code, message, filename }) => ({ code, message, filename: filename.replace(/^\d+\//, "") }))
-    .sort((a, b) => `${a.filename}\n${a.message}`.localeCompare(`${b.filename}\n${b.message}`));
+    .map(({ code, message, filename }) => ({ code, message, filename: pipe(filename, Str.replace(/^\d+\//, "")) }))
+    // Effect's localeCompare answers the sign of the native one, which is all a sort reads.
+    .sort((a, b) => pipe(`${a.filename}\n${a.message}`, Str.localeCompare(`${b.filename}\n${b.message}`)));
 
 // One oxlint run per law, through the repo's own config, over every plant the law linted in
 // process: each plant's findings must be the same. The real tree's law plants nothing.
@@ -736,12 +740,12 @@ describe("fabrika/program-package-layout", () => {
             ext = entry === "window tsx" ? "tsx" : "ts",
             worker = `./${workerPath}.${ext}`,
             view = `./${windowPath}.tsx`,
-            last = workerPath.split("/").at(-1) ?? "",
+            last = pipe(workerPath, Str.split("/")).at(-1) ?? "",
             impl = `./${last}.impl${link === ".ts" ? ".ts" : ""}`,
             // The Worker code's own file outside the package, as written from the package
             // folder and from the Worker file's folder.
             outside = `../../../outside/${last}.ts`,
-            up = `${"../".repeat(workerPath.split("/").length - 1)}${outside}`,
+            up = `${pipe("../", Str.repeat(pipe(workerPath, Str.split("/")).length - 1))}${outside}`,
             // The pure program sits beside the Worker file under '.', on the other condition.
             beside = condition === "default" ? "import" : "default",
             written = shapes[shape]!.text(c),
@@ -760,11 +764,14 @@ describe("fabrika/program-package-layout", () => {
                         ? { "#cf/*": "*" }
                         : {},
             text =
-              runtime === undefined || !link.startsWith("imports")
+              runtime === undefined || !pipe(link, Str.startsWith("imports"))
                 ? written
-                : written.replace(
-                    JSON.stringify(runtime),
-                    JSON.stringify(link === "imports pattern" ? `#cf/${runtime}` : "#cf"),
+                : pipe(
+                    written,
+                    Str.replace(
+                      JSON.stringify(runtime),
+                      JSON.stringify(link === "imports pattern" ? `#cf/${runtime}` : "#cf"),
+                    ),
                   ),
             files: Record<string, string> = {
               "src/program.ts": "export const program = 1;",
@@ -772,7 +779,7 @@ describe("fabrika/program-package-layout", () => {
               [`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
               // The Worker code sits in the exported file, in a local file it loads, or
               // outside the package.
-              ...(link === "same file" || link.startsWith("imports")
+              ...(link === "same file" || pipe(link, Str.startsWith("imports"))
                 ? { [`${workerPath}.${ext}`]: text }
                 : link === "symlink"
                   ? { [outside]: text }
@@ -791,8 +798,10 @@ describe("fabrika/program-package-layout", () => {
             symlinks = link === "symlink" ? { [`${workerPath}.${ext}`]: outside } : {},
             // The Worker file's subpaths under "./*", which "null pattern" shuts off.
             shut = [
-              `./${workerPath.slice("src/".length)}`,
-              ...(link === ".ts" || link === "no extension" ? [`./${workerPath.slice("src/".length)}.impl`] : []),
+              `./${pipe(workerPath, Str.slice("src/".length))}`,
+              ...(link === ".ts" || link === "no extension"
+                ? [`./${pipe(workerPath, Str.slice("src/".length))}.impl`]
+                : []),
             ],
             // The export that carries the Worker file, and the key its finding names.
             carriers: Record<(typeof entries)[number], [string, Record<string, unknown>]> = {
@@ -810,7 +819,7 @@ describe("fabrika/program-package-layout", () => {
             },
             [shown, exported] = carriers[entry],
             // A window behind an array target is the same window.
-            arrays = entry.startsWith("array"),
+            arrays = pipe(entry, Str.startsWith("array")),
             target = (path: string) => (arrays ? [path] : path),
             entryMessage = (key: string) =>
               `A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`,

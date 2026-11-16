@@ -9,6 +9,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { advises, stale, warnLines } from "./advice.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
@@ -27,7 +30,7 @@ const ROOT = join(import.meta.dirname, "..");
 
 // A run with no path is over the whole repo, as `pnpm lint` and `pnpm format` make it. Only it sees
 // every finding, so only it prunes a ledger, and only it runs the check below.
-const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
+const whole = process.argv.slice(2).every((arg) => pipe(arg, Str.startsWith("-")));
 
 // What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
 // derivation cannot see, and on a test that declares by hand what is derived. It reads the whole
@@ -83,17 +86,17 @@ const ran = spawnSync(
 );
 
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
-const read = (): readonly Diagnostic[] | null => {
-  try {
-    const report: {
-      readonly diagnostics?: readonly Diagnostic[];
-      readonly number_of_files?: number;
-    } = JSON.parse(ran.stdout);
-    return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
-  } catch {
-    return null;
-  }
-};
+const read = (): readonly Diagnostic[] | null =>
+  Result.getOrElse(
+    Result.try((): readonly Diagnostic[] | null => {
+      const report: {
+        readonly diagnostics?: readonly Diagnostic[];
+        readonly number_of_files?: number;
+      } = JSON.parse(ran.stdout);
+      return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
+    }),
+    () => null,
+  );
 
 const diagnostics = read();
 
@@ -129,7 +132,7 @@ const finding = (d: Diagnostic): Finding => {
   const file = relative(ROOT, resolve(process.cwd(), d.filename ?? ""));
 
   if (!lines.has(file)) {
-    lines.set(file, existsSync(join(ROOT, file)) ? readFileSync(join(ROOT, file), "utf8").split("\n") : []);
+    lines.set(file, existsSync(join(ROOT, file)) ? pipe(readFileSync(join(ROOT, file), "utf8"), Str.split("\n")) : []);
   }
 
   const line = d.labels?.[0]?.span.line;

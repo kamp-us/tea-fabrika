@@ -3,6 +3,9 @@
 // order their messages print, and is what `pnpm lint` calls.
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";
@@ -50,15 +53,13 @@ const CHECK_RULES: readonly Rule[] = [
 ];
 
 export const lintWorkflow = (text: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["check.yaml: invalid YAML"];
   }
 
-  const workflow = map(source);
+  const workflow = map(source.success);
   const errors: string[] = [];
   const require: Require = (holds, reason) => {
     if (!holds) {
@@ -74,7 +75,7 @@ export const lintWorkflow = (text: string): string[] => {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
+  const ran = Result.try(() => {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const check = read(".github/workflows/check.yaml");
     const files = cacheFiles(read);
@@ -94,16 +95,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
     const lint = String(map(map(manifest)["scripts"])["lint"]);
 
-    if (!lint.includes("node .github/ci/workflow-lint.ts")) {
+    if (!pipe(lint, Str.includes("node .github/ci/workflow-lint.ts"))) {
       errors.push("pnpm lint must run workflow-lint.ts");
     }
 
     // A pull request of ignored paths starts no run, so its rows are checked only here.
-    if (!lint.includes("node .github/ci/field-check.ts --local")) {
+    if (!pipe(lint, Str.includes("node .github/ci/field-check.ts --local"))) {
       errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
     }
 
-    if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {
+    if (!pipe(read("oxlint-plugins/lint.ts"), Str.includes('import { checkTracked } from "./gitignore.mjs"'))) {
       errors.push("full lint must use the shared tracked-file check");
     }
 
@@ -117,7 +118,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
     console.log(`workflow-lint: ${errors.length} errors`);
     process.exitCode = errors.length === 0 ? 0 : 1;
-  } catch {
+  });
+
+  if (Result.isFailure(ran)) {
     console.error("workflow-lint: input could not be read");
     process.exitCode = 2;
   }

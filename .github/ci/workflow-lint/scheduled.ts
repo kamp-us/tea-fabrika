@@ -1,4 +1,7 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -94,15 +97,13 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(source.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
   const errors: string[] = [];
@@ -121,7 +122,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC2. One run at a time, and a running one is never cut short.
   const concurrency = map(workflow["concurrency"]);
   require(typeof concurrency["group"] === "string" &&
-    !concurrency["group"].includes("${{") &&
+    !pipe(concurrency["group"], Str.includes("${{")) &&
     concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
 
   // SC3. The token reads runs (the time tables) and the checkout, and no more: `actions: write`
@@ -162,8 +163,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
       continue;
     }
 
-    require(!compact(map(job)["if"]).includes(
-      "always()",
+    require(!pipe(
+      compact(map(job)["if"]),
+      Str.includes("always()"),
     ), `SC4: ${name} stops with its run: only the report runs on always()`);
   }
 
@@ -185,7 +187,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     ...REPORT_ENV,
     ...Object.fromEntries(
       (Object.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
-        `LIMIT_${suite.toUpperCase()}`,
+        `LIMIT_${pipe(suite, Str.toUpperCase)}`,
         limitOf(jobs, suite),
       ]),
     ),
@@ -242,7 +244,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const tests = map(jobs[TESTS_JOB]),
     testSteps = steps(tests),
     shards = listed(tests),
-    toolingLegs = shards.filter((shard) => typeof shard === "string" && shard.startsWith(TOOLING_LEG)),
+    toolingLegs = shards.filter((shard) => typeof shard === "string" && pipe(shard, Str.startsWith(TOOLING_LEG))),
     nextLegs = shards.filter((shard) => !toolingLegs.includes(shard)),
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
@@ -290,7 +292,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const kept = testSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
-  const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
+  const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && pipe(s["run"], Str.includes(RESULTS)));
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
     testSteps.indexOf(kept[0] ?? {}) >
@@ -305,7 +307,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
-      ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
+      ), `SC11: every step that runs ${pipe(command, Str.split(" --shard"))[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
   // SC12. SC2's one group holds main's schedule and every hand-started run, so a waiting run is
