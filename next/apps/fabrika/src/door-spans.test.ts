@@ -314,7 +314,8 @@ const capture = (delegate: Tracer.Tracer) => {
     spanId: string;
     name: string;
     startTime: bigint;
-    attributes: Record<string, unknown> | undefined;
+    // As Effect's span hands an event's attributes to `event`.
+    attributes: Parameters<Tracer.Span["event"]>[2];
   }> = [];
   const tracer = Tracer.make({
     span(options) {
@@ -457,7 +458,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
   );
 });
 
-const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
+const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, Schema.Json> = {}) => {
   expect(span.traceId).toBe(a.traceId);
   expect(Option.getOrThrow(span.parent).spanId).toBe(a.spanId);
   expect(Object.fromEntries(span.attributes)).toEqual(attributes);

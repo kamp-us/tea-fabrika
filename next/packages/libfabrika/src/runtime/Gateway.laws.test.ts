@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 // P12, next/. The callbacks are real platform duties, not replacement gateway logic.
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer, type Schema } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -83,7 +83,7 @@ const setup = Effect.fnUntraced(function* (
 ) {
   const { connection } = yield* Effect.promise(() => import("../transport/Connection.ts"));
   let saved: typeof Attached.Type = online();
-  const frames: Array<Record<string, unknown>> = [];
+  const frames: Array<Record<string, Schema.Json>> = [];
   const closes: Array<number> = [];
   const c: Connection = connection({
     reader: "gateway/session-1",

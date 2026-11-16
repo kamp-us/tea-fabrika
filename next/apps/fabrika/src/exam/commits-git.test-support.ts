@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import type { Schema } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
@@ -177,7 +178,7 @@ class Repo {
     const answers = ran.stdout
       .split("\n")
       .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+      .map((l) => JSON.parse(l) as Record<string, Schema.Json>);
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
 
@@ -271,7 +272,7 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
   r.git("merge", "--squash", "-q", "pr");
   const squash = r.commit("squash");
   const rows = notes.map(
-    ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, unknown>> } => ({
+    ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, Schema.Json>> } => ({
       date: "2026-11-07",
       run: `r${i}`,
       attested: [

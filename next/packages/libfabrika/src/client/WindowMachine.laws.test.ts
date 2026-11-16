@@ -127,9 +127,9 @@ const POOL = ["milk", "bread", "eggs"] as const;
 const DRAFT = "draft~";
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+type Call = { readonly _tag: string; readonly [key: string]: Schema.Json };
 type Write = { readonly type: "write"; readonly call: Call; readonly id: number; readonly dial: number };
-type Row = { readonly _tag: string; readonly [key: string]: unknown };
+type Row = { readonly _tag: string; readonly [key: string]: Schema.Json };
 
 const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<Cmd>] => applyCell(machine, s, m);
 const isWrite = (c: Cmd): c is Write => c.type === "write";
@@ -202,7 +202,7 @@ const OUTCOMES = ["accepted", "refused"] as const;
  * `wait_err {error}`, `monitor_ok {value: null, ms}` and `monitor_err {error}`, each on its write's
  * `{id, dial}`. Built by the walk from what is waiting, then handed to the real update.
  */
-const answerMsg = (m: { readonly type: string; readonly [key: string]: unknown }): WindowMsg => m as WindowMsg;
+const answerMsg = (m: { readonly type: string; readonly [key: string]: Schema.Json }): WindowMsg => m as WindowMsg;
 
 /** A walk's own answers to a flight, in place of the slice 1 brain's; none leaves them to it. */
 type Answer = (
@@ -1939,12 +1939,12 @@ type Family = {
   readonly schema: Schema.Top;
   readonly from: () => WindowModel;
   /** The frame for a result or params object, and the frame's `ms` for an answer to a flight. */
-  readonly text: (s: WindowModel, sent: Record<string, unknown>) => readonly [string, number?];
+  readonly text: (s: WindowModel, sent: Record<string, Schema.Json>) => readonly [string, number?];
   /** The object the frame carries for a generated value: the value itself, unless a notice adds its pid. */
-  readonly sent?: (value: Record<string, unknown>) => Record<string, unknown>;
+  readonly sent?: (value: Record<string, Schema.Json>) => Record<string, Schema.Json>;
   readonly good: (prev: WindowModel, after: readonly [WindowModel, ReadonlyArray<Cmd>], value: any) => void;
   readonly drop: ReadonlyArray<string>;
-  readonly wrong: Readonly<Record<string, unknown>>;
+  readonly wrong: Schema.JsonObject;
 };
 
 const flightFor = (s: WindowModel, tag: string) => {
@@ -2092,7 +2092,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
 };
 
 /** The params of a notice, or the result of an answer, with one field dropped or of the wrong type. */
-const mutations = (family: Family, sent: Record<string, unknown>) => [
+const mutations = (family: Family, sent: Record<string, Schema.Json>) => [
   ...family.drop.map((k) => Object.fromEntries(Object.entries(sent).filter(([key]) => key !== k))),
   ...Object.entries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
 ];
@@ -2110,7 +2110,7 @@ describe("P18 L10: every frame family the parent reads decodes or reaches its ty
         // Arbitrary may make, such as `-0`, so the owner's Msg is built from the value JSON carries.
         const value = Schema.decodeSync(Json)(Schema.encodeSync(Json)(generated));
         const prev = family.from();
-        const sent = (family.sent ?? ((v) => v))(value as Record<string, unknown>);
+        const sent = (family.sent ?? ((v) => v))(value as Record<string, Schema.Json>);
         const [text, ms] = family.text(prev, sent);
         family.good(prev, door.frame(prev, text, ms), value);
 
@@ -2234,7 +2234,7 @@ const answeredFlight = (s: WindowModel, m: WindowMsg) => {
   return s.flight.find((f) => f.id === on.id && f.dial === on.dial);
 };
 
-const streamIn = (call: { readonly [key: string]: unknown }) => call["stream"];
+const streamIn = (call: { readonly [key: string]: Schema.Json }) => call["stream"];
 
 const append = (w: Follow, into: Array<Fact>, fact: Omit<Fact, "rev" | "arrivedAt">) => {
   w.rev += 1;

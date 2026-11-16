@@ -235,10 +235,7 @@ vi.mock("./exam/compiler.ts", async (original) => ({
 const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
 
 vi.mock("./local-instance.ts", () => ({
-  localInstance: (
-    _built: unknown,
-    options: { readonly settings: { readonly values: Readonly<Record<string, unknown>> } },
-  ) =>
+  localInstance: (_built: unknown, options: { readonly settings: { readonly values: Schema.JsonObject } }) =>
     Effect.suspend(() => {
       instances.push({ port: Number(options.settings.values["instance.port"]) });
       return Effect.fail({ reason: "test_instance_ready" });

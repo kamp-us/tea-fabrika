@@ -101,7 +101,8 @@ it.effect.prop(
       const resolved = yield* Sources.resolve(Declarations.all, slots(flags));
       const saved = yield* Snapshot.make(Declarations.all, resolved);
       const checked = yield* Snapshot.read(Declarations.all, saved);
-      const values: Record<string, unknown> = checked.values;
+      // The checked values by key, each of its own setting's type.
+      const values: Readonly<Record<string, (typeof checked.values)[keyof typeof checked.values]>> = checked.values;
 
       for (const d of [memory, wait]) {
         expect(d.scope).toEqual(["person"]);

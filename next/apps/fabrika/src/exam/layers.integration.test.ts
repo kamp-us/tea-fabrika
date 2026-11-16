@@ -24,7 +24,7 @@ const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
 const planter = Effect.acquireRelease(
   Effect.sync(() => {
     const roots: Array<string> = [];
-    const plant = (files: Readonly<Record<string, string | object>>): string => {
+    const plant = (files: Readonly<Record<string, string | Schema.JsonObject>>): string => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
       roots.push(root);
 

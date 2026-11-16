@@ -632,10 +632,10 @@ describe("Program.make authoring laws, next/", () => {
 });
 
 describe("P11 program contract and p22 refusal", () => {
-  for (const field of ["state", "msg", "view", "refuse", "inputs", "outputs", "writes", "wake"]) {
+  for (const field of ["state", "msg", "view", "refuse", "inputs", "outputs", "writes", "wake"] as const) {
     it(`plant, omit ${field}: incomplete declarations are refused`, async () => {
       const { Program } = await import("./Program.ts");
-      const raw: Record<string, unknown> = { ...spec() };
+      const raw: Partial<ReturnType<typeof spec>> = { ...spec() };
       delete raw[field];
       expect(() => Schema.decodeUnknownSync(Program.schema)(raw)).toThrow();
     });
@@ -1325,7 +1325,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         // The first read gives the authored machine; later reads cycle through equal-shaped copies.
         const copies = [fields.machine, { ...fields.machine }, { ...fields.machine }].slice(0, cycle);
         let reads = 0;
-        const spec: Record<string, unknown> = { ...fields };
+        const spec: Partial<typeof fields> = { ...fields };
         Object.defineProperty(spec, "machine", { enumerable: true, get: () => copies[reads++ % cycle] });
         const made = effect
           ? Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [spec]))

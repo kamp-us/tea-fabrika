@@ -1336,7 +1336,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
 
         for (const w of [...waits, ...monitors]) {
-          const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
+          const call = w.call as { readonly _tag: string; readonly [key: string]: Schema.Json };
           const params =
             call._tag === "wait"
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }

@@ -47,7 +47,13 @@ describe("L12: handlers map faults", () => {
             merge: () => fail(hostFault),
           });
           const ci = Layer.succeed(Ci.Ci, { start: () => fail(ciFault), at: () => fail(ciFault) });
-          const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
+          const cmd: Record<string, Schema.Json> = {
+            type: cell.method,
+            attempt: 1,
+            change: 1,
+            head,
+            start: cell.start,
+          };
 
           if (cell.kind === "bad_head") {
             if (cell.method === "change") {

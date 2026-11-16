@@ -172,9 +172,9 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
-const body = (entry: Entry): Record<string, unknown> =>
+const body = (entry: Entry): Record<string, Schema.Json> =>
   typeof entry.body === "object" && entry.body !== null && !Array.isArray(entry.body)
-    ? (entry.body as Record<string, unknown>)
+    ? (entry.body as Record<string, Schema.Json>)
     : {};
 
 /** The store's Sql with two cuts: on the next INSERT, or on the first transaction after an INSERT. */

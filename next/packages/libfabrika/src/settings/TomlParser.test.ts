@@ -99,7 +99,8 @@ type Doc = typeof doc extends fc.Arbitrary<infer D> ? D : never;
 /** The text, its values, and the line every leaf and every table header must have. */
 const write = (d: Doc) => {
   const lines: Array<string> = [];
-  const value: Record<string, unknown> = {};
+  // What the parse must give: each table's integers by key, and a quoted dotted key's one integer.
+  const value: Record<string, number | Record<string, number>> = {};
   const leaves: Array<{ path: ReadonlyArray<string>; line: number }> = [];
   const headers: Array<{ path: ReadonlyArray<string>; line: number }> = [];
   let pad = 0;
@@ -131,30 +132,30 @@ const write = (d: Doc) => {
   }
 
   for (const t of top) {
-    const inner: Record<string, unknown> = {};
+    const inner: Record<string, number> = {};
     value[t.name] = inner;
 
     if (t.spelling === "inline") {
       const line = put(`${t.name} = { ${t.keys.map((k, n) => `${k} = ${t.values[n]}`).join(", ")} }`);
       t.keys.forEach((k, n) => {
-        inner[k] = t.values[n];
+        inner[k] = t.values[n]!;
         leaves.push({ path: [t.name, k], line });
       });
     } else {
       t.keys.forEach((k, n) => {
         const key = t.spelling === "dotted" ? `${t.name}.${k}` : `"${t.name}".'${k}'`;
-        inner[k] = t.values[n];
+        inner[k] = t.values[n]!;
         leaves.push({ path: [t.name, k], line: put(`${key} = ${t.values[n]}`) });
       });
     }
   }
 
   for (const t of headed) {
-    const inner: Record<string, unknown> = {};
+    const inner: Record<string, number> = {};
     value[t.name] = inner;
     headers.push({ path: [t.name], line: put(t.spelling === "table" ? `[${t.name}]` : `[ "${t.name}" ]`) });
     t.keys.forEach((k, n) => {
-      inner[k] = t.values[n];
+      inner[k] = t.values[n]!;
       leaves.push({ path: [t.name, k], line: put(`${k} = ${t.values[n]}`) });
     });
   }

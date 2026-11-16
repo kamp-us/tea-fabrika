@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import type { Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -271,7 +272,8 @@ describe("chain after the merge (p86 and p89)", () => {
     fc.assert(
       fc.property(fc.nat(rows.length - 1), change, (at, mutation) => {
         const bad = structuredClone(rows);
-        const link: Record<string, unknown> = bad[at]!.attested[0]!;
+        // A saved link, which a mutation may give fast-check's generated JSON.
+        const link: Record<string, Schema.Json | fc.JsonValue> = bad[at]!.attested[0]!;
 
         if (mutation._tag === "cause") {
           if (!mutation.keepParent) {

@@ -147,7 +147,7 @@ const near = (a: Rect | undefined, b: Rect, label: string) => {
   }
 };
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly type: string; readonly [key: string]: Schema.Json };
 
 type Waiting =
   | { readonly _tag: "attach"; readonly workspace: number; readonly tile: string; readonly cmd: Cmd }

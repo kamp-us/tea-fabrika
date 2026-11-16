@@ -178,7 +178,7 @@ describe("T285, ledger tracing keep-laws", () => {
                   const id = `${a.id}/${index}`;
                   const input = line(a, ctx.traceId);
                   let name: string;
-                  let expected: Record<string, unknown>;
+                  let expected: Record<string, Schema.Json>;
 
                   if (call.op === "read") {
                     const rows = yield* Stream.runCollect(ledger.read(a.stream, call.after));

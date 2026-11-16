@@ -30,7 +30,7 @@ const SEED = 119120;
 
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: unknown };
+type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: Schema.Json };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
   applyCell(handshakeMachine as never, s as never, m as never) as never;

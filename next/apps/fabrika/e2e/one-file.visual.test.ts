@@ -262,7 +262,8 @@ const stopped = Effect.callback<never, Stopped>((resume) => {
   });
 });
 
-const note = (row: Readonly<Record<string, unknown>>) =>
+// A trace row: JSON.stringify leaves out a field that is undefined.
+const note = (row: Readonly<Record<string, Schema.Json | undefined>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
       appendFileSync(trace, `${JSON.stringify(row)}\n`);
@@ -274,7 +275,7 @@ const owned = <A, E, R>(
   at: Resource,
   acquire: Effect.Effect<A, E, R>,
   release: (a: A) => Effect.Effect<unknown, unknown>,
-  facts: (a: A) => Readonly<Record<string, unknown>> = () => ({}),
+  facts: (a: A) => Readonly<Record<string, Schema.Json | undefined>> = () => ({}),
 ) =>
   Effect.acquireRelease(acquire.pipe(Effect.tap((a) => note({ acquired: at, ...facts(a) }))), (a) =>
     release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),

@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
@@ -93,12 +93,12 @@ const bucket = (lie = false) => {
       return Promise.resolve(body === undefined ? null : { sha256: lie ? "0".repeat(64) : hex(body) });
     },
   };
-  const lines = (key: string): Array<Record<string, unknown>> =>
+  const lines = (key: string): Array<Record<string, Schema.Json>> =>
     new TextDecoder()
       .decode(stored.get(key))
       .split("\n")
       .filter((line) => line.trim() !== "")
-      .map((line) => JSON.parse(line) as Record<string, unknown>);
+      .map((line) => JSON.parse(line) as Record<string, Schema.Json>);
   return { calls, stored, puts, lines };
 };
 
@@ -109,7 +109,7 @@ const flush = SpanSink.use((sink) => sink.flush);
 const summaries = SpanSink.use((sink) => sink.summaries(0, Number.MAX_SAFE_INTEGER));
 
 /** One span named `piece` that starts at `at`, lasts `ms` on the TestClock, and fails unless `ok`. */
-const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<string, unknown> = {}) =>
+const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<string, Schema.Json> = {}) =>
   Effect.gen(function* () {
     yield* TestClock.setTime(at);
     yield* Effect.exit(
@@ -134,7 +134,8 @@ type Raw = {
 
 const key = (r: Raw) => `${r.piece} ${r.hour} ${r.ms} ${r.ok}`;
 
-const raw = (row: Record<string, unknown>): Raw => ({
+// A measurement row, read from SQLite or from an archived JSON line.
+const raw = (row: Readonly<Record<string, SQLOutputValue | Schema.Json>>): Raw => ({
   piece: String(row["piece"]),
   hour: hourStart(Number(row["at"])),
   ms: Number(row["ms"]),
@@ -214,7 +215,7 @@ describe("p101, measurements in two levels", () => {
                   start = hourStart(start) + H;
                 }
 
-                const attributes: Record<string, unknown> = {
+                const attributes: Record<string, Schema.Json> = {
                   ...(s.lag === undefined ? {} : { "fab.ledger.lag": s.lag }),
                   ...(s.doorLag === undefined ? {} : { "fab.gateway.lag": s.doorLag }),
                   // Keys that are not `.lag`, or `.lag` with no number: never the lag.
@@ -621,7 +622,7 @@ describe("p101, an archive that fails is never silent", () => {
                 [Archive.bucket(liar.calls), "mismatch"],
                 [Archive.bucket(blind), "mismatch"],
               ] as const;
-              const seen: Array<Record<string, unknown>> = [];
+              const seen: Array<Record<string, Schema.Json>> = [];
 
               for (const [archive, error] of tries) {
                 const exit = yield* Effect.exit(flush.pipe(Effect.provide(archive)));

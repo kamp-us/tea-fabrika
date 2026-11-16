@@ -24,7 +24,7 @@
 // Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
 // file on every start. S2, print the stored JWK in the `online` line.
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Node crypto makes the test person's key; it never touches a file or an account
-import { DatabaseSync } from "node:sqlite"; // edge: S2 reads the journal file's rows as stored, below any layer of ours
+import { DatabaseSync, type SQLOutputValue } from "node:sqlite"; // edge: S2 reads the journal file's rows as stored, below any layer of ours
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
@@ -124,7 +124,8 @@ type Seen = {
   readonly fingerprints: ReadonlyArray<string>;
   readonly task: typeof Task.Type;
   readonly taskAfterRestart: typeof Task.Type;
-  readonly journal: Record<string, unknown>;
+  /** Each journal table's rows, as SQLite gives them. */
+  readonly journal: Record<string, Array<Record<string, SQLOutputValue>>>;
   readonly brain: unknown;
 };
 

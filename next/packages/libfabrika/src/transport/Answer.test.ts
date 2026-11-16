@@ -78,7 +78,7 @@ const unauthenticated = fc.oneof(
 
 const admit = () => Effect.die("online routing must not repeat hello admission");
 
-const frame = (over: Record<string, unknown> = {}) =>
+const frame = (over: Record<string, fc.JsonValue> = {}) =>
   JSON.stringify({
     jsonrpc: "2.0",
     id: "r1",

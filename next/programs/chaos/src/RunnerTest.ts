@@ -32,7 +32,7 @@ export type Open = Effect.Effect<
         readonly recorded: Effect.Effect<{
           readonly rows: ReadonlyArray<{
             readonly name: string;
-            readonly attributes: Readonly<Record<string, unknown>>;
+            readonly attributes: Schema.JsonObject;
             readonly events: ReadonlyArray<unknown>;
             readonly links: ReadonlyArray<unknown>;
           }>;

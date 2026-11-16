@@ -324,7 +324,7 @@ describe("P16 stack and sealed loader", () => {
   it("p33 environment and declarations: actual stack selects completed bytes, no rebundle, byte-limited code-free env", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1600, max: 1800 }), fc.boolean(), async (length, multibyte) => {
-        const calls: Array<{ main: string; bundle: boolean; env: Record<string, unknown> }> = [];
+        const calls: Array<{ main: string; bundle: boolean; env: Record<string, Schema.Json> }> = [];
         vi.doMock("@alchemy.run/cloudflare", () => ({
           providers: () => Layer.empty,
           R2: { Bucket: () => Effect.succeed({ type: "r2" }) },

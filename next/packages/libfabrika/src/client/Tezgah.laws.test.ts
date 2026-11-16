@@ -57,7 +57,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
       expect(JSON.stringify(Schema.encodeSync(TezgahView)(same)), "L11: the wire view decodes to the view it was").toBe(
         JSON.stringify(wire),
       );
-      const tiles = (wire as { readonly tiles: ReadonlyArray<Record<string, unknown>> }).tiles;
+      const tiles = (wire as { readonly tiles: ReadonlyArray<Record<string, Schema.Json>> }).tiles;
       expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
 
       for (const [i, tile] of tiles.entries()) {
@@ -306,8 +306,8 @@ const FOCUS_KEYS: ReadonlyArray<{
   { keys: ["ctrl+b", "arrowdown"], does: "tezgah.focus_down", to: "down" },
 ];
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+type Cmd = { readonly type: string; readonly [key: string]: Schema.Json };
+type Call = { readonly _tag: string; readonly [key: string]: Schema.Json };
 
 /** One move a window drew: where from and to, its command, the cursor the page last said in `from`
  *  when it was made, and its letter once written. */
@@ -1115,7 +1115,9 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
           const w = at.wins[win]!;
           const focusRows = cmds.flatMap((c) => {
             const record =
-              c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
+              c.type === "record"
+                ? (c["record"] as { readonly _tag: string; readonly [k: string]: Schema.Json })
+                : null;
             return record?._tag === "focus" ? [record] : [];
           });
           const before = new Set(waitingMoves(prev).map(letterIn));

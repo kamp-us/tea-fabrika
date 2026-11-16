@@ -90,8 +90,8 @@ const machine = windowMachineFor({
   keys: TABLE!,
 });
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
-type Call = { readonly _tag: string; readonly [key: string]: unknown };
+type Cmd = { readonly type: string; readonly [key: string]: Schema.Json };
+type Call = { readonly _tag: string; readonly [key: string]: Schema.Json };
 
 type Did = {
   readonly type: "did";

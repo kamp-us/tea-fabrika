@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { afterAll, beforeEach, describe, expect, it } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
@@ -1521,7 +1521,7 @@ const spoofedParams = (write: typeof SpoofedWrite.Type, letter: string) => {
   };
 };
 
-const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, unknown>>> =>
+const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, SQLOutputValue>>> =>
   Object.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -3459,7 +3459,7 @@ describe("P10 inputs, retries and signer", () => {
       missing: {},
       junk: { reason: Schema.Literals(["wrong", "missing"]) },
     });
-    type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
+    type MessageState = { readonly schema: typeof schema; readonly m: Schema.JsonObject };
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
       const fields = Object.entries(state.schema.fields).filter(
@@ -3494,7 +3494,8 @@ describe("P10 inputs, retries and signer", () => {
             Arbitrary.map(({ value, junk }) => {
               const m = { ...state.m };
 
-              if (missing) {
+              // A replacement is undefined only when the field goes missing.
+              if (missing || value === undefined) {
                 delete m[key];
               } else {
                 m[key] = value;

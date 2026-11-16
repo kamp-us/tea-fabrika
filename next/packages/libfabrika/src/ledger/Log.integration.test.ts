@@ -132,9 +132,9 @@ const full: Line = {
 };
 
 /** The same line as plain JSON, the way it comes in across an object call. */
-const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
+const json = (): Record<string, Schema.Json> => JSON.parse(JSON.stringify(full));
 
-const without = (key: string): Record<string, unknown> =>
+const without = (key: string): Record<string, Schema.Json> =>
   Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
 
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;

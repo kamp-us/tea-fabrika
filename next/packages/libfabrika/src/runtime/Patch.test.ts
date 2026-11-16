@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import type { Schema } from "effect";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -130,7 +131,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return copy;
   }
 
-  return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
+  return { ...(value as Record<string, Schema.Json>), [key]: change(Reflect.get(Object(value), key), rest, f) };
 };
 
 /** One generated edit: which path the value holds now, and what to do there. */

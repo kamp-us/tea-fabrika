@@ -22,7 +22,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer, Scope } from "effect";
@@ -86,8 +86,8 @@ const home = folder.pipe(
       sqls.set(name, made);
       return made;
     };
-    const rows = (name: string, table: string): Array<Record<string, unknown>> =>
-      dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
+    const rows = (name: string, table: string): Array<Record<string, SQLOutputValue>> =>
+      dbs.has(name) ? db(name).prepare(`SELECT * FROM ${table}`).all() : [];
     return { open, asked, rows, names: () => [...dbs.keys()] };
   }),
 );

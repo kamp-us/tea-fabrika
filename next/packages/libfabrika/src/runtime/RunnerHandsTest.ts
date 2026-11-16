@@ -117,7 +117,7 @@ const checkProgram = Program.make({
   wake: () => null,
 });
 
-const PROGRAMS: Record<string, unknown> = { [checkProgram.name]: checkProgram };
+const PROGRAMS = { [checkProgram.name]: checkProgram };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });

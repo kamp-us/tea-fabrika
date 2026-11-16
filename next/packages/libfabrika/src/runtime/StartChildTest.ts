@@ -137,7 +137,7 @@ const ROW_LIMIT = 2_000_000;
 // A valid 256-character program name adds more bytes to the Cmd than to its first letter.
 const BOUNDARY_PROGRAM = `m${"é".repeat(255)}`;
 
-const PROGRAMS: Record<string, unknown> = {
+const PROGRAMS: Record<string, Loadable> = {
   starter: childStarter({ name: "starter", declare: true }),
   merger: childStarter({ name: "merger", declare: true }),
   plain: childStarter({ name: "plain", declare: false }),
@@ -250,10 +250,13 @@ const stopper = (name: string) => {
   });
 };
 
-let withStoppers: Record<string, unknown> | undefined;
+/** A program these laws' loader may load: a starter, or a stopper. */
+type Loadable = ReturnType<typeof childStarter> | ReturnType<typeof stopper>;
+
+let withStoppers: Record<string, Loadable> | undefined;
 
 /** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
-const stopperPrograms = (): Record<string, unknown> => {
+const stopperPrograms = (): Record<string, Loadable> => {
   withStoppers ??= { ...PROGRAMS, ...Object.fromEntries([...STOPPER_PROGRAMS].map((p) => [p, stopper(p)])) };
   return withStoppers;
 };
@@ -298,9 +301,9 @@ const raw = (tag: string, fields: object = {}): unknown =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
-const body = (entry: Entry | undefined): Record<string, unknown> =>
+const body = (entry: Entry | undefined): Record<string, Schema.Json> =>
   typeof entry?.body === "object" && entry.body !== null && !Array.isArray(entry.body)
-    ? (entry.body as Record<string, unknown>)
+    ? (entry.body as Record<string, Schema.Json>)
     : {};
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
@@ -383,7 +386,7 @@ type Ask = {
   readonly name: unknown;
   readonly input?: unknown;
   readonly inputBytes?: number;
-  readonly extra?: Record<string, unknown>;
+  readonly extra?: Record<string, Schema.Json>;
   readonly drop?: ReadonlyArray<string>;
 };
 

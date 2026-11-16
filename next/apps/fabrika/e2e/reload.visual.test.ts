@@ -212,12 +212,12 @@ const scoped = <A, E>(
   );
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */
-const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
+const objects = (value: unknown): ReadonlyArray<Record<string, Schema.Json>> =>
   typeof value !== "object" || value === null
     ? []
     : Array.isArray(value)
       ? value.flatMap(objects)
-      : [value as Record<string, unknown>, ...Object.values(value).flatMap(objects)];
+      : [value as Record<string, Schema.Json>, ...Object.values(value).flatMap(objects)];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {

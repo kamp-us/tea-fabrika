@@ -101,8 +101,9 @@ const capture = () => {
     },
   });
   const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
-  const tags = (name: string): ReadonlyArray<Record<string, unknown>> =>
-    ended(name).map((span) => Object.fromEntries(span.attributes));
+  // Each span's tags, decoded as JSON: a tag that is not a JSON value fails the law here.
+  const tags = (name: string): ReadonlyArray<Schema.JsonObject> =>
+    ended(name).map((span) => Schema.decodeUnknownSync(Schema.JsonObject)(Object.fromEntries(span.attributes)));
   const failed = (name: string): ReadonlyArray<boolean> =>
     ended(name).map((span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
   const all = () => spans.flatMap((span) => [...span.attributes.values()]);
@@ -128,7 +129,7 @@ const anyText = fc.oneof({ arbitrary: longText, weight: 3 }, { arbitrary: shortT
  * A tag that took text from the caller: as it was when it fits, else cut to at most 128 characters
  * with the full length kept beside it as a number, `<key>.length`.
  */
-const heldShort = (span: Record<string, unknown>, key: string, full: string) => {
+const heldShort = (span: Schema.JsonObject, key: string, full: string) => {
   if (full.length <= MOST) {
     expect(span[key], key).toBe(full);
     return;

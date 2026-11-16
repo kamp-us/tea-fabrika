@@ -32,7 +32,7 @@
 // Plants (after build): H1, call `execute` before the `executing` write lands. H3, count a finish
 // refused `unavailable` as done and save `acknowledged`; or hold a finish refused `rate_limited`. H4, execute the task in any `assigned`
 // answer, whoever it names.
-import { applyCell, type Cmd } from "@demlik/tea";
+import { applyCell, type Machine } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
@@ -76,9 +76,12 @@ const HELD: ReadonlySet<string> = new Set([
 ]);
 
 type Model = typeof handsMachine.model.Type;
-/** A Msg as the walk builds it: the machine reads it by its `type`. */
-type Sent = { readonly type: string } & Readonly<Record<string, unknown>>;
-type Out = Cmd & Readonly<Record<string, unknown>>;
+/** A Msg as the walk builds it: one of the machine's own. */
+type Sent = typeof handsMachine extends Machine<Model, infer M, infer _C, infer _U, infer _X> ? M : never;
+/** The machine's own Cmds, as its `init` and update cells give them. */
+type Out = typeof handsMachine extends Machine<Model, infer _M, infer C, infer _U, infer _X> ? C : never;
+/** A journal entry, as the machine writes it. */
+type Entry = Extract<Out, { readonly type: "journal_write" }>["entry"];
 
 const step = (s: Model, m: Sent) => applyCell<Model, Sent, Out>(handsMachine, s, m);
 const boot = (): readonly [Model, ReadonlyArray<Out>] => handsMachine.init(null, {});
@@ -129,7 +132,7 @@ type World = {
   opened: Set<number>;
   challenged: Set<number>;
   /** The journal: each task's last saved entry, kept across restarts as a file would keep it. */
-  readonly journal: Map<string, unknown>;
+  readonly journal: Map<string, Entry>;
   readonly door: Brain;
   /** The oracle's own counts, across every restart. */
   readonly executes: Map<string, number>;
@@ -374,7 +377,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         return { type: "journal_write_err", cmd: c, error: { _tag: "JournalError", reason: "storage" }, at: w.at };
       }
 
-      w.journal.set(text(r.get("task")), r.get("entry"));
+      w.journal.set(c.task, c.entry);
       return { type: "journal_write_ok", cmd: c, value: null, at: w.at };
     }
 
@@ -605,8 +608,10 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         run: () => {
           // A cut after a journal write: the entry landed, and the process died before it heard.
           if (cell.variant % 2 === 0) {
-            for (const c of w.waiting.filter((x) => x.type === "journal_write")) {
-              w.journal.set(text(record(c).get("task")), record(c).get("entry"));
+            for (const c of w.waiting) {
+              if (c.type === "journal_write") {
+                w.journal.set(c.task, c.entry);
+              }
             }
           }
 

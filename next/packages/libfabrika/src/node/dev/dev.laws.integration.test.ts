@@ -64,7 +64,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
                 Effect.suspend(() => {
                   const plugin = [...local.mapUnsafe.values()].find(
                     (value) => typeof value === "object" && value !== null && "sockets" in value,
-                  ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
+                  ) as { start: (ports: Record<string, fc.JsonValue>) => Effect.Effect<unknown> };
                   return plugin.start({ "fabrika-control": raw });
                 }),
               ),
@@ -333,7 +333,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           .flatMap(
             (call) =>
               (call.args[2] as Array<{
-                span: { name: string; ok: boolean; attributes: Record<string, unknown> };
+                span: { name: string; ok: boolean; attributes: Record<string, Schema.Json> };
               }>) ?? [],
           )
           .filter(

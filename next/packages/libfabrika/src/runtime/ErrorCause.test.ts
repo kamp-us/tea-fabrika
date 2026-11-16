@@ -327,7 +327,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
   const calls = ["init", "step", "fold", "upgrade_row", "upgrade_gives", "encode"] as const;
 
   /** The call that feeds `seen`, keyed by `key`, to the decoder at one site. */
-  const feed = (call: (typeof calls)[number], seen: Record<string, unknown>) => {
+  const feed = (call: (typeof calls)[number], seen: Record<string, Schema.Json>) => {
     const saved = { count: 1, seen };
     const inc = { type: "inc" };
 

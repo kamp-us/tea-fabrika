@@ -635,7 +635,7 @@ const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
 type Fact = {
   readonly tag: string;
   readonly id: string;
-  readonly body: Readonly<Record<string, unknown>>;
+  readonly body: Schema.JsonObject;
   readonly build: string;
 };
 
@@ -652,7 +652,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
         .map((e): Fact => ({
           tag: e.event,
           id: e.id,
-          body: e.body as Readonly<Record<string, unknown>>,
+          body: e.body as Schema.JsonObject,
           build: e.build,
         }));
       const inbox = yield* Stream.runCollect(mailbox.read(name, 0));

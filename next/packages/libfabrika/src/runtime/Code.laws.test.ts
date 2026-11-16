@@ -41,7 +41,7 @@ type Msg = {
   readonly from?: From;
 };
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly type: string; readonly [key: string]: Schema.Json };
 
 // 0135: the restated shapes below are pinned to the module's own types.
 type Loaded = {

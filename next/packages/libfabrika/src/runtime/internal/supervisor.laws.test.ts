@@ -1015,7 +1015,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
-  const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
+  const raw = saved as { journal: Record<string, Schema.Json>; receipts: Array<Record<string, Schema.Json>> };
   const journal = raw.journal;
   const fields = Object.keys(journal).filter((key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
@@ -1057,7 +1057,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
   // A person's restart starts with its own saved request ID and build.
   if (journal._tag === "waiting_start" && origin._tag === "manual") {
-    const request = journal.request as { id: string; code: Record<string, unknown> };
+    const request = journal.request as { id: string; code: Record<string, Schema.Json> };
     broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
     broken.push({
       ...raw,

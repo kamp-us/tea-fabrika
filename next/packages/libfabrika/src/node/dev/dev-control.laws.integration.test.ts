@@ -84,7 +84,7 @@ type Call = {
 };
 
 type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
-type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
+type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, Schema.Json> } };
 
 // `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.
 type Phase = "up" | "replacing" | "exited" | "waiting" | "braked";
@@ -334,7 +334,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           observe = Context.get(local, RuntimeLifecycle);
           const plugin = [...local.mapUnsafe.values()].find(
             (value) => typeof value === "object" && value !== null && "sockets" in value,
-          ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
+          ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
           listen = (port) => plugin.start({ "fabrika-control": port });
           observe({ type: "start", worker: NAME, pid: walk.pid });
           yield* listen(walk.port);

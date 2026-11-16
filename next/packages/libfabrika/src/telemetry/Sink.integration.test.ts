@@ -105,10 +105,13 @@ const flush = SpanSink.use((sink) => sink.flush);
 
 const recorded = (chain: ChainValue) => RecordManager.use((records) => Stream.runCollect(records.read(chain)));
 
-const traced = <A, E, R>(name: string, attributes: Record<string, unknown>, body: Effect.Effect<A, E, R>) =>
+/** A span's attributes as these laws set them: plain values, and a redacted key where a law plants one. */
+type Attributes = Record<string, Schema.Json | Redacted.Redacted<string>>;
+
+const traced = <A, E, R>(name: string, attributes: Attributes, body: Effect.Effect<A, E, R>) =>
   body.pipe(Effect.withSpan(name, { attributes }));
 
-const step = (name: string, attributes: Record<string, unknown> = {}) => traced(name, attributes, Effect.void);
+const step = (name: string, attributes: Attributes = {}) => traced(name, attributes, Effect.void);
 
 const count = (db: DatabaseSync, table: string, predicate = "1"): number =>
   Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${predicate}`).get()?.["n"]);

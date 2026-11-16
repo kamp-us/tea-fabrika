@@ -43,6 +43,8 @@ const Input = {
 type Path = ReadonlyArray<string>;
 type Tree = Readonly<Record<string, unknown>>;
 type Hint = { readonly pick: number; readonly key: number; readonly deep: boolean };
+/** A value that holds itself, which no TOML text can write. */
+type Cycle = { self?: Cycle };
 
 const segments = ["leaf", "a.b", "", "雪", 'a"b', "a'b", "a\\b", "a\nb", "__proto__", "constructor", "toString"];
 
@@ -691,7 +693,7 @@ describe("T877 public TOML edits, next/", () => {
         const start = fixture(l, initial);
         const parsed = yield* toml.parse(start.text);
         const path = selected(start.value, parsed.value, l.hints[0]!);
-        const cycle: Record<string, unknown> = {};
+        const cycle: Cycle = {};
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);

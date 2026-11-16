@@ -1,6 +1,7 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Schema } from "effect";
 import { Option } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -195,7 +196,7 @@ describe("decoders", () => {
     fc.assert(
       fc.property(anyLink, (value) => {
         for (const field of Object.keys(value)) {
-          const missing: Record<string, unknown> = { ...value };
+          const missing: Record<string, Schema.Json> = { ...value };
           delete missing[field];
           expect(decodeLink(missing)).toEqual(Option.none());
         }

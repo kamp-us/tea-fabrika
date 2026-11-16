@@ -148,13 +148,14 @@ const capture = () => {
   return { tracer, spans, ended };
 };
 
-const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Object.fromEntries(span.attributes);
+// A span's attributes as Effect's tracer keeps them: by key, each value as the code set it.
+const tags = (span: Tracer.NativeSpan): ReadonlyMap<string, unknown> => span.attributes;
 
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
-  Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+  [...tags(span)].find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
 
-const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Object.values(tags(span)).includes(value);
+const holds = (span: Tracer.NativeSpan, value: unknown): boolean => [...tags(span).values()].includes(value);
 
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
@@ -255,7 +256,7 @@ const write = (event: MemberEvent) => ClientManager.use((clients) => clients.wri
 /** Every tag of every span: no marker, and no text over 128 characters. */
 const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
   for (const span of spans) {
-    for (const [key, value] of Object.entries(tags(span))) {
+    for (const [key, value] of [...tags(span)]) {
       const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
 
       for (const mark of MARKS) {
@@ -293,7 +294,7 @@ describe("p97, mailbox spans", () => {
         expect(tagged(placed, "answer")).toBe("placed");
         expect(tagged(placed, "rev")).toBe(1);
         expect(tagged(placed, "pos")).toBe(1);
-        expect(tags(placed)["messaging.operation.type"]).toBe("send");
+        expect(tags(placed).get("messaging.operation.type")).toBe("send");
         expect(tagged(refused, "answer")).toBe("refused");
         expect(tagged(refused, "reason")).toBe("id_reused");
         const appends = ended("ledger.append");
@@ -330,11 +331,11 @@ describe("p97, mailbox spans", () => {
         }
 
         expect(holds(receive, name) || holds(receive, `${name}/inbox`)).toBe(true);
-        expect(tags(receive)["fab.mailbox.name"]).toBe(name);
+        expect(tags(receive).get("fab.mailbox.name")).toBe(name);
         expect(tagged(receive, "after")).toBe(0);
         expect(tagged(receive, "letters")).toBe(2);
         expect(tagged(receive, "skipped")).toBe(1);
-        expect(tags(receive)["messaging.operation.type"]).toBe("receive");
+        expect(tags(receive).get("messaging.operation.type")).toBe("receive");
         const reads = ended("ledger.read");
         expect(reads.length).toBeGreaterThan(0);
         expect(reads.every((read) => within(read, receive))).toBe(true);
@@ -371,7 +372,7 @@ describe("p97, process spans", () => {
         }
 
         expect(holds(first, name)).toBe(true);
-        expect(tags(first)["fab.process"]).toBe(A);
+        expect(tags(first).get("fab.process")).toBe(A);
         expect(tagged(first, "program")).toBe(program);
         expect(tagged(first, "hash")).toBe(hash);
         expect(tagged(first, "answer")).toBe("placed");
@@ -655,7 +656,7 @@ describe("p97, the tags hold the right names and numbers", () => {
           return expect.unreachable();
         }
 
-        expect(tags(send)["messaging.message.id"]).toBe(id);
+        expect(tags(send).get("messaging.message.id")).toBe(id);
       }).pipe(Effect.provide(all()), Effect.withTracer(tracer));
     }),
     options,

@@ -48,10 +48,10 @@ export type Recording = {
 };
 
 export type UsageSpan = {
-  readonly attributes: Readonly<Record<string, unknown>>;
+  readonly attributes: Schema.JsonObject;
   readonly startTimeUnixNano: string;
   readonly endTimeUnixNano: string;
-  readonly resource: { readonly attributes: Readonly<Record<string, unknown>> };
+  readonly resource: { readonly attributes: Schema.JsonObject };
 };
 
 export type Rig = {

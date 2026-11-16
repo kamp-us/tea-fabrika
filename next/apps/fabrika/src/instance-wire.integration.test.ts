@@ -8,6 +8,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { SQLOutputValue } from "node:sqlite";
 import { it } from "@effect/vitest";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
@@ -264,7 +265,7 @@ const instance = (saved?: Saved) => launch(shared, saved);
 // Read only the named public metadata tables. Never inspect general storage or key rows. The crash cases
 // read two more rows through `killedMoment`: the name's `process_recovery` row and its object's `activity` row.
 const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
-  const rows: Array<Record<string, unknown>> = [];
+  const rows: Array<Record<string, SQLOutputValue>> = [];
 
   for (const entry of readdirSync(home, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) {

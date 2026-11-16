@@ -59,7 +59,7 @@ export const Msg = Schema.Union([Start, End, Ping]);
 
 /** The Cmd for one ask, with its extra fields beside and its dropped operands gone. */
 const asked = (ask: typeof Ask.Type) => {
-  const operands: Record<string, unknown> = {
+  const operands: Record<string, Schema.Json> = {
     program: ask.program,
     name: ask.name,
     ...(ask.input === undefined ? {} : { input: ask.input }),

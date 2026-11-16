@@ -38,9 +38,9 @@ const Manifest = Schema.Struct({
   name: Schema.String,
   version: Schema.optional(Schema.String),
   private: Schema.optional(Schema.Boolean),
-  sideEffects: Schema.optional(Schema.Unknown),
+  sideEffects: Schema.optional(Schema.Json),
   scripts: Names,
-  exports: Schema.optional(Schema.Unknown),
+  exports: Schema.optional(Schema.Json),
   dependencies: Names,
   devDependencies: Names,
   peerDependencies: Names,
@@ -194,7 +194,7 @@ const shown = (from: string, file: string): string => relative(from, file).split
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
 // A tree is planted in the scope of the test that reads it, which removes it when the test ends (0061).
-const plant = (files: Readonly<Record<string, string | object>>) =>
+const plant = (files: Readonly<Record<string, string | Fields>>) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
@@ -211,8 +211,11 @@ const plant = (files: Readonly<Record<string, string | object>>) =>
 
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
 
+/** A planted JSON file's fields: JSON.stringify leaves out a field that is undefined. */
+type Fields = Readonly<Record<string, Schema.Json | undefined>>;
+
 /** A `package.json` the way p65 wants one; `extra` overrides or adds fields. */
-const manifest = (name: string, extra: object = {}): object => ({
+const manifest = (name: string, extra: Fields = {}): Fields => ({
   name,
   version: "0.0.0",
   private: true,

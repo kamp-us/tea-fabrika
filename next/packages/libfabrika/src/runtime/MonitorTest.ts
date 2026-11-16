@@ -163,7 +163,7 @@ type Reading = ReturnType<typeof reading>;
 const readerProgram = reading("reader");
 const chaserProgram = reading("chaser");
 
-const PROGRAMS: Record<string, unknown> = {
+const PROGRAMS = {
   [readerProgram.name]: readerProgram,
   [chaserProgram.name]: chaserProgram,
 };

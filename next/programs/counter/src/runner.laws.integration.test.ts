@@ -85,7 +85,7 @@ describe("p22 real counter in the runner", () => {
         fc
           .constantFrom("name", "machine", "state", "msg", "view", "refuse", "inputs", "outputs", "writes", "wake")
           .map((field) => {
-            const raw: Record<string, unknown> = { ...counter };
+            const raw: Partial<typeof counter> = { ...counter };
             delete raw[field];
             return raw;
           }),

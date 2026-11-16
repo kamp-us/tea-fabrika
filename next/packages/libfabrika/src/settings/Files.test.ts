@@ -348,19 +348,19 @@ const KINDS = {
     schema: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
     default: 18787,
     valid: fc.integer({ min: 1, max: 65535 }),
-    invalid: fc.constantFrom<unknown>(0, 65536, "18800", true, 1.5),
+    invalid: fc.constantFrom<Schema.Json>(0, 65536, "18800", true, 1.5),
   },
   word: {
     schema: Schema.String.check(Schema.isPattern(/^[a-z]+$/u)),
     default: "a",
     valid: fc.stringMatching(/^[a-z]{1,6}$/),
-    invalid: fc.constantFrom<unknown>("A1", "", 3, false),
+    invalid: fc.constantFrom<Schema.Json>("A1", "", 3, false),
   },
   flag: {
     schema: Schema.Boolean,
     default: false,
     valid: fc.boolean(),
-    invalid: fc.constantFrom<unknown>("yes", 1, null),
+    invalid: fc.constantFrom<Schema.Json>("yes", 1, null),
   },
 } as const;
 
@@ -400,7 +400,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: Schema.Json) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),
@@ -419,7 +419,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
       fc.property(
         declared.chain((ds) => fc.tuple(fc.constant(ds), document(ds))),
         ([ds, doc]) => {
-          const tree: Record<string, Record<string, unknown>> = {};
+          const tree: Record<string, Record<string, Schema.Json>> = {};
           let ok = true;
           ds.forEach((d, n) => {
             const v = doc.values[n]!;
@@ -447,7 +447,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
 
           if (stray !== undefined && !taken) {
             if (stray.table === undefined) {
-              (tree as Record<string, unknown>)[stray.key] = 1;
+              (tree as Record<string, Schema.Json>)[stray.key] = 1;
             } else {
               tree[stray.table] = { ...tree[stray.table], [stray.key]: 1 };
             }

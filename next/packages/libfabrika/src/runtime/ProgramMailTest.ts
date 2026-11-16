@@ -202,7 +202,7 @@ const alarmPolicy = {
   backoff: { minMs: 10, maxMs: 10, resetAfterMs: 10_000 },
 };
 
-const PROGRAMS: Record<string, unknown> = {
+const PROGRAMS = {
   ...Object.fromEntries(PAIRS.map((k) => [REQUESTERS[k].name, REQUESTERS[k]])),
   [mailResponder.name]: mailResponder,
   [timerProgram.name]: timerProgram,
@@ -1687,7 +1687,7 @@ const pipeHost = Effect.fnUntraced(function* (
   const context = yield* Layer.buildWithScope(shared, scope);
   const writer = pipe.writer === "plain" ? pipeWriter(PIPE_READER) : chunkWriter(PIPE_READER, PIPE_ASIDE);
   const reader = pipeReader();
-  const programs: Record<string, unknown> = { [writer.name]: writer, [reader.name]: reader };
+  const programs = { [writer.name]: writer, [reader.name]: reader };
 
   for (const [name, program] of [
     [PIPE_WRITER, writer.name],

@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import type { Schema } from "effect";
 import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
@@ -92,7 +93,10 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(declaration.doc.length).toBeGreaterThan(0);
         }
 
-        const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
+        const broken = structuredClone(table) as {
+          queue: Record<string, Schema.Json>;
+          merger: Record<string, Schema.Json>;
+        };
         const paths = [
           "merger.wait",
           "merger.poll",

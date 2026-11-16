@@ -537,7 +537,7 @@ const walk = (
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = JSON.parse(value) as Record<string, Schema.Json>;
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
         const cell =

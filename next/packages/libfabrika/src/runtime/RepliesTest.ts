@@ -149,7 +149,7 @@ const faulty = (sql: Sql, control: Control): Sql => ({
 });
 
 /** Every table and row of the database, as text, for retained-row and body checks. */
-const dump = (sql: Sql): ReadonlyArray<{ readonly table: string; readonly row: Record<string, unknown> }> =>
+const dump = (sql: Sql): ReadonlyArray<{ readonly table: string; readonly row: Record<string, Schema.Json> }> =>
   sql
     .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .flatMap(({ name }) => sql.exec(`SELECT * FROM "${String(name)}"`).map((row) => ({ table: String(name), row })));
@@ -190,10 +190,10 @@ const ANSWER = ["accepted", "malformed"] as const;
 const key = (name: string, id: string) => JSON.stringify([name, id]);
 
 /** A stored cell read as a JSON object, or undefined when it is not one. */
-export const parsed = (cell: string): Record<string, unknown> | undefined => {
+export const parsed = (cell: string): Record<string, Schema.Json> | undefined => {
   const value = Result.try(() => JSON.parse(cell) as unknown);
   return Result.isSuccess(value) && Predicate.isObject(value.success)
-    ? (value.success as Record<string, unknown>)
+    ? (value.success as Record<string, Schema.Json>)
     : undefined;
 };
 
@@ -343,7 +343,7 @@ const walk = (
         );
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = JSON.parse(value) as Record<string, Schema.Json>;
         const secret = step.body;
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);

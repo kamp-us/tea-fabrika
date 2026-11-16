@@ -169,7 +169,7 @@ export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly 
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
-    const { [key]: _gone, ...rest } = value as Record<string, unknown>;
+    const { [key]: _gone, ...rest } = value as Record<string, Schema.Json>;
     return rest;
   }
 

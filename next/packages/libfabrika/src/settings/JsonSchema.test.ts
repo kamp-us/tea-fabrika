@@ -41,18 +41,18 @@ const KINDS = {
   port: {
     make: () => Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
     valid: fc.integer({ min: 1, max: 65535 }),
-    invalid: fc.constantFrom<unknown>(0, 65536, "18800", true, 1.5),
+    invalid: fc.constantFrom<Schema.Json>(0, 65536, "18800", true, 1.5),
   },
   word: {
     // The u flag: Effect writes a pattern into JSON Schema only for a Unicode RegExp.
     make: () => Schema.String.check(Schema.isPattern(/^[a-z]+$/u)),
     valid: fc.stringMatching(/^[a-z]{1,6}$/),
-    invalid: fc.constantFrom<unknown>("A1", "", 3, false),
+    invalid: fc.constantFrom<Schema.Json>("A1", "", 3, false),
   },
   flag: {
     make: () => Schema.Boolean,
     valid: fc.boolean(),
-    invalid: fc.constantFrom<unknown>("yes", 1, null),
+    invalid: fc.constantFrom<Schema.Json>("yes", 1, null),
   },
 } as const;
 
@@ -138,7 +138,7 @@ const withDefaults = declared.chain((input) =>
   ),
 );
 
-type Json = Record<string, unknown>;
+type Json = Record<string, Schema.Json>;
 
 /** The definition a local reference names, by Effect's escaping: URI-encoded JSON Pointer. */
 const target = (document: Json, ref: string) => {
@@ -190,7 +190,10 @@ const contents = (input: Declared) =>
       ...input[1].map((_, n) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          (build(input).values(n).valid as fc.Arbitrary<unknown>).map((value) => ({ _tag: "valid" as const, value })),
+          (build(input).values(n).valid as fc.Arbitrary<Schema.Json>).map((value) => ({
+            _tag: "valid" as const,
+            value,
+          })),
           build(input)
             .values(n)
             .invalid.map((value) => ({ _tag: "invalid" as const, value })),
@@ -210,7 +213,7 @@ const contents = (input: Declared) =>
 type Contents = typeof contents extends (i: Declared) => fc.Arbitrary<infer C> ? C : never;
 
 const tree = ([, ds]: Declared, c: Contents) => {
-  const out: Record<string, Record<string, unknown>> = {};
+  const out: Record<string, Record<string, Schema.Json>> = {};
   ds.forEach((d, n) => {
     const v = c.values[n]!;
 
@@ -398,8 +401,8 @@ describe("L4, generated local references resolve, with every definition present"
 
           // Generated valid values of the file's own keys decode, and one invalid value among them does not.
           const editor = imported(document);
-          const valid: Record<string, Record<string, unknown>> = {};
-          let broken: Record<string, Record<string, unknown>> | undefined;
+          const valid: Record<string, Record<string, Schema.Json>> = {};
+          let broken: Record<string, Record<string, Schema.Json>> | undefined;
           input[1].forEach((d, n) => {
             const v = c.values[n]!;
 
@@ -421,7 +424,7 @@ describe("L4, generated local references resolve, with every definition present"
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);
 
           if (broken !== undefined) {
-            const [[table, keys]] = Object.entries(broken) as [[string, Record<string, unknown>]];
+            const [[table, keys]] = Object.entries(broken) as [[string, Record<string, Schema.Json>]];
             const document = { ...valid, [table]: { ...valid[table], ...keys } };
             expect(Exit.isFailure(Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" }))).toBe(
               true,
