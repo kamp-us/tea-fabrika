@@ -45,7 +45,9 @@ it("pinned: the page size the door cuts by is the page size the window reads, so
 const sendable = (code: number) => code === 1000 || (code >= 3000 && code <= 4999);
 
 const HOUR = 3_600_000;
+
 const H = 1_790_002_800_000;
+
 const fake = <A>(value: object): A => value as A;
 
 const database = Effect.acquireRelease(
@@ -56,6 +58,7 @@ const database = Effect.acquireRelease(
 const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "unreachable") => {
   const base = nodeSql(db);
   let settingsReads = 0;
+
   const sql = {
     ...base,
     exec: (query: string, ...args: Parameters<typeof base.exec> extends [string, ...infer A] ? A : never) => {
@@ -66,9 +69,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       return base.exec(query, ...args);
     },
   };
+
   const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
     createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
   );
+
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",
     identity: { key: "test-key", person: "test-person", as: "window" },
@@ -77,10 +82,12 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     watching: false,
     busy: false,
   });
+
   const frames: Array<string> = [];
   const closes: Array<number> = [];
   const left: Array<string> = [];
   let gone = false;
+
   const socket = fake<WebSocket>({
     deserializeAttachment: () => attached,
     serializeAttachment: (next: typeof Attached.Type) => {
@@ -96,6 +103,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       closes.push(code);
     },
   });
+
   const state = fake<DurableObjectState>({
     id: { name: "test-connection" },
     storage: {
@@ -111,12 +119,14 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     getTags: () => ["test-session", "test-tab", "test-key"],
     getWebSocketAutoResponseTimestamp: () => null,
   });
+
   let answer: typeof Answer.Type = Answer.cases.refused.make({ reason: "reserved" });
   const calls: Array<{ method: string; params: unknown }> = [];
   /** The object each routed call names as the one a parked wait rings, by method. */
   const readers: Array<{ method: string; reader: string | undefined }> = [];
   const saved: Array<SpanRow> = [];
   const stats = { writes: 0, archives: 0 };
+
   const env = fake<Env>({
     INSTANCE: JSON.stringify(input),
     PROJECT: {
@@ -125,16 +135,19 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         route: (_client: string, method: string, params: unknown, reader?: string) => {
           calls.push({ method, params });
           readers.push({ method, reader });
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
         },
         leave: (client: string) => {
           left.push(`leave ${client}`);
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
         disconnect: (client: string) => {
           left.push(`disconnect ${client}`);
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
@@ -145,6 +158,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         write: (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           stats.writes++;
           saved.push(...rows.map((row) => row.span));
+
           // edge: the platform record RPC returns a Promise
           return Promise.resolve({ _tag: "written" });
         },
@@ -153,6 +167,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     MEASUREMENTS: {
       put: () => {
         stats.archives++;
+
         // edge: the platform bucket returns a Promise
         return archiveFailure === "unreachable" ? Promise.reject(new Error("archive unavailable")) : Promise.resolve();
       },
@@ -160,8 +175,10 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       head: () => Promise.resolve(null),
     },
   });
+
   const config = fake<BrainOptions>(input);
   const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsLedger.layer(sql)));
+
   return {
     socket,
     frames,
@@ -205,18 +222,23 @@ StartsTest.law(
       const db = yield* database;
       let hour = H;
       yield* TestClock.setTime(hour - 16 * 24 * HOUR);
+
       const open = Effect.fnUntraced(function* () {
         const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
         const w = world(db, archiveFailure);
         const context = yield* Layer.build(w.layer).pipe(Effect.provideService(Scope.Scope, scope));
+
         return { scope, w, context, service: Context.get(context, ConnectionService) };
       });
+
       let owner = yield* open();
       owner.w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
+
       const accepted = () =>
         owner.service
           .message(owner.w.socket, JSON.stringify({ jsonrpc: "2.0", id: "prime", method: "process.send", params: {} }))
           .pipe(Effect.provideContext(owner.context));
+
       yield* accepted();
       yield* TestClock.setTime(hour + 1000);
       yield* accepted();
@@ -345,8 +367,10 @@ it.effect.prop(
       yield* TestClock.setTime(H - 16 * 24 * HOUR);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
+
         const send = (id: number, params: unknown) =>
           service.message(w.socket, JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params }));
+
         w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
         yield* send(0, {});
         yield* TestClock.setTime(H + 1000);
@@ -474,6 +498,7 @@ const T864Draw = Schema.Struct({
 });
 
 const t864Draws = Arbitrary.array(Arbitrary.schema(T864Draw), { minLength: 4, maxLength: 12 });
+
 const T864Due = Schema.Array(Schema.Struct({ day: Schema.String, rows: Schema.Int, part: Schema.Int }));
 
 const t864Pending = (db: DatabaseSync) =>
@@ -506,6 +531,7 @@ const t864Tables = (db: DatabaseSync) =>
 const t864Delivered = Effect.gen(function* () {
   const records = yield* RecordManager;
   const spans = yield* Stream.runCollect(records.read(Chain.cases.spans.make({})));
+
   return Array.from(spans, (span) => span.spanId);
 });
 
@@ -535,6 +561,7 @@ const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof 
     AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`)
       .get(Math.floor(((yield* Clock.currentTimeMillis) - 15 * T864_DAY) / T864_DAY) * T864_DAY)?.n,
   ).toBe(0);
+
   return { pending, due };
 });
 
@@ -593,9 +620,11 @@ it.effect.prop(
           const outcome = choices[draw.pick % choices.length]!;
           const answer = Answer.cases.ok.make({ result: draw.value });
           const failure = new LedgerError({ reason: "unreachable" });
+
           const exit = yield* Effect.exit(
             Runtime.complete(outcome === "success" ? Effect.succeed(answer) : Effect.fail(failure)),
           );
+
           const delivered = yield* t864Delivered;
 
           for (const id of pending) {
@@ -674,7 +703,9 @@ const answerCategories = ["ok", "parked", "parked_full", "reserved", "bad_input"
  * and 16,384 bytes of saved attachment as UTF-8 JSON. L1 keeps its own count against them.
  */
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
+
 /** A parked answer whose stream is this long fits once, and two of them never fit. */
 const FULL = 9_000;
 
@@ -687,6 +718,7 @@ const readAttachment = (w: ReturnType<typeof world>) =>
 
 const ordinaryFrame = Effect.fnUntraced(function* (state: typeof Attached.Type, seed: number, index: number) {
   const input = yield* sample(Schema.Struct({ id: Schema.String, params: Schema.Json }), seed);
+
   return {
     jsonrpc: "2.0",
     id: `${state.client}:${index}:${input.id}`,
@@ -701,11 +733,13 @@ const observeRpc = Effect.fnUntraced(function* (spans: Array<Tracer.Span>) {
     Effect.sync(() =>
       vi.spyOn(ProjectClient, "make").mockImplementation((stub) => {
         const client = make(stub);
+
         return {
           ...client,
           route: (...args) =>
             Effect.gen(function* () {
               spans.push(yield* Effect.currentSpan.pipe(Effect.orDie));
+
               return yield* client.route(...args);
             }),
         };
@@ -739,6 +773,7 @@ it.effect.prop(
         // world's attachment before any call, and each wait L1 expects kept since.
         const start = readAttachment(w);
         const kept: Array<typeof Wait.Type> = [];
+
         // A wait is saved while the call is out, so the attachment it must fit in is marked busy.
         const fits = (wait: typeof Wait.Type) =>
           kept.length + 1 <= MAX_WAITS &&
@@ -749,16 +784,20 @@ it.effect.prop(
           const state = readAttachment(w);
           expect(state._tag).toBe("online");
           const remaining = answerCategories.filter((key) => !reached.has(key));
+
           // Every category once, then a full wait until one has no room left.
           const category: keyof typeof answerCases =
             remaining.length === 0 && !reached.has("too_many_waits")
               ? "parked_full"
               : yield* sample(Schema.Literals(remaining.length > 0 ? remaining : answerCategories), walk.seed + i * 3);
+
           const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+
           const answer =
             category === "parked_full" && sampled._tag === "parked"
               ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
               : sampled;
+
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
           const replies = w.frames.length;
@@ -766,6 +805,7 @@ it.effect.prop(
           const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
           const keeps = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
+
           // Under the limits, a call answered parked is kept as a wait on the stream the answer
           // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
           // 4a): one more routed call. At them, it is refused `too_many_waits` and nothing more.
@@ -777,6 +817,7 @@ it.effect.prop(
                     ? { method: "tasks.wait", params: { after: wait.after } }
                     : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
                 ];
+
           expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
           expect(spans).toHaveLength(w.calls.length);
 

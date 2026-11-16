@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e0-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T18:43:00-08:00",
+  "ended": "2026-11-15T19:00:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E0 of the Effect-check sweep (docs/plan/quests/effect-sweep-PLAN.md, ticket 1075), in next/ and our tooling. tsconfig.base.json gains one overrides entry that sets the 78 checks with 0 hits to error for the whole scope (next/, fixtures/next/, .agents/, .github/ci/, oxlint-plugins/, stylelint.config.ts). next/packages/vitest takes the namespace import block, and the six programs and the three tooling tsconfigs take the barrel block (0577, call 2). oxlint-plugins/namespace-imports.test.ts moved with git mv to oxlint-plugins/effect-checks.test.ts and became law L2 for any check: it walks every file each scope project includes and merges the checker plugin block as the checker does. no-bare-disable now holds the checker ignore comment (L3). pnpm typecheck passes on all 13 scope projects with the new levels, so every one of the 78 checks and both import blocks are at 0 hits on main 82296f5cf. L1 and L4 are type laws and were proven by plants in next/programs/inbox. Seen while writing L3: the checker reads its directive wherever // or /* comes before it, even inside a string or after other words in a comment, and warns that an unused one has no effect, which fails the typecheck; the rule reads every piece of a comment, and the test builds its planted directives.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Laws: L1 type, a planted hit in a locked folder fails tsc (red before, green after undo). L2 test, oxlint-plugins/effect-checks.test.ts, green now; red under each of its four plants. L3 lint, oxlint-plugins/no-bare-disable.ts with eight new refused cases and three taken cases in oxlint-plugins/plants.test.ts, green now; red under its plant. L4 type, a reasoned next-line directive silences its hit: proven green as the plan expects. L5 is E1, not this slice.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a floating Effect.succeed(1) statement added to next/programs/inbox/src/program.ts: tsc -p next/programs/inbox fails with effect(floatingEffect)",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "import * as Option from \"effect/Option\" added to next/programs/inbox/src/program.ts: tsc -p next/programs/inbox fails with effect(preferBarrelImport)",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "the oxlint-plugins/**/*.mjs glob dropped from the E0 entry in tsconfig.base.json: effect-checks.test.ts fails, oxlint-plugins/gitignore.mjs no longer ends at error",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "effectFnIife set to warning in the E0 entry: effect-checks.test.ts fails, expected [[effectFnIife, ...], ...(985)] to deeply equal []",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "a later override for next/programs/**/*.ts that sets floatingEffect off: effect-checks.test.ts fails",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "next/programs/inbox/tsconfig.json back to main, without its barrel block: effect-checks.test.ts fails for preferBarrelImport",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "no-bare-disable.ts stops reading the checker directive: the eight refused checker cases in plants.test.ts fail (7 at the time, before the after-other-words case was added)",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "a bare // @effect-diagnostics-next-line floatingEffect:off line, with no reason, added to next/programs/inbox/src/program.ts: oxlint-plugins/lint.ts fails with fabrika(no-bare-disable) naming its line",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "a // @effect-diagnostics-next-line floatingEffect:off -- reason line over the planted floating Effect in next/programs/inbox/src/program.ts: tsc passes, so the reason tail is no part of the directive. Wrong as said, corrected at the E0 review: the checker obeys a <check>:<level> written inside the reason, so the tail is no part of the directive only while it holds none",
+      "result": "green"
+    },
+    {
+      "law": "L4",
+      "plant": "the same hit under a see // @effect-diagnostics-next-line floatingEffect:off comment: tsc passes, so the checker reads a directive after other words, which L3 now refuses",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

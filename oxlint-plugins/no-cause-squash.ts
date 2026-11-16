@@ -80,6 +80,7 @@ export const noCauseSquash: CreateRule = {
 
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Cause") || (at.from === "effect/Cause" && at.name === "*"))
@@ -92,6 +93,7 @@ export const noCauseSquash: CreateRule = {
         node.object.type === "Identifier"
       ) {
         const at = imported(resolve(node.object));
+
         return at !== null && at.from === "effect" && at.name === "*";
       }
 

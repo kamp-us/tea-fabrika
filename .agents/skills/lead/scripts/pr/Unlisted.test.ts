@@ -55,7 +55,9 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
       ahead: { a: 2, b: 3, c: 1 },
       empty: [],
     };
+
     const prs = [pr(1, "fabrikalfa/x", "OPEN"), { ...pr(2, "fabrikalfa/y-wip", "OPEN"), draft: true }];
+
     return Effect.map(checked(model, prs), (r) => expect(names(r)).toEqual({ unlisted: [], landed: [] }));
   });
 
@@ -85,6 +87,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     "scenario: 6, commits after a merged PR, or a closed PR, still need a pull request, and it is named",
     () => {
       const model = { branches: [branch("x", "new"), branch("z", "c")], ahead: { new: 1, c: 2 }, empty: [] };
+
       return Effect.map(checked(model, [pr(5, "x", "MERGED", "old"), pr(6, "z", "CLOSED", "c")]), (r) =>
         expect(Unlisted.lines(r)).toEqual([
           "no pull request: origin x, 1 commit not on main, at new; PR 5 was merged at another head",
@@ -98,6 +101,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   // scenario: 7, a local branch with commits never pushed, beside its pushed twin.
   it.effect("scenario: 7, the laptop's branch and origin's are two lines, since either can hold more", () => {
     const model = { branches: [branch("x", "a", "local"), branch("x", "b")], ahead: { a: 3, b: 2 }, empty: ["b"] };
+
     return Effect.map(checked(model, []), (r) =>
       expect(names(r)).toEqual({ unlisted: ["local x"], landed: ["origin x"] }),
     );
@@ -117,6 +121,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   const Name = Schema.Literals(["a", "b", "a-wip", "c"]);
   const Tip = Schema.Literals(["t1", "t2", "t3"]);
   const Count = Schema.Literals([0, 1, 2, 3]);
+
   const World = Schema.Struct({
     branches: Schema.Array(Schema.Struct({ name: Name, tip: Tip, location: Schema.Literals(["local", "origin"]) })),
     ahead: Schema.Struct({ t1: Count, t2: Count, t3: Count }),
@@ -145,11 +150,14 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     { u: Schema.Literals([0, 1, 2, 4]), l: Schema.Literals([0, 1, 3]) },
     ({ u, l }) => {
       const at = (i: number) => branch(`b${i}`, `t${i}`);
+
       const r: Unlisted.Report = {
         unlisted: Array.from({ length: u }, (_, i) => ({ branch: at(i), ahead: 1, earlier: null })),
         landed: Array.from({ length: l }, (_, i) => ({ branch: at(i), merged: null })),
       };
+
       const out = Unlisted.lines(r);
+
       return out.length === u + l + 1 && out.at(-1) === `unlisted: ${u} with no pull request, ${l} safe to delete`;
     },
   );
@@ -179,17 +187,22 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
       GIT_COMMITTER_NAME: "fixture",
       GIT_COMMITTER_EMAIL: "fixture@example.test",
     };
+
     const git = (...args: string[]) => {
       const r = spawnSync("git", args, { cwd: dir, env, encoding: "utf8" });
       expect(r.status, r.stderr).toBe(0);
+
       return r.stdout.trim();
     };
+
     const commit = (file: string, text: string) => {
       writeFileSync(join(dir, file), text);
       git("add", file);
       git("commit", "-q", "-m", file);
+
       return git("rev-parse", "HEAD");
     };
+
     git("init", "-q", "-b", "main");
     commit("a.txt", "one\n");
     git("checkout", "-q", "-b", "squashed");
@@ -206,6 +219,7 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
     // Main moves on in a file the squashed branch never touched.
     commit("a.txt", "one, changed on main\n");
     git("update-ref", "refs/remotes/origin/main", "main");
+
     return { squashed, fresh, clash };
   };
 
@@ -215,8 +229,10 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
       const fs = yield* FileSystem.FileSystem;
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "unl-" });
       const tips = fixture(dir);
+
       const got = yield* Effect.gen(function* () {
         const branches = yield* Branches;
+
         return [
           yield* branches.landsEmpty(tips.squashed),
           yield* branches.landsEmpty(tips.fresh),
@@ -224,6 +240,7 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
           yield* branches.ahead(tips.squashed),
         ];
       }).pipe(Effect.provide(BranchesGit.layer(dir)));
+
       expect(got).toEqual([true, false, false, 2]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );

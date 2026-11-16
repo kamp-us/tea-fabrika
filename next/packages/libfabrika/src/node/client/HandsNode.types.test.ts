@@ -5,9 +5,14 @@
 // law's runner. Plant (run once in a typecheck window, recorded in the tests step's field row): let
 // `KeyFile`'s `current` fail with `PlatformError`.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, FileSystem, Layer, Path, PlatformError } from "effect";
-import type { KeyValueStore } from "effect/persistence";
-import type { ChildProcessSpawner } from "effect/process";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
+import type * as KeyValueStore from "effect/persistence/KeyValueStore";
+import type * as PlatformError from "effect/PlatformError";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Commands } from "../../client/Commands.ts";
 import type { Command, Result } from "../../tasks/Task.ts";
 import type { ClientKey, ClientKeyError, Identity } from "../../transport/ClientKey.ts";
@@ -17,8 +22,11 @@ import type * as KeyFile from "./KeyFile.ts";
 
 it("type: T2 the three node layers supply Commands, ClientKey and KeyValueStore with no PlatformError left in their error or requirement channels", () => {
   type CommandsLayer = typeof CommandsNode.layer;
+
   type KeyLayer = ReturnType<typeof KeyFile.layer>;
+
   type JournalLayer = ReturnType<typeof JournalSqlite.layer>;
+
   // Each layer supplies exactly its contract.
   expectTypeOf<Layer.Success<CommandsLayer>>().toEqualTypeOf<Commands>();
   expectTypeOf<Layer.Success<KeyLayer>>().toEqualTypeOf<ClientKey>();

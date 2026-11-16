@@ -20,10 +20,16 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -37,18 +43,27 @@ import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const READER = "connection:t1";
+
 const MEMBERS = "gateway/access";
+
 const PARENT = `in-${Effect.runSync(processId)}-41`;
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const NAME = "home";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-07T21:10:01.204Z";
+
 // The founder's Mac signs `founded`: `by` is its checked key, never the person, and `build` is the
 // hash of the code that wrote the line, both handed in by the wiring (log.ts, `Line`).
 const FOUNDER_BY = "SHA256:founder-mac";
+
 const FOUNDER_BUILD = "b-5e9c2a0";
 
 const FOUNDER = {
@@ -74,17 +89,7 @@ type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
 const fresh = (): Store =>
   folder.pipe(
-    Effect.flatMap((path) =>
-      Effect.acquireRelease(
-        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
-        (db) =>
-          Effect.sync(() => {
-            if (db.isOpen) {
-              db.close();
-            }
-          }),
-      ),
-    ),
+    Effect.flatMap((path) => TestDatabase.make(join(path, "ledger.db"))),
     Effect.map(nodeSql),
   );
 
@@ -175,6 +180,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
 const granted = (
@@ -293,13 +299,16 @@ describe("p96 and p97, replay and write answers", () => {
   it.effect("each write span keeps its answer and a refusal's reason", () =>
     check(leaf, [], (key) => {
       const spans: Tracer.NativeSpan[] = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         for (const signer of ["pA", "wA", "unknown-signer"]) {
           const answer = yield* write(granted(signer, key));
@@ -324,6 +333,7 @@ const racing = (sql: Store, hook: { readonly id: string; before: Effect.Effect<v
     Ledger,
     Effect.gen(function* () {
       const real = yield* Ledger;
+
       return {
         read: real.read,
         wait: real.wait,
@@ -336,6 +346,7 @@ const racing = (sql: Store, hook: { readonly id: string; before: Effect.Effect<v
             }
 
             hook.before = null;
+
             return Effect.andThen(before, real.append(stream, id, line));
           }),
       };
@@ -372,10 +383,11 @@ describe("p96, founded is written once, by the first call", () => {
   it.effect("plant, founded written at Layer build: a Ledger that always fails still builds", () =>
     check(leaf, ["t1"], (key) => {
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "storage" })),
-        read: () => Stream.fail(new LedgerError({ reason: "storage" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "storage" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
+
       return Effect.gen(function* () {
         const failed = yield* Effect.flip(members);
         expect(failed).toBeInstanceOf(LedgerError);
@@ -486,7 +498,9 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
           Effect.asVoid,
           Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
         );
+
         const raced = refusing(sql, "id_reused", other);
+
         return Effect.gen(function* () {
           expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
           expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
@@ -503,6 +517,7 @@ describe("p96, the traced history from the plan", () => {
       Effect.gen(function* () {
         const t2 = granted("pB", key);
         const sheet = addedSheet("pB", "r1");
+
         const steps: ReadonlyArray<readonly [MemberEvent, unknown]> = [
           [granted("pA", "t1"), { _tag: "applied", rev: 2 }],
           [addedDevice("pA", "pB", "wB"), { _tag: "applied", rev: 3 }],
@@ -515,6 +530,7 @@ describe("p96, the traced history from the plan", () => {
           [addedDevice("r1", "pX", "wX", { old: "lost" }), { _tag: "refused", reason: "used" }],
           [t2, { _tag: "applied", rev: 4 }], // the rev-4 grant resent after the drop: nothing new
         ];
+
         const kept: Array<MemberEvent> = [FOUNDED];
         yield* members; // founded first, so each step below counts only its own entry
 
@@ -645,6 +661,7 @@ describe("p96, the stolen sheet race", () => {
         const macC = addedDevice("r1", "pC", "wC", { drops: ["pA"], old });
         const macX = addedDevice("r1", "pX", "wX", { old });
         let xAnswer: unknown = null;
+
         const hook: { readonly id: string; before: Effect.Effect<void, LedgerError> | null } = {
           id: eventId(macC),
           before: write(macX).pipe(
@@ -657,6 +674,7 @@ describe("p96, the stolen sheet race", () => {
             Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
           ),
         };
+
         return Effect.gen(function* () {
           expect(yield* write(sheet)).toEqual({ _tag: "applied", rev: 2 });
           const answer = yield* write(macC);
@@ -686,6 +704,7 @@ describe("p96, the stolen sheet race", () => {
             const one = clientsOn(onSql(sql));
             const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
             yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));
+
             const answers = yield* Effect.all(
               [
                 write(addedDevice("r1", device, "wC", { old: "lost" })).pipe(Effect.provide(one)),
@@ -693,6 +712,7 @@ describe("p96, the stolen sheet race", () => {
               ],
               { concurrency: "unbounded" },
             ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
+
             expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
             const lost = answers.find((a) => a._tag !== "applied");
             expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
@@ -708,9 +728,13 @@ describe("p96, the stolen sheet race", () => {
 // ---- p96 over any history: the answer is what the fold does, with no race ----
 
 const PERSONS = ["pA", "pB", "pC"] as const;
+
 const WINDOWS = ["wA", "wB", "wC"] as const;
+
 const LEAVES = ["t1", "t2", "g1"] as const;
+
 const SHEETS = ["r1", "r2"] as const;
+
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, "x1"];
 
 const signer = fc.oneof(
@@ -777,8 +801,10 @@ describe("p96, write tells the truth over any history", () => {
               const head = before.at(-1)?.rev ?? 0;
               const answer = yield* write(next);
               const after = yield* entries;
+
               const changes =
                 JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
+
               expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
               if (changes) {

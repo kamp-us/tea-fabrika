@@ -27,10 +27,13 @@ import { checklist, checklistMachine } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
 
 const SEED = 119120;
+
 const DAY = 86_400_000;
 
 type Model = typeof checklistMachine.model.Type;
+
 type Msg = typeof checklistMachine.msg.Type;
+
 type View = ReturnType<typeof checklist.view.select>;
 
 /** The state words the plan gives each item state (W1): a word beside the mark, never color alone. */
@@ -50,6 +53,7 @@ const text = (html: string) => unescape(html.replace(/<[^>]*>/g, " "));
 
 const attr = (tag: string, name: string) => {
   const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag);
+
   return m === null ? null : unescape(m[1]!);
 };
 
@@ -62,6 +66,7 @@ const byId = (html: string, id: string): string | null => {
   }
 
   const end = html.indexOf(`</${open[1]}>`, open.index + open[0].length);
+
   return text(html.slice(open.index + open[0].length, end < 0 ? undefined : end)).trim();
 };
 
@@ -85,6 +90,7 @@ const named = (html: string, tag: string): string | null => {
 
   const id = attr(tag, "id");
   const forLabel = id === null ? null : new RegExp(`<label[^>]*\\sfor="${id}"[^>]*>([\\s\\S]*?)</label>`).exec(html);
+
   return forLabel === null ? null : text(forLabel[1]!).trim();
 };
 
@@ -96,6 +102,7 @@ const name = fc.oneof(
 );
 
 const choice = fc.record({ move: fc.nat(), pick: fc.nat(), name, later: fc.integer({ min: 0, max: 2 * DAY }) });
+
 type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 
 /** Folds the real machine through Msgs legal in its model, as the brain would accept them. */
@@ -107,6 +114,7 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
   for (const c of list) {
     const held = model.items.length === 0 ? null : model.items[c.pick % model.items.length]!.name;
     const wake = checklist.wake(model);
+
     const options: Array<Msg> = [
       { type: "add", name: c.name },
       // Once an item is stamped, its real wake time makes the late state reachable.
@@ -119,6 +127,7 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
             { type: "remove", name: held },
           ] as const)),
     ];
+
     const msg = options[c.move % options.length]!;
     expect(Schema.is(checklistMachine.msg)(msg), "the walk sends a checked program input").toBe(true);
 
@@ -155,6 +164,7 @@ const render = (view: View, refusal: string | null, draft: string) =>
   );
 
 const walks = fc.array(choice, { minLength: 20, maxLength: 60 }).map(fold);
+
 const views = walks.chain((walk) => fc.constantFrom(...walk));
 
 describe("L24: the checklist window's markup", () => {
@@ -215,6 +225,7 @@ describe("L24: the checklist window's markup", () => {
         expect(named(html, field)).toBe(checklist.inputs.add.description);
         expect(attr(field, "maxLength") ?? attr(field, "maxlength")).toBe("80");
         expect(attr(field, "value") ?? "").toBe(draft);
+
         const described = (attr(field, "aria-describedby") ?? "")
           .split(/\s+/)
           .filter((id) => id !== "")
@@ -224,6 +235,7 @@ describe("L24: the checklist window's markup", () => {
 
         if (words === null) {
           expect(described, "no refusal, no description words").toBe("");
+
           return;
         }
 

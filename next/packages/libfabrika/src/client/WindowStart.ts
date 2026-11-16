@@ -3,12 +3,15 @@
  * input and output. Each Cmd becomes a write on its dial's socket or a call to a service, and each
  * socket event becomes a Msg. It decides nothing: the parent's Model says which dial is current.
  * The same start runs in a browser tab and in a program with no DOM.
- *
- * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import { Clock, DateTime, Deferred, Effect, Schema, type Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import type * as Stream from "effect/Stream";
 import * as Id from "../Id.ts";
 import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";
@@ -23,7 +26,6 @@ import type { WindowMsg, windowMachineFor, write } from "./WindowMachine.ts";
  * Schema for the facts a client states about itself: the hello's `platform`, `os` and `has`, and
  * the `label` its knock shows the person who grants it.
  *
- * @stability unstable
  * @category models
  */
 export const ClientInfo = Schema.Struct({
@@ -37,7 +39,6 @@ export const ClientInfo = Schema.Struct({
  * What a start is given: the tiles to show or a tezgah workspace, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
- * @stability unstable
  * @category models
  */
 export type StartOptions = {
@@ -61,6 +62,7 @@ const Failure = Schema.TaggedUnion({
 });
 
 const F = Failure.cases;
+
 type Write = ReturnType<typeof write>;
 
 /** One call as the JSON-RPC method and params the door takes. */
@@ -102,7 +104,6 @@ const wire = (call: Write["call"], label: string) => {
  * dials again by itself: reconnects are the Link machine's. A write, a ping or a hello for a dial
  * with no open socket fails at once.
  *
- * @stability unstable
  * @category constructors
  */
 export const start = Effect.fn("WindowStart.start")(function* (options: StartOptions) {
@@ -114,6 +115,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
   const sentAt = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   const handles = new Map<number, Handle>();
   const identities = new Map<string | null, Deferred.Deferred<Identity>>();
+
   const identityFor = (rejected: string | null) => {
     const found = identities.get(rejected);
 
@@ -123,11 +125,13 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
 
     const waiting = Deferred.makeUnsafe<Identity>();
     identities.set(rejected, waiting);
+
     return waiting;
   };
 
   const send = (dial: number, text: string) => sendOn(handles, dial, text);
   const dial = dialer({ sockets, origin: options.origin, tab, handles });
+
   const socket = (n: number, rejected: string | null, tries: number): Stream.Stream<WindowMsg> =>
     dial(n, Deferred.await(identityFor(rejected)), tries);
 
@@ -137,14 +141,17 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
         yield* Deferred.succeed(identityFor(cmd.rejected), key);
+
         return { found: key.found, fingerprint: key.fingerprint };
       }),
       now: Effect.fn("Client.now")(function* () {
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
+
         return { letter, sentAt: yield* sentAt };
       }),
       mint: Effect.fn("Client.mint")(function* () {
         const tile = yield* ids.next(TileId).pipe(Effect.mapError(() => F.entropy.make({})));
+
         return { tile };
       }),
       write: Effect.fn("Client.write")(function* (cmd: Write) {
@@ -154,13 +161,16 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(
           Effect.mapError(() => {
             written?.delete(cmd.id);
+
             return F.unreachable.make({});
           }),
         );
+
         return null;
       }),
       ping: Effect.fn("Client.ping")(function* (cmd) {
         yield* send(cmd.dial, "ping").pipe(Effect.mapError(() => F.closed.make({})));
+
         return null;
       }),
       hello: Effect.fn("Client.hello")(function* (cmd) {
@@ -176,6 +186,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
           line: handle.key.line,
           sign: handle.key.sign,
         }).pipe(Effect.mapError((error) => F.key.make({ error: error.error })));
+
         const params = {
           versions: [1],
           has: options.client.has,
@@ -188,14 +199,17 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
           sentAt: yield* sentAt,
           signed,
         };
+
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, method: "initialize", params })).pipe(
           Effect.mapError(() => F.closed.make({})),
         );
+
         return null;
       }),
       enroll: Effect.fn("Client.enroll")(function* (cmd) {
         const knock = { jsonrpc: "2.0", id: cmd.id, method: "gateway.knock", params: { label: options.client.label } };
         yield* send(cmd.dial, JSON.stringify(knock)).pipe(Effect.mapError(() => F.closed.make({})));
+
         return null;
       }),
       persist: Effect.fn("Client.persist")(function* () {
@@ -214,6 +228,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         yield* rows
           .put(ClientRow.make({ id, tab, build: options.build, sentAt: yield* sentAt, record: cmd.record }))
           .pipe(Effect.mapError((error) => ({ ...error })));
+
         return null;
       }),
     },

@@ -143,6 +143,7 @@ const moveMain = (r: Repo, n: number, path = "docs/other.md") => {
   }
 
   r.git("checkout", "-q", "pr");
+
   return main;
 };
 
@@ -294,6 +295,7 @@ describe("person commits between step links (p86b)", () => {
     expect(verifyCommit(r, person)).toBe(0);
     const middle = personLink(r, person);
     expect(middle.from).not.toBe(middle.to);
+
     const signedCommit = (parent: string, tree: string, signer: "person" | "tests" = "person") =>
       r
         .git(
@@ -310,6 +312,7 @@ describe("person commits between step links (p86b)", () => {
           tree,
         )
         .trim();
+
     const { squash, rows } = squashed(r, [{ note: middle, commit: person }]);
     const row = rows[0]!.attested[0]!;
 
@@ -328,6 +331,7 @@ describe("person commits between step links (p86b)", () => {
         row.sig = personLink(r, other).sig;
         break;
       }
+
       case "an unsigned commit":
         row.commit = r.git("commit-tree", "-p", r.base, "-m", "unsigned", middle.to).trim();
         break;
@@ -354,10 +358,12 @@ describe("person commits between step links (p86b)", () => {
         const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
         r.write("next/packages/x/src/a.ts", "a\n");
         const person = r.gitSigned();
+
         const payload = r
           .git("cat-file", "commit", person)
           .replace(/^gpgsig .*(?:\n .*)*\n/m, "")
           .replace("\n\n", "\nxgpgsig forged\n\n");
+
         const sig = sh(r.dir, "ssh-keygen", ["-Y", "sign", "-n", "git", "-f", join(KEYS, "person")], payload);
         const raw = payload.replace("\n\n", `\ngpgsig ${sig.trimEnd().replaceAll("\n", "\n ")}\n\n`);
         const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
@@ -425,11 +431,13 @@ describe("person commits between step links (p86b)", () => {
       expect(middle.to).toBe(last.from);
       expect(middle.from === middle.to).toBe(change === "empty commit");
       const before = r.check();
+
       const { squash, rows } = squashed(r, [
         { note: first, commit: tests },
         { note: middle, commit: person },
         { note: last, commit: build },
       ]);
+
       log(r, rows);
       const after = r.run(["chain", "--squash", squash]);
       expect(before.answers).toEqual([DONE]);
@@ -451,10 +459,12 @@ describe("person commits between step links (p86b)", () => {
     const before = r.check();
     expect(before.answers).toEqual([stuck("unsigned_commit", gap)]);
     expect(before.code).toBe(1);
+
     const { squash, rows } = squashed(r, [
       { note: first, commit: tests },
       { note: last, commit: build },
     ]);
+
     log(r, rows);
     const out = r.run(["chain", "--squash", squash]);
     expect(out.answers).toEqual([stuck("broken_chain", squash)]);

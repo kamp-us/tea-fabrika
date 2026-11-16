@@ -5,13 +5,18 @@
 // `css.ts:24`, `:28`, `:32` and `:35`, the four branches of the stylesheet refusal, through both of
 // its callers; `bundle.ts:47`, a Rolldown build that rejects.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
 import { inlineStylesheet } from "./css.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -68,6 +73,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
 
   if (step === "ledger_read" || step === "ledger_decode") {
     const { ledger: _, ...rest } = options();
+
     return {
       options: rest,
       disk: disk({ readFileString: () => (step === "ledger_read" ? fails() : damaged) }),
@@ -76,6 +82,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
 
   // A program's name is `pack/program` (P40), else the build refuses it before any disk step.
   const program = [{ name: "demo/counter", package: "counter-pkg", export: "program" }];
+
   return {
     options: options({ programs: program }),
     disk: disk({
@@ -133,9 +140,11 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
     ({ message, file }) =>
       Effect.gen(function* () {
         const failure = new Error(message);
+
         const error = yield* Effect.flip(
           Effect.provide(inlineStylesheet(`${ROOT}/${file}`), disk({ realPath: () => Effect.fail(failure as never) })),
         );
+
         expect(error.reason).toBe("bundle");
         expect(error.cause).toBe(failure);
       }),
@@ -156,6 +165,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
             disk({ realPath: (p) => Effect.succeed(p), readFileString: () => Effect.succeed(`${open}${tail}\n`) }),
           ),
         );
+
         expect(error.reason).toBe("bundle");
         expect(error.cause, "the cause is what the bundler rejected with").toBeInstanceOf(Error);
       }),

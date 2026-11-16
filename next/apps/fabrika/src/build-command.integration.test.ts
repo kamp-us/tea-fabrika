@@ -55,6 +55,7 @@ describe("P16 app build command", () => {
     Effect.gen(function* () {
       const home = yield* fixture,
         file = join(home, "build.ts");
+
       writeFileSync(file, `class Options { constructor(readonly out: string) {} }\n${readFileSync(file, "utf8")}`);
       const result = command(home);
       expect(result.stderr).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");

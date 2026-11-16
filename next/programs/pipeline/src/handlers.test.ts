@@ -21,31 +21,36 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
+          const head = Schema.decodeSync(CodeHost.Commit)("a".repeat(40));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
-          const hostFault = new CodeHost.CodeHostError({
+
+          const hostFault = CodeHost.CodeHostError.make({
             reason:
               reason === "refused"
-                ? new CodeHost.Refused({ cause })
+                ? CodeHost.Refused.make({ cause })
                 : reason === "rate_limited"
-                  ? new CodeHost.RateLimited({ cause })
-                  : new CodeHost.Unavailable({ cause }),
+                  ? CodeHost.RateLimited.make({ cause })
+                  : CodeHost.Unavailable.make({ cause }),
           });
-          const ciFault = new Ci.CiError({
-            reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
+
+          const ciFault = Ci.CiError.make({
+            reason: reason === "rate_limited" ? Ci.RateLimited.make({ cause }) : Ci.Unavailable.make({ cause }),
           });
+
           const fail = <E>(fault: E): Effect.Effect<never, E> =>
             cell.kind === "interrupt"
               ? Effect.interrupt
               : cell.kind === "defect"
                 ? Effect.die(new Error(cell.cause ?? "defect"))
                 : Effect.fail(fault);
+
           const host = Layer.succeed(CodeHost.CodeHost, {
             change: () => fail(hostFault),
             update: () => fail(hostFault),
             merge: () => fail(hostFault),
           });
+
           const ci = Layer.succeed(Ci.Ci, { start: () => fail(ciFault), at: () => fail(ciFault) });
           const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
 
@@ -105,13 +110,17 @@ it.effect.prop(
   ({ body, reason }) =>
     Effect.gen(function* () {
       const token = `ghp_${body}`;
+
       const services = yield* Layer.build(
         Layer.merge(CodeHostTest.layer({ token: Redacted.make(token) }), CiTest.layer({ token: Redacted.make(token) })),
       );
+
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
+
       const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
         Effect.provide(services),
       );
+
       RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),

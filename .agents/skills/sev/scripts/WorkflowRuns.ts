@@ -9,9 +9,12 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError>()("WorkflowRunsError", {
-  reason: Schema.String,
-}) {}
+export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError, { readonly brand: unique symbol }>()(
+  "WorkflowRunsError",
+  {
+    reason: Schema.String,
+  },
+) {}
 
 /** One workflow run, as GitHub lists it. */
 export const Run = Schema.Struct({
@@ -32,6 +35,7 @@ export const Run = Schema.Struct({
   /** When GitHub made it, as GitHub wrote it (ISO 8601). */
   created: Schema.String,
 });
+
 export type Run = typeof Run.Type;
 
 export class WorkflowRuns extends Context.Service<

@@ -61,18 +61,20 @@ export const layer = (
       const git = Effect.fn("BoxGitProcess.git")(
         function* (at: Inspection | null, args: ReadonlyArray<string>) {
           const into = at === null ? [] : [`--git-dir=${at.gitDir}`, `--work-tree=${at.work}`];
+
           const handle = yield* ChildProcess.make("git", ["-C", main, ...into, ...OFF, ...args], {
             env,
             extendEnv: false,
             stdin: "ignore",
           });
+
           const [out, err, code] = yield* Effect.all(
             [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
             { concurrency: 3 },
           );
 
           if (Number(code) !== 0 || err.length > 0) {
-            return yield* new BoxGitError({ command: args[0] ?? "" });
+            return yield* BoxGitError.make({ command: args[0] ?? "" });
           }
 
           return text.decode(out);
@@ -80,7 +82,7 @@ export const layer = (
         Effect.scoped,
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         (effect, _at, args) =>
-          Effect.catchTag(effect, "PlatformError", (cause) => new BoxGitError({ command: args[0] ?? "", cause })),
+          Effect.catchTag(effect, "PlatformError", (cause) => BoxGitError.make({ command: args[0] ?? "", cause })),
       );
 
       return BoxGit.of({
@@ -91,6 +93,7 @@ export const layer = (
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
             lines(out).map((line) => {
               const space = line.indexOf(" ");
+
               return { ref: line.slice(0, space), oid: line.slice(space + 1) };
             }),
           ),

@@ -22,6 +22,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   const push = map(on["push"]),
     pr = map(on["pull_request"]),
     queue = map(on["merge_group"]);
+
   require("pull_request" in on &&
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");

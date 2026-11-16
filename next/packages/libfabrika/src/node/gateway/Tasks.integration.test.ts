@@ -3,9 +3,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { Effect, Layer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as ScopedRef from "effect/ScopedRef";
 import * as ClientManagerLedger from "../../access/ClientManagerLedger.ts";
 import { Gateway } from "../../gateway/Gateway.ts";
 import * as RateLimiterSql from "../../gateway/RateLimiterSql.ts";
@@ -27,42 +29,38 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p39-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const path = join(folder, "ledger.db");
-  const handle = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(path);
-      // Keep a durable file across reopens without creating a rollback journal on every write.
-      // No disk sync per commit, as next/'s other test stores: no law cuts the power, a close keeps
-      // every commit, and the gateway's limiter and span sink commit on each call.
-      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-      return { db, sql: nodeSql(db) };
-    }),
-    (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
-  );
+  // A durable file across reopens, with the journal in memory and no disk sync per commit, as every
+  // next/ test store (`TestDatabase.make`): no law cuts the power, a close keeps every commit, and
+  // the gateway's limiter and span sink commit on each call.
+  const connect = TestDatabase.make(path).pipe(Effect.map(nodeSql));
+  const held = yield* ScopedRef.fromAcquire(connect);
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
-    exec: (query, ...params) => handle.sql.exec(query, ...params),
-    transaction: (step) => handle.sql.transaction(step),
-    size: () => handle.sql.size(),
+    exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
+    transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
+    size: () => ScopedRef.getUnsafe(held).size(),
   };
-  const reopen = Effect.sync(() => {
-    handle.db.close();
-    handle.db = new DatabaseSync(path);
-    handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-    handle.sql = nodeSql(handle.db);
-  });
+
+  const reopen = ScopedRef.set(held, connect);
   // Every ring the ledger asks its doorbell for, kept for the suite to read (P39 slice 4a, G2).
   const rings: Array<{ readonly to: string; readonly stream: string; readonly rev: number }> = [];
+
   const bell = Layer.succeed(Doorbell, {
     ring: (to: string, stream: string, rev: number) => Effect.sync(() => void rings.push({ to, stream, rev })),
   });
+
   const gateway: TestSuite.Store["gateway"] = (options) => {
     const data = Layer.mergeAll(
       LedgerSql.layer(sql, { reader: "tasks-gateway-law" }),
       LedgerTransactionSql.layer(sql),
       LedgerStreamsSql.layer(sql),
     ).pipe(Layer.provide(bell));
+
     const tasks = TasksLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer));
+
     const services = Layer.mergeAll(
       data,
       tasks,
@@ -75,9 +73,11 @@ const open = Effect.gen(function* () {
         Layer.provide(RateLimiterSql.layer(sql, { build: options.build, policy: options.rateLimit })),
       ),
     );
+
     // The suite's contract names no ledger error: a store that cannot open is a broken test, a defect.
     return Gateway.layer(options).pipe(Layer.provideMerge(services), Layer.orDie);
   };
+
   return { sql, reopen, gateway, rings } satisfies TestSuite.Store;
 });
 

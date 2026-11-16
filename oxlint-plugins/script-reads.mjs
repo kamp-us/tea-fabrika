@@ -29,9 +29,12 @@ import { parseSync } from "oxc-parser";
  */
 
 const SCRIPTS = /^\.agents\/skills\/([^/]+)\/scripts\//;
+
 const RELATIVE = /\.\.?\/[\w@+./-]+/g;
+
 // A path from the top with an extension. Most such words (`Effect.gen`) are no file and drop out.
 const TOP = /(?<![\w@./$-])\.?[\w@-][\w@.-]*(?:\/[\w@.-]+)*\.[A-Za-z]\w*(?![\w/])/g;
+
 // Outside the scripts tree: a package's files, and Markdown. A Markdown change runs no test job in
 // CI (.github/ci/changes.mjs), and skill prose has its own reader, skillscheck.sh.
 const LEAVES_OUT = /(?:^|\/)node_modules\/|\.md$/;
@@ -62,9 +65,11 @@ export const reached = (tree, exists, test) => {
   const names = [...tree.keys()]
     .filter((path) => !isTest(path))
     .map((path) => ({ path, word: word(posix.basename(path)) }));
+
   /** @type {Map<string, string>} */
   const via = new Map();
   const queue = [test];
+
   /**
    * @param {string} path
    * @param {string} from
@@ -128,15 +133,18 @@ const bare = (test, source) =>
 export const scriptReads = (tree, exists, prose) => {
   const tests = [...tree.keys()].filter(isTest);
   const reach = new Set(tests.flatMap((test) => [...reached(tree, exists, test).keys()]));
+
   /** @param {string} path */
   const tool = (path) => {
     const [folder = "", skill = ""] = SCRIPTS.exec(path) ?? [];
     // `flow/run.ts`, or `scripts/flow/run.ts`, but not the `run.ts` inside `flow/run.ts`.
     const name = escape(path.slice(folder.length));
+
     return new RegExp(`(?:(?<![\\w./-])|(?<=scripts/))${name}(?![\\w.-])`).test(
       prose(`.agents/skills/${skill}/SKILL.md`),
     );
   };
+
   return {
     raw: tests.flatMap((test) => bare(test, tree.get(test) ?? "").map((path) => ({ test, path }))),
     unreached: [...tree.keys()].filter((path) => !isTest(path) && !reach.has(path) && !tool(path)),
@@ -155,9 +163,11 @@ export const load = (root) => {
       .filter(isScript)
       .map((path) => [path, readFileSync(join(root, path), "utf8")]),
   );
+
   /** @param {string} path */
   const exists = (path) => statSync(join(root, path), { throwIfNoEntry: false })?.isFile() ?? false;
   /** @param {string} path */
   const prose = (path) => (exists(path) ? readFileSync(join(root, path), "utf8") : "");
+
   return { tree, exists, prose };
 };

@@ -8,6 +8,7 @@ const options = { seed: 119120, numRuns: 300 };
 
 // Few heads, so a build that left the head where a tests step ended it comes up often.
 const sha = fc.constantFrom("a".repeat(40), "b".repeat(40), "c".repeat(40));
+
 const law = fc.constantFrom("L1", "L2", "L3", "A4 failed");
 
 const plant = fc.record({
@@ -31,6 +32,7 @@ const other = fc.oneof(
 );
 
 const steps = fc.array(fc.oneof(tests, other), { maxLength: 10 });
+
 const none = () => null;
 
 // The two real plant tables of 2026-11-11, as the reports wrote them.
@@ -120,6 +122,7 @@ describe("a review's brief carries the quest's plant records, today's tooling", 
         plants: [{ law: "L6", plant: "y", result: "red" }],
       },
     ];
+
     const read = (path: string) => (path.endsWith("tests2.md") ? acpcancel : null);
     const [l1, l6] = Plants.records(quest, read);
     expect(l1?.failures).toEqual(["Failed on the first run: it picked `cancel`"]);
@@ -138,6 +141,7 @@ describe("a review's brief carries the quest's plant records, today's tooling", 
 
         if (found.length === 0) {
           expect(text).toBeNull();
+
           return;
         }
 

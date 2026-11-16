@@ -83,6 +83,7 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, Child
       const on = Effect.fn("RunsGh.on")(function* (workflow: string, branch: string) {
         const path = `repos/${repo}/actions/workflows/${workflow}/runs`;
         const body = yield* gh(path, ["-f", `branch=${branch}`, "-f", `per_page=${NEWEST}`]);
+
         return yield* runsIn(body).pipe(
           Effect.mapError(() => new RunsError({ reason: `the ${workflow} runs on ${branch} did not parse` })),
         );
@@ -90,6 +91,7 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Runs, never, Child
 
       const jobs = Effect.fn("RunsGh.jobs")(function* (id: number) {
         const body = yield* gh(`repos/${repo}/actions/runs/${id}/jobs`, ["-f", "per_page=100"]);
+
         return yield* jobsIn(body).pipe(
           Effect.mapError(() => new RunsError({ reason: `run ${id}'s jobs did not parse` })),
         );

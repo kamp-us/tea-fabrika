@@ -14,6 +14,7 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
+
         const home = yield* fs.makeTempDirectoryScoped({ prefix: "p19-bundle-" });
         const root = path.resolve(import.meta.dirname, "../../../..");
         const importer = path.join(home, "importer.mjs");
@@ -77,6 +78,7 @@ it.skipIf(!enabled)(
     const result = await Effect.runPromise(
       Effect.scoped(Host.check()).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
     );
+
     expect(result.starts).toHaveLength(4);
     expect(result.replacement).toBe(true);
     expect(result.controllerDeath).toBe(true);

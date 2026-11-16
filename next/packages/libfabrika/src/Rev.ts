@@ -1,10 +1,11 @@
 // One of the shared names of 0043, on layer 0 (0091): a value every module may import, with no service
 // and no error.
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { InputId } from "./Id.ts";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
 export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 export type Rev = typeof Rev.Type;
 
 /**

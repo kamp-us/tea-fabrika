@@ -21,7 +21,9 @@ export const isolateBoundary: CreateRule = {
         const exported = node.computed
           ? node.property.type === "Literal" && node.property.value === "exports"
           : node.property.type === "Identifier" && node.property.name === "exports";
+
         const ctx = node.object.type === "Identifier" && node.object.name === "ctx";
+
         const own =
           node.object.type === "MemberExpression" &&
           node.object.object.type === "ThisExpression" &&

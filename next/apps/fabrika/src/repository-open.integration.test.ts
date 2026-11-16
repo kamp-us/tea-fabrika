@@ -33,6 +33,7 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
 const entries = Effect.fnUntraced(function* (home: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const rows: Array<Entry> = [];
 
   for (const file of yield* fs.readDirectory(home, { recursive: true })) {
@@ -61,13 +62,15 @@ const jsonLines = (text: string) =>
   stripVTControlCharacters(text)
     .split(/\r?\n/)
     .flatMap((line) => {
-      const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
+      const result = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown))(line);
+
       return Result.isSuccess(result) ? [result.success] : [];
     });
 
 const reports = (text: string, commit: string, result: "ready" | "awaiting_trust") =>
   jsonLines(text).filter((line) => {
     const fields = Schema.decodeUnknownResult(Schema.Record(Schema.String, Schema.Unknown))(line);
+
     return (
       Result.isSuccess(fields) &&
       Object.values(fields.success).includes(result) &&
@@ -82,10 +85,13 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
+
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-dev-" });
+
       const home = path.join(root, "home"),
         repo = path.join(root, "repo"),
         origin = path.join(root, "origin.git");
+
       const marker = path.join(root, "outside-executed");
       yield* fs.makeDirectory(home);
       yield* git(root, ["init", "--bare", "--initial-branch=release", origin]);
@@ -102,16 +108,20 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), '[pack.trap]\nfrom = "./packs/trap"\n');
       const { publicKey } = generateKeyPairSync("ed25519");
       const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+
       const blob = Buffer.concat([
         Buffer.from([0, 0, 0, 11]),
         Buffer.from("ssh-ed25519"),
         Buffer.from([0, 0, 0, 32]),
         raw,
       ]);
+
       const operator = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
       const selected = Effect.fnUntraced(function* (interactive: boolean, outcome: "ready" | "awaiting_trust") {
         const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
         const app = path.resolve(import.meta.dirname, "..");
+
         const argv = [
           path.join(app, "dev.ts"),
           "--repo",
@@ -127,11 +137,14 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           "--window",
           raw.toString("base64url"),
         ];
+
         const input = yield* Queue.unbounded<Uint8Array>();
+
         const scriptArgs =
           process.platform === "darwin"
             ? ["-q", "/dev/null", process.execPath, ...argv]
             : ["-q", "-e", "-c", [process.execPath, ...argv].map(quote).join(" "), "/dev/null"];
+
         // Node's stdin is a socket pair. A shell pipeline gives script a real pipe on both hosts.
         // The scoped spawner owns the shell's process group, including cat, script and dev.
         const child = yield* ChildProcess.make(
@@ -155,6 +168,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
             forceKillAfter: "3 seconds",
           },
         );
+
         const output = yield* Ref.make("");
         yield* child.all.pipe(
           Stream.decodeText(),
@@ -180,6 +194,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           yield* Effect.sleep("25 millis");
         }
       });
+
       const pending = yield* Effect.scoped(selected(false, "awaiting_trust"));
       expect(reports(pending, commit, "ready")).toEqual([]);
       expect((yield* entries(home)).filter((row) => row._tag === "decision")).toEqual([]);

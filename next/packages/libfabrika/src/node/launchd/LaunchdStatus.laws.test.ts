@@ -1,10 +1,15 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
 const target = "gui/501/test.p19.brain";
+
 const Word = Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_雪 -]{0,18}[a-zA-Z0-9雪]$/));
 
 const print = (word: string, pid: number | null) =>
@@ -111,6 +116,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const missing = `Could not find service "test.p19.brain" in domain for user gui: 501\n`;
       expect(yield* decode(113, "", missing)).toEqual({ _tag: "absent" });
+
       const invalid = [
         [113, "", `Could not find service "other-${word}" in domain for user gui: 501\n`],
         [113, "", `Could not find service "test.p19.brain" in domain for user gui: 502\n`],
@@ -190,6 +196,7 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
       }),
       ({ mutation, word }) => {
         const text = print(word, 81);
+
         const broken =
           mutation === "missing-program"
             ? text.replace(/\tprogram = .*\n/, "")
@@ -204,6 +211,7 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
                     : mutation === "duplicate-pid"
                       ? text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")
                       : text.slice(0, -3);
+
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({
           _tag: "BrainControlError",

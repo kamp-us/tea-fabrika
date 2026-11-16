@@ -38,12 +38,14 @@ const unchanged: Ran = {
 const gh = (answers: ReadonlyArray<Ran>) => {
   const calls: Array<ReadonlyArray<string>> = [];
   const text = (s: string) => Stream.make(new TextEncoder().encode(s));
+
   const layer = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
       Effect.sync(() => {
         const answer = answers[calls.length] ?? { out: "", err: "no answer left", code: 1 };
         calls.push(command._tag === "StandardCommand" ? command.args.map(String) : []);
+
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(27000),
           exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(answer.code)),
@@ -60,6 +62,7 @@ const gh = (answers: ReadonlyArray<Ran>) => {
       }),
     ),
   );
+
   return { calls, layer };
 };
 
@@ -74,13 +77,16 @@ type Polled = {
 /** One read of the typecheck job at each of `heads`, in order, on one layer; `law` checks them. */
 const polled = (answers: ReadonlyArray<Ran>, heads: ReadonlyArray<string>, law: (p: Polled) => void) => {
   const fake = gh(answers);
+
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
   return Effect.runPromise(
     Effect.gen(function* () {
       const checks = yield* Checks;
+
       const found = yield* Effect.forEach(heads, (at) => Effect.result(checks.job(at, "typecheck")), {
         concurrency: 1,
       });
+
       law({ found, calls: fake.calls });
     }).pipe(Effect.provide(Layer.provide(ChecksGh.layer("example/repo"), fake.layer))),
   );
@@ -107,14 +113,17 @@ describe("gh api -i's output, today's tooling", () => {
       conclusion: fc.constantFrom(null, "success", "failure"),
       slug: fc.constantFrom("github-actions", "someone-else"),
     });
+
     fc.assert(
       fc.property(fc.uniqueArray(one, { selector: (r) => r.id, maxLength: 6 }), (runs) => {
         const text = body(runs.map((r) => run(r.id, r.status, r.conclusion, r.slug)));
         const ours = runs.filter((r) => r.slug === "github-actions").toSorted((a, b) => b.id - a.id)[0];
+
         const want =
           ours === undefined
             ? Option.none()
             : Option.some({ id: ours.id, status: ours.status, conclusion: ours.conclusion });
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a fast-check property is synchronous
         expect(Effect.runSync(ChecksGh.latestIn(text))).toEqual(want);
       }),

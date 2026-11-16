@@ -22,10 +22,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
 const Setting = Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Array(Schema.Unknown)])]);
+
 const Rules = Schema.Record(Schema.String, Setting);
 
 /** The part of oxlint's own reading of the config these laws read: its blocks. */
@@ -43,11 +45,14 @@ const rootRules = (): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const config = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = config?.type === "ObjectExpression" ? config.properties : [];
+
   const rules = properties.find(
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "rules",
   );
+
   const value = rules?.type === "Property" ? rules.value : undefined;
   const named = value?.type === "ObjectExpression" ? value.properties : [];
+
   return named.flatMap((property) =>
     property.type === "Property" && property.key.type === "Literal" ? [String(property.key.value)] : [],
   );
@@ -60,7 +65,7 @@ const Report = Schema.fromJsonString(
       Schema.Struct({
         code: Schema.String,
         filename: Schema.String,
-        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) })),
+        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) })),
       }),
     ),
   }),
@@ -76,12 +81,14 @@ const printout = spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, 
 const printed = Schema.decodeUnknownSync(Printed)(printout);
 
 const levelOf = (setting: typeof Setting.Type): string => (Predicate.isString(setting) ? setting : setting[0]);
+
 const ofThePlugins = (rule: string): boolean => rule.startsWith("anti-slop/") || rule.startsWith("anti-slop-effect/");
 
 /** The folders a rule's blocks list, as the config holds them: each override that names it at error. */
 const listed = (rule: string): ReadonlyArray<string> =>
   printed.overrides.flatMap((block) => {
     const setting = block.rules[rule];
+
     return setting !== undefined && levelOf(setting) === "deny" ? block.files : [];
   });
 
@@ -175,8 +182,10 @@ const tree = (glob: string): boolean => glob.endsWith("/**");
  */
 const unlisted = (rule: string): string | undefined => {
   const on = listed(rule);
+
   const covered = (folder: string) =>
     on.includes(folder) || on.some((glob) => WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+
   return ["oxlint-plugins/**", ...folders(ROOT)].find((folder) => tree(folder) && !covered(folder));
 };
 
@@ -197,6 +206,7 @@ const ON: ReadonlyArray<Site> = TAKEN.flatMap((rule) =>
 /** Each taken rule in the first folder its block does not list. A rule on in the whole scope has none left. */
 const OFF: ReadonlyArray<Site> = TAKEN.flatMap((rule) => {
   const glob = unlisted(rule);
+
   return glob === undefined ? [] : [{ rule, glob }];
 });
 
@@ -214,6 +224,7 @@ const plant = ({ rule, glob }: Site): string => {
   made.push(folder);
   const file = join(folder, `${rule.replace("/", "-")}.ts`);
   writeFileSync(file, `${(PLANTS[rule] ?? []).join("\n")}\n`);
+
   return relative(ROOT, file);
 };
 
@@ -222,12 +233,14 @@ let fires: ReadonlyMap<Site, ReadonlyArray<number>> = new Map();
 beforeAll(() => {
   const sites = [...ON, ...OFF];
   const files = sites.map(plant);
+
   // One oxlint run for every plant, through the repository's own config.
   const ran = spawnSync(OXLINT, ["--disable-nested-config", "--format=json", ...files], {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 2 ** 28,
   });
+
   const { diagnostics } = Schema.decodeUnknownSync(Report)(ran.stdout);
   fires = new Map(
     sites.map((site, i) => [
@@ -294,6 +307,7 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
           const gone = strays.map((name) => `next/gone/${name}/**`);
           const result = lock(scope, [...onList.map(glob), ...gone, ...whole], map);
           const everything = whole.includes("next/**");
+
           const expected = everything
             ? []
             : counted.filter(({ name, hits }) => hits === 0 && !onList.includes(name)).map(({ folder }) => folder);
@@ -318,6 +332,7 @@ describe("L5 no block for a taken rule says off or warn", () => {
     const settings = printed.overrides.flatMap((block) =>
       Object.entries(block.rules).filter(([rule]) => ofThePlugins(rule)),
     );
+
     expect(settings.length).toBeGreaterThan(0);
     expect(settings.filter(([, setting]) => levelOf(setting) !== "deny")).toEqual([]);
   });
@@ -328,6 +343,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
     "anti-slop": "vendor/anti-slop/src/index.ts",
     "anti-slop-effect": "vendor/anti-slop/src/effect/index.ts",
   };
+
   /** One `jsPlugins` entry, and whether `strays` must name it. */
   const entry = fc.oneof(
     fc.constantFrom("./oxlint-plugins/index.ts", "./other/plugin.ts").map((plugin) => ({ plugin, stray: false })),
@@ -339,6 +355,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
       })
       .map(({ name, dot, elsewhere }) => {
         const path = elsewhere === "" ? VENDORED[name] : `${elsewhere}${VENDORED[name].split("/").pop()}`;
+
         return { plugin: { name, specifier: `${dot ? "./" : ""}${path}` }, stray: elsewhere !== "" };
       }),
     fc
@@ -359,6 +376,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
           ignorePatterns: [],
           overrides: [],
         });
+
         expect(strays(ROOT, config).length).toBe(entries.filter(({ stray }) => stray).length);
       }),
       { seed: 119120, numRuns: 100 },

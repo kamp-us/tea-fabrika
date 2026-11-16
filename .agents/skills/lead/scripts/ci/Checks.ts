@@ -5,7 +5,9 @@ import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
 
 /** GitHub could not be asked, or its answer did not parse. A poll tries again; the reason is kept. */
-export class ChecksError extends Schema.TaggedError<ChecksError>()("ChecksError", { reason: Schema.String }) {}
+export class ChecksError extends Schema.TaggedError<ChecksError, { readonly brand: unique symbol }>()("ChecksError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * One job's check run, as GitHub reports it: its id (an Actions job's check run id is its job id),
@@ -13,10 +15,11 @@ export class ChecksError extends Schema.TaggedError<ChecksError>()("ChecksError"
  * `cancelled`, `skipped`, `timed_out` and the rest).
  */
 export const Job = Schema.Struct({
-  id: Schema.Number,
+  id: Schema.Finite,
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
 });
+
 export type Job = typeof Job.Type;
 
 export class Checks extends Context.Service<

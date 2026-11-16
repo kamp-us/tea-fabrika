@@ -1,11 +1,12 @@
 /**
  * The client hello: the text a client signs, version negotiation, the origin check and the full
  * check of a hello message.
- *
- * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
 import type { Admission } from "./Wire.ts";
@@ -15,7 +16,6 @@ import { Hello, Who } from "./Wire.ts";
  * Builds the text a client signs in its hello: `fabrika-hello`, the url, the tab and the nonce,
  * one per line, with no trailing newline.
  *
- * @stability unstable
  * @category constructors
  */
 export const helloText = (a: { readonly url: string; readonly tab: string; readonly nonce: string }): string =>
@@ -24,11 +24,11 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
 /**
  * Picks the highest protocol version that both sides list, or `null` when they share none.
  *
- * @stability unstable
  * @category combinators
  */
 export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
   const shared = client.filter((v) => server.includes(v));
+
   return shared.length === 0 ? null : Math.max(...shared);
 };
 
@@ -45,7 +45,6 @@ const decodeUrl = Schema.decodeUnknownResult(Schema.URLFromString);
  * slash), and must be listed in `origins`. `forwardedHost` is accepted but this function does not
  * read it.
  *
- * @stability unstable
  * @category guards
  */
 export const sameOrigin = (a: {
@@ -64,6 +63,7 @@ export const sameOrigin = (a: {
   }
 
   const url = decodeUrl(a.origin);
+
   return (
     Result.isSuccess(url) &&
     (url.success.protocol === "https:" || url.success.protocol === "http:") &&
@@ -77,7 +77,7 @@ export type WebCryptoError = import("./internal/binary.ts").WebCryptoError;
 
 /** What `checkHello` answers: the admitted hello, or the refusal with its reason. */
 export const CheckedHello = Schema.TaggedUnion({
-  online: { identity: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
+  online: { identity: Who, version: Schema.Int, ping: Schema.Finite, hello: Hello },
   refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
 });
 
@@ -85,13 +85,16 @@ const no = (reason: string) => CheckedHello.cases.refused.make({ reason });
 
 const pingMs = (text: string, min: number, max: number): number => {
   const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(text);
+
   const scale = new Map([
     ["ms", 1],
     ["s", 1000],
     ["m", 60_000],
     ["h", 3_600_000],
   ]);
+
   const n = match === null ? min : Number(match[1]) * (scale.get(match[2] ?? "") ?? 1);
+
   return Math.max(min, Math.min(max, n));
 };
 
@@ -116,7 +119,6 @@ const pingMs = (text: string, min: number, max: number): number => {
  * milliseconds and held between `ping.min` and `ping.max`. Text that does not read as a number
  * with a unit of `ms`, `s`, `m` or `h` gives `ping.min`.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: {
@@ -167,6 +169,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   field.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(field.buffer).setUint32(15, 32);
   field.set(raw.success, 19);
+
   const checked = yield* checkSshsig({
     text: helloText(a),
     armored: hello.signed,

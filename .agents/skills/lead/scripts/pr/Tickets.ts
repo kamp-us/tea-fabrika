@@ -6,7 +6,10 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** The tracker could not be asked, or refused the post. The reason never holds a local path. */
-export class TicketsError extends Schema.TaggedError<TicketsError>()("TicketsError", { reason: Schema.String }) {}
+export class TicketsError extends Schema.TaggedError<TicketsError, { readonly brand: unique symbol }>()(
+  "TicketsError",
+  { reason: Schema.String },
+) {}
 
 export class Tickets extends Context.Service<
   Tickets,

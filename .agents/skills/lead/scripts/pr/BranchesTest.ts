@@ -21,23 +21,25 @@ export const layer = (model: Model): Layer.Layer<Branches> =>
     Branches.of({
       refresh: Effect.void,
       list: model.broken
-        ? Effect.fail(new BranchesError({ command: "for-each-ref", reason: "broken" }))
+        ? Effect.fail(BranchesError.make({ command: "for-each-ref", reason: "broken" }))
         : Effect.succeed(model.branches),
       ahead: (tip) => {
         const n = model.ahead[tip];
+
         return n === undefined
-          ? Effect.fail(new BranchesError({ command: "rev-list", reason: `unknown ${tip}` }))
+          ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);
       },
       behind: (tip) => {
         const n = model.behind?.[tip];
+
         return n === undefined
-          ? Effect.fail(new BranchesError({ command: "rev-list", reason: `unknown ${tip}` }))
+          ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);
       },
       landsEmpty: (tip) =>
         model.ahead[tip] === undefined
-          ? Effect.fail(new BranchesError({ command: "merge-tree", reason: `unknown ${tip}` }))
+          ? Effect.fail(BranchesError.make({ command: "merge-tree", reason: `unknown ${tip}` }))
           : Effect.succeed(model.empty.includes(tip)),
     }),
   );

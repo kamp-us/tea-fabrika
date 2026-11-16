@@ -12,6 +12,7 @@ import { full, measured } from "../../vitest.shards.ts";
 import { main, nextFiles, stale, visualFiles } from "./shard-rows.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+
 const options = { seed: 119120, numRuns: 100 };
 
 /** A project's globs from vitest.config.ts, by its name: the arrays themselves, so a push is seen. */
@@ -67,6 +68,7 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
       const expected = Object.keys(table)
         .filter((path) => path.startsWith("next/") && !files.includes(path))
         .toSorted();
+
       expect(stale(table, files)).toEqual(expected);
       expect(stale(table, files.toReversed())).toEqual(expected);
     }),
@@ -98,12 +100,14 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
   expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
   expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
   const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
+
   const selected = [
     "next/apps/toy/e2e/stored.integration.test.ts",
     "next/apps/toy/src/db.integration.test.ts",
     "next/apps/toy/src/plain.test.ts",
     "next/apps/toy/src/view.test.tsx",
   ];
+
   const excluded = [
     "next/apps/toy/e2e/wire.test.ts",
     "next/apps/toy/e2e/window.visual.test.ts",
@@ -145,12 +149,14 @@ it("scenario: E8 the end-to-end files are next/'s visual tests and nothing else,
   // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
   // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
   const folder = mkdtempSync(join(tmpdir(), "t967-e2e-"));
+
   const selected = [
     "next/apps/fabrika/e2e/a.visual.test.ts",
     "next/apps/fabrika/e2e/node/b.visual.test.ts",
     "next/apps/other/e2e/e.visual.test.tsx",
     "next/packages/tuval/src/browser/key.laws.visual.test.ts",
   ].toSorted();
+
   const left = [
     "next/apps/fabrika/e2e/stored.integration.test.ts",
     "next/apps/fabrika/e2e/d.test.ts",
@@ -277,10 +283,12 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
   expect(result.stdout).toBe("");
+
   const lines = (stale: readonly string[], table: string) =>
     stale.map(
       (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
     );
+
   expect(result.stderr).toBe(
     [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
   );
@@ -293,9 +301,11 @@ it("scenario: every tracked next/ test file is in exactly one of next, next-inte
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
     .stdout.split("\0")
     .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+
   const [memory, integration, visual] = await Promise.all(
     ["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name])),
   );
+
   const all = [...memory!, ...integration!, ...visual!];
   expect(new Set(all).size, "a file in two projects").toBe(all.length);
   expect(all.toSorted()).toEqual(tracked.toSorted());

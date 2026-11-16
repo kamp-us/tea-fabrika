@@ -3,7 +3,7 @@
 // what runs. `no-secret-env` and `no-redacted-value` are planted in
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
-// `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
+// `no-node-imports` plants next/ paths in its own test file.
 // `program-package-layout` reads a program's package.json, so it plants generated program
 // packages under next/programs/ in program-package-layout.test.ts.
 // The planted lines of our own rules also run in process through oxlint's RuleTester, and every
@@ -24,20 +24,25 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 
 // RuleTester runs each case at once, inside the test that plants it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so a rule reads each planted path as oxlint gives it there.
 const tester = new RuleTester({ cwd: ROOT });
 
 const plant = mkdtempSync(join(import.meta.dirname, ".plant-"));
+
 afterAll(() => rmSync(plant, { recursive: true, force: true }));
+
 // What `./b.laws` must be taken for: a file with one more extension, not a named file.
 writeFileSync(join(plant, "b.laws.ts"), "export const b = 1;\n");
 
@@ -49,6 +54,7 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
     cwd: ROOT,
     encoding: "utf8",
   });
+
   const report = JSON.parse(out.stdout) as {
     readonly diagnostics: readonly {
       readonly code: string;
@@ -56,6 +62,7 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
       readonly labels: readonly { readonly span: { readonly line: number } }[];
     }[];
   };
+
   const fires = new Map<string, Fire[]>(paths.map((path) => [path, []]));
 
   for (const d of report.diagnostics) {
@@ -78,6 +85,28 @@ const linesOf = (fires: readonly Fire[], code: string): readonly number[] =>
 const fires = (path: string, code: string): readonly number[] => linesOf(firesIn([path]).get(path)!, code);
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
+
+/**
+ * `fabrika/no-data-taggederror`'s lines. It stays beside oxlint's `no-restricted-properties` entry
+ * (0573, the plan's amendment of 2026-11-15), since only ours refuses `Data.TaggedError` in a type
+ * position: its `banNames` visits `TSQualifiedName`. L1 below runs these lines in every folder too.
+ * Plant: drop `"fabrika/no-data-taggederror"` from `.oxlintrc.json`, and the type lines are not refused.
+ */
+const DATA_TAGGEDERROR: Plant = {
+  code: "fabrika(no-data-taggederror)",
+  prelude: [EFFECT, "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    // Type positions, which no trusted rule refuses.
+    ["export type Made = typeof Data.TaggedError;", true],
+    ['export type Instance = InstanceType<ReturnType<typeof Data.TaggedError<"X">>>;', true],
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+  ],
+};
 
 const PLANTS: readonly Plant[] = [
   {
@@ -104,14 +133,7 @@ const PLANTS: readonly Plant[] = [
       ['export const d = Context.Service("d");', false],
     ],
   },
-  {
-    code: "fabrika(no-data-taggederror)",
-    prelude: [EFFECT, "declare const Other: {TaggedError: (n: string) => new () => object};"],
-    lines: [
-      ['export class A extends Data.TaggedError("A") {}', true],
-      ['export class B extends Other.TaggedError("B") {}', false],
-    ],
-  },
+  DATA_TAGGEDERROR,
   {
     code: "fabrika(no-effect-promise)",
     prelude: [EFFECT, "declare const p: () => Promise<number>;", "declare const c: () => string;"],
@@ -289,6 +311,7 @@ const put = (name: string, text: string): string => {
   const file = join(plant, name);
   writeFileSync(file, text);
   planted.push(file);
+
   return file;
 };
 
@@ -297,6 +320,7 @@ const write = (p: Plant, name: string) => {
   const text = `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`;
   const file = put(`${name}-${p.file ?? "planted.ts"}`, text);
   const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
+
   return { file, text, want };
 };
 
@@ -320,6 +344,7 @@ describe("each rule refuses what it is there to refuse", () => {
   const ours = PLANTS.map((p, i) => [p.code, p, write(p, String(i))] as const);
   const builtIn = BUILTIN_PLANTS.map((p, i) => [p.code, p, write(p, `builtin-${i}`)] as const);
   const self = put("self.ts", 'import {a} from "./self.ts";\nimport {b} from "./b.laws.ts";\nexport {a, b};\n');
+
   const poll = put(
     "poll.test.ts",
     `${[
@@ -328,6 +353,7 @@ describe("each rule refuses what it is there to refuse", () => {
       'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
     ].join("\n")}\n`,
   );
+
   const notATest = put(
     "not-a-test.ts",
     `declare const it: any, expect: any, x: number;\n${'it("a", () => { if (x > 0) { expect(x).toBe(1); } });'}\n`,
@@ -366,6 +392,7 @@ describe("each rule refuses what it is there to refuse", () => {
   it("the plugin has one planted line or more for every rule it lists", async () => {
     const { default: plugin } = await import("./index.ts");
     const planted = new Set(PLANTS.map((p) => p.code));
+
     // `no-bare-disable` reports at the top of the file, so it has its own test below.
     const elsewhere = [
       "prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
@@ -380,8 +407,6 @@ describe("each rule refuses what it is there to refuse", () => {
       // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
       "service-id",
       "service-contract", // P19 plants the three desktop contracts and a native import below.
-      // T518's retired module is planted in one-id-module.test.ts.
-      "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
       "padding-line-between-statements",
       // next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
@@ -395,7 +420,6 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-clock-in-view",
       // Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
       "no-ledger-sql",
-      "no-node-filesystem",
       "no-node-imports",
       // libfabrika's modules are planted at their real paths in modules.test.ts.
       "modules",
@@ -417,6 +441,10 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-wall-clock",
       "one-machine-per-file", // scoped plant and blocking check below
       "isolate-boundary", // scoped platform-name plant below
+      // E1 (0574): no-stability-tag.test.ts plants a tag at in-scope and waiting paths with the real lint config.
+      "no-stability-tag",
+      // E2 (0577): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
+      "prefer-namespace-import",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
       // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
@@ -424,12 +452,17 @@ describe("each rule refuses what it is there to refuse", () => {
       // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
       // and a named file under next/ and runs oxlint over them with the real lint config.
       "integration-test-name",
+      // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
+      // plants generated lines at those paths, and at product and outside paths it must pass.
+      "test-database",
       // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
       "runs-from-depth",
     ];
+
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
     );
+
     expect(missing).toEqual([]);
   });
 });
@@ -442,6 +475,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     'import "@decimalturn/toml-patch";',
     'import "@decimalturn/toml-patch/dist/index.js";',
   ].join("\n");
+
   const banned = [
     "next/programs/sample/src/machine.ts",
     "next/packages/libfabrika/src/settings/TomlEdit.test.ts",
@@ -455,6 +489,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
     "next/apps/fabrika/src/settings-start.integration.test.ts",
     ".agents/skills/lead/scripts/example.ts",
   ];
+
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
   const result = await lintCopies(Object.fromEntries([...banned, adapter].map((file) => [file, imports])));
 
@@ -477,8 +512,10 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
   const io = "next/packages/libfabrika/src/plant/OverIo.test.ts";
   const memory = "next/packages/libfabrika/src/plant/InMemory.test.ts";
   const imports = ['import * as fc from "fast-check";', 'import { it } from "vitest";'];
+
   const law = (body: string, count: string) =>
     `it("law", () => { ${body}fc.assert(fc.property(fc.nat(), () => true), { seed: 119120, numRuns: ${count} }); });`;
+
   const result = await lintCopies({
     [io]: [
       'import { DatabaseSync } from "node:sqlite";',
@@ -490,83 +527,106 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
     ].join("\n"),
     [memory]: [...imports, law("", "3000"), ""].join("\n"),
   });
+
   expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
   expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
 });
 
-/** One override of oxlint's `--print-config`: its globs and its rules, a setting as `[level, options]`. */
-type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> };
+/** oxlint's `--print-config`: the root rules and each override's globs and rules, a setting as `[level, options]`. */
+type Printed = {
+  readonly rules: Record<string, unknown>;
+  readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }>;
+};
 
-/** True for the ban's own entry, `{ object: "Reflect", property: "get" }`, in a rule's options. */
-const isReflectGet = (entry: unknown): boolean =>
-  typeof entry === "object" &&
-  entry !== null &&
-  "object" in entry &&
-  entry.object === "Reflect" &&
-  "property" in entry &&
-  entry.property === "get";
+/** One fire of an oxlint JSON report. */
+type Diagnostics = ReadonlyArray<{
+  readonly code?: string;
+  readonly filename: string;
+  readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
+}>;
+
+/** True for one entry, `{ object, property }`, in `no-restricted-properties`'s options. */
+const isEntry =
+  (object: string, property: string) =>
+  (entry: unknown): boolean =>
+    typeof entry === "object" &&
+    entry !== null &&
+    "object" in entry &&
+    entry.object === object &&
+    "property" in entry &&
+    entry.property === property;
+
+/** The ban's own entry, `{ object: "Reflect", property: "get" }`. */
+const isReflectGet = isEntry("Reflect", "get");
+
+/** The swap's entry, `{ object: "Data", property: "TaggedError" }` (0573). */
+const isTaggedError = isEntry("Data", "TaggedError");
+
+/** A setting's options, as `--print-config` prints it, `[level, options]`, or none. */
+const optionsOf = (setting: unknown): ReadonlyArray<unknown> =>
+  Array.isArray(setting) && Array.isArray(setting[1]) ? setting[1] : [];
 
 /**
- * Where a law plants a file for one folder glob of the config, such as `next/programs/chaos/**`:
- * a file of that folder's own. A glob that names a file, not a folder, is answered unchanged.
+ * Where a law plants a file for one glob of the config, such as `next/programs/chaos/**`: a file of
+ * that folder's own. A glob that names a file is answered with its `*` filled in, so
+ * `apps/fabrika/*-e2e.ts` gets `apps/fabrika/planted-e2e.ts`.
  */
 const plantPath = (glob: string): string => {
   const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
-  return folder === glob ? glob : `${folder}/planted.ts`;
+
+  return folder === glob ? glob.replaceAll("*", "planted") : `${folder}/planted.ts`;
 };
 
-/** The globs of every override that holds the Reflect ban (0554), each with the rule's level there. */
-const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+/** The globs of every override whose `no-restricted-properties` holds one entry, each with the rule's level there. */
+const globsHolding = (
+  printed: Printed,
+  holds: (entry: unknown) => boolean,
+): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
   printed.overrides.flatMap(({ files, rules }) => {
     const setting = rules["no-restricted-properties"];
-    const options: unknown = Array.isArray(setting) ? setting[1] : undefined;
-    return Array.isArray(options) && options.some(isReflectGet)
+
+    return optionsOf(setting).some(holds)
       ? files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }))
       : [];
   });
 
-describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
-  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
-  // lists today gets REFLECT's lines, a later slice's folder included.
-  // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
-  it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
-    const at = realpathSync(mkdtempSync(join(tmpdir(), "reflect-ban-")));
+/**
+ * Runs `use` in a temp folder that holds a copy of the repo's `.oxlintrc.json` and its rules, with
+ * `printed` (its `--print-config`) and `lint` (one oxlint run over files written there).
+ */
+const inConfigCopy = (
+  use: (copy: {
+    readonly printed: Printed;
+    readonly lint: (text: string, files: ReadonlyArray<string>) => Diagnostics;
+  }) => void,
+) => {
+  const at = realpathSync(mkdtempSync(join(tmpdir(), "restricted-properties-")));
 
-    try {
-      copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
-      // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
-      mkdirSync(join(at, "oxlint-plugins"));
+  try {
+    copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+    // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
+    mkdirSync(join(at, "oxlint-plugins"));
 
-      for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
-        if (entry.isFile()) {
-          copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
-        }
+    for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
       }
+    }
 
-      symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
-      symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-      // The config loads the vendored anti-slop plugins from here (0563).
-      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
-      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
-        cwd: at,
-        encoding: "utf8",
-        maxBuffer: 2 ** 28,
-      });
-      expect(printed.status, printed.stderr).toBe(0);
-      const parsed: Printed = JSON.parse(printed.stdout);
-      const globs = banGlobs(parsed);
-      // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
-      expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
-      );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+    symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
+    symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+    // The config loads the vendored anti-slop plugins from here (0563).
+    symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
 
-      const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
-      const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+    const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+      cwd: at,
+      encoding: "utf8",
+      maxBuffer: 2 ** 28,
+    });
 
+    expect(printed.status, printed.stderr).toBe(0);
+
+    const lint = (text: string, files: ReadonlyArray<string>): Diagnostics => {
       for (const file of files) {
         mkdirSync(dirname(join(at, file)), { recursive: true });
         writeFileSync(join(at, file), text);
@@ -577,24 +637,109 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
         [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
         { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
       );
-      const report: {
-        readonly diagnostics: ReadonlyArray<{
-          readonly code?: string;
-          readonly filename: string;
-          readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
-        }>;
-      } = JSON.parse(ran.stdout);
+
+      const report: { readonly diagnostics: Diagnostics } = JSON.parse(ran.stdout);
+
+      return report.diagnostics;
+    };
+
+    use({ printed: JSON.parse(printed.stdout), lint });
+  } finally {
+    rmSync(at, { recursive: true, force: true });
+  }
+};
+
+/** The lines of `file` that one rule's code refuses, in order. */
+const refusedIn = (diagnostics: Diagnostics, file: string, code: string): ReadonlyArray<number> =>
+  diagnostics
+    .filter((d) => d.filename === file && d.code === code)
+    .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
+    .sort((a, b) => a - b);
+
+/** A plant's text, and the lines its rule must refuse. */
+const textOf = (p: Plant) => ({
+  text: `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`,
+  want: p.lines.flatMap(([, refused], i) => (refused ? [p.prelude.length + i + 1] : [])),
+});
+
+describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
+  // lists today gets REFLECT's lines, a later slice's folder included.
+  // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
+  it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = globsHolding(printed, isReflectGet);
+      // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
+      );
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+
+      const { text, want } = textOf(REFLECT);
+      const files = globs.map(({ glob }) => plantPath(glob));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
 
       for (const file of files) {
-        const refused = report.diagnostics
-          .filter((d) => d.filename === file && d.code === REFLECT.code)
-          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-          .sort((a, b) => a - b);
-        expect(refused, file).toEqual(want);
+        expect(refusedIn(diagnostics, file, REFLECT.code), file).toEqual(want);
       }
-    } finally {
-      rmSync(at, { recursive: true, force: true });
-    }
+    });
+  }, 120_000);
+});
+
+describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
+  // L1. scenario: the repo's own config, read by oxlint's own --print-config, so every folder that
+  // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines and ours'
+  // (DATA_TAGGEDERROR), a block that lands later included, and so do a file at the top and one under
+  // no block, which the root rules hold. Ours alone refuses the type-position lines.
+  // Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+  // lines are not refused; drop `"fabrika/no-data-taggederror"`, and no folder refuses the type lines.
+  it("L1 scenario: TAGGED_ERROR's lines and ours' type-position lines are refused exactly, in every folder of every block that sets the rule, and under none", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = globsHolding(printed, () => true);
+      // Coverage: today's app, next/ where JSON.parse blocks and where it advises, and the tooling.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["apps/fabrika/e2e.ts", "next/**/*", ".agents/**", ".github/**", "oxlint-plugins/**"]),
+      );
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+
+      const files = [
+        ...new Set(globs.map(({ glob }) => plantPath(glob))),
+        // Under no block that sets the rule: the root rules hold these.
+        "planted-tagged-error.ts",
+        "scripts/planted-tagged-error.ts",
+      ];
+
+      // Coverage: ours' plant has type-position lines it must refuse.
+      expect(DATA_TAGGEDERROR.lines.some(([line, refused]) => refused && line.startsWith("export type"))).toBe(true);
+
+      for (const p of [TAGGED_ERROR, DATA_TAGGEDERROR]) {
+        const { text, want } = textOf(p);
+        const diagnostics = lint(text, files);
+
+        for (const file of files) {
+          expect(refusedIn(diagnostics, file, p.code), `${p.code} in ${file}`).toEqual(want);
+        }
+      }
+    });
+  }, 120_000);
+
+  // L2. scenario: every override in --print-config. An override replaces the rule's options for its
+  // files, so a block without the entry would drop it for every folder it lists.
+  // Plant: add a block that sets the rule with only the JSON.parse entry for one folder.
+  it("L2 scenario: the root rules and every override that sets no-restricted-properties carry the entry", () => {
+    inConfigCopy(({ printed }) => {
+      expect(optionsOf(printed.rules["no-restricted-properties"]).some(isTaggedError), "the root rules").toBe(true);
+      const setting = printed.overrides.filter(({ rules }) => rules["no-restricted-properties"] !== undefined);
+      // Coverage: the seven blocks that set the rule when the swap landed, at least.
+      expect(setting.length).toBeGreaterThanOrEqual(7);
+      expect(
+        setting
+          .filter(({ rules }) => !optionsOf(rules["no-restricted-properties"]).some(isTaggedError))
+          .map(({ files }) => files),
+      ).toEqual([]);
+    });
   }, 120_000);
 });
 
@@ -614,7 +759,9 @@ describe("lint.ts, the first step of pnpm lint", () => {
       tried,
       [
         'import {Effect} from "effect";',
+        "",
         "declare const f: () => void;",
+        "",
         "export const e = Effect.void;",
         "",
         "try { f(); } catch { f(); }",
@@ -642,10 +789,14 @@ describe("lint.ts, the first step of pnpm lint", () => {
 
 const SECRET = "export const a = process.env.GITHUB_TOKEN;";
 
+// The Effect checker reads its directive anywhere in the text, a string too, so the planted ones are built.
+const CHECKER = ["@effect", "diagnostics"].join("-");
+
 describe("an ignore comment names its rules and says why", () => {
   const run = (name: string, text: string) => {
     const file = join(plant, name);
     writeFileSync(file, text);
+
     return spawnSync(process.execPath, ["oxlint-plugins/lint.ts", relative(ROOT, file)], {
       cwd: ROOT,
       encoding: "utf8",
@@ -671,6 +822,23 @@ describe("an ignore comment names its rules and says why", () => {
     ["eslint, the next line", `// eslint-disable-next-line\n${SECRET}\n`],
     ["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
     ["JSX", `export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`],
+    // L3 of docs/plan/quests/effect-sweep-PLAN.md: the Effect checker's own ignore comment.
+    ["the checker's, no reason", `// ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    ["the checker's, the whole file", `// ${CHECKER} preferEffectArray:off -- why\n${SECRET}\n`],
+    ["the checker's, skip-file", `// ${CHECKER} skip-file\n${SECRET}\n`],
+    ["the checker's, no level", `// ${CHECKER}-next-line preferEffectArray -- why\n${SECRET}\n`],
+    ["the checker's, no check", `// ${CHECKER}-next-line -- why\n${SECRET}\n`],
+    ["the checker's, an empty reason", `// ${CHECKER}-next-line preferEffectArray:off -- \n${SECRET}\n`],
+    ["the checker's, in a block", `/* ${CHECKER}-next-line preferEffectArray:off */\n${SECRET}\n`],
+    ["the checker's, after other words", `// see // ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    // Four forms @effect/tsgo 0.63.0 obeys, found at review: each silenced a planted hit.
+    ["the checker's, after plain words", `// see the ${CHECKER}-next-line floatingEffect:off\n${SECRET}\n`],
+    ["the checker's, in a doc block", `/**\n * ${CHECKER}-next-line floatingEffect:off -- why\n */\n${SECRET}\n`],
+    ["the checker's, in a string", `export const s = "// ${CHECKER} floatingEffect:off";\n${SECRET}\n`],
+    [
+      "the checker's, a check in the reason",
+      `// ${CHECKER}-next-line preferEffectArray:off -- and floatingEffect:off\n${SECRET}\n`,
+    ],
   ])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
     const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
     expect(out.stdout).toContain("fabrika(no-bare-disable)");
@@ -687,6 +855,18 @@ describe("an ignore comment names its rules and says why", () => {
     ["from here on", `/* oxlint-disable fabrika/no-secret-env -- why\n more why */\n${SECRET}\n`],
     ["two rules", `// oxlint-disable-next-line fabrika/no-secret-env, no-debugger -- why\n${SECRET}\ndebugger;\n`],
     ["words that only mention it", `// the oxlint-disable comment\nexport const b = 1;\n`],
+    [
+      "the checker's, one check",
+      `// ${CHECKER}-next-line preferEffectArray:off -- the platform hands back a plain array\nexport const b = [1];\n`,
+    ],
+    [
+      "the checker's, two checks",
+      `// ${CHECKER}-next-line preferEffectArray:off globalDate:off -- why\nexport const b = [Date.now()];\n`,
+    ],
+    [
+      "a reason with a colon in it",
+      `// ${CHECKER}-next-line globalDate:off -- the time: a fixture\nexport const b = [Date.now()];\n`,
+    ],
   ])("takes %s", (_name, text) => {
     const out = run("named.ts", text);
     expect(out.stdout).not.toContain("no-bare-disable");
@@ -696,6 +876,7 @@ describe("an ignore comment names its rules and says why", () => {
 describe("a plain file cannot take a folder out of the checks", () => {
   const LINT = join(ROOT, "oxlint-plugins", "lint.ts");
   const FORMAT = join(ROOT, "oxlint-plugins", "format.ts");
+
   const inFolder = (files: Readonly<Record<string, string>>) => {
     const folder = mkdtempSync(join(plant, "hide-"));
     mkdirSync(join(folder, "sub"));
@@ -706,6 +887,7 @@ describe("a plain file cannot take a folder out of the checks", () => {
 
     return folder;
   };
+
   const node = (script: string, cwd: string, ...args: readonly string[]) =>
     spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" });
 
@@ -750,8 +932,10 @@ describe("rules that apply by path", () => {
     const at = mkdtempSync(join(ROOT, folder, ".plant-"));
     const file = join(at, name);
     writeFileSync(file, text);
+
     return { at, file };
   };
+
   const made: string[] = [];
   afterAll(() => {
     for (const at of made) {
@@ -868,6 +1052,7 @@ describe("rules that apply by path", () => {
 it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   const text =
     'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n';
+
   const result = await lintCopies({ "next/machine.ts": text });
   expect(result("fabrika(one-machine-per-file)", "next/machine.ts")).toEqual([3]);
   // Copy the wrapper as well: its ROOT is its own folder's parent. Keep cwd in the real
@@ -889,10 +1074,12 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   mkdirSync(join(at, "next"));
   const file = join(at, "next/machine.ts");
   writeFileSync(file, text);
+
   const out = spawnSync(process.execPath, [join(at, "oxlint-plugins/lint.ts"), file], {
     cwd: ROOT,
     encoding: "utf8",
   });
+
   expect(out.stdout).toContain("fabrika(one-machine-per-file)");
   expect(out.status).toBe(1);
 });
@@ -900,6 +1087,7 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
 // format: the contract's forbidden Layer import is a lint input, including its static implementation.
 it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
   const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+
   const result = await lintCopies({
     [file]: [
       'import { Context, Effect, Layer, Schema } from "effect";',
@@ -909,12 +1097,14 @@ it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation",
       "}",
     ].join("\n"),
   });
+
   expect(result("eslint(no-restricted-imports)", file)).toContain(1);
 });
 
 // format: the second exported machine is an input to the existing one-machine lint rule.
 it("format: P21 L12 Menu exports only one tea machine", async () => {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+
   const result = await lintCopies({
     [file]: [
       'import { Machine } from "@demlik/tea/effect";',
@@ -925,6 +1115,7 @@ it("format: P21 L12 Menu exports only one tea machine", async () => {
       'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
     ].join("\n"),
   });
+
   expect(result("fabrika(one-machine-per-file)", file)).toContain(6);
 });
 
@@ -932,6 +1123,7 @@ it("format: P21 L12 Menu exports only one tea machine", async () => {
 it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM", async () => {
   const imported = "next/packages/libfabrika/src/desktop/Menu.ts";
   const globals = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+
   const result = await lintCopies({
     [imported]: 'import type { BrowserWindow } from "electron";\nexport type Handle = BrowserWindow;\n',
     [globals]: [
@@ -941,6 +1133,7 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
       "export type ElectronWindow = Electron.BrowserWindow;",
     ].join("\n"),
   });
+
   expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
   expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
 });
@@ -948,6 +1141,7 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
 // format: these module paths include erased imports because platform types count too.
 it("format: P21 L12 desktop refuses gateway and platform imports while admitting access", async () => {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+
   const result = await lintCopies({
     [file]: [
       'import type { Grant } from "../access/Access.ts";',
@@ -959,6 +1153,7 @@ it("format: P21 L12 desktop refuses gateway and platform imports while admitting
       'import type { Document } from "@types/web";',
     ].join("\n"),
   });
+
   expect(result("eslint(no-restricted-imports)", file)).toEqual([2, 3, 4, 5, 6, 7]);
 });
 
@@ -968,12 +1163,14 @@ it("format: P21 desktop is admitted as a module and keeps the front-file naming 
   const bad = "next/packages/libfabrika/src/desktop/bad.ts";
   const contract = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
   const layer = "next/packages/libfabrika/src/desktop/PersonCheckTest.ts";
+
   const result = await lintCopies({
     [front]: "export const view = () => [];\n",
     [bad]: "export const view = () => [];\n",
     [contract]: 'import { Context, Schema } from "effect";\nexport const Answer = Schema.String;\n',
     [layer]: 'import { Layer } from "effect";\nexport const layer = Layer.empty;\n',
   });
+
   expect(result("fabrika(modules)", front)).toEqual([]);
   expect(result("unicorn(filename-case)", front)).toEqual([]);
   expect(result("unicorn(filename-case)", bad)).toEqual([1]);
@@ -984,10 +1181,12 @@ it("format: P21 desktop is admitted as a module and keeps the front-file naming 
 // L12 kept lint inputs. These copies exercise the actual desktop config.
 it("scenario: P19 a Layer on the service class is refused", async () => {
   const path = "next/packages/libfabrika/src/desktop/BrainService.ts";
+
   const result = await lintCopies({
     [path]:
       'import {Context, Layer} from "effect";\nexport class BrainService extends Context.Service<BrainService, {}>()("@kampus/libfabrika/desktop/BrainService") { static layer = Layer.empty; }\n',
   });
+
   expect(result("fabrika(service-contract)", path)).toEqual([2]);
 });
 
@@ -1000,6 +1199,7 @@ it("scenario: P19 desktop-core refuses a native import through the real config",
 // scenario: L12 checks the real config at the new module's paths, including both filename rules.
 it("scenario: T878 L12 repositories keeps private imports, names and one-machine rules", async () => {
   const src = "next/packages/libfabrika/src/";
+
   const files = {
     [`${src}repositories/Repositories.ts`]: "export const snapshot = 1;\n",
     [`${src}repositories/repositories.ts`]: "export const snapshot = 1;\n",
@@ -1012,6 +1212,7 @@ it("scenario: T878 L12 repositories keeps private imports, names and one-machine
       'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n',
     [`${src}repositories/Platform.ts`]: 'import {spawn} from "node:child_process";\nexport {spawn};\n',
   };
+
   const result = await lintCopies(files);
   expect(result("fabrika(modules)", `${src}repositories/Repositories.ts`)).toEqual([]);
   expect(result("unicorn(filename-case)", `${src}repositories/Repositories.ts`)).toEqual([]);

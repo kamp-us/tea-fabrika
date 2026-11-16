@@ -33,6 +33,7 @@ const TIMINGS = {
 export const isTimings = (step: Record<string, unknown>): boolean => {
   const given = map(step["with"]);
   const kept = given["retention-days"];
+
   return (
     uses(step, "actions/upload-artifact") &&
     sameEntries(
@@ -53,8 +54,10 @@ export const timed = (name: string, job: Record<string, unknown>, report: string
   const list = steps(job);
   const tables = list.filter((s) => s["run"] === TIME_TABLE);
   const uploads = list.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path);
+
   const [table] = tables,
     [upload] = uploads;
+
   const errors: string[] = [];
 
   if (

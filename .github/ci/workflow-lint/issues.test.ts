@@ -6,6 +6,7 @@ import { lintIssues } from "./issues.ts";
 
 // Today's CI, serving both versions. Covers issues.ts: who may touch issues.
 const options = { seed: 119120, numRuns: 100 };
+
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
 
 type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
@@ -27,8 +28,11 @@ type Workflow = Record<string, unknown> & {
 // 0534's and 0541's binding constraint: automation opens issues here from two jobs alone,
 // scheduled.yaml's report and ci-speed.yaml's measure.
 const RULE = "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (0534, 0541)";
+
 const SCHEDULED = ".github/workflows/scheduled.yaml";
+
 const SPEED = ".github/workflows/ci-speed.yaml";
+
 const ALLOWED: Record<string, string> = { [SCHEDULED]: "report", [SPEED]: "measure" };
 
 const grant = fc.constantFrom<unknown>(

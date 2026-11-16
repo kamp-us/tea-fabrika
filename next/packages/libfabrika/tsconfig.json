@@ -1,6 +1,298 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "preferSchemaTaggedError": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: unnecessaryArrowBlock (E8), preferUnsafeConstructor (E16),
+          // unnecessaryEffectGen (E17), runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryArrowBlock": "error",
+                "preferUnsafeConstructor": "error",
+                "unnecessaryEffectGen": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          },
+          // These folders: effectSucceedWithVoid (E20).
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "effectSucceedWithVoid": "error"
+              }
+            }
+          },
+          // These folders: schemaNumber (E4).
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error"
+              }
+            }
+          },
+          // These folders: schemaClassMissingBrand (E6).
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaClassMissingBrand": "error"
+              }
+            }
+          },
+          // These folders: preferTypedSchemaDecoder (E5).
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "preferTypedSchemaDecoder": "error"
+              }
+            }
+          },
+          // These folders: unnecessaryTypeofType (E7).
+          {
+            "include": [
+              "src/*.ts",
+              "src/client/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/runtime/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts"
+            ],
+            "exclude": ["src/runtime/ProcessStore.integration.test.ts", "src/runtime/RuntimeCauseTest.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryTypeofType": "error"
+              }
+            }
+          },
+          // These folders: mapMapErrorToMapBoth (E14).
+          {
+            "include": [
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "mapMapErrorToMapBoth": "error"
+              }
+            }
+          },
+          // These folders: schemaStructWithTag (E11).
+          {
+            "include": ["src/client/**/*.ts", "src/node/**/*.ts", "src/processes/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaStructWithTag": "error"
+              }
+            }
+          },
+          // These folders: instanceOfSchema (E10).
+          {
+            "include": ["src/*.ts", "src/access/**/*.ts", "src/node/**/*.ts", "src/settings/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "instanceOfSchema": "error"
+              }
+            }
+          },
+          // These folders: returnEffectInGen (E15).
+          {
+            "include": ["src/cloudflare/**/*.ts", "src/node/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "returnEffectInGen": "error"
+              }
+            }
+          },
+          // These folders: preferSucceedSomeOrNone (E12).
+          {
+            "include": ["src/processes/**/*.ts", "src/runtime/**/*.ts", "src/telemetry/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "preferSucceedSomeOrNone": "error"
+              }
+            }
+          },
+          // These folders: catchToOrElseSucceed (E9).
+          {
+            "include": ["src/node/**/*.ts", "src/transport/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchToOrElseSucceed": "error"
+              }
+            }
+          },
+          // These folders: unnecessaryFailYieldableError (E19).
+          {
+            "include": ["src/node/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryFailYieldableError": "error"
+              }
+            }
+          },
+          // These folders: nestedEffectGenYield (E24).
+          {
+            "include": ["src/runtime/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "nestedEffectGenYield": "error"
+              }
+            }
+          },
+          // These folders: flatMapConditionalToFilterOrFail (E18).
+          {
+            "include": ["src/processes/**/*.ts", "src/telemetry/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "flatMapConditionalToFilterOrFail": "error"
+              }
+            }
+          },
+          // These folders: catchConditionalRefailToCatchIf (E22).
+          {
+            "include": ["src/processes/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchConditionalRefailToCatchIf": "error"
+              }
+            }
+          },
+          // These folders: catchToIgnore (E23).
+          {
+            "include": ["src/telemetry/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchToIgnore": "error"
+              }
+            }
+          },
+          // A library imports each Effect module by its path (0577). On for the folders at zero, their
+          // tests too, until the package is at zero and the block moves up to the whole package.
+          // Each import slice adds its folders here.
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": {
+              "namespaceImportPackages": ["effect"],
+              "diagnosticSeverity": { "preferNamespaceImport": "error" }
+            }
+          }
+        ]
+      }
+    ],
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
     "erasableSyntaxOnly": true

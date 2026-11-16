@@ -12,6 +12,7 @@ type Files = { workflows: Record<string, Parsed>; action: Parsed; workspace: Par
 const realFiles = (): Files => {
   const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
   const files = cacheFiles(read);
+
   return {
     workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, text]) => [path, parse(text)])),
     action: parse(files.action),
@@ -28,7 +29,9 @@ const text = (files: Files) => ({
 });
 
 const checkYaml = (files: Files) => files.workflows[".github/workflows/check.yaml"]!;
+
 const typecheckStep = (files: Files, name: string) => step(checkYaml(files), "typecheck", name);
+
 // The shared setup's steps, read as the one job of a workflow.
 const setup = (files: Files) => ({ jobs: { setup: files.action.runs } });
 
@@ -67,6 +70,7 @@ for (const [name, plant, error] of [
       const jobs = Object.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
+
       jobs[0]!.steps.push({ uses: "actions/setup-node@v7", with: { "node-version": "26.13.0", cache: "pnpm" } });
     },
     ".github/workflows/mutation.yaml: setup-node's cache is a pnpm store cache; use .github/actions/pnpm",
@@ -84,6 +88,7 @@ for (const [name, plant, error] of [
       const jobs = Object.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
+
       jobs[0]!.steps.push({ uses: "pnpm/action-setup@v6", with: { run_install: false, cache: true } });
     },
     ".github/workflows/mutation.yaml: pnpm/action-setup's cache is a pnpm store cache; use .github/actions/pnpm",
@@ -94,6 +99,7 @@ for (const [name, plant, error] of [
       const jobs = Object.values(
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
+
       jobs[0]!.steps.push({
         uses: "actions/cache/save@v6",
         if: `\${{ github.ref == 'refs/heads/main' }}`,

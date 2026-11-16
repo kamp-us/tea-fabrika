@@ -30,6 +30,7 @@ export const stored = <E>(
     const running = yield* scan(instance.dir, "running", accessBodies, proofs);
     yield* instance.stop;
     const stopped = yield* scan(instance.dir, "stopped", accessBodies, proofs);
+
     return {
       outputs: [...running.outputs, ...stopped.outputs],
       raw: [...running.raw, ...stopped.raw],
@@ -49,6 +50,7 @@ const scan = (
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
+
       // Only the running pass passes over a file renamed or deleted between its listing and its read.
       const gone = (error: PlatformError.PlatformError) => pass === "running" && error.reason._tag === "NotFound";
       const keys = [path.join(dir, "person"), path.join(dir, "person.pub")];
@@ -56,13 +58,13 @@ const scan = (
 
       for (const name of yield* fs.readDirectory(dir, { recursive: true })) {
         const file = path.join(dir, name);
-        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (info === undefined || info.type !== "File" || keys.includes(file)) {
           continue;
         }
 
-        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (bytes !== undefined) {
           const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
@@ -84,17 +86,20 @@ const scan = (
         const db = yield* instanceDatabase(file, { readOnly: true });
         const allowed = new Map<string, string>();
         retained.set(file, allowed);
+
         const tables = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
           db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all(),
         );
 
         for (const { name } of tables) {
           const table = `"${name.replaceAll('"', '""')}"`;
+
           const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
             db.prepare(`PRAGMA table_info(${table})`).all(),
           )
             .filter((column) => column.pk > 0)
             .map((column) => column.name);
+
           const select = db.prepare(`SELECT * FROM ${table}`);
           // The runtime's own tables hold 64-bit integers, such as an alarm's time in nanoseconds.
           select.setReadBigInts(true);
@@ -109,6 +114,7 @@ const scan = (
                   : value,
               ]),
             );
+
             const key = keys.length === 0 ? `row ${at}` : `key ${keys.map((column) => String(row[column])).join(" ")}`;
             let cells = row;
 
@@ -134,7 +140,8 @@ const scan = (
             // and for every credential.
             if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
               const value = Schema.decodeUnknownSync(Schema.String)(row.value);
-              const { armored, ...rest } = Schema.decodeUnknownSync(
+
+              const { armored, ...rest } = Schema.decodeSync(
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(value);
 

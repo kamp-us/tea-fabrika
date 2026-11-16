@@ -31,6 +31,7 @@ export const noLedgerSql: CreateRule = {
         });
       }
     };
+
     return {
       Literal(node) {
         if (typeof node.value === "string") {

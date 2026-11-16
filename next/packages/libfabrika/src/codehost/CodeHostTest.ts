@@ -52,8 +52,9 @@ export class Control extends Context.Service<
   }
 >()("@kampus/libfabrika/codehost/CodeHostTest.Control") {}
 
-export const commit = (hex: string) => Schema.decodeUnknownSync(Commit)(hex);
-export const tree = (hex: string) => Schema.decodeUnknownSync(Tree)(hex);
+export const commit = (hex: string) => Schema.decodeSync(Commit)(hex);
+
+export const tree = (hex: string) => Schema.decodeSync(Tree)(hex);
 
 const reasons = { unavailable: Unavailable, rate_limited: RateLimited, refused: Refused };
 
@@ -69,6 +70,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       let serial = 1;
       const used = new Set<string>([main]);
       let crash = false;
+
       const fresh = (size: number) => {
         let id: string;
 
@@ -77,10 +79,13 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         } while (used.has(id));
 
         used.add(id);
+
         return id;
       };
+
       // A host refuses a change it does not know with an answer of its own, never with nothing (0568).
       const missing = (change: number) => new Error(`the scripted host has no change ${change}`);
+
       const failure = (call: Call) =>
         Effect.suspend(() => {
           calls.push(call);
@@ -88,7 +93,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted host failure" : reveal(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CodeHostError({ reason: new reasons[fault.reason]({ cause }) }));
+            return Effect.fail(CodeHostError.make({ reason: reasons[fault.reason].make({ cause }) }));
           }
 
           if (fault?.kind === "defect") {
@@ -101,12 +106,14 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
 
           return Effect.void;
         });
+
       const host = CodeHost.of({
         change: (change) =>
           failure({ method: "change", change }).pipe(
             Effect.andThen(
               Effect.sync(() => {
                 const found = changes.get(change);
+
                 return found === undefined
                   ? Change.cases.missing.make({ change })
                   : Change.cases.found.make({ change, head: found.head, state: found.state, paths: found.paths });
@@ -120,7 +127,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
+                  return Effect.fail(CodeHostError.make({ reason: Refused.make({ cause: missing(change) }) }));
                 }
 
                 if (found.state !== "open") {
@@ -150,8 +157,10 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   tree: tree(fresh(head.length)),
                   main,
                 });
+
                 changes.set(change, { ...found, head: updated.head, tree: updated.tree, base: main });
                 updates.set(JSON.stringify([change, head]), updated);
+
                 return Effect.succeed(updated);
               }),
             ),
@@ -169,7 +178,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: missing(change) }) }));
+                  return Effect.fail(CodeHostError.make({ reason: Refused.make({ cause: missing(change) }) }));
                 }
 
                 if (found.state === "draft" || found.state === "closed") {
@@ -191,6 +200,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
 
                 if (crash) {
                   crash = false;
+
                   return Effect.interrupt;
                 }
 
@@ -199,6 +209,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
             ),
           ),
       });
+
       return Context.make(CodeHost, host).pipe(
         Context.add(Control, {
           put: (data: ChangeData) =>
@@ -238,7 +249,9 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
         size: number;
         serial: number;
       };
+
       type Real = { host: CodeHost["Service"]; control: Control["Service"] };
+
       type Cell = {
         move: number;
         pick: number;
@@ -246,6 +259,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
         head: string;
         conflict: ReadonlyArray<string> | null;
       };
+
       const command = (cell: Cell): fc.Command<Model, Real> => ({
         check: () => true,
         run: (m, r) => {
@@ -266,6 +280,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
               tree: tree(hex(3)),
               conflict: cell.conflict,
             };
+
             m.changes.set(id, data);
             m.updates.delete(id);
             m.merges.delete(id);
@@ -289,12 +304,14 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           } else {
             const merging = cell.move % 7 === 4;
             const previous = merging ? m.merges.get(id) : m.updates.get(id);
+
             const head =
               previous !== undefined && (cell.pick % 2 === 0 || (merging && found.state === "merged"))
                 ? previous.asked
                 : cell.pick % 3 === 0
                   ? commit(hex(7))
                   : found.head;
+
             const answer = merging ? sync(r.host.merge(id, head)) : sync(r.host.update(id, head));
             expect(Schema.is(merging ? Merged : Updated)(answer)).toBe(true);
 
@@ -355,6 +372,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
         },
         toString: () => JSON.stringify(cell),
       });
+
       const commandArb = fc
         .record({
           move: fc.nat(),
@@ -369,6 +387,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           conflict: fc.option(fc.array(fc.constantFrom("a b", "dir/[x]", ".dot")), { nil: null }),
         })
         .map(command);
+
       // pinned: the host's first generated head used to equal an f-padded input in either hash format.
       const collision = { move: 0, pick: 1, state: "open", head: "1".padStart(64, "f"), conflict: null } as const;
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
