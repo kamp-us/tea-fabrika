@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-unsafe-dictionary-type-1-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:32:11-08:00",
+  "ended": "2026-11-16T00:56:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of slice AS-no-unsafe-dictionary-type-1 (ticket 1057, decision 0563 and its amendment) at 3f760662d, the slice's own diff from merge base 797c3c8a8 (132 files): send back to the tests step, one blocking class. anti-slop/no-unsafe-dictionary-type, forced to error in a scratch config outside the repo over the slice's 21 folders, gives exactly 1 hit: next/packages/libfabrika/src/runtime/Entry.ts:133, ProgramLoader.layer's programs, which load decodes with stepper's Schema first; 0563 rule C (a door that decodes with a Schema first) fits, and the ignore line goes in with the rule's lock, since today's lint calls it an unused directive. No disable line, lock line or .oxlintrc.json change in the diff. The new types are honest: YamlMap and YamlValue (yaml's core schema gives only JSON values), oxlint-plugins/json.ts and .agents/skills/lead/scripts/json.ts (aliases of Schema.Json for parsed files), field-schema.ts's Fields, settings/internal/edit.ts's Content and Table (toml-eslint-parser's TOMLValue values are string, number, boolean and Date), the checklist-instance Notice params (a view patch; a non-JSON one would fail the law's count check, not pass it), node:sqlite's SQLOutputValue and libfabrika's SqlValue rows. Product behavior: Gateway.ts, Patch.ts and Runner.ts swap hand checks for Predicate.isObject, which in effect 4.1.3 is the same object-not-array check; quest.ts, chain.ts, Toml*.ts, brain.ts, Recorder.ts and Program.ts change types only or read the same values; Stub.ts now reads own's enumerable string keys once at make, which no caller outside its tests uses. The QuotaRunnerTest.ts rename of e._tag to e.tag touches only the entries filters, and its one driver node/QuotaRunner.test.ts hands whole rows, so toEqual still compares every field. The blocker: next/apps/fabrika/src/door.integration.test.ts:3498, MalformedStampedWrite's wrong edit. Its replacement comes from SpoofedWrite.value, Schema.Union([Schema.Json, Schema.Undefined]) (line 1496), filtered only by a failed decode, so undefined is drawn for a required field; the old code set m[key] = undefined there, and the new `if (missing || value === undefined)` deletes the key instead, to fit MessageState.m's new Schema.JsonObject type. Law p67 spoof no longer generates a message whose field is present with an undefined value, and Gateway.route takes params in process (no JSON on the way), where Object.hasOwn tells the two apart. Fix: type m honestly as Readonly<Record<string, Schema.Json | undefined>> (as the e2e note rows do) and restore `if (missing) delete m[key]; else m[key] = value;`. One finding row: fabrika/no-raw-try-catch fires on a type-only effect import, which is why the three alias files exist. A merge with origin/main at 5c94f12f4 conflicts in oxlint-plugins/namespace-imports.test.ts (deleted on main) and oxlint-plugins/plants.test.ts.",
+  "plants": [
+    {
+      "law": "the slice's hit count, anti-slop/no-unsafe-dictionary-type in a scratch config",
+      "plant": "none needed in the branch: the run over the 21 folders gives the one Entry.ts:133 hit, so the rule reads these files; the tests rows record red plants for yaml.ts, WindowMachine.laws, supervisor.laws and start-member",
+      "result": "red"
+    },
+    {
+      "law": "fabrika/no-raw-try-catch on a type-only import (finding proof), scratch file outside the repo",
+      "plant": "a file with `import type { Schema } from \"effect\"` and one try/catch: the rule reports it at 4:3",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Ran at 3f760662d with Node 26.13.0 after pnpm install --frozen-lockfile: pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes, 18 parts; one pnpm typecheck passes; 50 test files one at a time under nice -n 19 with --maxWorkers=1, all green, among them the .integration. laws the diff reaches, which the 0178 guard allowed (it refused none): runtime/Runner, RunnerSupervision, gateway/GatewayRevocation, node/gateway/Tasks, ledger/LedgerSpans, access/AccessSpans, apps/fabrika door, checklist-instance, start-child, start-member, tezgah-runner and exam/deps. loosening.sh on 797c3c8a8..HEAD: 111 unrecognized changes, all type edits, and 10 removed-expect hits, each the same expect rewritten (a Map's get for an index read, e.tag for e._tag, named(c, \"press\") for c.type === \"press\"); no law loosened by them. Planted by reading: Toml.types.test.ts goes red if Toml.ts's value goes back to Record<string, unknown>; QuotaRunnerTest Q7 goes red if the driver stops renaming _tag; p67 goes red if Gateway drops the inner m reserved check. Not run: .visual. files, box.test.ts (real signals), hands-launcher.integration.test.ts (real SIGTERM).",
+  "step": "review"
+}
