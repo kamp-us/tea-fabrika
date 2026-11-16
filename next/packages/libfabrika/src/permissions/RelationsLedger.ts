@@ -1,9 +1,10 @@
 /**
  * The relation store on the ledger stream `permissions/relations`.
- *
- * @stability unstable
  */
-import { Effect, Layer, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor, valueFor } from "../ledger/Log.ts";
 import { fold } from "./internal/relationsTable.ts";
@@ -24,7 +25,6 @@ const isRow = (entry: Entry): boolean => Object.hasOwn(Row.cases, entry._tag);
  * as `by`, whatever the writer it is given says; the referee keeps a resend as one row. A ledger
  * failure is `storage`, with its cause kept.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: { readonly by: string }): Layer.Layer<Relations, never, LedgerTransaction> =>
@@ -43,7 +43,7 @@ export const layer = (config: { readonly by: string }): Layer.Layer<Relations, n
           const row = decodeRow(valueFor(entry));
 
           if (Result.isFailure(row)) {
-            return Result.fail(new RelationsError({ reason: "bad_row", cause: row.failure }));
+            return Result.fail(RelationsError.make({ reason: "bad_row", cause: row.failure }));
           }
 
           rows.push(row.success);
@@ -61,7 +61,7 @@ export const layer = (config: { readonly by: string }): Layer.Layer<Relations, n
                 turn.append(STREAM, id, lineFor({ ...writer, by: config.by }, row));
               }
             })
-            .pipe(Effect.mapError((cause) => new RelationsError({ reason: "storage", cause })));
+            .pipe(Effect.mapError((cause) => RelationsError.make({ reason: "storage", cause })));
         }),
       });
     }),

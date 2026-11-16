@@ -64,7 +64,7 @@ export const layer = (
           const ran = yield* run("gh", args, cwd);
 
           if (ran.code !== 0) {
-            return yield* new WorkflowRunsError({
+            return yield* WorkflowRunsError.make({
               reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
             });
           }
@@ -73,18 +73,18 @@ export const layer = (
         },
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new WorkflowRunsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(WorkflowRunsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
       const list = Effect.fn("WorkflowRunsGh.list")(function* (args: ReadonlyArray<string>) {
         const out = yield* gh(["run", "list", "-R", repo, "--json", FIELDS, "-L", String(LIMIT), ...args]);
         const runs = yield* runsIn(out).pipe(
-          Effect.mapError(() => new WorkflowRunsError({ reason: "gh run list answered a shape we do not read" })),
+          Effect.mapError(() => WorkflowRunsError.make({ reason: "gh run list answered a shape we do not read" })),
         );
 
         if (runs.length >= LIMIT) {
-          return yield* new WorkflowRunsError({
+          return yield* WorkflowRunsError.make({
             reason: `${LIMIT} or more runs in one list: one read cannot hold all`,
           });
         }

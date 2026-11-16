@@ -23,7 +23,9 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Predicate, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;

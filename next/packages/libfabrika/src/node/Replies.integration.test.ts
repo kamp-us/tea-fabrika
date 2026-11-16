@@ -2,7 +2,11 @@
 // temporary folder; each open is a new connection to the same files, closed with its scope.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";

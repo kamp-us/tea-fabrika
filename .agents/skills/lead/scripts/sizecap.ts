@@ -360,14 +360,14 @@ const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {
 
       return { out, code: Number(code) };
     }),
-  ).pipe(Effect.mapError(() => new Failed({ reason: "git", message: `git ${args.join(" ")} could not run` })));
+  ).pipe(Effect.mapError(() => Failed.make({ reason: "git", message: `git ${args.join(" ")} could not run` })));
 });
 
 const gitOk = Effect.fn("sizecap.gitOk")(function* (args: ReadonlyArray<string>) {
   const ran = yield* git(args);
 
   if (ran.code !== 0) {
-    return yield* new Failed({ reason: "git", message: `git ${args.join(" ")} failed` });
+    return yield* Failed.make({ reason: "git", message: `git ${args.join(" ")} failed` });
   }
 
   return ran.out;
@@ -416,7 +416,7 @@ const plan = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs
       .readFileString(file)
-      .pipe(Effect.mapError(() => new Failed({ reason: "file", message: `cannot read ${file}` })));
+      .pipe(Effect.mapError(() => Failed.make({ reason: "file", message: `cannot read ${file}` })));
     const size = readPlan(text);
 
     yield* Console.log(planLine(size));

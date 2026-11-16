@@ -2,8 +2,6 @@
  * The quota assembly of a brain's objects: the Project's accounts under its ledger, one name's
  * accounting port in its Process object, and the door's quota answer before an input is recorded.
  * The limits come from the start's checked settings snapshot alone.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -29,7 +27,6 @@ const Send = Schema.TaggedStruct("send", { m: Schema.Json });
  * every append and transaction is admitted. A store that refuses the accounting tables fails the
  * build with the ledger's `storage` error, which carries no storage text.
  *
- * @stability unstable
  * @category layers
  */
 export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ readonly values: Values }, E>) =>
@@ -46,7 +43,6 @@ export const project = <E>(sql: Sql, brain: string, settings: Effect.Effect<{ re
  * Process recovery allowance of the start's checked settings. Its tables and fault slot are
  * created here, before the name does any work.
  *
- * @stability unstable
  * @category constructors
  */
 export const process = (sql: Sql, name: string, values: Values): Effect.Effect<Accounting, QuotasError> =>
@@ -59,7 +55,6 @@ export const process = (sql: Sql, name: string, values: Values): Effect.Effect<A
  * Returns the line a delivered input's message is saved as in its name's inbox. The inbox append
  * and the door's quota trial both build it here, so the trial charges what would land.
  *
- * @stability unstable
  * @category constructors
  */
 export const inboxLine = Effect.fnUntraced(function* (input: Incoming, build: string) {
@@ -86,7 +81,6 @@ export const inboxLine = Effect.fnUntraced(function* (input: Incoming, build: st
  * the input. A name that is not live, or a message its inbox already took, is taken: the door's
  * own answer for it stands (0147).
  *
- * @stability unstable
  * @category getters
  */
 export const admitsInput = Effect.fnUntraced(function* (
@@ -113,7 +107,6 @@ export const admitsInput = Effect.fnUntraced(function* (
  * the stream is a process's own stream, so its step record settles the charge its message took
  * ahead. Any other stream is admitted by its owner, as every other write is.
  *
- * @stability unstable
  * @category combinators
  */
 export const runtimeAppend = <A, E, R>(
@@ -132,7 +125,6 @@ export const runtimeAppend = <A, E, R>(
  * entries, so every entry it commits is charged to the program: a hands task's request, its
  * pointer for the hands key and its later collect are, as a checked write is.
  *
- * @stability unstable
  * @category combinators
  */
 export const own = <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
@@ -145,7 +137,6 @@ export const own = <A, E, R>(process: string, work: Effect.Effect<A, E, R>): Eff
  * process's program writing its own entries, so the write is charged to the program. A write over
  * the program's quota answers the `quota` refusal, as a single append's does.
  *
- * @stability unstable
  * @category combinators
  */
 export const ownWrite = <E, R>(process: string, work: Effect.Effect<Appended, E, R>): Effect.Effect<Appended, E, R> =>

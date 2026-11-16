@@ -5,8 +5,6 @@
  * R2's `put` takes a `sha256` and fails when the bytes do not match it, and `head` answers the
  * stored checksums. So `put` here answers the hash R2 says it stored, and the sink deletes its
  * local rows only when that equals the hash it worked out itself.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
 import { WebCrypto } from "effect/crypto";
@@ -16,7 +14,6 @@ import { SinkError } from "./Trace.ts";
  * The two R2 calls the archive makes, as plain Promise calls. R2 fails a `put` whose body does not
  * match `sha256`, and `head` answers null when it finds no file.
  *
- * @stability unstable
  * @category models
  */
 export interface BucketCalls {
@@ -34,7 +31,6 @@ const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toSt
  * It opens no span, since the sink's own work must leave no span for the sink to keep. A WebCrypto
  * failure is a `SinkError` with `reason: "storage"`.
  *
- * @stability unstable
  * @category constructors
  */
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
@@ -59,7 +55,6 @@ const decodeHead = Schema.decodeUnknownEffect(Head);
  * local rows only when that hash equals the one it worked out itself, so a lost or damaged upload
  * costs a retry and no data.
  *
- * @stability unstable
  * @category services
  */
 export class Archive extends Context.Service<

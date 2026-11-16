@@ -2,8 +2,6 @@
  * The quota accounts on any `Sql`: the Project's admission policy with its account reads, and one
  * name's own accounting port. Each charge is saved in the transaction that commits the data it
  * charges.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
@@ -118,7 +116,6 @@ const use = (model: Quota.Model): Use => ({
  * The accounting tables are made when the layer is built. A store that refuses them fails the
  * build with `QuotasError`, its reason `Storage`.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }) =>
@@ -525,7 +522,6 @@ class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pendin
  * Creates the accounting port for one name's own store. It keeps the name's local account, its
  * recovery account and one fault slot in that store's own tables.
  *
- * @stability unstable
  * @category constructors
  */
 export const accounting = (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting => {

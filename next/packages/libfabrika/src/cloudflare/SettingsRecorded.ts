@@ -1,7 +1,5 @@
 /**
  * The layer that puts an instance start on record and hands it on as `RecordedStart`.
- *
- * @stability unstable
  */
 import { Effect, Layer } from "effect";
 import { Digest } from "effect/crypto";
@@ -23,7 +21,6 @@ import * as SettingsInput from "./SettingsInput.ts";
  * Recording the same start again answers the first receipt, so every object of one instance can
  * build this layer for the same input.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (input: Start.Input) =>
