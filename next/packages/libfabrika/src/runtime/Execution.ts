@@ -6,7 +6,7 @@
  * @stability unstable
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
-import { Cause, Effect, Option, Result, Schema } from "effect";
+import { Cause, Effect, Option, Predicate, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
@@ -19,8 +19,7 @@ const Outcome = Schema.TaggedUnion({
   Ok: { value: Schema.Unknown, at: Schema.Number },
   Err: {
     error: Schema.declare<Tagged>(
-      (value): value is Tagged =>
-        typeof value === "object" && value !== null && "_tag" in value && typeof value._tag === "string",
+      (value): value is Tagged => Predicate.isObjectOrArray(value) && "_tag" in value && Predicate.isString(value._tag),
     ),
     at: Schema.Number,
   },

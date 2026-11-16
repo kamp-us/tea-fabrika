@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 
 /** @internal */
@@ -25,7 +25,7 @@ export const u32 = (n: number): Bytes => {
 
 /** @internal */
 export const field = (value: Uint8Array | string): Bytes => {
-  const bytes = typeof value === "string" ? utf8(value) : value;
+  const bytes = Predicate.isString(value) ? utf8(value) : value;
   return join(u32(bytes.length), bytes);
 };
 

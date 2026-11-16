@@ -26,7 +26,7 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -331,7 +331,7 @@ const Desk = (props: PageProps) => {
   ) : (
     tileName(focused)
   );
-  const said = typeof line === "string" ? <span className="says">{line}</span> : line;
+  const said = Predicate.isString(line) ? <span className="says">{line}</span> : line;
   return (
     <>
       <div className="area" ref={area}>

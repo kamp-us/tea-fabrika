@@ -3,6 +3,8 @@
 
 import { dirname, matchesGlob } from "node:path";
 
+import { Predicate, Result } from "effect";
+
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
  * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
@@ -10,7 +12,7 @@ import { dirname, matchesGlob } from "node:path";
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
 export const questKeyed = (saved: unknown): unknown => {
-  if (typeof saved !== "object" || saved === null || !("lane" in saved)) {
+  if (!Predicate.isObjectOrArray(saved) || !("lane" in saved)) {
     return saved;
   }
 
@@ -82,29 +84,16 @@ export const questRoot = (
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
-  let n: unknown;
-
-  try {
-    n = JSON.parse(note);
-  } catch {
-    return [];
-  }
-
-  const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
-  return typeof step === "string" ? [step] : [];
+  const n = Result.getOrUndefined(Result.try((): unknown => JSON.parse(note)));
+  const step = Predicate.hasProperty(n, "step") ? n.step : undefined;
+  return Predicate.isString(step) ? [step] : [];
 };
 
 const stuckIn = (out: string) =>
   out.split("\n").flatMap((line) => {
-    let a: unknown;
+    const a = Result.getOrUndefined(Result.try((): unknown => JSON.parse(line)));
 
-    try {
-      a = JSON.parse(line);
-    } catch {
-      return [];
-    }
-
-    if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
+    if (!Predicate.isTagged(a, "stuck")) {
       return [];
     }
 
@@ -123,7 +112,7 @@ const stuckIn = (out: string) =>
 export const questStuck = (out: string, questSteps: ReadonlySet<string>): string[] =>
   stuckIn(out)
     .filter(({ reason }) => reason !== "unsigned_commit")
-    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && questSteps.has(step))))
+    .filter(({ reason, step }) => !(reason === "stale_link" && !(Predicate.isString(step) && questSteps.has(step))))
     .map((a) => a.line);
 
 /**
@@ -141,9 +130,9 @@ export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[
     };
     const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
     return [
-      typeof a.reason === "string" ? a.reason : "stuck",
-      typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
-      typeof a.step === "string" ? `step ${a.step}` : "",
+      Predicate.isString(a.reason) ? a.reason : "stuck",
+      Predicate.isString(a.sha) ? a.sha.slice(0, 8) : "",
+      Predicate.isString(a.step) ? `step ${a.step}` : "",
       ...paths,
     ]
       .filter(Boolean)
@@ -205,7 +194,7 @@ const LOCKED = [
 const canon = (v: unknown): string =>
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
-    : v !== null && typeof v === "object"
+    : Predicate.isObjectOrArray(v)
       ? `{${Object.keys(v)
           .toSorted()
           .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
@@ -213,17 +202,13 @@ const canon = (v: unknown): string =>
       : JSON.stringify(v);
 
 const lockedPart = (text: string): string | null => {
-  try {
-    const json: unknown = JSON.parse(text);
+  const json = Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
 
-    if (json === null || typeof json !== "object") {
-      return null;
-    }
-
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
-  } catch {
+  if (!Predicate.isObjectOrArray(json)) {
     return null;
   }
+
+  return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
 };
 
 /** One manifest a step's commits touched, as the base and the head hold it (`null`: absent). */

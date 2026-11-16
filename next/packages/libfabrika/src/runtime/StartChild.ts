@@ -7,7 +7,7 @@
  * @stability unstable
  */
 import { Cmd } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 import { Started } from "../processes/Children.ts";
 
 /**
@@ -43,8 +43,8 @@ export const StartRefusal = Schema.Literals([
 
 /** What a step's own check takes: any object, typed as the operands. The host decodes it strictly,
  *  so a malformed start is answered `bad_cmd` and never fails the step that asked for it. */
-const Asked = Schema.declare<typeof StartChildInput.Type>(
-  (value): value is typeof StartChildInput.Type => typeof value === "object" && value !== null,
+const Asked = Schema.declare<typeof StartChildInput.Type>((value): value is typeof StartChildInput.Type =>
+  Predicate.isObjectOrArray(value),
 );
 
 /**
@@ -84,8 +84,8 @@ export const StopChildInput = Schema.Struct({ name: Schema.String });
 const StopRefusal = Schema.Literals(["not_child", "noproc"]);
 
 /** What a step's own check takes for a stop: any object, as for a start; the host decodes it strictly. */
-const AskedStop = Schema.declare<typeof StopChildInput.Type>(
-  (value): value is typeof StopChildInput.Type => typeof value === "object" && value !== null,
+const AskedStop = Schema.declare<typeof StopChildInput.Type>((value): value is typeof StopChildInput.Type =>
+  Predicate.isObjectOrArray(value),
 );
 
 /**

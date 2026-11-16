@@ -45,7 +45,7 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Option, Predicate, Result, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
@@ -178,7 +178,7 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
     }
   }
 
-  if (typeof model !== "string") {
+  if (!Predicate.isString(model)) {
     return refuse("a call names no model, so it has no list price");
   }
 
@@ -200,7 +200,7 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
   );
 };
 
-const named = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+const named = (value: unknown): string | null => (Predicate.isString(value) && value !== "" ? value : null);
 
 /** A transcript's calls and its first and last timestamp, or the first refusal. */
 export const read = (text: string): Result.Result<Transcript, Refused> => {

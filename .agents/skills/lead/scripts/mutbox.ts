@@ -61,7 +61,7 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Console, Effect, FileSystem, Option, Path, Predicate, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
@@ -140,7 +140,7 @@ const WINDOWS = new Set(["electron", "playwright", "@playwright/test"]);
 const loads = (file: string, source: string): ReadonlySet<string> => {
   const names = new Set<string>();
   const add = (node: { readonly type: string; readonly value?: unknown } | null | undefined) => {
-    if (node?.type === "Literal" && typeof node.value === "string") {
+    if (node?.type === "Literal" && Predicate.isString(node.value)) {
       names.add(node.value);
     }
   };
@@ -608,7 +608,7 @@ const sh = Effect.fnUntraced(
       forceKillAfter: `${KILL_GRACE_SECONDS} seconds`,
       ...(stdin === undefined
         ? {}
-        : { stdin: typeof stdin === "string" ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
+        : { stdin: Predicate.isString(stdin) ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
     });
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
       concurrency: 3,

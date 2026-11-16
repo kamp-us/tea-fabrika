@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import { Cause, Effect, Exit, Path, Predicate } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
   rolldown,
@@ -64,7 +64,7 @@ const emitted = (output: RolldownOutput) =>
       total +
       (item.type === "chunk"
         ? bytes(item.code)
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
     0,

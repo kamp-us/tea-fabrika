@@ -9,7 +9,7 @@
  * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Context, Effect, Exit, FileSystem, Option, Path, Predicate, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -112,7 +112,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
           Effect.mapError(fail("table")),
         );
       const exports = manifest.exports;
-      return typeof exports === "object" && Object.hasOwn(exports, "./window")
+      return Predicate.isObjectOrArray(exports) && Object.hasOwn(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
     }
@@ -145,7 +145,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
     const body =
       item.type === "chunk"
         ? item.code
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? item.source
           : new TextDecoder().decode(item.source);
     assets[route] = yield* Asset.makeEffect({ hash: yield* hash(body), type, body }).pipe(
@@ -321,7 +321,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   });
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
-  if (html === undefined || typeof html.source !== "string") {
+  if (html === undefined || !Predicate.isString(html.source)) {
     return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 

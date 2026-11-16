@@ -5,7 +5,7 @@
  */
 import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Duration, Option, Result, Schema } from "effect";
+import { Duration, Option, Predicate, Result, Schema } from "effect";
 
 /**
  * Schema for the job's state: `idle` with the next due time, or `running` with the time of the
@@ -71,7 +71,7 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly cmd: C;
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
-  if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
+  if (Predicate.isNumber(config.period) && !Number.isSafeInteger(config.period)) {
     return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
   }
 

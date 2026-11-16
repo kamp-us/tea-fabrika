@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Predicate, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -233,7 +233,7 @@ export type Line = {
   readonly listUsd: number | null;
 };
 
-const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const str = (v: unknown, or = ""): string => (Predicate.isString(v) ? v : or);
 const FaultS = Schema.Literals(FAULTS);
 const isFault = Schema.is(FaultS);
 
@@ -248,7 +248,7 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
     const d = parsed.success;
 
-    if (d === null || typeof d !== "object" || !("outcome" in d)) {
+    if (!Predicate.isObjectOrArray(d) || !("outcome" in d)) {
       continue;
     }
 
@@ -260,10 +260,10 @@ export const lineOf = (out: string, exit: number): Line | null => {
       head: str(o.head),
       reason,
       fault: isFault(o.fault) ? o.fault : faultFrom(outcome, reason),
-      report: typeof o.report === "string" ? o.report : null,
+      report: Predicate.isString(o.report) ? o.report : null,
       box: str(o.box),
-      exit: typeof o.exit === "number" ? o.exit : exit,
-      listUsd: typeof o.listUsd === "number" ? o.listUsd : null,
+      exit: Predicate.isNumber(o.exit) ? o.exit : exit,
+      listUsd: Predicate.isNumber(o.listUsd) ? o.listUsd : null,
     };
   }
 
@@ -1631,7 +1631,7 @@ export const stepsTable = (
       // A line that is not JSON, or is JSON null, holds no row.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-      if (r?.run && typeof r.listUsd === "number") {
+      if (r?.run && Predicate.isNumber(r.listUsd)) {
         dollars.set(r.run, r.listUsd);
       }
     }
