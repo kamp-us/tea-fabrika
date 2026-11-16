@@ -17,6 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -144,7 +145,7 @@ const capture = () => {
       return span;
     },
   });
-  const ended = (name: string) => spans.filter((s) => s.name === name && s.status._tag === "Ended");
+  const ended = (name: string) => Arr.filter(spans, (s) => s.name === name && s.status._tag === "Ended");
   return { tracer, spans, ended };
 };
 
@@ -152,7 +153,10 @@ const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Object.fromEn
 
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
-  Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+  Arr.findFirst(Object.entries(tags(span)), ([key]) => key === word || key.endsWith(`.${word}`)).pipe(
+    Option.map(([, value]) => value),
+    Option.getOrUndefined,
+  );
 
 const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Object.values(tags(span)).includes(value);
 
@@ -298,7 +302,7 @@ describe("p97, mailbox spans", () => {
         expect(tagged(refused, "reason")).toBe("id_reused");
         const appends = ended("ledger.append");
         expect(appends.length).toBe(2);
-        expect(appends.every((append, i) => within(append, sends[i] ?? placed))).toBe(true);
+        expect(Arr.every(appends, (append, i) => within(append, sends[i] ?? placed))).toBe(true);
         clean(spans);
       }).pipe(Effect.provide(all()), Effect.withTracer(tracer));
     }),
@@ -337,7 +341,7 @@ describe("p97, mailbox spans", () => {
         expect(tags(receive)["messaging.operation.type"]).toBe("receive");
         const reads = ended("ledger.read");
         expect(reads.length).toBeGreaterThan(0);
-        expect(reads.every((read) => within(read, receive))).toBe(true);
+        expect(Arr.every(reads, (read) => within(read, receive))).toBe(true);
         clean(spans);
       }).pipe(Effect.provide(all()), Effect.withTracer(tracer));
     }),
@@ -478,9 +482,10 @@ describe("p97, member spans", () => {
           yield* write(sheet);
           expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
           // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
-          const answers = ended("access.write")
-            .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
-            .sort();
+          const answers = Arr.map(
+            ended("access.write"),
+            (span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`,
+          ).sort();
           expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
           yield* clients.members;
           const read = ended("access.read").at(-1);
@@ -624,7 +629,9 @@ describe("p97, the tags hold the right names and numbers", () => {
         return Effect.gen(function* () {
           yield* write(sheet);
           expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-          const ignored = ended("access.write").find((span) => tagged(span, "answer") === "ignored");
+          const ignored = Option.getOrUndefined(
+            Arr.findFirst(ended("access.write"), (span) => tagged(span, "answer") === "ignored"),
+          );
 
           if (ignored === undefined) {
             return expect.unreachable();

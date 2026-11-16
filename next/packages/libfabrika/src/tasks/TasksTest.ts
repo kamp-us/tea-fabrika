@@ -17,6 +17,7 @@
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -234,7 +235,8 @@ export const BAD_RECORDED: ReadonlyArray<readonly [string, unknown]> = [
 
 /** A result one field away from valid, for the case it has. */
 export const brokenResult = (result: Result, pick: number): unknown => {
-  const fits = BAD_RESULT.filter(
+  const fits = Arr.filter(
+    BAD_RESULT,
     ([key]) =>
       key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),
   );
@@ -406,7 +408,7 @@ const expected = (saved: Saved): Task => {
 };
 
 const at = (world: World, phases: ReadonlyArray<Phase>) =>
-  [...world.tasks.values()].filter((j) => phases.includes(j.phase));
+  Arr.filter([...world.tasks.values()], (j) => phases.includes(j.phase));
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
@@ -446,7 +448,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_other: done,
     collect_early: requested || assigned || started,
   };
-  return moves.filter((move) => can[move]);
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /** An executor for `task` that may take it: its target key, holding every capability it needs. */
@@ -493,17 +495,18 @@ const walk = (
         const wanted = asked.get(key) ?? [];
         expect(saved.length, `${message}: one ${targetStream(key)} line per accepted request`).toBe(wanted.length);
         expect(
-          saved.map((entry) => entry.body),
+          Arr.map(saved, (entry) => entry.body),
           `${message}: each line points at its task`,
         ).toMatchObject(wanted);
         const answer = success(yield* tasks((j) => j.forTarget(key)), `${message}: forTarget`);
-        const open = [...world.tasks.values()].filter(
+        const open = Arr.filter(
+          [...world.tasks.values()],
           (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
         );
         const ids = (all: ReadonlyArray<Task>) =>
-          all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+          Arr.map(all, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
         expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
-          open.map((s) => s.request.id).sort(),
+          Arr.map(open, (s) => s.request.id).sort(),
         );
 
         for (const task of answer.tasks) {
@@ -607,7 +610,7 @@ const walk = (
         case "take_other": {
           const saved = choose([...world.tasks.values()], cell.pick);
           const key = choose(
-            tape.keys.filter((k) => k !== saved.request.target),
+            Arr.filter(tape.keys, (k) => k !== saved.request.target),
             cell.variant,
           );
           const executor = { ...able(saved, cell), key, has: [...CAPABILITIES] };
@@ -621,7 +624,7 @@ const walk = (
         case "take_lacking": {
           const saved = on(["requested", "assigned", "started", "finished", "collected"]);
           const missing = choose(saved.request.needs, cell.variant);
-          const executor = { ...able(saved, cell), has: CAPABILITIES.filter((c) => c !== missing) };
+          const executor = { ...able(saved, cell), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
           refused(
             yield* tasks((j) => j.take(saved.request.id, executor, recorded)),
             "a take without a needed capability",
@@ -925,7 +928,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         "take_other",
         "reopen",
         "take_lacking@requested",
-        ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+        ...Arr.flatMap(["assigned", "started", "finished"] as const, (phase) => [
           `take_again@${phase}` as const,
           `take_lacking@${phase}` as const,
         ]),
@@ -1062,7 +1065,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           }
 
           for (const choice of a.cells) {
-            const owned = [...expected.entries()].filter(([, j]) => j.state._tag === "requested");
+            const owned = Arr.filter([...expected.entries()], ([, j]) => j.state._tag === "requested");
             const move = choice % (owned.length > 0 ? 3 : 2);
 
             if (move === 0) {
@@ -1098,11 +1101,12 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               measured.rows += work.rows - before.rows;
               measured.tasks += a.total;
               const rows = [...actual];
-              const selected = [...expected.values()].filter(
+              const selected = Arr.filter(
+                [...expected.values()],
                 (j) => j.state._tag !== "absent" && j.state.request.process === process,
               );
               const ids = (tasks: ReadonlyArray<Task>) =>
-                tasks.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+                Arr.map(tasks, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);
 

@@ -1,4 +1,5 @@
 import { Arbitrary, Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -12,11 +13,15 @@ export const processClocks = Arbitrary.schema(
 const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
   const bytes = Uint8Array.from([
     ...Array.from({ length: 6 }, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
-    ...random.map((byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),
+    ...Arr.map(random, (byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),
   ]);
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-  const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
-  const suffix = Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join(
+  const bits = `00${Arr.join(
+    Arr.map([...bytes], (byte) => byte.toString(2).padStart(8, "0")),
+    "",
+  )}`;
+  const suffix = Arr.join(
+    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)] ?? ""),
     "",
   );
   return `process_${suffix}`;

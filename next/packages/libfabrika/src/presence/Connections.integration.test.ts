@@ -5,6 +5,8 @@
 // Join values are already checked by P10/P12; probe timestamps come from the gateway.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -52,7 +54,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
           seed: 119120,
           numRuns: 40,
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -159,7 +161,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
             yield* gateways.join(connection());
             yield* TestClock.setTime(NOW + elapsed);
             expect(
-              (yield* gateways.online("key-a")).map((row) => ({
+              Arr.map(yield* gateways.online("key-a"), (row) => ({
                 client: row.client,
                 state: row.state,
               })),
@@ -197,8 +199,8 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-b", B));
         yield* gateways.join(connection("tab-c", W, "key-b"));
-        expect((yield* gateways.online("key-a")).map((row) => row.client).sort()).toEqual(["tab-a", "tab-b"]);
-        expect((yield* gateways.online("key-b")).map((row) => row.client)).toEqual(["tab-c"]);
+        expect(Arr.map(yield* gateways.online("key-a"), (row) => row.client).sort()).toEqual(["tab-a", "tab-b"]);
+        expect(Arr.map(yield* gateways.online("key-b"), (row) => row.client)).toEqual(["tab-c"]);
       }).pipe(Effect.provide(world.layer()));
     }),
   );
@@ -214,16 +216,16 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-b", B));
         expect(
-          (yield* gateways.online("key-a"))
-            .map((row) => ({ client: row.client, state: row.state }))
-            .sort((a, b) => a.client.localeCompare(b.client)),
+          Arr.map(yield* gateways.online("key-a"), (row) => ({ client: row.client, state: row.state })).sort((a, b) =>
+            a.client.localeCompare(b.client),
+          ),
         ).toEqual([
           { client: "tab-a", state: "unknown" },
           { client: "tab-b", state: "online" },
         ]);
         world.failed.delete(A);
         world.pings.set(A, NOW);
-        expect((yield* gateways.online("key-a")).every((row) => row.state === "online")).toBe(true);
+        expect(Arr.every(yield* gateways.online("key-a"), (row) => row.state === "online")).toBe(true);
       }).pipe(Effect.provide(world.layer()));
     }),
   );
@@ -237,8 +239,8 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-a", B));
         yield* gateways.leave("tab-a", A);
-        expect((yield* gateways.online("key-a")).map((row) => row.session)).toEqual([B]);
-        expect(world.asked.map((row) => row.session)).toEqual([B]);
+        expect(Arr.map(yield* gateways.online("key-a"), (row) => row.session)).toEqual([B]);
+        expect(Arr.map(world.asked, (row) => row.session)).toEqual([B]);
         yield* gateways.leave("tab-a", B);
         expect(yield* gateways.online("key-a")).toEqual([]);
       }).pipe(Effect.provide(world.layer()));
@@ -322,12 +324,12 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 
         for (const name of ["connections.join", "connections.online", "connections.probe", "connections.leave"]) {
           expect(
-            spans.filter((span) => span.name === name && span.status._tag === "Ended"),
+            Arr.filter(spans, (span) => span.name === name && span.status._tag === "Ended"),
             name,
           ).toHaveLength(1);
         }
 
-        const join = spans.find((span) => span.name === "connections.join")!;
+        const join = Option.getOrThrow(Arr.findFirst(spans, (span) => span.name === "connections.join"));
         expect(join.attributes.get("fab.connection.client")).toBe("tab-a");
         expect(join.attributes.get("fab.connection.session")).toBe(A);
       }).pipe(Effect.provide(world.layer()), Effect.withTracer(tracer));

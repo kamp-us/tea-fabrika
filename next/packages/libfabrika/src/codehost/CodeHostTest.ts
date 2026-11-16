@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -362,7 +363,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           head: fc.oneof(
             fc
               .array(fc.constantFrom(..."0123456789abcdef"), { minLength: 64, maxLength: 64 })
-              .map((digits) => digits.join("")),
+              .map((digits) => Arr.join(digits, "")),
             fc.integer({ min: 1, max: 32 }).map((n) => n.toString(16).padStart(64, "f")),
           ),
           conflict: fc.option(fc.array(fc.constantFrom("a b", "dir/[x]", ".dot")), { nil: null }),

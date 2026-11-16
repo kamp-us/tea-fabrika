@@ -17,6 +17,7 @@
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Result } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -140,7 +141,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
  */
 const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
   const live: Array<{ subject: string; relation: string; object: string }> = [];
-  return cells.map((cell) => {
+  return Arr.map(cells, (cell) => {
     const thing = choose(OBJECTS, cell.thing);
     const fresh = {
       subject: subjectFor(choose(PERSONS, cell.person)),
@@ -154,12 +155,13 @@ const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
     }
 
     if (cell.move === "unrelated_live" || cell.move === "unrelated_any") {
-      const at = live.findIndex(
+      const at = Arr.findFirstIndex(
+        live,
         (t) => t.subject === fresh.subject && t.relation === fresh.relation && t.object === fresh.object,
       );
 
-      if (at >= 0) {
-        live.splice(at, 1);
+      if (Option.isSome(at)) {
+        live.splice(at.value, 1);
       }
 
       return { row: Relation.Row.cases.unrelated.make(fresh), by: BRAIN };
@@ -211,7 +213,7 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
     changed = false;
 
     for (const [name, union] of Object.entries(rules)) {
-      if (!held.has(name) && union.some(has)) {
+      if (!held.has(name) && Arr.some(union, has)) {
         held.add(name);
         changed = true;
       }
@@ -223,7 +225,7 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
 
 /** The history as ledger entries of `STREAM`, in the referee's order. */
 const toEntries = (history: ReadonlyArray<Written>): ReadonlyArray<Entry> =>
-  history.map(({ row, by }, n) => ({
+  Arr.map(history, ({ row, by }, n) => ({
     ...lineFor(
       {
         by,
@@ -245,11 +247,11 @@ const toEntries = (history: ReadonlyArray<Written>): ReadonlyArray<Entry> =>
 
 /** A turn that holds only these entries; a check reads it and never appends. */
 const turnHolding = (entries: ReadonlyArray<Entry>): LedgerTurn => ({
-  read: (stream, after) => entries.filter((e) => e.stream === stream && e.rev > after),
-  get: (stream, id) => Option.fromNullishOr(entries.find((e) => e.stream === stream && e.id === id)),
-  head: (stream) => entries.reduce((rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev), 0),
+  read: (stream, after) => Arr.filter(entries, (e) => e.stream === stream && e.rev > after),
+  get: (stream, id) => Arr.findFirst(entries, (e) => e.stream === stream && e.id === id),
+  head: (stream) => Arr.reduce(entries, 0, (rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev)),
   // T1041: the newest entry's pos, or none, as the store's position-only read answers.
-  end: (stream) => Option.fromUndefinedOr(entries.filter((e) => e.stream === stream).at(-1)?.pos),
+  end: (stream) => Option.fromUndefinedOr(Arr.filter(entries, (e) => e.stream === stream).at(-1)?.pos),
   append: () => {
     throw new Error("a check never appends");
   },
@@ -266,7 +268,7 @@ const tuplesIn = (relations: Relations["Service"], history: ReadonlyArray<Writte
   return Result.getOrThrow(tuples);
 };
 
-const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.on === thing.type);
+const rightsOn = (thing: Thing): ReadonlyArray<Right> => Arr.filter(RIGHTS, (r) => r.on === thing.type);
 
 /**
  * `within` of a right, on the object as `Ref` its type takes. Each right answers its own proof's
@@ -331,7 +333,7 @@ describe("T953 the permission core's check", () => {
           const oracle = liveTuples(history);
 
           for (const person of PERSONS) {
-            for (const thing of OBJECTS.filter((t) => t.type === "fabrika")) {
+            for (const thing of Arr.filter(OBJECTS, (t) => t.type === "fabrika")) {
               const looped =
                 oracle.has(tupleKey(subjectFor(person), "x", ref(thing))) ||
                 oracle.has(tupleKey(subjectFor(person), "y", ref(thing)));
@@ -408,7 +410,7 @@ describe("T953 the permission core's check", () => {
             // Both objects hold for the subject: its owner rows are the last the brain wrote before the checks.
             const before = [
               ...walkHistory(cells),
-              ...[one, two].map((thing) => ({
+              ...Arr.map([one, two], (thing) => ({
                 row: Relation.Row.cases.related.make({ subject, relation: "owner", object: ref(thing) }),
                 by: BRAIN,
               })),
@@ -418,7 +420,7 @@ describe("T953 the permission core's check", () => {
             // The removed object's proof is made first or last, so a recheck that reads the last call's object fails either way.
             const order = lastIsRemoved ? [kept, removed] : [removed, kept];
             const proofs = new Map(
-              order.map((thing) => {
+              Arr.map(order, (thing) => {
                 const answer = Start.within(tuples, sender, Test.ref("fabrika", thing.id));
                 expect(Result.isSuccess(answer), `L4: ${ref(thing)} holds before the removal`).toBe(true);
                 return [thing.id, Result.getOrThrow(answer)] as const;
@@ -434,7 +436,7 @@ describe("T953 the permission core's check", () => {
 
             const after = [
               ...before,
-              ...RELATIONS.fabrika.map((relation) => ({
+              ...Arr.map(RELATIONS.fabrika, (relation) => ({
                 row: Relation.Row.cases.unrelated.make({ subject, relation, object: ref(removed) }),
                 by: BRAIN,
               })),

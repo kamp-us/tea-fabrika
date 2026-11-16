@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Array as Arr, Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
 const PROCESS: string = Effect.runSync(
@@ -56,10 +56,7 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       continue;
     }
 
-    const keys = p.path
-      .slice(1)
-      .split("/")
-      .map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = Arr.map(p.path.slice(1).split("/"), (k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
     let target = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -493,7 +490,7 @@ describe("P40 the counter under its qualified identity", () => {
                     expect(yield* Stream.runCollect((yield* Mailbox).receive(NAME, 0))).toHaveLength(sent);
                     // The process facts name the qualified program under the registered name.
                     const info = yield* (yield* ProcessManager).info;
-                    expect(info.map((p) => ({ name: p.name, program: p.program }))).toEqual([
+                    expect(Arr.map(info, (p) => ({ name: p.name, program: p.program }))).toEqual([
                       { name: NAME, program: PROGRAM },
                     ]);
                   }).pipe(Effect.provide(yield* session(folder))),
@@ -560,8 +557,8 @@ describe("P40 the counter under its qualified identity", () => {
                 }
 
                 const info = yield* m.info;
-                expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
-                expect(info.every((p) => p.program === PROGRAM)).toBe(true);
+                expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names].sort());
+                expect(Arr.every(info, (p) => p.program === PROGRAM)).toBe(true);
               }
 
               expect(names.length).toBeGreaterThan(0);

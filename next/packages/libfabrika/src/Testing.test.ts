@@ -4,6 +4,7 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -44,7 +45,7 @@ describe("S2 syncTest catches its plants", () => {
     fc.assert(
       fc.property(fc.array(fc.integer({ min: -10, max: 10 }), { maxLength: 12 }), (ns) => {
         expect(() =>
-          syncTest(machine, {}, { msgs: ns.map((n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
+          syncTest(machine, {}, { msgs: Arr.map(ns, (n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
         ).not.toThrow();
       }),
       { seed: SEED, numRuns: 80 },

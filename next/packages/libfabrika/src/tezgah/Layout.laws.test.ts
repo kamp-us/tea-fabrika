@@ -21,6 +21,8 @@
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
 import { TileId, Workspace } from "./Workspace.ts";
@@ -58,7 +60,7 @@ const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => order(p.inner));
+  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => order(p.inner));
 
 /** Every way a workspace is untidy, by the plan's words; empty when tidy. */
 const untidy = (w: Space): ReadonlyArray<string> => {
@@ -80,7 +82,7 @@ const untidy = (w: Space): ReadonlyArray<string> => {
       out.push(`a ${node.dir} inside a ${parent}`);
     }
 
-    const sum = node.parts.reduce((total, p) => total + p.percent, 0);
+    const sum = Arr.reduce(node.parts, 0, (total, p) => total + p.percent);
 
     if (Math.abs(sum - 100) > 1e-6) {
       out.push(`parts sum to ${sum}`);
@@ -147,7 +149,7 @@ const Close = (pick: number): fc.Command<Model, Real> => ({
   run: (m, r) => {
     const tile = m.live[pick % m.live.length]!;
     r.w = Layout.remove(r.w, tileId(tile));
-    m.live = m.live.filter((t) => t !== tile);
+    m.live = Arr.filter(m.live, (t) => t !== tile);
     after(m, r, `close ${tile}`);
   },
   toString: () => `close ${pick}`,
@@ -196,7 +198,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
         ? null
         : {
             ...w,
-            layout: { ...root, parts: root.parts.map((p, i) => (i === 0 ? { ...p, percent: p.percent + 1 } : p)) },
+            layout: { ...root, parts: Arr.map(root.parts, (p, i) => (i === 0 ? { ...p, percent: p.percent + 1 } : p)) },
           };
     case "twice": {
       const tiles = order(root);
@@ -264,14 +266,14 @@ type Box = { readonly x: number; readonly y: number; readonly width: number; rea
 
 /** The smallest box around every tile under `node`, from the tiles' rectangles. */
 const extent = (node: Node, at: ReadonlyMap<string, Box>): Box => {
-  const boxes = order(node).map((t) => at.get(t)!);
-  const x = Math.min(...boxes.map((b) => b.x));
-  const y = Math.min(...boxes.map((b) => b.y));
+  const boxes = Arr.map(order(node), (t) => at.get(t)!);
+  const x = Math.min(...Arr.map(boxes, (b) => b.x));
+  const y = Math.min(...Arr.map(boxes, (b) => b.y));
   return {
     x,
     y,
-    width: Math.max(...boxes.map((b) => b.x + b.width)) - x,
-    height: Math.max(...boxes.map((b) => b.y + b.height)) - y,
+    width: Math.max(...Arr.map(boxes, (b) => b.x + b.width)) - x,
+    height: Math.max(...Arr.map(boxes, (b) => b.y + b.height)) - y,
   };
 };
 
@@ -282,7 +284,9 @@ const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: n
   const whole = extent(layout, at);
 
   if (
-    ![whole.x - size.x, whole.y - size.y, whole.width - size.width, whole.height - size.height].every((d) => near(d, 0))
+    !Arr.every([whole.x - size.x, whole.y - size.y, whole.width - size.width, whole.height - size.height], (d) =>
+      near(d, 0),
+    )
   ) {
     out.push(`the tiles fill ${JSON.stringify(whole)}, the window ${JSON.stringify(size)}`);
   }
@@ -296,7 +300,7 @@ const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: n
     const row = node.dir === "row";
     const start = (b: Box) => (row ? b.x : b.y);
     const long = (b: Box) => (row ? b.width : b.height);
-    const parts = node.parts.map((p) => extent(p.inner, at));
+    const parts = Arr.map(node.parts, (p) => extent(p.inner, at));
     const left = long(box) - (node.parts.length - 1) * gap;
     let edge = start(box);
 
@@ -342,7 +346,7 @@ const shortest = (node: Node, width: number, height: number, gap: number): numbe
 
   const left = (node.dir === "row" ? width : height) - (node.parts.length - 1) * gap;
   return Math.min(
-    ...node.parts.map((p) =>
+    ...Arr.map(node.parts, (p) =>
       node.dir === "row"
         ? shortest(p.inner, (left * p.percent) / 100, height, gap)
         : shortest(p.inner, width, (left * p.percent) / 100, gap),
@@ -366,7 +370,7 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
           const layout = encode(real.w).layout;
           fc.pre(shortest(layout, width, height, gap) > 1);
           const at = Layout.rects(real.w.layout, { width, height }, { gap }) as ReadonlyMap<string, Box>;
-          nested += typeof layout !== "string" && layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
+          nested += typeof layout !== "string" && Arr.some(layout.parts, (p) => typeof p.inner !== "string") ? 1 : 0;
           expect([...at.keys()].sort(), "every tile has its rectangle").toEqual([...order(layout)].sort());
           expect(gapBreaks(layout, at, { x: 0, y: 0, width, height }, gap), `gap ${gap} in ${width}x${height}`).toEqual(
             [],
@@ -450,11 +454,14 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
           const box = boxes.get(from)!;
 
           for (const side of SIDES) {
-            const shares = order(layout)
-              .filter((t) => t !== from)
-              .map((t) => ({ t, share: overlap(box, boxes.get(t)!, side) }))
-              .filter((x) => x.share > 0);
-            const most = Math.max(0, ...shares.map((x) => x.share));
+            const shares = Arr.filter(
+              Arr.map(
+                Arr.filter(order(layout), (t) => t !== from),
+                (t) => ({ t, share: overlap(box, boxes.get(t)!, side) }),
+              ),
+              (x) => x.share > 0,
+            );
+            const most = Math.max(0, ...Arr.map(shares, (x) => x.share));
             const got = Layout.neighbor(real.w.layout, tileId(from), side);
 
             if (shares.length === 0) {
@@ -464,8 +471,8 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
             }
 
             seen.found++;
-            seen.uneven += new Set(shares.map((x) => x.share.toFixed(9))).size > 1 ? 1 : 0;
-            const picked = shares.find((x) => x.t === got);
+            seen.uneven += new Set(Arr.map(shares, (x) => x.share.toFixed(9))).size > 1 ? 1 : 0;
+            const picked = Option.getOrUndefined(Arr.findFirst(shares, (x) => x.t === got));
             expect(
               picked,
               `L26: ${side} of ${from} is a tile touching that side in ${JSON.stringify(layout)}`,
@@ -475,7 +482,7 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
               `L26: ${side} of ${from} has the most overlap of ${JSON.stringify(shares)} in ${JSON.stringify(layout)}`,
             ).toBeGreaterThan(most - 1e-6);
             // The tie rule: of the tiles sharing the most overlap, the first in reading order.
-            const tied = shares.filter((x) => x.share > most - 1e-6);
+            const tied = Arr.filter(shares, (x) => x.share > most - 1e-6);
             seen.tie += tied.length > 1 ? 1 : 0;
             expect(
               got,

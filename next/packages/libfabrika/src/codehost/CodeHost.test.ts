@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -11,11 +12,11 @@ it("L1: Path refuses a whole dot or parent segment at any position", () => {
   // Custom fast-check data builds invalid inputs that the accepted Path schema cannot generate.
   const segments = fc
     .array(fc.constantFrom("a b", "dir/[x]", ".dot"))
-    .map((paths) => paths.flatMap((path) => path.split("/")));
+    .map((paths) => Arr.flatMap(paths, (path) => path.split("/")));
   const dotPaths = segments.chain((parts) =>
     fc.integer({ min: 0, max: parts.length }).map((index) => ({
-      dot: [...parts.slice(0, index), ".", ...parts.slice(index)].join("/"),
-      parent: [...parts.slice(0, index), "..", ...parts.slice(index)].join("/"),
+      dot: Arr.join([...parts.slice(0, index), ".", ...parts.slice(index)], "/"),
+      parent: Arr.join([...parts.slice(0, index), "..", ...parts.slice(index)], "/"),
     })),
   );
   const decode = Schema.decodeUnknownOption(CodeHost.Path);

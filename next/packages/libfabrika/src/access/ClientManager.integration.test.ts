@@ -24,6 +24,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -121,7 +123,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
           seed: SEED,
           numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -261,9 +263,9 @@ const eventId = (event: MemberEvent): string => {
 const view = (m: Access) => ({
   person: m.person,
   name: m.name,
-  keys: [...m.keys.entries()]
-    .map(([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under }))
-    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+  keys: Arr.map([...m.keys.entries()], ([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under })).sort(
+    (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  ),
   spent: [...m.spent].sort(),
 });
 
@@ -303,7 +305,7 @@ describe("p96 and p97, replay and write answers", () => {
       return Effect.gen(function* () {
         for (const signer of ["pA", "wA", "unknown-signer"]) {
           const answer = yield* write(granted(signer, key));
-          const span = spans.filter((s) => s.name === "access.write").at(-1)!;
+          const span = Arr.filter(spans, (s) => s.name === "access.write").at(-1)!;
           expect(span.attributes.get("fab.access.answer")).toBe(answer._tag);
 
           if (answer._tag === "refused") {
@@ -362,7 +364,7 @@ describe("p96, founded is written once, by the first call", () => {
           ),
         );
         const written = yield* entries;
-        expect(written.map((e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
+        expect(Arr.map(written, (e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
         yield* members;
         expect((yield* entries).length).toBe(1);
       }).pipe(Effect.provide(clientsOn(onSql(fresh()), founder))),
@@ -402,7 +404,12 @@ describe("p96, founded is written once, by the first call", () => {
           { concurrency: "unbounded" },
         ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
         const written = yield* entries.pipe(Effect.provide(onSql(sql)));
-        expect(written.filter((e) => e._tag === "founded").map((e) => e.id)).toEqual(["founded"]);
+        expect(
+          Arr.map(
+            Arr.filter(written, (e) => e._tag === "founded"),
+            (e) => e.id,
+          ),
+        ).toEqual(["founded"]);
       }),
     ),
   );
@@ -440,7 +447,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
     const two = ClientManagerLedger.layer(noBuild);
     // @ts-expect-error neither can be left out
     const three = ClientManagerLedger.layer(base);
-    expect([one, two, three].every(Layer.isLayer)).toBe(true);
+    expect(Arr.every([one, two, three], Layer.isLayer)).toBe(true);
   });
 
   /** A Ledger whose append of `founded` is refused with `reason`, after `before` runs. */
@@ -490,7 +497,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
         return Effect.gen(function* () {
           expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
           expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
-          expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
+          expect(Arr.map(yield* entries, (e) => e.id)[0]).toBe("founded");
         }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
       }),
     ),
@@ -669,7 +676,12 @@ describe("p96, the stolen sheet race", () => {
           expect(m.keys.get("pC")?.live ?? false).toBe(false);
           expect(m.keys.get("pA")?.live).toBe(true);
           // Both events are in the log; the fold took only the first.
-          expect((yield* entries).map((e) => e.id)).toEqual(["founded", eventId(sheet), eventId(macX), eventId(macC)]);
+          expect(Arr.map(yield* entries, (e) => e.id)).toEqual([
+            "founded",
+            eventId(sheet),
+            eventId(macX),
+            eventId(macC),
+          ]);
         }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
       }),
     ),
@@ -693,12 +705,12 @@ describe("p96, the stolen sheet race", () => {
               ],
               { concurrency: "unbounded" },
             ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
-            expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
-            const lost = answers.find((a) => a._tag !== "applied");
+            expect(Arr.filter(answers, (a) => a._tag === "applied").length, `round ${round}`).toBe(1);
+            const lost = Option.getOrUndefined(Arr.findFirst(answers, (a) => a._tag !== "applied"));
             expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
             expect(lost !== undefined && "reason" in lost ? lost.reason : null).toBe("used");
             const m = yield* members.pipe(Effect.provide(one));
-            expect([m.keys.get(device)?.live, m.keys.get("pX")?.live].filter((l) => l === true)).toEqual([true]);
+            expect(Arr.filter([m.keys.get(device)?.live, m.keys.get("pX")?.live], (l) => l === true)).toEqual([true]);
           }
         }),
     ),
@@ -793,7 +805,7 @@ describe("p96, write tells the truth over any history", () => {
 
               if (answer._tag === "applied") {
                 applied++;
-                const placed = after.find((e) => e.rev === answer.rev);
+                const placed = Option.getOrUndefined(Arr.findFirst(after, (e) => e.rev === answer.rev));
                 expect(placed?.id, next._tag).toBe(eventId(next));
 
                 if (answer.rev > head) {

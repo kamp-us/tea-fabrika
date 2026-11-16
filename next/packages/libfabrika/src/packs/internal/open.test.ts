@@ -5,6 +5,8 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
 import type { Schema } from "effect";
 import { Arbitrary, Effect } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
@@ -90,7 +92,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         if (result._tag === "saving") {
           expect(result.snapshot).toEqual(snapshot);
           expect(result.request).toBe(selection);
-          const other = draw.selections.find((id) => id !== selection)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.selections, (id) => id !== selection));
           const receipt = draw.receipts[pick % draw.receipts.length]!;
           expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
           expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
@@ -209,7 +211,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           old.push({ type: "failed", selection, request, reason: draw.failures[pick % draw.failures.length]! });
         }
 
-        const alternatives = draw.selections.filter((id) => id !== selection);
+        const alternatives = Arr.filter(draw.selections, (id) => id !== selection);
         selection = alternatives[pick % alternatives.length]!;
         snapshot = draw.snapshots[pick % draw.snapshots.length]!;
         accepted = false;
@@ -245,7 +247,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       for (const cell of draw.cells) {
         const moves = ["advance", "replace", "close"];
 
-        if (old.some((msg) => "selection" in msg && msg.selection !== selection)) {
+        if (Arr.some(old, (msg) => "selection" in msg && msg.selection !== selection)) {
           moves.push("late");
         }
 
@@ -266,7 +268,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         } else if (move === "close") {
           send({ type: "close" }, "closed");
         } else if (move === "late") {
-          const late = old.filter((msg) => "selection" in msg && msg.selection !== selection);
+          const late = Arr.filter(old, (msg) => "selection" in msg && msg.selection !== selection);
           const before = model;
           send(late[cell.pick % late.length]!, cursor.phase);
           expect(model).toEqual(before);
@@ -276,7 +278,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
             "refused",
           );
         } else if (move === "wrong-request") {
-          const other = draw.answers.find((id) => id !== request)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.answers, (id) => id !== request));
           const before = model;
           send(
             { type: "saved", selection, request: other, receipt: draw.receipts[cell.pick % draw.receipts.length]! },

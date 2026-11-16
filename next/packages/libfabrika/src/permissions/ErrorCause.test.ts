@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 
@@ -56,9 +57,10 @@ const encoded = fc
  */
 const own = (value: object) =>
   Object.fromEntries(
-    Object.getOwnPropertyNames(value)
-      .filter((key) => key !== "stack")
-      .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),
+    Arr.map(
+      Arr.filter(Object.getOwnPropertyNames(value), (key) => key !== "stack"),
+      (key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value],
+    ),
   );
 
 describe("T1062 L4, a sender error whose cause may be missing reads a cause written as undefined", () => {

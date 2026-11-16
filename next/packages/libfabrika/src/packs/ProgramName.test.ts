@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -56,7 +57,10 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
   if (space > 0 && n % 3 !== 0) {
     // Fill to the bound now and then, so the 256th character is reached, not only approached.
     const add = n % 5 === 0 ? space : 1 + (n % Math.min(space, 4));
-    const tail = Array.from({ length: add }, (_, i) => pick([...REST], n + i)).join("");
+    const tail = Arr.join(
+      Array.from({ length: add }, (_, i) => pick([...REST], n + i)),
+      "",
+    );
     return { name: { ...name, [key]: name[key] + tail }, move: `grow ${key} by ${add}` };
   }
 
@@ -128,8 +132,8 @@ describe("P40 qualified program names", () => {
       fc.asyncProperty(tape, async (tape) => {
         const steps = walk(tape);
         // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
-        expect(steps.some((s) => s.accepted && s.move !== "start")).toBe(true);
-        expect(steps.some((s) => !s.accepted)).toBe(true);
+        expect(Arr.some(steps, (s) => s.accepted && s.move !== "start")).toBe(true);
+        expect(Arr.some(steps, (s) => !s.accepted)).toBe(true);
 
         for (const step of steps) {
           const decoded = decode(step.name);

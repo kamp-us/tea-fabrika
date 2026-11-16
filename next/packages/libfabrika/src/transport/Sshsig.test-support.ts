@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
@@ -25,11 +26,11 @@ export const check = (armored: string, signers: ReadonlyArray<string>, body: str
 export const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 export const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  parts.reduce((offset, p) => {
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
+  Arr.reduce(parts, 0, (offset, p) => {
     out.set(p, offset);
     return offset + p.length;
-  }, 0);
+  });
   return out;
 };
 
@@ -45,17 +46,17 @@ export const str = (s: Uint8Array | string): Uint8Array => {
 };
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
-export const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
+export const rows = (body: string): string => Arr.join(body.match(/.{1,70}/g) ?? [], "\n");
 
 export const armor = (blob: Uint8Array): string =>
   `-----BEGIN SSH SIGNATURE-----\n${rows(base64(blob))}\n-----END SSH SIGNATURE-----\n`;
 
 export const unarmor = (armored: string): Uint8Array =>
   Buffer.from(
-    armored
-      .split("\n")
-      .filter((row) => !row.startsWith("-----"))
-      .join(""),
+    Arr.join(
+      Arr.filter(armored.split("\n"), (row) => !row.startsWith("-----")),
+      "",
+    ),
     "base64",
   );
 

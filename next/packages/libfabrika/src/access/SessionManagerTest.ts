@@ -8,6 +8,7 @@
 // driver and no ledger file (0043 rule 11, 0062).
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Brand, Effect, Option, Result, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -174,12 +175,9 @@ const authorityProperty = (
 
 const snapshot = (sql: Sql) =>
   JSON.stringify(
-    sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"), ({ name }) => [
       name,
-      sql
-        .exec(`SELECT * FROM "${String(name)}"`)
-        .map((row) => JSON.stringify(row))
-        .sort(),
+      Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => JSON.stringify(row)).sort(),
     ]),
   );
 

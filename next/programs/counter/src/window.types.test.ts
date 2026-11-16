@@ -10,7 +10,7 @@
 // - `./program.ts` exports `counterModel`, the model schema the machine holds, and `counterKeys`, the
 //   default key rows, one per input. `./window.tsx` exports `CounterWindow` and `counterWindow`.
 import { defineWindow, type WindowProps } from "@kampus/libfabrika";
-import { Exit, Schema } from "effect";
+import { Array as Arr, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { counter, counterKeys, counterMachine, counterModel } from "./program.ts";
@@ -83,14 +83,12 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
           `counter.${input}`
         ];
         expect(row?.length, `counter.${input} has a default row`).toBeGreaterThan(0);
-        expect(row!.every((key) => typeof key === "string" && key.length > 0)).toBe(true);
+        expect(Arr.every(row!, (key) => typeof key === "string" && key.length > 0)).toBe(true);
       }),
       { seed: 119120, numRuns: 100 },
     );
-    expect(
-      Object.keys(counterKeys)
-        .map((command) => command.slice("counter.".length))
-        .sort(),
-    ).toEqual(Object.keys(counter.inputs).sort());
+    expect(Arr.map(Object.keys(counterKeys), (command) => command.slice("counter.".length)).sort()).toEqual(
+      Object.keys(counter.inputs).sort(),
+    );
   });
 });

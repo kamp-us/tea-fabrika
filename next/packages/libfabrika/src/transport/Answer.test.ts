@@ -2,6 +2,8 @@
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";
@@ -115,7 +117,7 @@ describe("P10 JSON-RPC", () => {
           error: { code: -32000, message: "rate_limited", data: { reason: "rate_limited", retryAfter } },
         });
         expect(reply.attached).toEqual(attached);
-        const span = spans.find((s) => s.name === "transport.answerFrame")!;
+        const span = Option.getOrThrow(Arr.findFirst(spans, (s) => s.name === "transport.answerFrame"));
         expect(span.status._tag).toBe("Ended");
         expect(span.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }),
