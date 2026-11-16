@@ -4,10 +4,10 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
-import { QuotasError, type Accounting } from "../processes/Quotas.ts";
+import { Context, Effect, Layer, Schema, Struct } from "effect";
+import { QuotasError, type Accounting, type Charge } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
-import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
+import { changes, JournalState, Receipt, supervisorFields, Work } from "./internal/recovery.ts";
 
 /**
  * Reason for a journal that could not be read or written: the `Sql` threw, or a save would grow
@@ -112,7 +112,9 @@ const generationIn = (value: unknown): number | null => (typeof value === "numbe
  * The journal row and its receipts live in separate rows; `load` merges them back, and `save`
  * writes only the receipts that changed, in one transaction. A save that would grow the database
  * past `capacity` fails with `storage` and keeps the old rows. A row that does not decode, or is
- * stored under another name, fails with `bad_row`.
+ * stored under another name, fails with `bad_row`. With `accounting`, a save in or leaving a
+ * recovery state is charged to recovery (0147), a save of only the supervisor's own fields to the
+ * supervisor (0593), and every other save to the program.
  *
  * @stability unstable
  * @category constructors
@@ -134,6 +136,22 @@ export const recoveryStore = <S extends Kept>(
     return { ...row, ...kept(row) };
   };
   const encode = Schema.encodeUnknownSync(Row);
+  // The journal row without the supervisor's own fields and receipts: what a program's save changes.
+  const owned = Schema.encodeUnknownSync(
+    Schema.fromJsonString(Schema.Struct(Struct.omit(options.schema.fields, [...supervisorFields, "receipts"]))),
+  );
+  /**
+   * Who pays for a save (0593, 0147): recovery when the journal is in or leaves a recovery state;
+   * the supervisor when the save writes no receipt row and changes only its own fields, or is a
+   * first save with no receipts, the supervisor's record of its child; else the program, whole,
+   * even when the save also changes a supervisor field.
+   */
+  const charge = (saved: Kept, previous: Kept | null, receipts: number): Charge =>
+    recoveryState(saved) || recoveryState(previous)
+      ? "recovery"
+      : receipts === 0 && (previous === null ? saved.receipts.length === 0 : owned(saved) === owned(previous))
+        ? "supervisor"
+        : "program";
   const check = Schema.decodeUnknownSync(options.schema);
   const tables = () => {
     for (const query of TABLES) {
@@ -280,7 +298,7 @@ export const recoveryStore = <S extends Kept>(
             changed.length + (journal === text ? 0 : 1),
             growth,
             clock.currentTimeMillisUnsafe(),
-            recoveryState(saved) || recoveryState(previous),
+            charge(saved, previous, changed.length),
           );
 
           for (const receipt of changed) {

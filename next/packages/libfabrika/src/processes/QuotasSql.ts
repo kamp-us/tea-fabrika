@@ -25,6 +25,7 @@ import {
   Storage,
   type Accounting,
   type Allowance,
+  type Charge,
   type Limits,
   type Use,
 } from "./Quotas.ts";
@@ -139,6 +140,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       program: () => ({ writes: limits.writes, bytes: limits.storage, message: limits.recovery.project.message }),
       recovery: ({ location }) => limits.recovery[location],
       local: () => limits.recovery.process,
+      supervisor: () => limits.recovery.process,
     });
   const machine = (account: Quota.Account) => Quota.make({ account, limits: allowance(account) });
   const load = (account: Quota.Account) => {
@@ -520,13 +522,15 @@ class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pendin
 
 /**
  * Creates the accounting port for one name's own store. It keeps the name's local account, its
- * recovery account and one fault slot in that store's own tables.
+ * supervisor tally, its recovery account and one fault slot in that store's own tables.
  *
  * @category constructors
  */
 export const accounting = (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting => {
   const local = Quota.Account.cases.local.make({ name: options.name });
+  const supervisor = Quota.Account.cases.supervisor.make({ name: options.name });
   const recovery = Quota.Account.cases.recovery.make({ name: options.name, location: "process" });
+  const accounts: Record<Charge, Quota.Account> = { program: local, recovery, supervisor };
   const machine = (account: Quota.Account) => Quota.make({ account, limits: options.limits });
   const initialize = () => {
     for (const query of LocalTables) {
@@ -605,13 +609,15 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
       },
       catch: failed,
     }),
-    change: (operation, writes, bytes, at, inRecovery = false) => {
-      const account = inRecovery ? recovery : local;
+    change: (operation, writes, bytes, at, charge) => {
+      const account = accounts[charge];
 
       if (writes === 0 && bytes === 0) {
         return;
       }
 
+      // A saved reserve fault refuses every charge, a supervisor one too: a stopped name writes
+      // nothing until a checked restart clears it.
       const stopped = fault();
 
       if (stopped !== null) {
@@ -640,7 +646,12 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
             type: "advance",
             at: clock.currentTimeMillisUnsafe(),
           })[0];
-          return { program: load(local).total, recovery: use(reserve), fault: fault()?.fault ?? null };
+          return {
+            program: load(local).total,
+            supervisor: load(supervisor).total,
+            recovery: use(reserve),
+            fault: fault()?.fault ?? null,
+          };
         },
         catch: failed,
       }),

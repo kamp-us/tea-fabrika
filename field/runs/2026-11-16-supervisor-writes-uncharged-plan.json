@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-supervisor-writes-uncharged-plan",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T23:38:40-08:00",
+  "ended": "2026-11-15T23:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for decision 0593 in next/ (docs/plan/quests/supervisor-writes-uncharged-PLAN.md): RecoveryStore charges a journal save that changes only the supervisor's own fields (named in a new `bookkeeping` list beside the Supervision schema) to a new `supervisor` tally in the name's own store, counted and never limited; recovery saves stay on the reserve (0147); a program's own save is charged as today. Four supervisor-only saves the program paid for are found: the first boot save, the healthy mark, `swapped` and `limited` while idle. Restart counts already went to recovery. Six laws: L1 and L2 red today (the healthy mark), L3 and L4 for the program's own saves and restarts, L5 and L6 type laws. plancheck --draft passes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "The session could not reach www.erlang.org or kubernetes.io, so the OTP and Kubernetes quotes come from the repo's own earlier reads (experiments 239 and 254, docs/direction/follows/kubernetes.md) and the plan marks the anchors as not fetched. The start time is the first time read in the session; some reading came before it. No test or typecheck ran: the plan step only reads.",
+  "step": "plan"
+}

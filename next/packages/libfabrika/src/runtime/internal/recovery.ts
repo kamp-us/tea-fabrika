@@ -116,6 +116,23 @@ export const JournalState = Schema.Struct({
 });
 
 /**
+ * @internal The fields of a saved journal only its supervisor writes: its record of the child
+ * (`policy`, `build`, `maxDeliveries`) and its restart bookkeeping (0593). Named here by their
+ * text, so the store below the supervisor reads them without the supervisor's schema;
+ * `supervisor.ts` ties each name to that schema as `bookkeeping`.
+ */
+export const supervisorFields = [
+  "build",
+  "crashes",
+  "healthyAt",
+  "maxDeliveries",
+  "observations",
+  "policy",
+  "requests",
+  "restarts",
+] as const;
+
+/**
  * @internal Compares each receipt's text with the text its row holds in `rows`, keyed by letter. A
  * receipt equal to its row is skipped. A changed one adds the difference in bytes, and a new one
  * also adds its key, `name` and letter, as the row's own bytes.

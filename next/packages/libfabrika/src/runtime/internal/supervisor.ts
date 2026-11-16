@@ -8,7 +8,18 @@ import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
 import { Checkpoint } from "../ProcessStore.ts";
-import { AttemptFields, Count, Deliveries, Failure, Millis, Observation, Policy, Receipt, Text } from "./recovery.ts";
+import {
+  AttemptFields,
+  Count,
+  Deliveries,
+  Failure,
+  Millis,
+  Observation,
+  Policy,
+  Receipt,
+  supervisorFields,
+  Text,
+} from "./recovery.ts";
 import { Reply } from "./reply.ts";
 
 /** @internal */
@@ -154,6 +165,13 @@ export const Supervision = Schema.Struct({
 
 /** @internal */
 export type Supervision = typeof Supervision.Type;
+
+/**
+ * @internal The fields only the supervisor writes: its child record and its restart bookkeeping
+ * (0593). A save that changes nothing else is the supervisor's, never the program's. `satisfies`
+ * ties each name to the schema, so a renamed field fails to compile.
+ */
+export const bookkeeping = supervisorFields satisfies ReadonlyArray<keyof Supervision>;
 
 const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: F) =>
   Schema.Struct({ type: Schema.Literal(type), ...fields });

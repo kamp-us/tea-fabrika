@@ -2071,7 +2071,8 @@ describe("P34c live object accounting", () => {
           expect(local.program.writes).toBeGreaterThan(0);
 
           // The process's own healthy mark is saved on its first idle turn once its policy's reset
-          // window has passed, and its program pays for that write. This law moves the clock less
+          // window has passed, and that save is the supervisor's (0593, law L2 below), which the program
+          // paid for before. This law moves the clock less
           // than that window, so any write it sees is the refusal's or the hour's.
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
           const { policy } = Schema.decodeUnknownSync(
@@ -2133,6 +2134,90 @@ describe("P34c live object accounting", () => {
           // The required case: the hour turned inside a refused send, from the old hour.
           expect(turned, "no refused send crossed the hour").not.toBeNull();
           expect(turned).toBeLessThan(hour);
+        }),
+      ),
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
+  );
+  // 0593 (docs/plan/quests/supervisor-writes-uncharged-PLAN.md, L2): the finding's own objects. The
+  // write the hour-crossing law above ruled out of a refusal is the healthy mark, and it is the
+  // supervisor's, not the program's: its local account read 16 writes where it read 15, bytes 934 both.
+  effect.effect.prop(
+    "L2 the healthy mark after the journal's reset window is the supervisor's write, not the program's",
+    {
+      // Milliseconds past the journal's own reset window that the frozen clock jumps.
+      extra: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 900 })),
+      reopen: Schema.Boolean,
+    },
+    ({ extra, reopen }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              vi.useFakeTimers({ toFake: ["Date"] });
+              vi.setSystemTime(Date.parse(SENT));
+            }),
+            () => Effect.sync(() => vi.useRealTimers()),
+          );
+          const w = yield* Effect.acquireRelease(
+            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            (w) => Effect.promise(() => w.close()),
+          );
+          yield* Effect.promise(() => w.project.info());
+          const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+          const door = yield* Effect.acquireRelease(
+            Effect.promise(() => w.door()),
+            (door) => Effect.promise(() => door.close()),
+          );
+          // `letter` is the door's own key for the message id (0547 keeps wire names).
+          expect(
+            yield* Effect.promise(() =>
+              door.call("process.send", { pid, letter: "paid", m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+            ),
+          ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+            view: { count: 1 },
+          });
+          const before = yield* w.localUsage(pid);
+          expect(before.program.writes).toBeGreaterThan(0);
+
+          // The journal row as saved, with its own reset window and healthy mark.
+          const Saved = Schema.fromJsonString(
+            Schema.Struct({
+              healthyAt: Schema.Number,
+              policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Number }) }),
+            }),
+          );
+          const row = () => {
+            const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+            return String(journal?.value);
+          };
+          const bytes = (text: string) => new TextEncoder().encode(text).length;
+          const text = row();
+          const saved = Schema.decodeUnknownSync(Saved)(text);
+          const at = saved.healthyAt + saved.policy.backoff.resetAfterMs + extra;
+          vi.setSystemTime(at);
+
+          if (reopen) {
+            yield* Effect.promise(() => w.reopenAll());
+          }
+
+          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+            view: { count: 1 },
+          });
+          const after = yield* w.localUsage(pid);
+          // The required case: the open's idle turn saved the healthy mark.
+          expect(Schema.decodeUnknownSync(Saved)(row()).healthyAt, "the turn saved no healthy mark").toBeGreaterThan(
+            saved.healthyAt,
+          );
+
+          // Plant (RecoveryStore.ts charges every non-recovery save to "program", today's rule): the program
+          // reads one write more, as the finding saw; red here.
+          expect(after.program, "the healthy mark was charged to the program").toEqual(before.program);
+          expect(after.supervisor, "the supervisor tally missed the healthy mark").toEqual({
+            writes: before.supervisor.writes + 1,
+            bytes: before.supervisor.bytes + bytes(row()) - bytes(text),
+          });
+          expect(after.recovery, "the healthy mark was charged to recovery").toEqual(before.recovery);
         }),
       ),
     { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },

@@ -73,7 +73,7 @@ const remember = (
       throw new RepliesError({ reason: "storage" });
     }
 
-    accounting?.change("reply", 1, bytes(reply.name) + bytes(reply.id) + bytes(value), at, true);
+    accounting?.change("reply", 1, bytes(reply.name) + bytes(reply.id) + bytes(value), at, "recovery");
     sql.exec("INSERT INTO process_replies (name,id,value) VALUES (?,?,?)", reply.name, reply.id, value);
   }
 

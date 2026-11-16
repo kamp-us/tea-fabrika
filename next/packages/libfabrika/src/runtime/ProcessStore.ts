@@ -239,7 +239,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             1,
             bytes(text) - (old === undefined ? 0 : bytes(old)) + (old === undefined ? bytes(key) : 0),
             at,
-            recovering(sql),
+            recovering(sql) ? "recovery" : "program",
           );
         return {
           select: Effect.fn("process.select")(function* (process: string) {
@@ -342,7 +342,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                           .map((part) => part.checkpoint)
                           .join("")
                       : String(old.checkpoint);
-                const isRecovery = recovering(sql);
+                const charge = recovering(sql) ? "recovery" : "program";
                 options.accounting?.change(
                   "checkpoint",
                   oldText === text ? 0 : 1,
@@ -350,7 +350,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                     (oldText === undefined ? 0 : bytes(oldText)) +
                     (old === undefined ? bytes(options.process) : 0),
                   at,
-                  isRecovery,
+                  charge,
                 );
                 sql.exec("DELETE FROM process_checkpoint_parts WHERE process=?", options.process);
                 sql.exec(
@@ -383,7 +383,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                       1,
                       bytes(JSON.stringify({ process: options.process, id, rev, pos })),
                       at,
-                      isRecovery,
+                      charge,
                     );
                   }
 

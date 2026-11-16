@@ -110,26 +110,44 @@ export interface Use {
 }
 
 /**
+ * Schema for which account a store's write is charged to: the program's own, the brain's recovery
+ * reserve (0147), or the supervisor's bookkeeping (0593), which is counted and never limited.
+ *
+ * @category models
+ */
+export const Charge = Schema.Literals(["program", "recovery", "supervisor"]);
+
+/**
+ * Which account a store's write is charged to.
+ *
+ * @category models
+ */
+export type Charge = typeof Charge.Type;
+
+/**
  * The accounting port of one registered name's own store.
  *
  * **Details**
  *
  * A store calls `change` with a write's exact row count and byte difference inside the
- * transaction that makes it, and runs that transaction through `protect`. When a recovery charge
- * does not fit, `protect` saves the reserve fault after the rollback and fails with it. `check`
- * fails while a fault is saved, `recordFault` saves one met elsewhere, and `resume` clears it
- * once the pending charge fits.
+ * transaction that makes it, with the `Charge` that says who pays, and runs that transaction
+ * through `protect`. When a recovery charge does not fit, `protect` saves the reserve fault after
+ * the rollback and fails with it. `check` fails while a fault is saved, `recordFault` saves one met
+ * elsewhere, and `resume` clears it once the pending charge fits.
  *
  * @category models
  */
 export interface Accounting {
   readonly check: Effect.Effect<void, QuotasError>;
   readonly recordFault: (fault: RecoveryReserveExhausted) => Effect.Effect<void, QuotasError>;
-  readonly change: (operation: string, writes: number, bytes: number, at: number, recovery?: boolean) => void;
+  /** `charge` is required: every store says who pays. */
+  readonly change: (operation: string, writes: number, bytes: number, at: number, charge: Charge) => void;
   readonly protect: <A>(step: () => A) => A;
   readonly status: Effect.Effect<
     {
       readonly program: { readonly writes: number; readonly bytes: number };
+      /** The supervisor's bookkeeping saves for this name: a record, never a wall. */
+      readonly supervisor: { readonly writes: number; readonly bytes: number };
       readonly recovery: Use;
       readonly fault: RecoveryReserveExhausted | null;
     },

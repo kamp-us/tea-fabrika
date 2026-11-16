@@ -7,8 +7,9 @@ const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded 
 
 /**
  * Schema for whose account one machine keeps: a `program`'s ledger account, a registered name's
- * `recovery` account at one storage location, or a name's Process-local `local` program account.
- * Code that charges a write picks it; it is never read from a name's text.
+ * `recovery` account at one storage location, a name's Process-local `local` program account, or
+ * a name's `supervisor` tally of its supervisor's bookkeeping saves (0593). Code that charges a
+ * write picks it; it is never read from a name's text.
  *
  * @internal
  */
@@ -16,6 +17,8 @@ export const Account = Schema.TaggedUnion({
   program: { program: Schema.String },
   recovery: { name: Schema.String, location: Schema.Literals(["project", "process"]) },
   local: { name: Schema.String },
+  /** A name's supervisor bookkeeping in its own store (0593). Like `local`, never over a limit. */
+  supervisor: { name: Schema.String },
 });
 
 /** @internal */
@@ -126,8 +129,10 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
         const usedWrites = s.writes + writes;
         const usedBytes = account._tag === "recovery" ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
         const resource = usedWrites > options.limits.writes ? "writes" : "storage";
+        // A name's own `local` and `supervisor` tallies are records, never over a limit.
         const exceeded =
-          account._tag !== "local" && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
+          Account.isAnyOf(["program", "recovery"])(account) &&
+          (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
 
         if (exceeded) {
           if (account._tag === "recovery") {
