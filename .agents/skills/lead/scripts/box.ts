@@ -10,7 +10,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Layer } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";
 import * as Remove from "./box/Remove.ts";
-import * as RunsProcess from "./box/RunsProcess.ts";
+import * as RunsFs from "./box/RunsFs.ts";
 
 const setExit = (code: number) =>
   Effect.sync(() => {
@@ -26,10 +26,9 @@ const rm = Effect.fn("box.rm")(function* (name: string) {
     return yield* setExit(1);
   }
 
-  const services = Layer.mergeAll(
-    BoxGitProcess.layer(main, process.env),
-    RunsProcess.layer(`${import.meta.dirname}/keepruns.sh`, process.env),
-  ).pipe(Layer.provide(NodeServices.layer));
+  const services = Layer.mergeAll(BoxGitProcess.layer(main, process.env), RunsFs.layer(main)).pipe(
+    Layer.provide(NodeServices.layer),
+  );
   const removal = yield* Remove.remove(name, { boxes, main }).pipe(Effect.provide(services));
 
   if (removal.runs !== "") {
