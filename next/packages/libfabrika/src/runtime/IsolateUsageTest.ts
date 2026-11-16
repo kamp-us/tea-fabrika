@@ -7,6 +7,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Logger,
   References,
   Ref,
@@ -407,12 +408,12 @@ export const suite = (rig: Rig) =>
 
                   if (behavior === "fail") {
                     expect(logs[0]?.level).toBe("Error");
-                    expect(JSON.stringify(logs[0])).toContain("DeliveryError");
+                    expect(Formatter.formatJson(logs[0])).toContain("DeliveryError");
                   }
 
                   expect(
-                    JSON.stringify([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
-                  ).not.toContain(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
+                    Formatter.formatJson([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
+                  ).not.toContain(Formatter.formatJson(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
                 }
 
                 yield* Fiber.interrupt(pending);

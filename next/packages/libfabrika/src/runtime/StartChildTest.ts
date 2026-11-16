@@ -41,6 +41,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Logger,
   Option,
@@ -1146,7 +1147,8 @@ const walk = (
           const ask = { program: BOUNDARY_PROGRAM, name: target, inputBytes };
           const encoder = new TextEncoder();
           expect(
-            encoder.encode(JSON.stringify({ type: "start_child", program: ask.program, name: target, input })).length,
+            encoder.encode(Formatter.formatJson({ type: "start_child", program: ask.program, name: target, input }))
+              .length,
             "L6: this full Cmd exceeds the row limit",
           ).toBeGreaterThan(ROW_LIMIT);
           const before = (yield* answers(name)).length;
@@ -1167,7 +1169,7 @@ const walk = (
             first.traceId,
             first.build,
             first._tag,
-            JSON.stringify(first.body),
+            Formatter.formatJson(first.body),
           ];
           const size = texts.reduce((total, text) => total + (text === null ? 0 : encoder.encode(text).length), 0);
           expect(size, "L6: the complete first-letter row fits the limit").toBeLessThanOrEqual(ROW_LIMIT);
@@ -1682,7 +1684,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
           continue;
         }
 
-        outputs.push(JSON.stringify(yield* answers(name)));
+        outputs.push(Formatter.formatJson(yield* answers(name)));
       }
 
       const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));

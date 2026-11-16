@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 // P12, next/. The callbacks are real platform duties, not replacement gateway logic.
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Formatter, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -14,6 +14,12 @@ import type { connection } from "../transport/Connection.ts";
 import { Answer, Attached, type RateCountFailure } from "../transport/Wire.ts";
 
 const SEED = 119120;
+
+const AttachedJson = Schema.fromJsonString(Attached);
+
+/** A saved attachment as a reconstructed connection reads it back: written as JSON, then decoded. */
+const reread = (saved: typeof Attached.Type) =>
+  Schema.encodeEffect(AttachedJson)(saved).pipe(Effect.flatMap(Schema.decodeEffect(AttachedJson)));
 
 const generated = fc.record({
   id: fc.oneof(fc.string(), fc.integer()),
@@ -313,7 +319,7 @@ describe("P12 Connection attachment laws", () => {
       const parked = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
       yield* parked.c.frame(request(2));
       const fresh = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
-      fresh.save(JSON.parse(JSON.stringify(parked.saved())));
+      fresh.save(yield* reread(parked.saved()));
       yield* fresh.c.wake();
       yield* fresh.c.ring("counter:1/inbox", rev + 1);
       expect(fresh.frames).toEqual([{ jsonrpc: "2.0", id: 2, result: { rev: rev + 1 } }]);
@@ -327,7 +333,7 @@ describe("P12 Connection attachment laws", () => {
 
         for (const id of ids) {
           yield* f.c.frame(request(id));
-          expect(new TextEncoder().encode(JSON.stringify(f.saved())).length).toBeLessThanOrEqual(16384);
+          expect(new TextEncoder().encode(Formatter.formatJson(f.saved())).length).toBeLessThanOrEqual(16384);
         }
 
         expect(f.frames.some((frame) => JSON.stringify(frame).includes("too_many_waits"))).toBe(true);
@@ -363,7 +369,7 @@ describe("P12 Connection attachment laws", () => {
 
       const pending = yield* Effect.forkChild(
         f.c.frame(
-          JSON.stringify({
+          Formatter.formatJson({
             jsonrpc: "2.0",
             id,
             method: "process.send",
@@ -374,7 +380,7 @@ describe("P12 Connection attachment laws", () => {
 
       yield* Deferred.await(entered);
       const wake = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
-      wake.save(JSON.parse(JSON.stringify(f.saved())));
+      wake.save(yield* reread(f.saved()));
       yield* wake.c.wake();
       expect(wake.closes).toEqual([1012]);
       yield* Deferred.succeed(release, undefined);

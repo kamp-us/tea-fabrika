@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Clock, Effect, Exit, Formatter, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -1275,7 +1275,7 @@ describe("T285, runner tracing keep-laws", () => {
                       process: target,
                       name: "write",
                       personOnly: false,
-                      digest: JSON.stringify(m),
+                      digest: Formatter.formatJson(m),
                       traceId: signer.traceId,
                       span: signer,
                       arrivedAt: n,

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Formatter, Layer, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -513,8 +513,17 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const [saved] = w.first.sql.exec("SELECT id,value FROM gateway_bindings");
               assert(saved?.id !== undefined, "input binding must have a saved id");
-              const binding = { ...JSON.parse(String(saved.value)), [missing]: undefined };
-              w.first.sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", JSON.stringify(binding), saved.id);
+              const binding = {
+                ...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+                  String(saved.value),
+                )),
+                [missing]: undefined,
+              };
+              w.first.sql.exec(
+                "UPDATE gateway_bindings SET value=? WHERE id=?",
+                Formatter.formatJson(binding),
+                saved.id,
+              );
               const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
               expect(yield* Effect.result(door.route(client.client, "process.send", params))).toMatchObject({
                 _tag: "Failure",
@@ -888,7 +897,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 process: params.pid,
                 name: params.m._tag,
                 personOnly: false,
-                digest: createHash("sha256").update(JSON.stringify(params)).digest("base64url"),
+                digest: createHash("sha256").update(Formatter.formatJson(params)).digest("base64url"),
                 arrivedAt,
                 span: { traceId, spanId },
                 sentAt,
@@ -899,7 +908,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 "INSERT INTO gateway_bindings (id,letter,value) VALUES (?,?,?)",
                 id,
                 `${params.pid}/${letter}`,
-                JSON.stringify(binding),
+                Formatter.formatJson(binding),
               );
               w.first.db.close();
               const saved = yield* w.storage();
@@ -1065,7 +1074,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
               const digest = crypto.subtle.digest.bind(crypto.subtle),
                 marker = `p17-queued-${text}`,
-                encodedMarker = JSON.stringify(marker);
+                encodedMarker = Formatter.formatJson(marker);
 
               let paused = false;
 

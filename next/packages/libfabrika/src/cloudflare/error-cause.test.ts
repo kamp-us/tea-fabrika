@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { RpcCallError } from "alchemy/Rpc";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Formatter, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
 // Only the platform is fake: each stub, storage, bucket, loader and object state is a plain value
@@ -253,7 +253,7 @@ describe("T695, the object adapters keep what failed", () => {
     fc.record({ at: fc.nat(), other: fc.nat() }).filter(({ at, other }) => at !== other),
     ({ at, other }) =>
       Effect.gen(function* () {
-        const name = JSON.stringify(["p", `spans/${other}`]);
+        const name = Formatter.formatJson(["p", `spans/${other}`]);
         const error = yield* Effect.flip(recordWrite(objectState(name), undefined, Chain.cases.spans.make({}), at, []));
         expect(error.reason).toBe("bad_row");
         expect(error.cause).toBeUndefined();

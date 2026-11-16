@@ -1,7 +1,7 @@
 // next/. Contract: tail(env, {project, name, process}, items) returns an Effect<void>.
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema, Tracer } from "effect";
+import { Effect, Formatter, Layer, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";
@@ -115,7 +115,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               );
               expect(calls).toEqual([
                 {
-                  object: JSON.stringify(["project-test", "checklist:1"]),
+                  object: Formatter.formatJson(["project-test", "checklist:1"]),
                   rows: events.map(({ method, outcome, cpuTime, wallTime }) => ({
                     process: PROCESS,
                     method: methods.some((known) => known === method) ? method : "other",
@@ -127,8 +127,10 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               ]);
 
               for (const { content } of events) {
-                expect(JSON.stringify(calls)).not.toContain(content);
-                expect(JSON.stringify(spans.map((span) => Object.fromEntries(span.attributes)))).not.toContain(content);
+                expect(Formatter.formatJson(calls)).not.toContain(content);
+                expect(Formatter.formatJson(spans.map((span) => Object.fromEntries(span.attributes)))).not.toContain(
+                  content,
+                );
               }
             }),
           ),

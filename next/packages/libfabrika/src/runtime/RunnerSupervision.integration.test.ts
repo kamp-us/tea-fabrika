@@ -6,7 +6,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
+import { Cause, type Context, Effect, Exit, Formatter, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -164,15 +164,19 @@ const world = (
             state.sql.exec(
               "INSERT INTO p34_activity (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
               key,
-              JSON.stringify(value),
+              Formatter.formatJson(value),
             );
           }),
+        // A row this stand-in wrote itself: one that does not decode is a bug in the test, so a defect.
         get: (key: string) =>
-          Effect.sync(() => {
-            const [row] = state.sql.exec("SELECT value FROM p34_activity WHERE key=?", key);
-
-            return row === undefined ? undefined : JSON.parse(String(row.value));
-          }),
+          Effect.sync(() => state.sql.exec("SELECT value FROM p34_activity WHERE key=?", key)).pipe(
+            Effect.flatMap(([row]) =>
+              row === undefined
+                ? Effect.succeed(undefined)
+                : Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(String(row.value)),
+            ),
+            Effect.orDie,
+          ),
         // SQLite has already committed each put when it returns.
         sync: () => Effect.void,
       }
@@ -2321,7 +2325,11 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
             expected.exits.map(({ process, reason }) => [process, reason] as const),
           );
           // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
-          const serialized = JSON.stringify([rows, signals, w.ledger.rows().filter((row) => row._tag === "send")]);
+          const serialized = Formatter.formatJson([
+            rows,
+            signals,
+            w.ledger.rows().filter((row) => row._tag === "send"),
+          ]);
           expect(serialized.includes(SENTINEL), "no exception message in exit facts or monitor payloads").toBe(false);
         }
       }).pipe(Effect.provide(TestClock.layer()));

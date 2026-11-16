@@ -18,6 +18,7 @@ import {
   Context,
   Effect,
   Exit,
+  Formatter,
   Layer,
   Logger,
   References,
@@ -276,7 +277,7 @@ for (const flow of [
         if (Exit.isFailure(exit)) {
           outputs.push(
             String(Cause.squash(exit.cause)),
-            JSON.stringify(Cause.squash(exit.cause)),
+            Formatter.formatJson(Cause.squash(exit.cause)),
             Cause.pretty(exit.cause),
           );
         }
@@ -509,7 +510,7 @@ const project = Effect.fnUntraced(function* () {
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: { getByName: () => ({}) },
     PROCESS: {
       getByName: (key: string) => ({
@@ -685,7 +686,7 @@ it.effect(
           : ([undefined, yield* wake] as const);
 
         reached.add(`${traced ? "traced" : "untraced"}:${rejects ? "rejects" : "saves"}`);
-        expect(objects, "the wake reaches its name's one object").toEqual([JSON.stringify(["mail-test", name])]);
+        expect(objects, "the wake reaches its name's one object").toEqual([Formatter.formatJson(["mail-test", name])]);
         expect(traces, "the wake carries the caller's span, or no trace when it has none").toEqual([caller]);
 
         if (rejects) {

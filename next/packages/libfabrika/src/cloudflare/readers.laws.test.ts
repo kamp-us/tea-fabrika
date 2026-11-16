@@ -10,7 +10,7 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Formatter, Layer, Option, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -127,9 +127,9 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ...w.ctx.id,
                 name:
                   path === "Process"
-                    ? JSON.stringify(["settings-law", "worker"])
+                    ? Formatter.formatJson(["settings-law", "worker"])
                     : path === "RecordPart"
-                      ? JSON.stringify(["settings-law", "spans/0"])
+                      ? Formatter.formatJson(["settings-law", "spans/0"])
                       : "settings-law",
               },
               getWebSockets: () => {
@@ -167,7 +167,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
             const env = {
               ...w.env,
-              INSTANCE: JSON.stringify(bad),
+              INSTANCE: Formatter.formatJson(bad),
               PROJECT: new Proxy(w.env.PROJECT, {
                 get: (target, key) =>
                   key === "getByName"
@@ -752,7 +752,7 @@ StartsTest.law(
 
       const ctx = {
         ...w.ctx,
-        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
+        id: { ...w.ctx.id, name: Formatter.formatJson(["settings-law", "spans/0"]) },
         storage: {
           ...w.ctx.storage,
           sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),

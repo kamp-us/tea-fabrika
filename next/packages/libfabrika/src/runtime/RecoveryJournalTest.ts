@@ -10,7 +10,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Clock, type Context, Effect, Exit, Formatter, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
@@ -708,7 +708,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           recovered();
           const receipt = yield* w.recovery((s) => s.receipt(id));
-          expect(JSON.stringify([w.rows(), receipt]).includes(lost), "an uncaptured class survives nowhere").toBe(
+          expect(Formatter.formatJson([w.rows(), receipt]).includes(lost), "an uncaptured class survives nowhere").toBe(
             false,
           );
           break;

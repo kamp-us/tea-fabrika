@@ -6,7 +6,7 @@
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import { type Context, Effect, Exit, Formatter, type Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -233,7 +233,7 @@ describe("P34 recovery storage", () => {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
                       // An old saved shape fails explicitly too: it is never silently reset (P34c slice 2).
-                      JSON.stringify(typeof corrupt === "string" ? { v: 999, journal: corrupt } : corrupt),
+                      Formatter.formatJson(typeof corrupt === "string" ? { v: 999, journal: corrupt } : corrupt),
                       row.rowid!,
                     );
                     planted++;

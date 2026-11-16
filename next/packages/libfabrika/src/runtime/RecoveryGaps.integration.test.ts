@@ -4,7 +4,7 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Deferred, Effect, Exit, Fiber, Formatter, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   Activity,
@@ -520,7 +520,7 @@ describe("P34 interrupted recovery", () => {
                 process: A,
                 name: "queue",
                 personOnly: false,
-                digest: JSON.stringify(input.envelope.input),
+                digest: Formatter.formatJson(input.envelope.input),
                 traceId: from().traceId,
                 span: input.span,
                 arrivedAt: 0,

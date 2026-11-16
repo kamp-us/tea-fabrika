@@ -9,7 +9,7 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Formatter, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -373,7 +373,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
           const valueText = `${decor}${valueCore}${decor}`;
           const error = yield* Effect.flip<unknown, ProgramDown, never>(feed(call, { [keyText]: valueText }));
           expect(error).toBeInstanceOf(ProgramDown);
-          const reply = JSON.stringify(executionFailure(error));
+          const reply = Formatter.formatJson(executionFailure(error));
 
           for (const form of [keyCore, valueCore, ...forms(keyText), ...forms(valueText)]) {
             expect(reply.includes(form), "the RPC reply holds a cause's input-bearing text").toBe(false);

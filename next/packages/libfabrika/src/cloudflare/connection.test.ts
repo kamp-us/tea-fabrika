@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
@@ -271,7 +271,12 @@ StartsTest.law(
         yield* owner.service
           .message(
             owner.w.socket,
-            JSON.stringify({ jsonrpc: "2.0", id: index, method: "process.send", params: { by: `forged-${index}` } }),
+            Formatter.formatJson({
+              jsonrpc: "2.0",
+              id: index,
+              method: "process.send",
+              params: { by: `forged-${index}` },
+            }),
           )
           .pipe(Effect.provideContext(owner.context));
         expect(owner.w.stats.writes).toBe(writes);
@@ -322,14 +327,14 @@ it.effect.prop(
         for (let id = 0; id < count; id++) {
           yield* service.message(
             w.socket,
-            JSON.stringify({
+            Formatter.formatJson({
               jsonrpc: "2.0",
               id,
               method: parked ? "ledger.wait" : "process.send",
               params: parked ? { stream: "empty", after: 0 } : {},
             }),
           );
-          expect(JSON.parse(w.frames.at(-1)!)).toMatchObject({
+          expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1))).toMatchObject({
             id,
             error: { data: { reason: "rate_limited", retryAfter } },
           });
@@ -431,7 +436,7 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       const baselineWrites = stats.writes;
       const beforeMeasurements = Number(db.prepare("SELECT count(*) AS n FROM measurements").get()?.n);
       const params = { by: "t844-forged", m: { _tag: "comment" } };
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
+      yield* service.message(socket, Formatter.formatJson({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
       expect(calls).toEqual([{ method: "process.send", params }]);
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 1,
@@ -452,13 +457,19 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       ]);
 
       w.answer(Answer.cases.refused.make({ reason: "bad_input" }));
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }));
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }),
+      );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 2,
         error: { data: { reason: "bad_input" } },
       });
       w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }));
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }),
+      );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 3,
         result: { delivered: true },
@@ -544,7 +555,9 @@ const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof 
     t864Due(db, now).length === 0
   ) {
     for (let i = 0; i <= draw.pick % 3; i++) {
-      yield* Effect.void.pipe(Effect.withSpan("t864.pending", { attributes: { value: JSON.stringify(draw.value) } }));
+      yield* Effect.void.pipe(
+        Effect.withSpan("t864.pending", { attributes: { value: Formatter.formatJson(draw.value) } }),
+      );
     }
 
     yield* TestClock.adjust(17 * T864_DAY + draw.pick);
@@ -804,7 +817,7 @@ it.effect.prop(
           const before = w.calls.length;
           const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
           const keeps = wait !== null && fits(wait);
-          yield* service.message(w.socket, JSON.stringify(request));
+          yield* service.message(w.socket, Formatter.formatJson(request));
 
           // Under the limits, a call answered parked is kept as a wait on the stream the answer
           // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
@@ -886,7 +899,7 @@ it.effect.prop(
                 expect(state._tag).toBe(initial._tag);
                 const request = yield* ordinaryFrame(state, walk.seed + i, i);
                 const replies = w.frames.length;
-                yield* service.message(w.socket, JSON.stringify(request));
+                yield* service.message(w.socket, Formatter.formatJson(request));
                 expect(w.frames).toHaveLength(replies + 1);
                 expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
                   id: request.id,
@@ -903,7 +916,7 @@ it.effect.prop(
               const answer = yield* sample(Answer.cases.ok, walk.seed + walk.count);
               const request = yield* ordinaryFrame(state, walk.seed + walk.count + 1, walk.count);
               w.answer(answer);
-              yield* service.message(w.socket, JSON.stringify(request));
+              yield* service.message(w.socket, Formatter.formatJson(request));
               expect(w.calls).toEqual([{ method: request.method, params: request.params }]);
               expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
                 id: request.id,
@@ -973,7 +986,7 @@ it.effect.prop(
         const service = yield* ConnectionService;
         yield* service.message(
           w.socket,
-          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "tasks.wait", params: { after } }),
+          Formatter.formatJson({ jsonrpc: "2.0", id: "j1.1", method: "tasks.wait", params: { after } }),
         );
 
         // Rings at or before `after` do not pass the wait: each asks the door again.

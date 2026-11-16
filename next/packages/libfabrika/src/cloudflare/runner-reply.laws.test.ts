@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Formatter, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -130,11 +130,11 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               const raw = yield* Effect.promise(() => box.audit(submitted));
               const answer = yield* Effect.exit(remote.audit(submitted));
               expect(answer._tag).toBe(mode === "ok" ? "Success" : "Failure");
-              const shown = Exit.isFailure(answer) ? Cause.pretty(answer.cause) : JSON.stringify(answer.value);
-              const outputs = [JSON.stringify(raw), String(raw), shown];
+              const shown = Exit.isFailure(answer) ? Cause.pretty(answer.cause) : Formatter.formatJson(answer.value);
+              const outputs = [Formatter.formatJson(raw), String(raw), shown];
 
               for (const output of outputs) {
-                for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
                   expect(output).not.toContain(form);
                 }
               }

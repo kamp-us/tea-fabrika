@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Formatter, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -102,7 +102,7 @@ for (const kind of StartsTest.originKinds) {
             poisoned = move === "poison";
             // Simulate a saved entry received from storage, bypassing today's writer.
             db.prepare("UPDATE entries SET body = ? WHERE id = ?").run(
-              JSON.stringify({
+              Formatter.formatJson({
                 start: input.start,
                 settings: poisoned ? bad.settings : input.settings,
                 build: input.build,
@@ -214,7 +214,7 @@ StartsTest.law(
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify(input),
+        INSTANCE: Formatter.formatJson(input),
         PROJECT: { getByName: unexpected },
         PROCESS: { getByName: unexpected },
         CONNECTION: { getByName: unexpected },
@@ -412,9 +412,9 @@ StartsTest.law(
 
           const reply = yield* settingsReply(Effect.fail(new StartsError({ reason })));
           StartsTest.exclude(reply, secret);
-          expect(JSON.stringify(reply)).not.toContain("cause");
+          expect(Formatter.formatJson(reply)).not.toContain("cause");
         } else {
-          StartsTest.exclude(JSON.stringify(input), secret);
+          StartsTest.exclude(Formatter.formatJson(input), secret);
           const receipt = yield* move === "read" ? driver.read(input.start) : driver.record(input);
           placed = true;
           StartsTest.exclude(receipt, secret);

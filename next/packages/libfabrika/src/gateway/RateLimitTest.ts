@@ -1,6 +1,6 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Duration, Effect, Exit, Formatter, Layer, Option, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
@@ -142,7 +142,7 @@ export const suite = (rig: Rig): void => {
             }
 
             const old = history.get(sender);
-            const same = old?.policy === JSON.stringify(policy);
+            const same = old?.policy === Formatter.formatJson(policy);
             const at = old ? Math.max(now, old.at) : now;
 
             const row =
@@ -152,7 +152,7 @@ export const suite = (rig: Rig): void => {
                     times: [],
                     until: (Math.floor(at / policy.window) + 1) * policy.window,
                     at,
-                    policy: JSON.stringify(policy),
+                    policy: Formatter.formatJson(policy),
                   };
 
             const allowed = row.times.length < policy.limit;
@@ -180,7 +180,9 @@ export const suite = (rig: Rig): void => {
             expect(new Set(rows.map((r) => r.sender)).size).toBe(rows.length);
 
             for (const r of rows) {
-              const envelope = JSON.parse(String(r.value));
+              const envelope = yield* Schema.decodeUnknownEffect(
+                Schema.fromJsonString(Schema.Struct({ v: Schema.Json, build: Schema.Json })),
+              )(String(r.value));
               expect(envelope.v).toBe(1);
               expect(envelope.build).toBe("t843-test");
               expect(String(r.value)).not.toContain("request");
