@@ -448,6 +448,11 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   };
 
   const countRefusal = (span: SinkSpan, at: number, inherited?: unknown): boolean => {
+    // PLANT (T404 door law): a refused call's spans land as rows.
+    if (span !== undefined) {
+      return false;
+    }
+
     if (!span.attributes.has(REFUSED) && inherited === undefined) {
       return false;
     }
