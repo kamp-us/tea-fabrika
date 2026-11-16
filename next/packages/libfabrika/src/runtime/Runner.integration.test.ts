@@ -449,7 +449,7 @@ const worldOn = async (
   const ghost = Cmd.make("ghost", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
   const p = Program.make({
     ...normal,
-    inputs: options.noPorts ? {} : normal.inputs,
+    inputs: options.noPorts === true ? {} : normal.inputs,
     machine:
       options.onStep === undefined
         ? machine
@@ -466,7 +466,7 @@ const worldOn = async (
   });
   // The undeclared Cmd is an explicit broken module, not supported authoring.
   const loaded = (): unknown =>
-    options.unknownCmd
+    options.unknownCmd === true
       ? {
           ...p,
           machine: {
@@ -1787,8 +1787,12 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               yield* Fiber.interrupt(draining);
               const exit = yield* Fiber.await(draining);
               const failed = Exit.isFailure(exit)
-                ? Cause.hasInterrupts(exit.cause) && "interrupted"
-                : Exit.isFailure(exit.value) && Option.getOrUndefined(Cause.findErrorOption(exit.value.cause))?._tag;
+                ? Cause.hasInterrupts(exit.cause)
+                  ? "interrupted"
+                  : false
+                : Exit.isFailure(exit.value)
+                  ? Option.getOrUndefined(Cause.findErrorOption(exit.value.cause))?._tag
+                  : false;
               expect(failed).toBe(failure);
               expect(w.store.fault.once).toBe(false);
               expect(w.alarms).toEqual(retries ? [...before, now + w.policy.backoff.minMs] : before);

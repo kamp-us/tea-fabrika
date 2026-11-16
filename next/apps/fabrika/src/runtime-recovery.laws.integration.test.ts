@@ -541,7 +541,7 @@ const world = (
   const schedule = (entry: Entry) => {
     clearTimeout(entry.timer);
 
-    if (entry.alarm === null || entry.held || closed) {
+    if (entry.alarm === null || entry.held === true || closed) {
       return;
     }
 
