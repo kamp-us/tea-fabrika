@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e58-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:01:20-08:00",
+  "ended": "2026-11-16T01:05:27-08:00",
+  "parent": "2026-11-16-effect-e58-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for the rulings round of judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/, our tooling), head 9e9f7a005, three-dot against origin/main 2623b9f39 (merge base 37db01aa8): merge-ready, no findings. The build1 row rightly sent the one hit back to tests, since oxlint-plugins/** is an exam path. The tests2 line above oxlint-plugins/parallel.ts:164 sits on NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer))) inside if (import.meta.main), the script's own entry point. Its quoted sentence is the checker's own wording, matched byte for byte in the installed @effect/tsgo-linux-x64 0.63.0 binary's strictEffectProvide message. It follows the 0565 amendment on main (each runMain entry point gets a reasoned strictEffectProvide:off line that quotes the doc's entry-point reason) and the merge session's Q1 to Q3 ruling, which names parallel.ts:163. With strictEffectProvide forced to error the checker shows 0 strictEffectProvide hits in the file, so it parses the line and its ' -- ' tail. The package typecheck's only output is parallel.ts(163,6) TS377000 'directive has no effect', exit 1, expected until the integrator's lock lands with the line in the sweep PR (Q1 to Q3). No other @effect-diagnostics line in oxlint-plugins/, no tsconfig or lock change, no LOCKED row, no law narrowed. Row counts are right: met 1, quick fix 0, hand edits 1, left 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read-only apart from this row. Ran at 9e9f7a005: effect-tsgo diagnostics --format text --file oxlint-plugins/parallel.ts with an --lspconfig setting strictEffectProvide to error and includeSuggestionsInTsc true, 0 errors (5 unstableApiUsage warnings and 1 schemaClassMissingBrand message, other checks); tsc --noEmit -p oxlint-plugins, exit 1 with the one TS377000 line; vitest oxlint-plugins/parallel.test.ts, 7 passed; vitest oxlint-plugins/script-reads.test.ts, 12 passed; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 17 parts passed; loosening.sh 37db01aa8..HEAD, two hits, the directive line in parallel.ts and the import line in script-reads.test.ts, neither loosens a law; git merge-tree against origin/main 2623b9f39, no conflict. Plant by reading, not run: without the line the same diagnostics call showed 1 error at parallel.ts(163,33) in the build1 and tests2 rows and in review1's count at main. Not run: the whole repo's pnpm typecheck (the package typecheck covers the one file), any .integration. law (none reached).",
+  "plants": [],
+  "step": "review"
+}
