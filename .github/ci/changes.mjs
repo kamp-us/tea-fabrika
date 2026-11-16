@@ -238,7 +238,7 @@ export const classify = (paths, event, _proven = []) => {
  * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
  * request can be a draft; on any other event, a merge queue's group and a push included, the flag
  * is ignored. No event starts a tooling test (0539): their author runs the narrow ones on the
- * laptop, and the schedule (scheduled.yaml) runs them all every 3 hours.
+ * laptop, and the full run (scheduled.yaml) runs them all, at most once an hour (0581).
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft

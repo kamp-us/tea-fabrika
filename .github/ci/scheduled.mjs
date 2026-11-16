@@ -1,5 +1,7 @@
-// Today's CI, serving both versions. The scheduled run's report (0534): scheduled.yaml runs all of
-// next/ and every tooling test on main every 3 hours, and its report job runs this. A red run opens
+// Today's CI, serving both versions. The full run's report (0534): scheduled.yaml runs all of
+// next/ and every tooling test on main, started by a push to main or the hourly catch-up at most
+// once an hour through its gate (0581, gate.mjs), and its report job runs this. A run whose gate
+// said `false` skips the report, so it leaves the issue as it was. A red run opens
 // one GitHub issue labeled `ci-scheduled` naming the commits since the last green scheduled run and
 // the failing tests, or comments on the open one; a green run closes it. Those are the only issues
 // automation opens on this repository (0534's exception to "no GitHub issues here"), with the
@@ -243,6 +245,15 @@ export const jobsOf = (answer) => {
 };
 
 /**
+ * Whether a run's jobs show its test legs ran: a leg `tests (<shard>)` is in the list. GitHub lists
+ * a skipped matrix as one job named `tests`, with no shard (probe run 43795273918), so a run whose
+ * gate said `false` is never full. The gate and `lastGreen` read runs by it.
+ * @param {readonly Job[]} jobs
+ * @returns {boolean}
+ */
+export const isFull = (jobs) => jobs.some((job) => /^tests \(.+\)$/.test(job.name));
+
+/**
  * Each failing test in Vitest's JSON reports, as `file > test`, each once, in report order. A file
  * that failed with no failing test in it (an import error, a hook that threw) is listed by its
  * file alone. Paths are made relative to `root`, the checkout.
@@ -464,11 +475,19 @@ export const github = (env, send = globalThis.fetch) => {
   return {
     // The latest attempt's jobs, every leg its own; the run has 10, well under one page of 100.
     jobs: async () => jobsOf(await call("GET", `actions/runs/${id}/jobs?filter=latest&per_page=100`)),
+    // Main's newest green run whose test legs ran: a run whose gate said `false` ends `success`
+    // too, and names no tested commit (0581). One jobs call per green run stepped over.
     lastGreen: async () => {
-      const runs = (await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=1`))
-        .workflow_runs;
-      const sha = Array.isArray(runs) && isMap(runs[0]) ? runs[0]["head_sha"] : undefined;
-      return typeof sha === "string" ? sha : null;
+      const answer = await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=100`);
+      const runs = isMap(answer) && Array.isArray(answer["workflow_runs"]) ? answer["workflow_runs"].filter(isMap) : [];
+
+      for (const run of runs) {
+        if (isFull(jobsOf(await call("GET", `actions/runs/${String(run["id"])}/jobs?filter=latest&per_page=100`)))) {
+          return typeof run["head_sha"] === "string" ? run["head_sha"] : null;
+        }
+      }
+
+      return null;
     },
     open: async () => {
       const issues = await call("GET", `issues?labels=${LABEL}&state=open&sort=created&direction=asc&per_page=20`);
