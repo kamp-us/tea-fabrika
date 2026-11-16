@@ -13,7 +13,7 @@ const Setting = Schema.String.check(
 );
 
 const setting = (value: string) =>
-  Schema.decodeUnknownEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+  Schema.decodeEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 
 // The stack runs the completed brain file as it is (`bundle: false`); no code rides in its env.
 export const stack = (

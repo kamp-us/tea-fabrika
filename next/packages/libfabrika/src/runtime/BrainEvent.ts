@@ -1,7 +1,5 @@
 /**
  * The events of a local brain's life, as the driver that runs the brain on a laptop records them.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 
@@ -34,7 +32,6 @@ const Exit = {
  * that grace ran out, just before the SIGKILL. The
  * project appends each event to the `gateway/brain` stream under its `id`.
  *
- * @stability unstable
  * @category schemas
  */
 export const BrainEvent = Schema.TaggedUnion({

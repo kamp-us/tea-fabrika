@@ -1,11 +1,18 @@
 /**
  * `Repositories` on Node, through the `git` command.
- *
- * @stability unstable
  */
-import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import {
   Branch,
   DefaultUnknown,
@@ -19,11 +26,11 @@ import {
 import * as Sources from "./Sources.ts";
 
 const failure = (operation: string, cause: unknown, unknown = false) =>
-  new RepositoriesError({
+  RepositoriesError.make({
     message: `Selected repository: ${operation} failed.`,
     reason: unknown
-      ? new DefaultUnknown({ cause: Redacted.make(cause) })
-      : new ReadFailed({ cause: Redacted.make(cause) }),
+      ? DefaultUnknown.make({ cause: Redacted.make(cause) })
+      : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
 
 const safeConfig = [
@@ -58,7 +65,6 @@ const safeConfig = [
  * as `DefaultUnknown`. A root `fabrika.toml`, or a `.fabrika.jsonc` with no new settings file
  * beside it, fails with a message that says where the file moved.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly person: string }) =>
@@ -181,8 +187,10 @@ export const layer = (options: { readonly person: string }) =>
             });
             const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
-              Effect.mapError((cause) => failure("origin", cause, true)),
+              Effect.mapBoth({
+                onFailure: (cause) => failure("origin", cause, true),
+                onSuccess: (value) => value.replace(/\n$/, ""),
+              }),
             );
             // Host URL rewrites apply; credentials are authority, never destination identity.
             const identity = effective
@@ -210,7 +218,7 @@ export const layer = (options: { readonly person: string }) =>
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeUnknownEffect(Branch)(ref.slice(11)).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(ref.slice(11)).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
@@ -219,7 +227,7 @@ export const layer = (options: { readonly person: string }) =>
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeUnknownEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.
@@ -281,8 +289,8 @@ export const layer = (options: { readonly person: string }) =>
             const old = yield* entry("fabrika.toml");
 
             if (old !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy root settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy root settings file") }),
                 message: "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
               });
             }
@@ -290,8 +298,8 @@ export const layer = (options: { readonly person: string }) =>
             const document = yield* entry(file);
 
             if (document === null && (yield* entry(".fabrika.jsonc")) !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy-only settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy-only settings file") }),
                 message: ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
               });
             }

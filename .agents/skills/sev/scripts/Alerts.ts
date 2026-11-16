@@ -10,7 +10,9 @@ import type { Effect } from "effect";
 import type { Alert } from "./Level.ts";
 
 /** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class AlertsError extends Schema.TaggedError<AlertsError>()("AlertsError", { reason: Schema.String }) {}
+export class AlertsError extends Schema.TaggedError<AlertsError, { readonly brand: unique symbol }>()("AlertsError", {
+  reason: Schema.String,
+}) {}
 
 export class Alerts extends Context.Service<
   Alerts,

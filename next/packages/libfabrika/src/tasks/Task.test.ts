@@ -6,7 +6,8 @@
 // P39 slice 3 (ticket 1040): the `collected` state and event keep every field through JSON too,
 // with the collection (which process took the result, and its answer letter) whole.
 import { describe, expect, it } from "@effect/vitest";
-import { Result as R, Schema } from "effect";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { Collection, Event, Executor, Recorded, Request, Result, State } from "./Task.ts";
 import {

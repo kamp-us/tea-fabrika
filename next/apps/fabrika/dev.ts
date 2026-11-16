@@ -17,7 +17,7 @@ import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
@@ -79,7 +79,7 @@ const command = Command.make("dev", flags, (options) => {
       const owner = Number(options.parent);
 
       if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner) {
-        return yield* new InstanceError({ reason: "parent_gone" });
+        return yield* InstanceError.make({ reason: "parent_gone" });
       }
 
       yield* Effect.sleep("250 millis");
@@ -116,7 +116,7 @@ const command = Command.make("dev", flags, (options) => {
           prepared === undefined
             ? yield* Load.load(loadOptions).pipe(
                 Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
-                Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
+                Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })),
               )
             : { snapshot: prepared.settings, values: prepared.values };
         const { file, state } = yield* Effect.gen(function* () {
@@ -143,10 +143,10 @@ const command = Command.make("dev", flags, (options) => {
             ...(saved?.limits === undefined ? {} : { limits: saved.limits }),
           });
           return { file, state };
-        }).pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
+        }).pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         yield* fs
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
-          .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
+          .pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
         const instance = yield* localInstance(built, {
           name: state.name,
@@ -164,14 +164,14 @@ const command = Command.make("dev", flags, (options) => {
           const { append, read, wait } = instance.project(state.name);
 
           if (append === undefined || read === undefined || wait === undefined) {
-            return yield* new InstanceError({ reason: "ledger_unavailable" });
+            return yield* InstanceError.make({ reason: "ledger_unavailable" });
           }
 
           const calls: LedgerCalls = { append, read, wait };
           const selected = yield* OpenRepository.open(prepared, {
             selection: yield* ids.next(Id.InputId),
             request: yield* ids.next(Id.InputId),
-            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            actor: yield* Schema.decodeEffect(Id.Person)(state.person),
             by: "brain",
             build: built.build,
             interactive: process.stdin.isTTY === true,
@@ -188,7 +188,7 @@ const command = Command.make("dev", flags, (options) => {
           process.stdout.write(`${JSON.stringify(selected)}\n`);
 
           if (selected._tag === "refused") {
-            return yield* new InstanceError({ reason: "repository_refused" });
+            return yield* InstanceError.make({ reason: "repository_refused" });
           }
         }
 
@@ -249,7 +249,7 @@ const command = Command.make("dev", flags, (options) => {
       );
 
       if ((yield* childProcess.exitCode) !== 0) {
-        return yield* new InstanceError({ reason: "child_failed" });
+        return yield* InstanceError.make({ reason: "child_failed" });
       }
     }),
   );

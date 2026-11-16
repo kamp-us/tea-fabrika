@@ -2,29 +2,26 @@
  * The local brain's driver on Node: it starts the local runtime through a deploy the caller
  * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
  * call it over a private control socket.
- *
- * @stability unstable
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
-import {
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Option,
-  Queue,
-  Redacted,
-  Schema,
-  Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
-import { SecureRandom } from "effect/crypto";
-import { Base64Url } from "effect/encoding";
-import { HttpClient, HttpClientRequest } from "effect/http";
-import { ChildProcess } from "effect/process";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Queue from "effect/Queue";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -39,14 +36,16 @@ import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-d
  * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
  * `unreachable`, `bad_row`, `start_timeout` or `install`.
  *
- * @stability unstable
  * @category errors
  */
-export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
-  reason: Schema.String,
-  /** The failure this error translates, kept in memory for diagnosis. */
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class ControlError extends Schema.TaggedError<ControlError, { readonly brand: unique symbol }>()(
+  "ControlError",
+  {
+    reason: Schema.String,
+    /** The failure this error translates, kept in memory for diagnosis. */
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
@@ -82,12 +81,12 @@ const sample = (pid: number) =>
       });
 
       if (code !== 0) {
-        return yield* new ControlError({ reason: "sample" });
+        return yield* ControlError.make({ reason: "sample" });
       }
 
       return Number(text.trim()) * 1024;
     }),
-  ).pipe(Effect.mapError((cause) => new ControlError({ reason: "sample", cause })));
+  ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
   const raw = yield* work;
@@ -134,7 +133,6 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  * The brain's own flushes never wait: they fail as `offline` at once and retry on their schedule.
  * A call made while no port is known fails as `offline`.
  *
- * @stability unstable
  * @category constructors
  */
 export const startDev = Effect.fn("brain.instance")(function* <E, R>(
@@ -205,11 +203,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     args: ReadonlyArray<unknown>,
   ) {
     if (port === null) {
-      return yield* new ControlError({ reason: "offline" });
+      return yield* ControlError.make({ reason: "offline" });
     }
 
     const url = `http://127.0.0.1:${port}`;
-    const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
+    const fail = (cause: unknown) => ControlError.make({ reason: "unreachable", cause });
     const body = yield* Effect.try({
       try: () => JSON.stringify({ target, project, name, method, args }),
       catch: fail,
@@ -223,13 +221,13 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
       Effect.mapError(fail),
     );
-    const raw = yield* response.json.pipe(Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })));
+    const raw = yield* response.json.pipe(Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })));
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
-      Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
+      Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })),
     );
 
     if (answer.error !== undefined) {
-      return yield* new ControlError(answer.error);
+      return yield* ControlError.make(answer.error);
     }
 
     return answer.value;
@@ -305,13 +303,12 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       ],
       start: Effect.fnUntraced(function* (ports) {
         const port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
-          Effect.mapError(
-            (cause) =>
-              new SystemError({
-                subtag: "control_port",
-                message: "The local runtime returned an invalid control port",
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            SystemError.make({
+              subtag: "control_port",
+              message: "The local runtime returned an invalid control port",
+              cause,
+            }),
           ),
         );
         const [prev, next] = yield* send({ type: "listened", port });
@@ -396,7 +393,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         // or below reaches a whole process group. A first start that brings one fails the start.
         if (!isPid(pid)) {
           yield* Effect.logError("The local runtime reported a start with no process id", { pid });
-          yield* Deferred.fail(started, new ControlError({ reason: "bad_pid" }));
+          yield* Deferred.fail(started, ControlError.make({ reason: "bad_pid" }));
           return;
         }
 
@@ -444,7 +441,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         if (id !== null && ready !== undefined) {
           replacements.delete(id);
-          yield* Deferred.fail(ready, new ControlError({ reason: event.reason }));
+          yield* Deferred.fail(ready, ControlError.make({ reason: event.reason }));
         }
 
         const at = yield* Clock.currentTimeMillis;
@@ -467,7 +464,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     yield* Deferred.await(listening).pipe(
       Effect.timeoutOrElse({
         duration: START_BOUND,
-        orElse: () => Effect.fail(new ControlError({ reason: "start_timeout" })),
+        orElse: () => Effect.fail(ControlError.make({ reason: "start_timeout" })),
       }),
     );
     yield* Deferred.await(started);
@@ -572,10 +569,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         call("project", config.name, "", "codeInstall", [code]).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
         ),
-      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
+      ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "install", cause }))),
     failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
       recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
-        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+        Effect.mapError((cause) => ControlError.make({ reason: "install", cause })),
       ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>

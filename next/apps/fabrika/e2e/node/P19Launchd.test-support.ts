@@ -41,13 +41,13 @@ import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
 import { BrainInput } from "./P19Brain.test-support.ts";
 
-class HostError extends Schema.TaggedError<HostError>()("HostError", {
+class HostError extends Schema.TaggedError<HostError, { readonly brand: unique symbol }>()("HostError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-const fail = (cause: unknown) => new HostError({ reason: "host-check", cause: Redacted.make(cause) });
-const checked = (ok: boolean, reason: string) => (ok ? Effect.void : Effect.fail(new HostError({ reason })));
+const fail = (cause: unknown) => HostError.make({ reason: "host-check", cause: Redacted.make(cause) });
+const checked = (ok: boolean, reason: string) => (ok ? Effect.void : Effect.fail(HostError.make({ reason })));
 
 const command = Effect.fn("P19Host.command")(function* (executable: string, args: ReadonlyArray<string>) {
   return yield* Effect.scoped(
@@ -103,8 +103,8 @@ const processes = Effect.fn("P19Host.processes")(function* () {
  * and never reaches `kill`, where -1 means every process this user owns.
  */
 const signal = Effect.fn("P19Host.signal")(function* (name: "TERM" | "KILL", group: number) {
-  const owned = yield* Schema.decodeUnknownEffect(ProcessGroups.Owned)(group).pipe(
-    Effect.mapError((cause) => new HostError({ reason: "refused-group", cause: Redacted.make(cause) })),
+  const owned = yield* Schema.decodeEffect(ProcessGroups.Owned)(group).pipe(
+    Effect.mapError((cause) => HostError.make({ reason: "refused-group", cause: Redacted.make(cause) })),
   );
   yield* command("kill", [`-${name}`, `-${owned}`]);
 });
@@ -133,7 +133,7 @@ const status = Effect.fn("P19Host.status")(function* (target: string) {
 const listening = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
     Effect.provide(FetchHttpClient.layer),
   );
 
@@ -346,8 +346,8 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
         ? Readiness.cases.ready.make({})
         : Readiness.cases.waiting.make({});
     }).pipe(
-      Effect.mapError(
-        (cause: unknown) => new BrainProbeError({ reason: new Unreachable({ cause: Redacted.make(cause) }) }),
+      Effect.mapError((cause: unknown) =>
+        BrainProbeError.make({ reason: Unreachable.make({ cause: Redacted.make(cause) }) }),
       ),
     ),
     cleanup: Effect.gen(function* () {
@@ -365,8 +365,8 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
 
       return (yield* listening(spec.url)) ? Children.cases.waiting.make({}) : Children.cases.gone.make({});
     }).pipe(
-      Effect.mapError(
-        (cause: unknown) => new BrainProbeError({ reason: new Cleanup({ cause: Redacted.make(cause) }) }),
+      Effect.mapError((cause: unknown) =>
+        BrainProbeError.make({ reason: Cleanup.make({ cause: Redacted.make(cause) }) }),
       ),
     ),
   });
@@ -443,7 +443,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   );
   yield* bundle(`import ${JSON.stringify(helper)};`, controllerFile, root);
   yield* bundle(`import ${JSON.stringify(helper)};`, guardFile, root);
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
     // The brain's mode and input go first; the last argument checks that launchd keeps argv as given.
@@ -458,7 +458,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   // plutil, not a hand-written XML parser, verifies the native compiler preserves checked values.
   const plist = yield* command("plutil", ["-convert", "json", "-o", "-", `${home}/brain.plist`]);
   yield* checked(plist.code === 0, "plist-does-not-compile");
-  const job = yield* Schema.decodeUnknownEffect(
+  const job = yield* Schema.decodeEffect(
     Schema.fromJsonString(Schema.Struct({ Label: Schema.String, ProgramArguments: Schema.Array(Schema.String) })),
   )(plist.stdout);
   yield* checked(
@@ -512,7 +512,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     const current = yield* status(config.target);
 
     if (current._tag !== "loaded" || current.pid === null) {
-      return yield* new HostError({ reason: "no-process-to-observe" });
+      return yield* HostError.make({ reason: "no-process-to-observe" });
     }
 
     const expected = ProcessGroups.descendants(yield* processes(), current.pid);
@@ -593,7 +593,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   // The small job proves a successful exit is not restarted. The four starts above used the real brain.
   const fixture = `${home}/fixture.mjs`;
   yield* bundle(`import ${JSON.stringify(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`, fixture, root);
-  const normal = yield* Schema.decodeUnknownEffect(BrainSpec)({ ...spec, args: [fixture] });
+  const normal = yield* Schema.decodeEffect(BrainSpec)({ ...spec, args: [fixture] });
   yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(normal)));
   const normalContext = yield* Layer.build(Native.layer(normal, settings));
   const normalControl = Context.get(normalContext, BrainControl);
@@ -639,7 +639,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
       groups: owned,
       normalExitObservationMs: throttle * 3,
       executable,
-      versions: yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(ready),
+      versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
       settings,
     }),
   );

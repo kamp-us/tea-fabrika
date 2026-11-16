@@ -3,7 +3,15 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -26,12 +34,17 @@ const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-history-" });
-  const file = path.join(folder, "history.sqlite");
-  return Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
-}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+  return path.join(folder, "history.sqlite");
+}).pipe(
+  Effect.map((file) =>
+    Effect.acquireRelease(
+      Effect.sync(() => new DatabaseSync(file)),
+      (db) => Effect.sync(() => db.close()),
+    ).pipe(Effect.map(nodeSql)),
+  ),
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
 
 const process = "process_0000000000e008000000000000";
 const successor = "process_0000000000e008000000000001";
@@ -191,7 +204,7 @@ const service = Effect.fnUntraced(function* (
 ) {
   const ledger = yield* reader(sql);
   const failure = options.failure;
-  const lower = failure === undefined ? undefined : new LedgerError({ reason: failure.reason, cause: failure.cause });
+  const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
   const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
   const controlled: Ledger["Service"] = {
     ...ledger,
@@ -200,7 +213,7 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
-          return yield* Effect.fail(lower);
+          return yield* lower;
         }
 
         const captured = yield* ledger.wait(stream, after);

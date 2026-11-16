@@ -5,8 +5,11 @@
 // typecheck is this law's runner. Plant (after build): put `PlatformError` in `Journal.write`'s
 // error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer, PlatformError } from "effect";
-import type { KeyValueStore } from "effect/persistence";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import type * as KeyValueStore from "effect/persistence/KeyValueStore";
+import type * as PlatformError from "effect/PlatformError";
 import type { Rev } from "../Rev.ts";
 import type { Command, Result } from "../tasks/Task.ts";
 import type * as CommandsFront from "./Commands.ts";
@@ -18,24 +21,22 @@ import type * as JournalStore from "./JournalStore.ts";
 it("type: T1 Journal and Commands speak their own errors and shared names only, never KeyValueStore's or PlatformError", () => {
   // The journal's two calls, as the contract writes them: one entry per task, read or written.
   expectTypeOf<Context.Service.Shape<typeof Journal>>().toEqualTypeOf<{
-    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<Entry | null, JournalError>;
+    readonly write: (task: string, entry: Entry) => Effect.Effect<void, JournalError>;
   }>();
   expectTypeOf<Extract<JournalError, PlatformError.PlatformError>>().toEqualTypeOf<never>();
   expectTypeOf<Extract<JournalError, KeyValueStore.KeyValueStoreError>>().toEqualTypeOf<never>();
   expectTypeOf<JournalError["reason"]>().toEqualTypeOf<"storage" | "bad_entry">();
   // The five steps a task's entry may stand at, each keeping its execution and the client's own clock.
-  expectTypeOf<(typeof Entry.Type)["_tag"]>().toEqualTypeOf<
-    "prepared" | "executing" | "result" | "acknowledged" | "held"
-  >();
+  expectTypeOf<Entry["_tag"]>().toEqualTypeOf<"prepared" | "executing" | "result" | "acknowledged" | "held">();
   // A finish refused for good keeps the brain's reason, and every entry after `executing` keeps
   // when the command started.
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "held" }>["reason"]>().toEqualTypeOf<string>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["startedAt"]>().toEqualTypeOf<string | undefined>();
-  expectTypeOf<(typeof Entry.Type)["execution"]>().toEqualTypeOf<string>();
-  expectTypeOf<(typeof Entry.Type)["at"]>().toEqualTypeOf<string>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "result" }>["result"]>().toEqualTypeOf<Result>();
-  expectTypeOf<Extract<typeof Entry.Type, { _tag: "acknowledged" }>["rev"]>().toEqualTypeOf<Rev>();
+  expectTypeOf<Extract<Entry, { _tag: "held" }>["reason"]>().toEqualTypeOf<string>();
+  expectTypeOf<Extract<Entry, { _tag: "result" }>["startedAt"]>().toEqualTypeOf<string | undefined>();
+  expectTypeOf<Entry["execution"]>().toEqualTypeOf<string>();
+  expectTypeOf<Entry["at"]>().toEqualTypeOf<string>();
+  expectTypeOf<Extract<Entry, { _tag: "result" }>["result"]>().toEqualTypeOf<Result>();
+  expectTypeOf<Extract<Entry, { _tag: "acknowledged" }>["rev"]>().toEqualTypeOf<Rev>();
   // The command contract: what this host can do, and one closed command run once, never failing.
   expectTypeOf<Context.Service.Shape<typeof Commands>>().toEqualTypeOf<{
     readonly has: ReadonlyArray<string>;
@@ -52,5 +53,5 @@ it("type: T1 Journal and Commands speak their own errors and shared names only, 
   expectTypeOf<"layer" extends keyof typeof Commands ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof CommandsFront ? true : false>().toEqualTypeOf<false>();
   // The error is a schema value of its own, so a client can save or show it as the module wrote it.
-  expectTypeOf<typeof JournalError.Type>().toEqualTypeOf<JournalError>();
+  expectTypeOf<JournalError>().toEqualTypeOf<JournalError>();
 });

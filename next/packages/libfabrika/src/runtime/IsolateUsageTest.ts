@@ -233,63 +233,61 @@ export const suite = (rig: Rig) =>
                 },
                 size: () => store.sql.size(),
               };
-              yield* Effect.gen(function* () {
-                const service = yield* rig.telemetry(sql, "checklist:1");
+              const service = yield* rig.telemetry(sql, "checklist:1");
 
-                if (warm) {
-                  yield* service.record([sample(pid(1), 0)]);
-                }
+              if (warm) {
+                yield* service.record([sample(pid(1), 0)]);
+              }
 
-                let committed = warm ? 1 : 0;
-                let held = 0;
-                let owed = false;
+              let committed = warm ? 1 : 0;
+              let held = 0;
+              let owed = false;
 
-                for (const cell of tape) {
-                  // A fresh sink first loses its table creation in the failed transaction.
-                  const moves =
-                    held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
-                  const move = moves[cell.pick % moves.length];
+              for (const cell of tape) {
+                // A fresh sink first loses its table creation in the failed transaction.
+                const moves =
+                  held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
+                const move = moves[cell.pick % moves.length];
 
-                  if (move === "reopen") {
-                    yield* store.reopen;
-                  } else if (move === "flush") {
-                    expect(Exit.isFailure(yield* Effect.exit(service.flush))).toBe(true);
-                    owed = false;
+                if (move === "reopen") {
+                  yield* store.reopen;
+                } else if (move === "flush") {
+                  expect(Exit.isFailure(yield* Effect.exit(service.flush))).toBe(true);
+                  owed = false;
+                } else {
+                  const count = move === "recover" ? 1 : cell.size;
+                  const batch = Array.from({ length: count }, (_, n) => sample(pid(1), cell.cpu + n));
+                  writes = 0;
+                  // Fail inside a batch, including after earlier rows would have been written.
+                  failAt = move === "cut" ? 1 + (cell.pick % count) : null;
+                  transactions = 0;
+                  const before = rig.rows(store.sql).length;
+                  yield* service.record(batch);
+                  expect(transactions, "one batch is one atomic sink commit").toBe(1);
+
+                  if (move === "cut") {
+                    held += count;
+                    owed = true;
+                    expect(rig.rows(store.sql)).toHaveLength(before);
                   } else {
-                    const count = move === "recover" ? 1 : cell.size;
-                    const batch = Array.from({ length: count }, (_, n) => sample(pid(1), cell.cpu + n));
-                    writes = 0;
-                    // Fail inside a batch, including after earlier rows would have been written.
-                    failAt = move === "cut" ? 1 + (cell.pick % count) : null;
-                    transactions = 0;
-                    const before = rig.rows(store.sql).length;
-                    yield* service.record(batch);
-                    expect(transactions, "one batch is one atomic sink commit").toBe(1);
-
-                    if (move === "cut") {
-                      held += count;
-                      owed = true;
-                      expect(rig.rows(store.sql)).toHaveLength(before);
-                    } else {
-                      committed += count + held;
-                      held = 0;
-                    }
-
-                    failAt = null;
-                    expect(rig.rows(store.sql)).toHaveLength(committed);
-                    expect(rig.health(store.sql)).toHaveLength(committed);
+                    committed += count + held;
+                    held = 0;
                   }
-                }
 
-                if (held > 0) {
-                  yield* service.record([sample(pid(1), 0)]);
-                  committed += held + 1;
+                  failAt = null;
+                  expect(rig.rows(store.sql)).toHaveLength(committed);
+                  expect(rig.health(store.sql)).toHaveLength(committed);
                 }
+              }
 
-                yield* store.reopen;
-                expect(rig.rows(store.sql)).toHaveLength(committed);
-                expect(rig.health(store.sql)).toHaveLength(committed);
-              });
+              if (held > 0) {
+                yield* service.record([sample(pid(1), 0)]);
+                committed += held + 1;
+              }
+
+              yield* store.reopen;
+              expect(rig.rows(store.sql)).toHaveLength(committed);
+              expect(rig.health(store.sql)).toHaveLength(committed);
             }),
           );
         const replay = (tape: ReadonlyArray<Cell>) =>

@@ -23,7 +23,9 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Predicate, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -41,7 +43,7 @@ const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person:
 const admission = (person: string) => ({ ...ADMITTED, identity: { ...ADMITTED.identity, person } });
 
 const isAdmission = Schema.is(
-  Schema.Struct({ ping: Schema.Number, identity: Schema.Struct({ person: Schema.String }) }),
+  Schema.Struct({ ping: Schema.Finite, identity: Schema.Struct({ person: Schema.String }) }),
 );
 
 /** A blind draw the fold reads in the state it reached. */

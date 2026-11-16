@@ -1,7 +1,5 @@
 /**
  * Paged stream discovery on the ledger's SQL tables.
- *
- * @stability unstable
  */
 import { Effect, Layer, Option, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
@@ -12,7 +10,6 @@ import { PAGE } from "./Log.ts";
 /**
  * Supplies discovery using the ledger's table setup and page size.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>
@@ -22,18 +19,17 @@ export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>
       list: (prefix: string) =>
         Stream.paginate(null as string | null, (after) =>
           store.streams(prefix, after).pipe(
-            Effect.mapError(
-              (error) =>
+            Effect.mapBoth({
+              onFailure: (error) =>
                 new LedgerStreamsError({
                   reason:
                     error.reason === "bad_row"
                       ? new BadRow({ cause: error.cause })
                       : new Storage({ cause: error.cause }),
                 }),
-            ),
-            Effect.map(
-              (names) => [names, names.length < PAGE ? Option.none() : Option.fromUndefinedOr(names.at(-1))] as const,
-            ),
+              onSuccess: (names) =>
+                [names, names.length < PAGE ? Option.none() : Option.fromUndefinedOr(names.at(-1))] as const,
+            }),
           ),
         ),
     };

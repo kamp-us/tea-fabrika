@@ -338,16 +338,16 @@ const Ask = Schema.Struct({
   report: Schema.String,
   events: Schema.String,
   err: Schema.String,
-  minutes: Schema.Number,
+  minutes: Schema.Finite,
   /** When this run started, in ms: a report older than this is not this run's. */
-  started: Schema.Number,
+  started: Schema.Finite,
 });
 type Ask = typeof Ask.Type;
 
 const Read = Schema.Struct({
   /** `null`: the fetch failed, with why in `problem`. */
   head: Schema.NullOr(Schema.String),
-  commits: Schema.Number,
+  commits: Schema.Finite,
   /** What the commits check held the step on (`heldBy`). A missing signature is never in it (0161). */
   unsigned: Schema.Array(Schema.String),
   exam: Schema.Array(Schema.String),
@@ -361,7 +361,7 @@ const Read = Schema.Struct({
   /** What `plancheck --draft` said when it failed; `null` when it passed or did not run. */
   plancheck: Schema.NullOr(Schema.String),
   /** Files the agent left changed in the box's tree: a review may leave none. */
-  changed: Schema.Number,
+  changed: Schema.Finite,
   report: Schema.String,
   problem: Schema.NullOr(Schema.String),
 });
@@ -390,7 +390,7 @@ const Entry = Schema.Struct({
   outcome: Schema.String,
   reason: Schema.String,
   head: Schema.String,
-  exit: Schema.Number,
+  exit: Schema.Finite,
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
@@ -455,7 +455,7 @@ const ANSWER = /^[`*\s]*answer:\s*(done|send\s+(tests|build|plan)|ask|skip|stuck
  */
 const Said = Schema.TaggedUnion({
   none: {},
-  many: { count: Schema.Number },
+  many: { count: Schema.Finite },
   unread: {},
   one: { verb: Schema.String, to: Schema.String, reason: Schema.String },
 });
@@ -506,7 +506,7 @@ const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, r
  * 871, 2026-11-12), and a correct merge-ready was refused.
  */
 const verdictText = (report: string) =>
-  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+  Option.match(Schema.decodeOption(AnswerAlone)(report.trim()), {
     onNone: () => report,
     onSome: (answer) => answer.reason,
   });
@@ -1551,7 +1551,7 @@ const planOwners = (env: Env, plan: string) => {
   }
 
   const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
-  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+  return r.code === 0 ? Option.getOrNull(Schema.decodeOption(Owners)(r.out.trim())) : null;
 };
 
 /**
@@ -1649,7 +1649,7 @@ const MutboxLine = Schema.fromJsonString(
 
 /** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
 export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
-  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+  const line = Schema.decodeOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
   return line._tag === "Some"
     ? {
         outcome: line.value.outcome,
@@ -1703,7 +1703,7 @@ const runMutbox: MutboxRun = (args) =>
     return { code: Number(code), out };
   }).pipe(
     Effect.scoped,
-    Effect.catch(() => Effect.succeed({ code: 127, out: "" })),
+    Effect.orElseSucceed(() => ({ code: 127, out: "" })),
     Effect.provide(nodeServices),
   );
 
@@ -1808,7 +1808,7 @@ export const agentCapFull = (agents: number): boolean => agents >= AGENT_CAP;
 
 /** One timed part of a step's start, in ms, kept on the step's entry in state/<quest>.json, so the
  * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
-const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Number });
+const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Finite });
 type Phase = typeof Phase.Type;
 
 /** The `phase <name> <ms>` lines box.sh new prints on stderr, in order. */
@@ -1819,7 +1819,7 @@ const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 
 /** When the agent's event log says it first did anything, in ms; `null` with no timed first line. */
 export const firstEventAt = (events: string): number | null => {
-  const first = Schema.decodeUnknownOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
+  const first = Schema.decodeOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
   return Number.isFinite(at) ? at : null;
 };
@@ -1995,7 +1995,7 @@ export interface StepArgs {
  */
 export const Start = Schema.TaggedUnion({
   prepared: { ask: Ask, electron: Schema.Boolean, phases: Schema.Array(Phase) },
-  refused: { outcome: Schema.String, reason: Schema.String, exit: Schema.Number },
+  refused: { outcome: Schema.String, reason: Schema.String, exit: Schema.Finite },
 });
 
 export type Prepared = typeof Start.cases.prepared.Type;

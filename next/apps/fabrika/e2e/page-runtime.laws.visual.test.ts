@@ -39,14 +39,17 @@ const QUIET = 250;
 const REDIAL_WITHIN = 10_000;
 
 /** A Playwright call the law awaited failed: which call, and the cause. */
-class PlaywrightError extends Schema.TaggedError<PlaywrightError>()("PlaywrightError", {
-  op: Schema.String,
-  message: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+class PlaywrightError extends Schema.TaggedError<PlaywrightError, { readonly brand: unique symbol }>()(
+  "PlaywrightError",
+  {
+    op: Schema.String,
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 /** A property's own run failed, a counterexample or a setup error, with fast-check's report as its message. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
+class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()("PropertyFailed", {
   message: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -57,12 +60,12 @@ const text = (cause: unknown) => (cause instanceof Error ? cause.message : Strin
 const playwright = <A>(op: string, run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
-    catch: (cause) => new PlaywrightError({ op, message: `${op}: ${text(cause)}`, cause }),
+    catch: (cause) => PlaywrightError.make({ op, message: `${op}: ${text(cause)}`, cause }),
   });
 
 /** Runs a fast-check property, its failure kept as fast-check reports it. */
 const property = (run: () => Promise<void>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new PropertyFailed({ message: text(cause), cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => PropertyFailed.make({ message: text(cause), cause }) });
 
 type Assets = { readonly page: string; readonly script: string };
 let assets: Assets;

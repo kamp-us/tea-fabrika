@@ -34,7 +34,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       online: t.live,
       live: Effect.tryPromise({
         try: () => page.getByRole("status").innerText(),
-        catch: () => new SuiteError({ waited: "browser: the status line" }),
+        catch: () => SuiteError.make({ waited: "browser: the status line" }),
       }).pipe(
         Effect.map((text) => text.startsWith("Online")),
         Effect.orDie,
@@ -42,7 +42,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       add: (name) =>
         Effect.tryPromise({
           try: () => t.field.fill(name).then(() => t.field.press("Enter")),
-          catch: () => new SuiteError({ waited: "browser: the add field" }),
+          catch: () => SuiteError.make({ waited: "browser: the add field" }),
         }).pipe(Effect.orDie),
       shown: t.shown,
       dials: () => seen.sockets.length,
@@ -53,7 +53,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       pid: Effect.succeed(null),
       close: Effect.tryPromise({
         try: () => page.close(),
-        catch: () => new SuiteError({ waited: "browser: the tab's close" }),
+        catch: () => SuiteError.make({ waited: "browser: the tab's close" }),
       }).pipe(Effect.orDie),
     };
     return backend;
@@ -61,7 +61,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
 
 /** A key of the headless client's own, made in WebCrypto as a browser makes one. */
 const headlessKey = Effect.gen(function* () {
-  const failed = () => new ClientKeyError({ op: "make", error: "OperationError" });
+  const failed = () => ClientKeyError.make({ op: "make", error: "OperationError" });
   const pair = yield* Effect.tryPromise({
     try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
     catch: failed,
@@ -81,12 +81,12 @@ const headlessKey = Effect.gen(function* () {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "created" as const,
     sign: (bytes: Uint8Array) =>
       Effect.tryPromise({
         try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
-        catch: () => new ClientKeyError({ op: "sign", error: "OperationError" }),
+        catch: () => ClientKeyError.make({ op: "sign", error: "OperationError" }),
       }).pipe(Effect.map((b) => new Uint8Array(b))),
   };
 });

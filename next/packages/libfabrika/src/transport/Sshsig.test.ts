@@ -12,7 +12,8 @@
 // p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
 // it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as fc from "fast-check";
 import {
   SPACE,

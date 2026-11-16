@@ -198,8 +198,8 @@ describe("p101, measurements in two levels", () => {
       decoy: fc.boolean(),
     });
     await fc.assert(
-      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* fresh;
             yield* Effect.gen(function* () {
@@ -237,8 +237,8 @@ describe("p101, measurements in two levels", () => {
               expect([...(yield* summaries)].sort(bySummary)).toEqual(rollup(spans));
             }).pipe(Effect.provide(world(sql)), Effect.provide(TestClock.layer()));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) },
     );
   });

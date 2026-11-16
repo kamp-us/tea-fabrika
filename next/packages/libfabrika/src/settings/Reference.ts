@@ -4,8 +4,6 @@
  * **Details**
  *
  * Rows come from the declarations, never from the snapshot's keys. Defaults and releases are derived documentation, never extra settings facts.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 import * as Codec from "./Codec.ts";
@@ -21,7 +19,6 @@ import { Origin } from "./Sources.ts";
  *
  * `value` and `default` are JSON-encoded. `scope`, `reload` and `since` copy the declaration.
  *
- * @stability unstable
  * @category models
  */
 export const Row = Schema.Struct({
@@ -37,7 +34,6 @@ export const Row = Schema.Struct({
 /**
  * The decoded type of `Row`.
  *
- * @stability unstable
  * @category models
  */
 export type Row = typeof Row.Type;
@@ -49,7 +45,6 @@ export type Row = typeof Row.Type;
  *
  * `since` is the release that introduced the key, and `minimum` is the repo's stated minimum.
  *
- * @stability unstable
  * @category models
  */
 export interface Warning {
@@ -70,7 +65,6 @@ const sorted = <A>(group: Setting.Group<A>) => [...group.declarations].sort((a, 
  *
  * A row takes its value and origin from the snapshot at the declaration's path. When the snapshot holds none, the row shows the encoded default with the default origin.
  *
- * @stability unstable
  * @category constructors
  */
 export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row> =>
@@ -92,7 +86,6 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
  *
  * A row whose origin is the default never warns: no source set the key.
  *
- * @stability unstable
  * @category combinators
  */
 export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
@@ -112,7 +105,6 @@ const code = (text: string) => `\`${text}\``;
  *
  * Each section holds the escaped doc and a table of scope, environment name, flag, encoded default, reload and release. A `text` setting adds its file default and a note on the text spelling a file takes.
  *
- * @stability unstable
  * @category constructors
  */
 export const markdown = <A>(group: Setting.Group<A>) =>

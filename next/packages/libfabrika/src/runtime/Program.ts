@@ -2,8 +2,6 @@
  * A program: a pure tea machine and the declarations the runner checks it by. A program gets no
  * sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime would, and never
  * runs a Cmd: the runner does that, after the input is saved.
- *
- * @stability unstable
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
@@ -44,7 +42,6 @@ const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
 /**
  * Schema for a program's refusal: a `reason`, and the numbers that explain it.
  *
- * @stability unstable
  * @category schemas
  */
 export const Refusal = Schema.Struct({
@@ -55,7 +52,6 @@ export const Refusal = Schema.Struct({
 /**
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Refusal = typeof Refusal.Type;
@@ -70,7 +66,6 @@ const Upgrade = Schema.Struct({
 /**
  * Schema for the saved model's shape: its version, its schema and the named upgrades that reach it.
  *
- * @stability unstable
  * @category schemas
  */
 export const State = Schema.Struct({
@@ -81,7 +76,6 @@ export const State = Schema.Struct({
 /**
  * The saved model's shape, as `State` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type State = typeof State.Type;
@@ -107,7 +101,6 @@ const InputSchema = Schema.TaggedUnion({
  * One input port of a program: a write port, which takes an input, or a read port, which answers
  * from the view.
  *
- * @stability unstable
  * @category models
  */
 export type Input = typeof InputSchema.Type;
@@ -160,7 +153,6 @@ Object.defineProperty(writeCase, "make", { value: writePort });
  * keep the port's own schema type, so TypeScript checks a read port's `answer` against the input
  * that port declares.
  *
- * @stability unstable
  * @category schemas
  */
 export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
@@ -172,14 +164,12 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
  * Schema for an event a program may write: its schema, and whether only a person's input may cause
  * it. This is the trusted policy the door checks. Elm outputs never authorize a ledger write.
  *
- * @stability unstable
  * @category schemas
  */
 export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.Boolean });
 /**
  * One row of a program's `writes`, as `EventPolicy` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type EventPolicy = typeof EventPolicy.Type;
@@ -306,7 +296,6 @@ type FilledPorts<T extends ProgramMachine, I> = {
  * output ports, its audit selector and refusal check, and the events it may write. Concrete types
  * stay with authored programs. The loader uses the checked, erased declaration.
  *
- * @stability unstable
  * @category models
  */
 export type Program<
@@ -340,7 +329,6 @@ export type Program<
  * which carries its program's name (`tezgah.split_right`), its keys, its shell word and its
  * palette label. A window is handed a program's rows as a value and loads them into its key table.
  *
- * @stability unstable
  * @category models
  */
 export type Binding = {
@@ -466,7 +454,6 @@ const makeEffect = Effect.fn("program.make")(function* <
  * A spec writes nothing twice: the model's schema and the Msg schema come from the machine, and a
  * write port given as a description takes the machine's Msg schema.
  *
- * @stability unstable
  * @category constructors
  */
 export const Program = { schema: Declaration, make, makeEffect };
@@ -478,7 +465,6 @@ const Event = Schema.Record(Schema.String, Schema.Json);
  * Schema for what a program asks to write: caused by an earlier input it names, or explicitly its
  * own.
  *
- * @stability unstable
  * @category schemas
  */
 export const Write = Schema.TaggedUnion({
@@ -488,7 +474,6 @@ export const Write = Schema.TaggedUnion({
 /**
  * What a program asks the runner to write, as `Write` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Write = typeof Write.Type;
@@ -497,7 +482,6 @@ export type Write = typeof Write.Type;
  * Schema for one pure step's answer: `stepped`, with the next model, view and Cmds as JSON and the
  * wake time, or `refused`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Step = Schema.TaggedUnion({
@@ -512,7 +496,6 @@ export const Step = Schema.TaggedUnion({
 /**
  * One pure step's answer, as `Step` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Step = typeof Step.Type;
@@ -522,14 +505,12 @@ export type Step = typeof Step.Type;
  * input), or `refused` with the program's refusal. A fresh check decides admission without
  * preparing a model or running update.
  *
- * @stability unstable
  * @category schemas
  */
 export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
 /**
  * An admission answer, as `Admission` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Admission = typeof Admission.Type;
@@ -537,7 +518,6 @@ export type Admission = typeof Admission.Type;
 /**
  * An update's checked model, view, Cmds and wake time.
  *
- * @stability unstable
  * @category models
  */
 export type Prepared = typeof Step.cases.stepped.Type;
@@ -553,7 +533,6 @@ export type Prepared = typeof Step.cases.stepped.Type;
  * input, so it must be retried. `errorClass` names the thrown class, or the `error` text when one was
  * kept.
  *
- * @stability unstable
  * @category errors
  */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
@@ -584,7 +563,6 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
  * Each step answers a `Step` as JSON and runs no Cmd. They are plain functions: a failure is
  * thrown as `ProgramDown`, never returned.
  *
- * @stability unstable
  * @category models
  */
 export type Stepper = {
@@ -683,7 +661,6 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
  * must be a number or null, and a declared Cmd must match its input schema. A throw or bad data is
  * a `ProgramDown`, whose reason says where: `load`, `step`, `saved_state` or `saved_letter`.
  *
- * @stability unstable
  * @category constructors
  */
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {

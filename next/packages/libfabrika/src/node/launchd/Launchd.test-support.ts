@@ -1,22 +1,20 @@
 import { readlinkSync, symlinkSync } from "node:fs"; // edge: Effect's FileSystem takes and gives a link's target as text, and a target that is not valid UTF-8 needs bytes
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
-import {
-  Context,
-  Deferred,
-  Effect,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  PlatformError,
-  Schema,
-  Sink,
-  Stream,
-} from "effect";
-import { Digest } from "effect/crypto";
-import type { ChildProcess } from "effect/process";
-import { ChildProcessSpawner } from "effect/process";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
@@ -72,7 +70,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const events: Array<string> = [],
     seen: Array<Seen> = [],
     jobs: Array<unknown> = [];
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable: path.join(home, "Electron"),
     args: [path.join(home, "brain.mjs"), "spaces & <angles> 雪"],

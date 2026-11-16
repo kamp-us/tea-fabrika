@@ -4,8 +4,6 @@
  * **Details**
  *
  * Paths are sorted before hashing, and origins stay out of it, so equal settings have one hash whatever source gave them.
- *
- * @stability unstable
  */
 import { Effect, Option, Predicate, Record as Rec, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -16,7 +14,6 @@ import { Origin, type Resolved } from "./Sources.ts";
 /**
  * Schema for a recorded snapshot: `values` and `origins` keyed by dotted path, and the SHA-256 `hash` of the values.
  *
- * @stability unstable
  * @category models
  */
 export const Snapshot = Schema.Struct({
@@ -27,7 +24,6 @@ export const Snapshot = Schema.Struct({
 /**
  * The decoded type of `Snapshot`.
  *
- * @stability unstable
  * @category models
  */
 export type Snapshot = typeof Snapshot.Type;
@@ -39,13 +35,15 @@ export type Snapshot = typeof Snapshot.Type;
  *
  * Two cases build it in `read`: the saved input fails the strict decode, re-decode or re-encode, which carries a redacted `cause`, and the saved hash does not match the values, which carries none. The cause is redacted because decoder details can repeat the input.
  *
- * @stability unstable
  * @category errors
  */
-export class SnapshotError extends Schema.TaggedError<SnapshotError>()("SnapshotError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly brand: unique symbol }>()(
+  "SnapshotError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
@@ -92,7 +90,6 @@ const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
  *
  * Resolved values that do not encode are treated as a defect and are not in the error channel. Needs the `Digest` service.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
@@ -120,7 +117,6 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  *
  * The input must hold exactly the group's declared paths in `values` and `origins`, with no extra keys. Each origin must fit its own declaration: a flag named `--` and the path, the declaration's own environment name, or a file named by a relative path, `~`, `~/...`, `$FABRIKA_HOME` or `$FABRIKA_HOME/...`. Values are decoded and encoded again to their canonical form, and the saved hash must equal the hash of those canonical values. Returns the decoded values beside the snapshot. Fails with `SnapshotError`, and needs the `Digest` service.
  *
- * @stability unstable
  * @category decoding
  */
 export const read = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(

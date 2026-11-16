@@ -2,8 +2,6 @@
  * `node:sqlite` as a `Sql`, on its own subpath so the data layer's top level names no platform. It
  * backs tests and the local brain's span queue, never a ledger file of its own: the one ledger
  * lives in the project object.
- *
- * @stability unstable
  */
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import type { Sql, SqlValue } from "../Sql.ts";
@@ -31,7 +29,6 @@ const value = (column: SQLOutputValue): SqlValue => {
  * A column that is not text, a number or null throws a `TypeError`: the ledger writes none, so
  * such a row was written by something else.
  *
- * @stability unstable
  * @category constructors
  */
 export const nodeSql = (db: DatabaseSync): Sql => {

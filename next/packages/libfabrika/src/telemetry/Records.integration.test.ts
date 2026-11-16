@@ -35,8 +35,8 @@ import { RecordManager, type RecordCalls } from "./Records.ts";
 import { SinkError } from "./Sink.ts";
 import { type Chain, SpanRow } from "./Trace.ts";
 
-type ChainValue = typeof Chain.Type;
-type Row = typeof SpanRow.Type;
+type ChainValue = Chain;
+type Row = SpanRow;
 
 /** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
  *  file with a plain call, so a file cannot be acquired one by one: the folder holds them, and the

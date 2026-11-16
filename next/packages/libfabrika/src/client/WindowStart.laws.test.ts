@@ -24,10 +24,20 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
-import { Socket } from "effect/socket";
-import { TestClock } from "effect/testing";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Random from "effect/Random";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
@@ -64,7 +74,7 @@ const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" 
 /** One JSON-RPC 2.0 call as the page frames it. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),
@@ -251,7 +261,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
 };
 
 /** WebCrypto refused to make or export the test key: the test's own failure, never the product's. */
-class TestKeyError extends Schema.TaggedError<TestKeyError>()("TestKeyError", {}) {}
+class TestKeyError extends Schema.TaggedError<TestKeyError, { readonly brand: unique symbol }>()("TestKeyError", {}) {}
 
 /** A constructor's refusal, as a browser's `new WebSocket` throws one: a DOMException of a platform class. */
 const refuse = (message: string, name: string): never => {
@@ -262,17 +272,17 @@ const refuse = (message: string, name: string): never => {
 const identity = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise({
     try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
-    catch: () => new TestKeyError({}),
+    catch: () => TestKeyError.make({}),
   });
   const raw = new Uint8Array(
     yield* Effect.tryPromise({
       try: () => crypto.subtle.exportKey("raw", pair.publicKey),
-      catch: () => new TestKeyError({}),
+      catch: () => TestKeyError.make({}),
     }),
   );
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
   return {
     fingerprint: "SHA256:test",
     raw: btoa(String.fromCharCode(...raw))
@@ -284,7 +294,7 @@ const identity = Effect.gen(function* () {
     sign: (bytes: Uint8Array) =>
       Effect.tryPromise({
         try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
-        catch: () => new ClientKeyError({ op: "sign", error: "OperationError" }),
+        catch: () => ClientKeyError.make({ op: "sign", error: "OperationError" }),
       }).pipe(Effect.map((b) => new Uint8Array(b))),
   };
 });
@@ -590,7 +600,7 @@ describe("L9: failure classes through the real runtime", () => {
                     Effect.suspend(() => {
                       if (operation === "sign") {
                         injected++;
-                        return Effect.fail(new ClientKeyError({ op: "sign", error }));
+                        return Effect.fail(ClientKeyError.make({ op: "sign", error }));
                       }
 
                       return key.sign(bytes);
@@ -599,7 +609,7 @@ describe("L9: failure classes through the real runtime", () => {
               claimPersist: Effect.suspend(() => {
                 if (operation === "claim") {
                   injected++;
-                  return Effect.fail(new ClientKeyError({ op: "write", error }));
+                  return Effect.fail(ClientKeyError.make({ op: "write", error }));
                 }
 
                 return Effect.succeed(false);
@@ -614,7 +624,7 @@ describe("L9: failure classes through the real runtime", () => {
                   if (operation === "record" && (row.record._tag === "failure" || writes++ === skip)) {
                     injected++;
                     failedRecord ??= row.record;
-                    return Effect.fail(new ClientRowsError({ op: "write", error }));
+                    return Effect.fail(ClientRowsError.make({ op: "write", error }));
                   }
 
                   return Effect.void;
@@ -798,7 +808,7 @@ const Act = Schema.Union([
 ]);
 
 /** The number id of a call the start wrote, read from the text it sent. */
-const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
 type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 

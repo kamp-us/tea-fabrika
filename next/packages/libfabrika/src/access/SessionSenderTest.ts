@@ -10,7 +10,14 @@
 // Two oracles: the walk's own model of what it recorded, delivered, ended and removed, and `signer`
 // itself, asked under a kind and an id no other call uses, so its answer is the one it would sign.
 import { describe, expect, it } from "@effect/vitest";
-import { Brand, Cause, Effect, Exit, Option, Predicate, type Scope } from "effect";
+import * as Brand from "effect/Brand";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import type * as Id from "../Id.ts";
 import type { Sql } from "../Sql.ts";
@@ -108,9 +115,9 @@ const shown = (exit: Exit.Exit<unknown, unknown>): Shown => {
   }
 
   const error = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
-  return error instanceof NotGranted
+  return Schema.is(NotGranted)(error)
     ? { refused: "NotGranted" }
-    : error instanceof SigningRefused
+    : Schema.is(SigningRefused)(error)
       ? { refused: "SigningRefused", reason: error.reason }
       : { other: Predicate.hasProperty(error, "_tag") ? String(error._tag) : String(exit.cause) };
 };
@@ -193,7 +200,7 @@ const walk = (open: Open) =>
           (key: string) =>
             CLIENTS.some((c) => c === key && world.live.has(c))
               ? Effect.succeed(writer(key === "agent" ? "agent" : "person"))
-              : Effect.fail(new NotGranted({})),
+              : Effect.fail(NotGranted.make({})),
           { input: () => false, event: () => false },
         ),
       ),
