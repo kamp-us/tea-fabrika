@@ -1,9 +1,9 @@
-// T285, PR 1, next/. Plants are source fixtures, as in the other lint exams.
-import { Effect, Tracer } from "effect";
-import * as fc from "fast-check";
+// T285, PR 1, next/. Plants are source fixtures, as in the other rules' tests here. They were the exam's
+// (next/apps/fabrika/src/exam/effect-functions.integration.test.ts) until 0591 moved them here; the span
+// law on CI's `edges` step went to next/apps/fabrika/src/exam/edges.integration.test.ts. Plant: skip the
+// curried wrapper (an arrow returned by an arrow is not named), and line 7 stops firing.
 import { describe, expect, it } from "vitest";
-import { plant } from "../../../../../oxlint-plugins/plant.ts";
-import { asks } from "./edges.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(effect-functions)";
 const FILE = "next/packages/libfabrika/src/data/tracing.ts";
@@ -42,60 +42,24 @@ describe("effect-functions", async () => {
     ].join("\n"),
   });
 
-  it("rejects function spans, including append, recovery, curried and direct wrappers", () => {
+  it("scenario: rejects function spans, including append, recovery, curried and direct wrappers", () => {
     expect(all(CODE, FILE)).toEqual([3, 4, 5, 6, 7, 8, 9]);
   });
 
-  it("accepts inner spans, consumed stream spans, named fn, untraced helpers and callbacks", () => {
+  it("scenario: accepts inner spans, consumed stream spans, named fn, untraced helpers and callbacks", () => {
     expect(all(CODE, FILE).filter((line) => line >= 10)).toEqual([]);
   });
 
-  it("recognizes Effect imports under another name", () => {
+  it("scenario: recognizes Effect imports under another name", () => {
     expect(all(CODE, "next/packages/libfabrika/src/data/alias.ts")).toEqual([2]);
     expect(all(CODE, "next/packages/libfabrika/src/data/namespace.ts")).toEqual([2]);
   });
 
-  it("leaves today's version alone", () => {
+  it("scenario: leaves today's version alone", () => {
     expect(all(CODE, "packages/fabrika/src/tracing.ts")).toEqual([]);
   });
 
-  it("accepts test helpers that manufacture spans as sink input", () => {
+  it("scenario: accepts test helpers that manufacture spans as sink input", () => {
     expect(all(CODE, "next/packages/libfabrika/src/data/tracing.test.ts")).toEqual([]);
-  });
-
-  it("the exam's generated edge reads keep answers and one named function span", () => {
-    fc.assert(
-      fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 12 }), (old) => {
-        const spans: Array<Tracer.NativeSpan> = [];
-        const tracer = Tracer.make({
-          span(options) {
-            const span = new Tracer.NativeSpan(options);
-            spans.push(span);
-            return span;
-          },
-        });
-        const before = new Map<string, string>();
-        const after = new Map<string, string>();
-
-        for (const [index, present] of old.entries()) {
-          const path = `next/test-${index}.ts`;
-          const source = `// oxlint-disable-next-line fabrika/no-promises -- edge: case ${index}\nconst value = 1;`;
-
-          if (present) {
-            before.set(path, source);
-          }
-
-          after.set(path, source);
-        }
-
-        const found = Effect.runSync(asks(before, after).pipe(Effect.withTracer(tracer)));
-        expect(found.map((edge) => edge.path).sort()).toEqual(
-          old.flatMap((present, index) => (present ? [] : [`next/test-${index}.ts`])).sort(),
-        );
-        expect(spans.map((s) => s.name)).toEqual(["exam.asks"]);
-        expect(spans[0]!.status._tag).toBe("Ended");
-      }),
-      { seed: 119120, numRuns: 40 },
-    );
   });
 });
