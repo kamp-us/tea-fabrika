@@ -421,6 +421,13 @@
   },
   "overrides": [
     {
+      // 0559: no reduce callback or loop spreads its running result back into itself. An error, with
+      // no warn line and no inline ignore: a hit is rewritten, or it goes to the owner. Today's app
+      // keeps its hits and is not in `files`.
+      "files": ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
+      "rules": { "oxc/no-accumulating-spread": "error" }
+    },
+    {
       // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
       "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
       "rules": {
@@ -2300,6 +2307,106 @@
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          }
+        ]
+      }
+    },
+    {
+      // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
+      // would hide the call from this rule. Each of the next three blocks lists the folders where the
+      // ban is on: every folder at zero. A folder is listed whole and joins the day its own slice
+      // brings it to zero; none is ever taken off, and no block turns the ban off or down for a
+      // folder with fires (0168, 0524). The last slice folds the lists into the base blocks.
+      // This one is the tooling, which has no other entry for the rule.
+      "files": [".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // The Reflect ban in next/, where JSON.parse blocks. An override replaces a rule's options, so
+      // the JSON.parse entry of next/**/* is written out again.
+      "files": [
+        "next/apps/fabrika/*",
+        "next/apps/fabrika/e2e/node/**",
+        "next/apps/fabrika/src/entry/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/src/*",
+        "next/packages/tuval/src/window/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // The Reflect ban in next/, where JSON.parse still advises: the folders of the warn block above
+      // that have no Reflect fire. The level stays "warn" for the JSON.parse entry alone. lint.ts
+      // blocks every other fire of this rule at any level (advice.ts), so a Reflect call here fails
+      // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
+      // this list for the one above when its JSON.parse line goes.
+      "files": [
+        "next/apps/fabrika/src/exam/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/telemetry/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
           }
         ]
       }
