@@ -176,3 +176,7 @@ shape of code covers test files and tooling too (owner, 2026-11-15).**
     that is about code shape. Each needs its own count and its own plan, and none changes with
     this file.
   - Today's app.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) says `fabrika/no-hand-tag` is replaced by `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type`, turned on in this cleanup before ours is deleted.

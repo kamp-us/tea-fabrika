@@ -41,6 +41,7 @@ libfabrika
 | An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
 | No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
 | No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
+| No loop or `reduce` callback spreads its running result back into itself (0559) | `oxc/no-accumulating-spread` |
 | No question word as a name | `eslint/id-denylist`, `fabrika/no-question-word-key` |
 | One exported tea machine, or one factory, per file | `fabrika/one-machine-per-file` |
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
@@ -49,6 +50,7 @@ libfabrika
 | A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
 | A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
 | A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
+| No `Reflect.get`, `Reflect.set` or `Reflect.has`, and no `globalThis.Reflect`: decode with Schema, narrow with `Predicate.hasProperty`, or assign through the type ([0554](../.decisions/0554-no-reflect-get-set-has.md)). It is on for every folder at zero, each folder joining when its slice reaches zero | `eslint/no-restricted-properties` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at

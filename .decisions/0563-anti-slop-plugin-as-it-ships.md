@@ -217,3 +217,4 @@ authors already wrote (owner, 2026-11-15).**
   plugin's `src/` comes in whole and unchanged at one commit of the fork, as its README says, with
   the commit and license recorded. The first route, a git dependency, would make every install and
   CI run depend on one fork staying online, and its `prepare` script could run on install.
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) rules which of our rules rule E replaces: where theirs catches the same or more, ours goes in the pull request that turns theirs on; where ours catches more, it stays. It also settles `fabrika/no-hand-tag` (theirs holds it) and `fabrika/padding-line-between-statements` (theirs holds it once `require-readable-spacing` is on and a check shows it flags every line ours does), two of the open items under Not decided here.

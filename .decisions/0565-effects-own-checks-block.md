@@ -328,3 +328,7 @@ too.
   app has, since it was not run; whether more clashes exist than the five found by reading the
   report against `.decisions/`; and the count on any commit after `98bcdfa22`. Main moves fast,
   and the report saw `schemaSyncInEffect` go from 27 hits to 154 in six days.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) names which of our rules give way to a check of the Effect checker or another trusted rule, and which stay. `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules; `fabrika/no-promises` stays, since theirs is narrower. It leaves `deterministicKeys` and `service-id` as an unruled clash.
