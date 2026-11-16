@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e0-review",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1417",
+  "started": "2026-11-15T19:03:15-08:00",
+  "ended": "2026-11-15T19:16:00-08:00",
+  "parent": "2026-11-15-effect-e0-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_tests",
+  "why": "Review of slice E0 of the Effect-check sweep at 8c8fa9e0f, in next/ and our tooling: changes 2. The E0 entry in tsconfig.base.json names 78 checks, each in @effect/tsgo 0.63.0's schema, exactly the 135 less the plan's 57, at error for the plan's nine globs only; pnpm typecheck is green on this head, so all 78 and both import blocks are at zero. Blocking class 1, L2 (oxlint-plugins/effect-checks.test.ts): it walks only each tsconfig's include, but the checker also checks files a project reaches by relative import; 25 locked files are read by the checker and walked by no project (24 under .agents/skills/lead/scripts, plus oxlint-plugins/script-reads.mjs). Planted in a scratch copy: an override in oxlint-plugins/tsconfig.json and .github/ci/tsconfig.json setting globalRandom off for script-reads.mjs, with Math.random() planted there: tsc -p on both is silent and the law stays green. Blocking class 2, L3 (oxlint-plugins/no-bare-disable.ts): the checker reads its directive anywhere, not only after // or /*, and reads a check:level in the reason tail; four forms silence a planted floatingEffect hit in tsc and pass lint: `// see the @effect-diagnostics-next-line floatingEffect:off`, the same in a /** */ block, the file-wide form inside a string, and a reason tail holding floatingEffect:off.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Read-only on the branch apart from this row; plants ran in a second detached worktree of 8c8fa9e0f, reverted after. L1 plant: Math.random() in oxlint-plugins/no-bare-disable.ts, tsc -p oxlint-plugins red with effect(globalRandom), so a base override's globs are read from the repo root. L2 extends plant: next/programs/inbox extends cfg/mid.json; a top-level globalRandom off there leaves the hit red (checker and law agree); an override with include ../src/**/*.ts turns the checker silent and the law red; include src/**/*.ts changes neither, so override globs are read from their own tsconfig's folder, as the law does. Ran: effect-checks.test.ts alone (green), pnpm lint (exit 0, no-bare-disable fires 0 times on the branch), one pnpm typecheck (exit 0), loosening.sh (one removed-law hit, the moved namespace law, whose rows L2 keeps with a stronger merge; not loosened). git merge with origin/main is clean; with PR 1391 it conflicts in tsconfig.base.json only, two new overrides entries at one spot, and their order does not matter since they set different keys. Not run: plants.test.ts, which spawns lint processes.",
+  "step": "review"
+}

@@ -1,6 +1,6 @@
 // next/, P17b. The controller belongs to the test scope, so replacements share one arm.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 export const ErrorClass = Schema.Literals(["TypeError", "RangeError", "URIError"]);
 const Attempt = Schema.Struct({ process: Schema.String, error: ErrorClass });

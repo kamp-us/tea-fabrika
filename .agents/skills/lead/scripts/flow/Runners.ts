@@ -32,7 +32,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
         const runner = table[step.name];
 
         if (runner === undefined) {
-          return yield* new StepFailed({ reason: `no runner for step ${step.name}` });
+          return yield* StepFailed.make({ reason: `no runner for step ${step.name}` });
         }
 
         return yield* runner(step).pipe(Effect.provideContext(services));

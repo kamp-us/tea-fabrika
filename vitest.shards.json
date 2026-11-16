@@ -366,7 +366,6 @@
   "next/programs/pipeline/src/node/runner.laws.integration.test.ts": 21.8,
   "oxlint-plugins/door-is-library.test.ts": 0,
   "oxlint-plugins/exact-versions.test.ts": 7.1,
-  "oxlint-plugins/one-id-module.test.ts": 9,
   "oxlint-plugins/outside-input-constructor.test.ts": 1.1,
   "oxlint-plugins/plants.test.ts": 48.2,
   "oxlint-plugins/stylelint.test.ts": 6.9,

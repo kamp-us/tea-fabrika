@@ -1,7 +1,5 @@
 /**
  * The `Ledger` in any object but the project's: the project's stub, across an object call (0095).
- *
- * @stability unstable
  */
 import { Effect, Layer, Schema } from "effect";
 import { short } from "../telemetry/Trace.ts";
@@ -20,7 +18,6 @@ import { Appended, Entry, Waited } from "./Log.ts";
  * call ends one `ledger.call` span on the caller's side. `caller.reader` is the object's own name,
  * such as `connection:t1`: the name the referee rings after a parked wait.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): Layer.Layer<Ledger> => {
