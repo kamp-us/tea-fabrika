@@ -1,5 +1,6 @@
 // T878, next/, L1/L2/L10. Git owns the objects; failures are injected at its process edge.
-// The repository laws run on memory git, and on real git too at depth `full` (0535, GitLaws).
+// The repository laws run on memory git, and on real git too at depth `full` (0535, GitLaws). Its
+// spawner passes commands to Node's real one and it makes temp folders, so it is `.integration.` (0584).
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";

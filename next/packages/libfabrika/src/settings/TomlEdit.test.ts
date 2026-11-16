@@ -1,6 +1,8 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
+// L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
@@ -186,7 +188,7 @@ const document = Effect.fnUntraced(function* (toml: Toml["Service"], text: strin
   return parsed;
 });
 
-const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<string, TomlError>, tag: string, line?: number) {
+const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, TomlError>, tag: string, line?: number) {
   const exit = yield* Effect.exit(operation);
   expect(Exit.isFailure(exit)).toBe(true);
 
@@ -213,6 +215,39 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<string, To
 
   return error;
 });
+
+// The keys a walk down a path must read as own keys: each one names a member every object inherits.
+const hostile = ["__proto__", "constructor", "toString"] as const;
+const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
+
+// What a write through an inherited key would land on: the prototype, its constructor and its
+// toString. Each entry is one own member of one of them, with its value or accessors.
+const inherited = [Object.prototype, Object, Object.prototype.toString];
+
+const members = () =>
+  inherited.flatMap((owner) =>
+    Object.entries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
+  );
+
+const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof members>) =>
+  after.length === before.length && after.every((member, i) => member.every((x, j) => Object.is(x, before[i]![j])));
+
+// What TOML holds of a JSON value today: no null, no whole number past the safe range, and no
+// lone surrogate in a string or a key.
+const lone = (text: string) => /[\uD800-\uDFFF]/u.test(text);
+
+const writable = (value: unknown): boolean =>
+  value === null
+    ? false
+    : Array.isArray(value)
+      ? value.every(writable)
+      : record(value)
+        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
+        : typeof value === "string"
+          ? !lone(value)
+          : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+
+const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
 
 // Read both the model and the reparsed document before selecting a move.
 const selected = (model: Tree, parsed: Tree, hint: Hint): Path => {
@@ -863,5 +898,63 @@ describe("T877 public TOML edits, next/", () => {
         expect((yield* toml.parse(text)).value).toEqual({ target: value });
       }).pipe(Effect.provide(TomlParser.layer)),
     check,
+  );
+
+  // L9 (reflect ban, slice 5). Plants: read each step of a path with `in` and no own-key check, in
+  // `internal/edit.ts`'s `read` or in `TomlParser.ts`'s `put`; let `check` pass a scalar in the
+  // middle of a path; report a parse failure on line 1. Each one turns this law red.
+  it.effect.prop(
+    "L9 hostile keys are put and read back as own keys, a scalar mid-path is refused as today, and Object.prototype is unchanged",
+    {
+      path: Schema.Array(Key).check(Schema.isBetweenLength(2, 5)),
+      value: Schema.Json,
+      at: Schema.Int,
+      scalar: Scalar,
+    },
+    ({ path, value, at, scalar }) =>
+      Effect.gen(function* () {
+        const toml = yield* Toml;
+        const before = members();
+        // Every run holds each hostile key in the middle of a path and at its end.
+        const middle = 1 + (Math.abs(at) % (path.length - 1));
+        const paths = [path, ...hostile.flatMap((key) => [path.toSpliced(middle, 0, key), [...path, key]])];
+        const seen = { put: 0, refused: 0, midway: 0 };
+
+        for (const p of paths) {
+          for (const v of [value, scalar]) {
+            if (!writable(v)) {
+              yield* refusal(toml.set("", p, v), "Value");
+              seen.refused++;
+              continue;
+            }
+
+            const text = yield* toml.set("", p, v);
+            const parsed = yield* toml.parse(text);
+            expect(parsed.value).toEqual(put({}, p, v));
+            expect(get(parsed.value, p)).toEqual(v);
+            // The same value again reads the key back through the edit walk and keeps the bytes.
+            expect(yield* toml.set(text, p, v)).toBe(text);
+            expect(get((yield* toml.parse(yield* toml.remove(text, p))).value, p)).toBeUndefined();
+            seen.put++;
+          }
+
+          // A scalar in the middle of the path: an edit is a Conflict at the scalar's own line,
+          // and a document that writes through it is a Syntax failure at the line that does.
+          const prefix = p.slice(0, middle);
+          const source = yield* toml.set("", prefix, scalar);
+          const line = (yield* toml.parse(source)).spans.find((span) => same(span.path, prefix))!.line;
+          const set = yield* refusal(toml.set(source, p, 1), "Conflict", line);
+          expect(set.reason).toMatchObject({ path: p });
+          yield* refusal(toml.remove(source, p), "Conflict", line);
+          yield* refusal(toml.parse(`${dotted(prefix)} = ${literal(scalar)}\n${dotted(p)} = 1\n`), "Syntax", 2);
+          seen.midway++;
+        }
+
+        expect(seen.put + seen.refused, "every path was put or refused, with both values").toBe(paths.length * 2);
+        expect(seen.put, "the scalar value is always put").toBeGreaterThanOrEqual(paths.length);
+        expect(seen.midway, "every path met a scalar in its middle").toBe(paths.length);
+        expect(unchanged(before, members()), "Object.prototype, Object and toString keep their members").toBe(true);
+      }).pipe(Effect.provide(TomlParser.layer)),
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 200, full: 1000 }) }, timeout: 30000 },
   );
 });
