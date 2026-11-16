@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e15-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Tests step for slice E15 of the Effect-check sweep (returnEffectInGen). Recount matched the plan: 7 hits, none in a file of pull request 1366 (lib:cloudflare 3: ConnectionObject.ts, ProcessObject.ts, record.ts; lib:node 2: CodeStore.integration.test.ts, Nemesis.laws.integration.test.ts; app:src 2: sibling-objects.test-support.ts). The check's fix, return yield*, changes the value each generator returns, so no hit was fixed and no lock was written (a lock on a folder with hits is a red typecheck with nothing to build). Tried it on sibling-objects.test-support.ts: tsc fails with TS2379, because Cloudflare's DurableObject make wants an Effect of an Effect of the shape (setup, then the running object), and the fixed form gives it the shape itself. The cloudflare hits are the same shape of call. The two node test hits return a database Effect on purpose: each run of the suite opens its database again, and yield* would open it once inside the generator. The edit was reverted. Needs a design call: write each as a non-generator form (Effect.map to the inner Effect) with the same value, or turn the check off for these call sites.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig (libfabrika, app; the other 11 tsconfigs hold none per the plan). The caller check used tsc in next/apps/fabrika. checkerfix.mjs was not run (the coordinator's rule: edits are by hand).",
+  "plants": [],
+  "step": "tests"
+}
