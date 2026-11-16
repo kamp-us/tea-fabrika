@@ -34,7 +34,8 @@
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import { syncTest } from "../Testing.ts";

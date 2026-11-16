@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1073-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1420",
+  "started": "2026-11-15T20:23:00-08:00",
+  "ended": "2026-11-15T20:34:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of ticket 1073 slice 1 (decision 0584, next/ and our lint tooling) at a49228193: changes 2, findings 1, send tests. Class 1, K1 and the rule miss starters in the plan's own port, network and disk classes: request and get from node:http and node:https, node:tls, node:dgram, new Server from node:net, a remote WebSocket, and mkdtemp through fs.promises or a promises import all pass a plain file in a RuleTester probe, and K1 exercises only createServer for port, so connect, createConnection, http2, execFileSync, firefox, webkit and the other launch names can leave starters.ts with K1 green. Class 2, K1 and K2 check less than the old L1 and L2 they replace: K1 asserts only the messageId, where L1 asserted the message names what the call drives and the .integration. name, and K2 dropped L2's fake.spawnSync() call, readFileSync and chromium.name() cases. One finding row: three stand-ins fire wrongly (a vi.stubGlobal fetch with a remote literal, a fake object's spawn in a file that provides NodeServices.layer, and tmpdir() used only for a path), against the README's line that a spy or a fake never counts; the real tree is at zero, so blocking still meets 0523. Holds: the nine renames keep history (similarity 97 to 100) and each file is in the project its name picks; the 17 shard rows kept their seconds; lint:kind ran 43.1 s beside lint:dead's 69.5 s in CI, and the lint step took 70 s against 62 to 99 s on 17 recent runs without it. No full run at this head yet (0178).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Run here, one file at a time on Node 26.13.0: integration-test-name.test.ts (4 green), test-kind.test.ts (2 green), edge-config.test.ts (5), node-kinds.test.ts (1), build/error-cause.test.ts (4), vitest.shards.test.ts (34). lint:kind on the real tree: exit 0, 18 advice lines; 13 of the 18 advised files read, none calls its starter. vitest list --filesOnly per renamed file in next and next-integration. A RuleTester probe from the scratch folder, outside the repo. Not run: any .integration. file, and pnpm typecheck (the build ran it on this head).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

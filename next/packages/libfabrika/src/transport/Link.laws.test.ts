@@ -18,7 +18,7 @@
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { syncTest } from "../Testing.ts";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";

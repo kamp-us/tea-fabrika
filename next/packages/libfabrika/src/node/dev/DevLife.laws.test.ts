@@ -8,7 +8,8 @@
 // the processes and listeners a state names do not outlive their run, so `init` ignores a saved
 // model (S2, docs/direction/saved-state.md).
 import { applyCell } from "@demlik/tea";
-import { Predicate, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";

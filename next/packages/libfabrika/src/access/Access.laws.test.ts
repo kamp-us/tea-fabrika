@@ -17,7 +17,8 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { syncTest } from "../Testing.ts";

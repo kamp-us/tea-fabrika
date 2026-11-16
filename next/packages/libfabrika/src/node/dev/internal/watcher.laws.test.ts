@@ -2,7 +2,7 @@
 // whatever its answer. Rebuilds remember failed inputs without advancing the phase.
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { syncTest } from "../../../Testing.ts";
 

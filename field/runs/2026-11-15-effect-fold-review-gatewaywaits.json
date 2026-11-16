@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-fold-review-gatewaywaits",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1462",
+  "started": "2026-11-15T21:47:24-08:00",
+  "ended": "2026-11-15T21:51:20-08:00",
+  "parent": "2026-11-15-effect-fold-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Narrow review of commit 014ba9b56 alone, in next/: merge-ready, one finding row. The gateway's wait moved verbatim into GatewayWaits (route, then decode, same bad_row LedgerError and SinkError mapping), and connectionLayer is gatewayLayer plus GatewayWaits.layer(env) plus the recorded start, sharing one RecordedStart. The readers law keeps its three checks (socket bad_row refusal, typed LedgerError with no defect, one attempt) and no longer spies (0555). Three plants of the reviewer's own each turned it red: Effect.orDie on the gateway's call of waits.wait (no bad_row sent), reason unreachable in place of bad_row (typed check), and Effect.retry({ times: 1 }) on options.wait in transport/Connection.ts (two recorded calls).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "One finding: GatewayWaits.layer makes its own project stub, so a socket's waits and its other routes no longer share one stub, and Cloudflare orders calls only within one stub. Ran alone, green: readers.laws.test.ts (39), connection.test.ts (11), entry-flows.laws.test.ts (6). git merge-tree with origin/main bcad0080d: no conflict. loosening.sh from 3ef96b71c: one hit, an import line, no law loosened. Not run: any .integration. or .visual. file, pnpm typecheck.",
+  "step": "review"
+}

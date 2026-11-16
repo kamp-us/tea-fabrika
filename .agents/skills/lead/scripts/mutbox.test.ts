@@ -1052,7 +1052,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
                 expect(exit).toStrictEqual(
                   delay < limit
                     ? Exit.succeed({ out: "got go\n", err: "", code: 0 })
-                    : Exit.fail(new CallTimeout({ command: `sh -c ${waits}`, seconds })),
+                    : Exit.fail(CallTimeout.make({ command: `sh -c ${waits}`, seconds })),
                 );
                 expect(alive(pid)).toBe(false);
               }),
@@ -1082,7 +1082,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
 
   // format: the line gc prints, after "mutbox gc: ", before it exits 0 and the chain goes on.
   it("format: the line a timed-out call leaves", () => {
-    expect(timeoutLine(new CallTimeout({ command: "docker ps -aq", seconds: 30 }))).toBe(
+    expect(timeoutLine(CallTimeout.make({ command: "docker ps -aq", seconds: 30 }))).toBe(
       "docker ps -aq passed its 30 s limit and was stopped",
     );
   });

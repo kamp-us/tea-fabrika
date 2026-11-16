@@ -4,7 +4,8 @@
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";

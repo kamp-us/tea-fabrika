@@ -5,7 +5,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
