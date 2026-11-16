@@ -1,7 +1,10 @@
 // P19 next/. Only outside facts live here. Every policy decision stays in BrainServiceManaged.
 import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Deferred, Effect, Layer, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { BrainControl, BrainControlError, Command, Status } from "./BrainControl.ts";
 import { BrainProbe, BrainProbeError, Unreachable, Foreign, Readiness, Children, Cleanup } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";

@@ -2,7 +2,8 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";

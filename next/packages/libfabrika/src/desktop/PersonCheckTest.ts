@@ -1,5 +1,6 @@
 // Test-owned sibling Layer. Exhaustion fails closed instead of inventing another checked person.
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Answer, PersonCheck, PersonCheckError, Unavailable } from "./PersonCheck.ts";
 
 /**

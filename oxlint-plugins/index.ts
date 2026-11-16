@@ -43,6 +43,7 @@ import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
+import { preferNamespaceImport } from "./prefer-namespace-import.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
 import { runsFromDepth } from "./runs-from-depth.ts";
@@ -97,6 +98,7 @@ const plugin: Plugin = {
     "outside-input-constructor": outsideInputConstructor,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
+    "prefer-namespace-import": preferNamespaceImport,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
     "runs-from-depth": runsFromDepth,
     "service-id": serviceId,

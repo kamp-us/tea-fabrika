@@ -24,10 +24,20 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
-import { Socket } from "effect/socket";
-import { TestClock } from "effect/testing";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Random from "effect/Random";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";

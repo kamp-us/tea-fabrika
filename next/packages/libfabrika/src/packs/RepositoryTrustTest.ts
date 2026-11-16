@@ -2,8 +2,15 @@
 // No second trust reducer lives here: the opening machine consumes these saved events.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, Exit, Layer, Schema, type Scope, Stream } from "effect";
-import { Digest } from "effect/crypto";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";

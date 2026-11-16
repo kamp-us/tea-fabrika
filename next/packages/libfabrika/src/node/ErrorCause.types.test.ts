@@ -3,7 +3,8 @@
 // `pnpm typecheck`; the run half sees each field kept on a generated cause.
 // Plants: remove the cause field from one class, or widen one service's error to `unknown`.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Stream } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { IdError } from "../Id.ts";
 import type * as Id from "../Id.ts";
