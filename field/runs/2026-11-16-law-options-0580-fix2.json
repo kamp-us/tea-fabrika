@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-fix2",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:10:39-08:00",
+  "ended": "2026-11-16T00:16:28-08:00",
+  "parent": "2026-11-16-law-options-0580-review2",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "One more fix round (0564, 0177) for slice 1 of docs/plan/quests/law-options-0580-PLAN.md, tooling, for the one fault the recheck named: .github/ci/plant-check.ts, run as CI runs it on pull_request, exited 1 with three unclaimed refusals, because the build row and the first review row record plants for next/packages/vitest/src/Law.integration.test.ts, which the previous fix round renamed with git mv to Law.runner.test.ts (0584; the rename stays), and check() skipped a record only when its file was a changed head file not on the package's it. check() now refuses a record as unclaimed only when its file is a head law file whose it is the package's; a record of a file the head does not have, or of a file on another it, is not read. Run rows stay as they were written. The model law in .github/ci/plant-check.test.ts gets one more generated input: a record, red, naming a file absent from the head, which must give no refusal; the property's example now holds it too. Its plant, the old skip put back, made the law red with an extra unclaimed refusal for that file.",
+  "plants": [
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "refuse a record whose file is absent from head as unclaimed",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "The plant record is written by hand: .github/ci/plant-check.test.ts imports it from vitest, so plant.ts refuses it (no plant option) and the file keeps its plants in comments until its sweep, as the first tests row did for it. The plant ran once: a saved copy of plant-check.ts, the skip changed back to input.head.some((f) => f.file === plant.file && !f.ours), the one test file run (1 failed: expected [] and received an unclaimed refusal for next/packages/libfabrika/src/Gone.test.ts), then the copy restored and cmp found it the same. Ran on Node 26.13.0: vitest on .github/ci/plant-check.test.ts (5 passed), plant-check.ts with BASE origin/main, HEAD the branch head and EVENT pull_request (exit 0, 10 law files read, notices only), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, and one pnpm typecheck.",
+  "step": "tests"
+}

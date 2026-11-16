@@ -11,7 +11,9 @@
 // comment to an option or a label from the title to an option changes no law. A file moved with
 // `git mv` is paired with its old self by git's rename detection. Only files whose `it` comes from
 // the package are held; a file still on `@effect/vitest` cannot take the option, so its changed laws
-// get one notice and no refusal, until the sweep moves it.
+// get one notice and no refusal, until the sweep moves it. A row's record is unclaimed only when its
+// file is a head law file on the package's `it` and no changed law there names it; a record of a file
+// the head no longer has is not read, since run rows are never edited after a rename.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Effect, Exit, Option, Predicate, Schema } from "effect";
@@ -264,10 +266,12 @@ export const check = (
     }
   }
 
-  const foreign = new Set(input.head.filter((file) => !file.ours).map((file) => file.file));
+  // A record is held only against a head law file on the package's `it`: a file still on another
+  // `it`, or one the head no longer has (renamed or deleted after the row was written), is not read.
+  const owned = new Set(input.head.filter((file) => file.ours).map((file) => file.file));
 
   for (const { row, ...plant } of rows) {
-    if (plant.file === undefined || foreign.has(plant.file)) {
+    if (plant.file === undefined || !owned.has(plant.file)) {
       continue;
     }
 

@@ -79,9 +79,10 @@ const named = (r: Refusal) =>
   r._tag === "unclaimed" ? `${r._tag} ${r.plant.file} ${r.plant.law}` : `${r._tag} ${r.law.file} ${r.law.title}`;
 
 // Plant: compare a row's plant to the law's by prefix, so a record of a longer plant counts.
+// Plant: refuse a record whose file is absent from head as unclaimed.
 it("property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none", () => {
   fc.assert(
-    fc.property(files, fc.boolean(), (generated, ghost) => {
+    fc.property(files, fc.boolean(), fc.boolean(), (generated, ghost, gone) => {
       const row = "field/runs/2026-11-16-a-row.json";
       const base: LawFile[] = [];
       const head: LawFile[] = [];
@@ -143,6 +144,18 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
 
       // A record with no file, as rows before 0580 write them, is never read.
       rows.push({ row, law: titleOf(0), plant: PLANTS[0], result: "green" });
+
+      // A record of a file the head no longer has, as an older row of a since-renamed file, is never read.
+      if (gone) {
+        rows.push({
+          row,
+          file: "next/packages/libfabrika/src/Gone.test.ts",
+          law: titleOf(0),
+          plant: PLANTS[0],
+          result: "red",
+        });
+      }
+
       const outcome = check({ base, head }, rows);
       expect(outcome.refusals.map(named).toSorted()).toEqual(expected.filter((e) => e !== "").toSorted());
       expect(outcome.notices).toEqual(notices);
@@ -165,6 +178,7 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
               ],
             },
           ],
+          true,
           true,
         ],
       ],
