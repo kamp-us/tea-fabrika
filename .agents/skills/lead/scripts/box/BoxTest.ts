@@ -6,7 +6,7 @@
 //
 // Each case is a generated plan: one box, then what is planted in it. The oracle below names the
 // verdict the old Python rm gave that plan, check by check in its order.
-import { Effect, FileSystem, Layer, type Path, type Scope } from "effect";
+import { Effect, FileSystem, Layer, type Path, type Scope, Array as Arr, Option } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -150,8 +150,10 @@ export const expected = (plan: Plan): Remove.Verdict => {
     return Remove.Verdict.cases.absent.make({});
   }
 
-  const first = order.find(([holds]) => holds);
-  return first === undefined ? Remove.Verdict.cases.removed.make({}) : kept(first[1]);
+  return Option.match(
+    Arr.findFirst(order, ([holds]) => holds),
+    { onNone: () => Remove.Verdict.cases.removed.make({}), onSome: (first) => kept(first[1]) },
+  );
 };
 
 /** Plant the parts of a plan that are only files, the same in every world. */
@@ -351,7 +353,7 @@ export const rm = {
       ];
 
       it.each(
-        vectors.map((planted) => ({
+        Arr.map(vectors, (planted) => ({
           planted: JSON.stringify(planted),
           plan: { ...clean, ...planted },
           reason: Remove.line({ shown: "clean", runs: "", verdict: expected({ ...clean, ...planted }) }),

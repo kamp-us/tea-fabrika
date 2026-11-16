@@ -15,7 +15,7 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Layer, Path, Schema, Stream } from "effect";
+import { Effect, Layer, Path, Schema, Stream, Array as Arr } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as ChecksGh from "../ci/ChecksGh.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
@@ -30,7 +30,7 @@ import type { Step } from "./Step.ts";
 export type Ran = { readonly code: number; readonly output: string };
 
 /** The last lines of a command's output, for a reason. */
-export const tail = (output: string, n = 5): string => output.trimEnd().split("\n").slice(-n).join(" | ");
+export const tail = (output: string, n = 5): string => Arr.join(output.trimEnd().split("\n").slice(-n), " | ");
 
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {

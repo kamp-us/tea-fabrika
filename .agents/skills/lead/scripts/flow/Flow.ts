@@ -7,11 +7,11 @@
 // are unique, so a `send` names exactly one step. `attempts` caps how many step attempts one
 // flow may make, so a `send` loop ends `stuck`.
 
-import { Schema } from "effect";
+import { Schema, Array as Arr } from "effect";
 import { Step } from "./Step.ts";
 
 const uniqueNames = Schema.makeFilter<ReadonlyArray<Step>>(
-  (steps) => new Set(steps.map((s) => s.name)).size === steps.length,
+  (steps) => new Set(Arr.map(steps, (s) => s.name)).size === steps.length,
   { expected: "steps with unique names" },
 );
 

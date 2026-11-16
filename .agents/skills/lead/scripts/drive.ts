@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream, Array as Arr, pipe, Order } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -260,11 +260,8 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
 
   if (name === "unsigned") {
     // `commitsSaid` names the first 5 rules and then "and N more"; the sort reads the ones named.
-    const held = reason
-      .replace(/^commits check: /, "")
-      .split("; ")
-      .filter((h) => !/^and \d+ more$/.test(h));
-    return held.length > 0 && held.every((h) => /^stale_link\b/.test(h)) ? "tool" : "work";
+    const held = Arr.filter(reason.replace(/^commits check: /, "").split("; "), (h) => !/^and \d+ more$/.test(h));
+    return held.length > 0 && Arr.every(held, (h) => /^stale_link\b/.test(h)) ? "tool" : "work";
   }
 
   if (name === "step_said") {
@@ -468,7 +465,7 @@ const outsideFences = (report: string) => {
   const lines: string[] = [];
   let fenced = false;
 
-  for (const line of report.split("\n").map((l) => l.trim())) {
+  for (const line of Arr.map(report.split("\n"), (l) => l.trim())) {
     if (FENCE.test(line)) {
       fenced = !fenced;
     } else if (!fenced && line !== "") {
@@ -481,7 +478,7 @@ const outsideFences = (report: string) => {
 
 /** What the step said: its one `answer:` line. None, two or more, or one with no verb is not an answer. */
 const readAnswer = (report: string): typeof Said.Type => {
-  const lines = outsideFences(report).filter((l) => /^[`*\s]*answer:/i.test(l));
+  const lines = Arr.filter(outsideFences(report), (l) => /^[`*\s]*answer:/i.test(l));
 
   if (lines.length !== 1) {
     return lines.length === 0 ? Said.cases.none.make({}) : Said.cases.many.make({ count: lines.length });
@@ -513,8 +510,8 @@ const verdictText = (report: string) =>
 
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
-  const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
-  return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
+  const lines = Arr.map(outsideFences(verdictText(report)), (l) => l.replace(/^[`*#\s]+/, ""));
+  return /^merge-ready\b/i.test(lines[0] ?? "") && !Arr.some(lines, (l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
 const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
@@ -566,17 +563,17 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
   }
 
   if (read.unsigned.length > 0) {
-    return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
+    return stuck("unsigned", Arr.join(read.unsigned.slice(0, 5), "; "));
   }
 
   if (read.leaks.length > 0) {
-    return stuck("leak", `added lines leak, nothing pushed: ${read.leaks.slice(0, 10).join(" ")}`);
+    return stuck("leak", `added lines leak, nothing pushed: ${Arr.join(read.leaks.slice(0, 10), " ")}`);
   }
 
   if (ask.step === "build" && read.exam.length > 0) {
     return {
       outcome: { kind: "send", to: "tests", why: "exam_paths" },
-      reason: `the build touched exam paths: ${read.exam.join(" ")}`,
+      reason: `the build touched exam paths: ${Arr.join(read.exam, " ")}`,
     };
   }
 
@@ -586,7 +583,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
       reason:
-        `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
+        `pnpm-lock.yaml is behind ${Arr.join(read.manifests, " ")}, and a box has no network. ` +
         `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
         "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
         "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
@@ -690,7 +687,7 @@ const recordIt = (
   plants: Answer["plants"] = undefined,
 ): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
-  const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
+  const reason = left.length > 0 ? `${j.reason} (box kept: ${Arr.join(left, ", ")})` : j.reason;
   const entry = record({
     ask,
     outcome: endName(j.outcome),
@@ -857,7 +854,7 @@ export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
-const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
+const tail = (text: string, n = 3) => Arr.join(text.trim().split("\n").slice(-n), " | ");
 
 /** This run's report, or `null` when it wrote none. */
 const writtenReport = (ask: Ask) => {
@@ -899,10 +896,11 @@ const SHAPES = [
 const leaksIn = (diff: string, repo: string): string[] => {
   const file = join(homedir(), ".fabrika/leak-words");
   const words = existsSync(file)
-    ? readFileSync(file, "utf8")
-        .split("\n")
-        .map((w) => w.trim().toLowerCase())
-        .filter(Boolean)
+    ? pipe(
+        readFileSync(file, "utf8").split("\n"),
+        Arr.map((w) => w.trim().toLowerCase()),
+        Arr.filter(Boolean),
+      )
     : [];
   const hits: string[] = [];
   let path: string | null = null;
@@ -917,7 +915,7 @@ const leaksIn = (diff: string, repo: string): string[] => {
       const text = raw.slice(1).replaceAll(repo, "");
       const low = text.toLowerCase();
 
-      if (SHAPES.some((s) => s.test(text)) || words.some((w) => low.includes(w))) {
+      if (Arr.some(SHAPES, (s) => s.test(text)) || Arr.some(words, (w) => low.includes(w))) {
         hits.push(`${path}:${line}`);
       }
 
@@ -931,13 +929,14 @@ const leaksIn = (diff: string, repo: string): string[] => {
 /** The steps signed on the quest's own commits, from where it left main. */
 const stepsIn = (env: Env, root: string, head: string): Set<string> =>
   new Set(
-    sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`])
-      .out.split("\n")
-      .filter(Boolean)
-      .flatMap((sha) => {
+    pipe(
+      sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`]).out.split("\n"),
+      Arr.filter(Boolean),
+      Arr.flatMap((sha) => {
         const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
         return r.code === 0 ? stepOf(r.out) : [];
       }),
+    ),
   );
 
 // Git with no hooks and no repo-set helpers, so nothing Claude wrote into a tree runs as drive.
@@ -1010,10 +1009,11 @@ export type Change = { readonly xy: string; readonly path: string; readonly from
 
 /** Each file the agent left changed in the box's tree, by its status letters. */
 export const changedFiles = (porcelain: string): Change[] =>
-  porcelain
-    .split("\0")
-    .filter(Boolean)
-    .map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) }));
+  pipe(
+    porcelain.split("\0"),
+    Arr.filter(Boolean),
+    Arr.map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) })),
+  );
 
 /**
  * Case-only renames, which `git status` cannot see on a disk that ignores case: a tracked `id.ts`
@@ -1038,7 +1038,7 @@ export const caseRenames = (box: string, tracked: readonly string[]): { from: st
     if (
       path !== from &&
       path.toLowerCase() === from.toLowerCase() &&
-      path.split("/").slice(0, -1).join("/") === from.split("/").slice(0, -1).join("/")
+      Arr.join(path.split("/").slice(0, -1), "/") === Arr.join(from.split("/").slice(0, -1), "/")
     ) {
       out.push({ from, path });
     }
@@ -1065,11 +1065,11 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
     return { ...listed, changes: [] as Change[] };
   }
 
-  const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
-  const old = new Set(moved.map((m) => m.from));
+  const moved = caseRenames(boxTree(env.BOXES, box), Arr.filter(listed.out.split("\0"), Boolean));
+  const old = new Set(Arr.map(moved, (m) => m.from));
   const changes: Change[] = [
-    ...changedFiles(status.out).filter((c) => !old.has(c.path)),
-    ...moved.map((m) => ({ xy: "R ", ...m })),
+    ...Arr.filter(changedFiles(status.out), (c) => !old.has(c.path)),
+    ...Arr.map(moved, (m) => ({ xy: "R ", ...m })),
   ];
   return { ...status, changes };
 };
@@ -1079,13 +1079,24 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
  * (a report can be the answer alone), else a plain stand-in. One line, cut to fit.
  */
 export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
-  const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
-  const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
-  const reason = lines
-    .filter((l) => l.startsWith("{"))
-    .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
-    .find((w) => w !== undefined && w.length > 0);
-  return `T${ask.ticket} ${ask.step}: ${(prose ?? reason ?? "the step's work").slice(0, 72)}`;
+  const lines = Arr.map(report.split("\n"), (l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
+  const prose = Arr.findFirst(lines, (l) => l.length > 0 && !l.startsWith("{"));
+  const reason = pipe(
+    lines,
+    Arr.filter((l) => l.startsWith("{")),
+    Arr.findFirst((l) =>
+      pipe(
+        Option.fromNullishOr(/"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim()),
+        Option.filter((w) => w.length > 0),
+      ),
+    ),
+  );
+  const subject = pipe(
+    prose,
+    Option.orElse(() => reason),
+    Option.getOrElse(() => "the step's work"),
+  );
+  return `T${ask.ticket} ${ask.step}: ${subject.slice(0, 72)}`;
 };
 
 /**
@@ -1148,7 +1159,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
         ask.step,
         ask.ticket,
         subject,
-        ...changes.map((c) => c.path),
+        ...Arr.map(changes, (c) => c.path),
       ],
       {
         cwd: wt,
@@ -1183,7 +1194,7 @@ export const commitsSaid = (
 ): string => {
   const rules = heldRules(check.out, questSteps);
   return rules.length > 0
-    ? `commits check: ${rules.slice(0, 5).join("; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
+    ? `commits check: ${Arr.join(rules.slice(0, 5), "; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
 };
 
@@ -1201,15 +1212,18 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
     return Started.cases.made.make({});
   }
 
-  const line = err
-    .split("\n")
-    .toReversed()
-    .map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))
-    .find((m) => m !== null);
-  const check = BOX_CHECKS.find((c) => c === line?.[1]);
+  const line = pipe(
+    err.split("\n"),
+    Arr.reverse,
+    Arr.findFirst((l) => Option.fromNullishOr(/^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))),
+  );
+  const check = pipe(
+    line,
+    Option.flatMap((m) => Arr.findFirst(BOX_CHECKS, (c) => c === m[1])),
+  );
 
-  if (code === 3 && line && check) {
-    return Started.cases.refused.make({ check, detail: line[2] ?? "" });
+  if (code === 3 && Option.isSome(line) && Option.isSome(check)) {
+    return Started.cases.refused.make({ check: check.value, detail: line.value[2] ?? "" });
   }
 
   return Started.cases.failed.make({ detail: `box.sh new: ${tail(err)}` });
@@ -1325,15 +1339,17 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("git log", touched);
         }
 
-        const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+        const names = [...new Set(Arr.filter(touched.out.split("\n"), Boolean))];
         const at = (rev: string, path: string) => {
           const r = git("show", `${rev}:${path}`);
           return r.code === 0 ? r.out : null;
         };
         const manifests = lockfileBehind(
-          names
-            .filter((n) => n === "pnpm-workspace.yaml" || /(^|\/)package\.json$/.test(n))
-            .map((path) => ({ path, before: at(ask.base, path), after: at(head, path) })),
+          pipe(
+            names,
+            Arr.filter((n) => n === "pnpm-workspace.yaml" || /(^|\/)package\.json$/.test(n)),
+            Arr.map((path) => ({ path, before: at(ask.base, path), after: at(head, path) })),
+          ),
           workspaceGlobs(at(head, "pnpm-workspace.yaml") ?? ""),
           names.includes("pnpm-lock.yaml"),
         );
@@ -1351,10 +1367,11 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("exam.py", examRun);
         }
 
-        const exam = examRun.out
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => l.split("\t")[0] ?? l);
+        const exam = pipe(
+          examRun.out.split("\n"),
+          Arr.filter(Boolean),
+          Arr.map((l) => l.split("\t")[0] ?? l),
+        );
         // Each commit's own added lines, so nothing a later commit removed slips past.
         const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
 
@@ -1465,7 +1482,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           from: ask.base,
           head: e.head,
           outcome,
-          why: ok ? e.reason : `${e.reason} (${notes.join("; ")})`,
+          // oxlint-disable-next-line eslint/id-denylist -- the quest's state file keeps today's key, and flow/host.ts reads it
+          why: ok ? e.reason : `${e.reason} (${Arr.join(notes, "; ")})`,
           fault: faultFrom(outcome, e.reason),
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
@@ -1498,7 +1516,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           rmSync(join(env.BOXES, "state", `${ask.box}.box`), { force: true });
         }
 
-        return { ok, detail: notes.join("; ") };
+        return { ok, detail: Arr.join(notes, "; ") };
       }),
   };
 };
@@ -1566,9 +1584,10 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
     return "";
   }
 
-  const mine = Object.keys(owners)
-    .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
-    .toSorted();
+  const mine = Arr.sort(
+    Arr.filter(Object.keys(owners), (p) => owners[p] === step || (step === "mutation" && owners[p] === "tests")),
+    Order.String,
+  );
   const other =
     "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
     "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
@@ -1576,7 +1595,11 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
   return mine.length === 0
     ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
     : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
-        `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
+        `every file under it):\n${pipe(
+          mine,
+          Arr.map((p) => `- ${p}\n`),
+          Arr.join(""),
+        )}${other}\n---\n\n`;
 };
 
 /**
@@ -1590,11 +1613,15 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
     return "";
   }
 
-  const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
-  const text = last?.report ? read(last.report) : null;
-  return text === null || !last?.report
+  const report = pipe(
+    Arr.findLast(steps, (s) => s.step === "mutation" && typeof s.report === "string"),
+    Option.flatMapNullishOr((s) => s.report),
+    Option.filter((r) => r !== ""),
+  );
+  const text = Option.isSome(report) ? read(report.value) : null;
+  return text === null || Option.isNone(report)
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
-    : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+    : `\n\n---\nThe quest's newest mutation report (${report.value}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
 
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
@@ -1653,7 +1680,7 @@ export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuc
   return line._tag === "Some"
     ? {
         outcome: line.value.outcome,
-        reason: [line.value.reason, line.value.detail].filter(Boolean).join(": "),
+        reason: pipe([line.value.reason, line.value.detail], Arr.filter(Boolean), Arr.join(": ")),
       }
     : { outcome: "stuck", reason: "mutbox.ts gave no answer" };
 };
@@ -1791,7 +1818,7 @@ export const tailFor = (step: StepName) => `
 ---
 drive.ts reads your report, then one JSON object at its very end (its schema follows this prompt):
   verb: done | send | ask | skip | stuck
-  to:   ${sendsFrom(step).join(" | ")} when the verb is send, else null
+  to:   ${Arr.join(sendsFrom(step), " | ")} when the verb is send, else null
   reason: one or two sentences: what to tell the next step, the one question for the lead, why there is
         nothing here for this step, or why you are stuck
   laws: for a build that needed no change, because every law is already green at its start, the
@@ -1813,7 +1840,7 @@ type Phase = typeof Phase.Type;
 
 /** The `phase <name> <ms>` lines box.sh new prints on stderr, in order. */
 export const phasesIn = (text: string): Phase[] =>
-  [...text.matchAll(/^phase ([a-z_]+) (\d+)$/gm)].map((m) => ({ name: m[1] ?? "", ms: Number(m[2]) }));
+  Arr.map([...text.matchAll(/^phase ([a-z_]+) (\d+)$/gm)], (m) => ({ name: m[1] ?? "", ms: Number(m[2]) }));
 
 const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 
@@ -1841,7 +1868,11 @@ const holderOf = (porcelain: string, branch: string): string | null => {
     const lines = block.split("\n");
 
     if (lines.includes(`branch refs/heads/${branch}`)) {
-      return lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "";
+      return pipe(
+        Arr.findFirst(lines, (l) => l.startsWith("worktree ")),
+        Option.map((l) => l.slice("worktree ".length)),
+        Option.getOrElse(() => ""),
+      );
     }
   }
 
@@ -1966,7 +1997,7 @@ export const runNames = (boxes: string, quest: string): string[] => {
   return [
     ...readdirSync(boxes),
     ...(existsSync(trees) ? readdirSync(trees) : []),
-    ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box])),
+    ...Arr.flatMap(saved?.steps ?? [], (e) => (e.box === undefined ? [] : [e.box])),
   ];
 };
 
@@ -2073,11 +2104,13 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   // With no --from, a quest whose branch or -wip backup is on origin continues from the newest
   // tip, unless the saved head has moved past it (`startHead`). A box started at main on a
   // branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
-  const pushed = [branch, wipOf(branch)]
-    .map((ref) =>
+  const pushed = pipe(
+    [branch, wipOf(branch)],
+    Arr.map((ref) =>
       sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `refs/remotes/origin/${ref}^{commit}`]).out.trim(),
-    )
-    .filter(Boolean);
+    ),
+    Arr.filter(Boolean),
+  );
   const isAncestor = (a: string, b: string) =>
     sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
   const lastHead = startHead(pushed, saved?.head, isAncestor);
@@ -2125,12 +2158,12 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   };
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
   // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
-  const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
+  const counts = Arr.map(["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"], (pattern) => {
     const r = sh("pgrep", ["-f", pattern]);
     return pgrepAnswer(r.code, r.out);
   });
-  const refused = counts.some((c) => c._tag === "refused");
-  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
+  const refused = Arr.some(counts, (c) => c._tag === "refused");
+  const agents = Arr.reduce(counts, 0, (sum, c) => sum + (c._tag === "listed" ? c.count : 0));
 
   if (refused) {
     console.error(skipLine("agent cap"));

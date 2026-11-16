@@ -539,11 +539,6 @@
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"stuck\", why: \"record_failed\" },"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
 		}
 	]
 }

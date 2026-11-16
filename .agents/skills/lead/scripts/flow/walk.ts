@@ -10,7 +10,7 @@
 import { refuse } from "@demlik/tea";
 import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
-import { Clock, Effect, FileSystem, Option, Runtime, Schema } from "effect";
+import { Clock, Effect, FileSystem, Option, Runtime, Schema, Array as Arr, pipe } from "effect";
 import * as Flow from "./Flow.ts";
 import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
@@ -56,10 +56,14 @@ export type Options = { readonly state: string; readonly resume: boolean; readon
 export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options: Options) {
   const runners = yield* Runners.Runners;
   const fs = yield* FileSystem.FileSystem;
-  const missing = flow.steps.filter((s) => !runners.names.has(s.name)).map((s) => s.name);
+  const missing = pipe(
+    flow.steps,
+    Arr.filter((s) => !runners.names.has(s.name)),
+    Arr.map((s) => s.name),
+  );
 
   if (missing.length > 0) {
-    return yield* new Usage({ reason: `no runner for steps ${missing.join(", ")}` });
+    return yield* new Usage({ reason: `no runner for steps ${Arr.join(missing, ", ")}` });
   }
 
   const saved = yield* fs.exists(options.state).pipe(Effect.orElseSucceed(() => false));

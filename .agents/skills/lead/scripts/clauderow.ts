@@ -45,7 +45,7 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema, Array as Arr, Order } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
@@ -245,7 +245,7 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
       return refuse(`line ${i + 1}: a call's usage could not be read`);
     }
 
-    const tools = Array.isArray(content) ? content.filter(Schema.is(ToolUse)).length : 0;
+    const tools = Arr.isArray(content) ? Arr.filter(content, Schema.is(ToolUse)).length : 0;
     const key = named(id) ?? named(line.success.uuid);
     const seen = key === null ? undefined : byKey.get(key);
 
@@ -410,23 +410,28 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   const begun = yield* Effect.fromResult(instant(first));
   const ended = yield* Effect.fromResult(instant(last));
   const open = meta.finished === false;
-  const models = [...new Set(calls.map((call) => call.model))].toSorted();
-  const reads = [...new Set(models.map((model) => PRICES.get(model)?.read ?? ""))].toSorted();
-  const sum = (pick: (call: Call) => number) => calls.reduce((total, call) => total + pick(call), 0);
+  const models = Arr.sort(new Set(Arr.map(calls, (call) => call.model)), Order.String);
+  const reads = Arr.sort(new Set(Arr.map(models, (model) => PRICES.get(model)?.read ?? "")), Order.String);
+  const sum = (pick: (call: Call) => number) => Arr.reduce(calls, 0, (total, call) => total + pick(call));
   const input = sum((call) => call.tokens.input);
   const write5m = sum((call) => call.tokens.write5m);
   const write1h = sum((call) => call.tokens.write1h);
   const cached = sum((call) => call.tokens.read);
   const output = sum((call) => call.tokens.output);
   const { tokens } = final;
-  const reason = [
-    ask.reason,
-    ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
-    ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
-    ` out ${grouped(output)}. Dollars are list price (${SOURCE}, read ${reads.join(", ")}).`,
-    open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
-    ask.billing === null ? "" : ` Billing \`${ask.billing}\` as the caller gave it; the transcript does not record it.`,
-  ].join("");
+  const reason = Arr.join(
+    [
+      ask.reason,
+      ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
+      ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
+      ` out ${grouped(output)}. Dollars are list price (${SOURCE}, read ${Arr.join(reads, ", ")}).`,
+      open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
+      ask.billing === null
+        ? ""
+        : ` Billing \`${ask.billing}\` as the caller gave it; the transcript does not record it.`,
+    ],
+    "",
+  );
 
   return encodeRow({
     date: local(zone, begun).slice(0, 10),
@@ -438,7 +443,7 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
     parent: ask.parent,
     active: null,
     role: ask.role,
-    model: models.join("+"),
+    model: Arr.join(models, "+"),
     effort: meta.effort ?? null,
     outcome: ask.outcome,
     reason: reason.trim(),
@@ -537,7 +542,7 @@ const clauderow = Command.make(
         });
       }
 
-      return yield* Console.log(yield* row(transcript, { ...ask, run, reason: reason.join(" ") }));
+      return yield* Console.log(yield* row(transcript, { ...ask, run, reason: Arr.join(reason, " ") }));
     }).pipe(Effect.tapError((refused) => Console.error(`clauderow: ${refused.reason}`))),
 );
 

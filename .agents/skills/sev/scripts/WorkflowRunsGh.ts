@@ -5,7 +5,7 @@
 // miss an old queued run once enough newer runs had finished, and `gh run list --status` takes one
 // status a call. Five calls a beat of 20 seconds is 900 an hour, under the 5,000 a login gets
 // (GitHub's REST docs, "Rate limits for the REST API").
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Array as Arr } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "../../lead/scripts/pr/command.ts";
 import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
@@ -36,7 +36,7 @@ const Listed = Schema.fromJsonString(
 /** `gh run list --json`'s rows, as `Run`s; gh writes an empty conclusion before a run completes. */
 export const runsIn = (out: string): Effect.Effect<ReadonlyArray<Run>, Schema.SchemaError> =>
   Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
-    rows.map((r): Run => ({
+    Arr.map(rows, (r): Run => ({
       id: r.databaseId,
       workflow: r.workflowName,
       event: r.event,
@@ -65,7 +65,7 @@ export const layer = (
 
           if (ran.code !== 0) {
             return yield* new WorkflowRunsError({
-              reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
+              reason: `gh ${Arr.join(args.slice(0, 2), " ")} exited ${ran.code}: ${lastLine(ran)}`,
             });
           }
 

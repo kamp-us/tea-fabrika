@@ -14,7 +14,7 @@
 // Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
+import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream, Array as Arr } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
@@ -81,7 +81,7 @@ const flowCommand = Command.make(
         ),
       );
       const end = ending(model);
-      const spent = model.history.reduce((sum, a) => sum + (a.spent?.usd ?? 0), 0);
+      const spent = Arr.reduce(model.history, 0, (sum, a) => sum + (a.spent?.usd ?? 0));
       yield* Console.log(
         JSON.stringify({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
       );

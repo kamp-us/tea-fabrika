@@ -8,7 +8,7 @@
 //
 // The loop reads the log again before each cancel, so a close, a `next` or an `allow` counts at
 // once, never a beat late. It never asks for a rerun: the service has none.
-import { Console, Duration, Effect, Schema } from "effect";
+import { Console, Duration, Effect, Schema, Array as Arr, Option } from "effect";
 import * as Level from "./Level.ts";
 import type { Run } from "./WorkflowRuns.ts";
 import { WorkflowRuns } from "./WorkflowRuns.ts";
@@ -39,14 +39,14 @@ export const verdict = (run: Run, allow: ReadonlyArray<string>): Verdict =>
  * writes one `ended` by `close`, which ends them all.
  */
 export const running = (entries: ReadonlyArray<Level.Entry>): number => {
-  const from = entries.findLastIndex((e) => e._tag === "opened");
-  const latest = entries.slice(Math.max(0, from));
+  const from = Arr.findLastIndex(entries, (e) => e._tag === "opened");
+  const latest = entries.slice(Option.getOrElse(from, () => 0));
 
-  if (latest.some((e) => e._tag === "ended" && e.by === "close")) {
+  if (Arr.some(latest, (e) => e._tag === "ended" && e.by === "close")) {
     return 0;
   }
 
-  return latest.filter((e) => e._tag === "looping").length - latest.filter((e) => e._tag === "ended").length;
+  return Arr.filter(latest, (e) => e._tag === "looping").length - Arr.filter(latest, (e) => e._tag === "ended").length;
 };
 
 // ---------------------------------------------------------------- the loop

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Array as Arr, Option, pipe } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -34,7 +35,7 @@ describe("nextNumber", () => {
     fc.assert(
       fc.property(fc.constantFrom<Folder>(".decisions", "experiments"), fc.array(fc.nat({ max: 9999 })), (at, ns) => {
         const width = at === ".decisions" ? 4 : 2;
-        const paths = ns.map((n) => `${at}/${String(n).padStart(width, "0")}-x.md`);
+        const paths = Arr.map(ns, (n) => `${at}/${String(n).padStart(width, "0")}-x.md`);
         const next = nextNumber(at, paths) ?? "";
         expect(next).toBe(String(Math.max(0, ...ns) + 1).padStart(width, "0"));
         expect(ns).not.toContain(Number(next));
@@ -52,7 +53,7 @@ describe("nextNumber", () => {
   it("property: files that are not records take no number", () =>
     fc.assert(
       fc.property(fc.array(fc.nat({ max: 500 }), { minLength: 1 }), (ns) => {
-        const paths = ns.map((n) => `experiments/${n}-x.md`);
+        const paths = Arr.map(ns, (n) => `experiments/${n}-x.md`);
         const noise = [
           "experiments/README.md",
           "experiments/open-questions.md",
@@ -74,9 +75,9 @@ describe("inOrder", () => {
   it("property: numbered records come by number, whatever order git lists them in, and every record stays once", () =>
     fc.assert(
       fc.property(fc.uniqueArray(fc.nat({ max: 999 }), { minLength: 1 }), (ns) => {
-        const paths = ns.map((n) => `experiments/${n}-x.md`);
+        const paths = Arr.map(ns, (n) => `experiments/${n}-x.md`);
         const ordered = inOrder("experiments", [...paths].sort());
-        expect(ordered.map((p) => Number(/\/(\d+)-/.exec(p)?.[1]))).toEqual([...ns].sort((a, b) => a - b));
+        expect(Arr.map(ordered, (p) => Number(/\/(\d+)-/.exec(p)?.[1]))).toEqual([...ns].sort((a, b) => a - b));
       }),
     ));
 
@@ -122,16 +123,19 @@ describe("readTop", () => {
     ));
 
   it("format: a decision's plain frontmatter reads as written, a bracketed status included", () => {
-    const text = [
-      "---",
-      "id: 0008",
-      "title: Decision discovery is the AGENTS.md contract alone",
-      "status: amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)",
-      "tags: [decisions, discovery]",
-      "---",
-      "",
-      "# 0008: Decision discovery is the AGENTS.md contract alone",
-    ].join("\n");
+    const text = Arr.join(
+      [
+        "---",
+        "id: 0008",
+        "title: Decision discovery is the AGENTS.md contract alone",
+        "status: amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)",
+        "tags: [decisions, discovery]",
+        "---",
+        "",
+        "# 0008: Decision discovery is the AGENTS.md contract alone",
+      ],
+      "\n",
+    );
     const top = readTop(text);
     expect(top.fields.get("title")).toBe("Decision discovery is the AGENTS.md contract alone");
     expect(top.fields.get("status")).toBe("amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)");
@@ -203,15 +207,15 @@ describe("batchTexts", () => {
     fc.assert(
       fc.property(fc.array(fc.string()), (texts) => {
         const encoder = new TextEncoder();
-        const parts = texts.flatMap((text) => {
+        const parts = Arr.flatMap(texts, (text) => {
           const bytes = encoder.encode(text);
           return [encoder.encode(`abc123 blob ${bytes.length}\n`), bytes, encoder.encode("\n")];
         });
-        const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-        parts.reduce((at, p) => {
+        const all = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
+        Arr.reduce(parts, 0, (at, p) => {
           all.set(p, at);
           return at + p.length;
-        }, 0);
+        });
         expect(batchTexts(all)).toEqual(texts);
       }),
     ));
@@ -345,14 +349,17 @@ const note = (path: string, title: string, summary: string) =>
 
 const glossary = [
   ".glossary/TERMS.md",
-  [
-    "# Terms",
-    "",
-    "| Term | Definition | Not |",
-    "|---|---|---|",
-    "| upgrade (saved state) | One named step that moves saved state to the next shape. | Not a migration tool. |",
-    "| ledger | The log every fact goes to. | |",
-  ].join("\n"),
+  Arr.join(
+    [
+      "# Terms",
+      "",
+      "| Term | Definition | Not |",
+      "|---|---|---|",
+      "| upgrade (saved state) | One named step that moves saved state to the next shape. | Not a migration tool. |",
+      "| ledger | The log every fact goes to. | |",
+    ],
+    "\n",
+  ),
 ] as const;
 
 const corpus = [
@@ -381,7 +388,7 @@ const corpus = [
   glossary,
 ] as const;
 
-const entries = corpus.flatMap(([path, text]) => readEntries(path, text));
+const entries = Arr.flatMap(corpus, ([path, text]) => readEntries(path, text));
 
 const shortlist = (found: Found) =>
   Found.match(found, {
@@ -394,23 +401,34 @@ const shortlist = (found: Found) =>
 
 describe("readEntries", () => {
   it("format: one entry per record and one per glossary row, header rows left out, a decision with its id and status", () => {
-    expect(entries.map((e) => e.title)).toContain("upgrade (saved state)");
-    expect(entries.filter((e) => e.path === ".glossary/TERMS.md").map((e) => e.title)).toEqual([
-      "upgrade (saved state)",
-      "ledger",
-    ]);
-    expect(entries.find((e) => e.path === ".decisions/0004-x.md")?.decision).toEqual({
-      id: "0004",
-      status: Status.cases.superseded.make({ by: ["0011"] }),
-    });
+    expect(Arr.map(entries, (e) => e.title)).toContain("upgrade (saved state)");
+    expect(
+      pipe(
+        entries,
+        Arr.filter((e) => e.path === ".glossary/TERMS.md"),
+        Arr.map((e) => e.title),
+      ),
+    ).toEqual(["upgrade (saved state)", "ledger"]);
+    expect(
+      Option.map(
+        Arr.findFirst(entries, (e) => e.path === ".decisions/0004-x.md"),
+        (e) => e.decision,
+      ),
+    ).toEqual(
+      Option.some({
+        id: "0004",
+        status: Status.cases.superseded.make({ by: ["0011"] }),
+      }),
+    );
     expect(readEntries("experiments/README.md", "# Log\n")).toEqual([]);
   });
 
   it("scenario: only what says what a record is counts: a decision's Context and a note's body are not searched", () => {
-    const zebra = entries.find((e) => e.path === ".decisions/0001-x.md");
-    expect(zebra?.words.has("zebras")).toBe(false);
-    expect(zebra?.words.has("number")).toBe(true);
-    expect(entries.find((e) => e.path === "docs/direction/settings.md")?.words.has("migration")).toBe(false);
+    const entry = (path: string) => Option.getOrThrow(Arr.findFirst(entries, (e) => e.path === path));
+    const zebra = entry(".decisions/0001-x.md");
+    expect(zebra.words.has("zebras")).toBe(false);
+    expect(zebra.words.has("number")).toBe(true);
+    expect(entry("docs/direction/settings.md").words.has("migration")).toBe(false);
   });
 });
 
@@ -431,9 +449,14 @@ describe("find", () => {
           decision: undefined,
         }));
         const hits = shortlist(find("alpha beta filler", made, { limit: 100, all: false }));
-        const score = (word: string) => hits.find((h) => h.words.includes(word) && h.words.length === 1)?.score ?? 0;
+        const score = (word: string) =>
+          pipe(
+            Arr.findFirst(hits, (h) => h.words.includes(word) && h.words.length === 1),
+            Option.map((h) => h.score),
+            Option.getOrElse(() => 0),
+          );
         expect(score("alpha")).toBeGreaterThan(score("beta"));
-        expect(hits.every((h) => !h.words.includes("filler"))).toBe(true);
+        expect(Arr.every(hits, (h) => !h.words.includes("filler"))).toBe(true);
         expect(score("alpha")).toBeCloseTo(Math.log(made.length / rare), 2);
       }),
     ));
@@ -443,7 +466,7 @@ describe("find", () => {
     const idf = (df: number) => Math.log(11 / df);
     const round = (n: number) => Math.round(n * 100) / 100;
     const hits = shortlist(find("saved shape migration", entries, { limit: 8, all: false }));
-    expect(hits.map((h) => [h.path, h.score, h.words])).toEqual([
+    expect(Arr.map(hits, (h) => [h.path, h.score, h.words])).toEqual([
       [".glossary/TERMS.md", round(idf(4) + idf(5) + idf(2)), ["saved", "shape", "migration"]],
       [".decisions/0011-x.md", round(idf(5) + idf(2)), ["shape", "migration"]],
       [".decisions/0001-x.md", round(idf(4) + idf(5)), ["saved", "shape"]],
@@ -454,15 +477,16 @@ describe("find", () => {
 
   it("scenario: a superseded decision's hit lands on the live one it names, and --all shows it as itself", () => {
     const live = shortlist(find("migrated", entries, { limit: 8, all: false }));
-    expect(live.map((h) => [h.path, h.notes])).toEqual([[".decisions/0011-x.md", ["supersedes: 0003"]]]);
+    expect(Arr.map(live, (h) => [h.path, h.notes])).toEqual([[".decisions/0011-x.md", ["supersedes: 0003"]]]);
     const all = shortlist(find("migrated", entries, { limit: 8, all: true }));
-    expect(all.map((h) => [h.path, h.notes])).toEqual([[".decisions/0003-x.md", ["superseded by: 0004"]]]);
+    expect(Arr.map(all, (h) => [h.path, h.notes])).toEqual([[".decisions/0003-x.md", ["superseded by: 0004"]]]);
     const amended = shortlist(find("number", entries, { limit: 8, all: false }));
     expect(amended[0]?.notes).toEqual(["amended by: 0011"]);
   });
 
   it("scenario: a proposed decision is in force nowhere, so only --all finds it", () => {
-    const paths = (all: boolean) => shortlist(find("proposed rule", entries, { limit: 8, all })).map((h) => h.path);
+    const paths = (all: boolean) =>
+      Arr.map(shortlist(find("proposed rule", entries, { limit: 8, all })), (h) => h.path);
     expect(paths(false)).toEqual([]);
     expect(paths(true)).toEqual([".decisions/0007-x.md"]);
   });
@@ -483,7 +507,7 @@ describe("find", () => {
 
 describe("resolve", () => {
   const statuses = new Map(
-    entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
+    Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
   );
 
   it("scenario: a superseded chain lands on the accepted decision at its end; an accepted one names its amendments", () => {
@@ -496,10 +520,10 @@ describe("resolve", () => {
   it("property: along any chain of supersessions, every link resolves to the one accepted decision at its end", () =>
     fc.assert(
       fc.property(fc.uniqueArray(fc.integer({ min: 1, max: 9999 }), { minLength: 1, maxLength: 12 }), (ns) => {
-        const ids = ns.map((n) => String(n).padStart(4, "0"));
+        const ids = Arr.map(ns, (n) => String(n).padStart(4, "0"));
         const last = ids.at(-1) ?? "";
         const chain = new Map(
-          ids.map((id, i) => [
+          Arr.map(ids, (id, i) => [
             id,
             i === ids.length - 1
               ? Status.cases.accepted.make({ amendedBy: [] })

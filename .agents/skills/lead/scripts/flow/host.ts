@@ -28,7 +28,7 @@
 // rules are the app's own: a start with a `FABRIKA_HOME` and no `FABRIKA_FOREGROUND` is quiet
 // (apps/fabrika/src/launch.ts), so this step sets the one and removes the other.
 
-import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
+import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream, Array as Arr, pipe } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
@@ -225,7 +225,7 @@ const runLine = Effect.fn("host.runLine")(
 const logTail = Effect.fn("host.logTail")(function* (log: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(log).pipe(Effect.orElseSucceed(() => ""));
-  return text.trimEnd().split("\n").slice(-TAIL).join("\n");
+  return Arr.join(text.trimEnd().split("\n").slice(-TAIL), "\n");
 });
 
 /**
@@ -276,10 +276,11 @@ export const worktree = Effect.fn("host.worktree")(function* (main: string, dir:
 
 /** The files the commands changed, added or removed, one path each (untracked folders listed by file). */
 export const changedPaths = (porcelain: string): ReadonlyArray<string> =>
-  porcelain
-    .split("\0")
-    .filter((entry) => entry.length > 3)
-    .map((entry) => entry.slice(3));
+  pipe(
+    porcelain.split("\0"),
+    Arr.filter((entry) => entry.length > 3),
+    Arr.map((entry) => entry.slice(3)),
+  );
 
 /**
  * The facts stepcommit.sh checks for a box, written for this run's name and removed with the scope,
@@ -307,7 +308,7 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
   ];
   yield* Effect.acquireRelease(
     fs
-      .writeFileString(facts, `${text.join("\n")}\n`)
+      .writeFileString(facts, `${Arr.join(text, "\n")}\n`)
       .pipe(Effect.mapError(() => new StepFailed({ reason: `${facts} cannot be written` }))),
     () => fs.remove(facts, { force: true }).pipe(Effect.ignore),
   );
@@ -466,10 +467,11 @@ const HostEntry = Schema.Struct({
 });
 
 /** The last host entry among the quest's state file's steps, as a review is told it; `null` when none ran. */
-export const lastHost = (steps: ReadonlyArray<unknown>): string | null => {
-  const last = steps.findLast(Schema.is(HostEntry));
-  return last === undefined ? null : `${last.outcome} at ${last.head}: ${last.why}`;
-};
+export const lastHost = (steps: ReadonlyArray<unknown>): string | null =>
+  Option.match(Arr.findLast(steps, Schema.is(HostEntry)), {
+    onNone: () => null,
+    onSome: (last) => `${last.outcome} at ${last.head}: ${last.why}`,
+  });
 
 /**
  * The quest's state file, read loosely: what drive.ts wrote stays as it is, except a `lane` key

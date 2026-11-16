@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema } from "effect";
+import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema, Array as Arr, pipe } from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
@@ -34,56 +34,62 @@ const FABLE = "claude-fable-5-2";
 
 // One message over three lines, a blank line, a line that is not JSON, a message with no usage,
 // content that is plain text, and a first and a last line that are no model call.
-const plain = `${[
-  JSON.stringify({ type: "user", timestamp: "2026-11-10T07:59:58.250Z", message: { content: "made-up ask" } }),
-  assistant("2026-11-10T08:00:01.000Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [text]),
-  assistant("2026-11-10T08:00:01.500Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool]),
-  assistant("2026-11-10T08:00:01.900Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool, tool]),
-  "",
-  "{not json",
-  JSON.stringify({ type: "user", timestamp: "2026-11-10T08:00:09.000Z", message: { content: [tool] } }),
-  assistant(
-    "2026-11-10T08:03:30.000Z",
-    "msg_2",
-    OPUS,
-    usage(40, 0, 2500, 4200, 3100, { service_tier: "standard", inference_geo: "global", speed: "standard" }),
-    [tool],
-  ),
-  JSON.stringify({
-    type: "assistant",
-    timestamp: "2026-11-10T08:04:00.000Z",
-    message: { id: "msg_none", model: OPUS, content: [tool] },
-  }),
-  assistant("2026-11-10T08:07:45.999Z", "msg_3", OPUS, usage(7, 0, 0, 9900, 1_234_567), "plain text content"),
-  JSON.stringify({ type: "system", timestamp: "2026-11-10T08:12:15.400Z" }),
-].join("\n")}\n`;
+const plain = `${Arr.join(
+  [
+    JSON.stringify({ type: "user", timestamp: "2026-11-10T07:59:58.250Z", message: { content: "made-up ask" } }),
+    assistant("2026-11-10T08:00:01.000Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [text]),
+    assistant("2026-11-10T08:00:01.500Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool]),
+    assistant("2026-11-10T08:00:01.900Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool, tool]),
+    "",
+    "{not json",
+    JSON.stringify({ type: "user", timestamp: "2026-11-10T08:00:09.000Z", message: { content: [tool] } }),
+    assistant(
+      "2026-11-10T08:03:30.000Z",
+      "msg_2",
+      OPUS,
+      usage(40, 0, 2500, 4200, 3100, { service_tier: "standard", inference_geo: "global", speed: "standard" }),
+      [tool],
+    ),
+    JSON.stringify({
+      type: "assistant",
+      timestamp: "2026-11-10T08:04:00.000Z",
+      message: { id: "msg_none", model: OPUS, content: [tool] },
+    }),
+    assistant("2026-11-10T08:07:45.999Z", "msg_3", OPUS, usage(7, 0, 0, 9900, 1_234_567), "plain text content"),
+    JSON.stringify({ type: "system", timestamp: "2026-11-10T08:12:15.400Z" }),
+  ],
+  "\n",
+)}\n`;
 
 // Two models, Haiku at 100,000 prompt tokens and at 100,001, two usages without the full split,
 // and a run that crosses the start of daylight time in Los Angeles. Its meta says it still runs.
-const open = [
-  assistant(
-    "2026-03-08T09:58:00.000Z",
-    "msg_a",
-    SONNET,
-    { input_tokens: 500, cache_creation_input_tokens: 800, cache_read_input_tokens: null, output_tokens: 60 },
-    [tool],
-  ),
-  assistant("2026-03-08T09:59:30.000Z", "msg_b", HAIKU, usage(90_000, 5000, 4000, 1000, 700)),
-  assistant("2026-03-08T10:01:00.000Z", "msg_c", HAIKU, usage(90_000, 5000, 4000, 1001, 700), [tool, text, "odd"]),
-  assistant(
-    "2026-03-08T10:02:10.000Z",
-    "msg_d",
-    SONNET,
-    {
-      input_tokens: 10,
-      cache_creation_input_tokens: 900,
-      cache_creation: { ephemeral_1h_input_tokens: 300 },
-      cache_read_input_tokens: 77,
-      output_tokens: 5,
-    },
-    null,
-  ),
-].join("\n");
+const open = Arr.join(
+  [
+    assistant(
+      "2026-03-08T09:58:00.000Z",
+      "msg_a",
+      SONNET,
+      { input_tokens: 500, cache_creation_input_tokens: 800, cache_read_input_tokens: null, output_tokens: 60 },
+      [tool],
+    ),
+    assistant("2026-03-08T09:59:30.000Z", "msg_b", HAIKU, usage(90_000, 5000, 4000, 1000, 700)),
+    assistant("2026-03-08T10:01:00.000Z", "msg_c", HAIKU, usage(90_000, 5000, 4000, 1001, 700), [tool, text, "odd"]),
+    assistant(
+      "2026-03-08T10:02:10.000Z",
+      "msg_d",
+      SONNET,
+      {
+        input_tokens: 10,
+        cache_creation_input_tokens: 900,
+        cache_creation: { ephemeral_1h_input_tokens: 300 },
+        cache_read_input_tokens: 77,
+        output_tokens: 5,
+      },
+      null,
+    ),
+  ],
+  "\n",
+);
 
 /** A line whose message has no id, so its `uuid` is its key. */
 const unnamed = (at: string, uuid: string | undefined, said: unknown) =>
@@ -95,11 +101,14 @@ const unnamed = (at: string, uuid: string | undefined, said: unknown) =>
   });
 
 // Two lines of one message keyed by uuid, timestamps with an offset, and a call of no tokens.
-const closed = `${[
-  unnamed("2026-11-10T20:15:00.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
-  unnamed("2026-11-10T20:15:01.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
-  assistant("2026-11-10T20:45:03.000Z", "msg_z", FABLE, usage(0, 0, 0, 0, 0)),
-].join("\n")}\n`;
+const closed = `${Arr.join(
+  [
+    unnamed("2026-11-10T20:15:00.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
+    unnamed("2026-11-10T20:15:01.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
+    assistant("2026-11-10T20:45:03.000Z", "msg_z", FABLE, usage(0, 0, 0, 0, 0)),
+  ],
+  "\n",
+)}\n`;
 
 const FILES: Readonly<Record<string, string>> = {
   "plain.jsonl": plain,
@@ -264,16 +273,18 @@ const ZERO: Counts = { input: 0, write5m: 0, write1h: 0, cached: 0, output: 0 };
 
 /** A transcript of one line per call, each call with its own id. */
 const transcript = (model: string, calls: ReadonlyArray<Counts>, more = {}, name = "msg") =>
-  calls
-    .map((call, i) =>
+  pipe(
+    calls,
+    Arr.map((call, i) =>
       assistant(
         `2026-11-10T08:00:${String(i).padStart(2, "0")}.000Z`,
         `${name}_${i}`,
         model,
         usage(call.input, call.write5m, call.write1h, call.cached, call.output, more),
       ),
-    )
-    .join("\n");
+    ),
+    Arr.join("\n"),
+  );
 
 const options = { arbitrary: { seed: 119_120, runs: 50 } };
 
@@ -291,7 +302,9 @@ describe("clauderow's edge cases, each a law", () => {
         const got = JSON.parse(
           yield* row("agent.jsonl", ask()).pipe(on("UTC", { "agent.jsonl": transcript(FABLE, calls) })),
         );
-        const dollars = calls.reduce(
+        const dollars = Arr.reduce(
+          calls,
+          0,
           (sum, call) =>
             sum +
             (call.input * fable.input +
@@ -300,7 +313,6 @@ describe("clauderow's edge cases, each a law", () => {
               call.cached * fable.cached +
               call.output * fable.output) /
               1e6,
-          0,
         );
         expect(got.model).toBe(FABLE);
         expect(got.costUsd).toBeNull();
@@ -353,12 +365,12 @@ describe("clauderow's edge cases, each a law", () => {
     "counts a line with no message id and no uuid as its own call, and never folds two into one",
     { calls: some(5) },
     ({ calls }) => {
-      const lines = calls.map((call) =>
+      const lines = Arr.map(calls, (call) =>
         unnamed("2026-11-10T08:00:00.000Z", undefined, usage(call.input, 0, 0, 0, call.output)),
       );
-      const got = read(lines.join("\n"));
-      expect(Result.isSuccess(got) && got.success.calls.map((call) => call.tokens.input)).toEqual(
-        calls.map((call) => call.input),
+      const got = read(Arr.join(lines, "\n"));
+      expect(Result.isSuccess(got) && Arr.map(got.success.calls, (call) => call.tokens.input)).toEqual(
+        Arr.map(calls, (call) => call.input),
       );
     },
     options,
@@ -376,7 +388,7 @@ describe("clauderow's edge cases, each a law", () => {
       assistant("2026-11-10T08:00:01.000Z", "msg_2", OPUS, {}),
     ];
     const noMessage = JSON.stringify({ type: "assistant", timestamp: "2026-11-10T08:00:02.000Z", message: "words" });
-    const got = read([...skipped, real, noMessage, ...skipped].join("\n"));
+    const got = read(Arr.join([...skipped, real, noMessage, ...skipped], "\n"));
     expect(Result.isSuccess(got) && got.success.calls).toHaveLength(1);
     expect(Result.isSuccess(got) && [got.success.first, got.success.last]).toEqual([
       "2026-11-10T08:00:01.000Z",
@@ -437,7 +449,7 @@ describe("clauderow's edge cases, each a law", () => {
 
   it.effect("reads no message text into a row or a turn", () =>
     Effect.gen(function* () {
-      const printed = [yield* row("plain.jsonl", ask()), ...(yield* turns("plain.jsonl"))].join("\n");
+      const printed = Arr.join([yield* row("plain.jsonl", ask()), ...(yield* turns("plain.jsonl"))], "\n");
       expect(printed).not.toContain("made-up");
       expect(printed).not.toContain("plain text content");
     }).pipe(on("UTC")),
