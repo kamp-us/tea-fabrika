@@ -2,9 +2,10 @@
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
-//         its change, its commits and its words -> the proof run (scheduled.yaml) on its branch is
-//         read at its head -> green on every job: marked ready if a draft, then merge when ready on,
-//         as a squash pinned to that head
+//         its change, its commits and its words -> each new exported name is named under
+//         `## New names` (Names.ts, 0587) -> the proof run (scheduled.yaml) on its branch is read at
+//         its head -> green on every job: marked ready if a draft, then merge when ready on, as a
+//         squash pinned to that head
 //
 // A branch's proof run tests the full set or, since 0590, the changed set: the tests its change
 // reaches against origin/main. Its jobs' names say which (`kind`): a full run has `tests (<leg>)`
@@ -29,6 +30,7 @@ import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
 import { logText } from "../ci/typecheck.ts";
 import * as Leaks from "./Leaks.ts";
+import * as Names from "./Names.ts";
 import { type Detail, PullRequests } from "./PullRequests.ts";
 
 /** The full run's workflow file: the whole suite, which a pull request's own checks never run (0534, 0536). */
@@ -250,6 +252,12 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
 
   // Merge when ready merges later with no one watching, so the leak gate runs before it is turned on.
   yield* Leaks.gate(a.dir, found);
+
+  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+
+  if (unnamed !== null) {
+    return yield* refuse(unnamed);
+  }
 
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
