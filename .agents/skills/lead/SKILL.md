@@ -45,7 +45,7 @@ first step:
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
 Start a child at its parent's signed build head. Keep the child's tests until it lands.
-Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
+Land the stack with `land.ts stack <top-pr>`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 ```
 
@@ -565,12 +565,17 @@ visible, and never weaken the rules to hide this message.
    docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the
    quest merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
-   refused by `gh pr merge`; land it with `gh stack merge <pr> --squash --yes` by hand.
+   refused by `gh pr merge` and by `land.ts arm` (github/gh-stack#591); land it with
+   `land.ts stack <top-pr>`, never a bare `gh stack merge`. It runs `arm`'s leak gate and
+   `## New names` check on each layer, then one stack merge pinned to the heads it read. A stack
+   may not be larger than the queue builds at once: `land.ts stack` refuses when more layers are
+   open than main's `max_entries_to_build`, since the queue splits a larger stack and drops its
+   upper layers (ticket 1115). Split it, or land it layer by layer.
    Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
    GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
    `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
-   `gh stack merge <pr> --squash` lands bottom-up, and `gh stack sync --prune` rebases the rest
+   `land.ts stack <top-pr>` lands bottom-up, and `gh stack sync --prune` rebases the rest
    onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
    never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
    same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
