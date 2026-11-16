@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s5-review1",
+  "ticket": "1056",
+  "pr": "kamp-us/tea-fabrika#1411",
+  "started": "2026-11-15T18:48:31-08:00",
+  "ended": "2026-11-15T18:54:30-08:00",
+  "parent": "2026-11-15-reflect-ban-s5-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Reflect ban slice 5 review of 892112e1f, in next/: changes 1, sent to tests. The new guard in put (next/packages/libfabrika/src/settings/TomlParser.ts:38) uses Predicate.isObject, which is false for arrays in Effect 4.1.3, so put no longer steps into the array an array-of-tables header creates. A document with [[starts]] parses on the branch as {\"0\":{...},\"1\":{...},\"starts\":[]} and on main as {\"starts\":[{...},{...}]}: the rows land on the top table under number keys and the array stays empty, with no error. No law holds it: TomlEdit.test.ts (18) and TomlParser.test.ts (3) stay green with the regression. L9 draws only string keys, so it never walks into an array. The own-key read in internal/edit.ts holds; __proto__, constructor and toString stay own keys; the .oxlintrc.json line is the plan's fourth block and covers only settings/**. The plan's line that a scalar mid-path makes the next Object.defineProperty throw is wrong: the TOML parser refuses it first, on main too.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Read-only apart from this row. Probes ran from a scratch folder against the branch worktree and the main checkout, through the public Toml service. Ran: TomlEdit.test.ts and TomlParser.test.ts one at a time, oxlint over the settings folder (0 Reflect fires), one pnpm typecheck after pgrep -x tsgo found none (exit 0). loosening.sh: 2 'unrecognized change' hits, the added folder line in .oxlintrc.json and an added import in TomlEdit.test.ts; no law loosened. The branch has all of origin/main. Not run: any .integration., .visual. or workerd file.",
+  "step": "review"
+}

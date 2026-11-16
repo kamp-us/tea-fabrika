@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-anti-slop-install-tests3",
+  "ticket": "1057",
+  "pr": "kamp-us/tea-fabrika#1373",
+  "started": "2026-11-15T17:25:00-08:00",
+  "ended": "2026-11-15T17:38:00-08:00",
+  "parent": "2026-11-15-anti-slop-install-tests1",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review (field/runs/2026-11-15-t1057-review1.json) sent ticket 1057 back with three fixes, all made. (1) plants.test.ts's REFLECT ban scenario copied .oxlintrc.json into a temp repo without vendor/, so oxlint could not load the plugins; it now links vendor/ beside the two node_modules, and plants.test.ts passes 236 of 236. (2) Decision 0567 took the two Match rules, anti-slop-effect/no-manual-tag-comparison and anti-slop-effect/prefer-effect-match. Both are now in TAKEN, whose doc names 0567. The lead expected no folder at 0/0, but the zero lock's own count found 5 for no-manual-tag-comparison and 13 for prefer-effect-match, so each rule gets its block at the end of .oxlintrc.json, and the README's count table gains the two rows. L2 and L3 cover both through new plants (a refused and a taken line each). (3) audit now refuses a jsPlugins entry named anti-slop or anti-slop-effect that loads from any path but its vendored one (`strays` in anti-slop.ts), and the new law L7 holds it. anti-slop.test.ts passes 25 of 25 and vendored.test.ts 5 of 5.",
+  "plants": [
+    { "law": "L7 anti-slop.test.ts: the config loads the fork's two plugins only from vendor/anti-slop/", "plant": ".oxlintrc.json: anti-slop loaded from ./oxlint-plugins/fixtures/edited-copy/index.ts, a real copy of vendor/anti-slop/src so oxlint still reads the config; the scenario got the line naming that path", "result": "red" },
+    { "law": "L3 anti-slop.test.ts, extended to 0567's rules: a taken rule holds only where its block lists the folder", "plant": ".oxlintrc.json: anti-slop-effect/prefer-effect-match named in the root rules; its oxlint-plugins/** scenario and the root check both failed", "result": "red" },
+    { "law": "zero lock (audit in anti-slop.ts), extended to 0567's rules", "plant": ".oxlintrc.json: next/packages/tuval/** dropped from prefer-effect-match's block; audit printed the line naming that folder", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Each plant ran once and was undone. The real config gives audit no line, so the new blocks list exactly the zero folders as counted on this branch at 5fdb67431.",
+  "step": "tests"
+}

@@ -60,8 +60,8 @@ const same = (left: Path, right: Path): boolean => left.length === right.length 
 
 /** @internal */
 export const read = (value: unknown, path: Path): unknown =>
-  Arr.reduce(path, value, (parent, key) =>
-    Predicate.isObjectOrArray(parent) && Object.hasOwn(parent, key) ? Reflect.get(parent, key) : undefined,
+  Arr.reduce(path, value as unknown, (parent, key) =>
+    Predicate.hasProperty(parent, key) && Object.hasOwn(parent, key) ? parent[key] : undefined,
   );
 
 const equal = (left: unknown, right: unknown): boolean => {
