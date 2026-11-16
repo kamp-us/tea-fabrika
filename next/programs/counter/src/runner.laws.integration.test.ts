@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Effect, Layer, Predicate, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -67,16 +67,22 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       .slice(1)
       .split("/")
       .map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
-    let target = root;
+    let target: unknown = root;
 
     for (const key of keys.slice(0, -1)) {
-      target = Reflect.get(Object(target), key);
+      target = Predicate.hasProperty(target, key) ? target[key] : undefined;
     }
 
+    if (!Predicate.isObjectOrArray(target)) {
+      continue;
+    }
+
+    const last = keys.at(-1)!;
+
     if (p.op === "remove") {
-      Reflect.deleteProperty(Object(target), keys.at(-1)!);
+      Reflect.deleteProperty(target, last);
     } else {
-      Reflect.set(Object(target), keys.at(-1)!, structuredClone(p.value));
+      Object.assign(target, { [last]: structuredClone(p.value) });
     }
   }
 

@@ -882,7 +882,7 @@ it("format: each entry of readers is a tracked path that holds a test file", () 
   expect(ci.readers).toEqual(
     expect.arrayContaining([
       "next/apps/fabrika/src/exam/",
-      "next/apps/fabrika/src/settings-generated.test.ts",
+      "next/apps/fabrika/src/settings-generated.integration.test.ts",
       "next/apps/fabrika/src/build.test.ts",
       "next/apps/fabrika/src/build.integration.test.ts",
       "next/apps/fabrika/src/build-command.integration.test.ts",

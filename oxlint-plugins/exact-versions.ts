@@ -1,6 +1,7 @@
 // `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks
-// (docs/direction/pin-exact-versions.md). It lists what passes, so a range, a tag, a `git:` or a
-// `file:` all fail without being named here.
+// (docs/direction/pin-exact-versions.md). It lists what passes (an exact version, `workspace:*`, and
+// `catalog:` or `catalog:<name>`, whose catalog entry is checked exact), so a range, a tag, a `git:`
+// or a `file:` all fail without being named here.
 //
 //   node oxlint-plugins/exact-versions.ts            # this repo
 //   node oxlint-plugins/exact-versions.ts <folder>   # another git tree, as the test does
@@ -14,6 +15,8 @@ import { parse } from "yaml";
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
  * sibling in this repo, written as its exact version in a pack. `workspace:^` would be a range. */
 const POINTERS = new Set(["catalog:", "workspace:*"]);
+/** `catalog:<name>` is exact as well: its version sits in `catalogs.<name>`, checked below. */
+const NAMED = /^catalog:[a-z][a-z0-9-]*$/;
 const EXACT = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
 
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
@@ -21,7 +24,7 @@ const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optional
 const OVERRIDES = ["overrides", "resolutions"];
 
 const passes = (version: unknown): boolean =>
-  typeof version === "string" && (POINTERS.has(version) || EXACT.test(version));
+  typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

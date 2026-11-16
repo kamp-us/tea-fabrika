@@ -105,6 +105,16 @@ const tab = (context: Awaited<ReturnType<Browser["newContext"]>>) =>
     ),
   );
 
+declare global {
+  // What the tab entry (`PAGE_ENTRY` above) puts on the page for this law.
+  var __key: {
+    current(rejected: string | null): Promise<Answer<Key>>;
+    claim(): Promise<Answer<boolean>>;
+  };
+  // The tab's own IndexedDB open, kept while `failStore` makes it refuse.
+  var __realOpen: IDBFactory["open"] | undefined;
+}
+
 type Answer<A> = {
   readonly ok?: A;
   readonly err?: { readonly _tag: string; readonly op: string; readonly error: string };
@@ -113,12 +123,10 @@ type Answer<A> = {
 type Key = { readonly fingerprint: string; readonly found: "created" | "reused" | "replaced" };
 
 const current = (page: Page, rejected: string | null) =>
-  Effect.promise((): Promise<Answer<Key>> =>
-    page.evaluate((r) => Reflect.get(globalThis, "__key").current(r), rejected),
-  );
+  Effect.promise((): Promise<Answer<Key>> => page.evaluate((r) => globalThis.__key.current(r), rejected));
 
 const claim = (page: Page) =>
-  Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => Reflect.get(globalThis, "__key").claim()));
+  Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => globalThis.__key.claim()));
 
 /** Every value the profile's IndexedDB holds, described: private keys by their extractability, bytes and
  *  strings as hex, so the law can say no private material is stored. */
@@ -182,7 +190,7 @@ const failStore = (page: Page, name: string) =>
   Effect.promise(() =>
     page.evaluate((n) => {
       const real = indexedDB.open.bind(indexedDB);
-      Reflect.set(globalThis, "__realOpen", real);
+      globalThis.__realOpen = real;
       indexedDB.open = () => {
         throw new DOMException("refused", n);
       };
@@ -190,7 +198,13 @@ const failStore = (page: Page, name: string) =>
   );
 
 const healStore = (page: Page) =>
-  Effect.promise(() => page.evaluate(() => (indexedDB.open = Reflect.get(globalThis, "__realOpen"))));
+  Effect.promise(() =>
+    page.evaluate(() => {
+      if (globalThis.__realOpen) {
+        indexedDB.open = globalThis.__realOpen;
+      }
+    }),
+  );
 
 /** Ed25519's PKCS #8 prefix: private bytes stored in the clear would start with it. */
 const PKCS8_ED25519 = "302e020100300506032b657004220420";
