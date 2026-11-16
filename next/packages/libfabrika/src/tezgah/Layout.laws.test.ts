@@ -20,7 +20,7 @@
 // The second property breaks a walked, tidy workspace in one named way and asks `check` to see it,
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
 import { TileId, Workspace } from "./Workspace.ts";
@@ -54,7 +54,7 @@ type Space = {
 /** The workspace as the wire shows it: what every client reads. */
 const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w) as Space;
 const decode = (w: Space) => Schema.decodeUnknownSync(Workspace)(w);
-const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
+const tileId = (id: string) => Schema.decodeSync(TileId)(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>

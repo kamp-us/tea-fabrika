@@ -1,7 +1,5 @@
 /**
  * Pinned code-host reads, updates and squash merges.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -10,7 +8,6 @@ import * as Schema from "effect/Schema";
 /**
  * Schema for a positive change number.
  *
- * @stability unstable
  * @category models
  */
 export const ChangeId = Schema.Int.check(Schema.isGreaterThan(0));
@@ -20,7 +17,6 @@ const Id = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}([0-9a-f]{24})?$/)
 /**
  * Schema for a full lower-case SHA-1 or SHA-256 commit id.
  *
- * @stability unstable
  * @category models
  */
 export const Commit = Id.pipe(Schema.brand("Commit"));
@@ -28,7 +24,6 @@ export const Commit = Id.pipe(Schema.brand("Commit"));
 /**
  * Schema for a full git tree id, distinct from a commit id.
  *
- * @stability unstable
  * @category models
  */
 export const Tree = Id.pipe(Schema.brand("Tree"));
@@ -36,7 +31,6 @@ export const Tree = Id.pipe(Schema.brand("Tree"));
 /**
  * Schema for git path segments with no empty segment, dot, parent or NUL.
  *
- * @stability unstable
  * @category models
  */
 export const Path = Schema.String.check(
@@ -50,7 +44,6 @@ export const Path = Schema.String.check(
 /**
  * Schema for a change or its absence; null paths mean the list is incomplete.
  *
- * @stability unstable
  * @category models
  */
 export const Change = Schema.TaggedUnion({
@@ -67,7 +60,6 @@ export const Change = Schema.TaggedUnion({
 /**
  * Schema for a pinned update result, including conflicts and changes no longer open.
  *
- * @stability unstable
  * @category models
  */
 export const Updated = Schema.TaggedUnion({
@@ -81,7 +73,6 @@ export const Updated = Schema.TaggedUnion({
 /**
  * Schema for a pinned squash result and its landed tree.
  *
- * @stability unstable
  * @category models
  */
 export const Merged = Schema.TaggedUnion({
@@ -94,7 +85,6 @@ export const Merged = Schema.TaggedUnion({
 /**
  * The code host could not be reached.
  *
- * @stability unstable
  * @category errors
  */
 export class Unavailable extends Schema.TaggedError<Unavailable, { readonly brand: unique symbol }>()("Unavailable", {
@@ -104,7 +94,6 @@ export class Unavailable extends Schema.TaggedError<Unavailable, { readonly bran
 /**
  * The code host's request limit was reached.
  *
- * @stability unstable
  * @category errors
  */
 export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
@@ -114,7 +103,6 @@ export class RateLimited extends Schema.TaggedError<RateLimited, { readonly bran
 /**
  * The code host refused the request.
  *
- * @stability unstable
  * @category errors
  */
 export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
@@ -124,7 +112,6 @@ export class Refused extends Schema.TaggedError<Refused, { readonly brand: uniqu
 /**
  * Error for a host fault outside the change that permits another attempt.
  *
- * @stability unstable
  * @category errors
  */
 export class CodeHostError extends Schema.TaggedError<CodeHostError, { readonly brand: unique symbol }>()(
@@ -138,7 +125,6 @@ export class CodeHostError extends Schema.TaggedError<CodeHostError, { readonly 
  * Service for pinned changes. Every id in an answer uses the asked head's hash length. A moved
  * head differs from the pin.
  *
- * @stability unstable
  * @category services
  */
 export class CodeHost extends Context.Service<

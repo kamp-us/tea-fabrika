@@ -1,8 +1,6 @@
 /**
  * Saved view membership and fanout: which clients watch a process's view, and how each update
  * reaches them. This file holds the contract only (0095); `WatchersSql.layer` keeps the membership.
- *
- * @stability unstable
  */
 import { Context, type Effect, Schema } from "effect";
 import type { Update } from "./Entry.ts";
@@ -10,7 +8,6 @@ import type { Update } from "./Entry.ts";
 /**
  * Error for a membership read or write that failed in the store.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -20,7 +17,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * Error for a saved membership row that does not decode, or that is stored under another name.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -31,7 +27,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
  * Error for saved view membership that could not be read or written. A delivery that fails is never
  * one: it either ends that client's watch or leaves it in place.
  *
- * @stability unstable
  * @category errors
  */
 export class WatchersError extends Schema.TaggedError<WatchersError, { readonly brand: unique symbol }>()(
@@ -49,7 +44,6 @@ export class WatchersError extends Schema.TaggedError<WatchersError, { readonly 
  * `open` saves a client and sends it the whole view; `publish` sends one patch to every saved
  * client.
  *
- * @stability unstable
  * @category services
  */
 export class Watchers extends Context.Service<

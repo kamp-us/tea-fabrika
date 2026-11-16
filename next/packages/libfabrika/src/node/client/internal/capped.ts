@@ -1,6 +1,9 @@
-import { Clock, Effect, Option, Stream } from "effect";
-import { ChildProcess } from "effect/process";
-import type { ChildProcessSpawner } from "effect/process";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
 import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
@@ -79,9 +82,7 @@ export const capped = Effect.fnUntraced(function* (
       return { printed, result: Result.cases.exited.make({ code, version: yield* version(printed.out) }) };
     }),
   ).pipe(
-    Effect.catch(() =>
-      Effect.succeed({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) }),
-    ),
+    Effect.orElseSucceed(() => ({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) })),
   );
   const ended = yield* Clock.currentTimeMillis;
   yield* Effect.annotateCurrentSpan({

@@ -13,8 +13,8 @@ import { Effect, FileSystem, Path, Schema } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
-  byte: { offset: Schema.Number },
-  cell: { table: Schema.String, row: Schema.Number, column: Schema.String },
+  byte: { offset: Schema.Finite },
+  cell: { table: Schema.String, row: Schema.Finite, column: Schema.String },
 });
 
 /** One machine path found: the file, relative to the folder read, the place in it, and the root it names. */

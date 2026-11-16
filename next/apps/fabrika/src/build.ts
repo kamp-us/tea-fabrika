@@ -1,8 +1,6 @@
 /**
  * The app's build: its selected programs and its brain entry, handed to libfabrika's one-file build.
  * Disk and paths go through Effect's FileSystem and Path, which the caller provides.
- *
- * @stability unstable
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
@@ -13,7 +11,6 @@ export type {
   /**
    * What a finished build answers: the published brain file and its hash, and the tables it carries.
    *
-   * @stability unstable
    * @category models
    */
   Built,
@@ -42,7 +39,6 @@ type Options = {
  * programs a watcher rebuilds from. A failed file search or stylesheet lookup fails with a
  * `BuildError` of reason `read`, and the build's own failures pass through.
  *
- * @stability unstable
  * @category constructors
  */
 export const build = Effect.fn("build.app")(function* (options: Options) {
@@ -58,8 +54,10 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
-      Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
-      Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
+      Effect.mapBoth({
+        onFailure: (cause) => new BuildError({ reason: "read", cause }),
+        onSuccess: (found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test.")),
+      }),
     ));
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
     concurrency: 1,

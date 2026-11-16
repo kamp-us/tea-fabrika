@@ -158,12 +158,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       ({ methodsRun, failure }) =>
         Effect.gen(function* () {
           const planted = throwing(fresh(), failure);
-          const referee = yield* Effect.provide(
-            Effect.gen(function* () {
-              return yield* Referee;
-            }),
-            RefereeSql.layer(planted.sql).pipe(Layer.provide(ring)),
-          );
+          const referee = yield* Effect.provide(Referee, RefereeSql.layer(planted.sql).pipe(Layer.provide(ring)));
           // The stub bridges to the real referee, as a Durable Object stub does: through a Promise.
           const calls: LedgerCalls = {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise

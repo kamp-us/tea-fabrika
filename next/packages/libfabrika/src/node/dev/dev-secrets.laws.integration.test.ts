@@ -9,8 +9,15 @@ import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -161,7 +168,7 @@ const flow = async (sample: Flow) => {
     return Effect.runPromise(store.write(rows));
   };
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-    const call = Schema.decodeUnknownSync(
+    const call = Schema.decodeSync(
       Schema.fromJsonString(
         Schema.Struct({
           target: Schema.String,
@@ -320,7 +327,7 @@ const flow = async (sample: Flow) => {
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
-                Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
+                Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
                 ),
               ).toEqual({ token: bearer });
@@ -374,11 +381,11 @@ const flow = async (sample: Flow) => {
                     .message(socket, move === "malformed" ? `${rawFrame}!` : rawFrame)
                     .pipe(Effect.provide(logger)),
                 ),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             });
             yield* Effect.tryPromise({
               try: () => Reflect.get(instance.project(config.name), "info")(),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);
           }

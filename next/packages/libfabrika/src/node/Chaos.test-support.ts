@@ -2,7 +2,16 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -48,7 +57,7 @@ export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "t
 export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
-    id: Schema.decodeUnknownSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+    id: Schema.decodeSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
     by,
     arrivedAt: n,
     input,

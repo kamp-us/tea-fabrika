@@ -140,7 +140,7 @@ const POOL = ["merger:1", "merger:2", "merger:3", "worker:1", "worker:2"] as con
 /** The ledger's row limit (`ledger/Log.ts`): a first letter over it is refused whole. */
 const ROW_LIMIT = 2_000_000;
 
-type Answer = Result.Result<typeof Started.Type, ChildrenError>;
+type Answer = Result.Result<Started, ChildrenError>;
 type Reason = ChildrenError["reason"];
 
 /** The first letter's entry id in `<name>/inbox`. */
@@ -269,7 +269,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
 };
 
 /** The gateway's answer for these starts: no member's input was delivered to any requester. */
-const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) });
+const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeedNone });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
 const raw = (tag: string, fields: object): unknown =>

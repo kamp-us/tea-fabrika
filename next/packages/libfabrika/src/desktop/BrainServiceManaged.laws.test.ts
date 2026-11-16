@@ -1,7 +1,16 @@
 // P19 next/. L1/L2/L4/L5 drive the real service through held native replies and TestClock.
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Fiber, Formatter, Layer, Logger, Schema, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";

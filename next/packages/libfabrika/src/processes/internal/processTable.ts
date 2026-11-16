@@ -118,7 +118,7 @@ const Life = Schema.Struct({
   state: State,
   request: Start,
   from: Entry,
-  rev: Schema.Number,
+  rev: Schema.Finite,
   /** The reason it exited with, kept when a later `down` replaces its state. */
   exited: Schema.optionalKey(ExitReason),
 });
@@ -130,7 +130,7 @@ const Model = Schema.Struct({
   lives: Schema.ReadonlyMap(Schema.String, Life),
   watches: Schema.ReadonlyMap(Schema.String, Watch),
   current: Schema.ReadonlyMap(Schema.String, Schema.String),
-  restarts: Schema.ReadonlyMap(Schema.String, Schema.Array(Schema.Number)),
+  restarts: Schema.ReadonlyMap(Schema.String, Schema.Array(Schema.Finite)),
 });
 /** @internal */
 export type Model = typeof Model.Type;

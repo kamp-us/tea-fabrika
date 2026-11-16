@@ -29,7 +29,7 @@ const Runs = Schema.fromJsonString(
   Schema.Struct({
     check_runs: Schema.Array(
       Schema.Struct({
-        id: Schema.Number,
+        id: Schema.Finite,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
         app: Schema.optional(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
@@ -40,7 +40,7 @@ const Runs = Schema.fromJsonString(
 
 /** The latest check run GitHub Actions made in a check-runs body, as `Job`; none when it lists none. */
 export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Runs)(body), ({ check_runs }) => {
+  Effect.map(Schema.decodeEffect(Runs)(body), ({ check_runs }) => {
     const ours = check_runs.filter((run) => run.app?.slug === "github-actions");
     const latest = ours.reduce<(typeof ours)[number] | undefined>(
       (max, run) => (max === undefined || run.id > max.id ? run : max),
@@ -77,7 +77,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         Effect.scoped,
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new ChecksError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(ChecksError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
@@ -85,7 +85,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
         const last = ran.err.trim().split("\n").at(-1) ?? "";
         const path = args.find((a) => !a.startsWith("-")) ?? "";
-        return new ChecksError({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
+        return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
       };
 
       const job = Effect.fn("ChecksGh.job")(function* (head: string, name: string) {
@@ -108,7 +108,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         }
 
         const found = yield* latestIn(response.body).pipe(
-          Effect.mapError(() => new ChecksError({ reason: `GitHub's check runs at ${head} did not parse` })),
+          Effect.mapError(() => ChecksError.make({ reason: `GitHub's check runs at ${head} did not parse` })),
         );
 
         if (response.etag === null) {

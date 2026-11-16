@@ -123,7 +123,7 @@ export const Line = Schema.Struct({
   box: Schema.NullOr(Schema.String),
   phase: Schema.NullOr(Schema.Literals(Beat.PHASES)),
   /** Seconds since the chain last wrote its beat; `null` with no beat. */
-  quietSeconds: Schema.NullOr(Schema.Number),
+  quietSeconds: Schema.NullOr(Schema.Finite),
   /** Since when: the phase began, the step started, the quest stopped or landed. */
   since: Schema.NullOr(Schema.String),
   text: Schema.String,
@@ -133,7 +133,7 @@ export type Line = typeof Line.Type;
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
   for (const line of out.split("\n").toReversed()) {
-    const end = Schema.decodeUnknownOption(EndLine)(line.trim());
+    const end = Schema.decodeOption(EndLine)(line.trim());
 
     if (Option.isSome(end)) {
       return { outcome: end.value.outcome, reason: end.value.reason ?? "" };
@@ -229,15 +229,13 @@ const see = Effect.fn("quests.see")(function* (boxes: string, quest: string, sta
   const read = (file: string) => fs.readFileString(file).pipe(Effect.option);
   const out = path.join(boxes, `${quest}-chain.out`);
   const record = yield* read(path.join(boxes, "state", `${quest}${CHAIN}`));
-  const held = yield* fs
-    .exists(path.join(boxes, "state", `${quest}.lock`))
-    .pipe(Effect.catch(() => Effect.succeed(false)));
+  const held = yield* fs.exists(path.join(boxes, "state", `${quest}.lock`)).pipe(Effect.orElseSucceed(() => false));
   const ended = Option.flatMapNullishOr(yield* read(out), lastOutcome);
   const written = Option.flatMap(yield* fs.stat(out).pipe(Effect.option), (info) => info.mtime);
   const found = Option.match(record, {
     onNone: () => Found.cases.missing.make({}),
     onSome: (text) =>
-      Option.match(Schema.decodeUnknownOption(RecordText)(text), {
+      Option.match(Schema.decodeOption(RecordText)(text), {
         onNone: () => Found.cases.unreadable.make({}),
         onSome: (read) => Found.cases.read.make({ record: read }),
       }),
@@ -259,7 +257,7 @@ export const read = Effect.fn("quests.read")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const names = yield* fs.readDirectory(path.join(boxes, "state")).pipe(Effect.catch(() => Effect.succeed([])));
+  const names = yield* fs.readDirectory(path.join(boxes, "state")).pipe(Effect.orElseSucceed(() => []));
   const recorded = names.filter((name) => name.endsWith(CHAIN)).map((name) => name.slice(0, -CHAIN.length));
   const standingBoxes = names.filter((name) => name.endsWith(".box")).map((name) => name.slice(0, -".box".length));
   const asked = (options.named.length > 0 ? options.named : recorded).toSorted();

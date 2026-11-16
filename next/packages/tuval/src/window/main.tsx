@@ -26,7 +26,9 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -114,8 +116,7 @@ const TileBody = ({
     return t?.last ? m.client.views[t.last] : undefined;
   });
   const registration = windowFor(tile.program);
-  const data =
-    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+  const data = registration && shown ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view)) : null;
 
   // The tile guideline's empty state: one word where the view will start, and on an ended tile in
   // place of the ended process's last view.

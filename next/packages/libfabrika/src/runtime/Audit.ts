@@ -2,8 +2,6 @@
  * Audit selection and its errors. `select` reduces a program's message to the audit data the
  * program declares. The errors keep their cause in memory, redacted, and `Answer` carries a failure
  * across the audit RPC with no field for that cause.
- *
- * @stability unstable
  */
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
@@ -14,35 +12,30 @@ const Cause = { cause: Schema.optionalKey(Schema.Redacted(Schema.Unknown, { disa
 /**
  * The input cannot be decoded for audit selection.
  *
- * @stability unstable
  * @category errors
  */
 export class Input extends Schema.TaggedError<Input, { readonly brand: unique symbol }>()("Input", Cause) {}
 /**
  * The program's selector failed.
  *
- * @stability unstable
  * @category errors
  */
 export class Selection extends Schema.TaggedError<Selection, { readonly brand: unique symbol }>()("Selection", Cause) {}
 /**
  * The selected value cannot be encoded as checked JSON.
  *
- * @stability unstable
  * @category errors
  */
 export class Output extends Schema.TaggedError<Output, { readonly brand: unique symbol }>()("Output", Cause) {}
 /**
  * Audit transport failed without deciding anything about the program.
  *
- * @stability unstable
  * @category errors
  */
 export class Transport extends Schema.TaggedError<Transport, { readonly brand: unique symbol }>()("Transport", Cause) {}
 /**
  * The remote audit reply could not be checked.
  *
- * @stability unstable
  * @category errors
  */
 export class Reply extends Schema.TaggedError<Reply, { readonly brand: unique symbol }>()("Reply", Cause) {}
@@ -50,7 +43,6 @@ export class Reply extends Schema.TaggedError<Reply, { readonly brand: unique sy
 /**
  * Audit failures retain private causes in memory and print only safe tags.
  *
- * @stability unstable
  * @category errors
  */
 export class AuditError extends Schema.TaggedError<AuditError, { readonly brand: unique symbol }>()("AuditError", {
@@ -61,7 +53,6 @@ export class AuditError extends Schema.TaggedError<AuditError, { readonly brand:
  * Schema for checked audit RPC data: an `ok` value, or an `AuditError` with only its reason tag.
  * It deliberately has no field for a private cause.
  *
- * @stability unstable
  * @category schemas
  */
 export const Answer = Schema.TaggedUnion({
@@ -72,7 +63,6 @@ export const Answer = Schema.TaggedUnion({
 /**
  * Converts an audit failure to body-free RPC data.
  *
- * @stability unstable
  * @category constructors
  */
 export const failure = (error: AuditError): typeof Answer.cases.AuditError.Type =>
@@ -83,7 +73,6 @@ const reasons = { Input, Selection, Output, Transport, Reply };
 /**
  * Restores a checked audit error without trusting a remote cause.
  *
- * @stability unstable
  * @category constructors
  */
 export const restore = (answer: typeof Answer.cases.AuditError.Type): AuditError =>
@@ -105,7 +94,6 @@ type Declaration = {
  * message `type`), and encodes the result as JSON. A failure in the first step is an `Input` error,
  * in the selector a `Selection` error, and in the last step an `Output` error.
  *
- * @stability unstable
  * @category combinators
  */
 export const select = (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {

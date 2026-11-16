@@ -39,8 +39,8 @@ import { type Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-type ChainValue = typeof Chain.Type;
-type Row = typeof SpanRow.Type;
+type ChainValue = Chain;
+type Row = SpanRow;
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so a file cannot be acquired one by one: the folder holds them, and the scope that asked
@@ -480,13 +480,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: value, held: 0 }),
                     ),
+                  ),
               };
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(4);
@@ -681,15 +680,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
-                          : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: "unreachable", held: 0 }),
                     ),
+                  ),
               };
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(2);
@@ -1263,8 +1259,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.bigInt(),
     );
     await fc.assert(
-      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
             yield* Effect.gen(function* () {
@@ -1305,8 +1301,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }
             }).pipe(Effect.provide(world(sql)));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });

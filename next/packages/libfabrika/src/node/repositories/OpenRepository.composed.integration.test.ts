@@ -8,22 +8,20 @@ import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable 
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  Logger,
-  Path,
-  Redacted,
-  Schema,
-  Sink,
-  Stream,
-  Tracer,
-} from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -58,7 +56,7 @@ const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
-  Schema.decodeUnknownSync(RepoSnapshot)({
+  Schema.decodeSync(RepoSnapshot)({
     key: "a".repeat(64),
     branch: "release",
     commit: "b".repeat(40),
@@ -79,7 +77,7 @@ const reader = (text: string | null, touches: Array<string>) =>
         resolve: () => {
           touches.push("outside source");
           return Effect.fail(
-            new RepositoriesError({ reason: new ReadFailed({ cause: Redacted.make("must not resolve code") }) }),
+            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
           );
         },
       }),
@@ -488,7 +486,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                             ...captured,
                             append: () =>
                               Effect.fail(
-                                new LedgerError({ reason: "storage", message: `${url} ${folder} ${secret}` }),
+                                LedgerError.make({ reason: "storage", message: `${url} ${folder} ${secret}` }),
                               ),
                           }
                         : captured,

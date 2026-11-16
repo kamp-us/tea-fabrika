@@ -63,7 +63,7 @@ const exported = (path: string) =>
 
 /** What is wrong with one names file, as one line per problem; empty when every name is real. */
 const problems = (text: string) => {
-  const kinds = Schema.decodeUnknownSync(Kinds)(text);
+  const kinds = Schema.decodeSync(Kinds)(text);
   const found: string[] = [];
 
   for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
@@ -97,7 +97,7 @@ describe("node-kinds.json (L6)", () => {
   it("L6 scenario: every name is exported by a file its glob matches and bound by that string elsewhere in next/", () => {
     // The real file and the tracked tree: on main, RecordPart and IsolateTail, both from src/brain.ts.
     const text = readFileSync(join(ROOT, "node-kinds.json"), "utf8");
-    expect(Object.keys(Schema.decodeUnknownSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
+    expect(Object.keys(Schema.decodeSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
     expect(problems(text)).toEqual([]);
   });
 });

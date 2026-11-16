@@ -41,9 +41,8 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
     return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
   });
 
-const Beat = Schema.Struct({
-  _tag: Schema.Literal("beat"),
-  body: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
+const Beat = Schema.TaggedStruct("beat", {
+  body: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
 });
 
 const Letter = Schema.Struct({
@@ -52,13 +51,13 @@ const Letter = Schema.Struct({
   body: Schema.Struct({ m: Schema.Unknown }),
 });
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
 
 const View = Schema.Struct({
-  rev: Schema.Number,
+  rev: Schema.Finite,
   view: Schema.Union([
-    Schema.TaggedStruct("idle", { next: Schema.Number, period: Schema.Int }),
-    Schema.TaggedStruct("running", { due: Schema.Number, period: Schema.Int }),
+    Schema.TaggedStruct("idle", { next: Schema.Finite, period: Schema.Int }),
+    Schema.TaggedStruct("running", { due: Schema.Finite, period: Schema.Int }),
   ]),
 });
 

@@ -61,7 +61,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
     stdout
       .split("\n")
       .filter((line) => line.startsWith("{"))
-      .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line));
+      .map((line) => Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(line));
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
     Effect.gen(function* () {

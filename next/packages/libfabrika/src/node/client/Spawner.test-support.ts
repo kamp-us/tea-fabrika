@@ -4,9 +4,15 @@
 // It also reads the real git lines C4's runs saved (`fixtures/next/hands/git-version.json`).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Deferred, Effect, Layer, PlatformError, Schema, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
-import type { ChildProcess } from "effect/process";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
+import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 /** One child as a script: what it prints, in order, on which stream, how it ends, and whether it starts. */
 export type Child = {
@@ -86,6 +92,6 @@ const Vectors = Schema.fromJsonString(
 );
 
 /** The real git lines C4's runs saved: what git printed, and what `execute` answers for it. */
-export const gitVectors = Schema.decodeUnknownSync(Vectors)(
+export const gitVectors = Schema.decodeSync(Vectors)(
   readFileSync(resolve(import.meta.dirname, "../../../../../../fixtures/next/hands/git-version.json"), "utf8"),
 ).vectors;

@@ -43,7 +43,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
   const parsed = parseSync(path, text);
 
   if (parsed.errors.length > 0) {
-    return yield* new Unparsed({ path });
+    return yield* Unparsed.make({ path });
   }
 
   return parsed.comments.flatMap((comment): Edge[] => {
@@ -106,7 +106,7 @@ export const asks = Effect.fn("exam.asks")(function* (
 
 class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
   args: Schema.String,
-  code: Schema.Number,
+  code: Schema.Finite,
 }) {}
 
 /** One git command's output; any exit but 0 fails. */
@@ -117,7 +117,7 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   });
 
   if (code !== 0) {
-    return yield* new GitFailed({ args: args.join(" "), code });
+    return yield* GitFailed.make({ args: args.join(" "), code });
   }
 
   return out;

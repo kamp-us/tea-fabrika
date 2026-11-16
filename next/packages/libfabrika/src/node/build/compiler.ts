@@ -16,10 +16,8 @@
  *
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
- *
- * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -27,14 +25,12 @@ import { type OxcError, transformSync } from "oxc-transform-react";
  * Schema for a row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and
  * why.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, reason: Schema.String });
 /**
  * A row of `compiler-ledger.json`.
  *
- * @stability unstable
  * @category models
  */
 export type Row = typeof Row.Type;
@@ -43,7 +39,6 @@ export type Row = typeof Row.Type;
  * One thing the check refuses, at a function in a file, with the reason in words. `line` is 0 for
  * a stale ledger row, which has no place in the source.
  *
- * @stability unstable
  * @category models
  */
 export interface Finding {
@@ -62,7 +57,6 @@ export interface Finding {
  * It does not throw on a function it cannot compile: it leaves that function as it was and reports
  * why. It reports impure calls in render too. `check` turns the reports into findings.
  *
- * @stability unstable
  * @category constructors
  */
 export const compile = (file: string, code: string) =>
@@ -268,7 +262,6 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
  * as its path from the top of the repo and its text. A ledger row whose file is not among them is
  * stale too, and is a finding.
  *
- * @stability unstable
  * @category checking
  */
 export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [

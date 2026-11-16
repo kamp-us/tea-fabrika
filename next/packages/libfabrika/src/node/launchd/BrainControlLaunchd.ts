@@ -1,7 +1,5 @@
 /**
  * Scoped native commands and exclusive home-owned plist publication.
- *
- * @stability unstable
  */
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
@@ -42,16 +40,16 @@ const Job = Schema.Struct({
   AbandonProcessGroup: Schema.Literal(false),
 });
 
-const storage = (cause: unknown) => new BrainControlError({ reason: new Storage({ cause: Redacted.make(cause) }) });
-const conflict = (cause: unknown) => new BrainControlError({ reason: new Conflict({ cause: Redacted.make(cause) }) });
+const storage = (cause: unknown) => BrainControlError.make({ reason: Storage.make({ cause: Redacted.make(cause) }) });
+const conflict = (cause: unknown) => BrainControlError.make({ reason: Conflict.make({ cause: Redacted.make(cause) }) });
 
 const commandError = (cause: unknown, code?: number) =>
-  new BrainControlError({
-    reason: new Command({ ...(code === undefined ? {} : { code }), cause: Redacted.make(cause) }),
+  BrainControlError.make({
+    reason: Command.make({ ...(code === undefined ? {} : { code }), cause: Redacted.make(cause) }),
   });
 
 const unsupported = (cause: unknown) =>
-  new BrainControlError({ reason: new Unsupported({ cause: Redacted.make(cause) }) });
+  BrainControlError.make({ reason: Unsupported.make({ cause: Redacted.make(cause) }) });
 
 const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Snapshot) {
   const fs = yield* FileSystem.FileSystem;
@@ -66,7 +64,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const poll = yield* Schema.decodeUnknownEffect(Declarations.brainPoll.schema)(
     settings.values["desktop.brain-poll"],
   ).pipe(Effect.mapError(unsupported));
-  const job = yield* Schema.decodeUnknownEffect(Job)({
+  const job = yield* Schema.decodeEffect(Job)({
     Label: label,
     ProgramArguments: [spec.executable, ...spec.args],
     EnvironmentVariables: { ELECTRON_RUN_AS_NODE: "1", FABRIKA_HOME: spec.home, FABRIKA_BUILD: spec.build },
@@ -105,8 +103,8 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                 ? /^Process interrupted due to receipt of signal: '(SIG[A-Z0-9]+)'$/u.exec(native.success.message)?.[1]
                 : undefined,
             );
-            return new BrainControlError({
-              reason: new Command({
+            return BrainControlError.make({
+              reason: Command.make({
                 ...(Result.isSuccess(signal) ? { signal: signal.success } : {}),
                 cause: Redacted.make(cause),
               }),
@@ -131,7 +129,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   });
   const domain = Effect.gen(function* () {
     const response = yield* success("/usr/bin/id", ["-u"]);
-    const uid = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
+    const uid = yield* Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: decode only the numeric UID from protected native output
       Redacted.value(response.stdout),
     ).pipe(Effect.mapError(unsupported));
@@ -287,7 +285,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     // Deletes the captured entry only when it is our own plist, which was on its way out anyway.
     // Any other entry is somebody's: it keeps its place in the folder and the caller hears why.
     const discard = Effect.gen(function* () {
-      if ((yield* readPlist(captured).pipe(Effect.catch(() => Effect.succeed(null)))) !== compiled.bytes) {
+      if ((yield* readPlist(captured).pipe(Effect.orElseSucceed(() => null))) !== compiled.bytes) {
         return yield* conflict("plist path taken before restore");
       }
 
@@ -354,7 +352,6 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 /**
  * Controls the exact GUI-domain job derived from the canonical home.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) => Layer.effect(BrainControl, make(spec, settings));

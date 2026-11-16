@@ -8,12 +8,11 @@
  * are none, take one, then save each step in the journal before the next. The command runs only in
  * `executing`, after the brain said it started and `executing` was saved, so a crash never runs it
  * twice: a task whose journal says `executing` and no result ends `unknown interrupted`.
- *
- * @stability unstable
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -168,7 +167,7 @@ const Woke = Schema.Struct({ rev: Rev });
 const Listed = Schema.Struct({ tasks: Schema.Array(Schema.Struct(Pointer)), rev: Rev });
 const TakeReply = Schema.TaggedUnion({ idle: {}, assigned: { task: Task }, refused: { reason: Schema.String } });
 const Admitted = Schema.Struct({ identity: Schema.Struct({ key: Schema.String }) });
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 const Nonce = Schema.Struct({ nonce: Schema.String });
 
 const Rpc = Schema.Struct({
@@ -188,7 +187,7 @@ const interrupted = Result.cases.unknown.make({ reason: "interrupted" });
 // --- The work ------------------------------------------------------------------------------------
 
 /** Names the next call on the online dial and writes it. Only an online link calls. */
-const calling = (s: HandsModel, method: string, params: typeof Schema.Json.Type) => {
+const calling = (s: HandsModel, method: string, params: Schema.Json) => {
   const dial = socketDial(s.link) ?? 0;
   const id = `j${dial}.${s.sent + 1}`;
   return { s: { ...s, sent: s.sent + 1 }, call: id, out: [write({ dial, id, method, params })] };
@@ -642,7 +641,6 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
  * the work is not about, and a take that assigns another key's task change nothing it would run. Its
  * Cmds are `write`, `hello`, `knock`, `ping`, `journal_read`, `journal_write` and `execute`.
  *
- * @stability unstable
  * @category constructors
  */
 export const handsMachine = Machine.make({

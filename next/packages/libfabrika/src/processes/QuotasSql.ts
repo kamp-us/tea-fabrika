@@ -2,8 +2,6 @@
  * The quota accounts on any `Sql`: the Project's admission policy with its account reads, and one
  * name's own accounting port. Each charge is saved in the transaction that commits the data it
  * charges.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
@@ -43,10 +41,10 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Model));
 // An account's row key is its encoded tagged value, so no two kinds of account can share one.
 const key = Schema.encodeSync(Schema.fromJsonString(Quota.Account));
 const readAccount = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Account));
-const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Number, build: Schema.String });
-const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Number, build: Schema.String });
+const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Finite, build: Schema.String });
+const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Finite, build: Schema.String });
 const readStep = Schema.decodeUnknownOption(StepBody);
-const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Number, settled: Schema.Number });
+const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Finite, settled: Schema.Finite });
 const readHeld = Schema.decodeUnknownSync(Held);
 
 /**
@@ -118,7 +116,6 @@ const use = (model: Quota.Model): Use => ({
  * The accounting tables are made when the layer is built. A store that refuses them fails the
  * build with `QuotasError`, its reason `Storage`.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql, options: { readonly brain: string; readonly limits: Limits }) =>
@@ -514,7 +511,7 @@ const LocalTables = [
   "CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)",
 ];
 
-const Pending = Schema.Struct({ operation: Schema.String, writes: Schema.Number, bytes: Schema.Number });
+const Pending = Schema.Struct({ operation: Schema.String, writes: Schema.Finite, bytes: Schema.Finite });
 const Fault = Schema.Struct({ ...Pending.fields, fault: RecoveryReserveExhausted });
 const faultEncode = Schema.encodeSync(Schema.fromJsonString(Fault));
 const faultDecode = Schema.decodeUnknownSync(Schema.fromJsonString(Fault));
@@ -528,7 +525,6 @@ class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbo
  * Creates the accounting port for one name's own store. It keeps the name's local account, its
  * recovery account and one fault slot in that store's own tables.
  *
- * @stability unstable
  * @category constructors
  */
 export const accounting = (sql: Sql, options: { readonly name: string; readonly limits: Allowance }): Accounting => {

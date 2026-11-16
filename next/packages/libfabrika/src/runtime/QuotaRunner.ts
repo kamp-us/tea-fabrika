@@ -1,8 +1,6 @@
 /**
  * The runner's quota guard: a name with a saved reserve fault does no work until a person
  * restarts it.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -15,7 +13,6 @@ import type { ProgramRunner } from "./Runner.ts";
  * refused for quota. The turn catches it, keeps the saved wake or command and sets an alarm to
  * try again.
  *
- * @stability unstable
  * @category errors
  */
 export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting, { readonly brand: unique symbol }>()(
@@ -29,7 +26,6 @@ export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting, { readonly br
  * Project turn and the recovery store does for a refused save. The guard and the runner read it
  * here, so a fault is met by name on every path.
  *
- * @stability unstable
  * @category getters
  */
 export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
@@ -56,7 +52,6 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
  * end without doing work. A fault that reaches the guard inside another module's error is saved
  * the same way, and the call fails with the fault itself.
  *
- * @stability unstable
  * @category combinators
  */
 export const guard = (runner: ProgramRunner["Service"], accounting: Accounting): ProgramRunner["Service"] => {
@@ -90,7 +85,6 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
  * fits, then runs the runner's restart. The caller is the person's gate: it calls this only for a
  * restart it has checked is the person's.
  *
- * @stability unstable
  * @category combinators
  */
 export const personRestart = Effect.fn("quota_runner.restart")(function* (
@@ -106,7 +100,6 @@ export const personRestart = Effect.fn("quota_runner.restart")(function* (
  * Restarts a stopped name for the checked writer `by`, as `personRestart` does for a person. Any
  * other writer fails with `NotGranted`.
  *
- * @stability unstable
  * @category combinators
  */
 export const restart = (

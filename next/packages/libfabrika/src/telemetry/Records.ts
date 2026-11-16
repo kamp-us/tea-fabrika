@@ -9,8 +9,6 @@
  * write the rows and answer `written`. The size is checked before the write, so a resend after a
  * lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
  * `deleteContent`.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
@@ -20,7 +18,6 @@ import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } 
  * Schema for a part's answer to a write: `written`, or `rolled` with the next part's name. `had`
  * lists the batch's span ids this part already holds, so the sender sends only the rest on.
  *
- * @stability unstable
  * @category schemas
  */
 export const Written = Schema.TaggedUnion({
@@ -30,7 +27,6 @@ export const Written = Schema.TaggedUnion({
 /**
  * A part's answer to a write: `written` or `rolled`.
  *
- * @stability unstable
  * @category models
  */
 export type Written = typeof Written.Type;
@@ -65,7 +61,6 @@ const PAGE = 500;
  * The four calls a record part's object answers across an object call. The answers are unchecked:
  * `RecordManager.remote` decodes each one.
  *
- * @stability unstable
  * @category models
  */
 export type RecordCalls = {
@@ -182,7 +177,7 @@ const walk = Effect.fnUntraced(function* (
     return yield* Effect.flatMap(ask(calls(chain, at)), (answer) =>
       Lookup.match(answer, {
         found: ({ content }) => Effect.succeed(Option.fromNullOr(content)),
-        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeed(Option.none())),
+        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeedNone),
       }),
     );
   });
@@ -322,11 +317,11 @@ const sqlStore = (sql: Sql): Store => {
       };
     },
     content: (spanId) =>
-      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) => {
-        return decodeState(row).state === "kept"
+      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) =>
+        decodeState(row).state === "kept"
           ? Content.cases.kept.make(decodeKept(row))
-          : Content.cases.deleted.make(decodeDeleted(row));
-      }),
+          : Content.cases.deleted.make(decodeDeleted(row)),
+      ),
     erase: (spanId, { by, at, reason }) =>
       void sql.exec(
         `UPDATE content SET state = 'deleted', message = NULL, "by" = ?, at = ?, reason = ?
@@ -349,7 +344,6 @@ const sqlStore = (sql: Sql): Store => {
  * Building it touches nothing: the tables come with the first call. A throw from storage is a
  * `SinkError`.
  *
- * @stability unstable
  * @category constructors
  */
 export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
@@ -441,7 +435,6 @@ const parts = (make: (name: string) => Store, cap: number) => {
  * after a lost answer never lands a span in two parts: a part drops the spans it already holds,
  * and it checks its size before it writes.
  *
- * @stability unstable
  * @category services
  */
 export class RecordManager extends Context.Service<

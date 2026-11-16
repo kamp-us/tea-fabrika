@@ -1,11 +1,11 @@
 /**
  * The durable task service: record, take, start, finish and read one task. This file is the contract
  * only (0095); `TasksLedger.layer` keeps each task as its own ledger stream.
- *
- * @stability unstable
  */
-import { Context, Schema } from "effect";
-import type { Effect, Stream } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 import type { ProcessId } from "../ProcessId.ts";
 import type { Rev } from "../Rev.ts";
 import type { Collection, Executor, Task, Recorded, Request, Result } from "./Task.ts";
@@ -14,7 +14,6 @@ import type { Collection, Executor, Task, Recorded, Request, Result } from "./Ta
  * A task call failed. The `reason` says why. `cause` keeps the decode or ledger error underneath,
  * when there is one.
  *
- * @stability unstable
  * @category errors
  */
 export class TasksError extends Schema.TaggedError<TasksError, { readonly brand: unique symbol }>()("TasksError", {
@@ -40,7 +39,6 @@ export class TasksError extends Schema.TaggedError<TasksError, { readonly brand:
 /**
  * Where the referee placed an accepted call, and when it arrived. A repeat answers the first.
  *
- * @stability unstable
  * @category models
  */
 export type Receipt = { readonly rev: Rev; readonly arrivedAt: number };
@@ -48,7 +46,6 @@ export type Receipt = { readonly rev: Rev; readonly arrivedAt: number };
 /**
  * A take's receipt, with the execution identity it allocated once.
  *
- * @stability unstable
  * @category models
  */
 export type Taken = Receipt & { readonly execution: string };
@@ -57,7 +54,6 @@ export type Taken = Receipt & { readonly execution: string };
  * The name of the stream that indexes the tasks one hands key is asked for: one line `{ id, process }`
  * per accepted request whose target is `key`, written in the request's own transaction.
  *
- * @stability unstable
  * @category names
  */
 export const targetStream = (key: string): string => `target:${key}`;
@@ -73,7 +69,6 @@ export const targetStream = (key: string): string => `target:${key}`;
  * fails with `TasksError`. `take` answers the execution identity, which `started` and `finish` must
  * then present. `read` fails with `not_found` for an unknown id.
  *
- * @stability unstable
  * @category services
  */
 export class Tasks extends Context.Service<

@@ -23,9 +23,14 @@
 // Plants (after build): H2, read `executing` without a result as nothing, so the command runs
 // again. H5, move every work state to `offline` on a drop, losing the result.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
-import { TestClock } from "effect/testing";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { fcTypeId } from "../tasks/TasksTest.ts";
@@ -61,7 +66,7 @@ const identity = (() => {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),
   };

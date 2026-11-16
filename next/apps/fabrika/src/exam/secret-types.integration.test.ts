@@ -105,9 +105,7 @@ const checkSecretTypes = (project: Project, root: string) => {
     for (const read of reads) {
       const protectedRead = read.ancestors
         .map(() => types[index++])
-        .some((type) => {
-          return type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined;
-        });
+        .some((type) => type !== undefined && checker.getPropertyOfType(type, "~effect/Redacted") !== undefined);
 
       if (!protectedRead) {
         findings.push({

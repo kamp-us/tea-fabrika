@@ -1,8 +1,10 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
@@ -426,7 +428,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
     (steps, final) => {
       for (const state of [Test.machine.init(null, Test.ctx)[0], ...steps.map((s) => s.next), final]) {
         const items = Menu.view(state);
-        const clone = Schema.decodeUnknownSync(Test.modelJson)(Test.encoded(state));
+        const clone = Schema.decodeSync(Test.modelJson)(Test.encoded(state));
 
         if (!Test.same(items, Menu.view(clone)) || !Test.same(items, Menu.view(state))) {
           return "equal models rendered differently";

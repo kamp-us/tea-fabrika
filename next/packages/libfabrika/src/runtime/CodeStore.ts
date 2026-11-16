@@ -1,8 +1,6 @@
 /**
  * Stored program code, keyed by its hash. This file holds the contract only (0095);
  * `CodeStoreSql.layer` keeps the rows.
- *
- * @stability unstable
  */
 import type { Effect, Option } from "effect";
 import { Context, Schema } from "effect";
@@ -11,7 +9,6 @@ import type { BuiltProgram } from "./Built.ts";
 /**
  * Error for a code read or write that failed in the store.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -21,7 +18,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * Error for a stored code row that does not decode, or whose source does not hash to its hash.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -31,7 +27,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
 /**
  * Error for stored code that could not be read or written.
  *
- * @stability unstable
  * @category errors
  */
 export class CodeStoreError extends Schema.TaggedError<CodeStoreError, { readonly brand: unique symbol }>()(
@@ -49,7 +44,6 @@ export class CodeStoreError extends Schema.TaggedError<CodeStoreError, { readonl
  * `put` keeps a program's source under its hash, and a second put of the same hash leaves the first
  * row alone. `get` returns the stored program with its hash checked, or none.
  *
- * @stability unstable
  * @category services
  */
 export class CodeStore extends Context.Service<

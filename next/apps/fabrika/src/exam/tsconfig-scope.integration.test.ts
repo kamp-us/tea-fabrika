@@ -28,7 +28,7 @@ const Manifest = Schema.Struct({ scripts: Schema.optional(Schema.Record(Schema.S
 const readManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest));
 
 class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
-  code: Schema.Number,
+  code: Schema.Finite,
 }) {}
 
 /** A property fast-check found false, with its counterexample in the cause. */
@@ -38,7 +38,7 @@ class Falsified extends Schema.TaggedError<Falsified, { readonly brand: unique s
 
 /** Runs one fast-check `assert`; a counterexample fails the test as `Falsified`. */
 const falsified = (check: () => Promise<void>) =>
-  Effect.tryPromise({ try: check, catch: (cause) => new Falsified({ cause }) });
+  Effect.tryPromise({ try: check, catch: (cause) => Falsified.make({ cause }) });
 
 /** One tsgo API process for `cwd`, closed with the scope. */
 const api = (cwd: string) =>
@@ -95,7 +95,7 @@ const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
   });
 
   if (code !== 0) {
-    return yield* new GitFailed({ code });
+    return yield* GitFailed.make({ code });
   }
 
   return out.split("\0").filter((f) => TYPESCRIPT.test(f));

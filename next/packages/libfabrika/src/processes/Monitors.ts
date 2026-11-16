@@ -3,8 +3,6 @@
  * `monitor(process, Name)` and `demonitor(Ref, [flush])`, checked against the member behind the
  * program. This file holds the contract only (0095); `MonitorsLedger.layer(...)` watches on the
  * ledger.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -17,7 +15,6 @@ import { ProcessName } from "./Process.ts";
  * One request to watch a name. `id` is the asking Cmd's own id, which becomes the watch's ref, so
  * a retried Cmd finds the same watch. The host binds the `watcher`, never the program.
  *
- * @stability unstable
  * @category models
  */
 export type Watch = {
@@ -30,7 +27,6 @@ export type Watch = {
  * One request to end a watch: a `ref` the watcher got from a watch. Another watcher's ref is never
  * touched.
  *
- * @stability unstable
  * @category models
  */
 export type Unwatch = {
@@ -42,7 +38,6 @@ export type Unwatch = {
  * Schema for what a watch answers: its `ref`, the `process` it binds, which is the name's life when
  * it was asked, and the `name` asked. The watch never follows the name to a later life.
  *
- * @stability unstable
  * @category schemas
  */
 export const Watched = Schema.TaggedStruct("monitored", { ref: Text, process: ProcessId, name: ProcessName });
@@ -64,7 +59,6 @@ export const Watched = Schema.TaggedStruct("monitored", { ref: Text, process: Pr
  * `storage` means the ledger failed. The caller cannot tell whether the watch was saved, and may
  * ask again with the same id: a saved watch answers again.
  *
- * @stability unstable
  * @category errors
  */
 export class MonitorsError extends Schema.TaggedError<MonitorsError, { readonly brand: unique symbol }>()(
@@ -91,7 +85,6 @@ export class MonitorsError extends Schema.TaggedError<MonitorsError, { readonly 
  * `demonitor` ends the watcher's own watch under `ref`, and a `DOWN` for it still unread is never
  * read. A ref the watcher never got writes nothing.
  *
- * @stability unstable
  * @category services
  */
 export class Monitors extends Context.Service<

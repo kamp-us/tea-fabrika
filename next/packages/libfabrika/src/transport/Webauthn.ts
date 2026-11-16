@@ -7,11 +7,12 @@
  * The key type is `sk-ecdsa-sha2-nistp256@openssh.com`, a P-256 key tied to a relying party (rp).
  * The signature type is `webauthn-sk-ecdsa-sha2-nistp256@openssh.com`. Only WebCrypto is used, so
  * a browser tab runs it as Node does.
- *
- * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
 const KEY = "sk-ecdsa-sha2-nistp256@openssh.com";
@@ -38,7 +39,6 @@ const keyParts = (blob: Uint8Array) =>
  * `nistp256`, hold a 65-byte uncompressed point, a non-empty rp and nothing after. Any other line
  * gives `none`.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
@@ -61,7 +61,6 @@ export const passkeyBlob = (line: string): Option.Option<Bytes> => {
  *
  * Gives `none` when the line is not a well-formed passkey line, or when its rp is not valid UTF-8.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyRp = (line: string): Option.Option<string> =>
@@ -78,7 +77,6 @@ export const passkeyRp = (line: string): Option.Option<string> =>
  * Use to check a line once, where it comes in. A line that `passkeyBlob` cannot read fails with
  * "an OpenSSH P-256 passkey line".
  *
- * @stability unstable
  * @category models
  */
 export const PasskeyLine = Schema.String.check(
@@ -140,7 +138,6 @@ const Client = Schema.fromJsonString(
  * - The ECDSA P-256 signature verifies over the authenticator data and the SHA-256 of the client
  *   data.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
@@ -174,7 +171,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   return yield* Effect.try(() => ({
     rp: text(p.rp),
     origin: text(p.origin),
-    client: Schema.decodeUnknownSync(Client)(text(p.client)),
+    client: Schema.decodeSync(Client)(text(p.client)),
   })).pipe(
     Effect.flatMap(
       Effect.fnUntraced(function* ({ rp, origin, client }) {
@@ -198,7 +195,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
         return ok ? { origin, rp, be: (p.flags & 8) !== 0, bs: (p.flags & 16) !== 0, counter: p.counter } : null;
       }),
     ),
-    Effect.catch(() => Effect.succeed(null)),
+    Effect.orElseSucceed(() => null),
   );
 });
 
@@ -222,7 +219,6 @@ class BadAssertion extends Schema.TaggedError<BadAssertion, { readonly brand: un
  * match the key's rp, or the built signature does not pass `checkPasskey`. A WebCrypto error also
  * fails the effect.
  *
- * @stability unstable
  * @category constructors
  */
 export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(function* (a: {
@@ -256,18 +252,18 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (Option.isNone(parsed)) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const { blob, key, ints } = parsed.value;
   const decoded = yield* Effect.try({
-    try: () => Schema.decodeUnknownSync(Client)(text(client)),
-    catch: (cause) => new BadAssertion({ cause }),
+    try: () => Schema.decodeSync(Client)(text(client)),
+    catch: (cause) => BadAssertion.make({ cause }),
   });
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 
   if (!same(rpHash, auth.slice(0, 32))) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const signature = join(
@@ -286,7 +282,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (checked === null) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   return armor(

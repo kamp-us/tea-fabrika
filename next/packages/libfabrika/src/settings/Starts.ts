@@ -1,8 +1,6 @@
 /**
  * The record of instance starts: the service contract and its errors. The layers live in
  * `cloudflare/`, one that writes the ledger and one that calls it over RPC.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -11,7 +9,6 @@ import type * as Start from "./Start.ts";
 /**
  * Schema for what a read did not find. Today that is only an instance start, named by its id.
  *
- * @stability unstable
  * @category schemas
  */
 export const MissingTarget = Schema.TaggedUnion({ instance: { start: Schema.NonEmptyString } });
@@ -19,7 +16,6 @@ export const MissingTarget = Schema.TaggedUnion({ instance: { start: Schema.NonE
 /**
  * A start's input, its saved entry or a reply failed its checks.
  *
- * @stability unstable
  * @category errors
  */
 export class Decode extends Schema.TaggedError<Decode, { readonly brand: unique symbol }>()("Decode", {
@@ -29,7 +25,6 @@ export class Decode extends Schema.TaggedError<Decode, { readonly brand: unique 
 /**
  * No start is recorded under the asked id.
  *
- * @stability unstable
  * @category errors
  */
 export class Missing extends Schema.TaggedError<Missing, { readonly brand: unique symbol }>()("Missing", {
@@ -39,7 +34,6 @@ export class Missing extends Schema.TaggedError<Missing, { readonly brand: uniqu
 /**
  * The ledger did not place the start's entry, or the id already holds a different start.
  *
- * @stability unstable
  * @category errors
  */
 export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
@@ -49,7 +43,6 @@ export class Refused extends Schema.TaggedError<Refused, { readonly brand: uniqu
 /**
  * The ledger could not be read or written.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -59,7 +52,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * The call to the object that keeps the starts did not get through.
  *
- * @stability unstable
  * @category errors
  */
 export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
@@ -70,7 +62,6 @@ export class Unreachable extends Schema.TaggedError<Unreachable, { readonly bran
  * The `Starts` service's own error. Its `reason` says what went wrong and, for every reason but
  * `Missing`, keeps the cause.
  *
- * @stability unstable
  * @category errors
  */
 export class StartsError extends Schema.TaggedError<StartsError, { readonly brand: unique symbol }>()("StartsError", {
@@ -80,7 +71,6 @@ export class StartsError extends Schema.TaggedError<StartsError, { readonly bran
 /**
  * Service that records instance starts and reads them back.
  *
- * @stability unstable
  * @category services
  */
 export class Starts extends Context.Service<

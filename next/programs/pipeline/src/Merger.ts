@@ -40,10 +40,10 @@ const merge = Cmd.make("merge", {
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 const Step = Schema.TaggedUnion({
-  asking: { tries: Count, at: Schema.Number },
+  asking: { tries: Count, at: Schema.Finite },
   waiting: {
     tries: Count,
-    at: Schema.Number,
+    at: Schema.Finite,
     reason: Schema.Literals([...Faults, "ci_silent", "ci_lost", "no_answer", "pending"]),
   },
 });
@@ -65,7 +65,7 @@ const Previous = Schema.TaggedUnion({
   idle: counts,
   reading: { ...working, step: Schema.Union([Step, First]) },
   updating: prepared,
-  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Number },
+  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Finite },
   merging: { ...working, head: CodeHost.Commit, tree: CodeHost.Tree },
 });
 
@@ -73,7 +73,7 @@ const Model = Schema.TaggedUnion({
   idle: counts,
   reading: { ...working, step: Schema.Union([Step, First]) },
   updating: { ...prepared, head: CodeHost.Commit, round: Count, checked: Schema.NullOr(CodeHost.Tree) },
-  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Number, round: Count },
+  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Finite, round: Count },
   merging: { ...working, head: CodeHost.Commit, tree: CodeHost.Tree },
 });
 
@@ -108,12 +108,12 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
 ) => {
   const cmd = input.mapFields((fields) => ({ ...fields, type: Schema.Literal(name) }));
   return Schema.Union([
-    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Finite }),
     Schema.Struct({
       type: Schema.Literal(`${name}_err`),
       cmd,
       error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
-      at: Schema.Number,
+      at: Schema.Finite,
     }),
   ]);
 };
@@ -121,7 +121,7 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
 const Msg = Schema.Union([
   Land,
   Abandon,
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
   answers(change.cmdType, Inputs.change, CodeHost.Change, Faults),
   answers(update.cmdType, Inputs.update, CodeHost.Updated, Faults),
   answers(checks.cmdType, Inputs.checks, Ci.Checks, Faults),

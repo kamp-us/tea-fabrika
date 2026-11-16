@@ -1,7 +1,5 @@
 /**
  * Instance readiness and owned-resource checks.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -10,14 +8,12 @@ import * as Schema from "effect/Schema";
 /**
  * Schema for a readiness answer about the expected instance: still waiting, or ready.
  *
- * @stability unstable
  * @category schemas
  */
 export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
 /**
  * Schema for an owned-resource answer: still waiting, or every owned group and the listener gone.
  *
- * @stability unstable
  * @category schemas
  */
 export const Children = Schema.TaggedUnion({ waiting: {}, gone: {} });
@@ -25,7 +21,6 @@ export const Children = Schema.TaggedUnion({ waiting: {}, gone: {} });
 /**
  * Readiness could not be checked.
  *
- * @stability unstable
  * @category errors
  */
 export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
@@ -35,7 +30,6 @@ export class Unreachable extends Schema.TaggedError<Unreachable, { readonly bran
 /**
  * Another instance owns the fixed address.
  *
- * @stability unstable
  * @category errors
  */
 export class Foreign extends Schema.TaggedError<Foreign, { readonly brand: unique symbol }>()("Foreign", {
@@ -45,7 +39,6 @@ export class Foreign extends Schema.TaggedError<Foreign, { readonly brand: uniqu
 /**
  * Owned resources could not be checked.
  *
- * @stability unstable
  * @category errors
  */
 export class Cleanup extends Schema.TaggedError<Cleanup, { readonly brand: unique symbol }>()("Cleanup", {
@@ -55,7 +48,6 @@ export class Cleanup extends Schema.TaggedError<Cleanup, { readonly brand: uniqu
 /**
  * Probe failure with its protected cause.
  *
- * @stability unstable
  * @category errors
  */
 export class BrainProbeError extends Schema.TaggedError<BrainProbeError, { readonly brand: unique symbol }>()(
@@ -68,7 +60,6 @@ export class BrainProbeError extends Schema.TaggedError<BrainProbeError, { reado
 /**
  * Probes supplied by the client that owns the instance.
  *
- * @stability unstable
  * @category services
  */
 export class BrainProbe extends Context.Service<

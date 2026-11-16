@@ -59,7 +59,7 @@ export type PinState = typeof PinState.Type;
 export const pinState = (value: string | undefined): PinState =>
   value === undefined
     ? PinState.cases.unpinned.make({})
-    : Option.match(Schema.decodeUnknownOption(PinnedText)(value), {
+    : Option.match(Schema.decodeOption(PinnedText)(value), {
         onNone: () => PinState.cases.malformed.make({ value }),
         onSome: (pin) => PinState.cases.pinned.make({ pin }),
       });
@@ -86,7 +86,9 @@ export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
 // ---------------------------------------------------------------- the world
 
 /** A pin that could not be made, or a pinned run that could not start. */
-export class PinFailed extends Schema.TaggedError<PinFailed>()("PinFailed", { reason: Schema.String }) {}
+export class PinFailed extends Schema.TaggedError<PinFailed, { readonly brand: unique symbol }>()("PinFailed", {
+  reason: Schema.String,
+}) {}
 
 const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
   const handle = yield* command;
@@ -98,7 +100,7 @@ const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
 
 const git = (main: string, args: ReadonlyArray<string>) => ran(ChildProcess.make("git", ["-C", main, ...args]));
 
-const failed = (reason: string) => () => new PinFailed({ reason });
+const failed = (reason: string) => () => PinFailed.make({ reason });
 
 /**
  * The quest's pin, made from the main checkout's commit and removed when the scope closes. Fails
@@ -117,7 +119,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
   );
 
   if (head.code !== 0) {
-    return yield* new PinFailed({ reason: `the main checkout's commit cannot be read: ${head.output}` });
+    return yield* PinFailed.make({ reason: `the main checkout's commit cannot be read: ${head.output}` });
   }
 
   const dirty = yield* git(o.main, ["status", "--porcelain", "--", ...ARCHIVED]).pipe(
@@ -141,7 +143,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
   const script = pinnedScript(folder, o.script);
 
   if (copied.code !== 0 || !(yield* fs.exists(script).pipe(Effect.orElseSucceed(() => false)))) {
-    return yield* new PinFailed({ reason: `the scripts at ${short(head.output)} were not copied: ${copied.output}` });
+    return yield* PinFailed.make({ reason: `the scripts at ${short(head.output)} were not copied: ${copied.output}` });
   }
 
   yield* fs

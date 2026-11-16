@@ -1,7 +1,5 @@
 /**
  * Discovery of saved ledger stream names, independent of their contents.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Stream } from "effect";
@@ -9,7 +7,6 @@ import type { Stream } from "effect";
 /**
  * A failure while reading the store.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -19,7 +16,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * A saved stream name that failed decoding.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -29,7 +25,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
 /**
  * The discovery service's failure, with its original cause.
  *
- * @stability unstable
  * @category errors
  */
 export class LedgerStreamsError extends Schema.TaggedError<LedgerStreamsError, { readonly brand: unique symbol }>()(
@@ -42,7 +37,6 @@ export class LedgerStreamsError extends Schema.TaggedError<LedgerStreamsError, {
 /**
  * Service that lists distinct names matching a literal prefix in storage order.
  *
- * @stability unstable
  * @category services
  */
 export class LedgerStreams extends Context.Service<

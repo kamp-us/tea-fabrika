@@ -1014,88 +1014,86 @@ export const suite = (rig: Rig): void => {
     it.live(
       "L3: a swap sent while a step is held open runs after that turn; the next letter runs on the new code; each letter steps once, resends included",
       () =>
-        Effect.gen(function* () {
-          yield* law((g) =>
-            inWorld(rig, [BASE], (w) =>
-              Effect.gen(function* () {
-                const base = yield* hashFor(BASE);
-                yield* open(w, NAME, base);
-                const a = account(base);
-                const sent: Array<ReturnType<typeof press>["input"]> = [];
-                const before = g(fc.integer, { min: 0, max: 4 });
+        law((g) =>
+          inWorld(rig, [BASE], (w) =>
+            Effect.gen(function* () {
+              const base = yield* hashFor(BASE);
+              yield* open(w, NAME, base);
+              const a = account(base);
+              const sent: Array<ReturnType<typeof press>["input"]> = [];
+              const before = g(fc.integer, { min: 0, max: 4 });
 
-                for (let n = 0; n < before; n++) {
-                  sent.push(yield* pressOnce(w, a, g));
-                }
+              for (let n = 0; n < before; n++) {
+                sent.push(yield* pressOnce(w, a, g));
+              }
 
-                // The held turn: its step waits on a gate the law opens after the swap is sent.
-                const s = yield* session(w, NAME);
-                const gate = yield* Deferred.make<void>();
-                const held = yield* Deferred.make<void>();
-                w.code.stepGate = gate;
-                w.code.held = held;
-                const { input } = press(w, "inc");
-                const turn = yield* Effect.forkChild(s.runner.msg(input));
-                yield* Deferred.await(held);
-                const spec = g(() =>
-                  fcFitting(
-                    updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                      type: "inc",
-                    }),
-                    a.v,
-                  ),
-                );
-                const hash = yield* learn(w.code, spec);
-                const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
+              // The held turn: its step waits on a gate the law opens after the swap is sent.
+              const s = yield* session(w, NAME);
+              const gate = yield* Deferred.make<void>();
+              const held = yield* Deferred.make<void>();
+              w.code.stepGate = gate;
+              w.code.held = held;
+              const { input } = press(w, "inc");
+              const turn = yield* Effect.forkChild(s.runner.msg(input));
+              yield* Deferred.await(held);
+              const spec = g(() =>
+                fcFitting(
+                  updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                    type: "inc",
+                  }),
+                  a.v,
+                ),
+              );
+              const hash = yield* learn(w.code, spec);
+              const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
 
-                for (let n = 0; n < 20; n++) {
-                  yield* Effect.yieldNow;
-                }
+              for (let n = 0; n < 20; n++) {
+                yield* Effect.yieldNow;
+              }
 
-                expect(swapping.pollUnsafe(), "the swap waits for the turn in flight").toBeUndefined();
-                yield* Deferred.succeed(gate, undefined);
-                expect((yield* Fiber.join(turn))._tag).toBe("accepted");
-                a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                  type: "inc",
-                });
-                a.accepted.push(input.id);
-                sent.push(input);
-                const answer = yield* Fiber.join(swapping);
-                w.code.held = null;
+              expect(swapping.pollUnsafe(), "the swap waits for the turn in flight").toBeUndefined();
+              yield* Deferred.succeed(gate, undefined);
+              expect((yield* Fiber.join(turn))._tag).toBe("accepted");
+              a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                type: "inc",
+              });
+              a.accepted.push(input.id);
+              sent.push(input);
+              const answer = yield* Fiber.join(swapping);
+              w.code.held = null;
 
-                if (hash === a.build) {
-                  expect(answer).toEqual(SwapAnswer.cases.same.make({}));
-                } else {
-                  expect(answer).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
-                  a.model = climb(spec, a.model, a.v);
-                  a.v = spec.v;
-                  a.build = hash;
-                  a.swaps++;
-                }
+              if (hash === a.build) {
+                expect(answer).toEqual(SwapAnswer.cases.same.make({}));
+              } else {
+                expect(answer).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
+                a.model = climb(spec, a.model, a.v);
+                a.v = spec.v;
+                a.build = hash;
+                a.swaps++;
+              }
 
-                // The next letter runs on the new code; resends of letters this walk sent step nothing.
-                const next = yield* pressOnce(w, a, g);
-                const resends = g(fc.integer, { min: 0, max: Math.min(3, sent.length) });
+              // The next letter runs on the new code; resends of letters this walk sent step nothing.
+              const next = yield* pressOnce(w, a, g);
+              const resends = g(fc.integer, { min: 0, max: Math.min(3, sent.length) });
 
-                for (let n = 0; n < resends; n++) {
-                  const again = pick(g, sent);
-                  expect((yield* s.runner.msg(again))._tag).toBe("accepted");
-                }
+              for (let n = 0; n < resends; n++) {
+                const again = pick(g, sent);
+                expect((yield* s.runner.msg(again))._tag).toBe("accepted");
+              }
 
-                const { facts } = yield* agrees(w, a, base);
-                const stepped = byTag(facts, "stepped");
-                expect(stepped.find((f) => f.body.input === next.id)?.body.build, "the next letter's code").toBe(hash);
+              const { facts } = yield* agrees(w, a, base);
+              const stepped = byTag(facts, "stepped");
+              expect(stepped.find((f) => f.body.input === next.id)?.body.build, "the next letter's code").toBe(hash);
 
-                for (const id of a.accepted) {
-                  expect(
-                    stepped.filter((f) => f.body.input === id),
-                    `${id} steps once`,
-                  ).toHaveLength(1);
-                }
-              }),
-            ),
-          );
-        }),
+              for (const id of a.accepted) {
+                expect(
+                  stepped.filter((f) => f.body.input === id),
+                  `${id} steps once`,
+                ).toHaveLength(1);
+              }
+            }),
+          ),
+        ),
       TIMEOUT,
     );
 

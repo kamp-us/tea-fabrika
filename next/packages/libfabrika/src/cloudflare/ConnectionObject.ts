@@ -1,7 +1,5 @@
 /**
  * The Connection object's Layer: Alchemy's Effect object around `ConnectionService`.
- *
- * @stability unstable
  */
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
@@ -45,7 +43,6 @@ const platformSocket = (socket: Cloudflare.WebSocket): Effect.Effect<WebSocket> 
  * A socket slot has no failure type, so a failure there dies and the platform sees a rejected
  * event. A call fails with a `LedgerError` as itself, and any other failure of a call dies too.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: {
@@ -79,7 +76,7 @@ export const layer = (options: {
           Effect.orDie,
         );
 
-      return Effect.succeed({
+      return {
         fetch: ObjectService.fromWebHandler((request) =>
           service.pipe(Effect.flatMap((gateway) => gateway.fetch(request))),
         ),
@@ -89,6 +86,6 @@ export const layer = (options: {
         ring: (stream, rev) => called(service.pipe(Effect.flatMap((gateway) => gateway.ring(stream, rev)))),
         notify: (client, news) => called(service.pipe(Effect.flatMap((gateway) => gateway.notify(client, news)))),
         probe: (session) => called(service.pipe(Effect.flatMap((gateway) => gateway.probe(session)))),
-      } satisfies ConnectionShape);
-    }),
+      } satisfies ConnectionShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

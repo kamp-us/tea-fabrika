@@ -50,7 +50,7 @@ const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`
 const RuleRow = Schema.Struct({
   name: Schema.String,
   paths: Schema.Array(Schema.String),
-  layer: Schema.optionalKey(Schema.Number),
+  layer: Schema.optionalKey(Schema.Finite),
   imports: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 

@@ -5,8 +5,6 @@
  * A row keeps OTLP's span field names, so a later export to any OTLP backend is a map, not a
  * rewrite. A tag holds a name, an id, a number or a boolean. A failed span's message is never a
  * tag, only its record part's `content`, the one thing a person may delete.
- *
- * @stability unstable
  */
 import { Cause, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
@@ -15,7 +13,6 @@ import { ProcessId } from "../ProcessId.ts";
  * Schema for where a span's record lives: `job`, its process's JobRecord, or `spans`, the span
  * record that holds every span outside a process.
  *
- * @stability unstable
  * @category schemas
  */
 export const Chain = Schema.TaggedUnion({
@@ -25,7 +22,6 @@ export const Chain = Schema.TaggedUnion({
 /**
  * Where a span's record lives: a process's JobRecord, or the span record.
  *
- * @stability unstable
  * @category models
  */
 export type Chain = typeof Chain.Type;
@@ -34,7 +30,6 @@ export type Chain = typeof Chain.Type;
  * Returns a chain's name: `job/<process>` or `spans`. Its parts are named `<name>/<part>`,
  * counting from 0.
  *
- * @stability unstable
  * @category getters
  */
 export const chainName = (chain: Chain): string =>
@@ -44,7 +39,6 @@ export const chainName = (chain: Chain): string =>
  * Returns a record part's name, such as `job/<process>/0`: the name of the object that holds the
  * part.
  *
- * @stability unstable
  * @category getters
  */
 export const partName = (chain: Chain, part: number): string => `${chainName(chain)}/${part}`;
@@ -54,7 +48,6 @@ export const partName = (chain: Chain, part: number): string => `${chainName(cha
  * that decides which record the span goes to: the process's JobRecord, or the span record when no
  * ancestor has one.
  *
- * @stability unstable
  * @category constants
  */
 export const PROCESS = "fab.process";
@@ -62,14 +55,12 @@ export const PROCESS = "fab.process";
 /**
  * Schema for one span tag's value: a string, a number or a boolean.
  *
- * @stability unstable
  * @category schemas
  */
-export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+export const Tag = Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]);
 /**
  * One span tag's value.
  *
- * @stability unstable
  * @category models
  */
 export type Tag = typeof Tag.Type;
@@ -78,7 +69,6 @@ const Tags = Schema.Record(Schema.String, Tag);
 /**
  * The key that names the object that ended a span. It is the row's resource, never a span tag.
  *
- * @stability unstable
  * @category constants
  */
 export const OBJECT = "fab.object";
@@ -97,7 +87,6 @@ const Resource = Schema.Struct({ attributes: Schema.Struct({ [OBJECT]: Schema.St
  * Times are nanoseconds since 1970, a bigint as text. `ok` is the exit. A failed span's error
  * class is its `error.type` tag; its message is never in the row, only in its part's content.
  *
- * @stability unstable
  * @category schemas
  */
 export const SpanRow = Schema.Struct({
@@ -119,7 +108,6 @@ export const SpanRow = Schema.Struct({
 /**
  * One ended span as its row keeps it.
  *
- * @stability unstable
  * @category models
  */
 export type SpanRow = typeof SpanRow.Type;
@@ -129,7 +117,6 @@ export type SpanRow = typeof SpanRow.Type;
  * failure's text, or `deleted`, with who deleted it, when and why. Only `deleteContent` changes
  * it, and only once, from `kept` to `deleted`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Content = Schema.TaggedUnion({
@@ -139,7 +126,6 @@ export const Content = Schema.TaggedUnion({
 /**
  * A failed span's content: `kept` or `deleted`.
  *
- * @stability unstable
  * @category models
  */
 export type Content = typeof Content.Type;
@@ -148,7 +134,6 @@ export type Content = typeof Content.Type;
  * Schema for a full part's last fact: the part's number, its size in bytes at that moment, and
  * the next part's name. A part has at most one, and a reader follows it to the next part.
  *
- * @stability unstable
  * @category schemas
  */
 export const Rolled = Schema.TaggedStruct("rolled", {
@@ -159,7 +144,6 @@ export const Rolled = Schema.TaggedStruct("rolled", {
 /**
  * A full part's last fact, which names the next part.
  *
- * @stability unstable
  * @category models
  */
 export type Rolled = typeof Rolled.Type;
@@ -172,25 +156,23 @@ export type Rolled = typeof Rolled.Type;
  *
  * `piece` is the span's name, and `ms` how long the span took.
  *
- * @stability unstable
  * @category schemas
  */
 export const Measurements = Schema.Struct({
   piece: Schema.String,
   /** When the span ended, in ms on the object's clock. */
   at: Schema.Int,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   ok: Schema.Boolean,
   /** The error's class, never its message. */
   error: Schema.NullOr(Schema.String),
-  lag: Schema.NullOr(Schema.Number),
+  lag: Schema.NullOr(Schema.Finite),
   /** The span this row measured, so it joins its span row. Null when no span was current. */
   spanId: Schema.NullOr(Schema.String),
 });
 /**
  * One measurement: the raw row of one ended span.
  *
- * @stability unstable
  * @category models
  */
 export type Measurements = typeof Measurements.Type;
@@ -200,7 +182,6 @@ export type Measurements = typeof Measurements.Type;
  * hour's start (UTC), `ms` holds the p50, the p95 and the largest of the hour's durations, and
  * `lag` is the worst lag any of its measurements had.
  *
- * @stability unstable
  * @category schemas
  */
 export const MetricPoint = Schema.TaggedStruct("metric", {
@@ -208,13 +189,12 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
   hour: Schema.Int,
   count: Schema.Int,
   errors: Schema.Int,
-  ms: Schema.Struct({ p50: Schema.Number, p95: Schema.Number, max: Schema.Number }),
-  lag: Schema.NullOr(Schema.Number),
+  ms: Schema.Struct({ p50: Schema.Finite, p95: Schema.Finite, max: Schema.Finite }),
+  lag: Schema.NullOr(Schema.Finite),
 });
 /**
  * One piece's closed hour.
  *
- * @stability unstable
  * @category models
  */
 export type MetricPoint = typeof MetricPoint.Type;
@@ -224,7 +204,6 @@ export {
    * Tag name for a refusal counted instead of keeping the span or its measurement. Its value is
    * one of `Refused`; the sink counts any other value as `other`.
    *
-   * @stability unstable
    * @category constants
    */
   REFUSED,
@@ -234,14 +213,12 @@ export {
  * Schema for the closed value a counted refusal is split by. The sink counts any other value of
  * the refusal tag as `other`, so the set of counts stays small.
  *
- * @stability unstable
  * @category schemas
  */
 export const Refused = Schema.Literals(["reserved", "rate_limited", "other"]);
 /**
  * The closed value a counted refusal is split by.
  *
- * @stability unstable
  * @category models
  */
 export type Refused = typeof Refused.Type;
@@ -250,7 +227,6 @@ export type Refused = typeof Refused.Type;
  * Schema for a sum point: one piece's count of refused spans in one hour, split by a closed
  * refusal value. It is counted in place when the span ends, so there is no row per refusal.
  *
- * @stability unstable
  * @category schemas
  */
 export const SumPoint = Schema.TaggedStruct("sum", {
@@ -262,7 +238,6 @@ export const SumPoint = Schema.TaggedStruct("sum", {
 /**
  * One piece's hourly count of refusals of one kind.
  *
- * @stability unstable
  * @category models
  */
 export type SumPoint = typeof SumPoint.Type;
@@ -271,7 +246,6 @@ export type SumPoint = typeof SumPoint.Type;
  * Schema for a size row: the object's own storage size in bytes, written at most once an hour
  * while the object is awake, and kept for good.
  *
- * @stability unstable
  * @category schemas
  */
 export const Size = Schema.TaggedStruct("size", { at: Schema.Int, bytes: Schema.Int });
@@ -281,7 +255,6 @@ export const Size = Schema.TaggedStruct("size", { at: Schema.Int, bytes: Schema.
  * the hash it was checked by, kept for good. Part 1 is the day's own file; rows that land after it
  * leave as part 2, 3 and on.
  *
- * @stability unstable
  * @category schemas
  */
 export const Archived = Schema.TaggedStruct("archived", {
@@ -296,7 +269,6 @@ export const Archived = Schema.TaggedStruct("archived", {
  * Error for a sink, record or archive call that failed: the call never answered, a row or an
  * answer did not decode, or storage threw.
  *
- * @stability unstable
  * @category errors
  */
 export class SinkError extends Schema.TaggedError<SinkError, { readonly brand: unique symbol }>()("SinkError", {
@@ -313,7 +285,6 @@ export class SinkError extends Schema.TaggedError<SinkError, { readonly brand: u
  * Converts a thrown value into a `SinkError`: a row that does not decode is `bad_row`, anything
  * else `storage`. The thrown value is kept as `cause`.
  *
- * @stability unstable
  * @category constructors
  */
 export const sinkError = (error: unknown): SinkError =>
@@ -323,7 +294,6 @@ export const sinkError = (error: unknown): SinkError =>
  * Returns the class of a thrown or failed value, for the `error.type` tag: an `Error`'s name, else
  * the value's type. Never its message, which may hold input.
  *
- * @stability unstable
  * @category getters
  */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
@@ -353,7 +323,6 @@ const cut = (text: string): string => {
  * It keeps text from outside from growing a span row without bound. A cut never splits a surrogate
  * pair.
  *
- * @stability unstable
  * @category constructors
  */
 export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>

@@ -30,7 +30,7 @@ describe("P11 real counter laws", () => {
         const port = counter.inputs[type];
         expect(port.personOnly).toBe(false);
         expect(port.description.trim().length).toBeGreaterThan(0);
-        expect(Schema.decodeUnknownSync(port.schema)({ type })).toEqual({ type });
+        expect(Schema.decodeSync(port.schema)({ type })).toEqual({ type });
       }),
       { seed: SEED, numRuns: 100 },
     );
@@ -89,7 +89,7 @@ describe("P11 real counter laws", () => {
             const { counter } = await import("./program.ts");
             const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
-            expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
+            expect(Schema.decodeSync(Program.schema)(counter)).toMatchObject({
               name: "fabrika/counter",
               state: { v: 1 },
               writes: {},

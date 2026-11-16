@@ -7,8 +7,17 @@
 // does not run. `Recorder.calls(Service)` reads every record, and `Recorder.calls(Service, m)` reads
 // one method's argument lists. Each build of the layer starts with no calls.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Layer, Match, Predicate, Schema, Sink, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as Recorder from "./Recorder.ts";
 import { Full, Shelf, ShelfId } from "./Shelf.test-support.ts";
 
@@ -24,7 +33,7 @@ const shelf = (ran: Array<string>): Service => ({
   put: (name, count) =>
     Effect.suspend(() => {
       ran.push("put");
-      return count < 0 ? Effect.fail(new Full({ item: name })) : Effect.succeed(count * 2);
+      return count < 0 ? Effect.fail(Full.make({ item: name })) : Effect.succeed(count * 2);
     }),
   count: (name) =>
     Effect.sync(() => {
@@ -39,7 +48,7 @@ const shelf = (ran: Array<string>): Service => ({
     Stream.unwrap(
       Effect.sync(() => {
         ran.push("watch");
-        return name === "" ? Stream.fail(new Full({ item: name })) : Stream.make(name.length, 0);
+        return name === "" ? Stream.fail(Full.make({ item: name })) : Stream.make(name.length, 0);
       }),
     ),
   drain: () => Sink.drain,
@@ -118,9 +127,9 @@ const answer = (exit: Exit.Exit<unknown, Full>) =>
 
 /** The value each failing method raises, one object each, so a law can see it is that very value. */
 const refusals: Readonly<Record<Failing, Full>> = {
-  put: new Full({ item: "refused put" }),
-  size: new Full({ item: "refused size" }),
-  watch: new Full({ item: "refused watch" }),
+  put: Full.make({ item: "refused put" }),
+  size: Full.make({ item: "refused size" }),
+  watch: Full.make({ item: "refused watch" }),
 };
 
 const failsFor = (failing: ReadonlyArray<Failing>): Recorder.Fails<Service> => ({

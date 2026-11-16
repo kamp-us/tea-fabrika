@@ -3,8 +3,6 @@
  * `Accounting` port of one name's own store and the `Quotas` service. A program's use and the
  * brain's recovery use are separate accounts, so a program that is out of room can still be
  * recovered.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -15,13 +13,12 @@ import type { Line } from "../ledger/Log.ts";
  * Error for a program account's refused charge: the resource that ran out, the use the charge
  * would have reached and the limit.
  *
- * @stability unstable
  * @category errors
  */
 export class Exceeded extends Schema.TaggedError<Exceeded, { readonly brand: unique symbol }>()("Exceeded", {
   resource: Schema.Literals(["writes", "storage"]),
-  used: Schema.Number,
-  limit: Schema.Number,
+  used: Schema.Finite,
+  limit: Schema.Finite,
   cause: Schema.Defect(),
 }) {}
 
@@ -30,7 +27,6 @@ export class Exceeded extends Schema.TaggedError<Exceeded, { readonly brand: uni
  * resource, the storage location, the account, the room the write needed and the room that was
  * left.
  *
- * @stability unstable
  * @category errors
  */
 export class RecoveryReserveExhausted extends Schema.TaggedError<
@@ -40,8 +36,8 @@ export class RecoveryReserveExhausted extends Schema.TaggedError<
   resource: Schema.Literals(["writes", "storage"]),
   location: Schema.Literals(["project", "process"]),
   process: Schema.String,
-  required: Schema.Number,
-  remaining: Schema.Number,
+  required: Schema.Finite,
+  remaining: Schema.Finite,
   cause: Schema.Defect(),
 }) {}
 
@@ -49,7 +45,6 @@ export class RecoveryReserveExhausted extends Schema.TaggedError<
  * Error for a store failure while accounting rows were read or written, with that failure as its
  * cause.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -59,7 +54,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * Error for a committed entry whose owning program accounting could not resolve.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -70,7 +64,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
  * Error the accounting calls fail with. Its `reason` is one of `Exceeded`,
  * `RecoveryReserveExhausted`, `Storage` or `BadRow`.
  *
- * @stability unstable
  * @category errors
  */
 export class QuotasError extends Schema.TaggedError<QuotasError, { readonly brand: unique symbol }>()("QuotasError", {
@@ -86,7 +79,6 @@ export class QuotasError extends Schema.TaggedError<QuotasError, { readonly bran
  * A recovery account counts both in a rolling minute. A program account counts `writes` in a
  * rolling minute and `bytes` as the total it keeps.
  *
- * @stability unstable
  * @category models
  */
 export interface Allowance {
@@ -99,7 +91,6 @@ export interface Allowance {
  * The limits read from the checked settings: a program's writes per rolling minute, its storage
  * in bytes, and the recovery allowance of each storage location.
  *
- * @stability unstable
  * @category models
  */
 export interface Limits {
@@ -113,7 +104,6 @@ export interface Limits {
  * `ahead` for accepted messages whose step is not committed yet, and the running `total` it has
  * committed.
  *
- * @stability unstable
  * @category models
  */
 export interface Use {
@@ -134,7 +124,6 @@ export interface Use {
  * fails while a fault is saved, `recordFault` saves one met elsewhere, and `resume` clears it
  * once the pending charge fits.
  *
- * @stability unstable
  * @category models
  */
 export interface Accounting {
@@ -158,7 +147,6 @@ export interface Accounting {
  * made inside a step as a program's own, as recovery or as infrastructure, so admission charges
  * the right account.
  *
- * @stability unstable
  * @category services
  */
 export class Quotas extends Context.Service<

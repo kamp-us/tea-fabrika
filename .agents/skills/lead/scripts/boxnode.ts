@@ -32,7 +32,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 export const repoNode = Effect.fn("boxnode.repoNode")(function* (dir: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${dir}/package.json`).pipe(Effect.orElseSucceed(() => ""));
-  const pinned = Schema.decodeUnknownOption(Schema.fromJsonString(Pins))(text);
+  const pinned = Schema.decodeOption(Schema.fromJsonString(Pins))(text);
   return Option.isNone(pinned) ? null : (pinned.value.volta?.node ?? pinned.value.engines?.node ?? null);
 });
 

@@ -39,7 +39,7 @@ const Fault = Schema.Struct({
 export const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
@@ -56,7 +56,7 @@ class DevFailed extends Schema.TaggedError<DevFailed, { readonly brand: unique s
 }) {}
 
 class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", {
-  exitCode: Schema.Number,
+  exitCode: Schema.Finite,
 }) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
@@ -64,7 +64,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
 export const stopped = Effect.callback<never, Stopped>((resume) => {
   const stops = STOPS.map((reason) => {
-    const stop = () => resume(Effect.fail(new Stopped({ reason })));
+    const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
     return () => process.off(reason, stop);
   });
@@ -105,7 +105,7 @@ const note = (row: Readonly<Record<string, unknown>>) =>
     }
 
     if (fault?.kind === "trace" && row.acquired === fault.at) {
-      throw new SetupFault({ at: fault.at });
+      throw SetupFault.make({ at: fault.at });
     }
   });
 
@@ -149,7 +149,7 @@ const owned = <A, E, R>(
       fault?.at !== at
         ? Effect.void
         : fault.kind === "setup"
-          ? Effect.fail(new SetupFault({ at }))
+          ? Effect.fail(SetupFault.make({ at }))
           : fault.kind === "hold" || fault.kind === "timeout"
             ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
             : Effect.void,
@@ -188,7 +188,7 @@ export const homeWithCredential = (credential: string) =>
     const exitCode = yield* child.exitCode;
 
     if (exitCode !== 0) {
-      return yield* new KeygenFailed({ exitCode });
+      return yield* KeygenFailed.make({ exitCode });
     }
 
     return {
@@ -259,7 +259,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
     yield* Effect.gen(function* () {
       for (;;) {
         if (child.exitCode !== null) {
-          return yield* new DevFailed({ output: out.join("") });
+          return yield* DevFailed.make({ output: out.join("") });
         }
 
         // The readiness probe is one HTTP request. A refused connection is "not yet", never a failure.
@@ -432,7 +432,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
       const sent = wire
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line));
       const seen: GrantSeen = {
         urls: sent.map((row) => row.url),
         signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
@@ -649,7 +649,7 @@ export const reader = (h: Home, dev: Dev) =>
           const text = String(data);
 
           if (text !== "pong") {
-            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+            frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(text));
           }
         });
         socket.addEventListener("close", () => {
@@ -682,7 +682,7 @@ export const reader = (h: Home, dev: Dev) =>
           }
 
           if (closed) {
-            return yield* new WireClosed();
+            return yield* WireClosed.make();
           }
 
           yield* Effect.sleep("20 millis");

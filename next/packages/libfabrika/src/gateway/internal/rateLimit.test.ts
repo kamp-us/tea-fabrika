@@ -160,9 +160,8 @@ it("T843 policy: positive safe integers only (50 runs)", () => {
 });
 
 // Compile-only: full cannot carry a growing used count; the reducer's schema defines the states.
-const fullType = (model: Extract<Model, { _tag: "full" }>) => {
+const fullType = (model: Extract<Model, { _tag: "full" }>) =>
   // @ts-expect-error full represents exactly the policy limit and has no growing attempt counter.
-  return model.used;
-};
+  model.used;
 
 void fullType;

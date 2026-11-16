@@ -3,7 +3,7 @@
 // what runs. `no-secret-env` and `no-redacted-value` are planted in
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
-// `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
+// `no-node-imports` plants next/ paths in its own test file.
 // `program-package-layout` reads a program's package.json, so it plants generated program
 // packages under next/programs/ in program-package-layout.test.ts.
 // The planted lines of our own rules also run in process through oxlint's RuleTester, and every
@@ -24,7 +24,7 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -79,6 +79,28 @@ const fires = (path: string, code: string): readonly number[] => linesOf(firesIn
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
 
+/**
+ * `fabrika/no-data-taggederror`'s lines. It stays beside oxlint's `no-restricted-properties` entry
+ * (0573, the plan's amendment of 2026-11-15), since only ours refuses `Data.TaggedError` in a type
+ * position: its `banNames` visits `TSQualifiedName`. L1 below runs these lines in every folder too.
+ * Plant: drop `"fabrika/no-data-taggederror"` from `.oxlintrc.json`, and the type lines are not refused.
+ */
+const DATA_TAGGEDERROR: Plant = {
+  code: "fabrika(no-data-taggederror)",
+  prelude: [EFFECT, "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    // Type positions, which no trusted rule refuses.
+    ["export type Made = typeof Data.TaggedError;", true],
+    ['export type Instance = InstanceType<ReturnType<typeof Data.TaggedError<"X">>>;', true],
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+  ],
+};
+
 const PLANTS: readonly Plant[] = [
   {
     code: "fabrika(no-bare-tell)",
@@ -104,14 +126,7 @@ const PLANTS: readonly Plant[] = [
       ['export const d = Context.Service("d");', false],
     ],
   },
-  {
-    code: "fabrika(no-data-taggederror)",
-    prelude: [EFFECT, "declare const Other: {TaggedError: (n: string) => new () => object};"],
-    lines: [
-      ['export class A extends Data.TaggedError("A") {}', true],
-      ['export class B extends Other.TaggedError("B") {}', false],
-    ],
-  },
+  DATA_TAGGEDERROR,
   {
     code: "fabrika(no-effect-promise)",
     prelude: [EFFECT, "declare const p: () => Promise<number>;", "declare const c: () => string;"],
@@ -380,8 +395,6 @@ describe("each rule refuses what it is there to refuse", () => {
       // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
       "service-id",
       "service-contract", // P19 plants the three desktop contracts and a native import below.
-      // T518's retired module is planted in one-id-module.test.ts.
-      "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
       "padding-line-between-statements",
       // next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
@@ -395,7 +408,6 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-clock-in-view",
       // Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
       "no-ledger-sql",
-      "no-node-filesystem",
       "no-node-imports",
       // libfabrika's modules are planted at their real paths in modules.test.ts.
       "modules",
@@ -417,6 +429,10 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-wall-clock",
       "one-machine-per-file", // scoped plant and blocking check below
       "isolate-boundary", // scoped platform-name plant below
+      // E1 (0574): no-stability-tag.test.ts plants a tag at in-scope and waiting paths with the real lint config.
+      "no-stability-tag",
+      // E2 (0577): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
+      "prefer-namespace-import",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
       // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
@@ -494,79 +510,97 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
   expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
 });
 
-/** One override of oxlint's `--print-config`: its globs and its rules, a setting as `[level, options]`. */
-type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> };
+/** oxlint's `--print-config`: the root rules and each override's globs and rules, a setting as `[level, options]`. */
+type Printed = {
+  readonly rules: Record<string, unknown>;
+  readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }>;
+};
 
-/** True for the ban's own entry, `{ object: "Reflect", property: "get" }`, in a rule's options. */
-const isReflectGet = (entry: unknown): boolean =>
-  typeof entry === "object" &&
-  entry !== null &&
-  "object" in entry &&
-  entry.object === "Reflect" &&
-  "property" in entry &&
-  entry.property === "get";
+/** One fire of an oxlint JSON report. */
+type Diagnostics = ReadonlyArray<{
+  readonly code?: string;
+  readonly filename: string;
+  readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
+}>;
+
+/** True for one entry, `{ object, property }`, in `no-restricted-properties`'s options. */
+const isEntry =
+  (object: string, property: string) =>
+  (entry: unknown): boolean =>
+    typeof entry === "object" &&
+    entry !== null &&
+    "object" in entry &&
+    entry.object === object &&
+    "property" in entry &&
+    entry.property === property;
+
+/** The ban's own entry, `{ object: "Reflect", property: "get" }`. */
+const isReflectGet = isEntry("Reflect", "get");
+
+/** The swap's entry, `{ object: "Data", property: "TaggedError" }` (0573). */
+const isTaggedError = isEntry("Data", "TaggedError");
+
+/** A setting's options, as `--print-config` prints it, `[level, options]`, or none. */
+const optionsOf = (setting: unknown): ReadonlyArray<unknown> =>
+  Array.isArray(setting) && Array.isArray(setting[1]) ? setting[1] : [];
 
 /**
- * Where a law plants a file for one folder glob of the config, such as `next/programs/chaos/**`:
- * a file of that folder's own. A glob that names a file, not a folder, is answered unchanged.
+ * Where a law plants a file for one glob of the config, such as `next/programs/chaos/**`: a file of
+ * that folder's own. A glob that names a file is answered with its `*` filled in, so
+ * `apps/fabrika/*-e2e.ts` gets `apps/fabrika/planted-e2e.ts`.
  */
 const plantPath = (glob: string): string => {
   const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
-  return folder === glob ? glob : `${folder}/planted.ts`;
+  return folder === glob ? glob.replaceAll("*", "planted") : `${folder}/planted.ts`;
 };
 
-/** The globs of every override that holds the Reflect ban (0554), each with the rule's level there. */
-const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+/** The globs of every override whose `no-restricted-properties` holds one entry, each with the rule's level there. */
+const globsHolding = (
+  printed: Printed,
+  holds: (entry: unknown) => boolean,
+): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
   printed.overrides.flatMap(({ files, rules }) => {
     const setting = rules["no-restricted-properties"];
-    const options: unknown = Array.isArray(setting) ? setting[1] : undefined;
-    return Array.isArray(options) && options.some(isReflectGet)
+    return optionsOf(setting).some(holds)
       ? files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }))
       : [];
   });
 
-describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
-  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
-  // lists today gets REFLECT's lines, a later slice's folder included.
-  // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
-  it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
-    const at = realpathSync(mkdtempSync(join(tmpdir(), "reflect-ban-")));
+/**
+ * Runs `use` in a temp folder that holds a copy of the repo's `.oxlintrc.json` and its rules, with
+ * `printed` (its `--print-config`) and `lint` (one oxlint run over files written there).
+ */
+const inConfigCopy = (
+  use: (copy: {
+    readonly printed: Printed;
+    readonly lint: (text: string, files: ReadonlyArray<string>) => Diagnostics;
+  }) => void,
+) => {
+  const at = realpathSync(mkdtempSync(join(tmpdir(), "restricted-properties-")));
 
-    try {
-      copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
-      // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
-      mkdirSync(join(at, "oxlint-plugins"));
+  try {
+    copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+    // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
+    mkdirSync(join(at, "oxlint-plugins"));
 
-      for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
-        if (entry.isFile()) {
-          copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
-        }
+    for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
       }
+    }
 
-      symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
-      symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-      // The config loads the vendored anti-slop plugins from here (0563).
-      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
-      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
-        cwd: at,
-        encoding: "utf8",
-        maxBuffer: 2 ** 28,
-      });
-      expect(printed.status, printed.stderr).toBe(0);
-      const parsed: Printed = JSON.parse(printed.stdout);
-      const globs = banGlobs(parsed);
-      // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
-      expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
-      );
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
-      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+    symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
+    symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+    // The config loads the vendored anti-slop plugins from here (0563).
+    symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
+    const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+      cwd: at,
+      encoding: "utf8",
+      maxBuffer: 2 ** 28,
+    });
+    expect(printed.status, printed.stderr).toBe(0);
 
-      const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
-      const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
-
+    const lint = (text: string, files: ReadonlyArray<string>): Diagnostics => {
       for (const file of files) {
         mkdirSync(dirname(join(at, file)), { recursive: true });
         writeFileSync(join(at, file), text);
@@ -577,24 +611,105 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
         [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
         { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
       );
-      const report: {
-        readonly diagnostics: ReadonlyArray<{
-          readonly code?: string;
-          readonly filename: string;
-          readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
-        }>;
-      } = JSON.parse(ran.stdout);
+      const report: { readonly diagnostics: Diagnostics } = JSON.parse(ran.stdout);
+      return report.diagnostics;
+    };
+
+    use({ printed: JSON.parse(printed.stdout), lint });
+  } finally {
+    rmSync(at, { recursive: true, force: true });
+  }
+};
+
+/** The lines of `file` that one rule's code refuses, in order. */
+const refusedIn = (diagnostics: Diagnostics, file: string, code: string): ReadonlyArray<number> =>
+  diagnostics
+    .filter((d) => d.filename === file && d.code === code)
+    .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
+    .sort((a, b) => a - b);
+
+/** A plant's text, and the lines its rule must refuse. */
+const textOf = (p: Plant) => ({
+  text: `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`,
+  want: p.lines.flatMap(([, refused], i) => (refused ? [p.prelude.length + i + 1] : [])),
+});
+
+describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
+  // lists today gets REFLECT's lines, a later slice's folder included.
+  // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
+  it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = globsHolding(printed, isReflectGet);
+      // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
+      );
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+
+      const { text, want } = textOf(REFLECT);
+      const files = globs.map(({ glob }) => plantPath(glob));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
 
       for (const file of files) {
-        const refused = report.diagnostics
-          .filter((d) => d.filename === file && d.code === REFLECT.code)
-          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-          .sort((a, b) => a - b);
-        expect(refused, file).toEqual(want);
+        expect(refusedIn(diagnostics, file, REFLECT.code), file).toEqual(want);
       }
-    } finally {
-      rmSync(at, { recursive: true, force: true });
-    }
+    });
+  }, 120_000);
+});
+
+describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
+  // L1. scenario: the repo's own config, read by oxlint's own --print-config, so every folder that
+  // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines and ours'
+  // (DATA_TAGGEDERROR), a block that lands later included, and so do a file at the top and one under
+  // no block, which the root rules hold. Ours alone refuses the type-position lines.
+  // Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+  // lines are not refused; drop `"fabrika/no-data-taggederror"`, and no folder refuses the type lines.
+  it("L1 scenario: TAGGED_ERROR's lines and ours' type-position lines are refused exactly, in every folder of every block that sets the rule, and under none", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = globsHolding(printed, () => true);
+      // Coverage: today's app, next/ where JSON.parse blocks and where it advises, and the tooling.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["apps/fabrika/e2e.ts", "next/**/*", ".agents/**", ".github/**", "oxlint-plugins/**"]),
+      );
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+      const files = [
+        ...new Set(globs.map(({ glob }) => plantPath(glob))),
+        // Under no block that sets the rule: the root rules hold these.
+        "planted-tagged-error.ts",
+        "scripts/planted-tagged-error.ts",
+      ];
+      // Coverage: ours' plant has type-position lines it must refuse.
+      expect(DATA_TAGGEDERROR.lines.some(([line, refused]) => refused && line.startsWith("export type"))).toBe(true);
+
+      for (const p of [TAGGED_ERROR, DATA_TAGGEDERROR]) {
+        const { text, want } = textOf(p);
+        const diagnostics = lint(text, files);
+
+        for (const file of files) {
+          expect(refusedIn(diagnostics, file, p.code), `${p.code} in ${file}`).toEqual(want);
+        }
+      }
+    });
+  }, 120_000);
+
+  // L2. scenario: every override in --print-config. An override replaces the rule's options for its
+  // files, so a block without the entry would drop it for every folder it lists.
+  // Plant: add a block that sets the rule with only the JSON.parse entry for one folder.
+  it("L2 scenario: the root rules and every override that sets no-restricted-properties carry the entry", () => {
+    inConfigCopy(({ printed }) => {
+      expect(optionsOf(printed.rules["no-restricted-properties"]).some(isTaggedError), "the root rules").toBe(true);
+      const setting = printed.overrides.filter(({ rules }) => rules["no-restricted-properties"] !== undefined);
+      // Coverage: the seven blocks that set the rule when the swap landed, at least.
+      expect(setting.length).toBeGreaterThanOrEqual(7);
+      expect(
+        setting
+          .filter(({ rules }) => !optionsOf(rules["no-restricted-properties"]).some(isTaggedError))
+          .map(({ files }) => files),
+      ).toEqual([]);
+    });
   }, 120_000);
 });
 
@@ -641,6 +756,8 @@ describe("lint.ts, the first step of pnpm lint", () => {
 });
 
 const SECRET = "export const a = process.env.GITHUB_TOKEN;";
+// The Effect checker reads its directive anywhere in the text, a string too, so the planted ones are built.
+const CHECKER = ["@effect", "diagnostics"].join("-");
 
 describe("an ignore comment names its rules and says why", () => {
   const run = (name: string, text: string) => {
@@ -671,6 +788,23 @@ describe("an ignore comment names its rules and says why", () => {
     ["eslint, the next line", `// eslint-disable-next-line\n${SECRET}\n`],
     ["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
     ["JSX", `export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`],
+    // L3 of docs/plan/quests/effect-sweep-PLAN.md: the Effect checker's own ignore comment.
+    ["the checker's, no reason", `// ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    ["the checker's, the whole file", `// ${CHECKER} preferEffectArray:off -- why\n${SECRET}\n`],
+    ["the checker's, skip-file", `// ${CHECKER} skip-file\n${SECRET}\n`],
+    ["the checker's, no level", `// ${CHECKER}-next-line preferEffectArray -- why\n${SECRET}\n`],
+    ["the checker's, no check", `// ${CHECKER}-next-line -- why\n${SECRET}\n`],
+    ["the checker's, an empty reason", `// ${CHECKER}-next-line preferEffectArray:off -- \n${SECRET}\n`],
+    ["the checker's, in a block", `/* ${CHECKER}-next-line preferEffectArray:off */\n${SECRET}\n`],
+    ["the checker's, after other words", `// see // ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    // Four forms @effect/tsgo 0.63.0 obeys, found at review: each silenced a planted hit.
+    ["the checker's, after plain words", `// see the ${CHECKER}-next-line floatingEffect:off\n${SECRET}\n`],
+    ["the checker's, in a doc block", `/**\n * ${CHECKER}-next-line floatingEffect:off -- why\n */\n${SECRET}\n`],
+    ["the checker's, in a string", `export const s = "// ${CHECKER} floatingEffect:off";\n${SECRET}\n`],
+    [
+      "the checker's, a check in the reason",
+      `// ${CHECKER}-next-line preferEffectArray:off -- and floatingEffect:off\n${SECRET}\n`,
+    ],
   ])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
     const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
     expect(out.stdout).toContain("fabrika(no-bare-disable)");
@@ -687,6 +821,18 @@ describe("an ignore comment names its rules and says why", () => {
     ["from here on", `/* oxlint-disable fabrika/no-secret-env -- why\n more why */\n${SECRET}\n`],
     ["two rules", `// oxlint-disable-next-line fabrika/no-secret-env, no-debugger -- why\n${SECRET}\ndebugger;\n`],
     ["words that only mention it", `// the oxlint-disable comment\nexport const b = 1;\n`],
+    [
+      "the checker's, one check",
+      `// ${CHECKER}-next-line preferEffectArray:off -- the platform hands back a plain array\nexport const b = [1];\n`,
+    ],
+    [
+      "the checker's, two checks",
+      `// ${CHECKER}-next-line preferEffectArray:off globalDate:off -- why\nexport const b = [Date.now()];\n`,
+    ],
+    [
+      "a reason with a colon in it",
+      `// ${CHECKER}-next-line globalDate:off -- the time: a fixture\nexport const b = [Date.now()];\n`,
+    ],
   ])("takes %s", (_name, text) => {
     const out = run("named.ts", text);
     expect(out.stdout).not.toContain("no-bare-disable");

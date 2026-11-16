@@ -1,6 +1,5 @@
 /**
  * The trusted fault and history-check contract. Layers live in sibling files.
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -10,7 +9,6 @@ import type { Fire, Fired, Report, Target } from "./Chaos.ts";
 /**
  * Chaos is disabled.
  *
- * @stability unstable
  * @category errors
  */
 export class Off extends Schema.TaggedError<Off, { readonly brand: unique symbol }>()("Off", {
@@ -20,7 +18,6 @@ export class Off extends Schema.TaggedError<Off, { readonly brand: unique symbol
 /**
  * The requested target cannot be used.
  *
- * @stability unstable
  * @category errors
  */
 export class BadTarget extends Schema.TaggedError<BadTarget, { readonly brand: unique symbol }>()("BadTarget", {
@@ -30,7 +27,6 @@ export class BadTarget extends Schema.TaggedError<BadTarget, { readonly brand: u
 /**
  * The caller lacks the required grant.
  *
- * @stability unstable
  * @category errors
  */
 export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand: unique symbol }>()("NotGranted", {
@@ -40,7 +36,6 @@ export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand:
 /**
  * The operation did not reach its destination.
  *
- * @stability unstable
  * @category errors
  */
 export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
@@ -50,7 +45,6 @@ export class Unreachable extends Schema.TaggedError<Unreachable, { readonly bran
 /**
  * History contained an undecodable known row or invalid position.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
@@ -60,7 +54,6 @@ export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique 
 /**
  * Storage failed while reading the check's snapshot.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
@@ -70,7 +63,6 @@ export class Storage extends Schema.TaggedError<Storage, { readonly brand: uniqu
 /**
  * The service's own error, retaining the original cause in its reason.
  *
- * @stability unstable
  * @category errors
  */
 export class NemesisError extends Schema.TaggedError<NemesisError, { readonly brand: unique symbol }>()(
@@ -83,7 +75,6 @@ export class NemesisError extends Schema.TaggedError<NemesisError, { readonly br
 /**
  * Performs trusted faults and checks bounded history.
  *
- * @stability unstable
  * @category services
  */
 export class Nemesis extends Context.Service<

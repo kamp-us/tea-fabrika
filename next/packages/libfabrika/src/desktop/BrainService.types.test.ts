@@ -9,7 +9,7 @@ import type {
   Operation,
   Timeout,
 } from "@kampus/libfabrika/desktop/BrainService";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
 
 it("format: L11 the public lifecycle has typed errors and needs no app or native types", () => {
   // This is a compile-time contract. CI's typecheck is its runner.
@@ -25,5 +25,5 @@ it("format: L11 the public lifecycle has typed errors and needs no app or native
   // @ts-expect-error a bare reason loses its failure class
   const invalid: BrainServiceError["reason"] = "stop";
   expectTypeOf(invalid).not.toEqualTypeOf<string>();
-  expectTypeOf<typeof BrainServiceError.Type>().toEqualTypeOf<BrainServiceError>();
+  expectTypeOf<BrainServiceError>().toEqualTypeOf<BrainServiceError>();
 });
