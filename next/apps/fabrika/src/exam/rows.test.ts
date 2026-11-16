@@ -53,8 +53,10 @@ describe("the rule file's rows give a file its row", () => {
     }
 
     const tail = rest.at(-1) ?? "";
+
     return name.length - tail.length >= at && name.endsWith(tail) && name.length > 0;
   };
+
   const claims = (pattern: ReadonlyArray<string>, path: ReadonlyArray<string>): boolean => {
     const [segment, ...rest] = pattern;
 
@@ -67,11 +69,14 @@ describe("the rule file's rows give a file its row", () => {
     }
 
     const [name, ...below] = path;
+
     return name !== undefined && one(segment, name) && claims(rest, below);
   };
+
   const weight = (pattern: string): number => {
     const segments = pattern.split("/");
     const count = (keep: (segment: string) => boolean) => segments.filter(keep).length;
+
     // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
     return (
       count((s) => s !== "**") * 1_000_000 +
@@ -79,22 +84,27 @@ describe("the rule file's rows give a file its row", () => {
       [...pattern].filter((c) => c !== "*" && c !== "/").length
     );
   };
+
   const expected = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
     const found = rows.flatMap((row) =>
       row.paths
         .filter((pattern) => claims(pattern.split("/"), path.split("/")))
         .map((pattern) => ({ name: row.name, weight: weight(pattern) })),
     );
+
     const top = Math.max(...found.map((f) => f.weight));
+
     return [...new Set(found.filter((f) => f.weight === top).map((f) => f.name))].sort();
   };
 
   const folder = fc.constantFrom("src", "app", "data", "door", "runtime", "internal");
   const file = fc.constantFrom("Log.ts", "log.ts", "index.ts", "ProcessStore.ts", "Log.test.ts");
+
   const segment = fc.oneof(
     { arbitrary: folder, weight: 6 },
     { arbitrary: fc.constantFrom("*", "**", "d*", "*a", "*t*"), weight: 2 },
   );
+
   const pattern = fc
     .tuple(
       fc.array(segment, { minLength: 1, maxLength: 4 }),
@@ -103,9 +113,11 @@ describe("the rule file's rows give a file its row", () => {
       }),
     )
     .map(([folders, last]) => [...folders, ...(last === undefined ? [] : [last])].join("/"));
+
   const rows: fc.Arbitrary<ReadonlyArray<Row>> = fc
     .array(fc.array(pattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
     .map((each) => each.map((paths, n) => ({ name: `row-${n}`, paths })));
+
   const path = fc
     .tuple(fc.array(folder, { minLength: 1, maxLength: 4 }), file)
     .map(([folders, last]) => [...folders, last].join("/"));

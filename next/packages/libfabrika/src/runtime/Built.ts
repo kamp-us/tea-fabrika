@@ -67,6 +67,7 @@ const hashed = <S extends Schema.Struct<{ readonly hash: typeof Hash }>>(
  * @category schemas
  */
 export const BuiltProgram = hashed(Schema.Struct({ hash: Hash, source: Schema.String }), (p) => p.source);
+
 /**
  * One built program, as `BuiltProgram` decodes it.
  *
@@ -87,6 +88,7 @@ export const AssetType = Schema.Literals([
   "text/css; charset=utf-8",
   "text/html; charset=utf-8",
 ]);
+
 /**
  * An asset's content type, as `AssetType` decodes it.
  *
@@ -103,6 +105,7 @@ export type AssetType = typeof AssetType.Type;
  * @category schemas
  */
 export const Asset = hashed(Schema.Struct({ hash: Hash, type: AssetType, body: Schema.String }), (a) => a.body);
+
 /**
  * One served file, as `Asset` decodes it.
  *
@@ -113,6 +116,7 @@ export type Asset = typeof Asset.Type;
 
 /** An HTTP route under the brain's origin: slash-led names, no empty, `.` or `..` segment. */
 const ROUTE = /^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/;
+
 const isProgramName = Schema.is(ProgramName);
 
 /**
@@ -141,6 +145,7 @@ export const Built = Schema.Struct({
     ),
   ),
 });
+
 /**
  * The built tables, as `Built` decodes them.
  *

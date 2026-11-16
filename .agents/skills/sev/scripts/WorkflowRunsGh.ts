@@ -79,6 +79,7 @@ export const layer = (
 
       const list = Effect.fn("WorkflowRunsGh.list")(function* (args: ReadonlyArray<string>) {
         const out = yield* gh(["run", "list", "-R", repo, "--json", FIELDS, "-L", String(LIMIT), ...args]);
+
         const runs = yield* runsIn(out).pipe(
           Effect.mapError(() => new WorkflowRunsError({ reason: "gh run list answered a shape we do not read" })),
         );

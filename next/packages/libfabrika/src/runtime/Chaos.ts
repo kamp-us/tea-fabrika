@@ -9,7 +9,9 @@ import { ProcessEvent } from "../processes/Process.ts";
 import { ProcessId } from "../ProcessId.ts";
 
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
+
 const Positive = Count.check(Schema.isGreaterThanOrEqualTo(1));
+
 const Text = Schema.NonEmptyString;
 
 /**
@@ -33,6 +35,7 @@ export const Target = Schema.Struct({
   client: Text,
   key: Text,
 });
+
 /**
  * The decoded Target value.
  *
@@ -56,6 +59,7 @@ export const Fault = Schema.TaggedUnion({
   fail_step: { process: ProcessId, times: Schema.Literals([1, 3]) },
   revoke_key: { client: Text, key: Text },
 });
+
 /**
  * The decoded Fault value.
  *
@@ -85,6 +89,7 @@ export const Start = Schema.Struct({
  * @category schemas
  */
 export const Fire = Schema.Struct({ id: ExperimentId, ordinal: Positive, target: Target, fault: Fault });
+
 /**
  * The decoded Fire value.
  *
@@ -100,6 +105,7 @@ export type Fire = typeof Fire.Type;
  * @category schemas
  */
 export const Hit = Schema.Struct({ name: Text, process: ProcessId, after: Count });
+
 /**
  * The decoded Hit value.
  *
@@ -118,6 +124,7 @@ export const Fired = Schema.TaggedUnion({
   fired: { hit: Schema.NullOr(Hit) },
   refused: { reason: Schema.Literals(["off", "bad_target", "not_granted", "stale", "unreachable"]) },
 });
+
 /**
  * The decoded Fired value.
  *
@@ -163,6 +170,7 @@ export const Report = Schema.Struct({
   processBoundary: Count,
   restarts: Schema.Array(Restart),
 });
+
 /**
  * The decoded Report value.
  *
@@ -267,6 +275,7 @@ export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>):
   const first = restarts(entries)
     .filter((row) => row.name === hit.name && row.after === hit.process && row.rev > hit.after)
     .sort((left, right) => left.rev - right.rev)[0];
+
   return first === undefined
     ? null
     : { ref: first.ref, rev: first.rev, arrivedAt: first.arrivedAt, process: first.process };

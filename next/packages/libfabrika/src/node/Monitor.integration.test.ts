@@ -23,6 +23,7 @@ const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ pr
 const connect = (path: string) => {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
   return db;
 };
 
@@ -40,6 +41,7 @@ const databases = Effect.gen(function* () {
       }
     }),
   );
+
   const handle = (part: string) => {
     const found = held.get(part);
 
@@ -50,10 +52,13 @@ const databases = Effect.gen(function* () {
     const db = connect(paths.join(path, `${part}.db`));
     const made = { db, sql: nodeSql(db) };
     held.set(part, made);
+
     return made;
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -66,9 +71,12 @@ const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
+
   const reopen = Effect.sync(() => {
     for (const [part, { db }] of held) {
       db.close();
@@ -76,6 +84,7 @@ const databases = Effect.gen(function* () {
       held.set(part, { db: fresh, sql: nodeSql(fresh) });
     }
   });
+
   /** The streams of the `ledger` part, read through the ledger as every reader reads them. */
   const entries: MonitorTest.Store["entries"] = (streams) =>
     Effect.forEach(
@@ -102,6 +111,7 @@ const databases = Effect.gen(function* () {
       ),
       Effect.orDie,
     );
+
   return { sql, reopen, entries } satisfies MonitorTest.Store;
 });
 

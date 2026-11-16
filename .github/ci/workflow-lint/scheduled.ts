@@ -28,18 +28,25 @@ const TOOLING_PROJECT = "--project tooling";
 // opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
 // keep theirs.
 const RUNNERS = 10;
+
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
 const READS = { actions: "read", contents: "read" };
+
 export const VERDICT = "report";
+
 // The one job that holds every test leg, next's and tooling's, so one `fail-fast` stops them all
 // (SC6). A tooling leg's shard starts TOOLING_LEG, which is how scheduled.mjs's `suiteOf` reads it.
 const TESTS_JOB = "tests";
+
 const TOOLING_LEG = "tooling-";
+
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
+
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
 const REPORT_IF = "always()";
+
 const REPORT = "node .github/ci/scheduled.mjs";
 
 const REPORT_ENV = {
@@ -49,18 +56,25 @@ const REPORT_ENV = {
 };
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
+
 const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
 // `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
 const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
+
 const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
+
 // Each suite's test commands, which carry its time limit on their own steps (SC13). The report reads
 // each limit as `LIMIT_<SUITE>` (SC5).
 const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as const;
+
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
 // and the three after it at most 7 s, against their 2 minutes of step limits.
@@ -76,6 +90,7 @@ const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unk
   const commands: readonly string[] = SUITES[suite];
   const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
   const limits = new Set(found.map((s) => s["timeout-minutes"]));
+
   return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
 };
 
@@ -86,6 +101,7 @@ const backstop = (next: number, tooling: number) =>
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
   const shard = map(map(job["strategy"])["matrix"])["shard"];
+
   return Array.isArray(shard) ? shard : [];
 };
 
@@ -105,7 +121,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const workflow = map(source),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
+
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(`scheduled.yaml: ${reason}`);
@@ -172,12 +190,14 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Object.keys(jobs).filter((name) => name !== VERDICT);
+
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
     compact(report["if"]) ===
       REPORT_IF, "SC5: the report needs every other job, and runs after any result, on every branch");
   const judged = steps(report).filter((s) => "run" in s);
+
   // Each suite's limit, as `LIMIT_<SUITE>`, equal to its test steps' `timeout-minutes` (SC13):
   // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's suite
   // from its name's shard, so no job sets a `name` of its own.
@@ -190,6 +210,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ]),
     ),
   };
+
   require(Object.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
@@ -247,6 +268,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
     vitestCount = numbered(legsOfCheck).length;
+
   require(legsOfCheck.length > 0 &&
     JSON.stringify(shards.slice(0, nextLegs.length)) === JSON.stringify(nextLegs) &&
     JSON.stringify(nextLegs) ===
@@ -280,6 +302,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC9. The commands are only these: no step runs another test command or narrows one.
   const commandsOf = (job: Record<string, unknown>) =>
     steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
       ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),
@@ -290,6 +313,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const kept = testSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
+
   const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
@@ -319,6 +343,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // job's limit may read `matrix` (GitHub's docs, "Contexts reference").
   const whole = (limit: unknown): limit is number =>
     typeof limit === "number" && Number.isInteger(limit) && limit > 0 && limit + BACKSTOP < 360;
+
   const nextLimit = limitOf(jobs, "next"),
     toolingLimit = limitOf(jobs, "tooling");
 

@@ -43,7 +43,9 @@ export const fcTypeId = (prefix: string): fc.Arbitrary<string> =>
   fc.stringMatching(new RegExp(`^${prefix}_[0-7]${B32}{9}[ef]${B32}{2}[89abrstv]${B32}{12}$`));
 
 const fcWord = fc.stringMatching(/^[a-z][a-z0-9-]{0,11}$/);
+
 const fcTraceId = fc.stringMatching(/^[0-9a-f]{32}$/).filter((text) => !/^0+$/.test(text));
+
 const fcHash = fc.stringMatching(/^[0-9a-f]{16}$/);
 
 /** A made-up public key fingerprint, in OpenSSH's `SHA256:` form. */
@@ -134,6 +136,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
 
   if (field === "process") {
     const flipped = request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+
     return { ...request, process: differs(request.process, other.process, flipped) };
   }
 
@@ -170,6 +173,7 @@ export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly 
 
   if (replacement === MISSING) {
     const { [key]: _gone, ...rest } = value as Record<string, unknown>;
+
     return rest;
   }
 
@@ -238,6 +242,7 @@ export const brokenResult = (result: Result, pick: number): unknown => {
     ([key]) =>
       key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),
   );
+
   return broken(result, pick, fits);
 };
 
@@ -256,6 +261,7 @@ const Cell = fc.record({
   connection: fcTypeId("connection"),
   build: fcHash,
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /** A tape: three made-up keys, a pool of requests to them, and the cells. Only the first two keys hold `git`. */
@@ -266,6 +272,7 @@ const Tape = fc.uniqueArray(fcFingerprint, { minLength: 3, maxLength: 3 }).chain
     cells: fc.array(Cell, { minLength: 12, maxLength: 40, size: "max" }),
   }),
 );
+
 type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Move =
@@ -296,8 +303,11 @@ type Move =
   | "collect_early";
 
 type Phase = "requested" | "assigned" | "started" | "finished" | "collected";
+
 type Receipt = { readonly rev: number; readonly arrivedAt: number };
+
 type Event = "requested" | "taken" | "started" | "finished" | "collected";
+
 type Collection = { readonly process: string; readonly letter: string };
 
 /** What the fold knows of one task, from its own calls and their answers. */
@@ -320,6 +330,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 /** The store's Sql with one planted fault: refuse the next entry insert, or the statement after it. */
 const cutting = (sql: Sql) => {
   const fault = { at: null as "before" | "after" | null, armed: false };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (fault.at === "before" && INSERT.test(query)) {
@@ -354,6 +365,7 @@ const cutting = (sql: Sql) => {
       }),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -390,6 +402,7 @@ const success = <A>(answer: R.Result<A, unknown>, message: string): A => {
 const expected = (saved: Saved): Task => {
   const { request, executor, execution, result } = saved;
   const assignment = executor === undefined || execution === undefined ? undefined : { execution, executor };
+
   const state =
     saved.phase === "requested"
       ? State.cases.requested.make({ request })
@@ -402,6 +415,7 @@ const expected = (saved: Saved): Task => {
             : assignment !== undefined && result !== undefined && saved.collection !== undefined
               ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
               : expect.fail("the fold reached a phase without its facts");
+
   return { state, events: saved.events } as Task;
 };
 
@@ -419,6 +433,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
   const collected = at(world, ["collected"]).length > 0;
   const done = finished || collected;
   const owned = at(world, ["assigned", "started", "finished", "collected"]).length > 0;
+
   const can: Record<Move, boolean> = {
     request_new: fresh,
     request_equal: any,
@@ -446,6 +461,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_other: done,
     collect_early: requested || assigned || started,
   };
+
   return moves.filter((move) => can[move]);
 };
 
@@ -476,16 +492,20 @@ const walk = (
     const world: World = { tasks: new Map(), head: 0, next: 0 };
     // One service for the life of the store, built again on reopen as a restarted brain would.
     let life = yield* Layer.build(layer(sql));
+
     const tasks = <A>(call: (tasks: Tasks["Service"]) => Effect.Effect<A, TasksError>) =>
       Tasks.use(call).pipe(Effect.provide(life), Effect.result);
+
     /** G1: what each key was asked for, one pointer per accepted request, in the order they were saved. */
     const asked = new Map<string, Array<{ readonly id: string; readonly process: string }>>();
+
     // The ledger's own reader, outside the tasks service: it sees the `target:` stream as any reader would.
     const lines = (key: string) =>
       Ledger.use((ledger) => Stream.runCollect(ledger.read(targetStream(key), 0))).pipe(
         Effect.provide(LedgerSql.layer(sql, { reader: "connection:tasks-test-targets" }).pipe(Layer.provide(quiet))),
         Effect.orDie,
       );
+
     /** G1: each key's stream holds one line per accepted request, and `forTarget` answers its open tasks and last rev. */
     const indexed = Effect.fnUntraced(function* (message: string) {
       for (const key of tape.keys) {
@@ -497,11 +517,14 @@ const walk = (
           `${message}: each line points at its task`,
         ).toMatchObject(wanted);
         const answer = success(yield* tasks((j) => j.forTarget(key)), `${message}: forTarget`);
+
         const open = [...world.tasks.values()].filter(
           (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
         );
+
         const ids = (all: ReadonlyArray<Task>) =>
           all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+
         expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
           open.map((s) => s.request.id).sort(),
         );
@@ -517,7 +540,9 @@ const walk = (
         done.add(open.length > 0 ? "listed" : "listed_empty");
       }
     });
+
     const said = (cell: Cell): Recorded => ({ ...cell.said, seen: cell.seen % (world.head + 1) });
+
     /** Keep an accepted call's receipt as the oracle's next event, and move the log head. */
     const keep = (saved: Saved, event: Event, recorded: Recorded, receipt: Receipt) => {
       expect(receipt.rev, "an accepted call is placed past every earlier one").toBeGreaterThan(world.head);
@@ -525,6 +550,7 @@ const walk = (
       saved.receipts.set(event, receipt);
       saved.events.push({ ...recorded, event, rev: receipt.rev, arrivedAt: receipt.arrivedAt });
     };
+
     /** Every saved task reads as the oracle kept it, and every request not yet saved reads as absent. */
     const unchanged = Effect.fnUntraced(function* (message: string) {
       for (const request of tape.requests) {
@@ -548,10 +574,12 @@ const walk = (
 
       const move = choose(options, cell.move);
       const recorded = said(cell);
+
       /** The task a move is played on, and the phase it was in then. */
       const on = (phases: ReadonlyArray<Phase>) => {
         const saved = choose(at(world, phases), cell.pick);
         done.add(`${move}@${saved.phase}`);
+
         return saved;
       };
 
@@ -568,6 +596,7 @@ const walk = (
           ]);
           break;
         }
+
         case "request_equal": {
           const saved = choose([...world.tasks.values()], cell.pick);
           const answer = yield* tasks((j) => j.request(copied(saved.request), recorded));
@@ -576,6 +605,7 @@ const walk = (
           );
           break;
         }
+
         case "request_changed": {
           const saved = choose([...world.tasks.values()], cell.pick);
           const other = choose(tape.requests, cell.variant);
@@ -583,6 +613,7 @@ const walk = (
           refused(yield* tasks((j) => j.request(changed, recorded)), "changed bytes under a saved id", "conflict");
           break;
         }
+
         case "take_ok": {
           const saved = choose(at(world, ["requested"]), cell.pick);
           const executor = able(saved, cell);
@@ -595,6 +626,7 @@ const walk = (
           keep(saved, "taken", recorded, taken);
           break;
         }
+
         case "take_again": {
           // The take reply was lost: the same key, maybe on a new connection, gets its saved assignment,
           // whether or not the task has started or finished since.
@@ -604,12 +636,15 @@ const walk = (
           expect(taken, "a repeated take answers the first assignment").toEqual(saved.taken);
           break;
         }
+
         case "take_other": {
           const saved = choose([...world.tasks.values()], cell.pick);
+
           const key = choose(
             tape.keys.filter((k) => k !== saved.request.target),
             cell.variant,
           );
+
           const executor = { ...able(saved, cell), key, has: [...CAPABILITIES] };
           refused(
             yield* tasks((j) => j.take(saved.request.id, executor, recorded)),
@@ -618,6 +653,7 @@ const walk = (
           );
           break;
         }
+
         case "take_lacking": {
           const saved = on(["requested", "assigned", "started", "finished", "collected"]);
           const missing = choose(saved.request.needs, cell.variant);
@@ -629,17 +665,21 @@ const walk = (
           );
           break;
         }
+
         case "start_ok": {
           const saved = choose(at(world, ["assigned"]), cell.pick);
           const execution = saved.execution ?? expect.fail("an assigned task has an execution");
+
           const receipt = success(
             yield* tasks((j) => j.started(saved.request.id, execution, recorded)),
             "a start by the assignment",
           );
+
           saved.phase = "started";
           keep(saved, "started", recorded, receipt);
           break;
         }
+
         case "start_again": {
           // A lost start acknowledgement, retried even after the finish: it never moves the task back.
           const saved = on(["started", "finished", "collected"]);
@@ -650,56 +690,71 @@ const walk = (
           );
           break;
         }
+
         case "start_wrong":
         case "finish_wrong": {
           const saved = choose(at(world, ["assigned", "started", "finished", "collected"]), cell.pick);
           const wrong = otherExecution(saved.execution ?? "", cell.variant);
+
           const answer =
             move === "start_wrong"
               ? yield* tasks((j) => j.started(saved.request.id, wrong, recorded))
               : yield* tasks((j) => j.finish(saved.request.id, wrong, cell.result, recorded));
+
           refused(answer, "an unrelated execution identity", "wrong_execution");
           break;
         }
+
         case "out_of_order": {
           // Before a take nothing may start or finish; an assigned task may not finish, even by its own execution.
           const saved = on(["requested", "assigned"]);
           const execution = saved.execution ?? "any-execution";
+
           const answer =
             saved.phase === "requested" && cell.variant % 2 === 0
               ? yield* tasks((j) => j.started(saved.request.id, execution, recorded))
               : yield* tasks((j) => j.finish(saved.request.id, execution, cell.result, recorded));
+
           refused(answer, "a start or a finish out of order", "wrong_state");
           break;
         }
+
         case "finish_ok": {
           const saved = choose(at(world, ["started"]), cell.pick);
           const execution = saved.execution ?? expect.fail("a started task has an execution");
+
           const receipt = success(
             yield* tasks((j) => j.finish(saved.request.id, execution, copied(cell.result), recorded)),
             "a finish by the assignment",
           );
+
           saved.phase = "finished";
           saved.result = cell.result;
           keep(saved, "finished", recorded, receipt);
           break;
         }
+
         case "finish_equal": {
           const saved = on(["finished", "collected"]);
+
           const answer = yield* tasks((j) =>
             j.finish(saved.request.id, saved.execution ?? "", copied(saved.result ?? cell.result), recorded),
           );
+
           expect(success(answer, "an equal finish retry"), "it answers the first finish").toEqual(
             saved.receipts.get("finished"),
           );
           break;
         }
+
         case "finish_other": {
           const saved = on(["finished", "collected"]);
+
           const other =
             JSON.stringify(cell.other) === JSON.stringify(saved.result)
               ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
               : cell.other;
+
           refused(
             yield* tasks((j) => j.finish(saved.request.id, saved.execution ?? "", other, recorded)),
             "a conflicting result for a finished task",
@@ -707,29 +762,35 @@ const walk = (
           );
           break;
         }
+
         case "unknown_id": {
           // A request's id with one more part: a well-formed id that nobody requested.
           const id = `${choose(tape.requests, cell.pick).id}/0`;
+
           const executor = {
             key: choose(tape.keys, cell.pick),
             connection: cell.connection,
             has: [...CAPABILITIES],
             build: cell.build,
           };
+
           const calls: ReadonlyArray<() => Effect.Effect<R.Result<unknown, TasksError>>> = [
             () => tasks((j) => j.read(id)),
             () => tasks((j) => j.take(id, executor, recorded)),
             () => tasks((j) => j.started(id, "any-execution", recorded)),
             () => tasks((j) => j.finish(id, "any-execution", cell.result, recorded)),
           ];
+
           refused(yield* choose(calls, cell.variant)(), "a call on an id nobody requested", "not_found");
           break;
         }
+
         case "bad": {
           const answer = yield* badCall(world, tape, cell, recorded, tasks);
           refused(answer, "a call with one invalid field", "bad_input");
           break;
         }
+
         case "cut_before":
         case "cut_after": {
           fault.at = move === "cut_before" ? "before" : "after";
@@ -740,6 +801,7 @@ const walk = (
           refused(answer, "a call whose transaction is cut fails", "storage");
           break;
         }
+
         case "reopen":
           yield* store.reopen;
           life = yield* Layer.build(layer(sql));
@@ -747,15 +809,18 @@ const walk = (
         case "collect_ok": {
           const saved = on(["finished"]);
           const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
+
           const receipt = success(
             yield* tasks((j) => j.collected(saved.request.id, copied(collection), recorded)),
             "the requesting process collects a finished task",
           );
+
           saved.phase = "collected";
           saved.collection = collection;
           keep(saved, "collected", recorded, receipt);
           break;
         }
+
         case "collect_again": {
           // The collect reply was lost: the same process and letter, maybe after a reopen, answer the first receipt.
           const saved = on(["collected"]);
@@ -766,6 +831,7 @@ const walk = (
           );
           break;
         }
+
         case "collect_conflict": {
           // The same process names another letter: one result is given in one answer letter only.
           const saved = on(["collected"]);
@@ -777,14 +843,17 @@ const walk = (
           );
           break;
         }
+
         case "collect_other": {
           // Another process generation, such as a successor, never takes this result.
           const saved = on(["finished", "collected"]);
           const other = choose(tape.requests, cell.variant).process;
+
           const process =
             other === saved.request.process
               ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
               : other;
+
           refused(
             yield* tasks((j) =>
               j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
@@ -794,6 +863,7 @@ const walk = (
           );
           break;
         }
+
         case "collect_early": {
           const saved = on(["requested", "assigned", "started"]);
           const collection = { process: saved.request.process, letter: `${saved.request.id}/answer` };
@@ -854,6 +924,7 @@ const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks
 
   if (which === 0 || saved.length === 0) {
     const request = choose(tape.requests, world.next < tape.requests.length ? world.next : cell.pick);
+
     return cell.pick % 3 === 0
       ? tasks((j) => j.request(request, badRecord))
       : tasks((j) => j.request(broken(request, cell.pick, BAD_REQUEST) as Request, recorded));
@@ -1024,6 +1095,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
       Effect.gen(function* () {
         const done = new Set<string>();
         const measured = { scans: 0, queries: 0, rows: 0, tasks: 0 };
+
         const tape = Schema.Struct({
           request: Schema.Struct({ ...Request.fields, process: Id.Process }),
           recorded: Recorded,
@@ -1033,23 +1105,29 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           ),
           total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(257), Schema.isLessThanOrEqualTo(530)),
         });
+
         const check = Effect.fnUntraced(function* (a: typeof tape.Type) {
           const raw = yield* open;
           const work = { queries: 0, rows: 0 };
+
           const sql: Sql = {
             exec: (query, ...params) => {
               const rows = raw.sql.exec(query, ...params);
               work.queries++;
               work.rows += rows.length;
+
               return rows;
             },
             transaction: (step) => raw.sql.transaction(step),
             size: () => raw.sql.size(),
           };
+
           const store = { ...raw, sql };
           let life = yield* Layer.build(layer(store.sql));
+
           const call = <A, E>(f: (j: Tasks["Service"]) => Effect.Effect<A, E>) =>
             Tasks.use(f).pipe(Effect.provide(life));
+
           const wanted = a.request.process;
           const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
           const said = { ...a.recorded, seen: 0 };
@@ -1098,11 +1176,14 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               measured.rows += work.rows - before.rows;
               measured.tasks += a.total;
               const rows = [...actual];
+
               const selected = [...expected.values()].filter(
                 (j) => j.state._tag !== "absent" && j.state.request.process === process,
               );
+
               const ids = (tasks: ReadonlyArray<Task>) =>
                 tasks.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);
 
@@ -1112,6 +1193,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
             }
           }
         });
+
         const result = yield* Arbitrary.checkEffect(
           Arbitrary.schema(tape),
           (a) =>
@@ -1121,6 +1203,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
             ),
           { seed: 119120, runs: 60, concurrency: 1 },
         );
+
         expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
         expect(done).toEqual(new Set(["reopen", "taken"]));
         yield* Effect.logInfo("P39 process discovery work", measured);
@@ -1134,15 +1217,18 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
       Effect.gen(function* () {
         const store = yield* open;
         const lower = new LedgerStreamsError({ reason: new Storage({ cause }) });
+
         const dependencies = Layer.mergeAll(
           Layer.succeed(LedgerStreams, { list: () => Stream.fail(lower) }),
           LedgerSql.layer(store.sql, { reader: "tasks-discovery-error" }).pipe(Layer.provide(quiet)),
           LedgerTransactionSql.layer(store.sql).pipe(Layer.provide(quiet)),
           Id.Generator.layer,
         );
+
         const result = yield* Tasks.use((tasks) =>
           Stream.runCollect(tasks.forProcess("process_01m6v5270hetdrt4r8h9vvjwjs")),
         ).pipe(Effect.provide(TasksLedger.layer.pipe(Layer.provide(dependencies))), Effect.result);
+
         expect(R.isFailure(result)).toBe(true);
 
         if (R.isFailure(result)) {

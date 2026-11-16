@@ -44,6 +44,7 @@ const setup = Effect.gen(function* () {
   const path = yield* Path.Path;
   const dir = yield* checkout;
   const named = yield* REPO;
+
   const repo = Option.isSome(named)
     ? named.value
     : PullRequestsGh.repoFromUrl((yield* run("git", ["-C", dir, "remote", "get-url", "origin"], dir)).out);
@@ -53,12 +54,14 @@ const setup = Effect.gen(function* () {
   }
 
   const every = Duration.seconds(yield* SECONDS);
+
   const services = Layer.mergeAll(
     WorkflowRunsGh.layer(repo, dir),
     PullRequestsGh.layer(repo, dir),
     BranchesGit.layer(dir),
     AlertsGh.layer(repo, dir),
   );
+
   return { home: path.join(dir, "runs", "sev"), every, wait: Duration.times(every, 3), services };
 });
 

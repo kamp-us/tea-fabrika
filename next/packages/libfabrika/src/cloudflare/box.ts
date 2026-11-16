@@ -24,6 +24,7 @@ const reply = Effect.fnUntraced(function* (execution: Pick<Execution, "reply">, 
 
 export const programBox = (declared: unknown, build: string) => {
   const program = nodeExecution(declared, build);
+
   const execution = {
     ...program,
     audit: (msg: unknown) =>
@@ -34,6 +35,7 @@ export const programBox = (declared: unknown, build: string) => {
         }),
       ),
   };
+
   const declaration = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     Effect.map((pure) =>
@@ -55,6 +57,7 @@ export const programBox = (declared: unknown, build: string) => {
       }),
     ),
   );
+
   return class ProgramBox extends WorkerEntrypoint {
     describe() {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise

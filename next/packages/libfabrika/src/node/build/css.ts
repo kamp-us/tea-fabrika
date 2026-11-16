@@ -16,8 +16,11 @@ import { BuildError } from "../../runtime/Built.ts";
 
 /** A reference to a scheme (`https:`, `data:`), a host (`//`) or a fragment is not a local file. */
 const remote = (ref: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(ref);
+
 const unsupported = "unsupported @import condition";
+
 const encode = (text: string) => new TextEncoder().encode(text);
+
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 // lightningcss names the bad token in its message; the build's errors name what is broken.
@@ -64,6 +67,7 @@ const parse = (file: string, text: string) => {
   const at = offsets(text),
     starts: number[] = [],
     imports: number[] = [];
+
   const result = transform({
     filename: file,
     code: encode(text),
@@ -92,6 +96,7 @@ const parse = (file: string, text: string) => {
       },
     },
   });
+
   return { dependencies: result.dependencies ?? [], starts, imports };
 };
 
@@ -123,6 +128,7 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
 const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
   const done = new Set<string>(),
     open = new Set<string>();
+
   const visit = (file: string): boolean => {
     if (open.has(file)) {
       return true;
@@ -136,8 +142,10 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
     const found = [...(edges.get(file) ?? [])].some(visit);
     open.delete(file);
     done.add(file);
+
     return found;
   };
+
   return [...edges.keys()].some(visit);
 };
 
@@ -160,10 +168,12 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
 export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const edges = new Map<string, Set<string>>();
   // A resolver's failure reaches the bundler as an Error with our message; `refusal` reads it back.
   const plain = (error: { readonly message?: string | undefined }) => new Error(error.message ?? "");
+
   const found = (specifier: string, from: string): Effect.Effect<string | { external: string }, Error> =>
     remote(specifier)
       ? Effect.succeed({ external: specifier })
@@ -175,11 +185,13 @@ export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) 
           ),
           Effect.mapError(plain),
         );
+
   const checked = (target: string) =>
     fs.readFileString(target).pipe(
       Effect.tap((text) => check(target, text)),
       Effect.mapError(plain),
     );
+
   const bundling = {
     filename: yield* fs.realPath(file).pipe(Effect.mapError(refusal)),
     errorRecovery: false,
@@ -192,6 +204,7 @@ export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) 
         Effect.runPromiseWith(context)(checked(target)),
     },
   };
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: lightningcss takes a resolver only in bundleAsync
   const result = yield* Effect.tryPromise({ try: () => bundleAsync(bundling), catch: refusal });
 

@@ -20,11 +20,15 @@ export const CheckedSelection = Schema.Struct({
   settings: Snapshot,
   person: Id.Person,
 });
+
 /** @internal */
 export type CheckedSelection = typeof CheckedSelection.Type;
+
 /** @internal */
 export const Refusal = Schema.Literals(["denied", "storage", "invalid_document", "read_failed", "invalid_history"]);
+
 const checking = { selection: Id.InputId, snapshot: Schema.NullOr(CheckedSelection) };
+
 const selected = { selection: Id.InputId, snapshot: CheckedSelection };
 
 const State = Schema.TaggedUnion({

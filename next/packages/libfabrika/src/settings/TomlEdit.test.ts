@@ -11,8 +11,11 @@ import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const check = { arbitrary: { seed: 119120, runs: 100 }, timeout: 30000 };
+
 const strict = { onExcessProperty: "error" } as const;
+
 const Integer = Schema.Int.check(Schema.isBetween({ minimum: -1000000, maximum: 1000000 }));
+
 // TOML cannot encode lone surrogate code points.
 const Text = Schema.String.check(Schema.isPattern(/^[^\uD800-\uDFFF]*$/u), Schema.isMaxLength(32));
 
@@ -41,7 +44,9 @@ const Input = {
 };
 
 type Path = ReadonlyArray<string>;
+
 type Tree = Readonly<Record<string, unknown>>;
+
 type Hint = { readonly pick: number; readonly key: number; readonly deep: boolean };
 
 const segments = ["leaf", "a.b", "", "雪", 'a"b', "a'b", "a\\b", "a\nb", "__proto__", "constructor", "toString"];
@@ -60,9 +65,13 @@ const layouts = fc.record({
 });
 
 const layout = (seed: number) => fc.sample(layouts, { seed, numRuns: 1 })[0]!;
+
 type Layout = ReturnType<typeof layout>;
+
 const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!;
+
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
+
 const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
 
 const frozen = (value: unknown): unknown =>
@@ -91,6 +100,7 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
   }
 
   const parent = get(tree, [key]);
+
   return Object.fromEntries([
     ...Object.entries(tree).filter(([name]) => name !== key),
     [key, rest.length === 0 ? value : put(record(parent) ? parent : {}, rest, value)],
@@ -100,6 +110,7 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
 const drop = (tree: Tree, path: Path): Tree => {
   const [key, ...rest] = path;
   const parent = key === undefined ? undefined : get(tree, [key]);
+
   return rest.length === 0
     ? Object.fromEntries(Object.entries(tree).filter(([name]) => name !== key))
     : key !== undefined && record(parent)
@@ -110,6 +121,7 @@ const drop = (tree: Tree, path: Path): Tree => {
 const leaves = (tree: Tree, path: Path = []): Array<Path> =>
   Object.entries(tree).flatMap(([key, value]) => {
     const at = [...path, key];
+
     return record(value) && Object.keys(value).length > 0 ? leaves(value, at) : [at];
   });
 
@@ -163,6 +175,7 @@ const fixture = (l: Layout, n: number, trailingComma = false) => {
   const text = lines
     .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 ? "\n" : l.eol))
     .join("");
+
   return { text, value: { untouched: "text # = [ ]", "box.a.b": n, box } };
 };
 
@@ -183,6 +196,7 @@ const document = Effect.fnUntraced(function* (toml: Toml["Service"], text: strin
   const parsed = yield* toml.parse(text);
   expect(parsed.value).toEqual(value);
   retained(text, comments);
+
   return parsed;
 });
 
@@ -217,6 +231,7 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<string, To
 // Read both the model and the reparsed document before selecting a move.
 const selected = (model: Tree, parsed: Tree, hint: Hint): Path => {
   const paths = leaves(model).filter((path) => get(parsed, path) !== undefined);
+
   return pick(paths, hint.pick);
 };
 
@@ -225,6 +240,7 @@ const absent = (model: Tree, parsed: Tree, hint: Hint): Path => {
     parents(model).filter((p) => record(get(parsed, p))),
     hint.pick,
   );
+
   let key = pick(segments, hint.key);
 
   while (get(model, [...parent, key]) !== undefined) {
@@ -269,6 +285,7 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         // Each slot records source pieces when the fixture is written, before the edit.
         const slots = [
           { prefix: `"a.b"${l.space}`, token: String(initial), suffix: " # keep-0-雪" },
@@ -276,6 +293,7 @@ describe("T877 public TOML edits, next/", () => {
           { prefix: `third${l.space}`, token: `[${initial}, { k = "# inside string" }]`, suffix: " # keep-2-雪" },
           { prefix: `fourth${l.space}`, token: `{ "" = ${initial}, peer = true }`, suffix: " # keep-3-雪" },
         ];
+
         const paths = [["a.b"], ["second"], ["third"], ["fourth"]];
         const endings = slots.map((_, i) => (l.mixed && i % 2 ? "\n" : l.eol));
         const prefix = `# first-雪${l.eol}date = 1979-05-27T07:32:00Z${l.eol}large = 9_223_372_036_854_775_807${l.eol}`;
@@ -287,12 +305,14 @@ describe("T877 public TOML edits, next/", () => {
         for (const [i, hint] of l.hints.entries()) {
           const slot = hint.pick % slots.length;
           const current = slots[slot]!;
+
           const at =
             prefix.length +
             slots
               .slice(0, slot)
               .reduce((n, s, j) => n + s.prefix.length + s.token.length + s.suffix.length + endings[j]!.length, 0) +
             current.prefix.length;
+
           const head = text.slice(0, at);
           const tail = text.slice(at + current.token.length);
           const value = frozen(values[i % values.length]!);
@@ -353,9 +373,11 @@ describe("T877 public TOML edits, next/", () => {
           const array = (value: unknown, marker: string) => `[${literal(value)}, "# string text", ${marker}${l.eol}]`;
           const keys = members.map((_, i) => segments[i]!);
           const markers = members.map((_, i) => `# member-${i}-雪`);
+
           let inline = `{ ${members
             .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
             .join(", ")} }`;
+
           let model: Tree = Object.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
           let paths: Array<Path> = keys.map((key) => [key]);
           const siblings: Array<string> = [];
@@ -389,9 +411,11 @@ describe("T877 public TOML edits, next/", () => {
             const parsed = yield* toml.parse(text);
             expect(parsed.value).toEqual(model);
             const hint = l.hints[i % l.hints.length]!;
+
             const choices = paths.filter(
               (path) => get(model, path) !== undefined && get(parsed.value, path) !== undefined,
             );
+
             const path = pick(choices, hint.pick);
             const value = frozen(pick(values, hint.key));
             text = yield* operation === "set" ? toml.set(text, path, value) : toml.remove(text, path);
@@ -431,10 +455,12 @@ describe("T877 public TOML edits, next/", () => {
           const next = yield* toml.set(text, path, value);
           model = put(model, path, value);
           yield* document(toml, next, model);
+
           // All old lines are kept verbatim except an inline member's punctuation.
           const oldLines = (text.match(/[^\n]*\n|[^\n]+$/g) ?? []).filter(
             (line) => line.trim().length > 0 && !line.includes("{") && !line.includes("}"),
           );
+
           let end = -1;
 
           for (const line of oldLines) {
@@ -506,6 +532,7 @@ describe("T877 public TOML edits, next/", () => {
         // Drain the current leaves, so inline first/middle/last/only positions all occur.
         for (let i = 0; leaves(model).length > 0; i++) {
           const parsed = yield* document(toml, text, model);
+
           // Empty structural tables stay in the model; they are not assigned leaves.
           const choices = leaves(model).filter(
             (p) => !record(get(model, p)) || (l.style === "inline" && p.length === 1 && p[0] === "box"),
@@ -516,10 +543,12 @@ describe("T877 public TOML edits, next/", () => {
           }
 
           const hint = l.hints[i % l.hints.length]!;
+
           const path = pick(
             choices.filter((p) => get(parsed.value, p) !== undefined),
             hint.pick,
           );
+
           const edited = yield* toml.remove(text, path);
           model = drop(model, path);
 
@@ -571,7 +600,9 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         type Piece = { readonly text: string; readonly member?: string; readonly comma?: number };
+
         let pieces: Array<Piece> = [{ text: `# before${l.eol}box${l.space}{  ` }];
         const initial = Object.fromEntries(values.map((v, i) => [`k${i}`, v]));
         let model: Tree = initial;
@@ -590,17 +621,21 @@ describe("T877 public TOML edits, next/", () => {
           const parsed = yield* toml.parse(text);
           expect(parsed.value).toEqual({ box: model, other: "unchanged # text" });
           const hint = l.hints[i % l.hints.length]!;
+
           const key = pick(
             Object.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
             hint.pick,
           );
+
           const at = pieces.findIndex((piece) => piece.member === key);
           const left = pieces.findLastIndex((piece, index) => index < at && piece.comma !== undefined);
           const right = pieces.findIndex((piece, index) => index > at && piece.comma !== undefined);
           const candidates = [...new Set([left, right].filter((index) => index >= 0))];
+
           const choices = (candidates.length === 0 ? [-1] : candidates).map((comma) =>
             pieces.filter((_, index) => index !== at && index !== comma),
           );
+
           const edited = yield* toml.remove(text, ["box", key]);
           expect(choices.map(write)).toContain(edited);
           pieces = choices.find((choice) => write(choice) === edited)!;
@@ -633,6 +668,7 @@ describe("T877 public TOML edits, next/", () => {
           model = put(model, editedPath, value);
           const parsed = yield* document(toml, text, model);
           const path = absent(model, parsed.value, hint);
+
           const bad = pick(
             [
               `broken = ]${l.eol}${text}`,
@@ -642,6 +678,7 @@ describe("T877 public TOML edits, next/", () => {
             ],
             hint.key,
           );
+
           yield* refusal(toml.set(bad, path, value), "Syntax");
           yield* refusal(toml.remove(bad, path), "Syntax");
           yield* document(toml, text, model);
@@ -668,9 +705,11 @@ describe("T877 public TOML edits, next/", () => {
         const hint = l.hints[0]!;
         const parent = pick(["scalar", "array", "rows", "table"], hint.pick);
         const path = parent === "table" ? [parent] : [parent, parent === "rows" ? "0" : pick(segments, hint.key)];
+
         // The explicit parent's own header is the location, even after a child header.
         const line =
           parent === "table" ? beforeTable.split(l.eol).length : parent === "rows" ? 4 : parent === "array" ? 3 : 2;
+
         const set = yield* refusal(toml.set(text, path, 2), "Conflict", line);
         expect(set.reason).toMatchObject({ path });
         yield* refusal(toml.remove(text, path), "Conflict", line);
@@ -695,6 +734,7 @@ describe("T877 public TOML edits, next/", () => {
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);
+
         const bad: ReadonlyArray<unknown> = [
           null,
           undefined,
@@ -761,6 +801,7 @@ describe("T877 public TOML edits, next/", () => {
         const toml = yield* Toml;
         const l = layout(seed);
         const n = Math.abs(initial);
+
         const text =
           [
             `number = +${n}`,
@@ -769,6 +810,7 @@ describe("T877 public TOML edits, next/", () => {
             `array = [${n}, # inside-array${l.eol} true]`,
             `table = { b = 2, a = ${n} }`,
           ].join(l.eol) + (l.final ? l.eol : "");
+
         const parsed = yield* toml.parse(text);
 
         for (const path of Object.keys(parsed.value).map((key) => [key])) {
@@ -791,6 +833,7 @@ describe("T877 public TOML edits, next/", () => {
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
+
         const bytes = Setting.make("limits.record", {
           schema: Schema.ByteSize,
           default: ByteSize.bytes(1),
@@ -800,9 +843,11 @@ describe("T877 public TOML edits, next/", () => {
           since: "0.0.0",
           format: "text",
         });
+
         const group = Setting.group({ port: Declarations.port, bytes });
         const file = Files.schema(group, "person");
         let text = `# settings-雪${l.final ? l.eol : ""}`;
+
         const checkedSet = Effect.fnUntraced(function* <A>(
           source: string,
           declaration: Setting.Setting<A>,
@@ -813,6 +858,7 @@ describe("T877 public TOML edits, next/", () => {
           const candidate = yield* toml.set(source, declaration.segments, encoded);
           const parsed = yield* toml.parse(candidate);
           yield* Schema.decodeUnknownEffect(Files.schema(group, scope))(parsed.value, strict);
+
           return candidate;
         });
 

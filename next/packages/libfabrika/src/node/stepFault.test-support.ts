@@ -3,6 +3,7 @@ import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 
 export const ErrorClass = Schema.Literals(["TypeError", "RangeError", "URIError"]);
+
 const Attempt = Schema.Struct({ process: Schema.String, error: ErrorClass });
 
 export const Before = Schema.Struct({
@@ -45,6 +46,7 @@ export const controller = Machine.make({
       }
 
       const error = model.errors[model.attempts.length];
+
       return error === undefined
         ? [model, []]
         : [{ ...model, attempts: [...model.attempts, { process: msg.process, error }] }, []];

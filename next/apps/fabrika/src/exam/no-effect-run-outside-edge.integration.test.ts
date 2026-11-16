@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-effect-run-outside-edge)";
+
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
+
 const PASSES = "next/apps/fabrika/dev.ts";
+
 const EDGE = "next/packages/libfabrika/src/app/edges.ts";
 
 const runs = [

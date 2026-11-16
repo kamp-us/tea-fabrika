@@ -17,6 +17,7 @@ const schedule = Schema.Struct({
 });
 
 const checks = (runs: number) => ({ arbitrary: { seed: 119120, runs } });
+
 type Outside = Effect.Success<ReturnType<typeof Outside.make>>;
 
 const progress = Effect.fnUntraced(function* (outside: Outside, n: number, action: "up" | "stop", wait = false) {
@@ -25,6 +26,7 @@ const progress = Effect.fnUntraced(function* (outside: Outside, n: number, actio
 
   if (call === undefined) {
     yield* TestClock.adjust("1 millis");
+
     return;
   }
 
@@ -66,6 +68,7 @@ const finish = Effect.fnUntraced(function* <A, E>(
   }
 
   expect(fiber.pollUnsafe(), "bounded operation completes").toBeDefined();
+
   return yield* Fiber.await(fiber);
 });
 
@@ -85,11 +88,13 @@ it.effect.prop(
                 args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
               }
             : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+
       const outside = yield* Outside.make({
         job,
         file: v.initial === "absent" ? "absent" : "matching",
         listener: "ready",
       });
+
       const settings = yield* ServiceTest.timing();
       const context = yield* Layer.build(ServiceTest.layer(outside, settings));
       const brain = Context.get(context, BrainService);
@@ -124,6 +129,7 @@ it.effect.prop(
         children: "alive",
         listener: "ready",
       });
+
       const settings = yield* ServiceTest.timing();
       const context = yield* Layer.build(ServiceTest.layer(outside, settings));
       const brain = Context.get(context, BrainService);
@@ -270,6 +276,7 @@ it.effect.prop(
         file: "matching",
         children: "alive",
       });
+
       const settings = yield* ServiceTest.timing();
       const context = yield* Layer.build(ServiceTest.layer(outside, settings));
       const brain = Context.get(context, BrainService);
@@ -312,14 +319,17 @@ it.effect.prop(
         file: "matching",
         children: "alive",
       });
+
       const settings = yield* ServiceTest.timing();
       let flushes = 0;
+
       const context = yield* Layer.build(
         ServiceTest.layer(outside, settings, {
           batch: (work) => work,
           flush: Effect.gen(function* () {
             flushes++;
             yield* Effect.sleep(`${deliveryDelay} millis`);
+
             return { sent: 0 };
           }),
           check: Effect.void,
@@ -327,6 +337,7 @@ it.effect.prop(
           sums: () => Effect.succeed([]),
         }),
       );
+
       const brain = Context.get(context, BrainService);
       const first = yield* Effect.forkScoped(brain[action]);
 
@@ -358,18 +369,23 @@ it.effect.prop(
       const secret = `sentinel-${word}/+ &=`;
       const outside = yield* Outside.make();
       const settings = yield* ServiceTest.timing();
+
       const logs: Array<string> = [],
         spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span(options) {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       const logger = Logger.make((options) => {
         logs.push(Formatter.formatJson(options.message));
       });
+
       const work = Effect.gen(function* () {
         const context = yield* Layer.build(ServiceTest.layer(outside, settings));
         const brain = Context.get(context, BrainService);
@@ -403,6 +419,7 @@ it.effect.prop(
         expect(fiber.pollUnsafe(), "failed native replies settle the operation").toBeDefined();
         const exit = yield* Fiber.await(fiber);
         expect(Exit.isFailure(exit)).toBe(true);
+
         const outputs = [
           Formatter.formatJson(exit),
           Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
@@ -424,6 +441,7 @@ it.effect.prop(
           }
         }
       });
+
       yield* work.pipe(Effect.withTracer(tracer), Effect.provide(Logger.layer([logger])));
     }),
   checks(100),

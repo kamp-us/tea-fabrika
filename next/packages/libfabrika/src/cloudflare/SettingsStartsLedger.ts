@@ -15,14 +15,18 @@ import type { Sql } from "../Sql.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
 const storage = (cause: unknown) => new StartsError({ reason: new Storage({ cause }) });
+
 const decode = (cause: unknown) => new StartsError({ reason: new Decode({ cause }) });
+
 const event = Schema.TaggedStruct("instance_started", Start.Body.fields);
+
 const stream = (start: string) => `settings/instance/${start}`;
 
 const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
   const body = yield* Schema.decodeUnknownEffect(Start.Body)(entry.body, { onExcessProperty: "error" }).pipe(
     Effect.mapError(decode),
   );
+
   yield* SettingsInput.check({
     settings: body.settings,
     start: body.start,
@@ -42,6 +46,7 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
   }
 
   const { id, rev, pos, arrivedAt, by, for: person, sentAt, seen, parent, traceId } = entry;
+
   return yield* Schema.decodeUnknownEffect(Start.Receipt)({
     ...body,
     entry: { id, stream: entry.stream, rev, pos, arrivedAt, by, for: person, sentAt, seen, parent, traceId },
@@ -70,6 +75,7 @@ export const fromLedger = () =>
     Effect.gen(function* () {
       const ledger = yield* Referee;
       const lookup = (start: string) => ledger.read(stream(start), 0, "settings").pipe(Effect.mapError(storage));
+
       const read = Effect.fnUntraced(function* (start: string) {
         yield* Schema.decodeUnknownEffect(Start.Input.fields.start)(start).pipe(Effect.mapError(decode));
         const entries = yield* lookup(start);
@@ -87,14 +93,17 @@ export const fromLedger = () =>
 
         return yield* saved(entry, start);
       });
+
       const record = Effect.fnUntraced(function* (input: Start.Input) {
         const checked = yield* SettingsInput.check(input).pipe(Effect.mapError(decode));
+
         const body = Start.Body.make({
           start: input.start,
           settings: checked.snapshot,
           build: input.build,
           repo: input.repo,
         });
+
         const entries = yield* lookup(input.start);
 
         const first = entries[0];
@@ -125,6 +134,7 @@ export const fromLedger = () =>
             parent: null,
             traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
           });
+
         const line = lineFor({ ...origin, build: input.build }, event.make(body));
         const reply = yield* ledger.append(stream(input.start), input.start, line).pipe(Effect.mapError(storage));
         const ack = yield* Schema.decodeUnknownEffect(Appended)(reply).pipe(Effect.mapError(decode));
@@ -141,6 +151,7 @@ export const fromLedger = () =>
 
         return receipt;
       });
+
       return {
         record: (input: Start.Input) => record(input).pipe(Effect.provide(Digest.layerWebCrypto)),
         read: (start: string) => read(start).pipe(Effect.provide(Digest.layerWebCrypto)),

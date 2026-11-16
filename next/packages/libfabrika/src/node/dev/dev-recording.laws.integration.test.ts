@@ -15,13 +15,17 @@ for (const failed of [false, true]) {
       fc.asyncProperty(fc.uuid(), async (child) => {
         const home = mkdtempSync(join(tmpdir(), "p12-rec-")),
           folder = join(home, child);
+
         const directories: Array<unknown> = [],
           paths: Array<ReadonlyArray<string>> = [];
+
         const realPath = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
         const fs = FileSystem.layerNoop({
           makeDirectory: (path, options) =>
             Effect.suspend(() => {
               directories.push([path, options]);
+
               return failed
                 ? Effect.fail(
                     PlatformError.systemError({
@@ -36,12 +40,14 @@ for (const failed of [false, true]) {
                   });
             }),
         });
+
         const platform = Layer.merge(
           fs,
           Layer.succeed(Path.Path, {
             ...realPath,
             join: (...parts) => {
               paths.push(parts);
+
               return realPath.join(...parts);
             },
           }),
@@ -54,6 +60,7 @@ for (const failed of [false, true]) {
               Effect.provide(NodeServices.layer),
             ),
           );
+
           expect(directories).toEqual([[folder, { recursive: true }]]);
           expect(Exit.isFailure(exit)).toBe(failed);
           const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;

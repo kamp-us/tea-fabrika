@@ -54,6 +54,7 @@ export const Verdict = Schema.TaggedUnion({
   /** Ended, and these jobs are not green. */
   red: { run: Schema.Number, jobs: Schema.Array(Job) },
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** The full run a pull request's head is judged by, as the command found it. */
@@ -65,6 +66,7 @@ export const FullRun = Schema.TaggedUnion({
   /** None at the head; the branch's newest run, at an older head. */
   older: { head: Schema.String, verdict: Verdict },
 });
+
 export type FullRun = typeof FullRun.Type;
 
 /** The newest run at `head` among a branch's runs; else the branch's newest, at another head. */
@@ -73,6 +75,7 @@ export const pick = (
   runs: ReadonlyArray<Run>,
 ): { readonly at: Option.Option<Run>; readonly newest: Option.Option<Run> } => {
   const newest = (list: ReadonlyArray<Run>) => Option.fromUndefinedOr(list.toSorted((a, b) => b.id - a.id)[0]);
+
   return { at: newest(runs.filter((r) => r.head === head)), newest: newest(runs) };
 };
 
@@ -84,6 +87,7 @@ const judge = Effect.fn("Arm.judge")(function* (run: Run) {
 
   const jobs = yield* (yield* Runs).jobs(run.id);
   const bad = jobs.filter((job) => !passes(job));
+
   // A run with no jobs at all (a workflow file GitHub could not read) is not green either.
   return jobs.length > 0 && bad.length === 0
     ? Verdict.cases.green.make({ run: run.id })
@@ -108,6 +112,7 @@ export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, h
 
 /** The longest line a refusal prints from a log, and the most lines it prints per job. */
 const WIDTH = 200;
+
 const MOST = 15;
 
 const cut = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 3)}...` : line);
@@ -131,6 +136,7 @@ export const failingLines = (log: string): ReadonlyArray<string> => {
   const marked = lines.filter((line, i) => raw[i]?.includes("##[error]") === true && /^\s*\w*Error\b/.test(line));
   const found = [...TOLD.map((told) => lines.filter((line) => told.test(line))), marked].flat();
   const shown = [...new Set(found.length > 0 ? found : lines.filter((line) => line.trim() !== "").slice(-8))].map(cut);
+
   return shown.length > MOST ? [...shown.slice(0, MOST), `... and ${shown.length - MOST} more`] : shown;
 };
 
@@ -161,6 +167,7 @@ export const Armed = Schema.TaggedUnion({
   armed: { pr: Schema.Number, oid: Schema.String, readied: Schema.Boolean, full: Schema.String },
   merged: { pr: Schema.Number, commit: Schema.String },
 });
+
 export type Armed = typeof Armed.Type;
 
 const runUrl = (repo: string, run: number) => `https://github.com/${repo}/actions/runs/${run}`;
@@ -185,10 +192,12 @@ const redReport = Effect.fn("Arm.redReport")(function* (repo: string, run: numbe
     }
 
     lines.push(`  ${job.name}: ${stands}, failed step: ${failed.join(", ")}`);
+
     const told = yield* Effect.match(checks.log(job.id), {
       onFailure: (e) => [`its log did not read: ${e.reason}`],
       onSuccess: failingLines,
     });
+
     lines.push(...told.map((line) => `    ${line}`));
   }
 
@@ -221,6 +230,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
   const note = (seen: string) => unrunNote(seen, found.oid, found.head, docsOnly);
+
   // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
   const judged = (verdict: Verdict, place: string, green: (run: number) => string) =>
     Verdict.match(verdict, {
@@ -232,7 +242,9 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
       red: ({ run, jobs }) =>
         Effect.flatMap(redReport(a.repo, run, jobs), (report) => Effect.fail(refuse(`${place}: ${report}`))),
     });
+
   const full = yield* fullRunAt(found.head, found.oid);
+
   const said = yield* FullRun.match(full, {
     none: () => Effect.succeed(note("")),
     at: ({ verdict }) =>
@@ -248,6 +260,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   }
 
   yield* prs.arm(found.number, found.oid);
+
   return Armed.cases.armed.make({ pr: found.number, oid: found.oid, readied: found.draft, full: said });
 });
 

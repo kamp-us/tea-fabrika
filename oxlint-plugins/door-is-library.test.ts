@@ -28,6 +28,7 @@ describe("P17a, the library owns the door", async () => {
     "next/apps/fabrika/src/door.integration.test.ts": "const guard = () => true;",
     "next/apps/fabrika/src/brain.ts": "export const wire = () => true;",
   };
+
   const linted = await plant(files);
   // The three fronts pass in any of the three retired files. The old barrel's name, a module's
   // internal file and another module's front do not.

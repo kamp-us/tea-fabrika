@@ -56,8 +56,10 @@ const page = (url: string) =>
       browserCall(() => chromium.launch({ headless: true })),
       (b) => Effect.orDie(browserCall(() => b.close())),
     );
+
     const p = yield* browserCall(() => browser.newContext().then((c) => c.newPage()));
     yield* browserCall(() => p.goto(url));
+
     return p;
   });
 
@@ -70,6 +72,7 @@ const driver = (p: Page, url: string, tab: string) =>
     p.evaluate(
       async ({ url, tab }) => {
         const bytes = (s: string) => new TextEncoder().encode(s);
+
         const concat = (...parts: Array<Uint8Array>) => {
           const result = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
           let at = 0;
@@ -81,17 +84,22 @@ const driver = (p: Page, url: string, tab: string) =>
 
           return result;
         };
+
         const field = (data: string | Uint8Array) => {
           const body = typeof data === "string" ? bytes(data) : data,
             n = new Uint8Array(4);
+
           new DataView(n.buffer).setUint32(0, body.length);
+
           return concat(n, body);
         };
+
         const b64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
         const pair = await crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]);
         const publicBytes = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
         const raw = b64(publicBytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
         const fingerprint = `SHA256:${b64(new Uint8Array(await crypto.subtle.digest("SHA-256", publicBytes))).replace(/=+$/, "")}`;
+
         const proof = async (text: string) => {
           const blob = concat(field("ssh-ed25519"), field(publicBytes));
           const digest = new Uint8Array(await crypto.subtle.digest("SHA-512", bytes(text)));
@@ -99,6 +107,7 @@ const driver = (p: Page, url: string, tab: string) =>
           const signed = new Uint8Array(await crypto.subtle.sign("Ed25519", pair.privateKey, payload));
           const version = new Uint8Array(4);
           new DataView(version.buffer).setUint32(0, 1);
+
           const packet = concat(
             bytes("SSHSIG"),
             version,
@@ -108,20 +117,24 @@ const driver = (p: Page, url: string, tab: string) =>
             field("sha512"),
             field(concat(field("ssh-ed25519"), field(signed))),
           );
+
           return `-----BEGIN SSH SIGNATURE-----\n${b64(packet)
             .match(/.{1,70}/g)!
             .join("\n")}\n-----END SSH SIGNATURE-----\n`;
         };
+
         let serial = 0;
         const frames: Array<unknown> = [];
         let socket: WebSocket;
         const pending = new Map<number, (frame: unknown) => void>();
+
         const call = (method: string, params: unknown) =>
           new Promise<any>((done) => {
             const id = ++serial;
             pending.set(id, done);
             socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
           });
+
         const hello = async (nonce: string) =>
           call("initialize", {
             versions: [1],
@@ -135,6 +148,7 @@ const driver = (p: Page, url: string, tab: string) =>
             sentAt: "2026-11-11T04:00:00.000Z",
             signed: await proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
           });
+
         const first = await new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
           socket.onerror = () => fail(new Error("WebSocket failed"));
@@ -161,7 +175,9 @@ const driver = (p: Page, url: string, tab: string) =>
             }
           };
         });
+
         Object.assign(globalThis, { p15: { call, frames } });
+
         return { first, fingerprint };
       },
       { url, tab },
@@ -178,6 +194,7 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
     const knock = yield* rpc(p, "gateway.knock", { label: "Chromium" });
     const env = { ...process.env };
     delete env.TYPESAFE_API_KEY;
+
     // The instance listens on this thread too, so the grant command must leave it free to answer.
     const [printed, exitCode] = yield* Effect.scoped(
       Effect.gen(function* () {
@@ -194,11 +211,13 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
           ],
           { cwd: APP, env, stdin: "ignore", stderr: "inherit" },
         );
+
         return yield* Effect.all([Stream.mkString(Stream.decodeText(command.stdout)), command.exitCode], {
           concurrency: 2,
         });
       }),
     );
+
     expect(Number(exitCode), `grant.ts client: ${printed}`).toBe(0);
     yield* browserCall(() => p.waitForFunction(() => window.p15.frames.some((f) => f.method === "reinitialized")));
   });
@@ -222,10 +241,13 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = objects(answer).find((o) => Array.isArray(o.processes));
+
   const row = (loaded?.processes as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>)?.find(
     (p) => p.name === "counter:1",
   );
+
   const failed = objects(answer).find((o) => o._tag === "failed");
+
   return row?.outcome ?? (failed === undefined ? { _tag: "same" } : { _tag: "failed", reason: failed.reason });
 };
 
@@ -238,6 +260,7 @@ const session = (url: string, key: string) =>
     const processes = yield* rpc(p, "ledger.read", { stream: "processes/counter:1", after: 0 });
     const pid: string = processes.result.entries.find((r: { _tag: string }) => r._tag === "started").body.process;
     let letters = 0;
+
     return {
       pid,
       call: (method: string, params: unknown) => rpc(p, method, params),
@@ -286,10 +309,12 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 `import ${JSON.stringify(specifiers[0])}; import "../dependency/imported.ts";\n`,
               );
               yield* fs.writeFileString(imported, `import ${JSON.stringify(specifiers[1])};\n`);
+
               const warnings = yield* Effect.acquireRelease(
                 Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
                 (spy) => Effect.sync(() => spy.mockRestore()),
               );
+
               yield* build({
                 root,
                 entry,
@@ -415,12 +440,15 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const copy = yield* fixture;
               const run = yield* instance(copy);
               const answers: Array<unknown> = [yield* nextAnswer(run.answers)];
+
               const changed = () =>
                 nextAnswer(run.answers, 60_000, (answer) => {
                   // Inspect every answer for L17, including late same-hash notifications from L2.
                   answers.push(answer);
+
                   return outcome(answer)._tag !== "same";
                 });
+
               const s = yield* session(run.url, run.founder.key);
               yield* s.press("inc");
               // The sentinel in the source the bundle carries, then in the line its error names.
@@ -430,11 +458,13 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
               );
               yield* changed();
+
               const outputs = [
                 ...answers.map((a) => JSON.stringify(a)),
                 ...(yield* s.read("gateway/code")).map((e) => JSON.stringify(e)),
                 ...(yield* s.read(s.pid)).map((e) => JSON.stringify(e)),
               ];
+
               const forbidden = [sentinel, run.home, copy.home, ROOT];
 
               for (const output of outputs) {
@@ -476,11 +506,13 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             );
             const run = yield* cli(copy, fakeBytes);
             const s = yield* session(run.url, run.founder.key);
+
             const initialSpans = yield* spanOutputs(run.home).pipe(
               Effect.map(rebuildSpans),
               Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
               Effect.timeout("60 seconds"),
             );
+
             const recorded = new Set(initialSpans.map((span) => span.spanId));
             let k = 1;
             let count = 0;
@@ -497,6 +529,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
               const denied = yield* s.call(method, { program: PROGRAM, source: message, hash: null, reason: "load" });
               expect(denied.error?.data?.reason).toBe("unknown_method");
+
               let text = edited(
                 source,
                 next,
@@ -519,9 +552,11 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               }
 
               yield* copy.write(text);
+
               const printed = yield* run.nextLine(
                 (line) => line.startsWith("counter:1 ") || line.startsWith(`${PROGRAM} did not load:`),
               );
+
               expect(printed.length).toBeGreaterThan(0);
               seen.add(move);
 
@@ -580,11 +615,13 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
               for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
                 const named = String(fact.body.path);
+
                 const relative =
                   !named.startsWith("/") &&
                   !/^[A-Za-z]:/.test(named) &&
                   !named.split(/[/\\]/).includes("..") &&
                   !named.includes(copy.home);
+
                 expect(
                   relative && named.startsWith(folder),
                   `code.failed's path is repo-relative and inside ${folder}: ${named}`,

@@ -46,6 +46,7 @@ const openFailure = (error: Socket.SocketError): ErrorClass => {
 
   const cause = "cause" in reason ? reason.cause : undefined;
   const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
+
   return Schema.is(ErrorClass)(name) ? name : "NetworkError";
 };
 
@@ -90,6 +91,7 @@ export const send = (
 ): Effect.Effect<void, "none" | Socket.SocketError> =>
   Effect.suspend((): Effect.Effect<void, "none" | Socket.SocketError> => {
     const handle = handles.get(dial);
+
     return handle === undefined ? Effect.fail("none" as const) : handle.writer.write(text);
   });
 
@@ -113,10 +115,12 @@ export const dialer =
         const emit = (m: DialMsg): void => {
           Queue.offerUnsafe(queue, m);
         };
+
         const key = yield* identity;
         yield* dialWait(tries);
         const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(options.tab)}`;
         const connection = yield* Socket.fromWebSocket(acquire(options.sockets, url));
+
         const pull = yield* Socket.readerString(connection).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
@@ -127,10 +131,12 @@ export const dialer =
               }
 
               emit({ type: "socket_closed", dial, code: closeCode(error), at });
+
               return yield* Effect.never;
             }),
           ),
         );
+
         const writer = yield* connection.writer;
         const written = new Map<number, number>();
         yield* Effect.acquireRelease(
@@ -138,6 +144,7 @@ export const dialer =
           () => Effect.sync(() => options.handles.delete(dial)),
         );
         emit({ type: "socket_opened", dial, at: yield* Clock.currentTimeMillis });
+
         return yield* pull.pipe(
           Effect.flatMap((texts) =>
             Effect.map(Clock.currentTimeMillis, (at) => {
@@ -147,8 +154,10 @@ export const dialer =
                 const sent = Option.flatMap(answerId(text), ({ id }) => {
                   const at = Option.fromUndefinedOr(written.get(id));
                   written.delete(id);
+
                   return at;
                 });
+
                 emit({
                   type: "frame",
                   dial,
@@ -164,6 +173,7 @@ export const dialer =
             Effect.gen(function* () {
               options.handles.delete(dial);
               emit({ type: "socket_closed", dial, code: closeCode(error), at: yield* Clock.currentTimeMillis });
+
               return yield* Effect.never;
             }),
           ),

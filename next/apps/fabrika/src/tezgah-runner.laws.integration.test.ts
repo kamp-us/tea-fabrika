@@ -37,11 +37,16 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const PROJECT = "desk-s2a";
+
 const SENT = "2026-11-14T04:00:00.000Z";
+
 const WAIT = 60_000;
+
 /** A door frame's JSON text. */
 const Json = Schema.fromJsonString(Schema.Unknown);
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 const typeId = (prefix: string, n: number): string => {
@@ -60,6 +65,7 @@ const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const n = Buffer.alloc(4);
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
@@ -69,6 +75,7 @@ const identity = () => {
   const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -82,8 +89,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -93,13 +102,16 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
+
       return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
     },
   };
 };
 
 type Key = ReturnType<typeof identity>;
+
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Record<string, any>;
 
@@ -133,6 +145,7 @@ const door = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
     `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
+
   const frames: Array<any> = [];
   let serial = 0;
   socket.addEventListener("message", (event) => {
@@ -140,20 +153,26 @@ const door = async (instance: Instance, key: Key, tab: string) => {
       frames.push(Schema.decodeUnknownSync(Json)(String(event.data)));
     }
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const found = await until(
       "a frame",
       async () => frames.findIndex(match),
       (i) => i >= 0,
     );
+
     return frames.splice(found, 1)[0];
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
+
   const hello = await call("initialize", {
     versions: [1],
     has: [],
@@ -166,7 +185,9 @@ const door = async (instance: Instance, key: Key, tab: string) => {
     sentAt: SENT,
     signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
   });
+
   expect(hello.error, "the founder's hello is admitted").toBeUndefined();
+
   return { call, close: () => socket.close() };
 };
 
@@ -176,6 +197,7 @@ const env = (name: string, value: string) =>
     Effect.sync(() => {
       const old = process.env[name];
       process.env[name] = value;
+
       return old;
     }),
     (old) =>
@@ -201,6 +223,7 @@ const startInstance = Effect.fnUntraced(
     const built = yield* build({ out: path.join(home, "dist") });
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     const key = identity();
+
     const instance: Instance = yield* localInstance(
       built,
       RecordWireTest.startupFixture({
@@ -212,6 +235,7 @@ const startInstance = Effect.fnUntraced(
         port: port.port,
       }),
     );
+
     return { instance, key };
   },
   Effect.provide(SecureRandom.layerWebCrypto),
@@ -220,6 +244,7 @@ const startInstance = Effect.fnUntraced(
 
 const calls = (instance: Instance) => {
   const project = () => instance.project(PROJECT);
+
   return {
     info: async (): Promise<Array<any>> => project().info(),
     facts: async (stream: string): Promise<Array<any>> =>
@@ -234,20 +259,25 @@ const findTezgah = async (instance: Instance) => {
     () => calls(instance).info(),
     (all) => all.some((row) => String(row.name).startsWith("tezgah:")),
   );
+
   const found = rows.filter((row) => String(row.name).startsWith("tezgah:"));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
+
   return { pid: String(found[0].process), name: String(found[0].name) };
 };
 
 // L8's real half: the suite's walk, on its own instance, through the founder's door letters.
 const open: RunnerTest.Open = Effect.gen(function* () {
   const { instance, key } = yield* startInstance();
+
   const socket = yield* Effect.acquireRelease(
     Effect.promise(() => door(instance, key, "desk-s2a-l8")),
     (d) => Effect.sync(d.close),
   );
+
   const tezgah = yield* Effect.promise(() => findTezgah(instance));
   let letters = 0;
+
   return {
     send: (m: unknown) =>
       Effect.promise(async () => {
@@ -258,15 +288,18 @@ const open: RunnerTest.Open = Effect.gen(function* () {
           sentAt: SENT,
           seen: 0,
         });
+
         return answer.result ?? { _tag: "error", reason: String(answer.error?.data?.reason ?? "none") };
       }),
     view: Effect.promise(async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view),
     process: (name: string) =>
       Effect.promise(async () => {
         const live = (await calls(instance).info()).some((row) => row.name === name);
+
         const exited = (await calls(instance).facts(`processes/${name}`))
           .filter((row) => row._tag === "exited")
           .map((row) => row.reason);
+
         return { live, exited };
       }),
   };
@@ -281,6 +314,7 @@ const order = (node: any): ReadonlyArray<string> =>
 const shown = (view: any) => {
   const space = (view?.workspaces ?? []).find((w: any) => w.n === 1);
   const ids = space === undefined ? [] : order(space.layout);
+
   return ids.map((id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
 };
 
@@ -291,6 +325,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
       Effect.scoped(
         Effect.gen(function* () {
           const { instance, key } = yield* startInstance();
+
           const signer: Identity = {
             fingerprint: key.fingerprint,
             raw: key.raw,
@@ -298,10 +333,12 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             found: "reused",
             sign: (bytes) => Effect.sync(() => key.sign(bytes)),
           };
+
           const window = windowMachineFor({
             decode: () => Schema.decodeUnknownSync(checklistView),
             tile: () => undefined,
           });
+
           const booting = yield* Headless.start({
             tiles: [],
             tezgah: { workspace: 1 },
@@ -321,7 +358,9 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               ),
             ),
           );
+
           const run = yield* booting.ready;
+
           const socket = yield* Effect.acquireRelease(
             Effect.promise(() => door(instance, key, "desk-s2a-l12")),
             (d) => Effect.sync(d.close),
@@ -330,26 +369,33 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
           yield* Effect.promise(async () => {
             const tezgah = await findTezgah(instance);
             const view = async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view;
+
             const tiles = () =>
               run
                 .getState()
                 .tiles.map((t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" }))
                 .sort((a, b) => (a.id < b.id ? -1 : 1));
+
             /** The window shows exactly workspace 1's tiles in tezgah's view, each one open. */
             const follows = async (label: string, count: number) => {
               const want = await until(label, view, (v) => shown(v).length === count);
+
               const expected = shown(want)
                 .map((t) => ({ ...t, open: true }))
                 .sort((a, b) => (a.id < b.id ? -1 : 1));
+
               await until(
                 `${label}: the window follows`,
                 async () => tiles(),
                 (got) => JSON.stringify(got) === JSON.stringify(expected),
               );
               expect(tiles(), `L12: ${label}`).toEqual(expected);
+
               return shown(want);
             };
+
             let letters = 0;
+
             const did = async (m: object) => {
               const sent = await socket.call("process.send", {
                 pid: tezgah.pid,
@@ -358,6 +404,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
                 sentAt: SENT,
                 seen: 0,
               });
+
               expect(sent.result, `L12: tezgah takes ${JSON.stringify(m)}`).toMatchObject({ _tag: "accepted" });
             };
 
@@ -394,11 +441,13 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               closed.map((t) => t.id),
               "L12: t2 is gone",
             ).toEqual([one[0]!.id, t3]);
+
             const ended = await until(
               "the closed tile's process ends",
               () => calls(instance).facts(`processes/${three[1]!.name}`),
               (rows) => rows.some((row) => row._tag === "exited"),
             );
+
             expect(
               ended.filter((row) => row._tag === "exited").map((row) => row.reason),
               "L12: the closed tile's process ends with shutdown",

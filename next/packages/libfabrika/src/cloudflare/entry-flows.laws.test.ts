@@ -39,6 +39,7 @@ const recordConstructor = vi.hoisted(() => {
       ObjectState | WorkerEnvironment | Scope.Scope
     >;
   } = {};
+
   return slot;
 });
 
@@ -70,11 +71,13 @@ const settingsExec =
 vi.mock("./objects.ts", async (original) => {
   const actual = await original<typeof import("./objects.ts")>();
   const { Layer } = await import("effect");
+
   return {
     ...actual,
     RecordPart: {
       make: (implementation: NonNullable<typeof recordConstructor.value>) => {
         recordConstructor.value = implementation;
+
         return Layer.empty;
       },
     },
@@ -88,6 +91,7 @@ SettingsTest.suite((recipe, secret) =>
     const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));
     // Each Process object's descriptor, kept across a reopen as the object's own storage keeps it.
     const configured = new Map<string, unknown>();
+
     const captured: Record<SettingsTest.Channel, unknown[]> = {
       transport: [],
       ledger: [],
@@ -103,6 +107,7 @@ SettingsTest.suite((recipe, secret) =>
       logs: [],
       "span attributes": [],
     };
+
     let fault: SettingsTest.Fault = "none";
     let calls = 0;
     let reads = 0;
@@ -110,22 +115,28 @@ SettingsTest.suite((recipe, secret) =>
     let consumers = 0;
     const databases: DatabaseSync[] = [];
     const key = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
+
     let input = {
       ...(yield* StartsTest.input(recipe)),
       founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
     };
+
     captured.transport.push(JSON.stringify(input));
     const lower = new Error(secret, { cause: { password: secret } });
+
     const database = Effect.acquireRelease(
       Effect.sync(() => {
         const db = new DatabaseSync(":memory:");
         databases.push(db);
+
         return db;
       }),
       (db) => Effect.sync(() => db.close()),
     );
+
     const local = yield* database;
     const rawSql = nodeSql(local);
+
     const settingsSql = {
       ...rawSql,
       exec: settingsExec(
@@ -141,8 +152,10 @@ SettingsTest.suite((recipe, secret) =>
         },
       ),
     };
+
     const startsContext = yield* Layer.build(SettingsStartsLedger.layer(settingsSql));
     const starts = Context.get(startsContext, Starts.Starts);
+
     const gate = Effect.fnUntraced(function* (wire: unknown) {
       calls++;
       captured.transport.push(wire);
@@ -159,6 +172,7 @@ SettingsTest.suite((recipe, secret) =>
         fault === "refused"
           ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
           : starts.record(wire as StartsTest.Input);
+
       const reply = yield* settingsReply(work);
       captured[reply._tag === "ok" ? "transport" : "RPC failures"].push(reply);
 
@@ -168,9 +182,11 @@ SettingsTest.suite((recipe, secret) =>
 
       return reply;
     });
+
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const attribute = Tracer.NativeSpan.prototype.attribute;
+
         const spies = [
           vi.spyOn(Tracer.NativeSpan.prototype, "attribute").mockImplementation(function (
             this: Tracer.NativeSpan,
@@ -178,14 +194,17 @@ SettingsTest.suite((recipe, secret) =>
             value,
           ) {
             captured["span attributes"].push({ key, value });
+
             return Reflect.apply(attribute, this, [key, value]);
           }),
           vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
             captured.stdout.push(String(chunk));
+
             return true;
           }),
           vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
             captured.stderr.push(String(chunk));
+
             return true;
           }),
           ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
@@ -194,6 +213,7 @@ SettingsTest.suite((recipe, secret) =>
             }),
           ),
         ];
+
         return spies;
       }),
       (spies) =>
@@ -203,6 +223,7 @@ SettingsTest.suite((recipe, secret) =>
           }
         }),
     );
+
     const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
       const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
       const db = path === "Project" ? local : yield* database;
@@ -216,6 +237,7 @@ SettingsTest.suite((recipe, secret) =>
         owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
       });
       const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+
       let attached = Attached.cases.online.make({
         client: "fixture-client",
         identity: { key: "fixture-public", person: input.founding.person, as: "window" },
@@ -224,6 +246,7 @@ SettingsTest.suite((recipe, secret) =>
         watching: false,
         busy: false,
       });
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies hibernating socket methods without workerd's nominal brand
       const socket = {
         deserializeAttachment: () => attached,
@@ -235,6 +258,7 @@ SettingsTest.suite((recipe, secret) =>
         },
         close: () => {},
       } as unknown as WebSocket;
+
       // Only platform handles are doubled. The five consumer implementations run unchanged.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
       const ctx = {
@@ -262,6 +286,7 @@ SettingsTest.suite((recipe, secret) =>
           transactionSync: sql.transaction,
           get: async (name: string) => {
             consumers++;
+
             return values.get(name);
           },
           put: async (name: string, value: unknown) => {
@@ -275,6 +300,7 @@ SettingsTest.suite((recipe, secret) =>
         },
         getWebSockets: () => {
           consumers++;
+
           return path === "Connection" ? [socket] : [];
         },
         getTags: () => ["fixture-session", "fixture-tab", "fixture-public"],
@@ -283,6 +309,7 @@ SettingsTest.suite((recipe, secret) =>
         // T852: a reopened Project binds each process load to its tail.
         exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       } as unknown as DurableObjectState;
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
       const env = {
         INSTANCE: encoded,
@@ -310,6 +337,7 @@ SettingsTest.suite((recipe, secret) =>
             write: async (...args: unknown[]) => {
               captured["record RPC"].push(args);
               captured["span attributes"].push(args);
+
               return { _tag: "written" };
             },
           }),
@@ -317,6 +345,7 @@ SettingsTest.suite((recipe, secret) =>
         MEASUREMENTS: {
           put: async (...args: unknown[]) => {
             captured.archives.push(args);
+
             return {};
           },
           head: async () => null,
@@ -324,6 +353,7 @@ SettingsTest.suite((recipe, secret) =>
         LOADER: {
           get: () => {
             consumers++;
+
             return {
               getEntrypoint: () => ({
                 describe: async () => ({ name: "test/fixture", v: 1, writes: {}, inputs: {}, cmds: [] }),
@@ -332,12 +362,14 @@ SettingsTest.suite((recipe, secret) =>
           },
         },
       } as unknown as Env;
+
       let close = Effect.void;
       let enter: SettingsTest.Entry["enter"];
 
       if (path === "HTTP") {
         enter = Effect.fnUntraced(function* (choice) {
           const route = ["/window.js", "/", "/missing", "/window.js"][choice % 4] ?? "/";
+
           const response = yield* fetch(
             new Request(`http://127.0.0.1:${config.port}${route}`, {
               headers: { host: choice % 4 === 3 ? "wrong.invalid" : `127.0.0.1:${config.port}` },
@@ -346,17 +378,20 @@ SettingsTest.suite((recipe, secret) =>
             config,
             { "/window.js": { body: "fixture", hash: "fixture", type: "text/javascript" } },
           );
+
           captured["HTTP replies"].push({
             status: response.status,
             headers: [...response.headers],
             body: yield* Effect.promise(() => response.text()),
           });
+
           return response.status;
         });
       } else if (path === "RecordPart") {
         const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
         close = Scope.close(scope, Exit.void);
         const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
+
         // Construct only the stable holder here. The operation must perform the fallible gate.
         const build = yield* constructor.pipe(
           Effect.provideService(WorkerEnvironment, env),
@@ -367,10 +402,12 @@ SettingsTest.suite((recipe, secret) =>
           ),
           Effect.provideService(Scope.Scope, scope),
         );
+
         enter = Effect.fnUntraced(function* (choice) {
           const part = yield* build.pipe(Effect.provideService(Scope.Scope, scope));
           const chain = Chain.cases.spans.make({});
           const method = choice % 4;
+
           return yield* method === 0
             ? part.write(chain, 0, [])
             : method === 1
@@ -391,6 +428,7 @@ SettingsTest.suite((recipe, secret) =>
                   bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "test/fixture" }],
                   door: () => Effect.succeed({} as GatewayCalls),
                 });
+
         close = Effect.promise(() => runtime.dispose());
         yield* Effect.addFinalizer(() => close);
         enter = (choice: number) =>
@@ -427,6 +465,7 @@ SettingsTest.suite((recipe, secret) =>
                               )
                               .pipe(Effect.asVoid),
                       );
+
               return Reflect.apply(runtime.runPromise, runtime, [work]);
             },
             catch: (cause: unknown) => new EntryFailure({ cause }),
@@ -435,6 +474,7 @@ SettingsTest.suite((recipe, secret) =>
 
       return { enter, close };
     });
+
     return {
       deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
         input = { ...(yield* StartsTest.input(next)), founding: input.founding };
@@ -460,6 +500,7 @@ SettingsTest.suite((recipe, secret) =>
               ? []
               : db.prepare(`SELECT * FROM ${table}`).all(),
           );
+
           const channel =
             table === "entries"
               ? "ledger"
@@ -468,6 +509,7 @@ SettingsTest.suite((recipe, secret) =>
                 : table === "content"
                   ? "content"
                   : "spans";
+
           output[channel] = [...output[channel], ...rows];
         }
 

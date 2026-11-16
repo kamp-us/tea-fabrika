@@ -130,6 +130,7 @@ export type Part = {
 
 /** A layout as the wire carries it. */
 type LayoutWire = string | { readonly dir: Dir; readonly parts: ReadonlyArray<PartWire> };
+
 type PartWire = { readonly percent: number; readonly inner: LayoutWire };
 
 /**

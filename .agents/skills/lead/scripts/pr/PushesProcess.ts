@@ -16,6 +16,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
     Pushes,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
       const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string, stdin?: string) =>
         run(cmd, args, cwd, stdin === undefined ? {} : { stdin }).pipe(
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
@@ -46,6 +47,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
 
           // The diff is read whole before the grep starts, so a diff that fails is never an empty pass.
           const range = `origin/main...${head}`;
+
           const diff = yield* ran(
             "git",
             ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", range],

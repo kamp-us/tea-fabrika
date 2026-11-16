@@ -23,17 +23,22 @@ import * as fc from "fast-check";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
 const SEED = 119120;
+
 const BEAT_BOUND = 10_000; // L1: an unanswered beat leaves online within 10 s
+
 const REMOVED = 4003;
 
 // L20: every Link Msg about a dial must carry it; blocked is the one profile-wide failure.
 expectTypeOf<Exclude<LinkMsg, { readonly type: "blocked" }>>().toMatchTypeOf<{ readonly dial: number }>();
 
 type Step = readonly [Link, ReadonlyArray<{ readonly type: string; readonly dial?: number }>];
+
 const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
 
 const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
+
 const live = (s: Link): boolean => s._tag !== "removed" && s._tag !== "blocked";
+
 const roundTrip = (s: Link): Link => Schema.decodeUnknownSync(Link)(Schema.encodeSync(Link)(s));
 
 /** One generated step: choice numbers and words the walk turns into a move against its state. */
@@ -47,6 +52,7 @@ const choice = fc.record({
 });
 
 type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
+
 const walks = fc.array(choice, { minLength: 1, maxLength: 60 });
 
 /** A close code from outside: a normal close, an abnormal one, an unknown one, or the removal. */
@@ -161,10 +167,12 @@ describe("L1: the link machine", () => {
           }
 
           left++;
+
           const allowed =
             (m.type === "granted" && m.dial === prev.s.dial) ||
             (m.type === "closed" && m.dial === prev.s.dial) ||
             m.type === "blocked";
+
           expect(allowed, `${m.type} took a grant wait to ${next._tag}`).toBe(true);
           expect(m.type !== "granted" || next._tag === "dialing", "granted signs a fresh hello on the same dial").toBe(
             true,
@@ -180,6 +188,7 @@ describe("L1: the link machine", () => {
   it("a 4003 close on the current dial is removed, and only ask_again dials, past every old dial", () => {
     let removed = 0,
       asked = 0;
+
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, (prev, m, next, cmds) => {
@@ -199,6 +208,7 @@ describe("L1: the link machine", () => {
             expect(next._tag).toBe("dialing");
             expect(currentDial(next)).toBe(m.dial);
             expect(m.dial).toBeGreaterThan(Math.max(0, ...prev.delivered.map((d) => ("dial" in d ? d.dial : 0))));
+
             return;
           }
 
@@ -220,6 +230,7 @@ describe("L1: the link machine", () => {
 
           if (!live(s)) {
             expect(timer, `${s._tag} has a timer`).toBeNull();
+
             return;
           }
 
@@ -268,6 +279,7 @@ describe("L1: the link machine", () => {
           }
 
           online++;
+
           let s: Link = start,
             waited = 0;
 

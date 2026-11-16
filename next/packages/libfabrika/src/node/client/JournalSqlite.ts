@@ -24,11 +24,13 @@ const failed = (method: string, key?: string) => (cause: unknown) =>
 const store = (sql: Sql) => {
   const exec = (method: string, key: string | undefined, query: string, ...params: ReadonlyArray<string>) =>
     Effect.try({ try: () => sql.exec(query, ...params), catch: failed(method, key) });
+
   return KeyValueStore.makeStringOnly({
     get: (key) =>
       exec("get", key, "SELECT value FROM journal WHERE key = ?", key).pipe(
         Effect.flatMap(([row]) => {
           const value = row?.["value"];
+
           return value === undefined
             ? Effect.undefined
             : Predicate.isString(value)
@@ -75,6 +77,7 @@ export const layer = (options: { readonly file: string }) =>
         try: () => {
           const db = new DatabaseSync(options.file);
           db.exec(TABLE);
+
           return db;
         },
         catch: failed("open"),

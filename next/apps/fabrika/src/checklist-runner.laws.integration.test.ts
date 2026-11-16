@@ -23,11 +23,15 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "checklist:1";
+
 const BUILD = "checklist-build";
+
 const BRAIN = "SHA256:brain";
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
+
 const agent = Writer.cases.agent.make({ key: "SHA256:agent", for: "agent" });
 
 const brainFrom = {
@@ -67,6 +71,7 @@ const session = (
     const ledger = yield* files("ledger");
     const store = yield* files("process");
     const manager = yield* files("manager");
+
     const started = Layer.effectDiscard(
       ProcessManager.use((m) =>
         m.status(NAME).pipe(
@@ -83,15 +88,18 @@ const session = (
         ),
       ).pipe(Effect.orDie),
     ).pipe(Layer.provideMerge(managerLayer(manager)));
+
     const process = yield* ProcessManager.use((m) => m.status(NAME)).pipe(
       Effect.map((s) => s.state.process),
       Effect.provide(started),
       Effect.orDie,
     );
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return CheckedWriter.of({
           append: (i) =>
             mailbox.send(NAME, i.id, i.envelope.input, {
@@ -108,6 +116,7 @@ const session = (
         });
       }),
     );
+
     return ProgramRunner.layer(
       { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
       { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
@@ -145,6 +154,7 @@ const open: RunnerTest.Open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t806-checklist-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
+
   return {
     start: (program: typeof checklist, alarms: Array<number | null>) =>
       Effect.flatMap(session(files, alarms, program), (layer) => ProgramRunner.pipe(Effect.provide(layer))),

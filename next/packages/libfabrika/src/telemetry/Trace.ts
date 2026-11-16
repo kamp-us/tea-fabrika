@@ -22,6 +22,7 @@ export const Chain = Schema.TaggedUnion({
   job: { process: ProcessId },
   spans: {},
 });
+
 /**
  * Where a span's record lives: a process's JobRecord, or the span record.
  *
@@ -66,6 +67,7 @@ export const PROCESS = "fab.process";
  * @category schemas
  */
 export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+
 /**
  * One span tag's value.
  *
@@ -73,6 +75,7 @@ export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
  * @category models
  */
 export type Tag = typeof Tag.Type;
+
 const Tags = Schema.Record(Schema.String, Tag);
 
 /**
@@ -116,6 +119,7 @@ export const SpanRow = Schema.Struct({
   /** The exit. A failure's class is `attributes["error.type"]`; its message is content. */
   ok: Schema.Boolean,
 });
+
 /**
  * One ended span as its row keeps it.
  *
@@ -136,6 +140,7 @@ export const Content = Schema.TaggedUnion({
   kept: { spanId: Schema.String, message: Schema.String },
   deleted: { spanId: Schema.String, by: Schema.String, at: Schema.Int, reason: Schema.String },
 });
+
 /**
  * A failed span's content: `kept` or `deleted`.
  *
@@ -156,6 +161,7 @@ export const Rolled = Schema.TaggedStruct("rolled", {
   next: Schema.String,
   bytes: Schema.Int,
 });
+
 /**
  * A full part's last fact, which names the next part.
  *
@@ -187,6 +193,7 @@ export const Measurements = Schema.Struct({
   /** The span this row measured, so it joins its span row. Null when no span was current. */
   spanId: Schema.NullOr(Schema.String),
 });
+
 /**
  * One measurement: the raw row of one ended span.
  *
@@ -211,6 +218,7 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
   ms: Schema.Struct({ p50: Schema.Number, p95: Schema.Number, max: Schema.Number }),
   lag: Schema.NullOr(Schema.Number),
 });
+
 /**
  * One piece's closed hour.
  *
@@ -238,6 +246,7 @@ export {
  * @category schemas
  */
 export const Refused = Schema.Literals(["reserved", "rate_limited", "other"]);
+
 /**
  * The closed value a counted refusal is split by.
  *
@@ -259,6 +268,7 @@ export const SumPoint = Schema.TaggedStruct("sum", {
   refused: Refused,
   count: Schema.Int,
 });
+
 /**
  * One piece's hourly count of refusals of one kind.
  *
@@ -340,6 +350,7 @@ const MOST_CHARS = 128;
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
 const cut = (text: string): string => {
   const last = text.charCodeAt(MOST_CHARS - 1);
+
   return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
 };
 

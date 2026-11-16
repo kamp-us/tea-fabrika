@@ -33,6 +33,7 @@ export const repoNode = Effect.fn("boxnode.repoNode")(function* (dir: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${dir}/package.json`).pipe(Effect.orElseSucceed(() => ""));
   const pinned = Schema.decodeUnknownOption(Schema.fromJsonString(Pins))(text);
+
   return Option.isNone(pinned) ? null : (pinned.value.volta?.node ?? pinned.value.engines?.node ?? null);
 });
 
@@ -48,12 +49,14 @@ const Pins = Schema.Struct({
 export const firstOnPath = (path: string, dirs: readonly string[]): string => {
   const front = [...new Set(dirs.filter((dir) => dir !== ""))];
   const rest = path.split(":").filter((dir) => dir !== "" && !front.includes(dir));
+
   return [...front, ...rest].join(":");
 };
 
 /** The folder above a program's absolute path, or `null` for a path that is not one. */
 const holder = (program: string): string | null => {
   const at = program.lastIndexOf("/");
+
   return program.startsWith("/") && at > 0 ? program.slice(0, at) : null;
 };
 
@@ -63,6 +66,7 @@ const holder = (program: string): string | null => {
  */
 export const pinnedBin = (said: string, pin: string): string | null => {
   const [execPath = "", version = ""] = said.trim().split("\n");
+
   return version.trim() === `v${pin}` && execPath.endsWith("/node") ? holder(execPath.trim()) : null;
 };
 
@@ -73,6 +77,7 @@ export const pinnedBin = (said: string, pin: string): string | null => {
 export const pnpmBin = (said: string): string | null => {
   const program = said.trim();
   const dir = program.includes("\n") || !program.endsWith("/pnpm") ? null : holder(program);
+
   return dir === null || dir.endsWith("/.volta/bin") ? null : dir;
 };
 
@@ -82,6 +87,7 @@ export const NODE_PROBE = "node -v; pnpm exec node -v";
 /** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
 export const holdsPin = (said: string, pin: string): boolean => {
   const lines = said.trim().split("\n");
+
   return lines.length === 2 && lines.every((line) => line.trim() === `v${pin}`);
 };
 
@@ -91,6 +97,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 const said = (cwd: string, command: string, args: readonly string[]) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
     return yield* spawner.string(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }));
   }).pipe(Effect.orElseSucceed(() => ""));
 
@@ -98,9 +105,11 @@ const said = (cwd: string, command: string, args: readonly string[]) =>
 export const boxEnv = (main: string, parent: Env) =>
   Effect.gen(function* () {
     const pin = yield* repoNode(main);
+
     const keep = (reason: string) =>
       Effect.sync(() => {
         console.error(`boxnode: ${reason}, so a box keeps the host's PATH as it is`);
+
         return parent;
       });
 
@@ -118,5 +127,6 @@ export const boxEnv = (main: string, parent: Env) =>
     }
 
     const pnpm = pnpmBin(yield* said(main, "volta", ["which", "pnpm"]));
+
     return { ...parent, PATH: firstOnPath(parent.PATH ?? "", pnpm === null ? [node] : [node, pnpm]) };
   }).pipe(Effect.provide(nodeServices));

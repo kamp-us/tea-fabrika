@@ -37,6 +37,7 @@ it.prop(
               process: `process-${pick}`,
               phase: pick % 3 === 0 ? "saved" : "fresh",
             };
+
       const previous = model;
       [model] = applyCell(StepFaultTest.controller, model, msg);
       msgs.push(msg);
@@ -47,6 +48,7 @@ it.prop(
           msg.name === previous.name &&
           msg.letter === previous.letter &&
           previous.attempts.length < previous.errors.length;
+
         expect(model.attempts.length).toBe(previous.attempts.length + (charge ? 1 : 0));
         expect(model.attempts.slice(0, previous.attempts.length)).toEqual(previous.attempts);
       }

@@ -12,7 +12,9 @@ const root = join(import.meta.dirname, "..");
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** In process, RuleTester: the file fires on exactly these lines, or on none. */
@@ -33,6 +35,7 @@ const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
     ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
     { cwd: root, encoding: "utf8" },
   );
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{
       code: string;
@@ -40,6 +43,7 @@ const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
       labels: Array<{ span: { line: number } }>;
     }>;
   };
+
   const found = [...cases.keys()].map((file) => [
     file,
     report.diagnostics
@@ -47,6 +51,7 @@ const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
       .map((d) => d.labels[0]!.span.line)
       .sort((a, b) => a - b),
   ]);
+
   expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
 };
 
@@ -70,6 +75,7 @@ it("every native filesystem import form is refused only in next/ product files",
         ),
         (module) => {
           const from = JSON.stringify(module);
+
           const forms = [
             `import * as native0 from ${from};`,
             `import native1 from ${from};`,
@@ -82,6 +88,7 @@ it("every native filesystem import form is refused only in next/ product files",
             `import native8 = require(${from});`,
             `const native9 = import(\`${module}\`);`,
           ];
+
           const files = [
             ["product/plant.ts", true],
             ["product/plant.test.ts", false],
@@ -89,6 +96,7 @@ it("every native filesystem import form is refused only in next/ product files",
             ["exam/plant.ts", false],
             ["e2e/plant.ts", false],
           ] as const;
+
           // The one oxlint run reads every run's files, so each run writes them in a folder of its own.
           const run = join(folder, `${n++}`);
 

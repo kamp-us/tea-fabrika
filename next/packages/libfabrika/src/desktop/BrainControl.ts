@@ -85,6 +85,7 @@ export class Command extends Schema.TaggedError<Command>()("Command", {
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+
 /**
  * Service-manager output, or a job value, that cannot be read or written without guessing.
  *
@@ -92,6 +93,7 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * @category errors
  */
 export class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { cause: Schema.Defect() }) {}
+
 /**
  * The job or its file belongs to another configuration, or the home is not canonical.
  *

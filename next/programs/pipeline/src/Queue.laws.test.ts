@@ -13,11 +13,17 @@ import { queue } from "./Queue.ts";
 import * as Settings from "./Settings.ts";
 
 type Program = ReturnType<typeof queue>;
+
 type Model = Program["machine"]["model"]["Type"];
+
 type Msg = Program["msg"]["Type"];
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
 type Start = Extract<Command, { type: "start_child" }>;
+
 type Entry = { change: number; head: string; reply: { to: string; ref: string } | null };
+
 type Active = Entry & { name: string; ref: string };
 
 type Oracle = {
@@ -31,9 +37,13 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
+
 const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
+
 const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
+
 const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -46,7 +56,9 @@ const draw = fc.record({
 });
 
 type Cell = typeof draw extends fc.Arbitrary<infer A> ? A : never;
+
 const world = fc.record({ most: fc.integer({ min: 1, max: 6 }), enabled: fc.boolean() });
+
 type World = typeof world extends fc.Arbitrary<infer A> ? A : never;
 
 const program = (w: World) =>
@@ -126,6 +138,7 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
+
   return Schema.decodeUnknownSync(p.msg)({
     type: "start_child_err",
     cmd: { type: "start_child" },
@@ -137,6 +150,7 @@ const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
 
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
+
   return Schema.decodeUnknownSync(p.msg)(
     which < 3
       ? {
@@ -208,15 +222,18 @@ const step = (walk: Walk, input: Msg) => {
   if (refused !== null) {
     walk.seen.add(refused.reason);
     expect(p.view.select(walk.model)).toEqual(originalView);
+
     return;
   }
 
   const expected: Array<unknown> = [];
+
   const forward = (entry: Entry, answer: typeof Mail.Reply.Type) => {
     if (entry.reply !== null) {
       expected.push({ type: "send", to: entry.reply.to, m: { ...answer, ref: entry.reply.ref } });
     }
   };
+
   const next = () => {
     const entry = m.line.shift();
     m.reason = null;
@@ -256,8 +273,10 @@ const step = (walk: Walk, input: Msg) => {
       m.since = input.at;
     } else {
       const current = m.current!;
+
       const tag =
         input.type === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
+
       m.reason = Schema.TaggedStruct("start_refused", {
         change: Schema.Number,
         name: Schema.String,
@@ -361,6 +380,7 @@ const open = (w: World, seen: Set<string>): Walk => {
   const [model, commands] = p.machine.init(null, ctx);
   expect(commands).toEqual([]);
   expect(p.inputs.resume).toMatchObject({ personOnly: true });
+
   return { p, w, model, oracle: initial(), history: [], unanswered: null, seen };
 };
 
@@ -369,6 +389,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
   const starts = walk.history.filter((c) => c.type === "start_child");
   const sends = walk.history.filter((c) => c.type === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
+
   const moves: Array<() => unknown> = [
     () => enqueue(cell, (cell.pick % 10) + 1),
     () =>
@@ -480,6 +501,7 @@ for (const [law, reached] of [
           const w = { ...drawn, enabled: true };
           const p = program(w);
           const first = draw.map((cell) => enqueue(cell, (cell.pick % 10) + 1));
+
           const guided = arbGuidedSequence(
             p.machine,
             ctx,
@@ -493,6 +515,7 @@ for (const [law, reached] of [
             },
             { maxLength: 100, size: "max" },
           );
+
           return fc
             .tuple(guided, fc.array(draw, { minLength: 80, maxLength: 100 }))
             .map(([msgs, cells]) => ({ w, msgs, cells }));
@@ -538,6 +561,7 @@ const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => 
   const current: Extract<Model, { _tag: "idle" }> = { ...idle, current: entry };
   // @ts-expect-error a reply address requires its ref
   const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "quest" } };
+
   return [line, current, partial];
 };
 

@@ -44,17 +44,22 @@ const grant = Command.make(
     }
 
     const { code, key } = values;
+
     const origin = yield* Effect.try({
       try: () => new URL(url).origin,
       catch: () => new GrantError({ reason: "bad_url" }),
     });
+
     const unreachable = () => new GrantError({ reason: "unreachable" });
+
     const targetUrl = yield* Effect.try({
       try: () => `${origin}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
       catch: unreachable,
     });
+
     const client = yield* HttpClient.HttpClient;
     const response = yield* client.get(targetUrl).pipe(Effect.mapError(unreachable));
+
     // The body is read as text: the client's own JSON reader takes an empty body for `null`.
     const target = yield* response.text.pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Target))),
@@ -81,11 +86,13 @@ const grant = Command.make(
       },
       sentAt: DateTime.formatIso(yield* DateTime.now),
     });
+
     const armored = yield* Effect.scoped(
       Effect.gen(function* () {
         const signer = yield* ChildProcess.make("ssh-keygen", ["-Y", "sign", "-n", "fabrika-client", "-f", key], {
           stdin: Stream.make(new TextEncoder().encode(text)),
         });
+
         const [out, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(signer.stdout)), signer.exitCode], {
           concurrency: 2,
         });
@@ -97,6 +104,7 @@ const grant = Command.make(
         return out;
       }),
     );
+
     const result = yield* HttpClientRequest.post(`${origin}/grant`).pipe(
       HttpClientRequest.bodyText(JSON.stringify({ text, armored }), "application/json"),
       client.execute,

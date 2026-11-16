@@ -24,21 +24,25 @@ const shelf = (ran: Array<string>): Service => ({
   put: (name, count) =>
     Effect.suspend(() => {
       ran.push("put");
+
       return count < 0 ? Effect.fail(new Full({ item: name })) : Effect.succeed(count * 2);
     }),
   count: (name) =>
     Effect.sync(() => {
       ran.push("count");
+
       return name.length;
     }),
   size: Effect.sync(() => {
     ran.push("size");
+
     return 12;
   }),
   watch: (name) =>
     Stream.unwrap(
       Effect.sync(() => {
         ran.push("watch");
+
         return name === "" ? Stream.fail(new Full({ item: name })) : Stream.make(name.length, 0);
       }),
     ),
@@ -46,6 +50,7 @@ const shelf = (ran: Array<string>): Service => ({
 });
 
 const Name = Schema.Literals(["a", "jar", "shelf", ""]);
+
 /** A sort key, so the four kinds of call come in any order. */
 const At = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 40 }));
 
@@ -63,7 +68,9 @@ const Overfull = Schema.TaggedStruct("put", {
 });
 
 const Count = Schema.TaggedStruct("count", { name: Name, at: At });
+
 const Size = Schema.TaggedStruct("size", { at: At });
+
 const Watch = Schema.TaggedStruct("watch", { name: Name, at: At });
 
 /**
@@ -79,6 +86,7 @@ const Moves = Schema.Struct({
 });
 
 type Move = typeof Put.Type | typeof Count.Type | typeof Size.Type | typeof Watch.Type;
+
 type Failing = "put" | "size" | "watch";
 
 /** The moves in the order they run. The sort is stable, so equal keys keep their kind's order. */
@@ -155,8 +163,10 @@ describe("Recorder.layer records each run of a watched member (0579)", () => {
     ({ moves, failing }) => {
       const ran: Array<string> = [];
       const plain = shelf([]);
+
       const failed = (m: Move): Failing | null =>
         !Predicate.isTagged(m, "count") && failing.includes(m._tag) ? m._tag : null;
+
       return Effect.gen(function* () {
         const list = ordered(moves);
         covered(list);
@@ -215,16 +225,20 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
           const s = yield* Shelf;
           const built = [s.put("a", 1)];
           expect(built).toHaveLength(1);
+
           return yield* Recorder.calls(Shelf);
         }).pipe(Effect.provide(Recorder.layer(Shelf, shelf([]))));
+
         expect(dropped).toEqual([]);
 
         const retried = yield* Effect.gen(function* () {
           const s = yield* Shelf;
           const exit = yield* Effect.exit(s.put("jar", -1).pipe(Effect.retry({ times: 1 })));
           expect(Exit.isFailure(exit)).toBe(true);
+
           return yield* Recorder.calls(Shelf);
         }).pipe(Effect.provide(Recorder.layer(Shelf, shelf([]))));
+
         expect(retried).toEqual([
           { method: "put", args: ["jar", -1] },
           { method: "put", args: ["jar", -1] },
@@ -236,8 +250,10 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
           yield* TestClock.adjust("1 second");
           const ended = yield* Fiber.join(fiber);
           expect(ended._tag).toBe("None");
+
           return yield* Recorder.calls(Shelf);
         }).pipe(Effect.provide(Recorder.layer(Shelf, { ...shelf([]), put: () => Effect.never })));
+
         expect(endless).toEqual([{ method: "put", args: ["shelf", 2] }]);
       }),
   );
@@ -249,22 +265,28 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
     () =>
       Effect.gen(function* () {
         const ran: Array<string> = [];
+
         const flowing = yield* Effect.gen(function* () {
           const s = yield* Shelf;
           const stream = s.watch("jar");
           const before = yield* Recorder.calls(Shelf);
           const counts = yield* Stream.runCollect(stream);
+
           return { before, counts, after: yield* Recorder.calls(Shelf) };
         }).pipe(Effect.provide(Recorder.layer(Shelf, shelf(ran))));
+
         expect(flowing).toEqual({ before: [], counts: [3, 0], after: [{ method: "watch", args: ["jar"] }] });
         expect(ran).toEqual(["watch"]);
 
         const held: Array<string> = [];
+
         const refused = yield* Effect.gen(function* () {
           const s = yield* Shelf;
           const exit = yield* Effect.exit(Stream.runCollect(s.watch("jar")));
+
           return { exit, after: yield* Recorder.calls(Shelf) };
         }).pipe(Effect.provide(Recorder.layer(Shelf, shelf(held), { fails: { watch: refusals.watch } })));
+
         expect(Exit.isFailure(refused.exit) ? Cause.squash(refused.exit.cause) : refused.exit).toBe(refusals.watch);
         expect(refused.after).toEqual([{ method: "watch", args: ["jar"] }]);
         expect(held).toEqual([]);
@@ -278,25 +300,31 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
     () =>
       Effect.gen(function* () {
         const layer = Recorder.layer(Shelf, shelf([]));
+
         const once = Effect.gen(function* () {
           const s = yield* Shelf;
           yield* s.count("jar");
+
           return yield* Recorder.calls(Shelf);
         }).pipe(Effect.provide(layer));
+
         expect(yield* once).toEqual([{ method: "count", args: ["jar"] }]);
         expect(yield* once).toEqual([{ method: "count", args: ["jar"] }]);
 
         const part = yield* Effect.gen(function* () {
           const s = yield* Shelf;
           const exit = yield* Effect.exit(s.count("jar"));
+
           return { exit, after: yield* Recorder.calls(Shelf), label: s.label };
         }).pipe(
           Effect.provide(
             Recorder.layer(Shelf, { [ShelfId]: ShelfId, label: "a part of a shelf", drain: shelf([]).drain }),
           ),
         );
+
         const defect =
           Exit.isFailure(part.exit) && Cause.hasDies(part.exit.cause) ? Cause.squash(part.exit.cause) : null;
+
         expect(defect).toBeInstanceOf(Error);
         expect(defect instanceof Error ? defect.name : null).toBe("UnimplementedError");
         expect(part.after).toEqual([]);
@@ -321,18 +349,23 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
           },
           { fails: { put: refusals.put } },
         );
+
         const left = Recorder.layer(
           Shelf,
           { [ShelfId]: ShelfId, label: "a part of a shelf", drain: () => Sink.drain },
           // @ts-expect-error R18: put is left out of impl, so fails may not name it
           { fails: { put: refusals.put } },
         );
+
         const exit = yield* Effect.gen(function* () {
           const s = yield* Shelf;
+
           return { exit: yield* Effect.exit(s.put("jar", 1)), after: yield* Recorder.calls(Shelf) };
         }).pipe(Effect.provide(given));
+
         expect(Exit.isFailure(exit.exit) ? Cause.squash(exit.exit.cause) : exit.exit).toBe(refusals.put);
         expect(exit.after).toEqual([{ method: "put", args: ["jar", 1] }]);
+
         const stray = Recorder.layer(Shelf, {
           [ShelfId]: ShelfId,
           label: "a part of a shelf",
@@ -340,6 +373,7 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
           // @ts-expect-error R18: nope is no member of Shelf, so impl may not give it
           nope: () => Effect.void,
         });
+
         expect(Layer.isLayer(left)).toBe(true);
         expect(Layer.isLayer(stray)).toBe(true);
       }),

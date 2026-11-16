@@ -28,6 +28,7 @@ export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Laye
     Ledger,
     Effect.gen(function* () {
       const referee = yield* Referee;
+
       return {
         append: referee.append,
         read: (stream, after) => pages(after, (from) => referee.read(stream, from, caller.reader)),

@@ -30,11 +30,13 @@ export const stack = (
     Effect.gen(function* () {
       const settings = checked.input;
       const instance = yield* setting(JSON.stringify(settings));
+
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
+
       const brain = yield* Cloudflare.Workers.Worker("Brain", {
         name: settings.name,
         main: built.brain,
@@ -55,6 +57,7 @@ export const stack = (
           INSTANCE: instance,
         },
       });
+
       return { url: brain.url };
     }),
   );

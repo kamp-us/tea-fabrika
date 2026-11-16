@@ -16,7 +16,9 @@ import { integrationTestName } from "./integration-test-name.ts";
 const root = join(import.meta.dirname, "..");
 
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** A snippet that drives a real resource: its imports, the line that opens it, and what it drives. */
@@ -43,7 +45,9 @@ const MEMORY = [
 ] as const;
 
 const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
+
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}(?:\.laws)?$/);
+
 const end = fc.constantFrom(".ts", ".tsx");
 
 it("L1: a real resource's call fires in a plain next/ test file, at its line, and never under the integration or visual name", () => {
@@ -90,9 +94,11 @@ const fires = (paths: readonly string[]) => {
     cwd: root,
     encoding: "utf8",
   });
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
+
   const found = new Map<string, number[]>();
 
   for (const d of report.diagnostics.filter((each) => each.code === "fabrika(integration-test-name)")) {

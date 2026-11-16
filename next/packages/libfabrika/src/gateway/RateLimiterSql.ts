@@ -21,6 +21,7 @@ const Saved = Schema.Struct({
 });
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Saved));
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Saved));
 
 const fail = (cause: unknown) =>
@@ -33,6 +34,7 @@ const unsupported = Effect.fail(fail(new Error("Unsupported gateway budget opera
 const make = (sql: Sql, options: { readonly build: string; readonly policy: Policy }) => {
   const checked = Schema.decodeUnknownResult(Policy)(options.policy);
   const build = options.build;
+
   return RateLimiter.RateLimiterStore.of({
     fixedWindow: Effect.fnUntraced(function* (
       request: Parameters<(typeof RateLimiter.RateLimiterStore)["Service"]["fixedWindow"]>[0],
@@ -48,6 +50,7 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
       }
 
       const at = yield* Clock.currentTimeMillis;
+
       return yield* Effect.try({
         try: () =>
           sql.transaction(() => {
@@ -58,11 +61,13 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
             sql.exec("DELETE FROM gateway_limits WHERE until<=?", at);
             const row = sql.exec("SELECT until,value FROM gateway_limits WHERE sender=?", request.key)[0];
             const model = row === undefined ? Rate.machine.init(null, {})[0] : decode(row.value).model;
+
             const [next, commands] = applyCell<
               typeof Rate.Model.Type,
               typeof Rate.machine.msg.Type,
               ReturnType<typeof Rate.machine.init>[1][number]
             >(Rate.machine, model, { type: "take", at, policy });
+
             const command = commands[0];
 
             if (command === undefined) {
@@ -86,6 +91,7 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
               next.until,
               encode({ v: 1, build, model: next }),
             );
+
             return decision._tag === "allowed"
               ? ([decision.count, decision.ttl] as const)
               : ([policy.limit + 1, decision.retryAfter] as const);

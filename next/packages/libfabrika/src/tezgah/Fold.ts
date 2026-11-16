@@ -82,6 +82,7 @@ export const lengths = (
   }
 
   const rest = total - held.percent;
+
   return node.parts.map((p, i) =>
     i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
   );
@@ -96,6 +97,7 @@ export const lengths = (
  */
 export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect> => {
   const out = new Map<TileId, Rect>();
+
   const band = (tiles: ReadonlyArray<TileId>, r: Rect, upright: boolean) => {
     const each = Math.max(0, ((upright ? r.height : r.width) - (tiles.length - 1) * GAP) / tiles.length);
 
@@ -104,9 +106,11 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
       out.set(t, upright ? { ...r, y: r.y + at, height: each } : { ...r, x: r.x + at, width: each });
     }
   };
+
   const walk = (node: Layout, r: Rect): void => {
     if (typeof node === "string") {
       out.set(node, r);
+
       return;
     }
 
@@ -116,6 +120,7 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
 
     for (const [i, p] of node.parts.entries()) {
       const share = shares[i] ?? 0;
+
       const box = row
         ? { x: at, y: r.y, width: share, height: r.height }
         : { x: r.x, y: at, width: r.width, height: share };
@@ -129,7 +134,9 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
       at += share + GAP;
     }
   };
+
   walk(w.layout, { x: 0, y: 0, width: size.width, height: size.height });
+
   return out;
 };
 
@@ -146,8 +153,10 @@ export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
 
   for (;;) {
     const boxes = drawn(w, size, strips);
+
     const due = order(w.layout).filter((t) => {
       const r = boxes.get(t);
+
       return (
         !strips.has(t) && t !== w.focus && r !== undefined && (r.width < SMALLEST.width || r.height < SMALLEST.height)
       );

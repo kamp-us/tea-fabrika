@@ -26,7 +26,9 @@ type Part = {
 };
 
 const SEED = 119120;
+
 const pageBoundary: [number, string, number] = [503, "private failure", 42];
+
 const rollAtCap: [number[], number, number] = [[1, 2], 1000, 0];
 
 /** The page law's three generators, in their order: total, content, deletion time. */
@@ -64,10 +66,12 @@ const reopen = (open: Open, total: number, content: string, at: number) =>
       // oxlint-disable-next-line fabrika/no-promises -- edge: the law loads the adapter as its wiring plant does
       const { recordPart } = yield* Effect.promise(() => import("./RecordPart.ts"));
       const store = yield* open("file");
+
       const rows = Array.from({ length: total }, (_, n) => ({
         span: span(n),
         content: n === total - 1 ? content : null,
       }));
+
       yield* store.use((sql) =>
         Effect.gen(function* () {
           const part: Part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);

@@ -69,12 +69,14 @@ describe("P39 slice 1: the task's schemas", () => {
     fc.assert(
       fc.property(Values, ({ request, executor, result, recorded, execution, letter, collector, rev, arrivedAt }) => {
         const collection = { process: request.process, letter };
+
         const collected = State.cases.collected.make({
           request,
           assignment: { execution, executor },
           result,
           collection,
         });
+
         const event = { ...recorded, event: "collected" as const, rev, arrivedAt };
 
         for (const [schema, value] of [

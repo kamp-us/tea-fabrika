@@ -14,11 +14,14 @@ const database = (path: string): Effect.Effect<RunnerInitTest.Database, never, S
     const open = (): Handle => {
       const db = new DatabaseSync(path);
       db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+
       return { db, sql: nodeSql(db) };
     };
+
     const held = yield* Effect.acquireRelease(Effect.sync(open), (handle: Handle) =>
       Effect.sync(() => handle.db.isOpen && handle.db.close()),
     );
+
     return {
       sql: {
         exec: (query: string, ...params: ReadonlyArray<SqlValue>) => held.sql.exec(query, ...params),
@@ -36,6 +39,7 @@ const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t762-init-" });
+
   return (name: string) => database(path.join(folder, `${name}.db`));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 

@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-hand-tag)";
+
 const FIRES = "next/packages/libfabrika/src/coordination/fires.ts";
+
 const PASSES = "next/packages/libfabrika/src/coordination/passes.ts";
+
 const LOG = "next/packages/libfabrika/src/ledger/Log.ts";
 
 const fires = [

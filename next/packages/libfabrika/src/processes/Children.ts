@@ -50,6 +50,7 @@ export const Child = Schema.Struct({
   /** The child's first letter, written in the start's own turn. */
   input: Schema.optionalKey(Schema.Json),
 });
+
 /**
  * One request to start a child, as `Child` decodes it.
  *
@@ -71,6 +72,7 @@ export const Started = Schema.TaggedUnion({
   /** Known, not running: its current, newest life ended or went down. */
   already_present: { process: ProcessId, name: Text },
 });
+
 /**
  * The answer to one start, as `Started` decodes it: a fresh start, a name whose process is already
  * live, or a name that is known but not running.

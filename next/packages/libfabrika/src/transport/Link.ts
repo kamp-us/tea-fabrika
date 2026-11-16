@@ -15,17 +15,22 @@ import { Schema } from "effect";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;
+
 /** How long a dial may take to be admitted or told to wait before it counts as stalled. */
 const DIALING = 15_000;
+
 /** How often an online link checks the brain with `ping`, at most: a missed `pong` by the next
  *  check is a hang. The brain's own interval (`ping` from `initialize`) is the upper bound. */
 const BEAT = 5_000;
+
 /** How often a grant wait knocks again, which keeps its code or renews an expired one. */
 const RENEW = CAP;
+
 /** The close code the door sends when the key's grant was removed. */
 const REMOVED = 4003;
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export const Link = Schema.TaggedUnion({
@@ -49,9 +54,11 @@ export const Link = Schema.TaggedUnion({
   /** The client cannot go on, such as a key store that failed. */
   blocked: { reason: Schema.String },
 });
+
 export type Link = typeof Link.Type;
 
 const OnDial = { dial: Dial };
+
 /** How long the dial took to reach an outcome, in ms: a measurement, never authority. */
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
@@ -83,6 +90,7 @@ export const LinkMsg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("blocked"), reason: Schema.String }),
   Schema.Struct({ type: Schema.Literal("ask_again"), ...OnDial }),
 ]);
+
 export type LinkMsg = typeof LinkMsg.Type;
 
 /** Send the text `ping` on the dial's socket; the brain answers `pong`. */
@@ -113,10 +121,12 @@ export const linkTimer = (link: Link): { readonly after: number; readonly msg: L
       return { after: RENEW, msg: { type: "renew", dial: link.dial, knocks: link.knocks ?? 0 } };
     case "online": {
       const after = Math.max(0, Math.min(link.ping, BEAT));
+
       return (link.pings ?? 0) === 0
         ? { after, msg: { type: "beat", dial: link.dial } }
         : { after, msg: { type: "stalled", dial: link.dial, ms: after } };
     }
+
     case "retrying":
       return { after: backoff(link.tries), msg: { type: "retry", dial: link.dial, tries: link.tries } };
     case "removed":
@@ -128,6 +138,7 @@ export const linkTimer = (link: Link): { readonly after: number; readonly msg: L
 /** The link's timer as tea's built-in `timer` Sub takes it. */
 export const timerDeps = (link: Link): { readonly ms: number; readonly msg: LinkMsg } | null => {
   const timer = linkTimer(link);
+
   return timer === null ? null : { ms: timer.after, msg: timer.msg };
 };
 
@@ -142,6 +153,7 @@ const failed = (link: Link & { readonly dial: number }): Link =>
   Link.cases.retrying.make({ dial: link.dial, tries: failures(link) + 1 });
 
 type Step = readonly [Link, ReadonlyArray<ReturnType<typeof ping> | ReturnType<typeof knock>>];
+
 const stay = (link: Link): Step => [link, []];
 
 export const linkMachine = Machine.make({
@@ -160,6 +172,7 @@ export const linkMachine = Machine.make({
       }
 
       const knocks = s._tag === "waiting_grant" ? (s.knocks ?? 0) : 0;
+
       return [
         Link.cases.waiting_grant.make({
           dial: m.dial,

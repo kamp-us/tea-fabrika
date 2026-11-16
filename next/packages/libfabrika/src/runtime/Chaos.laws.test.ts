@@ -14,9 +14,13 @@ import type { ProcessId } from "../ProcessId.ts";
 import * as Chaos from "./Chaos.ts";
 
 const arbitrary = { seed: 119120, runs: 100 };
+
 const process = "process_0000000000e008000000000000";
+
 const next = "process_0000000000e008000000000001";
+
 const other = "process_0000000000e008000000000002";
+
 const experiment = Schema.decodeUnknownSync(Id.make("chaos"))("chaos_0000000000e008000000000000");
 
 const target = {
@@ -39,9 +43,13 @@ const from = {
 
 // The planned service values keep the existing shared identities, rather than new string aliases.
 expectTypeOf<typeof Chaos.ExperimentId.Type>().toEqualTypeOf<Id.IdValue<"chaos">>();
+
 expectTypeOf<typeof Chaos.Target.Type.process>().toEqualTypeOf<typeof ProcessId.Type>();
+
 expectTypeOf<typeof Chaos.Start.Type.id>().toEqualTypeOf<typeof Chaos.ExperimentId.Type>();
+
 expectTypeOf<typeof Chaos.Fire.Type.id>().toEqualTypeOf<typeof Chaos.ExperimentId.Type>();
+
 expectTypeOf<typeof Chaos.Fire.Type.fault>().toEqualTypeOf<typeof Chaos.Fault.Type>();
 
 expectTypeOf<typeof Chaos.Fault.Type._tag>().toEqualTypeOf<
@@ -214,6 +222,7 @@ const restart = (id: string, name: string, predecessor: string, successor: strin
     reason: "crash",
     build: "test",
   });
+
   return RestartEntry.make({ ...from, id, stream: `processes/${name}`, pos: rev, rev, arrivedAt, body });
 };
 
@@ -231,6 +240,7 @@ it.prop(
   ([{ after, at, reverse, sameClock, matching }]) => {
     const hit = { name: target.name, process, after };
     const first = restart("first", target.name, process, next, after + 2, at);
+
     const rows = [
       restart("before", target.name, process, next, after - 1, at),
       restart("at-hit", target.name, process, next, after, at),
@@ -240,6 +250,7 @@ it.prop(
       { ...restart("wrong-stream", target.name, process, next, after + 1, at), stream: "processes/other:1" },
       ...(matching ? [first, restart("later", target.name, process, other, after + 3, sameClock ? at : at + 1)] : []),
     ];
+
     const input = reverse ? rows.toReversed() : rows;
     expect(Chaos.recovery(hit, input)).toEqual(
       matching ? { ref: first.id, rev: first.rev, arrivedAt: first.arrivedAt, process: next } : null,

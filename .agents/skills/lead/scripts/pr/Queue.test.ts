@@ -18,14 +18,19 @@ import * as TicketsCli from "./TicketsCli.ts";
 import * as TicketsTest from "./TicketsTest.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
+
 const merged = "feedfacefeedfacefeedfacefeedfacefeedface";
+
 const repo = "fixture/repo";
 
 const State = Schema.Literals(["OPEN", "CLOSED", "MERGED"]);
+
 /** How the required check stands at the head: not made yet, or one of GitHub's answers. */
 const Required = Schema.Literals(["none", "queued", "in_progress", "success", "failure", "cancelled", "skipped"]);
+
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+
 const refused = new LeakGrepRefused({ reason: "private_word" });
 
 /** The one leak check that refuses, with the error it refuses with. */
@@ -67,6 +72,7 @@ const memory = (w: World = {}) => {
   const remote = PushesTest.remote();
   const tracker = TicketsTest.world(w.open ?? []);
   const sweeps = SweepsTest.count();
+
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github, w.failing?.prs),
     PushesTest.layer(remote, leaking(w.leak ?? "clean")),
@@ -74,6 +80,7 @@ const memory = (w: World = {}) => {
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
   );
+
   return { github, remote, tracker, sweeps, layer };
 };
 
@@ -83,6 +90,7 @@ const add = (m: ReturnType<typeof memory>) => Queue.add({ dir: ".", pr: 900 }).p
 const added = (m: ReturnType<typeof memory>) =>
   Effect.gen(function* () {
     const answer = yield* Effect.result(Queue.add({ dir: ".", pr: 900 }));
+
     return { answer, leaks: yield* Recorder.calls(Pushes) };
   }).pipe(Effect.provide(m.layer));
 
@@ -109,6 +117,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           leak,
           required,
         });
+
         const { answer, leaks } = yield* added(m);
         const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
         expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
@@ -178,14 +187,18 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           Effect.gen(function* () {
             const m = memory();
             const layer = Layer.merge(m.layer, ChecksTest.layer(polls, ""));
+
             const fiber = yield* Queue.add({ dir: ".", pr: 900, wait: { minutes: 5, every: 60 } }).pipe(
               Effect.provide(layer),
               Effect.result,
               Effect.forkChild,
             );
+
             yield* TestClock.adjust("6 minutes");
+
             return { answer: yield* Fiber.join(fiber), calls: m.github.calls };
           });
+
         const unreachable = new ChecksError({ reason: "gh: offline" });
         const green = yield* waited([job("none"), unreachable, job("in_progress"), job("success")]);
         expect(green.answer._tag).toBe("Success");
@@ -211,6 +224,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
     ({ number, head }) => {
       const args = PullRequestsGh.mergeArgs(repo, number, head);
       expect(args).toEqual(["pr", "merge", String(number), "-R", repo, "--squash", "--match-head-commit", head]);
+
       return true;
     },
   );
@@ -219,9 +233,12 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
 describe("settle: a merged pull request closes the tickets it names (0015, T410)", () => {
   const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
   const note = `Closed by the merge of https://github.com/${repo}/pull/900, merge commit ${merged}.\n`;
+
   const landed = (body: string, w: World = {}) =>
     memory({ state: "MERGED", ...w, more: { body, mergeCommit: merged, ...w.more } });
+
   const closes = (m: ReturnType<typeof memory>) => m.tracker.posts.filter((p) => p._tag !== "list");
+
   const Noise = Schema.Array(
     Schema.Literals(["", "Done.", "close ticket 5", "fabrika close ticket", "ticket 5", "#5"]),
   );
@@ -243,12 +260,14 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
     () =>
       Effect.gen(function* () {
         const keywords = ["close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved"];
+
         const body = [
           ...keywords.flatMap((k) => [`${k} #5`, `${k.slice(0, 1).toUpperCase()}${k.slice(1)} #5`, `${k}: 5`]),
           "Ticket: 5",
           "Closes-ticket: 5",
           "T5 build: the fix",
         ].join("\n");
+
         const m = landed(body, { open: [5] });
         yield* settle(m);
         expect(m.tracker.posts).toEqual([]);
@@ -281,12 +300,14 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
     ({ named, open, lead, trail, crlf }) =>
       Effect.gen(function* () {
         const isOpen = (n: number) => open[named.indexOf(n as never)] === true;
+
         // A repeated line closes its ticket once.
         const rows = [
           "Done.",
           ...named.map((n) => `${lead}fabrika close ticket ${n}${trail}`),
           `fabrika close ticket ${named[0]}`,
         ];
+
         const m = landed(rows.join(crlf ? "\r\n" : "\n"), { open: named.filter(isOpen) });
         const done = yield* settle(m);
         expect(m.tracker.posts[0]).toEqual({ _tag: "list" });
@@ -317,6 +338,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
       const m = landed("Builds the close.\n\nfabrika close ticket 410\nfabrika close ticket 411\n", {
         open: [410, 411],
       });
+
       const done = yield* settle(m);
       expect(closes(m).map((p) => [p._tag, "ticket" in p ? p.ticket : null])).toEqual([
         ["comment", 410],
@@ -354,6 +376,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
           more: { body: "fabrika close ticket 5", base: world.base, mergeCommit: world.commit },
           open: [5],
         });
+
         const done = yield* settle(m);
         expect(done._tag).toBe("unmerged");
         expect(done.lines).toHaveLength(1);
@@ -371,10 +394,12 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
       Effect.gen(function* () {
         const tickets =
           failing === "open" || failing === "comment" || failing === "close" ? { [failing]: "ERROR refused" } : {};
+
         const m = landed("fabrika close ticket 5", {
           open: [5],
           failing: { tickets, ...(failing === "sweep" ? { sweep: "no node" } : {}) },
         });
+
         const done = yield* settle(m);
         expect(done._tag).toBe("merged");
         expect(m.sweeps.kicks).toBe(1);
@@ -417,6 +442,7 @@ describe("closeOnly: closes the named tickets and starts no sweep (0015)", () =>
           open: open ? [5] : [],
           more: { body, base, mergeCommit: confirmed ? merged : null },
         });
+
         const done = yield* run(m);
         const lands = state === "MERGED" && confirmed && base === "main";
         expect(done._tag).toBe(lands ? "merged" : "unmerged");

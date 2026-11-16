@@ -11,10 +11,15 @@ import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
 
 const seed = 119120;
+
 const options = { seed, numRuns: 100 };
+
 const effectOptions = { arbitrary: { seed, runs: 40 } };
+
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+
 const maxClock = 2 ** 48 - 1;
+
 const letters = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz");
 
 const text = (minLength: number, maxLength: number) =>
@@ -63,14 +68,17 @@ const uuid = fc.tuple(clock, fc.uint8Array({ minLength: 10, maxLength: 10 })).ma
     ...Array.from({ length: 6 }, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
     ...random,
   ]);
+
   bytes[6] = (bytes[6]! & 15) | 0x70;
   bytes[8] = (bytes[8]! & 63) | 0x80;
+
   return bytes;
 });
 
 // Independent oracle: follow the spec's bit-string recipe, not the generator's shift loop.
 const referenceEncode = (bytes: Uint8Array): string => {
   const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
+
   return Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join("");
 };
 
@@ -79,6 +87,7 @@ const referenceDecode = (suffix: string): Uint8Array => {
     .map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
     .join("")
     .slice(2);
+
   return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
 };
 
@@ -86,6 +95,7 @@ const wire = (type: string, bytes: Uint8Array): string => (type === "" ? "" : `$
 
 const split = (value: string): readonly [string, string] => {
   const separator = value.lastIndexOf("_");
+
   return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
 };
 
@@ -120,10 +130,12 @@ const accepts = (input: unknown, type?: string): boolean => {
   }
 
   const bytes = referenceDecode(suffix);
+
   return bytes[6]! >>> 4 === 7 && bytes[8]! >>> 6 === 2;
 };
 
 const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes));
+
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
 const expectDecoded = <A, E>(
@@ -168,7 +180,9 @@ const refuses = (marker: string) => (): never => {
 };
 
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock }));
+
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 128 }));
+
 const Prefix = Schema.String.check(Schema.isPattern(/^[a-z](?:[a-z_]{0,61}[a-z])?$/));
 
 const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, failureReason: string): void => {
@@ -206,6 +220,7 @@ describe("T518 Id format", () => {
       ["add", Id.Add],
       ["deny", Id.Deny],
     ] as const;
+
     fc.assert(
       fc.property(uuid, prefix, (bytes, type) => {
         for (const [name, Specific] of builtins) {
@@ -258,13 +273,16 @@ describe("T518 Id format", () => {
       fc.property(prefix, badPrefixShapes, (type, bad) => {
         for (const name of [type, ...bad]) {
           const spans: Array<Tracer.NativeSpan> = [];
+
           const tracer = Tracer.make({
             span(options) {
               const span = new Tracer.NativeSpan(options);
               spans.push(span);
+
               return span;
             },
           });
+
           const exit = Effect.runSync(Effect.exit(Id.makeEffect(name)).pipe(Effect.withTracer(tracer)));
           expect(Exit.isSuccess(exit)).toBe(validPrefix(name));
           const made = spans.filter((span) => span.name === "id.makeEffect");
@@ -301,10 +319,12 @@ describe("T518 Id format", () => {
       Effect.gen(function* () {
         const Specific = Id.make(type);
         const Other = Id.make(type === "process" ? "letter" : "process");
+
         const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(Specific), {
           count: 200,
           seed: sampleSeed,
         });
+
         expect(values).toHaveLength(200);
 
         for (const value of values) {
@@ -348,11 +368,15 @@ describe("T518 Id format", () => {
         (type, bytes, index, overflow, version, variant, count) => {
           const raw = wire(type, bytes),
             suffix = referenceEncode(bytes);
+
           const head = type === "" ? "" : `${type}_`;
+
           const wrongVersion = bytes.slice(),
             wrongVariant = bytes.slice();
+
           wrongVersion[6] = (bytes[6]! & 15) | (version << 4);
           wrongVariant[8] = (bytes[8]! & 63) | (variant << 6);
+
           const bad = [
             raw.toUpperCase(),
             head + suffix.toUpperCase(),
@@ -371,6 +395,7 @@ describe("T518 Id format", () => {
             ),
             ...(type === "" ? [`_${suffix}`] : [type + suffix, `${type}__${suffix}`]),
           ];
+
           const Specific = Id.make(type);
 
           for (const value of bad) {
@@ -397,8 +422,10 @@ describe("T518 Id format", () => {
     fc.assert(
       fc.property(prefix, uuid, (type, bytes) => {
         const other = type === "process" ? "letter" : "process";
+
         const left = wire(type, bytes),
           right = wire(other, bytes);
+
         expect(Schema.is(Id.make(type))(left)).toBe(true);
         expect(Schema.is(Id.make(other))(right)).toBe(true);
         expect(Schema.is(Id.Schema)(wire("", bytes))).toBe(false);
@@ -506,8 +533,10 @@ describe("T518 Id format", () => {
     fc.assert(
       fc.property(unknown, uuid, (input, bytes) => {
         const Specific = Id.make("process");
+
         const wrongVersion = bytes.slice(),
           wrongVariant = bytes.slice();
+
         wrongVersion[6] = (bytes[6]! & 15) | 0x40;
         wrongVariant[8] = bytes[8]! & 63;
 
@@ -544,13 +573,16 @@ describe("T518 Id order and generation", () => {
     { at: Time, type: Prefix },
     ({ at, type }) => {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span(settings) {
           const span = new Tracer.NativeSpan(settings);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         const Specific = Id.make(type);
         const generator = yield* Id.Generator;
@@ -596,6 +628,7 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make(type);
         const generator = yield* Id.Generator;
+
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
           if (array instanceof Uint8Array) {
             array.fill(0);
@@ -606,9 +639,11 @@ describe("T518 Id order and generation", () => {
 
         try {
           yield* TestClock.setTime(at);
+
           const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
             concurrency: 1,
           });
+
           increasing(ids);
 
           for (const id of ids) {
@@ -637,11 +672,14 @@ describe("T518 Id order and generation", () => {
             ...values.map(([type, bytes]) => wire(type, bytes)),
             ...shapes.map((type) => wire(type, tied)),
           ].map((raw) => Id.Schema.make(raw));
+
           const expected = [...ids].sort((left, right) => {
             const [lp, ls] = split(left),
               [rp, rs] = split(right);
+
             return compare(ls, rs) || compare(lp, rp);
           });
+
           expect([...ids].sort(Id.Order)).toEqual(expected);
 
           for (const left of ids) {
@@ -650,6 +688,7 @@ describe("T518 Id order and generation", () => {
             for (const right of ids) {
               const [lp, ls] = split(left),
                 [rp, rs] = split(right);
+
               expect(Id.Order(left, right)).toBe(compare(ls, rs) || compare(lp, rp));
             }
           }
@@ -665,6 +704,7 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("letter");
         const generator = yield* Id.Generator;
+
         // Zero entropy keeps a burst at the last millisecond inside the clock's range.
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
           if (array instanceof Uint8Array) {
@@ -677,9 +717,11 @@ describe("T518 Id order and generation", () => {
         try {
           for (const now of [0, at, maxClock]) {
             yield* TestClock.setTime(now);
+
             const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
               concurrency: 1,
             });
+
             increasing(ids);
 
             for (const id of ids) {
@@ -733,6 +775,7 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
         const generator = yield* Id.Generator;
+
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
           if (array instanceof Uint8Array) {
             array.fill(255);
@@ -744,9 +787,11 @@ describe("T518 Id order and generation", () => {
         try {
           const now = Math.min(at, maxClock - 1);
           yield* TestClock.setTime(now);
+
           const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
             concurrency: 1,
           });
+
           increasing(ids);
           expect(timestamp(ids[0]!)).toBe(now);
 
@@ -785,10 +830,13 @@ describe("T518 Id order and generation", () => {
               Infinity,
             ]) {
               yield* TestClock.setTime(now);
+
               const exit = yield* Effect.gen(function* () {
                 const generator = yield* Id.Generator;
+
                 return yield* generator.next(Specific);
               }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
+
               expectIdFailure(exit, "clock");
             }
           } finally {
@@ -805,6 +853,7 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
         const generator = yield* Id.Generator;
+
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
           if (array instanceof Uint8Array) {
             array.fill(255);
@@ -840,6 +889,7 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("letter");
         const start = Math.min(at, maxClock - 10_000);
+
         // A collision sample, not a proof. Fresh provide calls build independent layers, including
         // writers restarted on exactly the same schedule. Entropy is real, never stubbed here.
         const batches = yield* Effect.forEach(
@@ -847,11 +897,13 @@ describe("T518 Id order and generation", () => {
           () =>
             Effect.gen(function* () {
               const generator = yield* Id.Generator;
+
               return yield* Effect.forEach(
                 [0, 0, -1, ...schedule],
                 (delta) =>
                   Effect.gen(function* () {
                     yield* TestClock.setTime(Math.max(0, start + delta));
+
                     return yield* generator.next(Specific);
                   }),
                 { concurrency: 1 },
@@ -859,6 +911,7 @@ describe("T518 Id order and generation", () => {
             }).pipe(Effect.provide(Id.Generator.layer)),
           { concurrency: 1 },
         );
+
         const ids = batches.flat();
         expect(new Set(ids).size).toBe(ids.length);
 
@@ -915,8 +968,10 @@ describe("T518 Id order and generation", () => {
 
         try {
           const generator = yield* Id.Generator;
+
           const Input = Id.make("input"),
             Chaos = Id.make("chaos");
+
           // Leave room above the longest rollback, so all-ones entropy never reaches the last millisecond.
           const start = Math.min(at, maxClock - 1_000_010_000);
           const suffixes: Array<string> = [];
@@ -925,6 +980,7 @@ describe("T518 Id order and generation", () => {
           for (const now of [start, start, start + rollback, start, start - 1, ...deltas.map((n) => start + n)]) {
             yield* TestClock.setTime(Math.max(0, now));
             highest = Math.max(highest, Math.max(0, now));
+
             const input = yield* generator.next(Input),
               chaos = yield* generator.next(Chaos);
 
@@ -960,6 +1016,7 @@ describe("T518 shared Id generator", () => {
       readonly work: ReadonlyArray<number>;
     }>;
   };
+
   const checkSchedule = async (schedule: Schedule) => {
     const Specific = Id.make(schedule.type);
     const allocated: Array<string> = [];
@@ -970,6 +1027,7 @@ describe("T518 shared Id generator", () => {
     }
 
     const validate = check.run;
+
     // The real format check runs synchronously after the state write and encoding.
     // Observe there: a fiber can yield between allocation and returning to its caller.
     const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
@@ -979,6 +1037,7 @@ describe("T518 shared Id generator", () => {
 
       return validate(input, self, options);
     });
+
     const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
       if (array instanceof Uint8Array) {
         array.fill(schedule.entropy);
@@ -1016,6 +1075,7 @@ describe("T518 shared Id generator", () => {
           return ids;
         }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
       );
+
       expect(allocated).toHaveLength(returned.length);
       expect([...allocated].sort()).toEqual([...returned].sort());
       increasing(allocated);
@@ -1024,6 +1084,7 @@ describe("T518 shared Id generator", () => {
       decoding.mockRestore();
     }
   };
+
   it("shared fibers allocate unique, strictly increasing ids over generated schedules", async () => {
     await fc.assert(
       fc.asyncProperty(

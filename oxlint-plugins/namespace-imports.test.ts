@@ -52,6 +52,7 @@ const stem = (glob: string): string => glob.split("*")[0] ?? glob;
 /** `outer` reads every file `glob` reads: the same glob, or a `**` glob over a parent folder with the same ending. */
 const covers = (outer: string, glob: string): boolean => {
   const [folder, ending] = outer.split("/**/");
+
   return outer === glob || (ending !== undefined && glob.startsWith(`${folder}/`) && glob.endsWith(`/${ending}`));
 };
 
@@ -86,13 +87,16 @@ const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<st
     for (const override of overrides) {
       const options = record(override.options);
       const include = strings(override.include);
+
       const sets = {
         packages: "namespaceImportPackages" in options,
         severity: "preferNamespaceImport" in record(options.diagnosticSeverity),
       };
+
       const raises =
         (!sets.packages || list(options.namespaceImportPackages).includes("effect")) &&
         (!sets.severity || record(options.diagnosticSeverity).preferNamespaceImport === "error");
+
       const reads = raises
         ? include.some((outer) => covers(outer, glob)) &&
           !strings(override.exclude).some((excluded) => touches(excluded, glob))

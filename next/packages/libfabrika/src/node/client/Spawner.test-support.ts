@@ -48,11 +48,14 @@ export const spawner = (child: Child, seen: Seen) =>
 
         const killed = yield* Deferred.make<void>();
         const tail = child.endless ? Stream.never : Stream.empty;
+
         const on = (to: "out" | "err") =>
           Stream.fromIterable(child.chunks.filter((c) => c.to === to).map((c) => c.bytes)).pipe(Stream.concat(tail));
+
         return yield* Effect.acquireRelease(
           Effect.sync(() => {
             seen.spawns++;
+
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(4100 + seen.spawns),
               exitCode: child.endless

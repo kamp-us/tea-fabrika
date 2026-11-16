@@ -137,9 +137,11 @@ const sh = Effect.fn("land.sh")(
       cwd,
       ...(stdin === undefined ? {} : { stdin: Stream.make(new TextEncoder().encode(stdin)) }),
     });
+
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
       concurrency: 3,
     });
+
     return { code: Number(code), out, err } satisfies Ran;
   },
   Effect.scoped,
@@ -174,7 +176,9 @@ const loadEnv = Effect.gen(function* () {
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME" "${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}"',
     `${HERE}/env.sh`,
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = "", COAUTHOR = "", HOME = "", TRACKER_HOME = ""] = out.split("\n");
+
   return { MAIN, BOXES, GH_REPO, COAUTHOR, HOME, TRACKER_HOME };
 });
 
@@ -198,6 +202,7 @@ const stepOwning = (owners: Readonly<Record<string, string>>, path: string): str
   const under = Object.keys(owners)
     .filter((row) => row.endsWith("/") && path.startsWith(row))
     .toSorted((a, b) => b.length - a.length)[0];
+
   return under === undefined ? "no row in the plan" : (owners[under] ?? "no row in the plan");
 };
 
@@ -210,6 +215,7 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
   }
 
   const ran = yield* sh(main, "sh", [`${main}/.agents/skills/plan/scripts/plancheck.sh`, "--owners-json", plan]);
+
   return ran.code === 0 ? Schema.decodeUnknownOption(Owners)(ran.out).pipe(Option.getOrElse(() => ({}))) : {};
 });
 
@@ -217,6 +223,7 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
 const prBody = (body: string, loosening: string) => {
   const [first = "", ...rest] = body.split("\n");
   const fence = (t: string) => ["```text", t.trimEnd() || "(empty)", "```"];
+
   return {
     title: first.replace(/^#+\s*/, "").trim(),
     body: [rest.join("\n").trim(), "", "## Loosening", "", ...fence(loosening), ""].join("\n"),
@@ -297,6 +304,7 @@ const ready = Command.make(
       plan: Option.getOrUndefined(Option.map(ask.plan, (p) => path.resolve(p))),
       sentAt: DateTime.formatIso(yield* DateTime.now),
     });
+
     yield* fs.makeDirectory(`${env.BOXES}/state`, { recursive: true });
     yield* fs.writeFileString(`${env.BOXES}/state/${ask.quest}.land.json`, Schema.encodeSync(ReadyJson)(record));
     yield* note(
@@ -328,6 +336,7 @@ const gitIn =
 export const readReady = Effect.fn("land.readReady")(function* (quest: string, ticket: string) {
   const fs = yield* FileSystem.FileSystem;
   const env = yield* loadEnv;
+
   const ready = yield* fs.readFileString(`${env.BOXES}/state/${quest}.land.json`).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ReadyJson)),
     Effect.mapError(
@@ -335,6 +344,7 @@ export const readReady = Effect.fn("land.readReady")(function* (quest: string, t
         new Refused({ check: "ready", reason: `no readable state/${quest}.land.json: run land.ts ready`, output: "" }),
     ),
   );
+
   return { quest, ticket, ready, env } satisfies Quest;
 });
 
@@ -370,6 +380,7 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ quest, ready, env 
   const file = `${env.BOXES}/${quest}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
+
   return { title: posted.title, file };
 });
 
@@ -398,7 +409,9 @@ export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: 
       const conflicts = (yield* sh(ready.tree, "git", ["diff", "--name-only", "--diff-filter=U"])).out
         .split("\n")
         .filter((p) => p !== "");
+
       const owners = yield* planOwners(env.MAIN, ready.plan);
+
       return yield* new Refused({
         check: "merge",
         reason: [
@@ -416,6 +429,7 @@ export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: 
 /** Leak-greps the branch's net change from main and each commit a push would send (0048). */
 export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Quest, main: string) {
   const leakgrep = `${HERE}/leakgrep.sh`;
+
   const diff = yield* gitIn(ready.tree)(
     "leak",
     "the diff from main does not read",
@@ -425,6 +439,7 @@ export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Quest
     "--unified=0",
     `${main}...HEAD`,
   );
+
   yield* must("leak", "the leak grep refused the branch's change", ready.tree, "sh", [leakgrep], `${diff}\n`);
   yield* must("leak", "the leak grep refused a commit", ready.tree, "sh", [
     leakgrep,
@@ -446,6 +461,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
   merged: boolean,
 ) {
   const git = gitIn(ready.tree);
+
   const commits = (yield* git(
     "sign",
     "the quest's commits do not read",
@@ -454,6 +470,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
     "--topo-order",
     `${main}..HEAD`,
   )).split("\n");
+
   const missing = ready.lead.filter((sha) => !commits.includes(sha));
 
   if (missing.length > 0) {
@@ -466,6 +483,7 @@ export const signLead = Effect.fn("land.signLead")(function* (
 
   const signer = `${env.MAIN}/next/apps/fabrika/src/exam/commits.ts`;
   const key = `${env.HOME}/.fabrika/step-keys/lead`;
+
   const sign = (at: string, subject: string) =>
     must("sign", `the sign script refused ${subject}`, at, "node", [
       signer,
@@ -515,6 +533,7 @@ export const push = Effect.fn("land.push")(function* ({ ready }: Quest) {
     target,
     "HEAD",
   ]);
+
   return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
 });
 
@@ -537,6 +556,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
     "-q",
     ".[0].number",
   ]);
+
   const open = Number(listed);
 
   if (listed !== "" && Number.isInteger(open) && open > 0) {
@@ -550,6 +570,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
       "-F",
       `body=@${draft.file}`,
     ]);
+
     return open;
   }
 
@@ -565,6 +586,7 @@ export const openPr = Effect.fn("land.openPr")(function* (
     "--body-file",
     draft.file,
   ]);
+
   const number = Number(/\/pull\/(\d+)/.exec(made)?.[1]);
 
   if (!Number.isInteger(number)) {
@@ -603,6 +625,7 @@ export const queue = Effect.fn("land.queue")(function* (env: Env, pr: number, wa
 /** Puts HEAD and the notes back as they were before the merge: the tree was clean, so nothing else is lost. */
 const rollback = Effect.fn("land.rollback")(function* ({ ready }: Quest) {
   const notes = yield* sh(ready.tree, "git", ["rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
+
   return Effect.gen(function* () {
     yield* sh(ready.tree, "git", ["merge", "--abort"]);
     yield* sh(ready.tree, "git", ["reset", "-q", "--hard", ready.head]);
@@ -625,13 +648,16 @@ const run = Command.make(
     yield* checkTree(quest);
     const draft = yield* draftPr(quest);
     const back = yield* rollback(quest);
+
     // Every refusal before the push changes nothing.
     const { main, signed, target, tip } = yield* Effect.gen(function* () {
       const { main, merged } = yield* mergeMain(quest);
       yield* leakCheck(quest, main);
       const signed = yield* signLead(quest, main, merged);
+
       return { main, signed, ...(yield* push(quest)) };
     }).pipe(Effect.onError(() => back));
+
     yield* say(`main at ${main.slice(0, 8)}, signed ${signed} lead commits, pushed ${target} at ${tip.slice(0, 8)}`);
 
     if (draft === undefined) {
@@ -661,6 +687,7 @@ const armCommand = Command.make(
   { pr: PrNumber },
   Effect.fn("land.armCommand")(function* ({ pr }) {
     const env = yield* loadEnv;
+
     const armed = yield* Arm.arm({ repo: env.GH_REPO, pr }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -671,6 +698,7 @@ const armCommand = Command.make(
       ),
       Effect.mapError((e) => new Refused({ check: "arm", reason: e.reason, output: "" })),
     );
+
     yield* Console.log(Arm.line(armed));
   }),
 );
@@ -686,6 +714,7 @@ const merged = Command.make(
         Effect.provide(queueServices(env)),
         Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
       );
+
       yield* Console.log(settled.lines.join("\n"));
     }
   }),
@@ -702,6 +731,7 @@ const closeNamed = Command.make(
         Effect.provide(queueServices(env)),
         Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
       );
+
       yield* Console.log(settled.lines.join("\n"));
     }
   }),

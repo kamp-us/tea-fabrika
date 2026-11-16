@@ -86,6 +86,7 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
   }
 
   const at = yield* Clock.currentTimeMillis;
+
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
     store: fileStore(options.state, parse, { fenced: true }),
@@ -95,6 +96,8 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
     },
     terminal: (m) => m._tag !== "running",
   });
+
   const runtime = yield* handle.ready;
+
   return yield* runtime.done();
 }, Effect.scoped);

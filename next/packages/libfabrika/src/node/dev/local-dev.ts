@@ -22,8 +22,11 @@ import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
 
 type Life = typeof devLife.model.Type;
+
 type LifeMsg = typeof devLife.msg.Type;
+
 type Replacing = typeof DevState.cases.replacing.Type;
+
 type Signal = Replacing["signal"];
 
 /**
@@ -49,11 +52,14 @@ type Signal = Replacing["signal"];
 export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
   const state = yield* SubscriptionRef.make(devLife.init(null, { last })[0]);
   const turn = yield* Semaphore.make(1);
+
   const fold = (msg: LifeMsg) =>
     SubscriptionRef.modify(state, (prev) => {
       const [next] = applyCell(devLife, prev, msg);
+
       return [[prev, next] as const, next];
     });
+
   return {
     state,
     send: (msg: LifeMsg) => turn.withPermit(fold(msg)),
@@ -71,6 +77,7 @@ export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
           }
 
           yield* then(prev, next);
+
           return true;
         }),
       ),
@@ -194,8 +201,10 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
 }) {
   const { life, sample, record } = options;
   const { pid } = sample;
+
   const send = (prev: Life, next: Replacing) =>
     record(prev, next).pipe(Effect.andThen(options.signal(pid, next.signal)));
+
   const terming = yield* life.step(
     { type: "replacing", ...sample },
     (prev, next): next is Replacing => prev._tag !== "replacing" && next._tag === "replacing",
@@ -210,6 +219,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
     Stream.filter((s) => s._tag !== "replacing" || s.pid !== pid),
     Stream.runHead,
   );
+
   const ended = yield* gone.pipe(Effect.timeoutOption(options.grace));
 
   if (Option.isSome(ended)) {
@@ -222,6 +232,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
       prev._tag === "replacing" && prev.signal === "SIGTERM" && next._tag === "replacing" && next.signal === "SIGKILL",
     send,
   );
+
   return killing ? Ended.cases.killed.make({}) : Ended.cases.itself.make({});
 });
 
@@ -248,21 +259,25 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const file = path.join(home, "brain.pending.jsonl");
   const lastFile = path.join(home, "brain.last.json");
   const turn = yield* Semaphore.make(1);
+
   const read = Effect.gen(function* () {
     if (!(yield* fs.exists(file))) {
       return [];
     }
 
     const text = yield* fs.readFileString(file);
+
     return yield* Effect.forEach(
       text.split("\n").filter(Boolean),
       (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
   }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
+
   const durableWrite = Effect.fnUntraced(
     function* (target: string, text: string) {
       yield* fs.makeDirectory(home, { recursive: true });
@@ -285,8 +300,10 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     },
     Effect.mapError((cause) => new BrainError({ reason: "storage", cause })),
   );
+
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
     durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
+
   const last = Effect.fnUntraced(function* () {
     const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
 
@@ -304,6 +321,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       );
     }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
   });
+
   const saveLast = Effect.fnUntraced(function* () {
     const start = yield* last();
 
@@ -313,6 +331,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 
     yield* durableWrite(lastFile, JSON.stringify(start));
   });
+
   return {
     last: last().pipe(turn.withPermit),
     pending: read.pipe(turn.withPermit),
@@ -321,6 +340,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
           Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })),
         );
+
         const rows = yield* read;
         const old = rows.find((row) => row.id === event.id);
 

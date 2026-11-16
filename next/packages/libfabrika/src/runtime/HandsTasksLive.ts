@@ -40,6 +40,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
       const ask = Effect.fn("hands_tasks.ask")(
         function* (ask: typeof Ask.Type, from: From) {
           yield* Effect.annotateCurrentSpan({ "fab.hands.task": ask.id });
+
           const saved = yield* tasks.read(ask.id).pipe(
             Effect.catchIf(
               (error) => error.reason === "not_found",
@@ -53,6 +54,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
             }
 
             const request = { ...ask, needs: needs(ask.command), target: options.target, settings: options.settings };
+
             return Reply.cases.waiting.make(yield* tasks.request(request, from));
           }
 
@@ -75,6 +77,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
           }
 
           const receipt = yield* tasks.collected(ask.id, { process: ask.process, letter: `${ask.id}/answer` }, from);
+
           return Reply.cases.finished.make({ result: s.result, ...receipt });
         },
         Effect.catchTag("TasksError", translated),

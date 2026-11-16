@@ -17,14 +17,17 @@ const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ pr
 const store = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const opened = new DatabaseSync(paths.join(path, "ledger.db"));
       opened.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
       return opened;
     }),
     (opened) => Effect.sync(() => opened.isOpen && opened.close()),
   );
+
   return { sql: nodeSql(db) } satisfies RelationsTest.Store;
 });
 

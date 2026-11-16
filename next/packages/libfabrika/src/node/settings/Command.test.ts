@@ -42,9 +42,12 @@ import * as Command from "./Command.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 // T753 L8 and L9 reuse these complete command flows, with every output captured below.
 const VERSION = "0.0.0";
+
 const HOME = "/t730";
 
 type Person =
@@ -119,6 +122,7 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
       },
       sink: (path) => {
         sunk.push(path);
+
         return Sink.die(new Error("the settings command wrote with sink"));
       },
     }),
@@ -129,6 +133,7 @@ const counted = (at: string, sunk: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const all = yield* Recorder.calls(FileSystem.FileSystem);
     const reads = yield* Recorder.calls(FileSystem.FileSystem, "readFileString");
+
     return {
       touched: all.filter((call) => !WRITES.has(call.method)).map((call) => call.args[0]),
       reads: reads.filter(([path]) => path === at).length,
@@ -139,13 +144,16 @@ const counted = (at: string, sunk: ReadonlyArray<string>) =>
 /** Spans, as their names, attributes, events and status. */
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       ended.push(span);
+
       return span;
     },
   });
+
   const text = () =>
     ended
       .map((span) =>
@@ -155,12 +163,14 @@ const spans = () => {
         ),
       )
       .join("\n");
+
   return { tracer, text };
 };
 
 /** Every log entry at every level, with its fields and cause. */
 const logs = () => {
   const entries: Array<string> = [];
+
   const logger = Logger.make((options) => {
     entries.push(
       JSON.stringify({
@@ -171,6 +181,7 @@ const logs = () => {
       }),
     );
   });
+
   return { layer: Logger.layer([logger]), entries };
 };
 
@@ -192,14 +203,17 @@ const run = (input: Input) => {
   const sunk: Array<string> = [];
   const traced = spans();
   const logged = logs();
+
   return Effect.gen(function* () {
     const exit = yield* Cli.runWith(Command.make({ version: VERSION }), { version: VERSION })(input.args).pipe(
       Effect.withTracer(traced.tracer),
       Effect.exit,
     );
+
     const stdout = (yield* TestConsole.logLines).map(String);
     const stderr = (yield* TestConsole.errorLines).map(String);
     const counts = yield* counted(at, sunk);
+
     return { exit, stdout, stderr, counts, spans: traced.text(), logs: logged.entries };
   }).pipe(
     Effect.provideService(References.MinimumLogLevel, "All"),
@@ -221,9 +235,11 @@ const run = (input: Input) => {
 /** The oracle: the library's own load and report for the same inputs. */
 const expected = (input: Input, flags: Readonly<Record<string, string>>, all: boolean) => {
   const at = place(input.env);
+
   const env = Object.fromEntries(
     Declarations.all.declarations.flatMap((d) => (input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]])),
   );
+
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
     Effect.map((loaded) => Print.report(Reference.rows(Declarations.all, loaded.snapshot), { all })),
     Effect.exit,
@@ -234,6 +250,7 @@ const expected = (input: Input, flags: Readonly<Record<string, string>>, all: bo
 };
 
 const port = fc.integer({ min: 1, max: 65535 });
+
 const badPort = fc.oneof(fc.integer({ min: 65536, max: 2 ** 30 }), fc.integer({ min: -(2 ** 30), max: 0 }));
 
 // The person's file: missing, empty, a valid port, or each way it can fail to load.
@@ -252,6 +269,7 @@ const person = fc.oneof(
 
 // Declared values, as a flag or in the environment, valid or not.
 const value = fc.oneof(port.map(String), badPort.map(String));
+
 const version = fc.constantFrom("0.0.0", "0.0.1", "nope");
 
 const inputs = fc.record({
@@ -268,11 +286,13 @@ it("T753 L8 explicit values equal to defaults remain visible without all", async
   await fc.assert(
     fc.asyncProperty(fc.record({ viaEnv: fc.boolean(), all: fc.boolean() }), async (v) => {
       const d = Declarations.port;
+
       const ran = await run({
         args: [...(v.all ? ["--all"] : []), ...(v.viaEnv ? [] : [`--${d.path}=${d.default}`])],
         env: { HOME, ...(v.viaEnv ? { [d.env]: String(d.default) } : {}) },
         person: { _tag: "text", text: `[instance]\nport = ${d.default}\n` },
       });
+
       expect(Exit.isSuccess(ran.exit)).toBe(true);
       expect(ran.counts.reads).toBe(1);
       expect(ran.stdout.join("\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
@@ -290,13 +310,16 @@ const shape = (g: Generated) => {
     ...(g.flagPort === undefined ? {} : { [Declarations.port.path]: g.flagPort }),
     ...(g.flagVersion === undefined ? {} : { [Declarations.version.path]: g.flagVersion }),
   };
+
   const env: Record<string, string> = {
     HOME,
     ...(g.home === "fabrika-home" ? { FABRIKA_HOME: `${HOME}/f` } : {}),
     ...(g.envPort === undefined ? {} : { [Declarations.port.env]: g.envPort }),
     ...(g.envVersion === undefined ? {} : { [Declarations.version.env]: g.envVersion }),
   };
+
   const args = [...(g.all ? ["--all"] : []), ...Object.entries(flags).map(([path, v]) => `--${path}=${v}`)];
+
   return { input: { args, env, person: g.person }, flags };
 };
 
@@ -349,6 +372,7 @@ const secret = fc
  */
 const placed = (word: string) => {
   const s = JSON.stringify(word);
+
   return fc.constantFrom(
     "[instance]\nport = 18800\n",
     `[instance]\ntoken = ${s}\n`,
@@ -379,7 +403,9 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
             ...Object.fromEntries(fields.map((f) => [f, word])),
             ...(envPort === undefined ? {} : { [Declarations.port.env]: String(envPort) }),
           };
+
           const ran = await run({ args: all ? ["--all"] : [], env, person: { _tag: "text", text } });
+
           const outputs = [
             ...ran.stdout,
             ...ran.stderr,

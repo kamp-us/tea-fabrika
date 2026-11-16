@@ -34,8 +34,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../../settings/StartsTest.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
+
 const homes: string[] = [];
+
 const sha = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
+
 // The brain's exact bytes as one string: latin1 maps each byte 0 to 255 to one char.
 const brainBytes = (file: string) => readFileSync(file, "latin1");
 
@@ -47,6 +50,7 @@ const text = fc
   .map((xs) => xs.join(""));
 
 const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1, max: 3 }) });
+
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
 
 it("A13: an actual built box exposes separate fresh, update and body-free audit calls", async () => {
@@ -60,6 +64,7 @@ it("A13: an actual built box exposes separate fresh, update and body-free audit 
             const fs = yield* FileSystem.FileSystem;
             const path = yield* Path.Path;
             const builder = yield* Effect.promise(api);
+
             const built = yield* builder.build({
               out: path.join(home, "dist"),
               root: home,
@@ -69,9 +74,11 @@ it("A13: an actual built box exposes separate fresh, update and body-free audit 
               chaos: false,
               programs: [{ name: "p13/counter", package: "@p40/counter", export: "program" }],
             });
+
             const file = path.join(home, "checked-box.mjs");
             yield* fs.writeFileString(file, built.programs["p13/counter"]!.source);
             const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
             const output = yield* spawner.string(
               ChildProcess.make(
                 process.execPath,
@@ -96,6 +103,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
                 { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
               ),
             );
+
             const actual = Schema.decodeUnknownSync(
               Schema.fromJsonString(
                 Schema.Struct({
@@ -107,12 +115,16 @@ process.stdout.write(JSON.stringify({model,records,updates}));
                 }),
               ),
             )(output);
+
             let count = 0;
+
             const types = tape.map((n) => {
               const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
               count += type === "inc" ? 1 : -1;
+
               return type;
             });
+
             expect(actual.model).toEqual({ count });
             expect(actual.updates).toBe(tape.length);
             expect(actual.records.map((r) => r.value)).toEqual(types.map((type) => ({ type })));
@@ -126,6 +138,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
 
 // A clean build measured 0.12 to 0.3 s on a laptop; 10 s per generated sample is the budget.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
+
 type Selection = { readonly name: string; readonly package: string; readonly export: string };
 
 type Built = {
@@ -165,6 +178,7 @@ const fixture = (value: string, count = 1) => {
     const short = `program${n}`,
       name = `p16/${short}`,
       pkg = join(home, "programs", short);
+
     mkdirSync(pkg, { recursive: true });
     // Workspace packages resolve by name, but their real source is outside node_modules.
     symlinkSync(pkg, join(home, "node_modules/@p16", short), "dir");
@@ -195,6 +209,7 @@ const fixture = (value: string, count = 1) => {
   });
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
   vi.stubEnv("FABRIKA_HOME", home);
+
   return {
     home,
     options: {
@@ -212,6 +227,7 @@ const fixture = (value: string, count = 1) => {
 const api = async () => {
   const file = join(import.meta.dirname, "build.ts");
   assert(existsSync(file), "P16 not built: libfabrika/build reusable one-file build is absent");
+
   return vi.importActual<Build>(pathToFileURL(file).href);
 };
 
@@ -222,6 +238,7 @@ const strings = (source: string) => {
   const parsed = parseSync("brain.mjs", source);
   assert.equal(parsed.errors.length, 0);
   const found: string[] = [];
+
   const visit = (x: unknown): void => {
     if (x === null || typeof x !== "object") {
       return;
@@ -235,7 +252,9 @@ const strings = (source: string) => {
       visit(child);
     }
   };
+
   visit(parsed.program);
+
   return found;
 };
 
@@ -274,16 +293,19 @@ await module.evaluate(); if(context.__p16Inner!==undefined)throw Error('inner co
 
 const observe = async () => {
   const emitted: string[] = [];
+
   const native = await vi.importActual<{
     rolldown: (o: RolldownOptions) => Promise<{
       generate: (o: OutputOptions) => Promise<RolldownOutput>;
       close: () => Promise<void>;
     }>;
   }>("rolldown");
+
   vi.doMock("rolldown", () => ({
     ...native,
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
+
       return {
         ...handle,
         generate: async (o: OutputOptions) => {
@@ -306,6 +328,7 @@ const observe = async () => {
     },
   }));
   vi.resetModules();
+
   return emitted;
 };
 
@@ -339,8 +362,10 @@ describe("P16 p33 one-file build", () => {
       await fc.assert(
         fc.asyncProperty(graph, async ({ text, count, chaos }) => {
           const actual = await observe();
+
           const f = fixture(text, count),
             built = await build({ ...f.options, chaos });
+
           const bytes = readFileSync(built.brain, "utf8");
           embedded(bytes, [
             ...Object.values(built.programs).map((p) => p.source),
@@ -369,11 +394,15 @@ describe("P16 p33 one-file build", () => {
       fc.asyncProperty(graph, async ({ text, count, chaos }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2030-01-01"));
+
         const a = fixture(text, count),
           first = await build({ ...a.options, chaos });
+
         vi.setSystemTime(new Date("2031-01-01"));
+
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
+
         // Plants: publish `// ${new Date().getUTCFullYear() % 7}`, or flip one byte of the second brain.
         expect(brainBytes(second.brain), "two clean builds write the same bytes").toBe(brainBytes(first.brain));
 
@@ -409,8 +438,10 @@ describe("P16 p33 one-file build", () => {
         fc.asyncProperty(text, async (value) => {
           const f = fixture(value),
             previous = `last-good-${value}`;
+
           mkdirSync(f.options.out);
           writeFileSync(join(f.options.out, "brain.mjs"), previous);
+
           const result = await Effect.runPromise(
             Effect.result(
               (await api()).build({
@@ -419,6 +450,7 @@ describe("P16 p33 one-file build", () => {
               }),
             ).pipe(Effect.provide(NodeServices.layer)),
           );
+
           expect(result).toMatchObject({
             _tag: "Failure",
             failure: { _tag: "BuildError", reason: "table" },
@@ -437,11 +469,13 @@ describe("P16 p33 one-file build", () => {
       // P40: one `/` between two segments is a qualified name, so a name's bad text puts its
       // separator inside one segment of a good name, and a bare word is bad on its own.
       const word = fc.stringMatching(/^[A-Za-z_][\w]{0,6}$/);
+
       const separated = (seps: ReadonlyArray<string>) =>
         fc.oneof(
           fc.tuple(fc.constantFrom("1", "-", " ", ".", "/"), word).map(([a, b]) => a + b),
           fc.tuple(word, fc.constantFrom(...seps), word).map((p) => p.join("")),
         );
+
       const bad = fc.oneof(
         fc.tuple(fc.constant("export" as const), separated([" ", ".", "/", ":", '"', "\n"])),
         fc.tuple(
@@ -453,8 +487,10 @@ describe("P16 p33 one-file build", () => {
           ),
         ),
       );
+
       const f = fixture("table"),
         previous = "last-good-table";
+
       mkdirSync(f.options.out);
       writeFileSync(join(f.options.out, "brain.mjs"), previous);
       const selection = f.options.programs[0]!;
@@ -468,6 +504,7 @@ describe("P16 p33 one-file build", () => {
               }),
             ).pipe(Effect.provide(NodeServices.layer)),
           );
+
           expect(result).toMatchObject({
             _tag: "Failure",
             failure: { _tag: "BuildError", reason: "table" },
@@ -486,6 +523,7 @@ describe("P16 p33 one-file build", () => {
         fc.asyncProperty(text, async (value) => {
           const f = fixture(value),
             file = join(f.home, "inner.ts");
+
           writeFileSync(file, `export const text=${JSON.stringify(`${value}\r\n\\雪</script>`)};`);
           const handle = await rolldown({ input: file });
           let source = "";
@@ -525,11 +563,17 @@ describe("P16 p33 one-file build", () => {
 // Build walks are slow (a tab build bundles Effect and React's JSX runtime), so each runs a small
 // fixed count: 4 walks of up to 4 builds, about a minute on a laptop.
 const walks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 4 }) };
+
 const walkTimeout = buildTimeout(walks.numRuns * 5);
+
 const HTML = "text/html; charset=utf-8";
+
 const JS = "text/javascript; charset=utf-8";
+
 const PAGE = "/index.html";
+
 const SCRIPT = "/window.js";
+
 const utf8 = (s: string) => Buffer.byteLength(s, "utf8");
 
 /** A module specifier naming a `node:` module: an import, a re-export, a dynamic import, a require
@@ -547,6 +591,7 @@ const parsedRules = (css: string): unknown => {
       },
     },
   });
+
   return JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 };
 
@@ -555,6 +600,7 @@ const pageRules = (page: string): unknown =>
   parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
 
 const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
+
 // A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
 const STYLE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
 
@@ -567,16 +613,19 @@ type Call = {
 // The real Rolldown, observed per call. A page made after the tab's call is in no call's output.
 const observeCalls = async () => {
   const calls: Call[] = [];
+
   const native = await vi.importActual<{
     rolldown: (o: RolldownOptions) => Promise<{
       generate: (o: OutputOptions) => Promise<RolldownOutput>;
       close: () => Promise<void>;
     }>;
   }>("rolldown");
+
   vi.doMock("rolldown", () => ({
     ...native,
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
+
       return {
         ...handle,
         generate: async (o: OutputOptions) => {
@@ -594,6 +643,7 @@ const observeCalls = async () => {
                     : new TextDecoder().decode(item.source),
             })),
           });
+
           return out;
         },
         close: () => handle.close(),
@@ -601,24 +651,29 @@ const observeCalls = async () => {
     },
   }));
   vi.resetModules();
+
   return calls;
 };
 
 /** Every span a build opened, with its attributes, events and end, as plain data. */
 const tracing = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   return { spans, tracer };
 };
 
 const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.Tracer) => {
   const work = (await api()).build(options);
+
   return Effect.runPromise(
     Effect.result(tracer === undefined ? work : work.pipe(Effect.withTracer(tracer))).pipe(
       Effect.provide(NodeServices.layer),
@@ -629,8 +684,10 @@ const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.
 /** A stylesheet of the walk: its mark, whether its text tries to end its `<style>` element, and
  *  whether the listed file holds only a local `@import` of the file with its rules. */
 type Style = { readonly mark: string; readonly trap: boolean; readonly split?: boolean };
+
 /** The tab's files now: the label its view shows and its stylesheets in page order. */
 type Tab = { readonly label: string; readonly styles: ReadonlyArray<Style> };
+
 type TabMove = "add" | "bare" | "label" | "style" | "reorder" | "trap" | "split" | "drop" | "same";
 
 // The trap sits in a comment and in a string, so a build that drops comments still meets one.
@@ -648,12 +705,14 @@ const tabHome = (value: string) => {
   mkdirSync(dir);
   const view = join(dir, "view.tsx");
   const entry = join(dir, "entry.tsx");
+
   const write = (tab: Tab) => {
     writeFileSync(view, `export const Tip = () => <b>{${JSON.stringify(tab.label)}}</b>;`);
     writeFileSync(
       entry,
       `import {Effect} from "effect"; import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(tab.label)})];`,
     );
+
     return tab.styles.map((style, n) => {
       const file = join(dir, `s${n}.css`);
 
@@ -668,6 +727,7 @@ const tabHome = (value: string) => {
       return file;
     });
   };
+
   /** A helper module chain from the entry: `depth` files, the last naming `line`. */
   const chain = (depth: number, line: string) => {
     for (let n = 1; n <= depth; n++) {
@@ -684,6 +744,7 @@ const tabHome = (value: string) => {
       } export const mounted = [Tip, Effect.succeed("boundary")];`,
     );
   };
+
   return { ...f, dir, view, entry, write, chain };
 };
 
@@ -727,6 +788,7 @@ const checkCarried = (
   } else {
     const script = built.assets[SCRIPT],
       page = built.assets[PAGE];
+
     expect(script?.type, "the tab's script is carried").toBe(JS);
     expect(page?.type, "the page is carried").toBe(HTML);
     expect(script!.body).toContain(state.tab.label);
@@ -734,8 +796,10 @@ const checkCarried = (
     // The page comes out of the tab's own call: that one call emitted exactly the carried script and page.
     expect(tabCalls, "one Rolldown call built the tab").toHaveLength(1);
     const [tab] = tabCalls;
+
     const chunks = tab!.files.filter((x) => x.type === "chunk"),
       pages = tab!.files.filter((x) => x.type === "asset" && x.fileName === "index.html");
+
     expect(
       chunks.map((c) => c.text),
       "the carried script is the tab call's one chunk",
@@ -778,6 +842,7 @@ const checkCarried = (
 };
 
 const word = fc.stringMatching(/^[a-z][a-z0-9]{2,10}$/);
+
 const choices = fc.array(fc.record({ move: fc.nat(), word }), { minLength: 2, maxLength: 4 });
 
 /** Modules a browser tab has no way to load: Node's and the Workers runtime's. */
@@ -793,6 +858,7 @@ const NAMING: ReadonlyArray<(specifier: string) => string> = [
 
 /** Local references a stylesheet can make to a file next to it. */
 const LOCAL_URL = ['"./img.png"', "img.png", "'../tab/img.png'"] as const;
+
 // Each boundary walk builds 3 to 6 times; 8 walks reach every case above from seed 119120, so a
 // pull request runs all 8 too.
 const boundaryWalks = { seed: 119120, numRuns: runsFor({ fast: 8, full: 8 }) };
@@ -825,6 +891,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                     "drop",
                     "same",
                   ];
+
             const chosen: TabMove = allowed[move % allowed.length]!;
             reached.add(chosen);
             const before = tab;
@@ -863,10 +930,12 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             const { spans, tracer } = tracing();
             const start = calls.length;
+
             const result = await runBuild(
               { ...f.options, ...(tab === null ? {} : { tab: { entry: f.entry, styles } }) },
               tracer,
             );
+
             expect(result._tag, `${chosen} builds`).toBe("Success");
             const built = (result as { readonly success: Built }).success;
             checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
@@ -915,6 +984,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               ...(tab === null ? (["add"] as const) : (["compiler", "bundle", "read"] as const)),
               "table",
             ] as const;
+
             const chosen = allowed[move % allowed.length]!;
             let styles: readonly string[] = [];
 
@@ -945,6 +1015,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               ...(chosen === "table" ? { programs: [f.options.programs[0]!, f.options.programs[0]!] } : {}),
               ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
             };
+
             const result = await runBuild(options);
             const fails = chosen === "table" || fault !== null;
             reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
@@ -1028,6 +1099,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                 ...f.options,
                 ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
               });
+
               reached.add(label);
 
               if (chosen === "import" || chosen === "url") {
@@ -1068,10 +1140,12 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     { timeout: walkTimeout },
     async () => {
       const { fetch } = await import("../../cloudflare/fetch.ts");
+
       const secrets = fc.record({
         token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
         name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
       });
+
       const reached = new Set<string>();
       await fc.assert(
         fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
@@ -1081,6 +1155,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           vi.stubEnv(name, token);
           writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
           writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
+
           const forms = [
             token,
             encodeURIComponent(token),
@@ -1088,11 +1163,13 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             Buffer.from(token).toString("base64url"),
             Buffer.from(token).toString("hex"),
           ];
+
           const clean = (output: string, label: string) => {
             for (const form of forms) {
               expect(output.includes(form), `${label} copies no credential`).toBe(false);
             }
           };
+
           const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
 
           for (const { move, word } of steps) {
@@ -1106,6 +1183,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             const { spans, tracer } = tracing();
             const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
+
             const seen = JSON.stringify(
               spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
               (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
@@ -1137,12 +1215,15 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             // Every carried route as the brain answers it, by its plain and its encoded URL.
             const port = 8787;
+
             // A file route reaches no object: each binding answers nothing but the name lookup.
             const config = StartsTest.fixture(
               { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
               (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
             );
+
             const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
+
             // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
             const env = {
               INSTANCE: JSON.stringify(config),
@@ -1162,6 +1243,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                     built.assets,
                   ),
                 );
+
                 reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
                 clean(response.url, "a response URL");
                 clean(JSON.stringify([...response.headers]), "response headers");
@@ -1207,6 +1289,7 @@ const nameBreaks: ReadonlyArray<(name: string) => string> = [
 const p40Home = Effect.fn("p40.home")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "p40-" });
   yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
   yield* fs.makeDirectory(path.join(home, "node_modules/@p40"), { recursive: true });
@@ -1221,6 +1304,7 @@ const p40Home = Effect.fn("p40.home")(function* () {
     path.join(home, "node_modules/react"),
   );
   yield* fs.copy(path.join(ROOT, "next/apps/fabrika/src"), path.join(home, "src"));
+
   return home;
 });
 
@@ -1228,8 +1312,10 @@ const p40Home = Effect.fn("p40.home")(function* () {
 const p40Module = Effect.fn("p40.module")(function* (home: string, id: string, marker: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const pkg = path.join(home, "programs", id),
     link = path.join(home, "node_modules/@p40", id);
+
   yield* fs.makeDirectory(pkg, { recursive: true });
 
   if (!(yield* fs.exists(link))) {
@@ -1249,12 +1335,16 @@ const p40Module = Effect.fn("p40.module")(function* (home: string, id: string, m
 const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const { build } = yield* Effect.promise(api);
   const home = yield* p40Home();
+
   const out = path.join(home, "dist"),
     brain = path.join(out, "brain.mjs");
+
   const options = { out, root: home, entry: path.join(home, "src/brain.ts"), files: [], ledger: [], chaos: false };
   const markers = new Map<string, string>();
+
   let selected: ReadonlyArray<Pick> = [],
     published: string | undefined,
     builds = 0,
@@ -1264,12 +1354,16 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
   const addModule = Effect.fnUntraced(function* (n: number) {
     const id = `m${markers.size}`,
       marker = `p40-${id}-${n}`;
+
     yield* p40Module(home, id, marker);
     markers.set(id, marker);
+
     return id;
   });
+
   const selections = (picks: ReadonlyArray<Pick>, exported = (_: Pick) => "program") =>
     picks.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: exported(p) }));
+
   const onDisk = Effect.fnUntraced(function* () {
     // The digest of the brain's bytes stands for the bytes: any changed byte changes it.
     return (yield* fs.exists(brain)) ? sha(yield* fs.readFile(brain)) : undefined;
@@ -1336,6 +1430,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
     if (kind === 1) {
       const broken = nameBreaks[Math.floor(n / selected.length / 3) % nameBreaks.length]!(target.name);
+
       return yield* refused(selections(selected.map((p) => (p === target ? { ...p, name: broken } : p))), "table");
     }
 

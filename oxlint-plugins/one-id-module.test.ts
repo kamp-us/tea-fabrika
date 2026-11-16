@@ -10,7 +10,9 @@ import { oneIdModule } from "./one-id-module.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 

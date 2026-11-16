@@ -11,12 +11,15 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(edge-comment)";
+
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 const PRELUDE = ['import {Effect} from "effect";', "declare const p: Promise<number>, thing: Effect.Effect<number>;"];
 
 const PROMISE = "export const a = Effect.tryPromise(() => p);";
+
 const RUN = "export const a = Effect.runPromise(thing);";
+
 const BOTH = "export const a = Effect.runPromise(Effect.tryPromise(() => p));";
 
 /** Each planted file: its comment and the line under it, and whether this rule must refuse it. */
@@ -56,6 +59,7 @@ const CASES: Readonly<Record<string, readonly [string, string, boolean]>> = {
 };
 
 const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
+
 const UNUSED = at("unused");
 
 describe("edge-comment", async () => {
@@ -145,6 +149,7 @@ describe(".oxlintrc.json", () => {
   const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
   const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
   const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
+
   const off = (setting: unknown): boolean =>
     setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
 
@@ -177,6 +182,7 @@ describe(".oxlintrc.json", () => {
   const test = (path: string): boolean => /\.test\.|Test\.|\.test-support\./.test(path);
   const mirror = (o: (typeof config.overrides)[number]): boolean => o.files.every(agents) && !o.files.some(test);
   const LEVELS: Readonly<Record<string, string>> = { 0: "off", 1: "warn", 2: "error" };
+
   const level = (setting: unknown): string =>
     Array.isArray(setting) ? level(setting[0]) : (LEVELS[String(setting)] ?? String(setting));
 
@@ -199,6 +205,7 @@ describe(".oxlintrc.json", () => {
       .filter((o) => o.files.some(agents) && !mirror(o))
       .flatMap((o) => {
         const tests = o.files.filter(agents).every(test);
+
         return Object.entries(o.rules)
           .filter(
             ([rule, setting]) =>

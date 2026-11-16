@@ -42,6 +42,7 @@ export class SettingsError extends Schema.TaggedError<SettingsError>()("Settings
 export const STOP = "The instance did not start.";
 
 type Declaration = Setting.Setting<unknown>;
+
 type Path = ReadonlyArray<string>;
 
 interface Place {
@@ -51,7 +52,9 @@ interface Place {
 }
 
 const owner = { person: "a person's", repo: "a repo's" } as const;
+
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s === b[n]);
+
 /** Whether `path` is the declaration's own path or one of its tables. */
 const under = (d: Declaration, path: Path) => path.every((s, n) => d.segments[n] === s);
 
@@ -62,6 +65,7 @@ const at = (value: unknown, path: Path) =>
 const leaf = (value: unknown, path: Path): Path => {
   const below = at(value, path);
   const key = Predicate.isObject(below) ? Object.keys(below)[0] : undefined;
+
   return key === undefined ? path : leaf(value, [...path, key]);
 };
 
@@ -95,6 +99,7 @@ const located = (place: Place, path: Path) => {
 export const refused = (location: string, d: Declaration, shown: string) => {
   const expected = SchemaAST.resolveTitle(d.schema.ast) ?? "a valid value";
   const rule = SchemaAST.resolveDescription(d.schema.ast) ?? "fabrika settings lists every setting.";
+
   return new SettingsError({
     reason: "invalid",
     message: `${location}: ${d.path} = ${shown} is not ${expected}.\n  ${rule} ${STOP}`,
@@ -124,6 +129,7 @@ const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema
       [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
         const below = declarations.filter((d) => d.segments[depth] === key);
         const own = below.find((d) => d.segments.length === depth + 1);
+
         return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Codec.file(own))];
       }),
     ),
@@ -145,6 +151,7 @@ const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema
  */
 export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
   const own = group.declarations.filter((d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
+
   return own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
 };
 
@@ -161,6 +168,7 @@ const explain = (
 
   if (own.some((d) => under(d, path))) {
     const d = own.find((d) => same(d.segments, path));
+
     return d !== undefined
       ? refused(located(place, path), d, shape(at(place.document.value, path)))
       : new SettingsError({
@@ -184,6 +192,7 @@ const explain = (
 
   // A guess names only a key this file may set.
   const near = own.map((d) => d.path).find((p) => distance(p, key.join(".")) <= 2);
+
   return new SettingsError({
     reason: "unknown",
     message:
@@ -196,6 +205,7 @@ type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+
   return [major, minor, patch] as const;
 };
 

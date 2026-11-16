@@ -84,6 +84,7 @@ describe("the compile step's check", () => {
       "\treturn <b>{shown.count}</b>;",
       "};",
     ].join("\n");
+
     expect(at("next/a.tsx", text)).toEqual([]);
   });
 });

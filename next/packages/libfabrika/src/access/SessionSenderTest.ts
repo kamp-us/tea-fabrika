@@ -23,15 +23,23 @@ export type Store = { readonly sql: Sql };
 export type Open = Effect.Effect<Store, never, Scope.Scope>;
 
 const SEED = 119120;
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const PROCESSES = ["process_0000000000e008000000000000", "process_0000000000e008000000000001"] as const;
+
 const START = "process_0000000000e008000000000002";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const SPAN = "00f067aa0ba902b7";
+
 const CLIENTS = ["person", "agent"] as const;
+
 type Client = (typeof CLIENTS)[number];
 
 const inputId = Brand.nominal<Id.InputId>(); // The test plays the trusted door, never a public decoder.
+
 const PARENTS = [1, 2, 3].map((n) => inputId(`in-${START}-${n}`));
 
 const writer = (client: Client) =>
@@ -84,6 +92,7 @@ const Cell = fc.record({
   process: fc.nat(),
   client: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /** What the walk did, from its own moves only. */
@@ -103,11 +112,13 @@ type Shown =
 const shown = (exit: Exit.Exit<unknown, unknown>): Shown => {
   if (Exit.isSuccess(exit)) {
     const value = exit.value;
+
     // `signer` answers a session, whose `by` is the writer; `sender` answers the writer itself.
     return { writer: Predicate.hasProperty(value, "parent") && Predicate.hasProperty(value, "by") ? value.by : value };
   }
 
   const error = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
   return error instanceof NotGranted
     ? { refused: "NotGranted" }
     : error instanceof SigningRefused
@@ -141,9 +152,11 @@ const walk = (open: Open) =>
     let oracles = 0;
     yield* Effect.gen(function* () {
       const sessions = yield* SessionManager;
+
       // A signer under a kind and an id no other call uses: what it would sign for this input now.
       const signs = (parent: string, process: string) => {
         oracles++;
+
         return sessions
           .signer(parent, process, `oracle-${oracles}`)
           .pipe(Effect.provideService(SignRequest, { id: `oracle-${oracles}` }), Effect.exit);
@@ -173,6 +186,7 @@ const walk = (open: Open) =>
           const signed = yield* sessions
             .signer(parent, process, "saved")
             .pipe(Effect.provideService(SignRequest, { id: `sign-${parent}-${process}` }), Effect.exit);
+
           expect(shown(signed), "L9: a signer after sender calls still answers").toEqual(
             expected(world, parent, process),
           );

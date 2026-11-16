@@ -55,6 +55,7 @@ export const layer = (options: {
     Effect.gen(function* () {
       const state = yield* ObjectState;
       const env = yield* WorkerEnvironment;
+
       const bindings: Env = {
         INSTANCE: env.INSTANCE,
         PROJECT: env.PROJECT,
@@ -64,12 +65,15 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
+
       const service = ObjectService.make(
         ConnectionService,
         connectionLayer(raw, bindings, undefined, options.input(bindings)),
       );
+
       const event = (
         socket: Cloudflare.WebSocket,
         slot: (gateway: Service, ws: WebSocket) => Effect.Effect<void, unknown>,

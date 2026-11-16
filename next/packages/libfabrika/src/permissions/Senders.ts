@@ -19,6 +19,7 @@ export const Sender = Schema.TaggedUnion({
   person: { key: Schema.NonEmptyString, for: Schema.NonEmptyString },
   agent: { key: Schema.NonEmptyString, for: Schema.NonEmptyString },
 });
+
 /**
  * The decoded type of `Sender`.
  *

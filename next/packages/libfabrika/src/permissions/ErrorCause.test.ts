@@ -20,6 +20,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
  * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
  */
 type Form = "absent" | "undefined" | "json" | "error";
+
 const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
 /** The schema `SendersError` had before 0568. */

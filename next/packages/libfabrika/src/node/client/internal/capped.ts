@@ -19,8 +19,10 @@ const joined = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
   const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
   chunks.reduce((at, c) => {
     out.set(c, at);
+
     return at + c.length;
   }, 0);
+
   return out;
 };
 
@@ -55,12 +57,14 @@ export const capped = Effect.fnUntraced(function* (
 ) {
   const started = yield* Clock.currentTimeMillis;
   const over = (printed: Printed) => printed.outBytes + printed.errBytes > cap;
+
   const ran = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
         // A child that ignores the stop signal is killed outright two seconds later.
         ChildProcess.make(argv[0], [...argv[1]], { env: { ...env }, extendEnv: false, forceKillAfter: "2 seconds" }),
       );
+
       const last = yield* Stream.merge(
         handle.stdout.pipe(Stream.map((bytes): Chunk => ({ out: true, bytes }))),
         handle.stderr.pipe(Stream.map((bytes): Chunk => ({ out: false, bytes }))),
@@ -69,6 +73,7 @@ export const capped = Effect.fnUntraced(function* (
         Stream.takeUntil(over),
         Stream.runLast,
       );
+
       const printed = Option.getOrElse(last, () => nothing);
 
       if (over(printed)) {
@@ -76,6 +81,7 @@ export const capped = Effect.fnUntraced(function* (
       }
 
       const code = yield* handle.exitCode;
+
       return { printed, result: Result.cases.exited.make({ code, version: yield* version(printed.out) }) };
     }),
   ).pipe(
@@ -83,6 +89,7 @@ export const capped = Effect.fnUntraced(function* (
       Effect.succeed({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) }),
     ),
   );
+
   const ended = yield* Clock.currentTimeMillis;
   yield* Effect.annotateCurrentSpan({
     exit: ran.result._tag === "exited" ? ran.result.code : ran.result.reason,
@@ -91,5 +98,6 @@ export const capped = Effect.fnUntraced(function* (
     capped: over(ran.printed),
     duration_ms: ended - started,
   });
+
   return ran.result;
 });

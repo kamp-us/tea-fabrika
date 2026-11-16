@@ -15,6 +15,7 @@ export const Model = Schema.TaggedUnion({
   answered: { ref: Schema.String, value: Schema.Int },
   failed: { ref: Schema.String, reason: Schema.String },
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -54,11 +55,13 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
         }
 
         const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
             ? { to: m.to ?? config.peer, m: body }
             : { to: m.to ?? config.peer, m: body, source: m.claim };
+
         return [Model.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
@@ -76,6 +79,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           : [s, []],
     },
   });
+
   return Program.make({
     name: `requester-${config.self}`,
     machine,

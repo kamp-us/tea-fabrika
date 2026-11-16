@@ -25,6 +25,7 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
     }
 
     counts.set(text, count - 1);
+
     return [];
   });
 };
@@ -65,6 +66,7 @@ const report = (findings: Finding[], added: number): Report => ({
 const checkLines = (file: string, base: string, head: string): Report => {
   const added = selectAdded(base, head);
   const log = logOf(file);
+
   const findings = added.flatMap(({ line, text }) => {
     if (log !== null) {
       return [
@@ -78,10 +80,12 @@ const checkLines = (file: string, base: string, head: string): Report => {
     }
 
     const value = parse(text);
+
     return value === undefined
       ? [Finding.cases.error.make({ file, line, field: "row", reason: "invalid JSON" })]
       : checkRow(file, line, value);
   });
+
   return report(findings, added.length);
 };
 
@@ -107,6 +111,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   if (base !== "") {
     findings.push(error("row", head === "" ? "a row file is never deleted" : "a row file is never edited"));
+
     return report(findings, 0);
   }
 
@@ -114,6 +119,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   if (value === undefined) {
     findings.push(error("row", "invalid JSON"));
+
     return report(findings, 1);
   }
 
@@ -143,6 +149,7 @@ export const checkFile = (file: string, base: string, head: string): Report =>
 export const isFieldPath = (path: string) => /^field\/[^/]+\.jsonl$/.test(path) || inFolder(path);
 
 type Runner = (args: string[]) => { status: number | null; stdout: string };
+
 const git: Runner = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
 /**
@@ -163,6 +170,7 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
 
     return result.stdout;
   };
+
   const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
 
   if (!validSha(from)) {
@@ -176,8 +184,10 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
   }
 
   const tree = (ref: string) => new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
+
   const before = tree(from),
     after = tree(head);
+
   return paths.filter(isFieldPath).map((file) => ({
     file,
     base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
@@ -204,6 +214,7 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
 
     return result.stdout;
   };
+
   const root = read(["rev-parse", "--show-toplevel"]).trim();
   const from = read(["merge-base", main, "HEAD"]).trim();
 
@@ -214,10 +225,13 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
   const changed = names(read(["diff", "--no-renames", "--name-only", "-z", from, "--"]));
   const added = names(read(["ls-files", "--others", "--exclude-standard", "--full-name", "-z", "--", ":(top)field/"]));
   const before = new Set(names(read(["ls-tree", "--full-tree", "-r", "--name-only", "-z", from, "--", "field/"])));
+
   const disk = (file: string) => {
     const path = join(root, file);
+
     return existsSync(path) ? readFileSync(path, "utf8") : "";
   };
+
   return [...new Set([...changed, ...added])]
     .filter(isFieldPath)
     .toSorted()

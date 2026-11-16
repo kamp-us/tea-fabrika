@@ -86,6 +86,7 @@ describe("P33, saved state and process authority", () => {
             build,
             errors,
           };
+
           expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
           expect(Schema.is(Dead)({ ...dead, errors: errors.slice(1) })).toBe(false);
           expect(Schema.is(Dead)({ ...dead, tries: errors.length + 1 })).toBe(false);
@@ -121,6 +122,7 @@ describe("P33, saved state and process authority", () => {
       [],
       ({ build, exit, ...policy }) => {
         const store = storage();
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(undefined, undefined, { ...CODE, hash: build }), from());
@@ -155,14 +157,17 @@ describe("P33, saved state and process authority", () => {
       [],
       ([reason, other]) => {
         const store = storage();
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
           yield* processes.exit(A, reason, from());
           const before = store.rows();
+
           const retried = yield* Effect.exit(
             processes.exit(A, copied(reason), from({ parent: null, for: "retry-person" })),
           );
+
           expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe("Success");
           const changed = yield* Effect.result(processes.exit(A, other, from()));
           expect(changed).toMatchObject({ _tag: "Failure", failure: { reason: "ended" } });
@@ -181,11 +186,13 @@ describe("p79, process identity", () => {
         const store = storage();
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
+
           const answers = yield* Effect.forEach(
             Array.from({ length: count }, (_, i) => i),
             (i) => processes.start(first(`start:${i}`, `counter:${i}`), from()),
             { concurrency: 1 },
           );
+
           expect(new Set(answers.map((answer) => answer.process)).size).toBe(count);
 
           for (const answer of answers) {
@@ -198,6 +205,7 @@ describe("p79, process identity", () => {
   it.effect("plant, accept a generated collision: no reservation or start is partially written", () =>
     check(hash, [CODE.hash], (build) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(undefined, undefined, { ...CODE, hash: build }), from())).pipe(
           Effect.provide(manager(store, brain(), ids(A).next)),
@@ -226,6 +234,7 @@ describe("p79, process identity", () => {
       [["counter:2", "build-b"]],
       ([name, build]) => {
         const store = storage();
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
@@ -250,14 +259,18 @@ describe("p79, process identity", () => {
       (retryFrom) => {
         const store = storage();
         const unused = ids();
+
         return Effect.gen(function* () {
           const answer = yield* ProcessManager.use((p) => p.start(first(), from())).pipe(
             Effect.provide(manager(store, brain(), ids(A).next)),
           );
+
           store.reopen();
+
           const retry = yield* ProcessManager.use((p) => p.start(first(), from(retryFrom))).pipe(
             Effect.provide(manager(store, brain(), unused.next)),
           );
+
           expect(retry).toEqual(answer);
           expect(unused.calls()).toBe(0);
         });
@@ -270,6 +283,7 @@ describe("p79, predecessors and live info", () => {
   it.effect("plant, restart a live process: an ended current predecessor is required", () => {
     return check(hash, [CODE.hash], (build) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first(undefined, undefined, { ...CODE, hash: build }), from());
@@ -285,14 +299,17 @@ describe("p79, predecessors and live info", () => {
       ["other"],
       (program) => {
         const store = storage();
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
           yield* processes.exit(A, CRASHED, from());
           const before = store.rows();
+
           const error = yield* Effect.flip(
             processes.start(again(A, "restart:other", { program, hash: "build-a" }), from()),
           );
+
           expect(error.reason).toBe("name_taken");
           expect(store.rows()).toEqual(before);
           expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
@@ -309,13 +326,16 @@ describe("p79, predecessors and live info", () => {
       [["restart:one", "restart:two"]],
       (requests) => {
         const store = storage();
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
           yield* processes.exit(A, CRASHED, from());
+
           const answers = yield* Effect.forEach(requests, (id) => Effect.exit(processes.start(again(A, id), from())), {
             concurrency: 2,
           });
+
           expect(answers.filter(Exit.isSuccess)).toHaveLength(1);
           expect(answers.filter(Exit.isFailure)).toHaveLength(1);
           const live = yield* processes.info;
@@ -331,6 +351,7 @@ describe("p79, predecessors and live info", () => {
   it.effect("plant, omit after or count retries: predecessor and exact restart total survive reopen", () =>
     check(hash, ["build-b"], (build) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -392,6 +413,7 @@ describe("p79, predecessors and live info", () => {
   it.effect("plant, overwrite exit reason: the first exact reason is durable and written once", () =>
     check(fcExitReason, [SHUTDOWN], (reason) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first(), from());
@@ -410,6 +432,7 @@ describe("p79, names, parents and replay", () => {
   it.effect("plant, free a name on exit: reservation keeps its original program and owner", () => {
     return check(hash, [CODE.hash], (build) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
         yield* ProcessManager.use((p) => p.exit(A, NORMAL, from())).pipe(Effect.provide(manager(store)));
@@ -425,6 +448,7 @@ describe("p79, names, parents and replay", () => {
               Effect.provide(manager(store)),
             ),
           );
+
           expect(error._tag).toBe("ProcessError");
           expect(error.reason).toBe("name_taken");
         }
@@ -436,6 +460,7 @@ describe("p79, names, parents and replay", () => {
   it.effect("plant, trust From.by: a sibling cannot spoof the parent to exit or restart", () => {
     return check(fc.string({ minLength: 1 }), [BRAIN], (by) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -461,6 +486,7 @@ describe("p79, names, parents and replay", () => {
   it.effect("plant, reject additive tags or keep authority only in memory: replay skips unknown events", () =>
     check(fc.jsonValue(), [{ v: 2 }], (body) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
         const before = store.rows();
@@ -473,9 +499,11 @@ describe("p79, names, parents and replay", () => {
           }),
         ).pipe(Effect.provide(manager(store)));
         store.reopen();
+
         const replayed = yield* Effect.exit(
           ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store))),
         );
+
         expect(Exit.isSuccess(replayed) && replayed.value).toBe(true);
         expect(store.rows().some((row) => row._tag === "future_process_fact")).toBe(true);
       });
@@ -485,6 +513,7 @@ describe("p79, names, parents and replay", () => {
 
 // P33: the fold trusts a ProcessEvent only from the brain's own writer, `from().by` here.
 const OTHER = "SHA256:not-the-brain";
+
 const toW = Recipient.cases.process.make({ process: W });
 
 const forger = (store: Storage, by: string, streamForLife: string) => ({
@@ -506,6 +535,7 @@ const lawsFor = (
   stream: string,
 ): Record<keyof typeof ProcessEvent.cases, Effect.Effect<void, unknown>> => {
   const { forge, live, downs } = forger(store, by, stream);
+
   return {
     registered: Effect.gen(function* () {
       yield* forge("processes", {
@@ -514,11 +544,13 @@ const lawsFor = (
         program: "counter",
         owner: Owner.cases.process.make({ process: W }),
       });
+
       const answer = yield* Effect.exit(
         ProcessManager.use((p) => p.start(first("start:counter:2", "counter:2"), from())).pipe(
           Effect.provide(manager(store, brain(), ids(B).next)),
         ),
       );
+
       expect(Exit.isSuccess(answer)).toBe(true);
     }),
     started: Effect.gen(function* () {
@@ -578,6 +610,7 @@ describe("P33, the process fold ignores events not written by the brain", () => 
         [[OTHER, "counter:1"]],
         ([by, stream]) => {
           const store = storage();
+
           return Effect.gen(function* () {
             yield* Effect.gen(function* () {
               const processes = yield* ProcessManager;
@@ -606,12 +639,14 @@ describe("P33, names and client ids are checked against a pattern", () => {
         [name],
         (name) => {
           const store = storage();
+
           return Effect.gen(function* () {
             const error = yield* Effect.flip(
               ProcessManager.use((p) => p.start(first(`start:${name}`, name), from())).pipe(
                 Effect.provide(manager(store)),
               ),
             );
+
             expect(error._tag).toBe("ProcessError");
             expect(store.rows()).toEqual([]);
           });
@@ -631,16 +666,20 @@ describe("P33, names and client ids are checked against a pattern", () => {
         [client],
         (client) => {
           const store = storage();
+
           return Effect.gen(function* () {
             yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
             const before = store.rows();
+
             const caller = {
               owner: Owner.cases.brain.make({}),
               recipient: Recipient.cases.client.make({ client, session: X }),
             };
+
             const error = yield* Effect.flip(
               ProcessManager.use((p) => p.monitor("window:1", A, from())).pipe(Effect.provide(manager(store, caller))),
             );
+
             expect(error._tag).toBe("ProcessError");
             expect(store.rows()).toEqual(before);
           });
@@ -655,6 +694,7 @@ describe("P33, the brain writes process events and `parent` keeps who asked", ()
     check(fc.string({ minLength: 1 }), ["SHA256:caller-x"], (X_KEY) => {
       const store = storage();
       const asked = `in-${W}-7`;
+
       return Effect.gen(function* () {
         yield* Ledger.use((ledger) =>
           ledger.append(

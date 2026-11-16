@@ -11,6 +11,7 @@ export const Call = Schema.TaggedUnion({
   enqueue: { number: Schema.Number, oid: Schema.String },
   arm: { number: Schema.Number, oid: Schema.String },
 });
+
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
@@ -41,6 +42,7 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
+
     return reason === undefined ? Effect.void : Effect.fail(new PullRequestsError({ reason }));
   };
 
@@ -57,6 +59,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           const number = Math.max(0, ...w.prs.map((pr) => pr.number)) + 1;
           w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
           w.calls.push(Call.cases.draft.make({ branch, title: text.title }));
+
           return number;
         }),
       edit: (number, text) =>
@@ -77,6 +80,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       view: (number) =>
         Effect.flatMap(fails("view"), () => {
           const pr = w.prs.find((p) => p.number === number);
+
           return pr === undefined
             ? Effect.fail(new PullRequestsError({ reason: `no pull request ${number}` }))
             : Effect.succeed({

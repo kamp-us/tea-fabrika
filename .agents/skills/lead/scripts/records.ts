@@ -122,6 +122,7 @@ const specs: Record<Folder, Spec> = {
 
 const recordNumber = (name: string): number | undefined => {
   const digits = /^(\d+)[a-z]?-/.exec(name)?.[1];
+
   return digits === undefined ? undefined : Number(digits);
 };
 
@@ -177,6 +178,7 @@ export const readTop = (text: string): Top => {
     .find((line) => line.startsWith("# "))
     ?.slice(2)
     .trim();
+
   return { fields, heading };
 };
 
@@ -199,11 +201,15 @@ export const recordLine = (folder: Folder, path: string, text: string): string =
   const top = readTop(text);
   const name = path.slice(folder.length + 1).replace(/\.md$/, "");
   const id = spec.width === undefined ? name : (/^\d+[a-z]?(?=-)/.exec(name)?.[0] ?? name);
+
   const field = (key: string) => {
     const value = top.fields.get(key);
+
     return value === undefined ? `(no ${key})` : oneLine(value);
   };
+
   const title = recordTitle(folder, top);
+
   return [
     id,
     ...spec.before.map(field),
@@ -229,6 +235,7 @@ export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string
     .filter((path) => isRecord(folder, path))
     .map((path) => recordNumber(path.slice(folder.length + 1)))
     .filter((n) => n !== undefined);
+
   return String(Math.max(0, ...numbers) + 1).padStart(width, "0");
 };
 
@@ -247,6 +254,7 @@ export const inOrder = (folder: Folder, paths: ReadonlyArray<string>): ReadonlyA
 
 /** The folders `find` searches, and the one file whose table rows it searches too. */
 const searched: ReadonlyArray<Folder> = [".decisions", ".runbooks", ".patterns", "docs/direction", "experiments"];
+
 const GLOSSARY = ".glossary/TERMS.md";
 
 /** Below this many live records, every word looks common, so a ranking says nothing (phoenix's floor). */
@@ -283,6 +291,7 @@ export const Status = Schema.TaggedUnion({
   superseded: { by: Schema.Array(Schema.String) },
   other: { status: Schema.String },
 });
+
 export type Status = typeof Status.Type;
 
 /** Reads `accepted`, `amended-in-part by [0525](...), [0530](...)` or `superseded by [0043](...)`. */
@@ -313,6 +322,7 @@ const decidingText = (text: string): string => {
   const gloss = /^\*\*What this decides:\*\*([^\n]*(?:\n(?!\n)[^\n]*)*)/m.exec(body)?.[1] ?? "";
   // A decision with no Decision section gives its whole body, so it is still found.
   const decision = body.split(/^##\s+/m).find((section) => /^Decision\b/.test(section)) ?? body;
+
   return `${gloss}\n${decision}`;
 };
 
@@ -320,12 +330,14 @@ const decidingText = (text: string): string => {
 const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> => {
   const lines = text.split("\n");
   const separator = (line: string | undefined) => line !== undefined && /^\|\s*:?-{3}/.test(line);
+
   return lines.flatMap((line, i) => {
     if (!line.startsWith("|") || separator(line) || separator(lines[i + 1])) {
       return [];
     }
 
     const term = (line.split(/(?<!\\)\|/)[1] ?? "").trim();
+
     return term === "" ? [] : [{ path, title: term, words: wordsIn(line), decision: undefined }];
   });
 };
@@ -346,11 +358,14 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
   const title = oneLine(recordTitle(folder, top) ?? "(no title)");
   const keys = specs[folder].words.map((key) => top.fields.get(key) ?? "");
   const id = recordNumber(path.slice(folder.length + 1));
+
   const decision =
     folder === ".decisions" && id !== undefined
       ? { id: String(id).padStart(4, "0"), status: readStatus(top.fields.get("status")) }
       : undefined;
+
   const body = decision === undefined ? "" : decidingText(text);
+
   return [{ path, title, words: wordsIn([title, ...keys, body].join("\n")), decision }];
 };
 
@@ -362,6 +377,7 @@ export const Resolution = Schema.TaggedUnion({
   absent: { id: Schema.String },
   broken: { id: Schema.String, reason: Schema.String },
 });
+
 export type Resolution = typeof Resolution.Type;
 
 /**
@@ -377,6 +393,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
   }
 
   const landed = new Set<string>();
+
   // `trail` is the chain walked to `from`, so two links that meet again are not a loop.
   const follow = (from: string, by: ReadonlyArray<string>, trail: ReadonlySet<string>): string | undefined => {
     if (by.length === 0) {
@@ -389,12 +406,14 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
       }
 
       const status = statuses.get(next);
+
       const broken =
         status === undefined
           ? `${from} is superseded by ${next}, which is not on main`
           : Status.match(status, {
               accepted: () => {
                 landed.add(next);
+
                 return undefined;
               },
               superseded: (s) => follow(next, s.by, new Set([...trail, next])),
@@ -414,6 +433,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
     other: (s) => Resolution.cases.other.make({ id, status: s.status }),
     superseded: (s) => {
       const reason = follow(id, s.by, new Set([id]));
+
       return reason === undefined
         ? Resolution.cases.superseded.make({ id, by: [...landed].sort() })
         : Resolution.cases.broken.make({ id, reason });
@@ -429,6 +449,7 @@ export const Hit = Schema.Struct({
   words: Schema.Array(Schema.String),
   notes: Schema.Array(Schema.String),
 });
+
 export type Hit = typeof Hit.Type;
 
 /**
@@ -440,6 +461,7 @@ export const Found = Schema.TaggedUnion({
   noOverlap: { ranked: Schema.Number },
   indeterminate: { reason: Schema.String },
 });
+
 export type Found = typeof Found.Type;
 
 const byScore = (a: Hit, b: Hit) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -483,13 +505,17 @@ export const find = (
   const statuses = new Map(
     entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
   );
+
   const decisions = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])));
   const byPath = new Map([...decisions.values()].map((e) => [e.path, e.decision] as const));
+
   // A proposed or unknown decision is in force nowhere, so only `all` ranks it.
   const ranked = options.all
     ? entries
     : entries.filter((e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
+
   const hits = new Map<string, Hit>();
+
   const add = (entry: Entry, score: number, words: ReadonlyArray<string>, note?: string) => {
     const key = `${entry.path}\0${entry.title}`;
     const was = hits.get(key);
@@ -539,6 +565,7 @@ export const find = (
 
   const shown = [...hits.values()].map((hit) => {
     const decision = byPath.get(hit.path);
+
     const status =
       decision === undefined
         ? []
@@ -547,6 +574,7 @@ export const find = (
             superseded: (s) => [`superseded by: ${s.by.join(", ")}`],
             other: (s) => [`status: ${s.status}`],
           });
+
     return { ...hit, notes: [...status, ...hit.notes] };
   });
 
@@ -616,10 +644,12 @@ const git = Effect.fnUntraced(
     const handle = yield* ChildProcess.make("git", ["-C", repo, ...args], {
       stdin: stdin === undefined ? "ignore" : Stream.make(new TextEncoder().encode(stdin)),
     });
+
     const [out, err, code] = yield* Effect.all(
       [Stream.runCollect(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
       { concurrency: 3 },
     );
+
     return { out: collected(out), err: err.trim(), code: Number(code) };
   },
   Effect.scoped,
@@ -711,6 +741,7 @@ const list = Command.make(
   Effect.fn("records.list")(function* ({ folder }) {
     const records = yield* recordsAt(process.cwd(), folder);
     yield* Console.log(records.map((r) => recordLine(folder, r.path, r.text)).join("\n"));
+
     const next = nextNumber(
       folder,
       records.map((r) => r.path),
@@ -727,6 +758,7 @@ const next = Command.make(
   { folder: FolderArgument },
   Effect.fn("records.next")(function* ({ folder }) {
     const records = yield* recordsAt(process.cwd(), folder);
+
     const number = nextNumber(
       folder,
       records.map((r) => r.path),
@@ -759,9 +791,11 @@ const resolveCommand = Command.make(
   Effect.fn("records.resolve")(function* ({ ids }) {
     const decisions = yield* recordsAt(process.cwd(), ".decisions");
     const entries = decisions.flatMap((file) => readEntries(file.path, file.text));
+
     const statuses = new Map(
       entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
     );
+
     const paths = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.path] as const])));
     // `34`, `0034` and `0034-slug` all name decision 0034.
     const decisionId = (arg: string) => /^\d+/.exec(arg)?.[0].padStart(4, "0") ?? arg;

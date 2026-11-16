@@ -34,6 +34,7 @@ export const Row = Schema.Struct({
   reload: Schema.Literals(["live", "restart"]),
   since: Schema.String,
 });
+
 /**
  * The decoded type of `Row`.
  *

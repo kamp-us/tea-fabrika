@@ -34,6 +34,7 @@ export const bind = Effect.fnUntraced(function* (
   props: typeof Props.Type,
 ) {
   const tail = yield* getLoopbackEntrypoint(ctx.exports, "IsolateTail", { props });
+
   // The existing loader still takes native code options until its Alchemy port.
   return tail.raw;
 });
@@ -54,6 +55,7 @@ export const tail = Effect.fnUntraced(function* (
     const stub = processStub(env, props.project, props.name);
     yield* ProcessClient.make(stub).usage(rows);
   });
+
   yield* work.pipe(Effect.catchCause((cause) => Effect.logError(causeClass(Cause.map(cause, rejected)))));
 });
 

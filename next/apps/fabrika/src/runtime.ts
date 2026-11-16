@@ -25,6 +25,7 @@ const checkedSettings = (env: Pick<Env, "INSTANCE">) =>
 
 export const settings = Effect.fn("instance.settings")(function* (env: Pick<Env, "INSTANCE">) {
   const checked = yield* checkedSettings(env);
+
   return { ...checked.input, ...checked.input.founding, port: checked.values.port };
 });
 
@@ -48,11 +49,13 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     door: (options) =>
       Effect.gen(function* () {
         const checked = yield* RecordedStart;
+
         const config = {
           ...checked.input,
           port: checked.values.port,
           rateLimit: { limit: checked.values.gatewayLimit, window: checked.values.gatewayWindow },
         };
+
         return yield* Gateway.pipe(
           Effect.provide(
             Gateway.layer({

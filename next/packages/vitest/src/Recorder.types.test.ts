@@ -18,6 +18,7 @@ type Service = Shelf["Service"];
 
 /** A value of each method's own error type, and one of no service's. Made outside the laws. */
 const full = new Full({ item: "the shelf is full" });
+
 const plain = new Error("no Full");
 
 /** A service with an optional effectful member, which a Recorder records when it runs. */
@@ -43,25 +44,33 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
   it("R1 type: a method is exactly an effectful key of the service, and a name the service lacks does not compile in fails or in calls", () => {
     // Data (`label`), a Sink method (`drain`) and a symbol key are not methods.
     expectTypeOf<Recorder.Method<Service>>().toEqualTypeOf<"put" | "count" | "size" | "watch">();
+
     type _Put = typeof Recorder.calls<Shelf, Service, "put">;
+
     // @ts-expect-error R1: `nope` is no member of Shelf
     type _Nope = typeof Recorder.calls<Shelf, Service, "nope">;
+
     // @ts-expect-error R1: `label` is plain data, not a method
     type _Label = typeof Recorder.calls<Shelf, Service, "label">;
+
     // @ts-expect-error R1: `drain` answers a Sink, which is not watched
     type _Drain = typeof Recorder.calls<Shelf, Service, "drain">;
+
     // @ts-expect-error R1: `nope` is no member of Shelf
     assertType<Recorder.Fails<Service>>({ nope: full });
   });
 
   it("R2 type: a method's args are its own parameter list, so a wrong arg type does not compile", () => {
     type Puts = Effect.Success<ReturnType<typeof Recorder.calls<Shelf, Service, "put">>>;
+
     expectTypeOf<Puts>().toEqualTypeOf<ReadonlyArray<readonly [name: string, count: number]>>();
     expectTypeOf<Recorder.Args<Service, "count">>().toEqualTypeOf<readonly [name: string]>();
     // The Effect member is handed nothing.
     expectTypeOf<Recorder.Args<Service, "size">>().toEqualTypeOf<readonly []>();
+
     // A check on `method` narrows `args` to that method's list.
     type PutCall = Extract<Recorder.Call<Service>, { readonly method: "put" }>;
+
     expectTypeOf<PutCall["args"]>().toEqualTypeOf<readonly [name: string, count: number]>();
     expectTypeOf<readonly [1, "a"]>().not.toExtend<Recorder.Args<Service, "put">>();
     // @ts-expect-error R2: put's args are a name then a count, not a count then a name
@@ -82,8 +91,11 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
 
   it("R4 type: the layer provides the service and its record, and calls needs that record, so the plain service alone does not do", () => {
     type Made = ReturnType<typeof Recorder.layer<Shelf, Service>>;
+
     expectTypeOf<Made>().toEqualTypeOf<Layer.Layer<Shelf | Recorder.Recorded<Shelf>>>();
+
     type Reads = ReturnType<typeof Recorder.calls<Shelf, Service>>;
+
     expectTypeOf<Effect.Services<Reads>>().toEqualTypeOf<Recorder.Recorded<Shelf>>();
     expectTypeOf<Effect.Services<Reads>>().not.toBeNever();
     // A context with only the plain Shelf in it does not hold what calls needs.
@@ -92,6 +104,7 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
 
   it("R14 type: calls with a union of names answers each name's own arg list, so a wrong arg type does not compile", () => {
     type Both = Effect.Success<ReturnType<typeof Recorder.calls<Shelf, Service, "put" | "count">>>;
+
     expectTypeOf<Both>().toEqualTypeOf<
       ReadonlyArray<readonly [name: string, count: number] | readonly [name: string]>
     >();
@@ -105,10 +118,13 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
 
   it("R15 type: an optional effectful member is a method, typed as if it were there", () => {
     type Service = Spare;
+
     expectTypeOf<Recorder.Method<Service>>().toEqualTypeOf<"put" | "maybe">();
     expectTypeOf<Recorder.Args<Service, "maybe">>().toEqualTypeOf<readonly [count: number]>();
     expectTypeOf<Recorder.Failure<Service, "maybe">>().toEqualTypeOf<Full>();
+
     type MaybeCall = Extract<Recorder.Call<Service>, { readonly method: "maybe" }>;
+
     expectTypeOf<MaybeCall["args"]>().toEqualTypeOf<readonly [count: number]>();
     assertType<Recorder.Fails<Service>>({ maybe: full });
     // @ts-expect-error R15: maybe is handed a count, not a name
@@ -117,6 +133,7 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
 
   it("R16 type: a service with an overloaded method does not compile as a Recorder layer, and a generic method does", () => {
     type Picking = Parameters<typeof Recorder.layer<Picker, Picker>>[1];
+
     // @ts-expect-error R16: pick is overloaded, so no one arg list types what it was handed
     assertType<Picking>({});
     assertType<Parameters<typeof Recorder.layer<Echo, Echo>>[1]>({});
@@ -125,10 +142,15 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
 
   it("R17 type: fails names only a method impl gives, and impl names only the service's own members", () => {
     type Data = Pick<Service, typeof ShelfId | "label" | "drain">;
+
     type Putting = Data & Pick<Service, "put">;
+
     type Counting = Data & Pick<Service, "count">;
+
     type Stray = Counting & { readonly nope: Service["count"] };
+
     type Options<K extends keyof Service> = NonNullable<Parameters<typeof Recorder.layer<Shelf, Service, K>>[2]>;
+
     // A method impl gives may fail.
     assertType<Options<keyof Putting>>({ fails: { put: full } });
     // @ts-expect-error R17: put is left out of impl, so naming it in fails does not compile
@@ -136,6 +158,7 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
     // The same, when fails is a value typed for every method.
     expectTypeOf<{ readonly fails: Recorder.Fails<Service> }>().not.toExtend<Options<keyof Counting>>();
     expectTypeOf<Putting>().toExtend<Parameters<typeof Recorder.layer<Shelf, Service, keyof Putting>>[1]>();
+
     // @ts-expect-error R17: nope is no member of Shelf, so impl may not give it
     type _Stray = typeof Recorder.layer<Shelf, Service, keyof Stray>;
   });

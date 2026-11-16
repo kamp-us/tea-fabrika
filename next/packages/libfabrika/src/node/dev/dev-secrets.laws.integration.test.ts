@@ -50,7 +50,9 @@ const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
 );
 
 const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
+
 type Destination = (typeof destinations)[number];
+
 type Outputs = Record<Destination, Array<unknown>>;
 
 const forms = (text: string) => [
@@ -113,31 +115,39 @@ const flow = async (sample: Flow) => {
   const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
   vi.stubEnv("FABRIKA_HOME", home);
   const material = `${sample.word}/"\\\n`.padEnd(32, "!");
+
   const random = Layer.succeed(
     SecureRandom.SecureRandom,
     SecureRandom.make((size) => {
       expect(size).toBe(32);
+
       return Buffer.from(material);
     }),
   );
+
   const bearer = Buffer.from(material).toString("base64url");
   const key = `fake private key/${sample.pass}"\\\n`;
   const body = `fake body/${sample.word}/${sample.pass}"\\\n`;
+
   const rawFrame = JSON.stringify({
     jsonrpc: "2.0",
     id: "send",
     method: "process.send",
     params: { body, key, pass: sample.pass, authorization: bearer },
   });
+
   const words = [material, bearer, key, body, sample.pass, rawFrame];
   const outputs: Outputs = { spans: [], logs: [], journal: [], measurements: [], outbox: [] };
   const journalDb = new DatabaseSync(":memory:");
+
   const journal = ManagedRuntime.make(
     LedgerSql.layer(nodeSql(journalDb), { reader: "secret-test" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     ),
   );
+
   const parts = new Map<string, DatabaseSync>();
+
   const part = (name: string) => {
     let db = parts.get(name);
 
@@ -148,7 +158,9 @@ const flow = async (sample: Flow) => {
 
     return db;
   };
+
   let mode = "ok";
+
   const delivered = async (name: string, args: ReadonlyArray<unknown>) => {
     const [chain, at, rows] = Schema.decodeUnknownSync(
       Schema.Tuple([
@@ -157,9 +169,12 @@ const flow = async (sample: Flow) => {
         Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })),
       ]),
     )(args);
+
     const store = recordPart(nodeSql(part(name)), chain, at, 1_000_000_000);
+
     return Effect.runPromise(store.write(rows));
   };
+
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
     const call = Schema.decodeUnknownSync(
       Schema.fromJsonString(
@@ -171,6 +186,7 @@ const flow = async (sample: Flow) => {
         }),
       ),
     )(bodyText(options));
+
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
     // It holds no other header but the content type: no trace header rides along.
     expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
@@ -208,6 +224,7 @@ const flow = async (sample: Flow) => {
           ),
         ),
       );
+
       return Response.json({ value: null });
     }
 
@@ -225,18 +242,22 @@ const flow = async (sample: Flow) => {
 
     return Response.json({ value: [] });
   });
+
   const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
     vi.spyOn(console, name).mockImplementation((...args) => {
       outputs.logs.push({ name, args });
     }),
   );
+
   const logger = Logger.layer([
     Logger.make((options) => {
       outputs.logs.push({ level: options.logLevel, message: options.message, cause: options.cause });
     }),
   ]);
+
   const gatewayDb = new DatabaseSync(":memory:"),
     sql = nodeSql(gatewayDb);
+
   let attached: unknown = Attached.cases.online.make({
     client: "client",
     identity: { key: "public", person: "person-test", as: "agent" },
@@ -245,6 +266,7 @@ const flow = async (sample: Flow) => {
     watching: false,
     busy: false,
   });
+
   const ws = {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
@@ -253,8 +275,10 @@ const flow = async (sample: Flow) => {
     send: () => {},
     close: () => {},
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies attachment, send and close; workerd owns the complete socket
   const socket = ws as unknown as WebSocket;
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- workerd owns the full handles; the fixture supplies every member these real services call
   const ctx = {
     id: { name: "gateway" },
@@ -271,6 +295,7 @@ const flow = async (sample: Flow) => {
     getTags: () => ["session", "tab", "public"],
     getWebSocketAutoResponseTimestamp: () => null,
   } as unknown as DurableObjectState;
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
     INSTANCE: JSON.stringify(connectionInput),
@@ -299,6 +324,7 @@ const flow = async (sample: Flow) => {
       }),
     },
   } as unknown as Env;
+
   const runtime = connectionRuntime(ctx, env, connectionInput);
 
   try {
@@ -307,16 +333,20 @@ const flow = async (sample: Flow) => {
       Effect.scoped(
         Effect.gen(function* () {
           let observe: (event: RuntimeEvent) => void = () => {};
+
           let listen: Effect.Effect<unknown> = Effect.void;
+
           const instance = yield* startDev({ ...config, home, memory: 500_000_000, grace: 5000 }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
+
               const plugin = [...local.mapUnsafe.values()].find(
                 (value) => typeof value === "object" && value !== null && "sockets" in value,
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;
               };
+
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
@@ -330,7 +360,9 @@ const flow = async (sample: Flow) => {
               yield* listen;
             }),
           );
+
           const outbox = yield* brainOutbox(home);
+
           const awaitEvent = (ready: (row: Effect.Success<typeof outbox.pending>[number]) => boolean) =>
             Effect.gen(function* () {
               for (;;) {
@@ -412,6 +444,7 @@ const flow = async (sample: Flow) => {
       readFileSync(join(home, "brain.pending.jsonl"), "utf8"),
       readFileSync(join(home, "brain.last.json"), "utf8"),
     );
+
     // Control receives a Redacted at the service boundary. Reflect.apply keeps this runtime
     // law runnable on the old string signature; the type law below forbids that signature.
     const request = new Request("http://local/", {
@@ -425,20 +458,24 @@ const flow = async (sample: Flow) => {
         args: [],
       }),
     });
+
     const checked: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
       request,
       env,
       Redacted.make(bearer),
       {},
     ]);
+
     const forged = request.clone();
     forged.headers.set("authorization", `Bearer wrong-${sample.pass}`);
+
     const denied: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
       forged,
       env,
       Redacted.make(bearer),
       {},
     ]);
+
     expect((await Effect.runPromise(denied)).status).toBe(403);
     const answer = await Effect.runPromiseExit(checked.pipe(Effect.provide(logger)));
 
@@ -461,6 +498,7 @@ const flow = async (sample: Flow) => {
     expect(parts.size).toBeGreaterThan(0);
     expect(outputs.journal.length).toBeGreaterThan(0);
     expect(outputs.measurements.flat().length).toBeGreaterThan(0);
+
     return { outputs, words, answer };
   } finally {
     fetch.mockRestore();

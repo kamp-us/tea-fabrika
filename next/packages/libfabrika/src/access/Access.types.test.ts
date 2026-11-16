@@ -33,6 +33,7 @@ it("type: no service of access/ fails with an error tagged LedgerError", () => {
 
   // SessionManager: its own error and its two refusals, and nothing of the ledger's.
   type Sessions = (typeof SessionManager)["Service"];
+
   expectTypeOf<Failures<Sessions>["_tag"]>().toEqualTypeOf<"SessionManagerError" | "SigningRefused" | "NotGranted">();
   expectTypeOf<FromLedger<Sessions>>().toBeNever();
 });

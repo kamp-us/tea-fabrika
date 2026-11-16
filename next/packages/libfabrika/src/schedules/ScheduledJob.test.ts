@@ -16,12 +16,14 @@ const make = (period: number) =>
   ScheduledJob.make({ period, cmd: write, work: (due, ms) => write({ due, period: ms }) });
 
 const ctx = stubCtxThrowingProxy<unknown>();
+
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
 // Fast-check supplies boundary times and invalid durations; there is no domain schema for them.
 // The plan gives no run count. Keep the shared seed and use 150 walks of up to 100 moves.
 const walks = period.chain((ms) => {
   const { machine } = Result.getOrThrow(make(ms));
+
   return arbGuidedSequence(
     machine,
     ctx,
@@ -88,6 +90,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
                 prev,
                 { type: "timer", at: prev.next },
               );
+
               expect(due).toEqual({ _tag: "running", due: prev.next, period: prev.period });
               expect(jobs).toEqual([write({ due: prev.next, period: prev.period })]);
             }
@@ -148,11 +151,13 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
             const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
+
             const [unchanged, sent] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
               machine,
               prev,
               { type: "timer", at },
             );
+
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
             const ignored = msg.type === "timer" && (prev._tag === "running" || msg.at < prev.next);

@@ -46,5 +46,6 @@ export const select = (tasks: ReadonlyArray<Task>, subject: Subject): Result.Res
       task.state.request.process === subject.process &&
       task.state.request.target === subject.key,
   );
+
   return candidates.length > 1 ? Result.fail("ambiguous") : Result.succeed(candidates[0] ?? null);
 };

@@ -101,9 +101,11 @@ export const layer = (
 
       const list = Effect.fn("PullRequestsGh.list")(function* (args: ReadonlyArray<string>) {
         const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
+
         const rows = yield* Schema.decodeUnknownEffect(Listed)(out.trim() || "[]").pipe(
           Effect.mapError(() => new PullRequestsError({ reason: "gh pr list answered a shape we do not read" })),
         );
+
         return rows.map((r): PullRequest => ({
           number: r.number,
           head: r.headRefName,
@@ -154,9 +156,11 @@ export const layer = (
 
       const view = Effect.fn("PullRequestsGh.view")(function* (number: number) {
         const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
+
         const v = yield* Schema.decodeUnknownEffect(Viewed)(out).pipe(
           Effect.mapError(() => new PullRequestsError({ reason: "gh pr view answered a shape we do not read" })),
         );
+
         return {
           number: v.number,
           head: v.headRefName,
@@ -175,6 +179,7 @@ export const layer = (
       // REST, paged: `gh pr view --json files` stops at 100 files.
       const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
+
         return out.split("\n").filter((path) => path !== "");
       });
 

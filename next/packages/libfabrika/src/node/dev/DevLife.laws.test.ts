@@ -10,55 +10,92 @@ import type { DevState } from "./DevLife.ts";
 import { address, devLife, pending, reachable, target } from "./DevLife.ts";
 
 const SEED = 119120;
+
 type State = typeof DevState.Type;
+
 type Msg = typeof devLife.msg.Type;
+
 type Phase = State["_tag"];
+
 type Case<T extends Phase> = Extract<State, { readonly _tag: T }>;
+
 type Pending = { readonly _tag: "pending"; readonly id: string };
 
 // L4, a type law checked by tsc. A replace holds the old pid and a replacement that is always
 // pending from its first signal, and its Msg carries what the sampler saw and when.
 // Plant: type the field as `Replacement` (both cases): the `toBeNever` check on the none case fails.
 expectTypeOf<Case<"replacing">>().toHaveProperty("pid");
+
 expectTypeOf<Case<"replacing">>().toHaveProperty("listener");
+
 expectTypeOf<Case<"replacing">>().toHaveProperty("signal");
+
 expectTypeOf<Case<"replacing">["replacement"]>().toMatchTypeOf<Pending>();
+
 expectTypeOf<Extract<Case<"replacing">["replacement"], { readonly _tag: "none" }>>().toBeNever();
+
 expectTypeOf<Case<"replacing">["signal"]>().toEqualTypeOf<"SIGTERM" | "SIGKILL">();
+
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("bytes");
+
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("at");
+
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("replacement");
+
 // A replace and its kill each name the pid they are about, so a fold can refuse another process's.
 expectTypeOf<Extract<Msg, { readonly type: "replacing" }>>().toHaveProperty("pid");
+
 expectTypeOf<Extract<Msg, { readonly type: "killed" }>>().toHaveProperty("pid");
+
 expectTypeOf(reachable).returns.toEqualTypeOf<number | null>();
 
 // Type law, checked by tsc: only a running process holds a pid, and a replacement token lives only
 // where an exit put it. The negative checks are not vacuous: the positive ones name the same fields.
 expectTypeOf<Case<"spawned">>().toHaveProperty("pid");
+
 expectTypeOf<Case<"online">>().toHaveProperty("pid");
+
 expectTypeOf<Case<"starting">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"listening">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"exited">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"waiting">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"braked">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"stopping">>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"stopped">>().not.toHaveProperty("pid");
+
 expectTypeOf<Parameters<typeof DevState.cases.exited.make>[0]>().not.toHaveProperty("pid");
+
 expectTypeOf<Parameters<typeof DevState.cases.waiting.make>[0]>().not.toHaveProperty("pid");
+
 expectTypeOf<Parameters<typeof DevState.cases.braked.make>[0]>().not.toHaveProperty("pid");
+
 expectTypeOf<Case<"exited">>().toHaveProperty("replacement");
+
 expectTypeOf<Case<"waiting">>().toHaveProperty("replacement");
+
 expectTypeOf<Case<"starting">>().not.toHaveProperty("replacement");
+
 expectTypeOf<Case<"listening">>().not.toHaveProperty("replacement");
+
 expectTypeOf<Case<"braked">>().not.toHaveProperty("replacement");
+
 expectTypeOf<Case<"stopped">>().not.toHaveProperty("replacement");
+
 expectTypeOf(address).returns.toEqualTypeOf<number | null>();
+
 expectTypeOf(target).returns.toEqualTypeOf<number | null>();
+
 expectTypeOf(pending).returns.toEqualTypeOf<string | null>();
 
 // Disjoint ranges, so a number found in a state names what it is.
 const PIDS = { min: 30_000, max: 39_999 };
+
 const PORTS = { min: 40_000, max: 49_999 };
 
 const Choice = fc.record({
@@ -92,6 +129,7 @@ const Choice = fc.record({
     },
   ),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 const Walk = fc.record({
@@ -101,6 +139,7 @@ const Walk = fc.record({
   ),
   choices: fc.array(Choice, { minLength: 1, maxLength: 60 }),
 });
+
 type Walk = typeof Walk extends fc.Arbitrary<infer A> ? A : never;
 
 type Kind = Msg["type"];
@@ -257,6 +296,7 @@ type Ref = {
 type Settled = "completed" | "failed" | "discarded" | null;
 
 const active = (phase: Phase) => phase !== "braked" && phase !== "stopping" && phase !== "stopped";
+
 const known = (port: number) => (port === 0 ? null : port);
 
 // The plan's rows for a replace: the sampler replaces only a running process, once; its kill marks
@@ -292,6 +332,7 @@ const reference = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
   }
 
   const [next, settled] = main(ref, msg);
+
   return [{ ...next, signal: next.phase === "replacing" ? next.signal : null }, settled];
 };
 
@@ -325,6 +366,7 @@ const main = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
 
     // The event links to the start before it, or to the last durable start the driver read.
     const up = ref.port === null ? "spawned" : "online";
+
     return [{ ...ref, phase: up, pid: msg.pid, start: msg.start, after: ref.start ?? ref.last }, null];
   }
 
@@ -378,6 +420,7 @@ const walk = (w: Walk, visit: (step: Step) => void) => {
   expect(cmds).toEqual([]);
   expect(isState(initial)).toBe(true);
   let s = initial;
+
   let ref: Ref = {
     phase: "starting",
     port: null,
@@ -528,12 +571,14 @@ describe("T708 dev life laws", () => {
           armed = armed || began;
           // One to five more samples over the limit while the old process drains.
           const sample = began && msg.type === "replacing" ? msg : null;
+
           const repeats =
             sample === null
               ? []
               : Array.from({ length: choice.burst - 1 }, (_, n) =>
                   applyCell(devLife, next, { ...sample, replacement: `${sample.replacement}-${n + 1}` }),
                 );
+
           seen.repeats += repeats.length;
           expect(repeats).toEqual(repeats.map(() => [next, []]));
 
@@ -636,6 +681,7 @@ describe("T708 dev life laws", () => {
               // A replace of a process whose own replacement had not listened yet takes its place.
               replacing: null,
             };
+
             const way = ways[msg.type];
             expect(way).not.toBeUndefined();
             expect(step.settled).toBe(way);

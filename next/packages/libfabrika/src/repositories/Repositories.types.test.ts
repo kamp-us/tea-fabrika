@@ -7,7 +7,9 @@ const contract = (reader: Repository, source: Source, service: Context.Service.S
   expectTypeOf<ReturnType<typeof service.open>>().toEqualTypeOf<Effect.Effect<Repository, RepositoriesError>>();
   expectTypeOf<ReturnType<typeof reader.read>>().toEqualTypeOf<Effect.Effect<Uint8Array | null, RepositoriesError>>();
   expectTypeOf<ReturnType<typeof reader.resolve>>().toEqualTypeOf<Effect.Effect<Source, RepositoriesError>>();
+
   type Read = typeof SourceMetadata.Type & { readonly bytes: Uint8Array };
+
   expectTypeOf<ReturnType<Source["read"]>>().toEqualTypeOf<Effect.Effect<Read | null, RepositoriesError>>();
   // @ts-expect-error each source read must distinguish committed bytes from disk bytes
   const raw: Effect.Effect<Uint8Array | null, RepositoriesError> = source.read("entry.txt");
@@ -19,6 +21,7 @@ const contract = (reader: Repository, source: Source, service: Context.Service.S
   const textReason: RepositoriesError["reason"] = "ReadFailed";
   // @ts-expect-error an explicit repository needs both read operations
   const incomplete: Repository = { snapshot: reader.snapshot, read: reader.read };
+
   return [bytes, raw, textReason, incomplete];
 };
 

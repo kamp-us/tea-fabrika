@@ -18,6 +18,7 @@ const Row = Schema.Struct({
 });
 
 const decodeRow = Schema.decodeUnknownResult(Row);
+
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });

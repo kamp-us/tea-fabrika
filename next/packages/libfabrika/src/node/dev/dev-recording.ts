@@ -35,16 +35,20 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   yield* fs.makeDirectory(home, { recursive: true });
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => {
       // FileSystem has no SQLite handle; Node owns this durable span queue's database.
       const db = new DatabaseSync(path.join(home, "brain.records.sqlite"));
       db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+
       return db;
     }),
     (db) => Effect.sync(() => db.close()),
   );
+
   return yield* Layer.build(
     Layer.mergeAll(
       SpanSink.layer(nodeSql(db), { object }),

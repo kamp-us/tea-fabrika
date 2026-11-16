@@ -12,6 +12,7 @@ const uncaused = (cause: unknown) => {
   // @ts-expect-error every caller of WebCryptoError has a cause, so the field is required (0568).
   const bare = new WebCryptoError({});
   const kept = new WebCryptoError({ cause });
+
   return { bare, kept };
 };
 

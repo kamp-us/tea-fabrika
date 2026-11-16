@@ -18,22 +18,26 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
 /** Fake runners: each answers from `answers` by step name, and every call is written down. */
 const fakes = (answers: Readonly<Record<string, (n: number) => Outcome.Outcome>>) => {
   const calls: string[] = [];
+
   const table = Object.fromEntries(
     Object.entries(answers).map(([name, answer]) => [
       name,
       (step: Step.Step) =>
         Effect.sync(() => {
           calls.push(step.name);
+
           return Outcome.answer(answer(calls.filter((c) => c === name).length));
         }),
     ]),
   );
+
   return { calls, layer: Runners.layer(table) };
 };
 
 const tempState = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const dir = yield* fs.makeTempDirectoryScoped({ prefix: "flow-" });
+
   return `${dir}/state.json`;
 });
 
@@ -41,6 +45,7 @@ const readModel = (path: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs.readFileString(path);
+
     return Schema.decodeUnknownSync(Schema.fromJsonString(FlowMachine.Model))(text);
   });
 
@@ -51,11 +56,13 @@ describe("runFlow", () => {
     ran(
       Effect.gen(function* () {
         const state = yield* tempState;
+
         const { calls, layer } = fakes({
           a: () => Outcome.done("a"),
           b: () => Outcome.skip("b"),
           c: () => Outcome.done("c"),
         });
+
         const model = yield* runFlow(three, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(ending(model)).toMatchObject({ outcome: "done", exit: 0 });
         expect(calls).toEqual(["a", "b", "c"]);
@@ -69,11 +76,13 @@ describe("runFlow", () => {
     ran(
       Effect.gen(function* () {
         const state = yield* tempState;
+
         const { calls, layer } = fakes({
           a: () => Outcome.done("a"),
           b: (n) => (n === 1 ? Outcome.ask("may I?") : Outcome.done("yes")),
           c: () => Outcome.done("c"),
         });
+
         const parked = yield* runFlow(three, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(ending(parked)).toEqual({ outcome: "ask", reason: "b asks: may I?", exit: 20 });
         expect((yield* readModel(state))._tag).toBe("parked");
@@ -87,23 +96,29 @@ describe("runFlow", () => {
     ran(
       Effect.gen(function* () {
         const state = yield* tempState;
+
         const { layer } = fakes({
           a: () => Outcome.stuck("no"),
           b: () => Outcome.done("b"),
           c: () => Outcome.done("c"),
         });
+
         const stuck = yield* runFlow(three, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(ending(stuck).exit).toBe(30);
+
         const again = yield* runFlow(three, { state, resume: false, lead: false }).pipe(
           Effect.provide(layer),
           Effect.flip,
         );
+
         expect(again._tag).toBe("Usage");
         const changed = Flow.make("three", [Step.act("a"), Step.act("c")]);
+
         const other = yield* runFlow(changed, { state, resume: true, lead: false }).pipe(
           Effect.provide(layer),
           Effect.flip,
         );
+
         expect(other._tag === "Usage" ? other.reason : "").toContain("changed");
       }),
     ));
@@ -113,10 +128,12 @@ describe("runFlow", () => {
       Effect.gen(function* () {
         const state = yield* tempState;
         const { calls, layer } = fakes({ a: () => Outcome.done("a") });
+
         const refused = yield* runFlow(three, { state, resume: false, lead: false }).pipe(
           Effect.provide(layer),
           Effect.flip,
         );
+
         expect(refused._tag === "Usage" ? refused.reason : "").toBe("no runner for steps b, c");
         expect(calls).toEqual([]);
         expect(yield* FileSystem.FileSystem.pipe(Effect.flatMap((fs) => fs.exists(state)))).toBe(false);

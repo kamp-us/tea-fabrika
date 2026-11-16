@@ -23,6 +23,7 @@ export const EMPTY: Folded = access.init(null, {})[0];
 
 const step = (model: Folded, event: MemberEvent): Folded => {
   const [next] = applyCell(access, model, { type: "fold", event });
+
   return next;
 };
 
@@ -44,6 +45,7 @@ const step = (model: Folded, event: MemberEvent): Folded => {
  */
 export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded, Reason> => {
   const next = step(model, event);
+
   return next.reply._tag === "accepted" ? Result.succeed(next) : Result.fail(next.reply.reason);
 };
 

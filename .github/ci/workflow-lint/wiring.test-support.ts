@@ -28,6 +28,7 @@ const diff = {
 
 // M1: only changes' classify step asks GitHub, with the job's token.
 export const token = `\${{ github.token }}`;
+
 const classify = { ...diff, env: { ...diff.env, GITHUB_TOKEN: token } };
 
 export const build = `\${{ needs.changes.outputs.build != 'false' }}`;
@@ -78,6 +79,7 @@ export const step = <W extends { jobs: object }, J extends keyof W["jobs"] & str
 /** Where `job`'s step named `name` sits, for a plant that moves or removes it. */
 export const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) => {
   const found = step(w, job, name);
+
   return (w.jobs as Record<string, { steps: unknown[] }>)[job]?.steps.indexOf(found) ?? -1;
 };
 
@@ -89,10 +91,14 @@ export const testEnv = {
 export const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
 export const probe = "steps.diff.outputs.probe == 'true'";
+
 // The check job's steps, each on its own flag (ticket 985): lint on check, the rows on field.
 export const checkFlag = `\${{ needs.changes.outputs.check != 'false' }}`;
+
 const rowsFlag = `\${{ !cancelled() && needs.changes.outputs.field != 'false' }}`;
+
 const rowsAlone = `\${{ needs.changes.outputs.check == 'false' }}`;
+
 const rowInstall = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
 
 const name = fc.string({ maxLength: 20 });

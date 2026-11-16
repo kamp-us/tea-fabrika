@@ -25,6 +25,7 @@ export const noQuestionWordKey: CreateRule = {
         });
       }
     };
+
     return {
       Property(node) {
         if (node.parent.type === "ObjectExpression") {

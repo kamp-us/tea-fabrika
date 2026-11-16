@@ -18,7 +18,9 @@ import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
+
 const check = { seed: SEED, numRuns: RUNS };
 
 it.effect.prop(
@@ -61,6 +63,7 @@ it("T843 declaration schemas reject disabled, fractional, nonfinite and unsafe b
 });
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const DEFAULT = 18787;
 
 const declare = (path: string) =>
@@ -76,7 +79,9 @@ const declare = (path: string) =>
 // A declaration path segment, as settings.md "Key spelling and paths" writes keys: short words,
 // kebab-case when one word does not fit. A segment never holds a dot.
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}(-[a-z0-9]{1,4})?$/);
+
 const segments = fc.array(segment, { minLength: 1, maxLength: 4 });
+
 const ports = fc.integer({ min: 1, max: 65535 });
 
 /** `value` placed at `path` in nested tables. */
@@ -119,11 +124,13 @@ describe("L1, a Setting remains a Config", () => {
         expect(Config.isConfig(setting)).toBe(true);
         const provider = ConfigProvider.fromUnknown(value._tag === "absent" ? {} : nest(path, value.value));
         const parsed = await run(setting.parse(provider));
+
         const yielded = await run(
           Effect.gen(function* () {
             return yield* setting;
           }).pipe(Effect.provide(ConfigProvider.layer(provider))),
         );
+
         expect(Exit.isSuccess(yielded)).toBe(Exit.isSuccess(parsed));
 
         if (Exit.isSuccess(parsed) && Exit.isSuccess(yielded)) {
@@ -168,6 +175,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       // @ts-expect-error since is a release, never a number (T730 L10).
       Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart", since: 1 }),
     ];
+
     expect(typeof refused).toBe("function");
   });
 
@@ -177,6 +185,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
     expectTypeOf(Declarations.port.default).toEqualTypeOf<number>();
     expectTypeOf(Declarations.port.scope).toEqualTypeOf<readonly ["person"]>();
     expectTypeOf(Declarations.port).toExtend<Config.Config<number>>();
+
     const repo = Setting.make("a.b", {
       schema: Schema.String,
       default: "x",
@@ -185,6 +194,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       reload: "live",
       since: "1.2.3",
     });
+
     expectTypeOf(repo.scope).toEqualTypeOf<readonly ["repo", "person"]>();
     // T730 L10: the release metadata is on the declaration, typed, and the value type stays inferred.
     expectTypeOf(repo.since).toEqualTypeOf<string>();
@@ -282,6 +292,7 @@ it("scenario: T753 L1 a group's named declarations keep their decoded types", ()
       since: "1.2.3",
     }),
   });
+
   expectTypeOf(group.settings.count.default).toEqualTypeOf<number>();
   expectTypeOf(group.settings.label.default).toEqualTypeOf<string>();
   expectTypeOf(group.settings.count.schema.Type).toEqualTypeOf<number>();

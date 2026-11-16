@@ -64,9 +64,12 @@ const SEED = 119120;
 class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", { cause: Schema.Defect() }) {}
 
 const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
+
 /** P40: the counter's qualified name; its registered names stay `counter:N`. */
 const PROGRAM = "fabrika/counter";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PERSON = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
 
 // --- Variants ---------------------------------------------------------------------------------
@@ -130,6 +133,7 @@ const upgradesFor = (spec: Spec) =>
     }));
 
 const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
+
 const changed = Schema.TaggedStruct("changed", { count: Schema.Int });
 
 const write = Cmd.make("write", {
@@ -147,6 +151,7 @@ const Msg = Schema.Union([
 /** The variant as a program, made with `Program.make` as a program author writes one. */
 const programFor = (spec: Spec) => {
   const model = schemaFor(spec);
+
   const machine = Machine.make({
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
@@ -176,6 +181,7 @@ const programFor = (spec: Spec) => {
       send_err: (s: CounterModel) => [s, []],
     },
   });
+
   return Program.make({
     name: PROGRAM,
     machine,
@@ -241,6 +247,7 @@ const fcFitting = (model: CounterModel, v: number): fc.Arbitrary<Spec> =>
     .map(({ k, shape, below, above, climb }) => {
       // A field the model lacks needs an upgrade to add it, so its variant climbs at least one number.
       const up = shape === "field" && model.step === undefined ? Math.max(1, climb) : climb;
+
       return {
         k,
         shape,
@@ -311,6 +318,7 @@ const makeCode = Effect.fnUntraced(function* (specs: ReadonlyArray<Spec>) {
 const learn = Effect.fnUntraced(function* (code: Code, spec: Spec) {
   const digest = yield* hashFor(spec);
   code.variants.set(digest, spec);
+
   return digest;
 });
 
@@ -326,6 +334,7 @@ const loader = (code: Code) => ({
       }
 
       code.calls.loads.push(build);
+
       const loaded: Loaded = yield* ProgramLoader.use((l) => l.load(name, build)).pipe(
         Effect.provide(
           ProgramLoader.layer(
@@ -342,13 +351,16 @@ const loader = (code: Code) => ({
                   }
 
                   const n = typeof cmd === "object" && cmd !== null && "n" in cmd ? Number(cmd.n) : 0;
+
                   return Outcome.ok(n);
                 }),
             },
           ),
         ),
       );
+
       const { execution } = loaded;
+
       /** Holds a letter's step open while a law's gate is set, and says so on `held`. */
       const gated = Effect.gen(function* () {
         const gate = code.stepGate;
@@ -363,6 +375,7 @@ const loader = (code: Code) => ({
           yield* Deferred.await(gate);
         }
       });
+
       return {
         stepper: loaded.stepper,
         declaration: loaded.declaration,
@@ -372,6 +385,7 @@ const loader = (code: Code) => ({
           init: (saved: unknown) =>
             Effect.suspend(() => {
               code.calls.inits.push(build);
+
               return execution.init(saved);
             }),
           step: (model: unknown, m: unknown) => Effect.andThen(gated, execution.step(model, m)),
@@ -437,6 +451,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, specs: ReadonlyArray<Spec>)
   const ledger = yield* rig.open;
   const manager = yield* rig.open;
   const code = yield* makeCode(specs);
+
   return {
     rig,
     ledger,
@@ -458,6 +473,7 @@ const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(
 /** Opens a runner for `name`, starting it on `build` the first time, waking it after. */
 const open = Effect.fnUntraced(function* (w: World, name: string, build: string) {
   const known = w.names.get(name);
+
   const entry: Name = known ?? {
     name,
     store: yield* w.rig.open.pipe(Scope.provide(w.scope)),
@@ -466,13 +482,16 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
     updates: new Map(),
     session: null,
   };
+
   w.names.set(name, entry);
   const scope = yield* Scope.fork(w.scope);
   const alarms: Array<number | null> = [];
+
   const sessionWork = Effect.gen(function* () {
     const storeSql = entry.store.sql;
     const manager = w.rig.coordination(w.ledger.sql, w.manager.sql, nextProcess);
     const managerContext = yield* Layer.build(manager);
+
     // The brain starts each name once, on the build its descriptor names; a wake finds it live.
     const status = yield* ProcessManager.use((m) =>
       m.status(name).pipe(
@@ -485,11 +504,14 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
         Effect.flatMap(() => m.status(name)),
       ),
     ).pipe(Effect.provide(managerContext), Effect.orDie);
+
     entry.pid = status.state.process;
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: Effect.fnUntraced(function* (i: {
             id: string;
@@ -505,9 +527,12 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
                 w.cuts.armed = null;
                 w.cuts.hits.push(at);
+
                 return Effect.fail(new LedgerError({ reason: "unreachable" }));
               });
+
             yield* cut("before_acceptance");
+
             const appended = yield* mailbox.send(name, i.id, i.envelope.input, {
               ...brainFrom(entry.build),
               by: PERSON.key,
@@ -515,7 +540,9 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
               sentAt: i.sentAt,
               seen: i.seen,
             });
+
             yield* cut("after_acceptance");
+
             return appended;
           }),
           commit: () => Effect.die("a counter variant has no write Cmd"),
@@ -528,11 +555,13 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
               }
 
               w.durable.completed.add(id);
+
               return Appended.cases.placed.make({ rev: 1, pos: 1 });
             }),
         };
       }),
     );
+
     const services = Layer.mergeAll(
       ProcessStore.layer(storeSql, { process: entry.pid }),
       checked,
@@ -546,6 +575,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
             }
 
             w.durable.completed.add(mail.command);
+
             return Queued.make({ id: mail.command });
           }),
       }),
@@ -558,6 +588,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(managerContext)));
+
     const layer = ProgramRunner.withLoader(
       { id: entry.pid, name, program: PROGRAM, build: entry.build, owner: PERSON },
       loader(w.code),
@@ -572,12 +603,15 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
             w.cuts.armed = null;
             w.cuts.hits.push(cut);
+
             return Effect.fail(new LedgerError({ reason: "unreachable" }));
           }),
       },
     ).pipe(Layer.provideMerge(services));
+
     const context = yield* Layer.build(layer);
     const runner = Context.get(context, ProgramRunner);
+
     const session: Session = {
       scope,
       runner,
@@ -585,10 +619,13 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       run: (work) => Effect.provide(work, context),
       sql: storeSql,
     };
+
     return session;
   });
+
   const session = yield* sessionWork.pipe(Scope.provide(scope));
   entry.session = session;
+
   return session;
 });
 
@@ -606,12 +643,14 @@ const evict = Effect.fnUntraced(function* (w: World, name: string) {
 /** The name's open session, waking it on its descriptor's build when it was evicted. */
 const session = Effect.fnUntraced(function* (w: World, name: string) {
   const entry = w.names.get(name);
+
   return entry?.session ?? (yield* open(w, name, entry?.build ?? (yield* hashFor(BASE))));
 });
 
 /** One press, as the door delivers it: a fresh letter id unless a law resends one. */
 const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
   const n = letter ?? ++w.letters;
+
   return {
     n,
     input: {
@@ -643,9 +682,11 @@ type Fact = {
 const history = Effect.fnUntraced(function* (w: World, name: string) {
   const s = yield* session(w, name);
   const pid = w.names.get(name)?.pid ?? "";
+
   return yield* s.run(
     Effect.gen(function* () {
       const mailbox = yield* Mailbox;
+
       const facts = w.rig
         .rows(w.ledger.sql)
         .filter((e) => e.stream === pid)
@@ -655,8 +696,10 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
           body: e.body as Readonly<Record<string, unknown>>,
           build: e.build,
         }));
+
       const inbox = yield* Stream.runCollect(mailbox.read(name, 0));
       const checkpoint = yield* ProcessStore.use((store) => store.load);
+
       return { facts, inbox, checkpoint };
     }),
   );
@@ -665,6 +708,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
 /** The name's saved supervision journal. */
 const supervision = Effect.fnUntraced(function* (w: World, name: string) {
   const s = yield* session(w, name);
+
   return yield* recoveryStore(s.sql, { name, capacity: 1024 ** 3, schema: Supervision }).load;
 });
 
@@ -736,6 +780,7 @@ const replay = (
 const byTag = (facts: ReadonlyArray<Fact>, tag: string) => facts.filter((f) => f.tag === tag);
 
 const NAME = "counter:1";
+
 // Each run opens real SQLite files and runners; 100 runs took about 10 to 40 s on a laptop.
 const TIMEOUT = 300_000;
 
@@ -751,10 +796,12 @@ expectTypeOf<typeof SwapAnswer.Type>().toEqualTypeOf<Swapped>();
 
 // L20 (type): a swap's answer is a closed union a caller must match whole.
 expectTypeOf<Swapped["_tag"]>().toEqualTypeOf<"same" | "swapped" | "refused" | "not_now">();
+
 expectTypeOf<(typeof Swapped.cases)["refused"]["Type"]["reason"]>().toEqualTypeOf<"shape" | "newer" | "load">();
 
 // 0135: the swap request restated here is pinned to the runner's own parameter.
 type SwapRequest = { readonly load: string; readonly program: string; readonly hash: string };
+
 expectTypeOf<Parameters<Session["runner"]["swap"]>[0]>().toEqualTypeOf<SwapRequest>();
 
 const swap = (s: Session, load: string, hash: string) => s.runner.swap({ load, program: PROGRAM, hash });
@@ -793,6 +840,7 @@ const pressOnce = Effect.fnUntraced(function* (w: World, a: Account, g: fc.Gener
   expect(sent._tag, `press ${input.id}`).toBe("accepted");
   a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, { type });
   a.accepted.push(input.id);
+
   return input;
 });
 
@@ -804,6 +852,7 @@ const swapFitting = Effect.fnUntraced(function* (w: World, a: Account, spec: Spe
 
   if (hash === a.build) {
     expect(answer).toEqual(SwapAnswer.cases.same.make({}));
+
     return { hash, load, answer };
   }
 
@@ -813,6 +862,7 @@ const swapFitting = Effect.fnUntraced(function* (w: World, a: Account, spec: Spe
   a.build = hash;
   a.ran.push(hash);
   a.swaps++;
+
   return { hash, load, answer };
 });
 
@@ -860,6 +910,7 @@ const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) =>
   Effect.scoped(
     Effect.gen(function* () {
       const w = yield* world(rig, specs);
+
       return yield* body(w);
     }),
   );
@@ -875,6 +926,7 @@ type RefusedFact = {
 };
 
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.swapped"]["Type"], "_tag">>().toEqualTypeOf<SwappedFact>();
+
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.refused"]["Type"], "_tag">>().toEqualTypeOf<RefusedFact>();
 
 /** Runs the reload laws over the driver module's real stores. */
@@ -900,6 +952,7 @@ export const suite = (rig: Rig): void => {
                       h !== a.build &&
                       fits(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(h))), a.model, a.v) === "fits",
                   );
+
                   const move = pick(g, ["press", "press", "swap", ...(back.length > 0 ? ["back"] : [])]);
                   seen.add(move);
 
@@ -974,6 +1027,7 @@ export const suite = (rig: Rig): void => {
                       a,
                       g(() => fcFitting(a.model, a.v)),
                     );
+
                     loads.push(load);
                     continue;
                   }
@@ -1034,6 +1088,7 @@ export const suite = (rig: Rig): void => {
                 const { input } = press(w, "inc");
                 const turn = yield* Effect.forkChild(s.runner.msg(input));
                 yield* Deferred.await(held);
+
                 const spec = g(() =>
                   fcFitting(
                     updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
@@ -1042,6 +1097,7 @@ export const suite = (rig: Rig): void => {
                     a.v,
                   ),
                 );
+
                 const hash = yield* learn(w.code, spec);
                 const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
 
@@ -1119,6 +1175,7 @@ export const suite = (rig: Rig): void => {
                     "cut_swap",
                     ...(a.swaps > 0 ? ["restart"] : []),
                   ]);
+
                   seen.add(move);
 
                   if (move === "press") {
@@ -1162,6 +1219,7 @@ export const suite = (rig: Rig): void => {
                     const spec = { ...g(() => fcFitting(a.model, a.v)), v: a.v + 1 };
                     const hash = yield* learn(w.code, spec);
                     const load = `install_${++a.loads}`;
+
                     const cut = pick(g, [
                       "after_swap_prepared",
                       "after_swap_checkpoint",
@@ -1171,6 +1229,7 @@ export const suite = (rig: Rig): void => {
                       "after_swap_publish",
                       "after_swap_supervisor",
                     ]);
+
                     w.cuts.armed = cut;
                     const result = yield* Effect.exit(swap(s, load, hash));
                     expect(Exit.isFailure(result), `the call lost its answer at ${cut}`).toBe(true);
@@ -1279,11 +1338,13 @@ export const suite = (rig: Rig): void => {
                   } else {
                     const updates = Option.getOrThrow(Option.fromNullishOr(w.names.get(NAME))).updates;
                     const counts = new Map(watchers.map((c) => [c, updates.get(c)?.length ?? 0]));
+
                     const { answer } = yield* swapFitting(
                       w,
                       a,
                       g(() => fcFitting(a.model, a.v)),
                     );
+
                     const { inbox } = yield* history(w, NAME);
                     const rev = inbox.filter((l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
 
@@ -1386,6 +1447,7 @@ export const suite = (rig: Rig): void => {
           yield* law((g) => {
             const durable = pick(g, ["write", "send"] as const);
             const start = { ...BASE, durable, k: g(fc.integer, { min: 1, max: 5 }) };
+
             return inWorld(rig, [start], (w) =>
               Effect.gen(function* () {
                 const old = yield* hashFor(start);
@@ -1402,9 +1464,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
+
                   const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
                     pending[0],
                   );
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1415,12 +1479,14 @@ export const suite = (rig: Rig): void => {
                   const spec = { ...g(() => fcFitting(a.model, a.v)), durable };
                   const hash = yield* learn(w.code, spec);
                   const load = `pending_${n}`;
+
                   const cut = pick(g, [
                     "after_swap_prepared",
                     "after_swap_checkpoint",
                     "after_swap_record",
                     "after_swap_supervisor",
                   ]);
+
                   w.cuts.armed = cut;
                   expect(Exit.isFailure(yield* Effect.exit(swap(s, load, hash)))).toBe(true);
                   expect(w.cuts.armed).toBeNull();
@@ -1434,10 +1500,12 @@ export const suite = (rig: Rig): void => {
                   w.durable.blocked = false;
                   yield* swap(s, load, hash);
                   yield* s.runner.open(`pending-reader-${n}`);
+
                   const finished = yield* Effect.suspend(() => Effect.succeed(w.durable.completed.has(job.id))).pipe(
                     Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 millis") }),
                     Effect.timeoutOption("100 millis"),
                   );
+
                   expect(Option.isSome(finished), "the next turn retries the dispatched job after swap recovery").toBe(
                     true,
                   );
@@ -1486,6 +1554,7 @@ export const suite = (rig: Rig): void => {
           // Plant: omit sendRetry from finishSwap's alarm candidates.
           yield* law((g) => {
             const start: Spec = { ...BASE, durable: "send", k: g(fc.integer, { min: 1, max: 5 }) };
+
             return inWorld(rig, [start], (w) =>
               Effect.gen(function* () {
                 const old = yield* hashFor(start);
@@ -1501,9 +1570,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
+
                   const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
                     pending[0],
                   );
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1515,11 +1586,13 @@ export const suite = (rig: Rig): void => {
                   });
                   a.accepted.push(input.id);
                   yield* TestClock.setTime(g(fc.integer, { min: now + 1, max: deadline - 1 }));
+
                   const spec = g(() =>
                     fcFitting(a.model, a.v)
                       .map((variant) => ({ ...variant, durable: "send" as const }))
                       .filter((variant) => JSON.stringify(variant) !== JSON.stringify(w.code.variants.get(a.build))),
                   );
+
                   const hash = yield* learn(w.code, spec);
                   expect(hash).not.toBe(a.build);
                   const load = `normal_pending_${n}`;

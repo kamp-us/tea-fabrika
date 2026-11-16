@@ -15,6 +15,7 @@ import type { Sql } from "../../Sql.ts";
 const connect = (path: string) => {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
   return db;
 };
 
@@ -23,25 +24,31 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p39-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const path = join(folder, "ledger.db");
+
   const handle = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = connect(path);
+
       return { db, sql: nodeSql(db) };
     }),
     (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
   );
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => handle.sql.exec(query, ...params),
     transaction: (step) => handle.sql.transaction(step),
     size: () => handle.sql.size(),
   };
+
   const reopen = Effect.sync(() => {
     handle.db.close();
     handle.db = connect(path);
     handle.sql = nodeSql(handle.db);
   });
+
   return { sql, reopen } satisfies TestSuite.Store;
 });
 

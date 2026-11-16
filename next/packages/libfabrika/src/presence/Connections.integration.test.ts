@@ -21,22 +21,26 @@ const setup = (now: number) => {
     gateway: `connection:${client}`,
     at: now,
   });
+
   const store = storage();
   const live = new Set(["key-a", "key-b"]);
   const pings = new Map<string, number | null>();
   const failed = new Set<string>();
   const asked: Array<{ gateway: string; session: string }> = [];
+
   const layer = () =>
     Connections.layer(store.sql, {
       admitted: (key: string) => Effect.sync(() => live.has(key)),
       probe: (gateway: string, session: string) =>
         Effect.suspend(() => {
           asked.push({ gateway, session });
+
           return failed.has(session)
             ? Effect.fail(new LedgerError({ reason: "unreachable" }))
             : Effect.succeed(pings.get(session) ?? null);
         }),
     });
+
   return { store, live, pings, failed, asked, layer, connection };
 };
 
@@ -66,15 +70,18 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       ({ count, delay }) => {
         const world = setup(NOW);
         const started: string[] = [];
+
         const layer = Connections.layer(world.store.sql, {
           admitted: () => Effect.succeed(true),
           probe: (gateway) =>
             Effect.gen(function* () {
               started.push(gateway);
               yield* Effect.sleep(delay);
+
               return NOW;
             }),
         });
+
         return Effect.gen(function* () {
           yield* TestClock.setTime(NOW);
           const gateway = yield* Connections;
@@ -97,6 +104,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
   it.effect("storage and broken connection rows keep their typed LedgerError", () =>
     check(fc.string(), [], (message) => {
       const world = setup(NOW);
+
       const broken = Connections.layer(
         {
           ...world.store.sql,
@@ -109,6 +117,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
           probe: () => Effect.succeed(null),
         },
       );
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const gateway = yield* Connections;
@@ -153,6 +162,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
           const world = setup(NOW);
           const { connection } = world;
           world.pings.set(A, NOW);
+
           return Effect.gen(function* () {
             yield* TestClock.setTime(NOW);
             const gateways = yield* Connections;
@@ -176,6 +186,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -191,6 +202,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -208,6 +220,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       world.failed.add(A);
       world.pings.set(B, NOW);
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -231,6 +244,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -248,6 +262,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -264,6 +279,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         yield* Connections.use((g) => g.join(connection())).pipe(Effect.provide(world.layer()));
@@ -288,6 +304,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
     check(time, [NOW], (NOW) => {
       const world = setup(NOW);
       const { connection } = world;
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;
@@ -306,13 +323,16 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       world.failed.add(A);
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
         const gateways = yield* Connections;

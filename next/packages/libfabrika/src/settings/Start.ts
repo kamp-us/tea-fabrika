@@ -58,6 +58,7 @@ export const Input = Schema.Struct({
   /** Which program may start which: a right the host hands in, never a declared setting or a recorded fact. */
   starts: Schema.optionalKey(Schema.Array(Schema.Struct({ source: Text, to: Text }))),
 });
+
 /**
  * The decoded Input value.
  *
@@ -102,6 +103,7 @@ export const Receipt = Schema.Struct({
     ...Origin.fields,
   }),
 });
+
 /**
  * The decoded Receipt value.
  *

@@ -12,6 +12,7 @@ type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 const options = { seed: 119120, numRuns: 100 };
 
 const result = fc.constantFrom("success", "failure", "cancelled", "skipped", "", undefined);
+
 const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
 
 const needs = fc.dictionary(
@@ -22,8 +23,11 @@ const needs = fc.dictionary(
 
 // Each test job's time limit, as the report step's env gives it (`LIMIT_NEXT: *next-limit`).
 const LIMITS = { next: 17, tooling: 30 };
+
 const MINUTE = 60_000;
+
 const BASE = Date.parse("2026-11-15T14:15:17Z");
+
 /** A time `ms` after the run started, as the jobs API writes one. */
 const at = (ms: number) => new Date(BASE + ms).toISOString();
 
@@ -31,7 +35,9 @@ const at = (ms: number) => new Date(BASE + ms).toISOString();
 // after another leg failed, or by a person, leaves, and the report job still running. A canceled leg
 // here ran less than its limit, or its times are unknown, so it is never a time-out.
 const quiet = fc.constantFrom("success", "cancelled", "skipped", null);
+
 const stepName = fc.constantFrom("vitest", "end to end", "tooling tests", "results", "time table", "stop the run");
+
 const stepEnd = fc.option(fc.nat({ max: 40 * MINUTE }).map(at), { nil: null });
 
 // A step that did not fail: its times may be anything, even past every limit, since only a failed
@@ -113,11 +119,13 @@ it("property: with no failed step, job, test or time-out: red on a failed need, 
     fc.property(fc.option(needs, { nil: null }), calmJobs, (given, jobs) => {
       const results = given === null ? [] : Object.values(given).map((job) => job.result);
       const canceled = jobs.some((job) => job.status === "completed" && job.conclusion === "cancelled");
+
       const expected = results.includes("failure")
         ? "red"
         : !canceled && results.length > 0 && results.every((r) => r === "success")
           ? "green"
           : "stopped";
+
       expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe(expected);
     }),
     options,
@@ -159,6 +167,7 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
     }),
     options,
   );
+
   // pinned: the edge. A leg canceled at exactly its limit timed out; one canceled a millisecond
   // before it was canceled by something else.
   const leg = (ms: number) => ({
@@ -169,6 +178,7 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
     end: at(ms),
     steps: [],
   });
+
   expect(scheduled.ending(leg(17 * MINUTE), LIMITS)).toBe("timed out");
   expect(scheduled.ending(leg(17 * MINUTE - 1), LIMITS)).toBe("canceled");
   // A leg whose job has no known limit cannot be told a time-out.
@@ -192,6 +202,7 @@ it("property: a leg whose failed step ran for its limit or longer timed out, and
       steps,
       (name, step, setup, by, conclusion, others) => {
         const limit = LIMITS[name.includes("(tooling-") ? "tooling" : "next"] * MINUTE;
+
         const leg = (ran: number) => ({
           name,
           status: "completed",
@@ -200,6 +211,7 @@ it("property: a leg whose failed step ran for its limit or longer timed out, and
           end: at(setup + ran + 5_000),
           steps: [...others, { name: step, conclusion: "failure", start: at(setup), end: at(setup + ran) }],
         });
+
         expect(scheduled.ending(leg(limit), LIMITS)).toBe("timed out");
         expect(scheduled.ending(leg(limit + by), LIMITS)).toBe("timed out");
         expect(scheduled.ending(leg(limit - by), LIMITS)).toBe("failed");
@@ -224,12 +236,14 @@ it("property: a leg's suite is tooling when its shard starts tooling-, and next 
     fc.stringMatching(/^[a-z0-9]{1,6}$/),
     fc.integer({ min: 1, max: 9 }).map((k) => `tooling-${k}`),
   );
+
   fc.assert(
     fc.property(fc.constantFrom("tests", "tooling", "next", "a-job"), shard, (job, leg) => {
       expect(scheduled.suiteOf(`${job} (${leg})`)).toBe(leg.startsWith("tooling-") ? "tooling" : "next");
     }),
     options,
   );
+
   // scenario: on the 9-leg matrix, a tooling leg canceled at 29 minutes was stopped, and at 30 it
   // timed out by tooling's limit; a next leg canceled at 17 timed out by next's.
   const canceled = (name: string, minutes: number) => ({
@@ -240,6 +254,7 @@ it("property: a leg's suite is tooling when its shard starts tooling-, and next 
     end: at(minutes * MINUTE),
     steps: [],
   });
+
   expect(scheduled.ending(canceled("tests (tooling-1)", 29), LIMITS)).toBe("canceled");
   expect(scheduled.ending(canceled("tests (tooling-1)", 30), LIMITS)).toBe("timed out");
   expect(scheduled.ending(canceled("tests (e2e-1)", 17), LIMITS)).toBe("timed out");
@@ -289,6 +304,7 @@ it("property: a leg canceled at or past its limit is a time-out, named by its le
       run,
       (others, [suite, shard], over, list, r) => {
         const minutes = LIMITS[suite as keyof typeof LIMITS];
+
         const leg = {
           name: `tests (${shard})`,
           status: "completed",
@@ -297,6 +313,7 @@ it("property: a leg canceled at or past its limit is a time-out, named by its le
           end: at(minutes * MINUTE + over),
           steps: list,
         };
+
         const jobs = [...others, leg];
         const found = scheduled.causes(jobs, LIMITS);
         expect(found).toEqual([{ _tag: "timed out", leg: leg.name, minutes }]);
@@ -337,6 +354,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
             },
           ],
         }));
+
         const stopped = cancels.map((ms, i) => ({
           name: `tests (e2e-${i + 1})`,
           status: "completed",
@@ -345,6 +363,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
           end: at(ms),
           steps: [{ name: "end to end", conclusion: "cancelled", start: at(0), end: at(ms) }],
         }));
+
         // Every order the jobs API may list them in.
         const jobs = fc.sample(
           fc.shuffledSubarray([...red, ...stopped, ...others], {
@@ -355,6 +374,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
             numRuns: 1,
           },
         )[0]!;
+
         const first = red.toSorted((a, b) => Date.parse(a.steps[0]!.end) - Date.parse(b.steps[0]!.end));
         const found = scheduled.causes(jobs, LIMITS);
         expect(found).toEqual(first.map((job) => ({ _tag: "failed", leg: job.name })));
@@ -389,11 +409,13 @@ it("property: the limits are each LIMIT_ variable's positive number, by its job 
           ...Object.fromEntries(Object.entries(other).filter(([key]) => !key.startsWith("LIMIT_"))),
           ...Object.fromEntries(Object.entries(given).map(([id, value]) => [`LIMIT_${id}`, value])),
         };
+
         const expected = Object.fromEntries(
           Object.entries(given).flatMap(([id, value]) =>
             Number(value) > 0 ? [[id.toLowerCase(), Number(value)]] : [],
           ),
         );
+
         expect(scheduled.limits(env)).toEqual(expected);
       },
     ),
@@ -468,12 +490,14 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
   // holds each test job's limit in the report step's env.
   const run = fixture("43723335863");
   const { calls, send } = fake(run.jobs, null, null);
+
   const { result, action } = await scheduled.report({
     needs: run.needs,
     reports: [],
     env,
     api: scheduled.github(env, send)!,
   });
+
   expect(result).toBe("red");
   expect(action._tag).toBe("open");
   expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
@@ -487,12 +511,14 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
   }
 
   const { LIMIT_NEXT: _next, LIMIT_TOOLING: _tooling, ...bare } = env;
+
   const blind = await scheduled.report({
     needs: run.needs,
     reports: [],
     env: bare,
     api: scheduled.github(bare, fake(run.jobs, null, null).send)!,
   });
+
   expect(blind.result).toBe("stopped");
 });
 
@@ -519,6 +545,7 @@ it("property: the jobs API's answer reads as each job's name, status, conclusion
           })),
         })),
       };
+
       expect(scheduled.jobsOf(answer)).toEqual(jobs);
     }),
     options,
@@ -600,6 +627,7 @@ it("property: red opens an issue or comments on the open one, green closes the o
       run,
       (given, open, r) => {
         const action = scheduled.decide(given, open, r);
+
         const expected =
           given === "red"
             ? open === null
@@ -608,6 +636,7 @@ it("property: red opens an issue or comments on the open one, green closes the o
             : given === "green" && open !== null
               ? "close"
               : "none";
+
         expect(action._tag).toBe(expected);
 
         if (action._tag === "comment" || action._tag === "close") {
@@ -668,6 +697,7 @@ const fake = (
   others: readonly Listed[] = [],
 ) => {
   const calls: Call[] = [];
+
   const send = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
     calls.push({
       method: init.method,
@@ -677,6 +707,7 @@ const fake = (
     });
     const path = url.replace("https://api.example/repos/owner/repo/", "");
     const fail = failing.some((prefix) => path.startsWith(prefix));
+
     const json = path.startsWith("issues?")
       ? [
           // A pull request with the label is in the issues list too, and is never the report's.
@@ -689,9 +720,12 @@ const fake = (
         : path.startsWith("actions/runs/")
           ? jobs
           : {};
+
     const status = fail ? 500 : path === "labels" ? 422 : 200;
+
     return Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
   };
+
   return { calls, send };
 };
 
@@ -746,6 +780,7 @@ it("property: the report reads the run's jobs first, then makes exactly the call
         const api = scheduled.github(env, send)!;
         const { result, action } = await scheduled.report({ needs: given, reports: results, env, api });
         const failed = scheduled.failures(results, "/work/repo");
+
         const writes = calls
           .filter((c) => c.method !== "GET")
           .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
@@ -757,6 +792,7 @@ it("property: the report reads the run's jobs first, then makes exactly the call
         if (result === "stopped") {
           expect(calls).toHaveLength(1);
           expect(action._tag).toBe("none");
+
           return;
         }
 
@@ -860,12 +896,14 @@ it("property: on any ref but main the report judges the run the same and writes 
         const { GITHUB_REF: _main, ...bare } = env;
         const away = unset ? bare : { ...env, GITHUB_REF: ref };
         const { calls, send } = fake(answer(jobs), open, null);
+
         const { result, action } = await scheduled.report({
           needs: given,
           reports: results,
           env: away,
           api: scheduled.github(away, send)!,
         });
+
         const failed = scheduled.failures(results, "/work/repo");
 
         expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS }));
@@ -947,6 +985,7 @@ it("property: the report acts only on the open issue with its own title, never o
         const api = scheduled.github(env, send)!;
         const needed = { next: { result: given === "red" ? "failure" : "success" } };
         const { result, action } = await scheduled.report({ needs: needed, reports: [], env, api });
+
         const writes = calls
           .filter((c) => c.method !== "GET")
           .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
@@ -978,12 +1017,14 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
   // (red: a comment on issue 1350, and no new issue; then a close of 1350).
   const speed = { number: 1350, title: SPEED };
   const red = fake(answer([]), null, null, [], [speed]);
+
   const opened = await scheduled.report({
     needs: { next: { result: "failure" } },
     reports: [],
     env,
     api: scheduled.github(env, red.send)!,
   });
+
   expect(opened.action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
   expect(red.calls.find((c) => c.method === "POST" && c.url.endsWith("/issues"))?.body).toMatchObject({
     title: scheduled.TITLE,
@@ -991,12 +1032,14 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
   });
 
   const green = fake(answer([]), null, null, [], [speed]);
+
   const closed = await scheduled.report({
     needs: { next: { result: "success" } },
     reports: [],
     env,
     api: scheduled.github(env, green.send)!,
   });
+
   expect(closed).toEqual({ result: "green", action: { _tag: "none" } });
   expect(green.calls.filter((c) => c.method !== "GET")).toEqual([]);
 });

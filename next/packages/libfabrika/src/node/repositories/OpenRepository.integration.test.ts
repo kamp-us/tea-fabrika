@@ -27,10 +27,15 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!);
 
 const ids = generated(Id.InputId);
+
 const people = generated(Id.make("person"));
+
 const document = ".fabrika/fabrika.toml";
+
 const personName = "~/.fabrika/fabrika.toml";
+
 const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
+
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
@@ -61,11 +66,14 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
           Effect.gen(function* () {
             const fs = yield* FileSystem.FileSystem,
               path = yield* Path.Path;
+
             const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-code-" });
             yield* RepositoryOpenTest.isolateGit(root);
+
             const origin = path.join(root, "origin.git"),
               repo = path.join(root, "repo"),
               person = path.join(root, "person");
+
             const marker = path.join(root, "executed");
             yield* fs.makeDirectory(person);
             yield* git(root, ["init", "--bare", "--initial-branch=stable", origin]);
@@ -100,10 +108,12 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
             yield* git(repo, ["config", "core.sshCommand", trap]);
             yield* git(repo, ["config", "remote.origin.uploadpack", trap]);
             yield* git(repo, ["config", "maintenance.auto", "true"]);
+
             const db = yield* Effect.acquireRelease(
               Effect.sync(() => new DatabaseSync(":memory:")),
               (value) => Effect.sync(() => value.close()),
             );
+
             const trust = RepositoryTrustLedger.layer.pipe(
               Layer.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
               Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -116,6 +126,7 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
                 env: {},
                 version: "0.0.0",
               }).pipe(Effect.provide(RepositoriesGit.layer({ person })));
+
               const result = yield* OpenRepository.open(prepared, {
                 selection,
                 request,
@@ -125,6 +136,7 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
                 interactive: c.move % 3 !== 0,
                 confirm: () => Effect.succeed(c.move % 2 === 0),
               }).pipe(Effect.provide(trust), Effect.exit);
+
               expect(Exit.isSuccess(result)).toBe(true);
               expect(yield* fs.exists(marker)).toBe(false);
             }

@@ -18,6 +18,7 @@ import { PAGE } from "./Log.ts";
 export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>
   Layer.sync(LedgerStreams, () => {
     const store = ledgerStore(sql, { ring: () => Effect.void });
+
     return {
       list: (prefix: string) =>
         Stream.paginate(null as string | null, (after) =>

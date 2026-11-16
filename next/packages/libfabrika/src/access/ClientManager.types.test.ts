@@ -25,6 +25,7 @@ const checkTypes = (founder: Input, members: ClientManager["Service"]["members"]
   >();
   expectTypeOf<"layer" extends keyof typeof Contract.ClientManager ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof Contract ? true : false>().toEqualTypeOf<false>();
+
   const checkRefusals = () => {
     const { build: _build, ...noBuild } = founder;
     const { by: _by, ...noBy } = founder;
@@ -39,8 +40,10 @@ const checkTypes = (founder: Input, members: ClientManager["Service"]["members"]
     const lostPerson: Input = noPerson;
     // @ts-expect-error `members` fails only with LedgerError, never another error channel.
     expectTypeOf(members).toExtend<Effect.Effect<Access, string>>();
+
     return [restored, lostBuild, lostBy, lostPerson];
   };
+
   void checkRefusals;
 };
 

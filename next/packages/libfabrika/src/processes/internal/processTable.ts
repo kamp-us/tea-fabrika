@@ -16,8 +16,10 @@ export const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 
 /** @internal */
 export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+
 /** @internal */
 export const Code = Schema.Struct({ program: Text, hash: Text });
+
 /** @internal */
 export const Owner = Schema.TaggedUnion({ brain: {}, process: { process: ProcessId } });
 
@@ -43,6 +45,7 @@ export const Start = Schema.TaggedUnion({
   },
   again: { id: Text, name: Text, code: Code, after: ProcessId, reason: Text },
 });
+
 /** @internal */
 export type Start = typeof Start.Type;
 
@@ -122,6 +125,7 @@ const Life = Schema.Struct({
   /** The reason it exited with, kept when a later `down` replaces its state. */
   exited: Schema.optionalKey(ExitReason),
 });
+
 /** @internal */
 export type Life = typeof Life.Type;
 
@@ -132,6 +136,7 @@ const Model = Schema.Struct({
   current: Schema.ReadonlyMap(Schema.String, Schema.String),
   restarts: Schema.ReadonlyMap(Schema.String, Schema.Array(Schema.Number)),
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -188,6 +193,7 @@ export const processTableFor = (by: string) =>
 
         if (event._tag === "started") {
           const code = { program: event.program, hash: event.hash };
+
           const life = {
             name: event.name,
             state: State.cases.live.make({ process: event.process, code }),
@@ -201,6 +207,7 @@ export const processTableFor = (by: string) =>
             from: entry,
             rev: entry.rev,
           };
+
           return [
             {
               ...s,
@@ -214,6 +221,7 @@ export const processTableFor = (by: string) =>
         if (event._tag === "monitored") {
           const key = watchKey(event.to, event.ref);
           const round = (s.watches.get(key)?.round ?? 0) + 1;
+
           const watch = Watch.cases.live.make({
             ref: event.ref,
             process: event.process,
@@ -221,6 +229,7 @@ export const processTableFor = (by: string) =>
             round,
             ...(event.name === undefined ? {} : { name: event.name }),
           });
+
           return [{ ...s, watches: put(s.watches, key, watch) }, []];
         }
 
@@ -234,6 +243,7 @@ export const processTableFor = (by: string) =>
 
           const { _tag: _live, ...held } = watch;
           const canceled = Watch.cases.canceled.make(held);
+
           return [{ ...s, watches: put(s.watches, key, canceled) }, []];
         }
 
@@ -247,7 +257,9 @@ export const processTableFor = (by: string) =>
             after: event.after,
             reason: event.reason,
           });
+
           const times = [...(s.restarts.get(event.name) ?? []), entry.arrivedAt];
+
           return [
             {
               ...s,
@@ -263,10 +275,12 @@ export const processTableFor = (by: string) =>
         if (event._tag === "exited") {
           const state = State.cases.ended.make({ process: event.process, code, reason: event.reason });
           const ended = { ...life, exited: event.reason, state };
+
           return [{ ...s, lives: put(s.lives, event.process, ended) }, []];
         }
 
         const state = State.cases.down.make({ ...event, code });
+
         return [{ ...s, lives: put(s.lives, event.process, { ...life, state }) }, []];
       },
     },

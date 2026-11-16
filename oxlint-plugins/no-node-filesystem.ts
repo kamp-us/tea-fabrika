@@ -19,6 +19,7 @@ export const noNodeFilesystem: CreateRule = {
           : source?.type === "TemplateLiteral" && source.expressions.length === 0
             ? source.quasis[0]?.value.cooked
             : null;
+
       const edge =
         source != null &&
         context.sourceCode
@@ -37,6 +38,7 @@ export const noNodeFilesystem: CreateRule = {
         });
       }
     };
+
     return {
       ImportDeclaration: (node) => check(node, node.source),
       ExportNamedDeclaration: (node) => check(node, node.source),

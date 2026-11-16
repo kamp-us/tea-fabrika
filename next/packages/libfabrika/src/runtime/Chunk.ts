@@ -56,9 +56,11 @@ export const input = <const T extends string, S extends Schema.Top>(type: T, ite
 export class TooBig extends Schema.TaggedError<TooBig>()("TooBig", { index: Schema.Int, bytes: Schema.Int }) {}
 
 type Send = { readonly id: string; readonly type: string; readonly items: ReadonlyArray<Schema.Json> };
+
 type Chunk = typeof Chunk.Type;
 
 const encoder = new TextEncoder();
+
 const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).length;
 
 /**
@@ -78,8 +80,10 @@ export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArr
     items,
     part: { id: send.id, seq, last },
   });
+
   const sizes = send.items.map(bytes);
   const end = send.items.length;
+
   /** The chunk at `seq` that starts at item `from` and takes as many items as fit, and where it stops. */
   const take = (from: number, seq: number): Result.Result<{ readonly chunk: Chunk; readonly to: number }, TooBig> => {
     // A letter's bytes are its own fields, each item, and a comma between two items. It is the
@@ -106,6 +110,7 @@ export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArr
     // Nothing fit: the next item alone is over the size, or an empty send's own fields are.
     return Result.fail(new TooBig({ index: from, bytes: weigh(Math.min(from + 1, end), sizes[from] ?? 0) }));
   };
+
   const first = take(0, 0);
 
   if (Result.isFailure(first)) {
@@ -141,10 +146,12 @@ export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArr
  */
 export const join = (chunks: ReadonlyArray<Chunk>): Option.Option<ReadonlyArray<Schema.Json>> => {
   const id = chunks[0]?.part.id;
+
   const whole =
     id !== undefined &&
     chunks.every(
       (chunk, n) => chunk.part.id === id && chunk.part.seq === n && chunk.part.last === (n === chunks.length - 1),
     );
+
   return whole ? Option.some(chunks.flatMap((chunk) => chunk.items)) : Option.none();
 };

@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 // Today's tooling, [secrets]. This is redact.sh's file interface: answer and JSONL event paths.
 // Exact dropped values are in the parent's fake env. Nothing reads a real config or key file.
 const script = join(import.meta.dirname, "redact.sh");
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{3,12}$/);
+
 const options = { seed: 321, numRuns: 8, endOnFailure: true };
 
 const unicode = (text: string) => [...text].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
@@ -46,20 +48,25 @@ const run = (
   try {
     const home = join(dir, "home");
     mkdirSync(home);
+
     const a = join(dir, "answer.txt"),
       e = join(dir, "events.jsonl");
+
     writeFileSync(a, answer);
     writeFileSync(e, events);
+
     const env = {
       HOME: home,
       PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
       TMPDIR: dir,
       ...secrets,
     };
+
     const invoke = () => {
       const got = spawnSync("sh", [script, a, e], { encoding: "utf8", env, timeout: 5_000 });
       expect(got.error).toBeUndefined();
       expect(got.signal).toBeNull();
+
       return {
         code: got.status,
         text: got.stdout + got.stderr,
@@ -67,6 +74,7 @@ const run = (
         events: readFileSync(e, "utf8"),
       };
     };
+
     const first = invoke();
     check({ ...first, again: invoke });
   } finally {
@@ -129,13 +137,16 @@ describe("T321 K19 redaction, today's tooling", () => {
         }),
         ({ value, name, encoding, reverse }) => {
           const secret = `fake/${value}+pass?=end`;
+
           const encoded =
             encoding === "url"
               ? encodeURIComponent(secret)
               : encoding === "double-url"
                 ? encodeURIComponent(encodeURIComponent(secret))
                 : secret;
+
           const json = encoding === "unicode" ? `{"text":"${unicode(secret)}"}` : JSON.stringify({ text: encoded });
+
           const entries = [
             json,
             JSON.stringify({
@@ -189,6 +200,7 @@ describe("T321 K19 redaction, today's tooling", () => {
                 : shape === "control"
                   ? `c\b${value}\f`
                   : `e\u{1F600}${value}`;
+
           const line = json ? JSON.stringify({ text: secret }) : secret;
           const pem = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(value.repeat(10)).toString("base64")}\n`;
           run(`safe\n${line}\n${pem}`, `${JSON.stringify({ text: secret })}\n`, { TOKEN: secret }, (got) => {
@@ -218,11 +230,13 @@ describe("T321 K19 redaction, today's tooling", () => {
       const later = join(dir, "later.txt");
       const secret = `ghp_${"a1".repeat(20)}`;
       writeFileSync(later, `${secret}\n`);
+
       const got = spawnSync("sh", [script, missing, later], {
         encoding: "utf8",
         env: { HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TMPDIR: dir },
         timeout: 5_000,
       });
+
       expect(got.status).not.toBe(0);
       expect(readFileSync(later, "utf8")).not.toContain(secret);
     } finally {
@@ -239,17 +253,21 @@ describe("T321 K19 redaction, today's tooling", () => {
       const cwd = join(dir, "work");
       mkdirSync(cwd);
       writeFileSync(join(cwd, ".npmrc"), "original\n");
+
       const prompt = join(dir, "prompt"),
         answer = join(dir, "answer.md"),
         events = join(dir, "events.jsonl");
+
       writeFileSync(prompt, "");
       const secret = `ghp_${"b2".repeat(20)}`;
       const command = `rm -f .npmrc && mkdir .npmrc && printf '${secret}\\n' > ${answer} && printf '${secret}\\n'`;
+
       const got = spawnSync("sh", [script, "--run", cwd, prompt, answer, events, "sh", "-c", command], {
         encoding: "utf8",
         env: { HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TMPDIR: dir },
         timeout: 10_000,
       });
+
       expect(got.error).toBeUndefined();
       expect(readFileSync(answer, "utf8")).not.toContain(secret);
       expect(readFileSync(events, "utf8")).not.toContain(secret);
@@ -266,8 +284,10 @@ describe("T321 K19 redaction, today's tooling", () => {
         const pem = tokens(value).at(-1)!;
         const exact = `pass-${value}\nsecond-line`;
         const answer = location === "events" ? "safe\n" : `${pem}\n${exact}\n`;
+
         const events =
           location === "answer" ? "" : `${JSON.stringify({ type: "error", message: `${pem}\n${exact}` })}\n`;
+
         run(answer, events, { PLANTED_SECRET: exact }, (got) => {
           expect(got.code, "redact.sh must handle partial failed-run output").toBe(0);
 
@@ -294,12 +314,14 @@ describe("T321 K19 redaction, today's tooling", () => {
     fc.assert(
       fc.property(word, fc.constantFrom("", "\n", "\r\n"), (value, ending) => {
         const answer = `safe ${value} 猫 café${ending}`;
+
         const events =
           JSON.stringify({
             type: "turn.completed",
             usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 2 },
             text: value,
           }) + ending;
+
         run(answer, events, { PLANTED_SECRET: "absent-madeup-secret" }, (got) => {
           expect(got.code, "redact.sh must preserve safe bytes").toBe(0);
           expect(got.answer).toBe(answer);

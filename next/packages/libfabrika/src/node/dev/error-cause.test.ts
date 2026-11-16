@@ -9,7 +9,9 @@ import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
+
 const HOME = "/home-t695";
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -39,10 +41,13 @@ const started = (id: string) => ({
 });
 
 const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
+
 const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
+
 const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
 
 type Read = "exists" | "read" | "decode";
+
 type Call = "pending" | "last" | "add";
 
 /** The outbox's disk, where reading the pending file goes wrong at `read`. */
@@ -55,6 +60,7 @@ const brokenPending = (read: Read, failure: unknown, bad: string) =>
 const run = (call: Call) =>
   Effect.gen(function* () {
     const outbox = yield* brainOutbox(HOME);
+
     return call === "pending"
       ? yield* outbox.pending
       : call === "last"
@@ -106,9 +112,11 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
           open: () => fails(failure),
           rename: () => fails(failure),
         });
+
         const error = yield* Effect.flip(
           Effect.provide(brainOutbox(HOME).pipe(Effect.flatMap((outbox) => outbox.add(started(id)))), layer),
         );
+
         expect(error._tag).toBe("BrainError");
         expect(error.reason).toBe("storage");
         expect((error as { readonly cause?: unknown }).cause).toBe(failure);
@@ -131,6 +139,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
           exists: (path) => Effect.succeed(!pendingFile(path)),
           readFileString: () => Effect.succeed(bad),
         });
+
         const error = yield* Effect.flip(Effect.provide(run("last"), layer));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError((error as { readonly cause?: unknown }).cause), "the decoder's failure").toBe(true);
@@ -147,9 +156,11 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
     ({ field, bad }) =>
       Effect.gen(function* () {
         const raw = { ...started("e-1"), [field]: bad };
+
         const error = yield* Effect.flip(
           Effect.provide(brainOutbox(HOME).pipe(Effect.flatMap((outbox) => outbox.add(raw))), disk({})),
         );
+
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError((error as { readonly cause?: unknown }).cause), "the decoder's failure").toBe(true);
       }),
@@ -165,12 +176,14 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
           exists: (path) => Effect.succeed(pendingFile(path)),
           readFileString: () => Effect.succeed(`${JSON.stringify(started(id))}\n`),
         });
+
         const error = yield* Effect.flip(
           Effect.provide(
             brainOutbox(HOME).pipe(Effect.flatMap((outbox) => outbox.add({ ...started(id), pid }))),
             layer,
           ),
         );
+
         expect(error.reason).toBe("id_reused");
         expect((error as { readonly cause?: unknown }).cause).toBeUndefined();
       }),

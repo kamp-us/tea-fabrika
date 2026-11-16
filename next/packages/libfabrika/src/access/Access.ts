@@ -235,6 +235,7 @@ export const MemberEvent = Schema.TaggedUnion({
   revoked: { revoke: Revoke, signed: Signed },
   added: { add: Add, signed: Signed },
 });
+
 /**
  * The decoded type of `MemberEvent`.
  *
@@ -245,6 +246,7 @@ export type MemberEvent = typeof MemberEvent.Type;
 
 /** Rank `email`, the brain's own key, waits for P36. */
 const Rank = Schema.Literals(["person", "window", "agent", "hands", "recovery"]);
+
 type Rank = typeof Rank.Type;
 
 /** A key's one standing, with the rank and place it joined with. Only a sheet is spent or
@@ -257,7 +259,9 @@ const Key = Schema.TaggedUnion({
   /** A sheet a newer sheet ended. */
   replaced: { rank: Schema.Literal("recovery"), under: Schema.Null },
 });
+
 type Key = typeof Key.Type;
+
 type Keys = ReadonlyMap<string, Key>;
 
 /** A key as the view shows it. */
@@ -300,6 +304,7 @@ export type Access = {
  * @category models
  */
 export const Reason = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
+
 /**
  * The decoded type of `Reason`.
  *
@@ -313,6 +318,7 @@ const Reply = Schema.TaggedUnion({
   accepted: {},
   refused: { reason: Reason },
 });
+
 type Reply = typeof Reply.Type;
 
 const ACCEPTED: Reply = Reply.cases.accepted.make({});
@@ -344,6 +350,7 @@ const Model = Schema.TaggedUnion({
  * @category models
  */
 export type Folded = typeof Model.Type;
+
 type Founded = typeof Model.cases.founded.Type;
 
 const Msg = Schema.Struct({ type: Schema.Literal("fold"), event: MemberEvent });
@@ -497,6 +504,7 @@ const found = ({ id, name, keys, window }: Event<"founded">): Folded => {
   }
 
   const ids = new Set(["founded"]);
+
   return Model.cases.founded.make({ person: id, name, keys: change.keys, ids, reply: ACCEPTED });
 };
 
@@ -508,6 +516,7 @@ const grant = (model: Founded, { grant, signed }: Event<"granted">) =>
     }
 
     const change = new Change(model.keys).add(grant.key, grant.as, signed.signer);
+
     return Result.map(joins(model, grant.key, grant.as), () => change.keys);
   });
 
@@ -604,6 +613,7 @@ const fold = (model: Folded, event: MemberEvent): Folded => {
     }
 
     const reply = Reply.cases.refused.make({ reason: "not_member" });
+
     return Model.cases.unfounded.make({ reply });
   }
 

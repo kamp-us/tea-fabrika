@@ -158,6 +158,7 @@ const confirmed = (s: TezgahClient): Step => {
 };
 
 const decodeView = Schema.decodeUnknownResult(TezgahView);
+
 const encodeView = Schema.encodeUnknownResult(TezgahView);
 
 /**
@@ -178,6 +179,7 @@ export const tezgahMachine = Machine.make({
   update: {
     server: (s, m): Step => {
       const view = decodeView(m.view);
+
       return Result.isSuccess(view) ? confirmed({ ...s, serverState: view.success, rev: m.rev }) : [s, []];
     },
     patch: (s, m): Step => {
@@ -190,6 +192,7 @@ export const tezgahMachine = Machine.make({
       }
 
       const view = s.serverState;
+
       const next: Result.Result<TezgahView, unknown> =
         m.base === s.rev && m.rev === s.rev + 1
           ? Result.flatMap(
@@ -197,6 +200,7 @@ export const tezgahMachine = Machine.make({
               decodeView,
             )
           : Result.fail("gap");
+
       return Result.isSuccess(next) ? confirmed({ ...s, serverState: next.success, rev: m.rev }) : [s, [ask({})]];
     },
     move: (s, m): Step => [
@@ -236,6 +240,7 @@ export const tezgahMachine = Machine.make({
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
       const gone = s.pendingMutations.filter((p) => sentAs(p) === m.letter);
+
       return [
         { ...s, pendingMutations: s.pendingMutations.filter((p) => sentAs(p) !== m.letter) },
         gone.map(() => settled({ letter: m.letter, result: "overridden", ms: m.ms })),

@@ -33,8 +33,10 @@ export const layer = (input: Start.Input) =>
       const checked = yield* SettingsInput.check(input).pipe(
         Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
       );
+
       const starts = yield* Starts;
       const receipt = yield* starts.record(checked.input);
+
       const saved = yield* SettingsInput.receipt(receipt, { ...checked.input, settings: checked.snapshot }).pipe(
         Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
       );

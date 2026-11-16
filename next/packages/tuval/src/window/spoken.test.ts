@@ -11,12 +11,16 @@ import { Arbitrary, Schema } from "effect";
 import { spoken } from "./spoken.ts";
 
 const SEED = 119120;
+
 // The programs' own names, none inside another, and none a reason's tag.
 const NAMES = ["alpha", "bravo", "charlie", "delta", "echo"] as const;
+
 const PACKS = ["fabrika", "acme", "x"] as const;
 
 const Tiles = WindowModel.fields.tiles.check(Schema.isMinLength(1), Schema.isMaxLength(NAMES.length));
+
 const Said = WindowModel.fields.said;
+
 const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /**
@@ -26,16 +30,20 @@ const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
  */
 const page = (tiles: typeof Tiles.Type, said: typeof Said.Type, pick: number) => {
   const rows = tiles.map((t, i) => ({ ...t, id: `tile_${i + 1}`, name: `${NAMES[i]!}:1` }));
+
   const desk = rows.map((t, i) => ({
     id: t.id,
     program: `${PACKS[(pick + i) % PACKS.length]!}/${NAMES[i]!}`,
     n: i + 1 + (pick % 40),
   }));
+
   const messages = said.messages.map((x, i) => ({ ...x, tile: rows[(pick + i) % rows.length]!.id }));
+
   return { m: { tiles: rows, said: { ...said, messages } }, desk };
 };
 
 type Page = ReturnType<typeof page>;
+
 type DeskTile = Page["desk"][number];
 
 const lookup =
@@ -61,6 +69,7 @@ describe("the polite region says the current burst as one line", () => {
 
       if (p.m.said.messages.length === 0) {
         expect(words, "an empty burst, and the region said something").toBe("");
+
         return true;
       }
 
@@ -68,6 +77,7 @@ describe("the polite region says the current burst as one line", () => {
       const parts = p.m.said.messages.map((x) =>
         spoken({ ...p.m, said: { id: p.m.said.id, messages: [x] } }, lookup(p), () => null),
       );
+
       expect(words, "the burst as one line, in order").toBe(parts.join(", "));
       expect(words.includes("\n"), "the burst is one line").toBe(false);
 
@@ -104,6 +114,7 @@ describe("the polite region says the current burst as one line", () => {
           p.m.tiles.some((t) => t.reach._tag === "ended" && !p.m.said.messages.some((x) => x.tile === t.id)),
         ),
       ).toBe(true);
+
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 30 } },

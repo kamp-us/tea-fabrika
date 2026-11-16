@@ -24,6 +24,7 @@ export const Verdict = Schema.TaggedUnion({
   red: { to: Schema.Literals(["tests", "build"]), lines: Schema.Array(Schema.String) },
   skipped: { reason: Schema.String },
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** The job in check.yaml that runs `pnpm typecheck` alone; workflow-lint.ts holds it there. */
@@ -57,11 +58,14 @@ export type Found = { readonly path: string; readonly text: string };
 
 // `pnpm -r` puts the package's folder before each line of its output.
 const PREFIX = /^(\S+) typecheck: (.*)$/;
+
 // tsc's plain format, the one it prints to a pipe: `file(line,col): error TSnnnn: message`.
 const ERROR = /^(.+?)\(\d+,\d+\): error TS\d+: /;
+
 // What GitHub puts before each line of a job's log: the runner's time, then a `##[error]` mark on
 // a line the runner flagged.
 const STAMP = /^﻿?\d{4}-\d\d-\d\dT[\d:.]+Z (?:##\[error\])?/;
+
 // oxlint-disable-next-line no-control-regex -- the escape that starts a terminal color code
 const COLOR = /\u001B\[[0-9;]*m/g;
 
@@ -76,7 +80,9 @@ export const logText = (log: string): string =>
 // Actions runner lays out a repo's workspace. Read from the line itself, so no runner's home is
 // written here, and a path that does not end that way stays as it is.
 const CHECKOUT = String.raw`(?:/[^\s/"'()]+)*/work/([^\s/"'()]+)/\1/`;
+
 const ROOTED = new RegExp(`^${CHECKOUT}`);
+
 const ANYWHERE = new RegExp(CHECKOUT, "g");
 
 /** `text` with every checkout folder taken off, so each path in it is a repo path. */
@@ -159,6 +165,7 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
 
   if (errors.length === 0) {
     const last = ended.output.trim().split("\n").at(-1) ?? "";
+
     return notRun(`CI's ${JOB} job failed with no error line: ${last}`);
   }
 
@@ -167,6 +174,7 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
   const all = errors.flatMap((e) => e.text.split("\n")).map(cut);
   const more = `... and ${all.length - LINES + 1} more lines`;
   const lines = all.length > LINES ? [...all.slice(0, LINES - 1), more] : all;
+
   return Verdict.cases.red.make({ to, lines });
 };
 
@@ -191,6 +199,7 @@ const examIn = Effect.fn("typecheck.examIn")(function* (main: string, paths: Rea
   const ran = yield* exec(main, "python3", ["-I", script, list, ...paths]);
   // 0 is no exam path and 1 lists them; anything else read no list, so no error counts as exam.
   const listed = ran.code === 1 ? ran.output.split("\n").filter(Boolean) : [];
+
   return new Set(listed.map((l) => l.split("\t")[0] ?? l));
 });
 
@@ -206,6 +215,7 @@ export const wait = Effect.fn("typecheck.wait")(
 
     const checks = yield* Checks;
     const last = yield* Ref.make(`no ${JOB} job yet`);
+
     const poll = checks.job(a.head, JOB).pipe(
       Effect.flatMap((found) =>
         Option.isSome(found) && found.value.status === "completed"
@@ -218,6 +228,7 @@ export const wait = Effect.fn("typecheck.wait")(
       ),
       Effect.tapError((e) => Ref.set(last, e.reason)),
     );
+
     const ended: Option.Option<Job> = yield* poll.pipe(
       Effect.retry({ schedule: Schedule.spaced(Duration.seconds(a.every)) }),
       Effect.timeoutOption(Duration.minutes(a.minutes)),
@@ -225,6 +236,7 @@ export const wait = Effect.fn("typecheck.wait")(
 
     if (Option.isNone(ended)) {
       const said = yield* Ref.get(last);
+
       return notRun(`CI's ${JOB} job at ${a.head.slice(0, 8)} did not end within ${a.minutes} minutes (${said})`);
     }
 
@@ -233,6 +245,7 @@ export const wait = Effect.fn("typecheck.wait")(
     const errors = errorsIn(output);
     const paths = [...new Set(errors.map((e) => e.path))];
     const exam = paths.length === 0 ? new Set<string>() : yield* examIn(a.main, paths);
+
     return verdict({ conclusion: job.conclusion, output }, errors, exam);
   },
   // The poll retries Pending and ChecksError until the limit; only the log's read reaches here.

@@ -173,6 +173,7 @@ const watch = <S extends object>(
 
       const failure = Predicate.hasProperty(fails, prop) ? Option.some(fails[prop]) : Option.none();
       const write = (args: ReadonlyArray<unknown>) => Ref.update(kept, (list) => [...list, { method: prop, args }]);
+
       const effect = (out: Effect.Effect<unknown, unknown, unknown>, args: ReadonlyArray<unknown>) =>
         Effect.andThen(
           write(args),

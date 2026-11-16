@@ -39,6 +39,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const ids = yield* Id.Generator;
+
   const timings = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       "desktop.brain-poll": Declarations.brainPoll.schema,
@@ -47,21 +48,29 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       "desktop.brain-throttle": Declarations.brainThrottle.schema,
     }),
   )(settings.values).pipe(Effect.mapError((cause) => operation("inspect", cause)));
+
   const semaphore = yield* Semaphore.make(1);
   const life = BrainLife.machine({ spec, settings });
   let [model] = life.init(null, {});
+
   const settle = (msg: BrainLife.Msg) => {
     const [next, cmds] = applyCell<typeof model, BrainLife.Msg, BrainLife.Command>(life, model, msg);
     model = next;
+
     return cmds;
   };
+
   const send = Effect.fnUntraced(function* (msg: BrainLife.Msg) {
     const next = yield* ids.next(Id.Cmd).pipe(Effect.mapError((cause) => operation("inspect", cause)));
+
     return settle({ ...msg, next });
   });
+
   const translate = (cause: BrainControlError | BrainProbeError) =>
     cause.reason._tag === "Conflict" || cause.reason._tag === "Foreign" ? "Conflict" : "Operation";
+
   const Failed = Schema.TaggedUnion({ Conflict: {}, Operation: {} });
+
   const command = Effect.fnUntraced(
     function* (cmd: BrainLife.Command, action: "up" | "stop") {
       const began = yield* Clock.currentTimeMillis;
@@ -73,11 +82,13 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         "fab.command": cmd.type,
         "fab.sentAt": String(began),
       });
+
       const work: Effect.Effect<
         void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
         BrainControlError | BrainProbeError,
         Scope.Scope
       > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
+
       const answer = yield* work.pipe(Effect.result);
       const at = yield* Clock.currentTimeMillis;
       yield* Effect.annotateCurrentSpan({
@@ -95,6 +106,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         }
 
         const error = translate(answer.failure);
+
         return {
           cause: Redacted.make(answer.failure),
           cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
@@ -117,19 +129,23 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     Effect.scoped,
     Effect.withSpan("BrainService.command"),
   );
+
   const flush = sink.flush.pipe(
     Effect.provideService(RecordManager, records),
     Effect.provideService(Archive, archive),
     Effect.mapError((cause) => operation("cleanup", cause)),
   );
+
   const perform = (action: "up" | "stop") =>
     semaphore.withPermits(1)(
       Effect.gen(function* () {
         const began = yield* Clock.currentTimeMillis;
         let cmds = yield* send({ type: action, at: began });
         const first = cmds[0];
+
         const deadline =
           began + timings[action === "up" ? "desktop.brain-start-timeout" : "desktop.brain-stop-timeout"];
+
         const drive = Effect.gen(function* () {
           let cause: unknown = Redacted.make("lifecycle refused");
 
@@ -159,6 +175,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                         model.command === "ready" ? "start" : model.command === "remove" ? "cleanup" : model.command,
                       cause,
                     });
+
             return yield* new BrainServiceError({ reason });
           }
         }).pipe(
@@ -169,11 +186,13 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
             }
 
             settle({ type: "tick", at: deadline });
+
             return Effect.fail(
               new BrainServiceError({ reason: new Timeout({ action, cause: Redacted.make("deadline") }) }),
             );
           }),
         );
+
         const observed = Effect.gen(function* () {
           yield* Effect.annotateCurrentSpan({
             "fab.action": action,
@@ -193,8 +212,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                 ? model.reason
                 : "interrupted",
           });
+
           return yield* exit;
         }).pipe(Effect.withSpan(`BrainService.${action}`));
+
         const exit = yield* sink.batch(observed).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -203,6 +224,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           ),
           Effect.exit,
         );
+
         const delivery = yield* flush.pipe(
           Effect.timeoutOrElse({
             duration: Math.max(0, deadline - (yield* Clock.currentTimeMillis)),
@@ -211,6 +233,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           Effect.catch((error) =>
             Effect.gen(function* () {
               const at = yield* Clock.currentTimeMillis;
+
               return yield* sink.batch(
                 Effect.fail(error).pipe(
                   Effect.withSpan("BrainService.delivery", {
@@ -237,9 +260,11 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         }
 
         yield* delivery;
+
         return yield* exit;
       }),
     );
+
   return BrainService.of({ up: perform("up").pipe(Effect.as({ url: spec.url })), stop: perform("stop") });
 });
 

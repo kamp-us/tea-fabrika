@@ -16,6 +16,7 @@ import type { Tasks, TasksError } from "./Tasks.ts";
 import type * as TasksLedger from "./TasksLedger.ts";
 
 type Receipt = { readonly rev: number; readonly arrivedAt: number };
+
 type Taken = Receipt & { readonly execution: string };
 
 it("type: L9 the contract speaks only the tasks module's types and errors, and the service class has no static layer", () => {

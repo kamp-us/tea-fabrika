@@ -12,10 +12,15 @@ import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const options = { seed: SEED, numRuns: RUNS };
+
 type ChaosProgram = typeof chaos;
+
 type Model = typeof Fabrika.ChaosMachine.Model.Type;
+
 type Msg = typeof Fabrika.ChaosMachine.Msg.Type;
 
 type Command = ReturnType<
@@ -66,6 +71,7 @@ const report = Fabrika.Chaos.Report.make({
 });
 
 const fired = Fabrika.Chaos.Fired.cases.fired.make({ hit: null });
+
 const json = (value: unknown) => JSON.stringify(value);
 
 const answer = (cmd: Command, at: number): Msg => {
@@ -118,13 +124,16 @@ const completed = (
   const msgs: Array<Msg> = [];
   const commands: Array<Command> = [];
   const ticks: Array<{ readonly at: number; readonly cmds: ReadonlyArray<Command>; readonly model: Model }> = [];
+
   const step = (msg: Msg) => {
     msgs.push(msg);
     const [next, out] = applyCell<Model, Msg, Command>(chaos.machine, model, msg);
     model = next;
     commands.push(...out);
+
     return out;
   };
+
   let pending = [...step({ type: "start", ...start })];
   let clock = 100;
 
@@ -256,10 +265,12 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
         const replies = run.msgs.filter((m) => m.type.endsWith("_ok") || m.type.endsWith("_err"));
+
         const tail = arbMsgSequence(
           fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
           { minLength: 10, maxLength: 20 },
         );
+
         // Each cut is reached by folding the real machine; the tail names its actual old Cmds.
         fc.assert(
           fc.property(tail, (msgs) => {

@@ -16,12 +16,14 @@ const Connection = Schema.Struct({
   session: ProcessId,
   at: Schema.Int,
 });
+
 type Connection = typeof Connection.Type;
 
 const Online = Schema.Struct({
   ...Connection.fields,
   state: Schema.Literals(["online", "away", "unknown"]),
 });
+
 type Online = typeof Online.Type;
 
 type Adapter<P, A> = {
@@ -62,6 +64,7 @@ export class Connections extends Context.Service<
       Effect.gen(function* () {
         // Capture the adapters' services once. Calling a method still does all its work lazily.
         const context = yield* Effect.context<P | A>();
+
         const stored = Effect.fnUntraced(function* <T>(step: () => T) {
           return yield* Effect.try({
             try: () =>
@@ -69,20 +72,24 @@ export class Connections extends Context.Service<
                 sql.exec(`CREATE TABLE IF NOT EXISTS process_connections (
 							client TEXT PRIMARY KEY, "key" TEXT NOT NULL, connection TEXT NOT NULL,
 							session TEXT NOT NULL, at INTEGER NOT NULL)`);
+
                 return step();
               }),
             catch: (error) =>
               new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
           });
         });
+
         const probe = Effect.fn("connections.probe")(function* (connection: Connection) {
           yield* Effect.annotateCurrentSpan(
             short({ "fab.connection": connection.gateway, "fab.connection.session": connection.session }),
           );
+
           return yield* Effect.suspend(() => adapter.probe(connection.gateway, connection.session)).pipe(
             Effect.provideContext(context),
           );
         });
+
         return {
           join: Effect.fn("connections.join")(function* (connection: Connection) {
             yield* Effect.annotateCurrentSpan(
@@ -125,12 +132,14 @@ export class Connections extends Context.Service<
                 .exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key)
                 .map((row) => decodeConnection({ ...row, gateway: row.connection })),
             );
+
             return yield* Effect.forEach(
               connections,
               (connection) =>
                 Effect.gen(function* () {
                   const ping = yield* Effect.result(probe(connection));
                   const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+
                   return Online.make({
                     ...connection,
                     state:

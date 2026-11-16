@@ -21,6 +21,7 @@ import type { Sql } from "../Sql.ts";
 import type * as IsolateUsage from "./IsolateUsage.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
+
 export type Props = { readonly project: string; readonly name: string; readonly process: string };
 
 export type Event = {
@@ -72,6 +73,7 @@ const Cell = fc.record({
   size: fc.integer({ min: 1, max: 32 }),
   cpu: fc.integer({ min: 0, max: 30000 }),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.array(Cell, { minLength: 2, maxLength: 24 });
@@ -82,7 +84,9 @@ const DeliveryCell = fc.record({
   error: fc.string(),
   elapsed: fc.integer({ min: 0, max: 30_000 }),
 });
+
 type DeliveryCell = typeof DeliveryCell extends fc.Arbitrary<infer A> ? A : never;
+
 const DeliveryTape = fc.array(DeliveryCell, { minLength: 1, maxLength: 24 });
 
 class DeliveryError extends Schema.TaggedError<DeliveryError>()("DeliveryError", { message: Schema.String }) {}
@@ -108,19 +112,24 @@ export const suite = (rig: Rig) =>
               const live = [1, 2];
               const ran: Array<{ name: string; process: string }> = [];
               const expected: Array<Array<typeof IsolateUsage.Usage.Type>> = [[], []];
+
               const recordings = yield* Effect.forEach(stores, (store, n) => rig.telemetry(store.sql, names[n] ?? ""), {
                 concurrency: 1,
               });
+
               let next = 2;
+
               const deliver = (called: { name: string; process: string }, cpu: number, count: number) =>
                 Effect.gen(function* () {
                   const index = names.indexOf(called.name);
+
                   const events = Array.from({ length: count }, () => ({
                     event: { rpcMethod: "step" },
                     cpuTime: cpu,
                     wallTime: cpu + 1,
                     outcome: "ok",
                   }));
+
                   yield* rig.deliver({ project: "project-test", ...called }, events, (object, usage) => {
                     expect(object).toBe(JSON.stringify(["project-test", called.name]));
                     const recording = recordings[index];
@@ -133,6 +142,7 @@ export const suite = (rig: Rig) =>
                   });
                   expected[index]?.push(...events.map(() => sample(called.process, cpu)));
                 });
+
               const check = () => {
                 for (const [i, store] of stores.entries()) {
                   expect(
@@ -191,6 +201,7 @@ export const suite = (rig: Rig) =>
               check();
             }),
           );
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
@@ -208,6 +219,7 @@ export const suite = (rig: Rig) =>
               let depth = 0;
               let failAt: number | null = null;
               let writes = 0;
+
               const sql: Sql = {
                 exec: (query, ...params) => {
                   if (/^\s*INSERT INTO unsent\b/i.test(query)) {
@@ -229,10 +241,12 @@ export const suite = (rig: Rig) =>
                   depth++;
                   const result = Result.try(() => store.sql.transaction(body));
                   depth--;
+
                   return Result.getOrThrow(result);
                 },
                 size: () => store.sql.size(),
               };
+
               yield* Effect.gen(function* () {
                 const service = yield* rig.telemetry(sql, "checklist:1");
 
@@ -248,6 +262,7 @@ export const suite = (rig: Rig) =>
                   // A fresh sink first loses its table creation in the failed transaction.
                   const moves =
                     held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
+
                   const move = moves[cell.pick % moves.length];
 
                   if (move === "reopen") {
@@ -292,8 +307,10 @@ export const suite = (rig: Rig) =>
               });
             }),
           );
+
         const replay = (tape: ReadonlyArray<Cell>) =>
           Effect.forEach([true, false], (warm) => once(tape, warm), { concurrency: 1, discard: true });
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(replay(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
@@ -320,6 +337,7 @@ export const suite = (rig: Rig) =>
                 const entered = yield* Deferred.make<void>();
                 const spans: Array<Tracer.NativeSpan> = [];
                 const logs: Array<{ level: string; message: unknown; cause: string; fields: unknown }> = [];
+
                 const logger = Logger.layer([
                   Logger.make((options: Logger.Options<unknown>) => {
                     logs.push({
@@ -335,34 +353,41 @@ export const suite = (rig: Rig) =>
                     });
                   }),
                 ]);
+
                 const tracer = Tracer.make({
                   span: (options) => {
                     const span = new Tracer.NativeSpan(options);
                     spans.push(span);
+
                     return span;
                   },
                 });
+
                 const response: Effect.Effect<void, unknown> =
                   behavior === "hang"
                     ? Effect.never
                     : behavior === "fail"
                       ? Effect.fail(new DeliveryError({ message: `PRIVATE_DELIVERY_${cell.error}_END` }))
                       : Effect.void;
+
                 const delivery = rig.deliver(
                   { project: "project-test", name: "checklist:1", process: pid(1) },
                   [{ event: { rpcMethod: "step" }, cpuTime: n, wallTime: n + 1, outcome: "ok" }],
                   () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(response)),
                 );
+
                 const pending = yield* delivery.pipe(
                   Effect.withTracer(tracer),
                   Effect.provide(logger),
                   Effect.forkScoped,
                 );
+
                 // Wait for the actual usage call, so the hung case overlaps the program step.
                 yield* Deferred.await(entered);
                 yield* Ref.set(pendingUsage, Fiber.join(pending));
                 expect(yield* measured.snapshot).toEqual(before);
                 const expected = yield* control.step(id, cell.n);
+
                 // A step must answer while its independent usage call is still hung.
                 const answer = yield* Effect.raceFirst(
                   measured.step(id, cell.n),
@@ -370,6 +395,7 @@ export const suite = (rig: Rig) =>
                     Effect.andThen(Effect.fail("the step waited for its usage call")),
                   ),
                 );
+
                 expect(answer).toEqual(expected);
                 expect(yield* measured.snapshot).toEqual(yield* control.snapshot);
                 expect(measured.executions()).toBe(control.executions());
@@ -397,6 +423,7 @@ export const suite = (rig: Rig) =>
               }
             }),
           ).pipe(Effect.provide(TestClock.layer()));
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay with its own test clock
         const property = fc.asyncProperty(DeliveryTape, (tape) => Effect.runPromise(once(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise

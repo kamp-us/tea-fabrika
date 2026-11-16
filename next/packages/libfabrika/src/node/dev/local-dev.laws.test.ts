@@ -11,6 +11,7 @@ import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
 
 const SEED = 119120;
+
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 type Signal = "SIGTERM" | "SIGKILL";
@@ -29,21 +30,26 @@ const running = Effect.fnUntraced(function* (pid: number) {
   yield* life.send({ type: "listened", port: 40_001 });
   const log: Array<Entry> = [];
   const now = Clock.currentTimeMillis;
+
   const vouches = (name: Signal) =>
     SubscriptionRef.get(life.state).pipe(
       Effect.map((s) => s._tag === "replacing" && s.pid === pid && s.signal === name),
     );
+
   // What the brain records once a step moved the state: the fact its new signal names.
   const record = (_prev: unknown, next: { readonly signal: Signal }) =>
     Effect.gen(function* () {
       log.push({ step: next.signal === "SIGTERM" ? "replacing" : "killed", at: yield* now, vouched: true });
     });
+
   const heard = (name: Signal) =>
     Effect.gen(function* () {
       log.push({ step: name, at: yield* now, vouched: yield* vouches(name) });
     });
+
   // The runtime reports the exit, and the brain folds it, as its event fiber does.
   const exits = life.send({ type: "exited", replacement: "start-1" });
+
   return { life, log, record, heard, exits };
 });
 
@@ -73,6 +79,7 @@ describe("the memory restart's bounded stop, next/", () => {
         // The exact grace is a tie between two clocks; the law asks only either side of it.
         const ends = honors && moment !== null && moment !== grace ? moment : null;
         const w = yield* running(pid);
+
         // The stand-in: it may end some time after its SIGTERM, and a SIGKILL ends it at once.
         const stand = (target: number, name: Signal) =>
           Effect.gen(function* () {
@@ -85,10 +92,13 @@ describe("the memory restart's bounded stop, next/", () => {
               yield* Effect.forkScoped(Effect.sleep(ends).pipe(Effect.andThen(w.exits)));
             }
           });
+
         const began = yield* Clock.currentTimeMillis;
+
         const fiber = yield* Effect.forkChild(
           terminate({ life: w.life, sample: sample(pid), grace, signal: stand, record: w.record }),
         );
+
         yield* TestClock.adjust(grace * 2 + 1);
         const ended = yield* Fiber.join(fiber);
         const log = w.log.map(({ step, at, vouched }) => ({ step, at: at - began, vouched }));
@@ -132,6 +142,7 @@ describe("the memory restart's bounded stop, next/", () => {
           Effect.sync(() => vi.spyOn(process, "kill").mockImplementation(refuses(code))),
           (spy) => Effect.sync(() => spy.mockRestore()),
         );
+
         const exit = yield* signal(pid, name).pipe(Effect.exit);
         expect(kill.mock.calls).toEqual([[pid, name]]);
 
@@ -174,19 +185,24 @@ describe("the memory restart's bounded stop, next/", () => {
     ({ pid, grace, event, point, share, stale }) =>
       Effect.gen(function* () {
         const w = yield* running(pid);
+
         const msg =
           event === "exited"
             ? ({ type: "exited", replacement: "start-1" } as const)
             : event === "stop"
               ? ({ type: "stop" } as const)
               : ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
+
         const landed: Array<Fiber.Fiber<unknown>> = [];
+
         // It lands as the runtime's event fiber or the scope's close sends it: in a fiber of its own,
         // which waits its turn on the life state.
         const land = (at: string) =>
           point === at ? Effect.forkScoped(w.life.send(msg)).pipe(Effect.map((f) => landed.push(f))) : Effect.void;
+
         // A fact's write takes a while, as a synced file write does: other fibers run meanwhile.
         const write = Effect.yieldNow.pipe(Effect.repeat({ times: 5 }));
+
         const record = (prev: unknown, next: { readonly signal: Signal }) =>
           Effect.gen(function* () {
             const fact = next.signal === "SIGTERM" ? "replacing" : "killed";
@@ -196,6 +212,7 @@ describe("the memory restart's bounded stop, next/", () => {
             yield* land(`${fact}-end`);
             yield* write;
           });
+
         // The stand-in ignores SIGTERM, and only what lands moves the state.
         const stand = (target: number, name: Signal) =>
           Effect.gen(function* () {
@@ -208,6 +225,7 @@ describe("the memory restart's bounded stop, next/", () => {
               landed.push(yield* Effect.forkScoped(Effect.sleep(moment).pipe(Effect.andThen(w.life.send(msg)))));
             }
           });
+
         // The real life cell, with one seam: once the grace ran out, what lands is folded just before
         // the `killed` Msg asks its turn, as an exit that the event fiber folds in that gap.
         const life: typeof w.life = {
@@ -225,6 +243,7 @@ describe("the memory restart's bounded stop, next/", () => {
         const fiber = yield* Effect.forkChild(
           terminate({ life, sample: sample(stale ? pid + 2 : pid), grace, signal: stand, record }),
         );
+
         // The SIGTERM's step and every timer it sets run before the clock moves.
         yield* write.pipe(Effect.repeat({ times: 5 }));
         yield* TestClock.adjust(grace * 2 + 1);
@@ -237,10 +256,12 @@ describe("the memory restart's bounded stop, next/", () => {
         // How many signals the replace sends: none for a sample the state does not vouch for, the
         // SIGTERM alone when the process went before the `killed` fold, else both.
         const sent = stale || point === "before" ? 0 : point.startsWith("killed") || point === "after-SIGKILL" ? 2 : 1;
+
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],
         ];
+
         expect(w.log.map(({ step }) => step)).toEqual(steps.slice(0, sent).flat());
         // No signal went out on a pid the state had stopped vouching for.
         expect(w.log.filter(({ vouched }) => !vouched)).toEqual([]);

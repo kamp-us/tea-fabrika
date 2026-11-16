@@ -30,18 +30,23 @@ import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const REPO = ".fabrika/fabrika.toml";
+
 const PERSON = "~/.fabrika/fabrika.toml";
 
 const validate = (repo: string, person: string, version: string) =>
   Effect.runPromiseExit(
     Effect.gen(function* () {
       const toml = yield* Toml;
+
       const files = {
         repo: { file: REPO, document: yield* toml.parse(repo) },
         person: { file: PERSON, document: yield* toml.parse(person) },
       };
+
       return yield* Files.validate(Declarations.all, files, { version });
     }).pipe(Effect.provide(TomlParser.layer)),
   );
@@ -53,6 +58,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+
   return reason?._tag === "Fail" && reason.error instanceof Files.SettingsError ? reason.error : "not a SettingsError";
 };
 
@@ -99,12 +105,14 @@ const text = (entries: ReadonlyArray<Entry>) => {
   }
 
   const lines = [...top, ...(instance.length > 0 ? ["[instance]", ...instance] : []), ...tables];
+
   return `${lines.join("\n")}\n`;
 };
 
 /** The plan's scope table: what a file may hold. Repeated keys keep only their first in `text`. */
 const allowed = (entries: ReadonlyArray<Entry>, file: "repo" | "person") => {
   const firstPort = entries.find((e) => e._tag === "port" || e._tag === "bad-port");
+
   return entries.every((e) => {
     if (e._tag === "version") {
       return file === "repo";
@@ -131,10 +139,12 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
         const error = failure(exit);
         expect(error instanceof Files.SettingsError, `repo:\n${text(repo)}\nperson:\n${text(person)}`).toBe(!ok);
         expect(Exit.isSuccess(exit)).toBe(ok);
+
         // A file whose only fault is a key the other file owns says so.
         const scope =
           (allowed(repo, "repo") && scopeOnly(person, "person")) ||
           (allowed(person, "person") && scopeOnly(repo, "repo"));
+
         expect(!scope || (error instanceof Files.SettingsError && error.reason === "scope")).toBe(true);
       }),
       check,
@@ -161,6 +171,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
           since: "1.2.3",
           format: "text",
         });
+
         const group = Setting.group({ record: d });
         const expected = BigInt(v.count) * v.unit.scale + (v.half ? v.unit.scale / 2n : 0n);
         const spelling = `${v.count}${v.half ? ".5" : ""} ${v.unit.name}`;
@@ -182,23 +193,29 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
           Effect.gen(function* () {
             const toml = yield* Toml;
             const document = yield* toml.parse(`[limits]\nrecord = ${JSON.stringify(spelling)}\n`);
+
             const files = {
               repo: { file: REPO, document: v.file === "repo" ? document : { value: {}, spans: [] } },
               person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
             };
+
             yield* Files.validate(group, files, { version: "1.2.3" });
+
             const resolved = yield* Sources.resolve(group, {
               flags: Sources.flags({}),
               env: Sources.env({}),
               repo: Sources.file(REPO, files.repo.document),
               person: Sources.file(PERSON, files.person.document),
             });
+
             const saved = yield* Snapshot.make(group, resolved);
             const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
             const checked = yield* Snapshot.read(group, transported);
+
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
           }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
         );
+
         expect(Exit.isSuccess(exit)).toBe(true);
 
         if (Exit.isSuccess(exit)) {
@@ -233,6 +250,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
 describe("L8, the version refusal comes first, and a supported version goes on", () => {
   const triple = fc.tuple(fc.nat(12), fc.nat(12), fc.nat(12));
   const companion = fc.constantFrom("none", "unknown-repo", "unknown-person", "bad-port", "scope");
+
   const COMPANION: Record<string, { repo: string; person: string }> = {
     none: { repo: "", person: "" },
     "unknown-repo": { repo: "[nope]\nkey = 1\n", person: "" },
@@ -255,6 +273,7 @@ describe("L8, the version refusal comes first, and a supported version goes on",
             ? wanted[wanted.findIndex((part, n) => part !== running[n])]! >
               running[wanted.findIndex((part, n) => part !== running[n])]!
             : false;
+
           const repo = `fabrika-version = "${wanted.join(".")}"\n${COMPANION[other]!.repo}`;
           const exit = await validate(repo, COMPANION[other]!.person, running.join("."));
 
@@ -321,6 +340,7 @@ describe("L10, the three S5 messages, word for word", () => {
       .tuple(fc.nat(3), fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), fc.constantFrom("swap", "add", "drop"))
       .map(([at, letter, edit]) => {
         const word = "port";
+
         return edit === "swap"
           ? word.slice(0, at) + letter + word.slice(at + 1)
           : edit === "add"
@@ -328,6 +348,7 @@ describe("L10, the three S5 messages, word for word", () => {
             : word.slice(0, at) + word.slice(at + 1);
       })
       .filter((w) => w !== "port" && w.length > 0);
+
     await fc.assert(
       fc.asyncProperty(typo, async (key) => {
         const exit = await validate(`[instance]\n${key} = 18800\n`, "", "0.0.0");
@@ -365,7 +386,9 @@ const KINDS = {
 } as const;
 
 type Kind = keyof typeof KINDS;
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"]);
 
 const declared = fc.uniqueArray(
@@ -438,6 +461,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
 
           // A stray key is one no declaration names at its place, so it is unknown there.
           const stray = doc.stray;
+
           const taken =
             stray === undefined
               ? true
@@ -465,6 +489,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           const exit = Schema.decodeUnknownExit(Files.schema(grouped(ds), doc.file))(tree, {
             onExcessProperty: "error",
           });
+
           expect(Exit.isSuccess(exit), JSON.stringify({ file: doc.file, tree })).toBe(ok);
 
           // Nothing is filled in: an omitted key stays omitted, so no default reaches the file's value.

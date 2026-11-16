@@ -37,6 +37,7 @@ const OPENERS: ReadonlyArray<{
 
 /** Playwright's launchers: `chromium.launch()` and the like drive a browser or Electron. */
 const BROWSERS = /^(?:playwright|playwright-core|@playwright\/test)$/;
+
 const LAUNCHERS = new Set(["chromium", "firefox", "webkit", "_electron"]);
 
 /** The name of a test file that already says it drives a real resource. */
@@ -63,6 +64,7 @@ export const integrationTestName: CreateRule = {
     const launchers = new Set<string>();
     const sqlite = new Set<string>();
     const base = file.replace(/\.test\.(tsx?)$/, "");
+
     const report = (node: Node, call: string, drives: string) =>
       context.report({
         node,
@@ -76,6 +78,7 @@ export const integrationTestName: CreateRule = {
 
         for (const spec of node.specifiers) {
           const local = spec.local.name;
+
           const imported =
             spec.type === "ImportSpecifier"
               ? spec.imported.type === "Identifier"

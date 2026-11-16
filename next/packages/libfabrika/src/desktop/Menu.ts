@@ -34,6 +34,7 @@ export const Row = Schema.Struct({
   has: Schema.Array(Schema.String),
   as: Kind,
 });
+
 type Row = typeof Row.Type;
 
 const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
@@ -59,6 +60,7 @@ const Act = Schema.TaggedUnion({
 });
 
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
+
 const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Number });
 
 const Shown = {
@@ -74,6 +76,7 @@ const Model = Schema.TaggedUnion({
   idle: { ...Shown },
   checking: { ...Shown, act: Act, cmd: Id.Cmd },
 });
+
 type Model = typeof Model.Type;
 
 const clickFields = { key: Schema.String, cmd: Id.Cmd };
@@ -123,7 +126,9 @@ const deny = Cmd.make("deny", {
 });
 
 const open = Cmd.make("open", { input: Schema.toType(Schema.Struct({ cmd: Id.Cmd })), ok: Schema.Null, err: [] });
+
 const openWindow = Cmd.make("open_window", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
 const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
 /**
@@ -146,6 +151,7 @@ const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").repla
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
   const cut = safe(text).slice(0, 256);
+
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 };
 
@@ -213,6 +219,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         const clients = unique(m.clients);
         // Snapshots arrive separately. The latest list decides a shared key's row.
         const rows = s.rows.filter((row) => !clients.some((client) => client.key === row.key));
+
         return [{ ...s, rows, clients }, []];
       },
       rows: (s, m) => {
@@ -228,6 +235,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const clients = s.clients.filter((client) => !rows.some((row) => row.key === client.key));
+
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
@@ -242,6 +250,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const shown = Row.make({ ...row, has: [...row.has] });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -263,6 +272,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const shown = Client.make({ ...client, tabs: { ...client.tabs } });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -274,6 +284,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
       },
       deny: (s, m) => {
         const row = s.rows.find((r) => r.key === m.key);
+
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {
@@ -391,5 +402,6 @@ export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
   }
 
   items.push(Item.cases.action.make({ id: "quit", words: "Quit" }));
+
   return items;
 };

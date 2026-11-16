@@ -27,13 +27,18 @@ import { clientInbox, Owner, ProcessEvent, ProcessTable, signalId, Start } from 
 import { ProcessManager } from "./ProcessManager.ts";
 
 const NAMES = ["counter:0", "counter:1", "counter:2"] as const;
+
 const REFS = ["ref-0", "ref-1", "ref-2"] as const;
+
 /** A process id no generated history places: a call on it asks about a process that never lived. */
 const NEVER = PIDS[39]!;
+
 /** The name a rolled-back turn registers, which no committed history holds. */
 const GHOST = "ghost:1";
+
 /** The name Law B's refused exit is about, started and watched just before that exit. */
 const WATCHED = "watched:1";
+
 const PLACEABLE = PIDS.slice(0, 39);
 
 type Call =
@@ -52,6 +57,7 @@ type Call =
 // calls land where they can succeed (a free name, a live process, an ended one) and one in eight
 // goes anywhere, a never-placed process included, to reach the refusals.
 const n = fc.nat({ max: 63 });
+
 const ref = fc.nat({ max: REFS.length - 1 });
 
 const fcCall: fc.Arbitrary<Call> = fc.oneof(
@@ -71,7 +77,9 @@ const fcHistory = (minLength: number, maxLength: number) => fc.array(fcCall, { m
 
 /** What the history did so far, as the long-lived manager answered it: placed processes and the live ones. */
 type World = { readonly placed: Map<string, string>; readonly live: Set<string> };
+
 const world = (): World => ({ placed: new Map(), live: new Set() });
+
 const anyProcess = (state: World, n: number): string => [...state.placed.keys(), NEVER][n % (state.placed.size + 1)]!;
 
 const among = (choices: ReadonlyArray<string>, n: number, fallback: string): string =>
@@ -89,12 +97,14 @@ const aim = (step: Call, state: World): Aimed => {
   const restartable = NAMES.filter((name) => newest(state, name) !== NEVER && !state.live.has(newest(state, name)));
   const registered = NAMES.filter((name) => !free.includes(name));
   const n = "n" in step ? step.n : 0;
+
   const name =
     step.call === "first"
       ? among(free, n, NAMES[n % NAMES.length]!)
       : step.call === "again"
         ? among(restartable, n, among(registered, n, NAMES[n % NAMES.length]!))
         : among(registered, n, NAMES[n % NAMES.length]!);
+
   const process =
     step.call === "again"
       ? newest(state, name)
@@ -103,6 +113,7 @@ const aim = (step: Call, state: World): Aimed => {
         : step.call === "down"
           ? among(ended, n, anyProcess(state, n))
           : anyProcess(state, n);
+
   return { step, name, process };
 };
 
@@ -133,6 +144,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
 
       if (typeof value === "object" && value !== null && Object.hasOwn(value, "at")) {
         const { at: _at, ...rest } = value as { readonly at: unknown };
+
         return { ok: rest };
       }
 
@@ -140,6 +152,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
     }
 
     const error: unknown = Cause.squash(exit.cause);
+
     return { refused: typeof error === "object" && error !== null && "reason" in error ? error.reason : error };
   });
 
@@ -159,8 +172,10 @@ const run = ({ step, name, process }: Aimed) =>
           reason: "crashed",
           code: CODE,
         });
+
         return yield* answer(processes.start(request, from()));
       }
+
       case "exit":
         return yield* answer(processes.exit(process, step.reason, from()));
       case "monitor":
@@ -289,14 +304,17 @@ describe("T753 L16 quest: a long-lived ProcessManager answers as a fresh one", (
                     lineFor(from({ by: CLIENT, parent: null }), { _tag: "send", m: { held: true } }),
                   ),
                 );
+
                 return yield* answer(processes.exit(process, KILL, from()));
               }).pipe(Effect.provideContext(long));
+
               expect(rolled, "the exit's turn rolled back").toEqual({ refused: "refused" });
             } else {
               // A turn appends a new name's start, or ends a live process, folds, then throws.
               const rolled = yield* Effect.gen(function* () {
                 const tx = yield* LedgerTransaction;
                 const processes = yield* ProcessManager;
+
                 return yield* Effect.exit(
                   tx.transact((ledger) => {
                     if (turn === "registers" || live === undefined) {
@@ -325,6 +343,7 @@ describe("T753 L16 quest: a long-lived ProcessManager answers as a fresh one", (
                   }),
                 );
               }).pipe(Effect.provideContext(long));
+
               expect(Exit.isFailure(rolled), "the turn rolled back").toBe(true);
             }
 

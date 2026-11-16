@@ -4,6 +4,7 @@
 import type { Socket } from "effect/socket";
 
 type Kind = "open" | "message" | "error" | "close";
+
 type Listener = (event: Socket.WebSocketEvent) => void;
 
 /** What a test learns as the socket is used: each send, each listener, each close it was asked for. */
@@ -126,6 +127,7 @@ export class MemorySocket implements Socket.WebSocketLike {
 
     if (now.length === 0) {
       this.waiting.set(type, [...(this.waiting.get(type) ?? []), event]);
+
       return;
     }
 

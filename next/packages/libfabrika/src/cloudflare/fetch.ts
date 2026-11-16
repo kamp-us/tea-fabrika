@@ -76,6 +76,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
 ) {
   const start = Context.get(yield* httpContext(env), RecordedStart);
   const config = { ...start.input, port: start.values.port };
+
   const url = new URL(request.url),
     origin = `http://127.0.0.1:${config.port}`;
 
@@ -96,6 +97,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   if (url.pathname === "/grant" && request.method === "POST") {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Request JSON body enters Effect
     const input = yield* Effect.tryPromise({ try: () => request.json(), catch: () => null });
+
     return Response.json(yield* rpc(project.grant(input)));
   }
 
@@ -104,6 +106,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
       try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
       catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
     });
+
     return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
   }
 

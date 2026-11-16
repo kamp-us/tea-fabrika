@@ -40,5 +40,6 @@ export const descendants = (rows: ReadonlyArray<typeof Row.Type>, root: number):
   }
 
   const led = rows.filter((row) => tree.has(row.pid) && tree.has(row.group) && row.group > 1);
+
   return [...new Set(led.map((row) => row.group))];
 };

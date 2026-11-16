@@ -18,23 +18,28 @@ const open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p15-reload-" });
   const file = path.join(folder, "store.db");
+
   const held = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = new DatabaseSync(file);
+
       return { db, sql: nodeSql(db) };
     }),
     (handle) => Effect.sync(() => handle.db.isOpen && handle.db.close()),
   );
+
   const sql: Sql = {
     exec: (query, ...params) => held.sql.exec(query, ...params),
     transaction: (work) => held.sql.transaction(work),
     size: () => held.sql.size(),
   };
+
   const reopen = Effect.sync(() => {
     held.db.close();
     held.db = new DatabaseSync(file);
     held.sql = nodeSql(held.db);
   });
+
   return { sql, reopen } satisfies ReloadTest.Store;
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -64,6 +69,7 @@ const rows: ReloadTest.Rig["rows"] = (sql) =>
     ? []
     : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
         const row = decode(raw);
+
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body, build: row.build };
       });
 

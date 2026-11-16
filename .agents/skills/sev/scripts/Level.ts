@@ -50,6 +50,7 @@ export const Entry = Schema.TaggedUnion({
   /** The sev0 ended: every fix merged (the lead says so), or the owner called it off. */
   closed: { at: Schema.String, by: Schema.Literals(["owner", "lead"]) },
 });
+
 export type Entry = typeof Entry.Type;
 
 // ---------------------------------------------------------------- the level
@@ -60,10 +61,12 @@ export const Sev0 = Schema.TaggedUnion({
   /** `index` is the line of the log its `opened` is on, so a summary reads only this sev0. */
   open: { since: Schema.String, reason: Schema.String, allow: Branches, index: Schema.Number },
 });
+
 export type Sev0 = typeof Sev0.Type;
 
 /** One open `ci-scheduled` issue: what keeps a sev1 on. `since` is when it was opened. */
 export const Alert = Schema.Struct({ number: Schema.Number, title: Schema.String, since: Schema.String });
+
 export type Alert = typeof Alert.Type;
 
 /** The level CI is in now. */
@@ -72,6 +75,7 @@ export const Level = Schema.TaggedUnion({
   sev1: { issues: Schema.Array(Alert) },
   sev0: { since: Schema.String, reason: Schema.String, allow: Branches },
 });
+
 export type Level = typeof Level.Type;
 
 /** The level from the sev0 and the open issues: an open sev0 wins, then any open issue. */
@@ -148,6 +152,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
   }
 
   const lines = (yield* fs.readFileString(at)).split("\n").filter((line) => line !== "");
+
   return yield* Effect.forEach(
     lines,
     (line, index) =>
@@ -185,5 +190,6 @@ export const write = Effect.fn("Level.write")(function* (home: string, entry: En
 
   yield* fs.makeDirectory(home, { recursive: true });
   yield* fs.writeFileString(yield* file(home), `${Schema.encodeSync(EntryJson)(entry)}\n`, { flag: "a" });
+
   return next.success;
 });

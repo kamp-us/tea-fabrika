@@ -35,9 +35,11 @@ export const tail = (output: string, n = 5): string => output.trimEnd().split("\
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {
     const handle = yield* ChildProcess.make(command, args, { cwd: dir });
+
     const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
       concurrency: 2,
     });
+
     return { code: Number(code), output } satisfies Ran;
   },
   Effect.scoped,
@@ -52,6 +54,7 @@ const readArgs = <A>(schema: Schema.Codec<A>, step: Step) =>
   );
 
 const Dir = Schema.Struct({ dir: Schema.String });
+
 const Branch = Schema.Struct({ dir: Schema.String, branch: Schema.String.check(Schema.isStartingWith("fabrikalfa/")) });
 
 const Commit = Schema.Struct({
@@ -107,12 +110,14 @@ export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
   const n = Number(ran.output.trim());
+
   return ran.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
 };
 
 /** The pull request number in `gh pr create`'s answer, or `null`. */
 export const createdPr = (ran: Ran): number | null => {
   const n = Number(/\/pull\/(\d+)/.exec(ran.output)?.[1]);
+
   return ran.code === 0 && Number.isInteger(n) ? n : null;
 };
 
@@ -135,6 +140,7 @@ const openPr = Effect.fn("landing.openPr")(function* (dir: string, branch: strin
 /** A script by its path from the lead scripts' folder, the one above this. */
 const script = Effect.fn("landing.script")(function* (...parts: ReadonlyArray<string>) {
   const path = yield* Path.Path;
+
   return path.join(import.meta.dirname, "..", ...parts);
 });
 
@@ -144,30 +150,36 @@ type Spawns = ChildProcessSpawner.ChildProcessSpawner | Path.Path;
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   format: Effect.fn("landing.format")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(passOrStuck("pnpm format", yield* run(dir, "nice", ["-n", "15", "pnpm", "format"])));
   }),
   lint: Effect.fn("landing.lint")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(passOrStuck("pnpm lint", yield* run(dir, "nice", ["-n", "15", "pnpm", "lint"])));
   }),
   governance: Effect.fn("landing.governance")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(governanceOutcome(yield* run(dir, "sh", [yield* script("governance.sh")])));
   }),
   "lead-commit": Effect.fn("landing.leadCommit")(function* (step) {
     const { dir, ticket, subject, paths } = yield* readArgs(Commit, step);
     const stepcommit = yield* script("..", "..", "step-commit", "scripts", "stepcommit.sh");
+
     return Outcome.answer(commitOutcome(yield* run(dir, "sh", [stepcommit, "lead", ticket, subject, ...paths])));
   }),
   "leak-grep": Effect.fn("landing.leakGrep")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
     const leakgrep = yield* script("leakgrep.sh");
+
     return Outcome.answer(
       leakOutcome(yield* run(dir, "sh", [leakgrep, "--commits", "HEAD", "--not", "--remotes=origin"])),
     );
   }),
   "bot-push": Effect.fn("landing.botPush")(function* (step) {
     const { dir, branch } = yield* readArgs(Branch, step);
+
     return Outcome.answer(
       passOrStuck("botpush.mjs", yield* run(dir, "node", [yield* script("botpush.mjs"), dir, branch])),
     );
@@ -182,6 +194,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
 
     const made = yield* run(dir, "gh", ["pr", "create", "--head", branch, "--title", title, "--body", body]);
     const pr = createdPr(made);
+
     return Outcome.answer(
       pr === null ? Outcome.stuck(`gh pr create failed: ${tail(made.output)}`) : Outcome.done(`opened PR ${pr}`),
     );
@@ -190,6 +203,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     const { dir, branch } = yield* readArgs(Branch, step);
     const pr = yield* openPr(dir, branch);
     const checks = yield* run(dir, "gh", ["pr", "checks", String(pr), "--watch", "--interval", "30"]);
+
     return Outcome.answer(passOrStuck(`CI on PR ${pr}`, checks));
   }),
   queue: Effect.fn("landing.queue")(function* (step) {
@@ -206,6 +220,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
       PushesProcess.layer(yield* script()),
       ChecksGh.layer(repo),
     );
+
     // The `ci` step before this one waited for the checks, so the required one is read once here.
     return Outcome.answer(
       yield* Queue.add({ dir, pr }).pipe(

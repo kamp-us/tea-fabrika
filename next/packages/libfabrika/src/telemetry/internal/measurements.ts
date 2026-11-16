@@ -12,7 +12,9 @@ import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
 const HOUR = 3_600_000;
+
 const DAY = 24 * HOUR;
+
 /** How long raw rows stay local: "about two weeks" (owner, 2026-11-07), read as 336 hours. */
 const KEEP = 336 * HOUR;
 
@@ -50,6 +52,7 @@ export const countRefused = (sql: Sql, { piece, hour, refused, count }: SumPoint
   );
 
 const SumColumns = SumPoint.mapFields(Struct.omit(["_tag"]));
+
 const decodeSum = Schema.decodeUnknownSync(SumColumns);
 
 /** @internal Closed hours in [from, to), oldest first, then the closed tag value. */
@@ -69,9 +72,13 @@ const HealthColumns = Schema.Struct({
 });
 
 const decodeHealth = Schema.decodeUnknownSync(HealthColumns);
+
 const decodeHour = Schema.decodeUnknownSync(Schema.Struct({ hour: Schema.Int }));
+
 const decodeDay = Schema.decodeUnknownSync(Schema.Struct({ day: Schema.Int }));
+
 const decodeCount = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }));
+
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({ seq: Schema.Int }));
 
 const decodeSummary = Schema.decodeUnknownSync(
@@ -93,6 +100,7 @@ const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): 
 
 const toHealth = (row: unknown): Measurements => {
   const { ok, ...rest } = decodeHealth(row);
+
   return { ...rest, ok: ok === 1 };
 };
 
@@ -124,6 +132,7 @@ const summarize = (hour: number, rows: ReadonlyArray<Measurements>): Array<Metri
   return [...pieces].map(([piece, group]) => {
     const ms = group.map((row) => row.ms).sort((x, y) => x - y);
     const lags = group.flatMap((row) => (row.lag === null ? [] : [row.lag]));
+
     return MetricPoint.make({
       piece,
       hour,
@@ -187,6 +196,7 @@ export const writeSize = (sql: Sql, now: number): void => {
 export const readSummaries = (sql: Sql, from: number, to: number): Array<MetricPoint> =>
   sql.exec(`SELECT * FROM summary WHERE hour >= ? AND hour < ? ORDER BY hour, piece`, from, to).map((row) => {
     const { p50, p95, max, ...rest } = decodeSummary(row);
+
     return MetricPoint.make({ ...rest, ms: { p50, p95, max } });
   });
 
@@ -217,11 +227,13 @@ const partKey = (object: string, day: string, part: number): string =>
  *  rows still local. */
 const due = (sql: Sql, object: string, now: number): Array<Part> => {
   const cutoff = Math.floor((now - KEEP) / DAY) * DAY;
+
   return sql
     .exec(`SELECT DISTINCT (at / ${DAY}) * ${DAY} AS day FROM measurements WHERE at < ? ORDER BY day`, cutoff)
     .map((row) => decodeDay(row).day)
     .flatMap((start) => {
       const day = new Date(start).toISOString().slice(0, 10);
+
       const [open] = sql.exec(
         `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
 				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
@@ -238,15 +250,18 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
         start,
         start + DAY,
       );
+
       const last = read.reduce((max, row) => Math.max(max, decodeSeq(row).seq), -Infinity);
       const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
       const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
+
       const body = encoder.encode(
         `${read
           .map(toHealth)
           .map(({ piece, at, ms, ok, error, lag, spanId }) => JSON.stringify({ piece, at, ms, ok, error, lag, spanId }))
           .join("\n")}\n`,
       );
+
       return [{ start, day, part, key: partKey(object, day, part), body, rows: read.length, last }];
     });
 };
@@ -259,6 +274,7 @@ const unchanged = (sql: Sql, { start, rows, last }: Part): boolean => {
     start + DAY,
     last,
   );
+
   return now !== undefined && decodeCount(now).n === rows;
 };
 
@@ -270,10 +286,12 @@ const archivePart = Effect.fnUntraced(function* (sql: Sql, archive: (typeof Arch
   const stored = yield* Effect.result(archive.put(part.key, part.body));
   const ended = yield* Clock.currentTimeMillis;
   const span = yield* Effect.option(Effect.currentSpan);
+
   const failed: Failed | null = Result.match(stored, {
     onFailure: (error) => (error.reason === "unreachable" ? "unreachable" : "mismatch"),
     onSuccess: ({ sha256: held }) => (held === hash ? null : "mismatch"),
   });
+
   yield* Effect.try({
     try: () =>
       sql.transaction(() => {
@@ -317,10 +335,12 @@ const archivePart = Effect.fnUntraced(function* (sql: Sql, archive: (typeof Arch
 export const archiveDays = Effect.fn(
   function* (sql: Sql, object: string, now: number) {
     const archive = yield* Archive;
+
     const parts = yield* Effect.try({
       try: () => sql.transaction(() => due(sql, object, now)),
       catch: sinkError,
     });
+
     yield* Effect.forEach(
       parts,
       (part) => archivePart(sql, archive, part).pipe(Effect.catch((_: SinkError) => Effect.void)),

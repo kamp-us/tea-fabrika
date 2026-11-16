@@ -6,9 +6,13 @@ import { noQuestionWordKey } from "./no-question-word-key.ts";
 
 // oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
 const NATIVE = "eslint(id-denylist)";
+
 const CUSTOM = "fabrika(no-question-word-key)";
+
 const PATH = "next/packages/libfabrika/src/keys.ts";
+
 const WORDS = ["where", "why", "what", "who", "how"];
+
 const runs = { seed: 119120, numRuns: 12 };
 
 const isIdentifier = (name: string) => /^[$_\p{ID_Start}][$_‌‍\p{ID_Continue}]*$/u.test(name);
@@ -116,6 +120,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
         const lines: string[] = [];
         const native: number[] = [];
         const custom: number[] = [];
+
         const add = (source: string, by: number[] | null) => {
           lines.push(source);
           by?.push(lines.length);
@@ -123,6 +128,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
 
         for (const [i, name] of names.entries()) {
           const refused = WORDS.includes(name);
+
           const literal = [
             JSON.stringify(name),
             escaped(name),
@@ -165,6 +171,7 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
       ),
       async ([name, extension, word, skill]) => {
         const source = (spelling: string) => declarations(spelling, 0).join("\n");
+
         const held = [
           `next/${name}.${extension}`,
           `next/${name}.test.${extension}`,
@@ -173,11 +180,13 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
           `.agents/skills/${skill}/scripts/${name}.ts`,
           `.agents/skills/lead/scripts/${name}.test.ts`,
         ];
+
         const today = [
           `packages/fabrika/src/${name}.${extension}`,
           `apps/fabrika/src/${name}.test.${extension}`,
           `programs/tracker/src/${name}.${extension}`,
         ];
+
         const files: Record<string, string> = {};
 
         for (const path of [...held, ...today]) {
@@ -208,6 +217,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
       fc.record({ value: unicodeKey, dynamic: identifier, near: neighbor, word: fc.constantFrom(...WORDS) }),
       async ({ value, dynamic, near, word }) => {
         const text = JSON.stringify(value);
+
         const source = [
           `import { ${word} as imported } from "./outside.ts";`,
           `const text = ${text} + imported;`,
@@ -224,6 +234,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
           `// ${word} is an ordinary English word here`,
           `type ${near[0]?.toUpperCase()}${near.slice(1)}Type = {${near}: string};`,
         ].join("\n");
+
         const result = await plant({ [PATH]: source });
         expect(result(NATIVE, PATH)).toEqual([]);
         expect(result(CUSTOM, PATH)).toEqual([]);
@@ -250,6 +261,7 @@ it("format: quoted, escaped, shorthand and computed spellings", async () => {
       "const j = {\\u0077ho: 1};",
     ].join("\n"),
   });
+
   expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
   expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
 });

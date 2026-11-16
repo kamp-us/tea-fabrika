@@ -181,13 +181,16 @@ export const Permission =
     const { model, permission } = config;
     // oxlint-disable-next-line fabrika/service-id -- a right's id is its declarer's, as with Effect's own `Context.Service` caller; `Model.ts` names its rights by their path
     const key = Context.Service<Self, Proof<Self>>()(id);
+
     const within = (tuples: Tuples, sender: Sender, object: Ref<On>): Result.Result<Proof<Self>, Denied> => {
       const subject = `person:${sender.for}`;
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
+
       return holds(tuples)
         ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
         : Result.fail(new Denied({ subject, permission, object }));
     };
+
     return Object.assign(key, { within });
   };
 

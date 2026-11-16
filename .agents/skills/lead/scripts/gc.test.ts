@@ -108,8 +108,10 @@ describe("box gc, today's tooling", () => {
     const main = join(dir, "main");
     const box = join(dir, "box");
     const data = join(dir, "box-gitdata");
+
     const git = (...a: string[]) =>
       spawnSync("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", ...a], { encoding: "utf8" });
+
     git("init", "-q", main);
     git("init", "-q", "--separate-git-dir", data, box);
     writeFileSync(join(box, ".gitignore"), "node_modules\n");
@@ -230,16 +232,19 @@ describe("worktree gc, today's tooling", () => {
           const w = wip ? "-wip" : "";
           // One tip is always a branch some pull request has, so the lookup is exercised.
           const at = [...tips, ...refs.slice(0, 1).map(([r]) => r)];
+
           const got = worktreePrs(
             { branch: branch === null ? null : branch + w, head, tips: at.map((t) => t + w) },
             byRef,
             byHead,
           );
+
           const want = [
             ...(branch === null ? [] : (byRef.get(branch) ?? [])),
             ...at.flatMap((t) => byRef.get(t) ?? []),
             ...(head === null ? [] : (byHead.get(head) ?? [])),
           ];
+
           expect(got).toEqual(want);
         },
       ),
@@ -254,11 +259,13 @@ describe("worktree gc, today's tooling", () => {
     const byRef = new Map([["fabrikalfa/lead378", ["MERGED" as const]]]);
     const byHead = new Map([[head, ["MERGED" as const]]]);
     const base = { locked: false, busy: [], idle: IDLE, dirty: 0, branch: "person/t378-node-kinds" };
+
     const renamed = worktreePrs(
       { branch: "person/t378-node-kinds", head, tips: ["fabrikalfa/lead378"] },
       byRef,
       new Map(),
     );
+
     const byCommit = worktreePrs({ branch: "person/t378-node-kinds", head, tips: [] }, new Map(), byHead);
     expect(decideWorktree({ ...base, prs: renamed })).toEqual({ _tag: "remove", reason: "merged" });
     expect(decideWorktree({ ...base, prs: byCommit })).toEqual({ _tag: "remove", reason: "merged" });

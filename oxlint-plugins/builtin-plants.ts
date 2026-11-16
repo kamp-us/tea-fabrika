@@ -11,11 +11,17 @@ export interface Plant {
 }
 
 const NUM = "declare const x: number;";
+
 const NUMS = ["declare const x: number;", "declare const y: number;", "declare const z: number;"];
+
 const STR = "declare const s: string;";
+
 const XS = "declare const xs: number[];";
+
 const FN = "declare const f: () => void;";
+
 const P = "declare const p: Promise<number>;";
+
 const TEST = 'import {describe, expect, it, vi} from "vitest";';
 
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';

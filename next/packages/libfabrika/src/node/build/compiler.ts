@@ -31,6 +31,7 @@ import { type OxcError, transformSync } from "oxc-transform-react";
  * @category schemas
  */
 export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, reason: Schema.String });
+
 /**
  * A row of `compiler-ledger.json`.
  *
@@ -90,6 +91,7 @@ interface Fn {
 type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
 const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
@@ -115,6 +117,7 @@ const saysNoMemo = (body: Tree): boolean => {
 const opensWithCache = (body: Tree): boolean => {
   const first = body?.type === "BlockStatement" ? body.body[0] : null;
   const init = first?.type === "VariableDeclaration" ? first.declarations[0]?.init : null;
+
   return init?.type === "CallExpression" && init.callee?.name === "_c";
 };
 
@@ -124,6 +127,7 @@ const opensWithCache = (body: Tree): boolean => {
  */
 const functions = (file: string, text: string): readonly Fn[] => {
   const found: Fn[] = [];
+
   const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
     if (node === null || typeof node !== "object") {
       return;
@@ -160,6 +164,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
         top: depth === 0,
         cache: opensWithCache(node.body),
       });
+
       return;
     }
 
@@ -185,7 +190,9 @@ const functions = (file: string, text: string): readonly Fn[] => {
       walk(child, name, depth, inJsx);
     }
   };
+
   walk(parseSync(file, text, {}).program, null, 0, { on: false });
+
   return found;
 };
 
@@ -201,13 +208,16 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   const findings: Finding[] = [];
   const out = compile(file, text);
   const source = functions(file, text);
+
   const compiled = new Set(
     functions(file.replace(/\.tsx$/, ".js"), out.code)
       .filter((f) => f.cache)
       .map((f) => f.name),
   );
+
   const named = (fn: string) => rows.some((r) => r.fn === fn);
   const said = new Set<string>();
+
   const diagnose = (e: OxcError) => {
     const label = e.labels[0];
     const at = label === undefined ? 0 : utf16(text, label.start);

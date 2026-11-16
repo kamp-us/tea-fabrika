@@ -18,10 +18,13 @@ export const ErrorClass = Schema.Literals([
   "UnknownError",
   "other",
 ]);
+
 export type ErrorClass = typeof ErrorClass.Type;
 
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 /** A fixed word, such as a door's reason or an exit's tag: never free text. */
 const Word = Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/));
 
@@ -87,6 +90,7 @@ export const ClientRecord = Schema.TaggedUnion({
     error: ErrorClass,
   },
 });
+
 export type ClientRecord = typeof ClientRecord.Type;
 
 /** A record as a client keeps and sends it: a stable row id, the tab, the build and its own time. */
@@ -97,6 +101,7 @@ export const ClientRow = Schema.Struct({
   sentAt: Schema.String,
   record: ClientRecord,
 });
+
 export type ClientRow = typeof ClientRow.Type;
 
 export class ClientRowsError extends Schema.TaggedError<ClientRowsError>()("ClientRowsError", {

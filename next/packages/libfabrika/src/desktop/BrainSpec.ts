@@ -6,6 +6,7 @@
 import * as Schema from "effect/Schema";
 
 const Text = Schema.NonEmptyString.check(Schema.isPattern(/^[^\p{Cc}]+$/u));
+
 const Absolute = Text.check(Schema.isPattern(/^\//u));
 
 const Home = Absolute.check(

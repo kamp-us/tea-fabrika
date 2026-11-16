@@ -20,12 +20,15 @@ const store = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
   const handles: Array<DatabaseSync> = [];
+
   const connect = () => {
     const db = new DatabaseSync(paths.join(path, "ledger.db"));
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
     handles.push(db);
+
     return { db, sql: nodeSql(db) };
   };
+
   let current = yield* Effect.acquireRelease(Effect.sync(connect), () =>
     Effect.sync(() => {
       for (const db of handles) {
@@ -35,17 +38,21 @@ const store = Effect.gen(function* () {
       }
     }),
   );
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => current.sql.exec(query, ...params),
     transaction: (step) => current.sql.transaction(step),
     size: () => current.sql.size(),
   };
+
   const reopen = Effect.sync(() => {
     current.db.close();
     current = connect();
   });
+
   const open = () => handles.filter((db) => db.isOpen).length;
+
   return { sql, reopen, probe: { open } } satisfies ChildrenTest.Store;
 });
 

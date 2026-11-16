@@ -37,6 +37,7 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
     const fail = (cause: unknown) => new LedgerError({ reason: "unreachable", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
     const io = Effect.tryPromise({ try: () => Reflect.apply(stub[name], stub, args), catch: fail });
+
     return yield* io.pipe(
       Effect.flatMap((raw) =>
         Schema.decodeUnknownEffect(answer)(raw).pipe(
@@ -46,7 +47,9 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
       Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
     );
   });
+
   const page = Schema.Array(Entry);
+
   return Layer.succeed(Ledger, {
     append: (stream, id, line) => call("append", stream, Appended, stream, id, line),
     read: (stream, after) => pages(after, (from) => call("read", stream, page, stream, from, caller.reader)),

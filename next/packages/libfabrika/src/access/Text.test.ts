@@ -27,6 +27,7 @@ const SAW = {
 } as const;
 
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const TOOK = { label: "Browser", location: "test", method: "panel", check: "touch" } as const;
 
 const grant = {
@@ -76,6 +77,7 @@ describe("P10 signed text", () => {
       window: "window",
       nonce: "n1",
     };
+
     const text = enrollmentText(value);
     expect(text).toBe(
       `{"_tag":"enrolled","id":"a1","to":"project-a","for":"${PERSON}","key":"sk-key","window":"window","nonce":"n1"}\n`,

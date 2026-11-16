@@ -30,6 +30,7 @@ export const layer = (model: Model): Layer.Layer<BoxGit> => {
       refs: () => answer("for-each-ref", model.refs),
       objectsAt: (_at, ref) => {
         const oid = model.objects[ref];
+
         return oid === undefined ? Effect.fail(new BoxGitError({ command: "rev-parse" })) : answer("rev-parse", [oid]);
       },
       retained: answer("for-each-ref", model.retained),

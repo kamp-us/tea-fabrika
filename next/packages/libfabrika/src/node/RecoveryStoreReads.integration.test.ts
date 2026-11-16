@@ -13,15 +13,18 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t936-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const opened = new DatabaseSync(join(folder, "store.db"));
       // A test process never loses power, so it skips the sync (ticket 585, decision 0052).
       opened.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+
       return opened;
     }),
     (opened) => Effect.sync(() => opened.isOpen && opened.close()),
   );
+
   return nodeSql(db);
 });
 

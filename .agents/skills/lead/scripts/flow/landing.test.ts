@@ -63,9 +63,11 @@ describe("what the landing scripts' exit codes mean", () => {
       Effect.gen(function* () {
         const format = landing.format;
         expect(format).toBeDefined();
+
         const failed = yield* (format ?? (() => Effect.die("no format")))(Step.act("format", { folder: "x" })).pipe(
           Effect.flip,
         );
+
         expect(failed.reason).toContain("args do not parse");
       }),
     ));

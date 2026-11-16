@@ -74,6 +74,7 @@ export const Record = Schema.Struct({
   steps: Schema.Array(Step),
   beat: Schema.optionalKey(Beat.Beat),
 });
+
 export type Record = typeof Record.Type;
 
 const RecordText = Schema.fromJsonString(Record);
@@ -84,6 +85,7 @@ export const Found = Schema.TaggedUnion({
   unreadable: {},
   read: { record: Record },
 });
+
 export type Found = typeof Found.Type;
 
 /** How a quest's last process ended: chain.ts's last line, and when the out file was last written. */
@@ -92,6 +94,7 @@ export const End = Schema.Struct({
   reason: Schema.String,
   at: Schema.NullOr(Schema.String),
 });
+
 export type End = typeof End.Type;
 
 const EndLine = Schema.fromJsonString(
@@ -128,6 +131,7 @@ export const Line = Schema.Struct({
   since: Schema.NullOr(Schema.String),
   text: Schema.String,
 });
+
 export type Line = typeof Line.Type;
 
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
@@ -146,9 +150,11 @@ export const lastOutcome = (out: string): Omit<End, "at"> | null => {
 /** The box of an open step: the standing `<quest>-<step><n>` with the highest n. */
 const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): string | null => {
   const head = `${quest}-${step}`;
+
   const runs = boxes
     .filter((box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length)))
     .toSorted((a, b) => Number(a.slice(head.length)) - Number(b.slice(head.length)));
+
   return runs.at(-1) ?? null;
 };
 
@@ -181,6 +187,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
 
   if (!seen.held && seen.end !== null) {
     const { outcome, reason, at } = seen.end;
+
     return outcome === "done"
       ? { ...quest, state: "landed", since: at, text: reason }
       : { ...quest, state: "waits", since: at, text: `${outcome}: ${reason}` };
@@ -188,6 +195,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
 
   if (record.beat !== undefined) {
     const said = Beat.says(record.beat, now, quiet);
+
     return {
       ...quest,
       state: said.stuck ? "stuck" : "running",
@@ -201,6 +209,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
   if (open !== null) {
     const ms = now.getTime() - Date.parse(open.startedAt);
     const stuck = ms > quiet;
+
     return {
       ...quest,
       state: stuck ? "stuck" : "running",
@@ -229,11 +238,14 @@ const see = Effect.fn("quests.see")(function* (boxes: string, quest: string, sta
   const read = (file: string) => fs.readFileString(file).pipe(Effect.option);
   const out = path.join(boxes, `${quest}-chain.out`);
   const record = yield* read(path.join(boxes, "state", `${quest}${CHAIN}`));
+
   const held = yield* fs
     .exists(path.join(boxes, "state", `${quest}.lock`))
     .pipe(Effect.catch(() => Effect.succeed(false)));
+
   const ended = Option.flatMapNullishOr(yield* read(out), lastOutcome);
   const written = Option.flatMap(yield* fs.stat(out).pipe(Effect.option), (info) => info.mtime);
+
   const found = Option.match(record, {
     onNone: () => Found.cases.missing.make({}),
     onSome: (text) =>
@@ -242,10 +254,12 @@ const see = Effect.fn("quests.see")(function* (boxes: string, quest: string, sta
         onSome: (read) => Found.cases.read.make({ record: read }),
       }),
   });
+
   const end = Option.map(ended, (e) => ({
     ...e,
     at: Option.getOrNull(Option.map(written, (date) => date.toISOString())),
   }));
+
   return { quest, found, held, end: Option.getOrNull(end), boxes: standingBoxes } satisfies Seen;
 });
 
@@ -264,11 +278,13 @@ export const read = Effect.fn("quests.read")(function* (
   const standingBoxes = names.filter((name) => name.endsWith(".box")).map((name) => name.slice(0, -".box".length));
   const asked = (options.named.length > 0 ? options.named : recorded).toSorted();
   const now = DateTime.toDate(yield* DateTime.now);
+
   const lines = yield* Effect.forEach(
     asked,
     (quest) => Effect.map(see(boxes, quest, standingBoxes), (seen) => verdict(seen, now)),
     { concurrency: 1 },
   );
+
   return options.named.length > 0 || options.all
     ? lines
     : lines.filter((line) => line.state !== "landed" && line.state !== "queued");

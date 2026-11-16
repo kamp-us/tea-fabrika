@@ -17,8 +17,11 @@ import type * as KeyFile from "./KeyFile.ts";
 
 it("type: T2 the three node layers supply Commands, ClientKey and KeyValueStore with no PlatformError left in their error or requirement channels", () => {
   type CommandsLayer = typeof CommandsNode.layer;
+
   type KeyLayer = ReturnType<typeof KeyFile.layer>;
+
   type JournalLayer = ReturnType<typeof JournalSqlite.layer>;
+
   // Each layer supplies exactly its contract.
   expectTypeOf<Layer.Success<CommandsLayer>>().toEqualTypeOf<Commands>();
   expectTypeOf<Layer.Success<KeyLayer>>().toEqualTypeOf<ClientKey>();

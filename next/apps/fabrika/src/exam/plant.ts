@@ -29,6 +29,7 @@ const Report = Schema.Struct({
 const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
 
 type Files = Readonly<Record<string, string>>;
+
 type Fires<A> = (code: string, file: string) => readonly A[];
 
 /**
@@ -82,6 +83,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { cwd: at },
   );
+
   const [out, err] = yield* Effect.all(
     [
       ran.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -90,6 +92,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { concurrency: 3 },
   );
+
   const report = readReport(out);
 
   if (report.number_of_files !== Object.keys(files).length) {

@@ -9,8 +9,11 @@ import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const PLUGIN = "@effect/language-service";
+
 const NEXT = ["next/**/*.ts", "next/**/*.tsx"];
+
 const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
 
 /** Each check, and what its override leaves out of `next/`. */

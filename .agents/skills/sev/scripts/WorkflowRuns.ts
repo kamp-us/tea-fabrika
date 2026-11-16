@@ -32,6 +32,7 @@ export const Run = Schema.Struct({
   /** When GitHub made it, as GitHub wrote it (ISO 8601). */
   created: Schema.String,
 });
+
 export type Run = typeof Run.Type;
 
 export class WorkflowRuns extends Context.Service<

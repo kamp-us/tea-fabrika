@@ -17,6 +17,7 @@ export const Job = Schema.Struct({
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
 });
+
 export type Job = typeof Job.Type;
 
 export class Checks extends Context.Service<

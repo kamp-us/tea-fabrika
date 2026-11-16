@@ -83,7 +83,9 @@ export {
 };
 
 const PROCESSES = "processes";
+
 const CLIENTS = "client:";
+
 /** Names that lead streams this layer or the gateway already owns. */
 const RESERVED = `(?!(?:${PROCESSES}|gateway)$)`;
 
@@ -274,6 +276,7 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   }
 
   const value = saved.success;
+
   return Result.succeed(
     value._tag === "idle"
       ? value
@@ -379,7 +382,9 @@ export type ProcessInfo = {
 };
 
 const decodeDown = Schema.decodeUnknownOption(Down);
+
 const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({ reason }));
+
 const isText = Schema.is(Text);
 
 /**
@@ -426,6 +431,7 @@ const decodeAcked = Schema.decodeUnknownOption(Acked);
 export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
   const stream = acked(name);
   const newest = [...turn.read(stream, Math.max(0, turn.head(stream) - 1))].at(-1);
+
   return newest === undefined || newest.by !== by
     ? 0
     : Option.match(decodeAcked(valueFor(newest)), { onNone: () => 0, onSome: (ack) => ack.pos });
@@ -435,6 +441,7 @@ const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Ar
 
 const led = (word: string) => {
   const lead = JSON.stringify([word]).slice(0, -1);
+
   return (id: string): boolean => id.startsWith(lead) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
 };
 
@@ -455,6 +462,7 @@ export const inSignalSpace = led("DOWN");
  * @category guards
  */
 export const inNoticeSpace = led("notice");
+
 /**
  * Makes the letter id of a notice: the JSON array `["notice", key]`, which is in the notice id
  * space, so only the brain may write under it.
@@ -515,6 +523,7 @@ export class ProcessTable {
   /** Every entry `read` folds from rev 0, oldest first. */
   static entries(read: (stream: string, after: number) => Iterable<Entry>, by: string): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, 0)];
+
     return [...control, ...registered(control, by).flatMap((name) => [...read(eventStream(name), 0)])].sort(
       (a, b) => a.rev - b.rev,
     );
@@ -533,6 +542,7 @@ export class ProcessTable {
   after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, rev)];
     const names = new Set([...this.#model.names.keys(), ...registered(control, this.#by)]);
+
     return [...control, ...[...names].flatMap((name) => [...read(eventStream(name), rev)])].sort(
       (a, b) => a.rev - b.rev,
     );
@@ -560,6 +570,7 @@ export class ProcessTable {
       }
 
       const parent = this.parent(saved.state.process, caller.owner);
+
       return Result.isFailure(parent)
         ? Result.fail(parent.failure)
         : Result.succeed(Option.some({ process: saved.state.process, rev: saved.rev }));
@@ -604,6 +615,7 @@ export class ProcessTable {
   whereis(name: string): Option.Option<{ readonly program: string; readonly state: typeof State.Type }> {
     const registered = this.#model.names.get(name);
     const life = this.#model.lives.get(this.#model.current.get(name) ?? "");
+
     return registered === undefined || life === undefined
       ? Option.none()
       : Option.some({ program: registered.program, state: life.state });
@@ -613,6 +625,7 @@ export class ProcessTable {
   starter(name: string): Option.Option<string> {
     const first = [...this.#model.lives.values()].find((life) => life.name === name);
     const requester = first?.request._tag === "first" ? first.request.requester : undefined;
+
     return requester?._tag === "process"
       ? Option.map(this.life(requester.process), (life) => life.name)
       : Option.none();
@@ -645,6 +658,7 @@ export class ProcessTable {
 
     const life = this.parent(process, owner);
     const restarts = this.#model.restarts.get(name) ?? [];
+
     return Result.isFailure(life)
       ? Result.fail(life.failure)
       : Result.succeed({ name, state: life.success.state, restarts });
@@ -662,6 +676,7 @@ export class ProcessTable {
     }
 
     const reserved = this.#model.names.get(life.name);
+
     return Equal.equals(reserved?.owner, owner) ? Result.succeed(life) : denied("not_parent");
   }
 
@@ -674,6 +689,7 @@ export class ProcessTable {
     }
 
     const { state, exited } = parent.success;
+
     return state._tag !== "live" && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
   }
 
@@ -786,6 +802,7 @@ export class ProcessTable {
 
     // An earlier round's signal belongs to a watch already canceled.
     const current = round === watch.round && watch._tag === "live";
+
     return current && to._tag === "process" && to.process === process ? "signal" : "drop";
   }
 

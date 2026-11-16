@@ -43,6 +43,7 @@ const Job = Schema.Struct({
 });
 
 const storage = (cause: unknown) => new BrainControlError({ reason: new Storage({ cause: Redacted.make(cause) }) });
+
 const conflict = (cause: unknown) => new BrainControlError({ reason: new Conflict({ cause: Redacted.make(cause) }) });
 
 const commandError = (cause: unknown, code?: number) =>
@@ -60,12 +61,15 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const digest = yield* Digest.Digest;
   const label = `fabrika.brain.${yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(spec.home))}`;
   const plist = path.join(spec.home, "brain.plist");
+
   const throttle = yield* Schema.decodeUnknownEffect(Declarations.brainThrottle.schema)(
     settings.values["desktop.brain-throttle"],
   ).pipe(Effect.mapError(unsupported));
+
   const poll = yield* Schema.decodeUnknownEffect(Declarations.brainPoll.schema)(
     settings.values["desktop.brain-poll"],
   ).pipe(Effect.mapError(unsupported));
+
   const job = yield* Schema.decodeUnknownEffect(Job)({
     Label: label,
     ProgramArguments: [spec.executable, ...spec.args],
@@ -84,6 +88,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         const handle = yield* spawner.spawn(
           ChildProcess.make(executable, args, { extendEnv: false, env: {}, stdin: "ignore", forceKillAfter: poll }),
         );
+
         const text = (stream: typeof handle.stdout) =>
           stream.pipe(
             Stream.decodeText(),
@@ -93,10 +98,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               (all, chunk) => Redacted.make(Redacted.value(all) + chunk),
             ),
           );
+
         const exitCode = handle.exitCode.pipe(
           Effect.mapError((cause) => {
             // platform-node 4.1.2 exposes signal termination only through this exact exitCode cause.
             const native = Schema.decodeUnknownResult(Schema.Struct({ message: Schema.String }))(cause.reason.cause);
+
             const signal = Schema.decodeUnknownResult(Command.fields.signal.schema)(
               cause.reason._tag === "Unknown" &&
                 cause.reason.module === "ChildProcess" &&
@@ -105,6 +112,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                 ? /^Process interrupted due to receipt of signal: '(SIG[A-Z0-9]+)'$/u.exec(native.success.message)?.[1]
                 : undefined,
             );
+
             return new BrainControlError({
               reason: new Command({
                 ...(Result.isSuccess(signal) ? { signal: signal.success } : {}),
@@ -113,13 +121,16 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
             });
           }),
         );
+
         const [code, stdout, stderr] = yield* Effect.all([exitCode, text(handle.stdout), text(handle.stderr)], {
           concurrency: "unbounded",
         });
+
         return { code: Number(code), stdout, stderr };
       }),
     ).pipe(Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : commandError(cause))));
   });
+
   const success = Effect.fnUntraced(function* (executable: string, args: ReadonlyArray<string>) {
     const response = yield* run(executable, args);
 
@@ -129,18 +140,24 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     return response;
   });
+
   const domain = Effect.gen(function* () {
     const response = yield* success("/usr/bin/id", ["-u"]);
+
     const uid = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: decode only the numeric UID from protected native output
       Redacted.value(response.stdout),
     ).pipe(Effect.mapError(unsupported));
+
     return `gui/${uid.trimEnd()}`;
   });
+
   const inspect = Effect.gen(function* () {
     const target = `${yield* domain}/${label}`;
+
     return yield* LaunchdStatus.decode({ target, ...(yield* run("/bin/launchctl", ["print", target])) });
   });
+
   const owned = Effect.gen(function* () {
     const status = yield* inspect;
 
@@ -150,6 +167,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     return status;
   });
+
   const canonical = Effect.gen(function* () {
     const home = yield* fs.realPath(spec.home).pipe(Effect.mapError(storage));
 
@@ -157,6 +175,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       return yield* conflict("home is not canonical");
     }
   });
+
   const readPlist = Effect.fnUntraced(function* (file: string) {
     const stat = yield* fs.lstat(file).pipe(
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)),
@@ -173,26 +192,33 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     return yield* fs.readFileString(file).pipe(Effect.mapError(storage));
   });
+
   const existing = readPlist(plist);
+
   const compile = Effect.fnUntraced(function* () {
     const dir = yield* fs
       .makeTempDirectoryScoped({ directory: spec.home, prefix: ".brain-" })
       .pipe(Effect.mapError(storage));
+
     const json = path.join(dir, "job.json"),
       xml = path.join(dir, "job.plist");
+
     yield* fs.writeFileString(json, JSON.stringify(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
     yield* success("/usr/bin/plutil", ["-convert", "xml1", "-o", xml, json]);
     yield* fs.chmod(xml, 0o600).pipe(Effect.mapError(storage));
     const file = yield* fs.open(xml, { flag: "r+", noFollow: true }).pipe(Effect.mapError(storage));
     yield* file.sync.pipe(Effect.mapError(storage));
+
     return { xml, bytes: yield* fs.readFileString(xml).pipe(Effect.mapError(storage)) };
   });
+
   const syncHome = Effect.scoped(
     Effect.gen(function* () {
       const directory = yield* fs.open(spec.home, { flag: "r" });
       yield* directory.sync;
     }),
   ).pipe(Effect.mapError(storage));
+
   const install = Effect.scoped(
     Effect.gen(function* () {
       yield* canonical;
@@ -206,6 +232,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
         // A prior publication may have failed while syncing this directory.
         yield* syncHome;
+
         return;
       }
 
@@ -222,6 +249,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       yield* syncHome;
     }),
   );
+
   const start = Effect.scoped(
     Effect.gen(function* () {
       yield* canonical;
@@ -234,6 +262,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       yield* success("/bin/launchctl", ["bootstrap", yield* domain, plist]);
     }),
   ).pipe(Effect.asVoid);
+
   const stop = Effect.gen(function* () {
     if ((yield* owned)._tag === "absent") {
       return;
@@ -241,6 +270,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     yield* success("/bin/launchctl", ["bootout", `${yield* domain}/${label}`]);
   }).pipe(Effect.asVoid);
+
   const remove = Effect.gen(function* () {
     yield* canonical;
     const before = yield* existing;
@@ -283,7 +313,9 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           Effect.ignore,
         ),
     );
+
     const captured = path.join(held, "brain.plist");
+
     // Deletes the captured entry only when it is our own plist, which was on its way out anyway.
     // Any other entry is somebody's: it keeps its place in the folder and the caller hears why.
     const discard = Effect.gen(function* () {
@@ -293,6 +325,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
       yield* fs.remove(captured).pipe(Effect.mapError(storage));
     });
+
     // Puts the captured entry back as itself. Each kind has one call that refuses a taken path with
     // EEXIST and follows no link: symlink(2), mkdir(2), and link(2) for the rest. link(2) follows a
     // symlink on macOS and refuses a directory, so it serves neither. Safe to run twice: once the
@@ -330,6 +363,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       Effect.catchReason("PlatformError", "AlreadyExists", () => discard),
       Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : storage(cause))),
     );
+
     // Rename captures the actual directory entry; checking before unlink would race a replacement.
     // Keep it until the lifecycle accepts the reply, including its deadline check. A release has no
     // error channel: a restore that fails here leaves the entry in its folder.
@@ -348,6 +382,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       yield* syncHome;
     }).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)));
   });
+
   return BrainControl.of({ inspect, install, start, stop, remove });
 });
 

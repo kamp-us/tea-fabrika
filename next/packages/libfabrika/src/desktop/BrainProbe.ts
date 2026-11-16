@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
  * @category schemas
  */
 export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
+
 /**
  * Schema for an owned-resource answer: still waiting, or every owned group and the listener gone.
  *
@@ -21,6 +22,7 @@ export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
  * @category schemas
  */
 export const Children = Schema.TaggedUnion({ waiting: {}, gone: {} });
+
 /**
  * Readiness could not be checked.
  *
@@ -28,6 +30,7 @@ export const Children = Schema.TaggedUnion({ waiting: {}, gone: {} });
  * @category errors
  */
 export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+
 /**
  * Another instance owns the fixed address.
  *
@@ -35,6 +38,7 @@ export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable"
  * @category errors
  */
 export class Foreign extends Schema.TaggedError<Foreign>()("Foreign", { cause: Schema.Defect() }) {}
+
 /**
  * Owned resources could not be checked.
  *

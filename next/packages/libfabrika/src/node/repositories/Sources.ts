@@ -52,13 +52,17 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 }) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const contains = (base: string, location: string) => {
     const relative = path.relative(base, location);
+
     return (
       relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
     );
   };
+
   type Location = { readonly location: string; readonly committed: boolean; readonly directory: boolean };
+
   const target: (
     base: string,
     name: string,
@@ -162,6 +166,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
     return { location, committed: committed && contains(options.root, location), directory };
   });
+
   const readAt = Effect.fnUntraced(function* (base: string, file: string, committed: boolean) {
     const located = yield* target(base, file, committed).pipe(
       Effect.catchReason("RepositoriesError", "MissingPath", () => Effect.succeed(null)),
@@ -173,12 +178,15 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
     if (located.committed) {
       const bytes = yield* options.read(path.relative(options.root, located.location).split(path.sep).join("/"));
+
       return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 
     const bytes = yield* fs.readFile(located.location).pipe(Effect.mapError(failed));
+
     return { ...SourceMetadata.cases.disk.make({}), bytes };
   });
+
   return Effect.fnUntraced(function* (
     from: string,
     file: "repo" | "person",
@@ -189,6 +197,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         : yield* fs
             .realPath(options.person)
             .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+
     const located = yield* target(base, from, file === "repo");
 
     if (located.committed) {

@@ -15,6 +15,7 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "isolate-usage-test";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const FROM = {
@@ -31,6 +32,7 @@ const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -44,6 +46,7 @@ const identity = () => {
 
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -56,8 +59,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -67,6 +72,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)
@@ -102,6 +108,7 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
 const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof identity>) {
   const tab = "usage";
   const frames: Array<typeof Frame.Type> = [];
+
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
@@ -110,14 +117,17 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
           frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
+
       return socket;
     }),
     (held) => Effect.sync(() => held.close()),
   );
+
   const next = (match: (frame: typeof Frame.Type) => boolean) =>
     until(
       Effect.sync(() => {
         const at = frames.findIndex(match);
+
         return at < 0 ? undefined : frames.splice(at, 1)[0];
       }),
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
@@ -125,14 +135,19 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     ).pipe(
       Effect.flatMap((frame) => (frame === undefined ? Effect.die("the signed client closed") : Effect.succeed(frame))),
     );
+
   let serial = 0;
+
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return yield* next((frame) => frame.id === id);
   });
+
   const challenge = yield* next((frame) => frame.method === "challenge");
   const { nonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(challenge.params);
+
   const hello = yield* call("initialize", {
     versions: [1],
     has: ["seal"],
@@ -145,7 +160,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     sentAt: FROM.sentAt,
     signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
+
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
+
   return Effect.fnUntraced(function* (process: string, letter: string, input: unknown) {
     const reply = yield* call("process.send", { pid: process, letter, m: input, sentAt: FROM.sentAt, seen: 0 });
     expect(reply).toMatchObject({ result: { _tag: "accepted" } });
@@ -191,12 +208,15 @@ const world = Effect.gen(function* () {
   yield* fs.writeFileString(file, spinSource);
   const checklist = path.join(home, "checklist.ts");
   yield* fs.writeFileString(checklist, 'export { checklist as program } from "@kampus/checklist";');
+
   const built = yield* build({
     out: path.join(home, "dist"),
     programs: { "usage/spin": file, "fabrika/checklist": checklist },
   });
+
   const key = identity();
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
   const instance = yield* localInstance(
     built,
     RecordWireTest.settingsFixture({
@@ -208,7 +228,9 @@ const world = Effect.gen(function* () {
       port: port.port,
     }),
   );
+
   const send = yield* wire(instance.url, key);
+
   return { instance, built, home, send, from: { ...FROM, by: key.fingerprint, build: built.build } };
 });
 
@@ -290,6 +312,7 @@ const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
     yield* invoke(world.instance.process(process), "open", "usage-probe");
+
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
@@ -297,6 +320,7 @@ const read = (world: World["Service"], process: string) =>
       0,
       0,
     ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ spans: Schema.Array(SpanRow) }))));
+
     return page.spans;
   });
 
@@ -323,17 +347,21 @@ const spinSample = Effect.gen(function* () {
   const world = yield* World;
   const spin = yield* start(world, "spin:1", "usage/spin");
   yield* world.send(spin, "idle", { type: "idle" });
+
   const idle = yield* until(
     read(world, spin),
     (rows) => cpu(rows, "update").length === 1,
     "the idle update produced no isolate.cpu row",
   );
+
   yield* world.send(spin, "spin", { type: "spin" });
+
   const busy = yield* until(
     read(world, spin),
     (rows) => cpu(rows, "update").length === 2,
     "the spinning update produced no second isolate.cpu row",
   );
+
   const baseline = cpu(idle, "update").map(duration);
   const later = cpu(busy, "update").filter((row) => !idle.some((old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
@@ -344,6 +372,7 @@ const spinSample = Effect.gen(function* () {
   }
 
   yield* checkHealth(world.home, busy).pipe(Effect.provide(NodeServices.layer));
+
   return { baseline, spinning };
 });
 
@@ -367,6 +396,7 @@ it.layer(
         yield* send(checklist, "add", { type: "add", name: "milk" });
         yield* send(checklist, "rename", { type: "rename", name: "milk", to: "bread" });
         yield* send(checklist, "remove", { type: "remove", name: "bread" });
+
         const updated = yield* until(
           read(world, checklist),
           (rows) =>
@@ -376,12 +406,14 @@ it.layer(
             cpu(rows, "fresh").length === calls(rows, "fresh").length,
           "checklist execution.fresh and execution.update calls did not each produce an isolate.cpu row",
         );
+
         expect(cpu(updated, "update")).toHaveLength(calls(updated, "update").length);
         expect(cpu(updated, "fresh")).toHaveLength(calls(updated, "fresh").length);
         yield* invoke(instance.process(checklist), "restart", {
           id: "replay",
           build: built.programs["fabrika/checklist"]?.hash ?? "missing",
         });
+
         const started = yield* until(
           invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
@@ -389,6 +421,7 @@ it.layer(
           (rows) => rows.some((row) => row.body.after === checklist),
           "restart recorded no successor within 10 seconds",
         );
+
         const successor = started.find((row) => row.body.after === checklist)?.body.process;
 
         if (successor === undefined) {
@@ -398,11 +431,13 @@ it.layer(
         // The three accepted client inputs replay. The old process's alarm stamps do not
         // drive its successor, and execution.fold spans need not be in the successor's record.
         const replayed = calls(updated, "update").length;
+
         const folded = yield* until(
           read(world, successor),
           (rows) => cpu(rows, "fold").length === replayed,
           "successor execution.fold calls did not each produce an isolate.cpu row",
         );
+
         expect(replayed).toBe(3);
         expect(cpu(folded, "fold")).toHaveLength(replayed);
 

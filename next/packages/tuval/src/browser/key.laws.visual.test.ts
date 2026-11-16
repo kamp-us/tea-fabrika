@@ -22,8 +22,11 @@ import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
 
 const SEED = 119120;
+
 const ORIGIN = "http://127.0.0.1";
+
 const ENTRY = "\0key-laws-entry";
+
 const HERE = new URL(".", import.meta.url).pathname;
 
 /** The page's handle on the real layer: each call one Effect run in the tab, its answer as data. */
@@ -63,7 +66,9 @@ const bundled = Effect.gen(function* () {
     ),
     (bundle) => Effect.promise(() => bundle.close()),
   );
+
   const { output } = yield* Effect.promise(() => bundle.generate({ format: "esm" }));
+
   return output[0].code;
 });
 
@@ -126,14 +131,17 @@ const stored = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(async () => {
       const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
+
       const hex = (b: ArrayBufferLike | ArrayBufferView) =>
         [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
             () => true,
             () => false,
           );
+
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
           out.push({ kind: "bytes", hex: hex(v) });
@@ -218,13 +226,16 @@ describe("L3: the browser key store", () => {
                     Effect.scoped(
                       Effect.gen(function* () {
                         const context = yield* profile(b, script);
+
                         const pages = yield* Effect.forEach(Array.from({ length: tabs }), () => tab(context), {
                           concurrency: 1,
                         });
+
                         // A fresh profile: every tab asks at once, and all get the one stored key.
                         const first = yield* Effect.forEach(pages, (p) => current(p, null), {
                           concurrency: "unbounded",
                         });
+
                         const prints = new Set(first.map((a) => a.ok?.fingerprint));
                         expect(prints.size, "racing tabs made more than one key").toBe(1);
                         expect(first.filter((a) => a.ok?.found === "created")).toHaveLength(1);

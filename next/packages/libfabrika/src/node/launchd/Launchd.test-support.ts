@@ -56,22 +56,27 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "p19-unit-" });
   const folder = directoryName === "" ? temporary : path.join(temporary, directoryName);
   yield* fs.makeDirectory(folder, { recursive: true });
   const home = yield* fs.realPath(folder);
   const plist = path.join(home, "brain.plist");
+
   const competing = yield* replacement === undefined
     ? Effect.succeed(null)
     : fs.makeTempDirectoryScoped({ directory: home, prefix: ".competing-" });
+
   let swapped: BrainFilesTest.Dirent | null = null;
   // The competing writer writes once. A later removal races nobody.
   let raced = false;
   let failing = true;
   let directoryFault = fault === "directory-sync";
+
   const events: Array<string> = [],
     seen: Array<Seen> = [],
     jobs: Array<unknown> = [];
+
   const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
     home,
     executable: path.join(home, "Electron"),
@@ -80,6 +85,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     ...input,
     url: "http://127.0.0.1:18787",
   });
+
   const spawner = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
@@ -95,6 +101,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         const args = command.args.map((arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
         const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+
         let response: Response = {
           ...supplied,
           stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
@@ -114,10 +121,12 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           }
 
           const input = args.at(-1) ?? "";
+
           const data = yield* fs.readFileString(input).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
             Effect.mapError(() => failure("compile")),
           );
+
           jobs.push(data);
           const body = JSON.stringify(data);
           const output = args[args.indexOf("-o") + 1];
@@ -132,6 +141,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         const bytes = (text: string) => Stream.make(new TextEncoder().encode(text));
         const stubborn = supplied.stubborn;
         const killed = yield* Deferred.make<void>();
+
         const signaled = (signal: string) =>
           Effect.fail(
             PlatformError.systemError({
@@ -144,9 +154,11 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
               cause: new Error(`Process interrupted due to receipt of signal: '${signal}'`),
             }),
           );
+
         return yield* Effect.acquireRelease(
           Effect.suspend(() => {
             events.push("spawn");
+
             return stubborn?.started ?? Effect.void;
           }).pipe(
             Effect.map(() =>
@@ -197,6 +209,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       }),
     ),
   );
+
   // Reads an entry as it is on disk: lstat and readLink, so a symlink is never followed.
   const dirent = Effect.fnUntraced(function* (file: string) {
     const stat = yield* fs
@@ -226,10 +239,13 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     yield* fs.chmod(file, 0o600);
     const bytes = yield* fs.readFileString(file);
     yield* fs.chmod(file, mode);
+
     return BrainFilesTest.Dirent.cases.file.make({ bytes, mode });
   });
+
   // A link's target as the bytes on disk. `readLink` gives text, which loses what is not UTF-8.
   const linkBytes = (file: string) => Effect.sync(() => Array.from(readlinkSync(file, "buffer")));
+
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
@@ -246,8 +262,10 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     const stat = yield* fs
       .lstat(plist)
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+
     return { path: stat?.type === "SymbolicLink" ? yield* linkBytes(plist) : null, held };
   });
+
   const replace = Effect.fnUntraced(function* (
     checkpoint: BrainFilesTest.Replacement["checkpoint"],
     // Our plist's bytes, read right before the capture took it.
@@ -291,6 +309,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     swapped = yield* dirent(plist);
     events.push(`replace:${checkpoint}`);
   });
+
   const disk = Layer.succeed(FileSystem.FileSystem, {
     ...fs,
     open: (file, options) =>
@@ -341,10 +360,13 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         yield* replace("after-capture", ours);
       }),
   });
+
   const settings = yield* ServiceTest.timing(flags);
+
   const context = yield* Layer.build(
     Launchd.layer(spec, settings).pipe(Layer.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
   );
+
   return {
     recover: Effect.sync(() => {
       failing = false;

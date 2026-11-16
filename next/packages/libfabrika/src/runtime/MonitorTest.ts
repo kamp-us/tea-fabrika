@@ -81,19 +81,27 @@ export type Store = {
 };
 
 const SEED = 119120;
+
 const BUILD = "watch-build-a";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 /** A call that does not answer in this long is held behind something it must never wait on. */
 const LIMIT = "10 seconds";
+
 const READERS = ["reader:1", "reader:2"] as const;
+
 const TARGETS = ["writer:1", "writer:2"] as const;
+
 const FABRIKA = FabrikaModel.ref("fabrika", "watch");
 
 // ---------------------------------------------------------------------------------------------
 // The reader: it watches and forgets on its inputs, and keeps every message it folds, in order.
 
 const ReaderModel = Schema.Struct({ log: Schema.Array(Schema.Json) });
+
 type ReaderModel = typeof ReaderModel.Type;
 
 const ReaderMsg = Schema.Union([
@@ -160,7 +168,9 @@ const reading = (name: "reader" | "chaser") =>
   });
 
 type Reading = ReturnType<typeof reading>;
+
 const readerProgram = reading("reader");
+
 const chaserProgram = reading("chaser");
 
 const PROGRAMS: Record<string, unknown> = {
@@ -179,7 +189,9 @@ type Logged = {
 };
 
 const decodeModel = Schema.decodeUnknownOption(ReaderModel);
+
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
+
 /** The member each reader was started by: the founder, who owns the fabrika. */
 const MEMBER = Sender.cases.person.make({ key: "SHA256:person", for: PERSON });
 
@@ -229,6 +241,7 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
+
     return value as S["Type"];
   });
 
@@ -308,7 +321,9 @@ const savedLog = Effect.fnUntraced(function* (
     Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: pid })),
     Effect.provide(context),
   );
+
   const model = Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
+
   return (model?.log ?? []) as ReadonlyArray<Logged>;
 });
 
@@ -373,9 +388,11 @@ const host = Effect.fnUntraced(function* (
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(ledger(cutting(store.sql("ledger"), world))),
   );
+
   const context = yield* Layer.buildWithScope(shared, scope);
   const manager = Context.get(context, ProcessManager);
   const real = Context.get(context, Monitors);
+
   // The test layer around the brain's watch service: it ends a life, loses a reply or holds a call.
   const cut = Layer.succeed(Monitors, {
     monitor: (watch, from) =>
@@ -437,6 +454,7 @@ const host = Effect.fnUntraced(function* (
           }
 
           world.done.add("lose_after");
+
           return yield* new MonitorsError({ reason: "storage" });
         }
 
@@ -463,6 +481,7 @@ const host = Effect.fnUntraced(function* (
         }
       }),
   });
+
   const boot = Effect.fnUntraced(function* (name: string, member: boolean) {
     const status = yield* manager.status(name).pipe(Effect.result);
 
@@ -481,6 +500,7 @@ const host = Effect.fnUntraced(function* (
         brainFrom(),
       )
       .pipe(Effect.orDie);
+
     return started.process;
   });
 
@@ -505,6 +525,7 @@ const host = Effect.fnUntraced(function* (
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -521,12 +542,14 @@ const host = Effect.fnUntraced(function* (
         };
       }),
     );
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {
         ping: (cmd: unknown) =>
           Effect.sync(() => {
             const ref = typeof cmd === "object" && cmd !== null && "ref" in cmd ? String(cmd.ref) : "";
             world.pings.push(ref);
+
             return Outcome.ok(ref);
           }),
       }),
@@ -537,10 +560,12 @@ const host = Effect.fnUntraced(function* (
       cut,
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
     const runner = ProgramRunner.layer(
       { id: pid, name, program: program.name, build: BUILD, owner: person },
       { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
     ).pipe(Layer.provide(own));
+
     runners.set(name, Context.get(yield* Layer.buildWithScope(runner, scope), ProgramRunner));
   }
 
@@ -554,6 +579,7 @@ const answers = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
     Effect.timeoutOption(LIMIT),
     Effect.map((answer) => {
       expect(Option.isSome(answer), `${label} answers: nothing holds it`).toBe(true);
+
       return Option.getOrThrow(answer);
     }),
   );
@@ -575,6 +601,7 @@ type Move =
   | "reopen";
 
 const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), alt: fc.nat(), reason: generated(ExitReason) });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -591,6 +618,7 @@ const walk = (
   Effect.fnUntraced(function* (cells: ReadonlyArray<Cell>) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: World = {
       targets: new Map(),
       readers: new Map(),
@@ -603,17 +631,21 @@ const walk = (
       done,
       n: 0,
     };
+
     let scope = yield* Scope.make();
     let life = yield* host(store, world, next.next, scope, program);
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const runner = (name: string) => life.runners.get(name) ?? expect.fail(`no runner for ${name}`);
     const now = Clock.currentTimeMillis;
+
     const wake = Effect.fnUntraced(function* (name: string) {
       yield* answers(runner(name).due(yield* now), `${name}'s wake`);
     });
+
     const say = Effect.fnUntraced(function* (name: string, input: unknown) {
       return yield* answers(runner(name).msg(letter(++world.n, input)), `${name}'s ${JSON.stringify(input)}`);
     });
+
     /** Supervision ends a watched life; a retried exit, with the same reason, answers again. */
     const end = Effect.fnUntraced(function* (name: string, reason: ExitReason, again = false) {
       const target = world.targets.get(name) ?? expect.fail(`no target ${name}`);
@@ -643,17 +675,21 @@ const walk = (
       world.ends.set(target.pid, reason);
       done.add("end");
     });
+
     const readerLife = Effect.fnUntraced(function* (name: string) {
       const status = yield* life.manager.status(name).pipe(Effect.orDie);
+
       return status.state.process;
     });
 
     for (const cell of cells) {
       const live = TARGETS.filter((t) => world.targets.get(t)?.live === true);
       const ended = TARGETS.filter((t) => world.targets.get(t)?.live === false);
+
       const watching = [...world.watches.values()].filter(
         (w) => w.state === "live" && world.readers.get(w.reader)?.pid === w.watcher,
       );
+
       const possible = moves.filter(
         (move) =>
           (move !== "watch_race" || live.length > 0) &&
@@ -662,6 +698,7 @@ const walk = (
           (move !== "send_stale" || [...world.targets.values()].some((t) => t.lives.length > 1 || !t.live)) &&
           (move !== "forget_race" || watching.some((w) => world.targets.get(w.target)?.live === true)),
       );
+
       const move = choose(possible, cell.move);
       const reader = choose(READERS, cell.pick);
 
@@ -690,6 +727,7 @@ const walk = (
                 // A wake's catch-up takes the permit the monitor's perform does not hold, and folds the
                 // saved answer; its Cmds wait for this call's Cmds to finish.
                 overtaking.push(yield* Effect.forkIn(wake(reader), held));
+
                 const folded = yield* savedLog(store, life.context, reader, pid).pipe(
                   Effect.orDie,
                   Effect.repeat({
@@ -698,6 +736,7 @@ const walk = (
                   }),
                   Effect.timeoutOption(LIMIT),
                 );
+
                 expect(Option.isSome(folded), `M15: a catch-up folds ${ref}'s answer before the settle`).toBe(true);
                 world.done.add("overtake");
               });
@@ -729,6 +768,7 @@ const walk = (
 
           break;
         }
+
         case "send":
         case "send_stale": {
           const name = choose(TARGETS, cell.alt);
@@ -736,6 +776,7 @@ const walk = (
           const from = move === "send" ? target.pid : choose(target.lives, cell.alt);
           const stale = from !== target.pid || !target.live;
           const n = ++world.n;
+
           const sent = yield* ProgramMail.use((mail) =>
             mail.deliver({
               command: `${from}/${n}/0`,
@@ -758,6 +799,7 @@ const walk = (
 
           break;
         }
+
         case "end":
           yield* end(choose(live, cell.alt), cell.reason, cell.pick % 2 === 0);
           break;
@@ -769,6 +811,7 @@ const walk = (
         case "restart": {
           const name = choose(ended, cell.alt);
           const target = world.targets.get(name) ?? expect.fail("a target");
+
           const placed = yield* life.manager
             .start(
               Start.cases.again.make({
@@ -781,12 +824,14 @@ const walk = (
               brainFrom(),
             )
             .pipe(Effect.orDie);
+
           target.pid = placed.process;
           target.live = true;
           target.lives.push(placed.process);
           done.add("restart");
           break;
         }
+
         case "wake":
           yield* wake(reader);
           done.add("wake");
@@ -796,22 +841,26 @@ const walk = (
           const own = watching.filter((w) => w.watcher === watcher);
           const foreign = watching.filter((w) => w.watcher !== watcher);
           const kind = choose(["own", "foreign", "unknown"] as const, cell.alt);
+
           const ref =
             kind === "own" && own.length > 0
               ? choose(own, cell.alt).ref
               : kind === "foreign" && foreign.length > 0
                 ? choose(foreign, cell.alt).ref
                 : `${watcher}/${90_000 + world.n}/0`;
+
           const actual = own.some((w) => w.ref === ref)
             ? "own"
             : foreign.some((w) => w.ref === ref)
               ? "foreign"
               : "unknown";
+
           world.forgets.push({ watcher, ref, kind: actual });
           yield* say(reader, { type: "forget", ref });
           done.add(`forget:${actual}`);
           break;
         }
+
         case "forget_race": {
           // The demonitor is dispatched and held; the watched life ends, so its DOWN is saved but unread.
           const held = watching.filter((w) => world.targets.get(w.target)?.live === true);
@@ -828,6 +877,7 @@ const walk = (
           done.add("forget:saved_down");
           break;
         }
+
         case "watcher_end": {
           // The watcher's own life ends and a new one starts under its name.
           const old = world.readers.get(reader) ?? expect.fail("a reader");
@@ -845,6 +895,7 @@ const walk = (
           done.add(held.length > 0 ? "watcher_end:held" : "watcher_end");
           break;
         }
+
         case "reopen": {
           // The host goes away and comes back on the same stores, as a restarted brain would.
           yield* Scope.close(scope, Exit.void);
@@ -945,6 +996,7 @@ const walk = (
       if (watch.state === "canceled") {
         // M8: no DOWN for a canceled ref folds after its cancel, including one already saved.
         expect(downs.length, `M8: ${label}: no DOWN folds after its demonitor`).toBe(watch.downsAtCancel ?? 0);
+
         const canceled = rows.filter(
           (r) =>
             r.tag === "demonitored" &&
@@ -952,6 +1004,7 @@ const walk = (
             r.body.to?.process === watch.watcher &&
             r.body.reason === "canceled",
         );
+
         expect(canceled.length, `M8: ${label}: one demonitored row`).toBe(1);
         continue;
       }
@@ -965,6 +1018,7 @@ const walk = (
             r.body.to?.process === watch.watcher &&
             r.body.reason === "watcher_exited",
         );
+
         expect(exited.length, `M9: ${label}: demonitored watcher_exited`).toBe(1);
 
         for (const pid of world.readers.get(watch.reader)?.lives ?? []) {
@@ -1005,6 +1059,7 @@ const walk = (
         const touched = rows.filter(
           (r) => r.tag === "demonitored" && r.body.ref === forget.ref && r.body.to?.process === forget.watcher,
         );
+
         expect(touched, `M8: ${forget.watcher}'s demonitor of a ${forget.kind} ref writes nothing`).toEqual([]);
       }
     }

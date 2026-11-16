@@ -2640,8 +2640,7 @@
     // block lists the folders where its rule has no hit, and is on as an error there and nowhere
     // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
     // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
-    // is on a list, the list becomes the four globs of the scope. `anti-slop/require-readable-spacing`
-    // has no block yet: no folder is at zero for it, so its first block comes with the first sweep.
+    // is on a list, the list becomes the four globs of the scope.
     {
       // 0558: no ternary nests more than 2 deep.
       "files": [
@@ -2805,6 +2804,40 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
+      // binding, and between top-level statements, as the rule ships.
+      "files": [
+        ".agents/**",
+        ".github/ci/**",
+        "oxlint-plugins/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop/require-readable-spacing": "error" }
     }
   ]
 }

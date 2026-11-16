@@ -69,6 +69,7 @@ export const record = Effect.fnUntraced(function* (usage: ReadonlyArray<typeof U
         "fab.isolate.outcome": row.outcome,
       },
     });
+
     span.end(span.status.startTime + BigInt(Math.round(row.cpuMs * 1_000_000)), Exit.void);
   }
 });

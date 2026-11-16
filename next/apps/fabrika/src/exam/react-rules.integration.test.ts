@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const FIRES = "next/packages/tuval/src/window/fires.tsx";
+
 const PASSES = "next/packages/tuval/src/window/passes.tsx";
 
 const fires = [

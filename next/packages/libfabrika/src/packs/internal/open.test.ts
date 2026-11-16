@@ -11,7 +11,9 @@ import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 
 type Model = typeof Open.machine.model.Type;
+
 type Msg = typeof Open.machine.msg.Type;
+
 type Phase = "closed" | "checking" | "history" | "awaiting_trust" | "saving" | "ready" | "refused";
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
@@ -38,13 +40,17 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
       const messages: Array<Msg> = [];
       let decision: typeof TrustDecision.Type | undefined;
       let writes = 0;
+
       const send = (msg: Msg) => {
         messages.push(msg);
         model = applyCell(Open.machine, model, msg)[0];
+
         return model;
       };
+
       const select = (pick: number) => {
         const past = draw.snapshots[pick % draw.snapshots.length]!;
+
         const event = Event.cases.selected.make({
           repository: snapshot.repository,
           key: snapshot.key,
@@ -56,10 +62,13 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           settings: past.settings,
           request: draw.selections[selected.length]!,
         });
+
         selected.push(event);
         events.push(event);
+
         return event;
       };
+
       const answer = (past: typeof Event.cases.selected.Type, yes: boolean) => {
         decision = yes ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({});
         events.push(
@@ -76,6 +85,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           }),
         );
       };
+
       const replay = (pick: number) => {
         const selection = draw.selections[pick % draw.selections.length]!;
         send({ type: "select", selection });
@@ -177,6 +187,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       let accepted = false;
       const old: Array<Msg> = [];
       const messages: Array<Msg> = [];
+
       const send = (msg: Msg, expected: Phase) => {
         const [next] = applyCell(Open.machine, model, msg);
         messages.push(msg);
@@ -195,6 +206,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         model = next;
         cursor.phase = expected;
       };
+
       const select = (pick: number) => {
         if (model._tag !== "closed") {
           old.push({ type: "checked", selection, snapshot });
@@ -215,6 +227,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         accepted = false;
         send({ type: "select", selection }, "checking");
       };
+
       const advance = (pick: number, yes: boolean) => {
         if (cursor.phase === "closed" || cursor.phase === "ready" || cursor.phase === "refused") {
           select(pick);
@@ -328,6 +341,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       }
 
       expect(model._tag).toBe("refused");
+
       // Require a stale yes to arrive while its replacement is actually awaiting an answer.
       const stale: Msg = {
         type: "answer",
@@ -335,6 +349,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         request,
         decision: TrustDecision.cases.accepted.make({}),
       };
+
       select(draw.cells[0]!.pick);
       advance(0, true);
       advance(0, true);

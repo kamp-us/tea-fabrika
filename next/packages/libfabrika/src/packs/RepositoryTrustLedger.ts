@@ -20,7 +20,9 @@ import {
 
 // A bounded read fails closed instead of trusting a truncated history. Never discard old decisions.
 const LIMIT = 4096;
+
 const stream = (key: string, person: string) => `repository/${person}/${key}`;
+
 const storage = (cause: unknown) => new RepositoryTrustError({ reason: new Storage({ cause: Redacted.make(cause) }) });
 
 const invalid = (cause: unknown) =>
@@ -51,11 +53,13 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const ledger = yield* Ledger;
     const digest = yield* Digest.Digest;
+
     const checkSettings = (saved: Snapshot.Snapshot) =>
       Snapshot.read(Declarations.all, saved).pipe(
         Effect.provideService(Digest.Digest, digest),
         Effect.mapError(invalid),
       );
+
     return RepositoryTrust.of({
       history: Effect.fn("repositoryTrust.history")(function* (key: string, person: string) {
         const rows = yield* ledger
@@ -144,6 +148,7 @@ export const layer = Layer.effect(
           }
 
           const parent = stored.value;
+
           const selected = yield* Schema.decodeUnknownEffect(Event.cases.selected)(valueFor(parent), {
             onExcessProperty: "error",
           }).pipe(Effect.mapError(invalid));

@@ -12,6 +12,7 @@
  * @stability unstable
  */
 export * from "./Depth.ts";
+
 /**
  * The one typed way a law watches a service's calls (decision 0579): `Recorder.layer` provides a
  * service and records each run of its methods, and `Recorder.calls` reads them back.
