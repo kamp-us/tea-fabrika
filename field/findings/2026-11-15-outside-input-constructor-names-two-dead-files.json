@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-outside-input-constructor-names-two-dead-files",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-sonnet-5-5",
+  "rule": "dead_code",
+  "location": {
+    "path": "oxlint-plugins/outside-input-constructor.ts",
+    "line": 6
+  },
+  "says": "The scoped path pattern of the outside-input-constructor rule names next/packages/libfabrika/src/data/id.ts and next/packages/libfabrika/src/runtime/ChaosState.ts, and neither file exists, so those two alternatives match nothing.",
+  "proof": "On origin/main at e4404464d91114e66c326272e7fba9c6313db19f, oxlint-plugins/outside-input-constructor.ts line 6 reads `^next\\/packages\\/libfabrika\\/src\\/(?:data\\/id|ledger\\/Log|access\\/Authorization|gateway\\/(?:Gateway|GatewayStore|GatewayNonce)|runtime\\/(?:Nemesis|ChaosState|Runner|Entry))\\.ts$`. Running ls next/packages/libfabrika/src/data fails with No such file or directory, and ls next/packages/libfabrika/src/runtime | grep -i chaosstate prints nothing.",
+  "cost": "The rule looks like it guards two files it cannot reach, and a new file later created at one of those paths would be held by a rule written for different code.",
+  "head": "e4404464d91114e66c326272e7fba9c6313db19f",
+  "ticket": null,
+  "pr": null
+}
