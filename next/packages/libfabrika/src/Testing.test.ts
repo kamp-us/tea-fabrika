@@ -31,7 +31,7 @@ const machine = Machine.make({
   },
 });
 
-const equals = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const equals = <A>(a: A, b: A) => JSON.stringify(a) === JSON.stringify(b);
 
 const encode = Schema.encodeSync(Model);
 

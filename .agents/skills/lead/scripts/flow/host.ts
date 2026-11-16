@@ -456,7 +456,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
   const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
 
-  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Json))(text).pipe(
     Option.map(questKeyed),
     Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
     Option.getOrElse(() => ({ quest: a.quest, steps: [] })),

@@ -110,7 +110,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (error: unknown) => BuildError.make({ reason: "bundle", message: String(error), cause: error });
+  const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
 
   const config = {
     input,

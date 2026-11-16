@@ -1969,24 +1969,24 @@ describe("P10 review regressions", () => {
     mockRestore: () => void;
   };
 
-  const failOnce = (spy: Spy, thrown: unknown, sync: boolean) =>
+  const failOnce = (spy: Spy, cause: unknown, sync: boolean) =>
     sync
       ? spy.mockImplementationOnce(() => {
-          throw thrown;
+          throw cause;
         })
-      : spy.mockRejectedValueOnce(thrown);
+      : spy.mockRejectedValueOnce(cause);
 
   type Edge = {
     readonly name: string;
     readonly spy: () => Spy;
     readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
-    readonly refused: (failure: unknown, thrown: unknown) => void;
+    readonly refused: (failure: unknown, cause: unknown) => void;
   };
 
-  const gatewayCrypto = (failure: unknown, thrown: unknown) => {
+  const gatewayCrypto = (failure: unknown, cause: unknown) => {
     assert(Schema.is(GatewayError)(failure));
     expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
-    expect(failure.reason.cause).toBe(thrown);
+    expect(failure.reason.cause).toBe(cause);
   };
 
   const ledgerCrypto = (failure: unknown) => {
@@ -1994,14 +1994,14 @@ describe("P10 review regressions", () => {
     expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
   };
 
-  const membershipCrypto = (failure: unknown, thrown: unknown) => {
+  const membershipCrypto = (failure: unknown, cause: unknown) => {
     assert(Schema.is(SessionManagerError)(failure));
     expect(failure).toMatchObject({
       _tag: "SessionManagerError",
       reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
     });
     assert(Schema.is(LedgerError)(failure.reason.cause));
-    expect(failure.reason.cause.cause).toBe(thrown);
+    expect(failure.reason.cause.cause).toBe(cause);
   };
 
   const edges: ReadonlyArray<Edge> = [
@@ -4096,7 +4096,7 @@ describe("P10 inputs, retries and signer", () => {
                   reason === "dead" ? { _tag: "refused", reason: "dead" } : { _tag: "ok", result: answered };
 
                 // These are JSON replies: -0 and 0 have the same wire representation.
-                const wire = (value: unknown) => JSON.parse(JSON.stringify(value));
+                const wire = (value: object) => JSON.parse(JSON.stringify(value));
                 expect(wire(yield* d.route(client, "process.send", params))).toEqual(wire(expected));
                 const delivered = w.deliveries.length;
                 // A settled retry must use the saved result rather than call the program again.

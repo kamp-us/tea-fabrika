@@ -740,7 +740,7 @@ export const reader = (h: Home, dev: Dev) =>
 
     let serial = 0;
 
-    const call = (method: string, params: unknown) =>
+    const call = (method: string, params: Schema.Json) =>
       Effect.gen(function* () {
         while (ws.readyState === WebSocket.CONNECTING) {
           yield* Effect.sleep("20 millis");
@@ -785,7 +785,7 @@ export const reader = (h: Home, dev: Dev) =>
 
     /** The answer's `result`. A refused call (the door's rate limit, say) fails here by name, with
      *  what the door said, before any decode can blame the frame's shape. */
-    const answered = (method: string, params: unknown) =>
+    const answered = (method: string, params: Schema.Json) =>
       Effect.flatMap(call(method, params), (frame) =>
         frame.error === undefined && frame.result !== undefined
           ? Effect.succeed(frame.result)

@@ -408,7 +408,7 @@ class Client {
     );
   }
 
-  async call(method: string, params: unknown): Promise<Frame> {
+  async call(method: string, params: Schema.Json): Promise<Frame> {
     const id = ++this.serial;
 
     while (this.ws.readyState === WebSocket.CONNECTING) {
@@ -460,7 +460,7 @@ const counter = async (c: Client) => {
   return (started!.body as { process: string }).process;
 };
 
-const send = (c: Client, pid: string, letter: string, m: unknown = { type: "inc" }, seen = 0) =>
+const send = (c: Client, pid: string, letter: string, m: Schema.Json = { type: "inc" }, seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
 const ratePolicy = { limit: 4, window: 1000 };
@@ -695,12 +695,12 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
   Effect.promise(async (): Promise<Settled> => {
     const reply = await send(c, pid, letter).then(
       (r) => r,
-      (error: unknown) => {
-        if (error instanceof Error && error.message === "wire closed before answer") {
+      (cause: unknown) => {
+        if (cause instanceof Error && cause.message === "wire closed before answer") {
           return null;
         }
 
-        throw error;
+        throw cause;
       },
     );
 
@@ -958,7 +958,7 @@ describe("P12 real dev.ts wire", () => {
       ...connections.map((row) => String(row.client)),
     ];
 
-    const attributed = (row: unknown) => identities.some((id) => JSON.stringify(row).includes(id));
+    const attributed = (row: object) => identities.some((id) => JSON.stringify(row).includes(id));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
     expect(attributed({ attributes: { "fab.client": connections[0]!.client } })).toBe(true);

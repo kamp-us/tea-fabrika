@@ -453,7 +453,7 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
     }
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -1064,7 +1064,7 @@ describe("P12 real object adapters", () => {
       // An hour away: the wake is saved, and no alarm arrives to keep the object awake.
       const far = Date.now() + 3_600_000;
 
-      const send = (letter: string, m: unknown) =>
+      const send = (letter: string, m: Schema.Json) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
 
       expect(await send("arm", { type: "schedule", at: far })).toMatchObject({
@@ -1099,7 +1099,7 @@ describe("P12 real object adapters", () => {
       const { p, client } = await admitted(instance, key);
       const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 
-      const send = (pid: string, letter: string, m: unknown) =>
+      const send = (pid: string, letter: string, m: Schema.Json) =>
         routed(p, client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
 
       const timers = async (name: string) =>

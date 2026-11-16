@@ -503,7 +503,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
           const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
             (value): Answer => ({ _tag: "value", value }),
-            (error: unknown): Answer => ({ _tag: "error", error }),
+            (cause: unknown): Answer => ({ _tag: "error", error: cause }),
           );
 
           if (world.pending) {

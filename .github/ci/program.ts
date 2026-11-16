@@ -3,7 +3,7 @@
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
 import { Predicate, Result } from "effect";
-import { parseSync } from "oxc-parser";
+import { parseSync, type Program } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
 export type Runner = (args: string[]) => { status: number | null; stdout: string };
@@ -41,7 +41,7 @@ const tool = (comment: Comment) =>
   (comment.type === "Block" && declares.test(comment.value));
 
 /** The tree as text with every position dropped. `raw` stays, so `16` and `0x10` differ. */
-const shape = (program: unknown) =>
+const shape = (program: Program) =>
   JSON.stringify(program, (key, value: unknown) =>
     key === "start" || key === "end" || key === "range" || key === "loc"
       ? undefined

@@ -614,7 +614,7 @@ const Rated = Schema.TaggedStruct("rated", {
   ticket: Text,
 });
 
-const errorsOf = (row: unknown) => {
+const errorsOf = (row: object) => {
   const report = checker.checkFile(fileOf("findings"), "", `${JSON.stringify(row)}\n`);
 
   return {

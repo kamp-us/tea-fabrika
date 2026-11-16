@@ -176,7 +176,7 @@ const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
   const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
-  const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
+  const note = (event: string, value: object | null = null) => events.push({ ...stamp(), event, value });
   note("start");
 
   const read = async (label: string, call: () => Promise<unknown>) => {
@@ -490,7 +490,7 @@ const wire = async (
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -599,10 +599,10 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
             .then((value: unknown) => {
               fixture.diagnostics?.note("abort.result", { status: "fulfilled", value: value ?? null });
             })
-            .catch((error: unknown) => {
+            .catch((cause: unknown) => {
               fixture.diagnostics?.note("abort.result", {
                 status: "rejected",
-                error: error instanceof Error ? error.name : "unknown",
+                error: cause instanceof Error ? cause.name : "unknown",
               });
             });
           fixture.diagnostics.note("abort.end");

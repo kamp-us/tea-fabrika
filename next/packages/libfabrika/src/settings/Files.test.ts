@@ -209,7 +209,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
             });
 
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(saved));
             const checked = yield* Snapshot.read(group, transported);
 
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
@@ -423,7 +423,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: number | string | boolean) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),

@@ -59,14 +59,14 @@ const encodedError = fc
   .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
-const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
+const causeKey = (form: Form, json: fc.JsonValue, cause: unknown): { cause?: unknown } =>
   form === "absent"
     ? {}
     : {
         cause: Match.value(form).pipe(
           Match.when("undefined", () => undefined),
           Match.when("json", () => json),
-          Match.orElse(() => error),
+          Match.orElse(() => cause),
         ),
       };
 

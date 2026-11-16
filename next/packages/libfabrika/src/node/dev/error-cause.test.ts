@@ -47,7 +47,7 @@ const started = (id: string) => ({
 
 const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
 
-const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
+const fails = <A>(failure: object) => Effect.fail(failure as never) as Effect.Effect<A, never>;
 
 const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
 
@@ -56,7 +56,7 @@ type Read = "exists" | "read" | "decode";
 type Call = "pending" | "last" | "add";
 
 /** The outbox's disk, where reading the pending file goes wrong at `read`. */
-const brokenPending = (read: Read, failure: unknown, bad: string) =>
+const brokenPending = (read: Read, failure: object, bad: string) =>
   disk({
     exists: (path) => (read === "exists" && pendingFile(path) ? fails(failure) : Effect.succeed(pendingFile(path))),
     readFileString: () => (read === "read" ? fails(failure) : Effect.succeed(`${bad}\n`)),

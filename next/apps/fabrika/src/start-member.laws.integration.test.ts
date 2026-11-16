@@ -101,7 +101,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     throw new Error(`no frame in ${WAIT} ms`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 

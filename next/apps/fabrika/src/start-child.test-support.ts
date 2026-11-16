@@ -202,7 +202,7 @@ export const childInstance = Effect.fnUntraced(function* (
 });
 
 /** A letter for the door's `process.send`. */
-export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+export const letter = (pid: string, id: string, m: Schema.Json) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform RPC doubles return Promises to the public client adapters
 const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);

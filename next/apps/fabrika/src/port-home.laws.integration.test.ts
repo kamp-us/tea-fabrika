@@ -197,7 +197,7 @@ const press = Effect.fnUntraced(function* (
 
   let serial = 0;
 
-  const ask = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const ask = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const n = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }));
 

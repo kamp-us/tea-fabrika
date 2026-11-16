@@ -716,7 +716,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       ),
     head: Effect.sync(() => accountingEntries(sql).at(-1)?.rev ?? 0),
     /** One input through the door, to the name's live process. */
-    input: Effect.fnUntraced(function* (name: string, id: string, m: unknown) {
+    input: Effect.fnUntraced(function* (name: string, id: string, m: Schema.Json) {
       const to = yield* pid(name);
 
       // `letter` is the door's own key for the message id (0547 keeps saved and wire names).

@@ -311,7 +311,7 @@ console.log(JSON.stringify(resolved.test));
 
           const config = new Function("base", "defineConfig", "process", source)(
             { test: { include: ["all/**/*.test.ts"], exclude: ["keep-me"] } },
-            (x: unknown) => x,
+            <X>(x: X) => x,
             { env: { RELATED: tests.join(",") } },
           ) as {
             test: {
@@ -362,7 +362,7 @@ console.log(JSON.stringify(resolved.test));
           expect(got.invocation!.limit).toBe(String(ms));
           const source = got.invocation!.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
 
-          const config = new Function("base", "defineConfig", "process", source)({ test: {} }, (x: unknown) => x, {
+          const config = new Function("base", "defineConfig", "process", source)({ test: {} }, <X>(x: X) => x, {
             env: { RELATED: "math.test.ts", TEST_LIMIT: got.invocation!.limit },
           }) as { test: { testTimeout: number; hookTimeout: number } };
 

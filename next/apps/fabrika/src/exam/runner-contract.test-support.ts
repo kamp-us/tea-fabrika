@@ -291,4 +291,4 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
   };
 });
 
-export const unchanged = (before: unknown, after: unknown) => expect(after).toEqual(before);
+export const unchanged = <A>(before: A, after: A) => expect(after).toEqual(before);
