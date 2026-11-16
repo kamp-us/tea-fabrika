@@ -4,8 +4,6 @@
  * through the gateway's checked writer, folds what landed and installs it. Only then do its Cmds
  * run, each saved as dispatched first, each answer saved as a letter before the program sees it. A
  * wake folds saved letters and runs none of their Cmds.
- *
- * @stability unstable
  */
 import { applyCell, type Outcome } from "@demlik/tea";
 import {
@@ -111,7 +109,6 @@ export {
    * deliveries of one letter, a restart intensity of 5 over a 5000 ms period, and a backoff from 100
    * ms to 800 ms that resets after 5000 ms.
    *
-   * @stability unstable
    * @category models
    */
   defaultPolicy,
@@ -119,7 +116,6 @@ export {
    * Schema for the saved supervision state the runner keeps for one process: its name, restart
    * policy, build, recent restarts and the journal of the one unfinished recovery job.
    *
-   * @stability unstable
    * @category schemas
    */
   Supervision,
@@ -131,7 +127,6 @@ export {
  * `not_now` with the supervision journal's current tag (such as `stepping` or `writing_reply`)
  * while a recovery job is unfinished, which keeps the swap from running yet.
  *
- * @stability unstable
  * @category schemas
  */
 export const Swapped = Schema.TaggedUnion({
@@ -143,7 +138,6 @@ export const Swapped = Schema.TaggedUnion({
 /**
  * What a swap answers, as `Swapped` decodes it.
  *
- * @stability unstable
  * @category schemas
  */
 export type Swapped = typeof Swapped.Type;
@@ -152,7 +146,6 @@ export type Swapped = typeof Swapped.Type;
  * Schema for what `msg` answers: the input's placing in the inbox (`accepted`), or why it was not
  * taken (`refused`).
  *
- * @stability unstable
  * @category schemas
  */
 export const Sent = Schema.TaggedUnion({
@@ -162,7 +155,6 @@ export const Sent = Schema.TaggedUnion({
 /**
  * What `msg` answers, as `Sent` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Sent = typeof Sent.Type;
@@ -170,7 +162,6 @@ export type Sent = typeof Sent.Type;
 /**
  * What `open` answers: the inbox position the view was made at, and the view.
  *
- * @stability unstable
  * @category models
  */
 export type Opened = { readonly rev: number; readonly view: View };
@@ -179,7 +170,6 @@ export type Opened = { readonly rev: number; readonly view: View };
  * The process a runner steps: its id, its registered name (its inbox), its program, the build of
  * the code stepping it, and its checked owner, the writer of its own writes.
  *
- * @stability unstable
  * @category models
  */
 export type Descriptor = {
@@ -426,7 +416,6 @@ const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
  * What the wiring gives a runner beside its services: the restart policy, where recovery is kept,
  * a hook that cuts a recovery short, and the chunk size of a chunked send.
  *
- * @stability unstable
  * @category models
  */
 export type RunnerOptions = {
@@ -472,7 +461,6 @@ export type RunnerOptions = {
  * A wake folds saved letters and runs none of their Cmds again. The process's ended spans are
  * flushed after every call, on success and on failure.
  *
- * @stability unstable
  * @category services
  */
 export class ProgramRunner extends Context.Service<
@@ -2919,7 +2907,6 @@ export class ProgramRunner extends Context.Service<
  * `bad_input` is a delivery that does not decode, or a restart request that reuses an `id` with
  * another build. `bad_client` is a watcher's client id that is empty or over 256 characters.
  *
- * @stability unstable
  * @category errors
  */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {

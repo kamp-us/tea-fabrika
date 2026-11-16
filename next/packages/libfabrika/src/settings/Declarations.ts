@@ -7,8 +7,6 @@
  * **Details**
  *
  * A schema's title and description are the words a refused value is explained with. Every setting here is `since` release 0.0.0 and reloads on restart. See docs/direction/settings.md, "Is this a setting?", for how a choice becomes one.
- *
- * @stability unstable
  */
 import { ByteSize, Schema } from "effect";
 import * as Setting from "./Setting.ts";
@@ -31,7 +29,6 @@ const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)).annota
  *
  * The value is a whole number from 1 to 65535. The default is 18787. It is set in a person's file only.
  *
- * @stability unstable
  * @category settings
  */
 export const port = Setting.make("instance.port", {
@@ -50,7 +47,6 @@ export const port = Setting.make("instance.port", {
  *
  * The value is three whole numbers, as `1.2.3`. It is set in the repo's file only, and it is read before every other setting. The default is 0.0.0, the first release that reads settings, and a later release never raises it by itself.
  *
- * @stability unstable
  * @category settings
  */
 export const version = Setting.make("fabrika-version", {
@@ -67,7 +63,6 @@ const Positive = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number
 /**
  * Setting for the most attempts one checked sender may route in a gateway window.
  *
- * @stability unstable
  * @category settings
  */
 export const gatewayLimit = Setting.make("gateway.limit", {
@@ -82,7 +77,6 @@ export const gatewayLimit = Setting.make("gateway.limit", {
 /**
  * Setting for the gateway budget's window in milliseconds.
  *
- * @stability unstable
  * @category settings
  */
 export const gatewayWindow = Setting.make("gateway.window", {
@@ -97,7 +91,6 @@ export const gatewayWindow = Setting.make("gateway.window", {
 /**
  * Setting for a one-time browser link's lifetime in whole milliseconds.
  *
- * @stability unstable
  * @category settings
  */
 export const desktopLinkTtl = Setting.make("desktop.link-ttl", {
@@ -113,7 +106,6 @@ export const desktopLinkTtl = Setting.make("desktop.link-ttl", {
  * Setting for the delay in whole seconds that the service manager waits between crash restarts
  * of the local brain.
  *
- * @stability unstable
  * @category settings
  */
 export const brainThrottle = Setting.make("desktop.brain-throttle", {
@@ -129,7 +121,6 @@ export const brainThrottle = Setting.make("desktop.brain-throttle", {
  * Setting for the interval in milliseconds between two readiness or shutdown checks of the local
  * brain. A native command that is interrupted gets the same interval to exit before it is killed.
  *
- * @stability unstable
  * @category settings
  */
 export const brainPoll = Setting.make("desktop.brain-poll", {
@@ -145,7 +136,6 @@ export const brainPoll = Setting.make("desktop.brain-poll", {
  * Setting for the most milliseconds one attempt to start or reuse the local brain may take
  * before it fails.
  *
- * @stability unstable
  * @category settings
  */
 export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
@@ -161,7 +151,6 @@ export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
  * Setting for the most milliseconds one stop may take to confirm that the local brain and what
  * it owns are gone, before it fails.
  *
- * @stability unstable
  * @category settings
  */
 export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
@@ -189,7 +178,6 @@ const Memory = Schema.ByteSize.check(Schema.makeFilter((size: ByteSize.ByteSize)
  * with SIGTERM, then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same
  * ports.
  *
- * @stability unstable
  * @category settings
  */
 export const brainMemory = Setting.make("desktop.brain-memory", {
@@ -211,7 +199,6 @@ export const brainMemory = Setting.make("desktop.brain-memory", {
  * The default is 5000, an OTP worker's shutdown default. Control calls wait through a replace, so
  * this is also about how long one replace keeps the control connection closed.
  *
- * @stability unstable
  * @category settings
  */
 export const brainGrace = Setting.make("desktop.brain-grace", {
@@ -248,7 +235,6 @@ const ChunkBytes = Schema.ByteSize.check(
  * experiment 295 picked: 256 letters of the default chunk size are 16 MiB, what one catch-up may
  * hold at once. It is set in the repo's file only.
  *
- * @stability unstable
  * @category settings
  */
 export const mailUnread = Setting.make("mail.unread", {
@@ -269,7 +255,6 @@ export const mailUnread = Setting.make("mail.unread", {
  * the ledger's row cap, and 1 KiB leaves room for a chunk's own fields. The default is 64 KiB,
  * which experiment 295 picked. It is set in the repo's file only.
  *
- * @stability unstable
  * @category settings
  */
 export const mailChunk = Setting.make("mail.chunk", {
@@ -297,7 +282,6 @@ const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{
  * The default is none: a program's hands command is then refused with `no_hands`, and no task is
  * made. TOML has no null, so a person sets it by writing the key and unsets it by leaving it out.
  *
- * @stability unstable
  * @category settings
  */
 export const handsTarget = Setting.make("hands.target", {
@@ -324,7 +308,6 @@ const RecoveryAllowance = Schema.Struct({
 /**
  * Setting for the most ledger writes one program may commit per rolling minute.
  *
- * @stability unstable
  * @category settings
  */
 export const writes = Setting.make("limits.writes", {
@@ -339,7 +322,6 @@ export const writes = Setting.make("limits.writes", {
 /**
  * Setting for the most encoded ledger bytes one program may keep.
  *
- * @stability unstable
  * @category settings
  */
 export const storage = Setting.make("limits.storage", {
@@ -359,7 +341,6 @@ export const storage = Setting.make("limits.storage", {
  * Setting for the recovery allowance of each storage location: its writes and bytes per rolling
  * minute, and the room one replayed message may take.
  *
- * @stability unstable
  * @category settings
  */
 export const recovery = Setting.make("limits.recovery", {
@@ -385,7 +366,6 @@ export const recovery = Setting.make("limits.recovery", {
  * and the three quota settings, `writes`, `storage` and `recovery`.
  * Making the group checked their paths, environment names and defaults together.
  *
- * @stability unstable
  * @category settings
  */
 export const all = Setting.group({

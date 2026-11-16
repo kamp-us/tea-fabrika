@@ -1,8 +1,6 @@
 /**
  * The gateway: the door a client connects to. It proves who a client is, admits it, and routes the
  * calls it sends to the project.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import {
@@ -79,7 +77,6 @@ const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
  * The id of one connection to the gateway, a non-empty string the gateway makes when the connection
  * opens. It names a connection, not a client key.
  *
- * @stability unstable
  * @category models
  */
 export type ConnectionId = typeof ConnectionId.Type;
@@ -2003,7 +2000,6 @@ type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => E
  * sent an input delivered to a process, refused as `sign` is, and writes nothing: the brain asks it
  * before a start (0170).
  *
- * @stability unstable
  * @category services
  */
 export class Gateway extends Context.Service<
