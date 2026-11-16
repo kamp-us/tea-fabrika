@@ -1,7 +1,7 @@
 ---
 id: 0571
 title: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
-status: accepted
+status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
 date: 2026-11-15
 tags: [runbook, operations, checklist, docs, sev, skills, wipe, dev-home]
 ---
