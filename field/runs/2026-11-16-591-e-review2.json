@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-e-review2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T02:12:34-08:00",
+  "ended": "2026-11-16T02:18:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice E of the exam-to-lint plan (0591), next/ and our tooling, after its fix round (0177): fabrikalfa/exam-to-lint-e at 895ce57, the one commit since 4b0d103. The fix changes only five laws files and two rows, no product file. Each of the five S2 walks the first review named now sends every Msg its machine takes and asserts it: the window's two walks together equal msgKeysOf(syncWindow), and they save an armed and an asking prefix, a cursor, an open tezgah link, a size and a minting attach; tezgah's program walk steps all its handlers, focus moves and cursors included; the queue walk is Q1's own, with every reply case live and late and a saved tree_drift stop; the hands walk equals msgKeysOf(handsMachine) and reaches finish:held; the chaos walk equals msgKeysOf(chaosMachine) and saves incomplete:clock and incomplete:check. Every plant that came back green on the old walk is red on the new one, in field/runs/2026-11-16-591-e-fix.json. The hands walk does not reach finish:lacks_capability or finish:again:unavailable, and that does not matter for S2: the first only adds a task to skip.tasks, which the walk's forged take refusals already save, and the second takes the same retry path as finish:again:garbled, which is asserted. The loosening hits are no loosening: the hands coverage assert became a superset, and the window S2 law, new in this slice, went from 30 runs of 80 messages to 20 runs of 120 with every Msg asserted.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a tezgah window's walk",
+      "plant": "by reading, next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets size to null; caught, since the walk asserts a saved size and syncTest compares the whole model",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Ran at 895ce57 under nice -n 19 pnpm exec vitest run --maxWorkers=1: WindowMachine, HandsMachine and ChaosMachine laws, the queue and tezgah program laws, and oxlint-plugins/machine-has-laws.test.ts, 6 files and 77 tests, all green. pnpm lint in full with NODE_OPTIONS=--max-old-space-size=6144 passed all 18 parts. One pnpm typecheck exits 0. loosening.sh on 4b0d103..895ce57 read hit by hit.",
+  "step": "review"
+}
