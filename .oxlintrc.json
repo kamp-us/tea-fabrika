@@ -2935,6 +2935,7 @@
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
