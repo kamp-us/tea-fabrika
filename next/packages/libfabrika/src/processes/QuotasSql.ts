@@ -89,6 +89,8 @@ const recoveryAccount = (name: string) => Quota.Account.cases.recovery.make({ na
 const none = { writes: 0, bytes: 0 };
 const free = Result.succeed(undefined);
 const refuse = Result.fail("quota" as const);
+const faulted = Quota.Model.isAnyOf(["reserve_fault"]);
+const refused = Quota.Decision.isAnyOf(["refused"]);
 
 // A store failure met while accounting rows are read or written, as the error every call fails with.
 const failed = (cause: unknown) =>
@@ -96,7 +98,7 @@ const failed = (cause: unknown) =>
 
 const use = (model: Quota.Model): Use => ({
   writes: model.writes,
-  bytes: model.account._tag === "program" ? model.bytes - model.ahead.bytes : model.bytes,
+  bytes: Quota.Account.isAnyOf(["program"])(model.account) ? model.bytes - model.ahead.bytes : model.bytes,
   ahead: model.ahead,
   total: model.total,
 });
@@ -174,11 +176,11 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       ...(replay === undefined ? {} : { replay }),
     })[0];
 
-    if (next._tag === "reserve_fault") {
+    if (faulted(next)) {
       throw new QuotasError({ reason: next.fault });
     }
 
-    if (next.decision._tag === "refused") {
+    if (refused(next.decision)) {
       return refuse;
     }
 
@@ -627,7 +629,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
         ahead: none,
       })[0];
 
-      if (next._tag === "reserve_fault") {
+      if (faulted(next)) {
         throw new Stopped({ pending: { operation, writes, bytes }, fault: next.fault });
       }
 
@@ -664,7 +666,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
               ahead: none,
             })[0];
 
-            if (trial._tag === "reserve_fault") {
+            if (faulted(trial)) {
               throw new QuotasError({ reason: trial.fault });
             }
 

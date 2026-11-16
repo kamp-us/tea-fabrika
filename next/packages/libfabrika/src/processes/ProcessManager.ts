@@ -30,17 +30,19 @@ import {
   ProcessEvent,
   type ProcessInfo,
   ProcessTable,
-  type Recipient,
+  Recipient,
   signalId,
-  type Start,
+  Start,
   type StartAnswer,
-  type State,
+  State,
 } from "./Process.ts";
 import { Quotas } from "./Quotas.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;
 const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
 const Send = Schema.TaggedStruct("send", { m: Down });
+const firstStart = Start.isAnyOf(["first"]);
+const againStart = Start.isAnyOf(["again"]);
 type Policy = { readonly reason: string; readonly crashes: number; readonly until: number };
 type Failure = ProcessError | LedgerError;
 /**
@@ -227,7 +229,7 @@ export class ProcessManager extends Context.Service<
             return quotas.recovering(recovery, run);
           }
 
-          return caller.recipient._tag === "process"
+          return Recipient.isAnyOf(["process"])(caller.recipient)
             ? quotas.ordinary(caller.recipient.process, run)
             : quotas.infrastructure(run);
         };
@@ -249,8 +251,10 @@ export class ProcessManager extends Context.Service<
           from: From,
         ) => {
           const { ref, round, name } = watch;
-          const inbox =
-            to._tag === "client" ? clientInbox(to.client) : `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
+          const inbox = Recipient.match(to, {
+            client: ({ client }) => clientInbox(client),
+            process: ({ process }) => `${Option.getOrThrow(table.life(process)).name}/inbox`,
+          });
           const letter = signalId(to, ref, round);
 
           // A retried call may find this signal already written. Only the brain's own row counts;
@@ -313,7 +317,7 @@ export class ProcessManager extends Context.Service<
                       return Result.fail(new ProcessError({ reason: "id_collision" }));
                     }
 
-                    if (request._tag === "first") {
+                    if (firstStart(request)) {
                       turn.append(
                         ProcessTable.stream,
                         id("registered", request.name),
@@ -337,12 +341,10 @@ export class ProcessManager extends Context.Service<
                           process,
                           name: request.name,
                           ...request.code,
-                          ...(request._tag === "first" && request.requester !== undefined
+                          ...(firstStart(request) && request.requester !== undefined
                             ? { requester: request.requester }
                             : {}),
-                          ...(request._tag === "first" && request.member !== undefined
-                            ? { member: request.member }
-                            : {}),
+                          ...(firstStart(request) && request.member !== undefined ? { member: request.member } : {}),
                         }),
                       ),
                     );
@@ -352,7 +354,7 @@ export class ProcessManager extends Context.Service<
                       turn.append(inbox(request.name), id("start", request.id), letterLine(from, first.m));
                     }
 
-                    if (request._tag === "again") {
+                    if (againStart(request)) {
                       turn.append(
                         ProcessTable.events(request.name),
                         id("restarted", process),
@@ -371,7 +373,7 @@ export class ProcessManager extends Context.Service<
 
                     return Result.succeed({ process, rev: placed.rev });
                   },
-                  request._tag === "again" ? request.after : undefined,
+                  Start.match(request, { first: () => undefined, again: ({ after }) => after }),
                 );
               });
           yield* Effect.annotateCurrentSpan({
@@ -394,7 +396,7 @@ export class ProcessManager extends Context.Service<
               return Result.fail(life.failure);
             }
 
-            if (life.success.state._tag !== "live") {
+            if (!State.isAnyOf(["live"])(life.success.state)) {
               return Result.succeed(undefined);
             }
 

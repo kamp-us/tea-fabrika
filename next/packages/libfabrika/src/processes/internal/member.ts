@@ -1,6 +1,6 @@
 import { Option, Result } from "effect";
 import type { Sender, SendersError } from "../../permissions/Senders.ts";
-import type { Life } from "./processTable.ts";
+import { type Life, Start } from "./processTable.ts";
 
 /**
  * The member a life was started for, its process owner (0172): the member its first start was
@@ -9,7 +9,7 @@ import type { Life } from "./processTable.ts";
  * @internal
  */
 export const recorded = (life: Life): Sender | undefined =>
-  life.request._tag === "first" ? life.request.member : undefined;
+  Start.match(life.request, { first: (request) => request.member, again: () => undefined });
 
 /**
  * Picks the member a call is checked against (0170, 0531): the sender of the input that caused it,

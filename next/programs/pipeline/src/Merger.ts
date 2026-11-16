@@ -1,7 +1,7 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Ci, CodeHost, Program, Send, StartChild } from "@kampus/libfabrika";
-import { Array as Arr, Schema } from "effect";
+import { Ci, CodeHost, Program, type Refusal, Send, StartChild } from "@kampus/libfabrika";
+import { Array as Arr, Match, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
@@ -85,17 +85,44 @@ const rounds = {
   run: (raw: unknown) => {
     const s = Schema.decodeUnknownSync(Previous)(raw);
 
-    return s._tag === "updating"
-      ? { ...s, head: s.job.head, round: 0, checked: null }
-      : s._tag === "checking"
-        ? { ...s, round: 0 }
-        : s;
+    return Previous.matchOrElse(
+      s,
+      {
+        updating: (s) => ({ ...s, head: s.job.head, round: 0, checked: null }),
+        checking: (s) => ({ ...s, round: 0 }),
+      },
+      (s) => s,
+    );
   },
 };
 
 type Model = typeof Model.Type;
 
 type Working = Exclude<Model, typeof Model.cases.idle.Type>;
+
+const idle = Model.isAnyOf(["idle"]);
+
+const reading = Model.isAnyOf(["reading"]);
+
+const updating = Model.isAnyOf(["updating"]);
+
+const checking = Model.isAnyOf(["checking"]);
+
+const merging = Model.isAnyOf(["merging"]);
+
+const rounded = Model.isAnyOf(["updating", "checking"]);
+
+/** A step still asking: its answer is due. A first read's step is `asking` too. */
+const askingStep = Match.type<Working["step"]>().pipe(
+  Match.tag("asking", () => true),
+  Match.orElse(() => false),
+);
+
+/** A step that waits only on checks still pending, so the next ask does not start them again. */
+const pendingStep = Match.type<Working["step"]>().pipe(
+  Match.tag("waiting", ({ reason }) => reason === "pending"),
+  Match.orElse(() => false),
+);
 
 type Command = ReturnType<
   typeof change | typeof update | typeof checks | typeof merge | typeof Send.send | typeof StartChild.exit
@@ -136,8 +163,13 @@ const Msg = Schema.Union([
 
 const clamp = (at: number) => Math.min(at, 8.64e15);
 
-const commandFor = (s: Working) =>
-  s._tag === "reading" ? "change" : s._tag === "updating" ? "update" : s._tag === "checking" ? "checks" : "merge";
+const commandFor = (s: Working): string =>
+  Match.valueTags(s, {
+    reading: () => "change",
+    updating: () => "update",
+    checking: () => "checks",
+    merging: () => "merge",
+  });
 
 const progress = (s: Working) => ({ attempt: s.attempt, late: s.late, job: s.job });
 
@@ -164,14 +196,12 @@ export const merger = (settings: Values) => {
     const attempt = s.attempt + 1;
     const next = { ...s, attempt, step: asking(at, tries) };
 
-    const cmd =
-      s._tag === "reading"
-        ? change({ attempt, change: s.job.change })
-        : s._tag === "updating"
-          ? update({ attempt, change: s.job.change, head: s.head })
-          : s._tag === "checking"
-            ? checks({ attempt, head: s.head, start })
-            : merge({ attempt, change: s.job.change, head: s.head });
+    const cmd = Match.valueTags(s, {
+      reading: (s): Command => change({ attempt, change: s.job.change }),
+      updating: (s): Command => update({ attempt, change: s.job.change, head: s.head }),
+      checking: (s): Command => checks({ attempt, head: s.head, start }),
+      merging: (s): Command => merge({ attempt, change: s.job.change, head: s.head }),
+    });
 
     return [next, [cmd]];
   };
@@ -186,22 +216,22 @@ export const merger = (settings: Values) => {
     }
 
     if ("cmd" in m) {
-      if (
-        s._tag === "idle" ||
-        s.step._tag !== "asking" ||
-        m.cmd.type !== commandFor(s) ||
-        m.cmd.attempt !== s.attempt
-      ) {
+      if (idle(s) || !askingStep(s.step) || m.cmd.type !== commandFor(s) || m.cmd.attempt !== s.attempt) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
       if ("error" in m) {
-        return [{ ...s, step: waiting(s, m.at, m.error._tag === "malformed_result" ? "bad_cmd" : m.error._tag) }, []];
+        const fault = Match.value(m.error).pipe(
+          Match.tag("malformed_result", () => "bad_cmd" as const),
+          Match.orElse(({ _tag }) => _tag),
+        );
+
+        return [{ ...s, step: waiting(s, m.at, fault) }, []];
       }
     }
 
     if (m.type === "land") {
-      if (s._tag !== "idle") {
+      if (!idle(s)) {
         return [s, []];
       }
 
@@ -213,7 +243,7 @@ export const merger = (settings: Values) => {
       ];
     }
 
-    if (s._tag === "idle") {
+    if (idle(s)) {
       return [s, []];
     }
 
@@ -222,161 +252,146 @@ export const merger = (settings: Values) => {
         return [s, []];
       }
 
-      return ask(
-        s,
-        m.at,
-        s.step.tries + (s.step._tag === "asking" ? 1 : 0),
-        !(s.step._tag === "waiting" && s.step.reason === "pending"),
-      );
+      return ask(s, m.at, s.step.tries + (askingStep(s.step) ? 1 : 0), !pendingStep(s.step));
     }
 
     if (m.type === "abandon") {
-      return s._tag === "merging" || s.job.ref !== m.ref ? [s, []] : finish(s, Reply.cases.abandoned.make(identity(s)));
+      return merging(s) || s.job.ref !== m.ref ? [s, []] : finish(s, Reply.cases.abandoned.make(identity(s)));
     }
 
-    if (s._tag === "reading" && m.type === "change_ok") {
-      const v = m.value;
+    if (reading(s) && m.type === "change_ok") {
+      const at = m.at;
 
-      if (v._tag === "missing") {
-        return finish(s, Reply.cases.closed.make({ ...identity(s), state: "missing" }));
-      }
+      return CodeHost.Change.match(m.value, {
+        missing: (): Cell => finish(s, Reply.cases.closed.make({ ...identity(s), state: "missing" })),
+        found: (v): Cell => {
+          if (v.state !== "open") {
+            return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
+          }
 
-      if (v.state !== "open") {
-        return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
-      }
+          if (v.head !== s.job.head) {
+            return finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head }));
+          }
 
-      if (v.head !== s.job.head) {
-        return finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head }));
-      }
+          const kind = Change.kind(settings.kinds, v.paths);
+          const wanted = Change.checksFor(settings.checks, kind);
 
-      const kind = Change.kind(settings.kinds, v.paths);
-      const wanted = Change.checksFor(settings.checks, kind);
+          if (!Arr.isReadonlyArrayNonEmpty(wanted)) {
+            return finish(s, Reply.cases.unset.make({ ...identity(s), kind }));
+          }
 
-      if (!Arr.isReadonlyArrayNonEmpty(wanted)) {
-        return finish(s, Reply.cases.unset.make({ ...identity(s), kind }));
-      }
-
-      return ask(
-        Model.cases.updating.make({
-          ...progress(s),
-          kind,
-          checks: wanted,
-          head: s.job.head,
-          round: 0,
-          checked: null,
-          step: asking(m.at),
-        }),
-        m.at,
-        0,
-        false,
-      );
-    }
-
-    if (s._tag === "updating" && m.type === "update_ok") {
-      const v = m.value;
-
-      if (v._tag === "current" || v._tag === "updated") {
-        if (v._tag === "current" && s.checked !== null) {
           return ask(
-            Model.cases.merging.make({ ...progress(s), head: s.head, tree: s.checked, step: asking(m.at) }),
-            m.at,
+            Model.cases.updating.make({
+              ...progress(s),
+              kind,
+              checks: wanted,
+              head: s.job.head,
+              round: 0,
+              checked: null,
+              step: asking(at),
+            }),
+            at,
             0,
             false,
           );
-        }
+        },
+      });
+    }
 
-        if (v._tag === "updated" && s.round === settings.rounds) {
-          return finish(s, Reply.cases.behind.make({ ...identity(s), head: v.head, main: v.main, rounds: s.round }));
-        }
+    if (updating(s) && m.type === "update_ok") {
+      const at = m.at;
 
-        return ask(
+      // The pinned head now holds main: check it, one round more when this update moved it.
+      const check = (
+        v: { readonly head: typeof CodeHost.Commit.Type; readonly tree: typeof CodeHost.Tree.Type },
+        moved: boolean,
+      ): Cell =>
+        ask(
           Model.cases.checking.make({
             ...progress(s),
             kind: s.kind,
             checks: s.checks,
             head: v.head,
             tree: v.tree,
-            round: s.round + (v._tag === "updated" ? 1 : 0),
-            until: clamp(m.at + wait),
-            step: asking(m.at),
+            round: s.round + (moved ? 1 : 0),
+            until: clamp(at + wait),
+            step: asking(at),
           }),
-          m.at,
+          at,
           0,
-          v._tag === "updated",
+          moved,
         );
-      }
 
-      if (v._tag === "conflict") {
-        return finish(s, Reply.cases.conflict.make({ ...identity(s), main: v.main, paths: v.paths }));
-      }
-
-      if (v._tag === "moved") {
-        return finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head }));
-      }
-
-      return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
+      return CodeHost.Updated.match(m.value, {
+        current: (v): Cell =>
+          s.checked === null
+            ? check(v, false)
+            : ask(
+                Model.cases.merging.make({ ...progress(s), head: s.head, tree: s.checked, step: asking(at) }),
+                at,
+                0,
+                false,
+              ),
+        updated: (v): Cell =>
+          s.round === settings.rounds
+            ? finish(s, Reply.cases.behind.make({ ...identity(s), head: v.head, main: v.main, rounds: s.round }))
+            : check(v, true),
+        conflict: (v): Cell => finish(s, Reply.cases.conflict.make({ ...identity(s), main: v.main, paths: v.paths })),
+        moved: (v): Cell => finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head })),
+        closed: (v): Cell => finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state })),
+      });
     }
 
-    if (s._tag === "checking" && m.type === "checks_ok") {
-      const verdict = Change.verdict(s.checks, m.value);
+    if (checking(s) && m.type === "checks_ok") {
+      const at = m.at;
 
-      if (verdict._tag === "red") {
-        return finish(s, Reply.cases.red.make({ ...identity(s), head: s.head, runs: verdict.runs }));
-      }
-
-      if (verdict._tag === "green") {
-        return ask(
-          Model.cases.updating.make({
-            ...progress(s),
-            kind: s.kind,
-            checks: s.checks,
-            head: s.head,
-            round: s.round,
-            checked: s.tree,
-            step: asking(m.at),
-          }),
-          m.at,
-          0,
-          false,
-        );
-      }
-
-      if (verdict._tag === "lost" || m.at >= s.until) {
-        return [
-          {
-            ...s,
-            until: clamp(m.at + wait),
-            step: waiting(s, m.at, verdict._tag === "lost" ? "ci_lost" : "ci_silent"),
-          },
-          [],
-        ];
-      }
-
-      return [
-        { ...s, step: Step.cases.waiting.make({ tries: s.step.tries, at: clamp(m.at + poll), reason: "pending" }) },
+      const late = (reason: "ci_lost" | "ci_silent"): Cell => [
+        { ...s, until: clamp(at + wait), step: waiting(s, at, reason) },
         [],
       ];
+
+      return Change.Verdict.match(Change.verdict(s.checks, m.value), {
+        red: (verdict): Cell => finish(s, Reply.cases.red.make({ ...identity(s), head: s.head, runs: verdict.runs })),
+        green: (): Cell =>
+          ask(
+            Model.cases.updating.make({
+              ...progress(s),
+              kind: s.kind,
+              checks: s.checks,
+              head: s.head,
+              round: s.round,
+              checked: s.tree,
+              step: asking(at),
+            }),
+            at,
+            0,
+            false,
+          ),
+        lost: (): Cell => late("ci_lost"),
+        pending: (): Cell =>
+          at >= s.until
+            ? late("ci_silent")
+            : [
+                {
+                  ...s,
+                  step: Step.cases.waiting.make({ tries: s.step.tries, at: clamp(at + poll), reason: "pending" }),
+                },
+                [],
+              ],
+      });
     }
 
-    if (s._tag === "merging" && m.type === "merge_ok") {
-      const v = m.value;
-
-      if (v._tag === "merged") {
-        return finish(
-          s,
-          Reply.cases.merged.make({ ...identity(s), head: s.head, commit: v.commit, tree: v.tree, checked: s.tree }),
-        );
-      }
-
-      if (v._tag === "moved") {
-        return finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head }));
-      }
-
-      if (v._tag === "conflict") {
-        return finish(s, Reply.cases.conflict.make({ ...identity(s), main: v.main, paths: v.paths }));
-      }
-
-      return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
+    if (merging(s) && m.type === "merge_ok") {
+      return CodeHost.Merged.match(m.value, {
+        merged: (v): Cell =>
+          finish(
+            s,
+            Reply.cases.merged.make({ ...identity(s), head: s.head, commit: v.commit, tree: v.tree, checked: s.tree }),
+          ),
+        moved: (v): Cell => finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head })),
+        conflict: (v): Cell => finish(s, Reply.cases.conflict.make({ ...identity(s), main: v.main, paths: v.paths })),
+        closed: (v): Cell => finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state })),
+      });
     }
 
     return [s, []];
@@ -412,31 +427,32 @@ export const merger = (settings: Values) => {
     state: { v: 2, upgrades: [rounds] },
     view: (s) => ({
       state: s._tag,
-      ref: s._tag === "idle" ? null : s.job.ref,
-      change: s._tag === "idle" ? null : s.job.change,
-      head: s._tag === "idle" ? null : s._tag === "reading" ? s.job.head : s.head,
-      round: s._tag === "updating" || s._tag === "checking" ? s.round : null,
+      ref: idle(s) ? null : s.job.ref,
+      change: idle(s) ? null : s.job.change,
+      head: Model.matchOrElse(s, { idle: () => null, reading: (s) => s.job.head }, (s) => s.head),
+      round: rounded(s) ? s.round : null,
       attempt: s.attempt,
-      tries: s._tag === "idle" ? null : s.step.tries,
+      tries: idle(s) ? null : s.step.tries,
       late: s.late,
     }),
-    refuse: (s, m) =>
-      m.type === "land"
-        ? s._tag === "idle"
-          ? null
-          : { reason: "busy" }
-        : m.type !== "abandon"
-          ? null
-          : s._tag === "idle"
-            ? { reason: "idle" }
-            : s._tag === "merging"
-              ? { reason: "merging" }
-              : m.ref !== s.job.ref
-                ? { reason: "other_job" }
-                : null,
+    refuse: (s, m): Refusal | null => {
+      if (m.type === "land") {
+        return idle(s) ? null : { reason: "busy" };
+      }
+
+      if (m.type !== "abandon") {
+        return null;
+      }
+
+      return Model.matchOrElse(
+        s,
+        { idle: (): Refusal => ({ reason: "idle" }), merging: (): Refusal => ({ reason: "merging" }) },
+        (s): Refusal | null => (m.ref !== s.job.ref ? { reason: "other_job" } : null),
+      );
+    },
     inputs: { land: "Land this change at its pinned head", abandon: "Abandon this job before merging" },
     outputs: {},
     writes: {},
-    wake: (s) => (s._tag === "idle" ? null : s.step.at),
+    wake: (s) => (idle(s) ? null : s.step.at),
   });
 };

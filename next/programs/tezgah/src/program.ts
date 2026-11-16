@@ -6,7 +6,7 @@
 // behind it. Layout geometry and the view's shapes are the library's (its `Layout` and `Workspace`),
 // shared with every window; a program's box takes them from the library's root, as every name.
 import { Machine } from "@demlik/tea/effect";
-import { Layout, Program, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
+import { Layout, Program, type Refusal, StartChild, Started, Workspace } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
 /** The program a new tile shows. A constant until programs read pack settings (P38 slice 5); then
@@ -84,6 +84,8 @@ const Starting = Schema.TaggedUnion({
 
 type Starting = typeof Starting.Type;
 
+const attaching = Starting.isAnyOf(["attach"]);
+
 const Model = Schema.Struct({
   workspaces: Schema.Array(Workspace.Workspace),
   tiles: Schema.Array(Workspace.Tile),
@@ -107,7 +109,7 @@ const holding = (m: Model, tile: string) =>
 const known = (m: Model, tile: string) => m.tiles.some((t) => t.id === tile) || m.starting.some((s) => s.tile === tile);
 
 const exists = (m: Model, n: number) =>
-  m.workspaces.some((w) => w.n === n) || m.starting.some((s) => s._tag === "attach" && s.workspace === n);
+  m.workspaces.some((w) => w.n === n) || m.starting.some((s) => attaching(s) && s.workspace === n);
 
 /** A workspace takes its first tile's id body: windows mint ids, and tezgah mints none. */
 const workspaceId = Schema.decodeSync(Workspace.WorkspaceId);
@@ -122,7 +124,7 @@ const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
   n: m.next,
   shows: answer.name,
   program: NEW_TILE,
-  child: answer._tag === "started",
+  child: Started.isAnyOf(["started"])(answer),
   keep: "failed",
   cursor: null,
 });
@@ -132,7 +134,7 @@ const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
 const placed = (m: Model, s: Starting, answer: Started): Model => {
   const rest = { ...m, starting: m.starting.filter((x) => x !== s) };
 
-  if (s._tag === "attach") {
+  if (attaching(s)) {
     if (m.workspaces.some((w) => w.n === s.workspace)) {
       return rest;
     }

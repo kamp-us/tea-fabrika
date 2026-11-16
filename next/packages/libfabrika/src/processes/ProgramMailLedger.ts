@@ -22,6 +22,7 @@ import { ProcessManager } from "./ProcessManager.ts";
 import {
   type Delivery,
   type Grants,
+  MailFailure,
   type MailRefusal,
   ProgramMail,
   ProgramMailError,
@@ -200,7 +201,7 @@ export const layer = (config: {
 
             if (
               source.name !== delivery.source.name ||
-              source.state._tag !== "live" ||
+              !State.isAnyOf(["live"])(source.state) ||
               source.state.process !== delivery.source.process
             ) {
               return yield* refuse("stale_sender");
@@ -268,9 +269,13 @@ export const layer = (config: {
         ),
         Effect.tapError((error) =>
           Effect.annotateCurrentSpan(
-            error.reason._tag === "full"
-              ? { [tag("answer")]: "full", [tag("unread")]: error.reason.unread, [tag("cap")]: config.cap }
-              : { [tag("answer")]: "refused", [tag("reason")]: error.reason._tag },
+            MailFailure.matchOrElse(
+              error.reason,
+              {
+                full: ({ unread }) => ({ [tag("answer")]: "full", [tag("unread")]: unread, [tag("cap")]: config.cap }),
+              },
+              ({ _tag }) => ({ [tag("answer")]: "refused", [tag("reason")]: _tag }),
+            ),
           ),
         ),
       );

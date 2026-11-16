@@ -22,7 +22,7 @@ import { Child, Children, ChildrenError, type ChildStop, INPUT_BYTES, type Start
 import { ExitReason } from "./ExitReason.ts";
 import { pick, recorded } from "./internal/member.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
-import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
+import { ProcessError, ProcessName, type ProcessTable, Recipient, Start, State } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
 const tag = (word: string): string => `fab.children.${word}`;
@@ -72,6 +72,8 @@ type Found = Data.TaggedEnum<{
 }>;
 
 const Found = Data.taggedEnum<Found>();
+
+const live = State.isAnyOf(["live"]);
 
 /** The first letter's id in the child's inbox. */
 const letterId = (id: string): string => JSON.stringify(["start", id]);
@@ -172,10 +174,11 @@ const answer = (
 
     // The caller fields: name, program, requester and input, never the hash, so a rebuild retries alike.
     const same =
-      saved.request._tag === "first" &&
+      Start.isAnyOf(["first"])(saved.request) &&
       saved.name === child.name &&
       saved.request.code.program === child.code.program &&
-      saved.request.requester?._tag === "process" &&
+      saved.request.requester !== undefined &&
+      Recipient.isAnyOf(["process"])(saved.request.requester) &&
       saved.request.requester.process === child.requester.process &&
       (child.input === undefined ? Option.isNone(m) : Option.exists(m, (value) => Equal.equals(value, child.input)));
 
@@ -216,9 +219,7 @@ const answer = (
           program !== child.code.program
             ? Result.fail(refuse("name_taken"))
             : Result.succeed(
-                state._tag === "live"
-                  ? Started.cases.already_started.make(life)
-                  : Started.cases.already_present.make(life),
+                live(state) ? Started.cases.already_started.make(life) : Started.cases.already_present.make(life),
               ),
         judged: Option.some(judged.success),
       });
@@ -267,7 +268,7 @@ const stopped = (table: ProcessTable, stop: ChildStop): Result.Result<string, Ch
     return Result.fail(refuse("not_child"));
   }
 
-  return current.state._tag === "live" ? Result.succeed(current.state.process) : Result.fail(refuse("noproc"));
+  return live(current.state) ? Result.succeed(current.state.process) : Result.fail(refuse("noproc"));
 };
 
 /** Keeps a storage failure's cause with the caller: every nested span records only the safe reason,
@@ -389,7 +390,7 @@ export const layer = (config: {
 
       /** The write turn, under the proof when a member was checked, else as the host's grant allows. */
       const write = (child: Child, from: From, judged: Judged) =>
-        judged._tag === "allowed"
+        Judged.$is("allowed")(judged)
           ? place(child, from).pipe(Rebac.provide(judged.proof))
           : manager.start(
               Start.cases.first.make({ id: child.id, name: child.name, code: child.code, requester: child.requester }),
@@ -431,13 +432,16 @@ export const layer = (config: {
           // requester has ended, so the second pass always answers.
           for (let pass = 1; ; pass++) {
             const found = yield* look(child, sender);
-            const judged = found._tag === "free" ? Option.some(found.judged) : found.judged;
+            const judged = Found.$match(found, {
+              free: (free) => Option.some(free.judged),
+              answered: (answered) => answered.judged,
+            });
 
             if (Option.isSome(judged)) {
               yield* Effect.annotateCurrentSpan(shown(judged.value));
             }
 
-            if (found._tag === "answered") {
+            if (Found.$is("answered")(found)) {
               return yield* Effect.fromResult(found.answer);
             }
 

@@ -3,7 +3,8 @@ import * as Schema from "effect/Schema";
 import { Exceeded, RecoveryReserveExhausted, type Allowance } from "../Quotas.ts";
 
 const Amount = Schema.Struct({ writes: Schema.Finite, bytes: Schema.Finite });
-const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded } });
+/** @internal */
+export const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded } });
 
 /**
  * Schema for whose account one machine keeps: a `program`'s ledger account, a registered name's
@@ -60,13 +61,17 @@ const Msg = Schema.Union([
 /** @internal */
 export type Msg = typeof Msg.Type;
 
+const recovery = Account.isAnyOf(["recovery"]);
+const local = Account.isAnyOf(["local"]);
+const faulted = Model.isAnyOf(["reserve_fault"]);
+
 const advance = (s: Model, at: number): Model => {
   const now = Math.max(s.at, at);
   const groups = s.groups.filter((g) => g.at > now - 60_000);
   return {
     ...s,
     writes: groups.reduce((n, g) => n + g.writes, 0),
-    bytes: s.account._tag === "recovery" ? groups.reduce((n, g) => n + g.bytes, 0) : s.bytes,
+    bytes: recovery(s.account) ? groups.reduce((n, g) => n + g.bytes, 0) : s.bytes,
   };
 };
 
@@ -111,7 +116,7 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
       propose: (previous, m) => {
         const s = advance(previous, m.at);
 
-        if (s._tag === "reserve_fault") {
+        if (faulted(s)) {
           return [s, []];
         }
 
@@ -124,13 +129,12 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
         const writes = replay ? 0 : m.writes + m.ahead.writes;
         const bytes = replay ? 0 : Math.max(0, m.bytes + m.ahead.bytes);
         const usedWrites = s.writes + writes;
-        const usedBytes = account._tag === "recovery" ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
+        const usedBytes = recovery(account) ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
         const resource = usedWrites > options.limits.writes ? "writes" : "storage";
-        const exceeded =
-          account._tag !== "local" && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
+        const exceeded = !local(account) && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
 
         if (exceeded) {
-          if (account._tag === "recovery") {
+          if (recovery(account)) {
             const { _tag: _case, ...fields } = s;
             return [
               Model.cases.reserve_fault.make({

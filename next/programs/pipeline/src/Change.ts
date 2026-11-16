@@ -56,6 +56,8 @@ export const Verdict = Schema.TaggedUnion({
   lost: { runs: Schema.NonEmptyArray(Ci.CheckRun) },
 });
 
+const done = Ci.Status.isAnyOf(["done"]);
+
 export const verdict = (
   checks: Arr.NonEmptyReadonlyArray<typeof Check.Type>,
   current: typeof Ci.Checks.Type,
@@ -68,18 +70,17 @@ export const verdict = (
   const selected = current.filter((r) => asked.some((c) => matches(c, r)));
 
   const red = selected.filter(
-    (r) => r.status._tag === "done" && (r.status.conclusion === "failure" || r.status.conclusion === "timed_out"),
+    (r) => done(r.status) && (r.status.conclusion === "failure" || r.status.conclusion === "timed_out"),
   );
 
   const lost = selected.filter(
-    (r) =>
-      r.status._tag === "done" && (r.status.conclusion === "cancelled" || r.status.conclusion === "startup_failure"),
+    (r) => done(r.status) && (r.status.conclusion === "cancelled" || r.status.conclusion === "startup_failure"),
   );
 
   const pending = asked.filter((c) => {
     const runs = selected.filter((r) => matches(c, r));
 
-    return runs.length === 0 || runs.some((r) => r.status._tag !== "done");
+    return runs.length === 0 || runs.some((r) => !done(r.status));
   });
 
   if (Arr.isReadonlyArrayNonEmpty(red)) {

@@ -33,6 +33,16 @@ const Model = Schema.TaggedUnion({
 
 type Model = typeof Model.Type;
 
+const idle = Model.isAnyOf(["idle"]);
+
+const starting = Model.isAnyOf(["starting"]);
+
+const landing = Model.isAnyOf(["landing"]);
+
+const stopped = Model.isAnyOf(["stopped"]);
+
+const busy = Model.isAnyOf(["starting", "landing"]);
+
 type Entry = typeof Entry.Type;
 
 type Command = ReturnType<typeof StartChild.startChild | typeof Send.send>;
@@ -108,8 +118,8 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
   };
 
   const refuse = (s: Model, m: Message): Refusal | null => {
-    const line = s._tag === "idle" ? [] : s.line;
-    const current = s._tag === "starting" || s._tag === "landing" ? s.current : null;
+    const line = idle(s) ? [] : s.line;
+    const current = busy(s) ? s.current : null;
 
     if (m.type === "enqueue") {
       if (unset) {
@@ -130,12 +140,12 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
         return { reason: "missing" };
       }
 
-      if (s._tag === "starting" && current?.change === m.change) {
+      if (starting(s) && current?.change === m.change) {
         return { reason: "starting" };
       }
     }
 
-    return m.type === "resume" && s._tag !== "stopped" ? { reason: "running" } : null;
+    return m.type === "resume" && !stopped(s) ? { reason: "running" } : null;
   };
 
   const reduce = (s: Model, m: Message): Cell => {
@@ -150,15 +160,15 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     if (m.type === "enqueue") {
       const entry = Entry.make({ change: m.change, head: m.head, reply: m.reply ?? null });
 
-      return s._tag === "idle" ? next(s, [entry]) : [{ ...s, line: [...s.line, entry] }, []];
+      return idle(s) ? next(s, [entry]) : [{ ...s, line: [...s.line, entry] }, []];
     }
 
     if (m.type === "start_child_ok" || m.type === "start_child_err") {
-      if (s._tag !== "starting" || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
+      if (!starting(s) || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
-      if (m.type === "start_child_ok" && m.value._tag === "started") {
+      if (m.type === "start_child_ok" && Started.isAnyOf(["started"])(m.value)) {
         return [
           Model.cases.landing.make({ attempt: s.attempt, late: s.late, line: s.line, current: s.current, since: m.at }),
           [],
@@ -181,13 +191,13 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     }
 
     if (m.type === "reply") {
-      if (s._tag !== "landing" || m.ref !== String(s.attempt)) {
+      if (!landing(s) || m.ref !== String(s.attempt)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
       const sent = forward(s.current, m);
 
-      if (m._tag === "merged" && m.tree !== m.checked) {
+      if (Reply.isAnyOf(["merged"])(m) && m.tree !== m.checked) {
         return [
           Model.cases.stopped.make({
             attempt: s.attempt,
@@ -209,8 +219,8 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       return [model, [...sent, ...commands]];
     }
 
-    if (m.type === "drop" && s._tag !== "idle") {
-      if (s._tag === "landing" && s.current.change === m.change) {
+    if (m.type === "drop" && !idle(s)) {
+      if (landing(s) && s.current.change === m.change) {
         return [s, [Send.send({ to: s.current.name, m: Abandon.make({ type: "abandon", ref: String(s.attempt) }) })]];
       }
 
@@ -221,7 +231,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       return [{ ...s, line: s.line.filter((entry) => entry.change !== m.change) }, sent];
     }
 
-    return m.type === "resume" && s._tag === "stopped" ? next(s, s.line) : [s, []];
+    return m.type === "resume" && stopped(s) ? next(s, s.line) : [s, []];
   };
 
   const machine = Machine.make({
@@ -247,15 +257,12 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     state: { v: 1, upgrades: [] },
     view: (s) => ({
       state: s._tag,
-      current:
-        s._tag === "starting" || s._tag === "landing"
-          ? { change: s.current.change, head: s.current.head, name: s.current.name }
-          : null,
-      since: s._tag === "landing" ? s.since : null,
-      line: s._tag === "idle" ? [] : s.line.map(({ change, head }) => ({ change, head })),
+      current: busy(s) ? { change: s.current.change, head: s.current.head, name: s.current.name } : null,
+      since: landing(s) ? s.since : null,
+      line: idle(s) ? [] : s.line.map(({ change, head }) => ({ change, head })),
       attempt: s.attempt,
       late: s.late,
-      reason: s._tag === "stopped" ? s.reason : null,
+      reason: stopped(s) ? s.reason : null,
       unset: unset ? "queue.checks" : null,
     }),
     refuse,

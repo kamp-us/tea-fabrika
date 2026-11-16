@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Ledger, type LedgerError } from "../ledger/Ledger.ts";
-import { type Entry, valueFor } from "../ledger/Log.ts";
+import { type Entry, valueFor, Waited } from "../ledger/Log.ts";
 import { inbox } from "./Mailbox.ts";
 import { ProcessEvent, ProcessTable } from "./Process.ts";
 import { BadRow, ProcessHistory, ProcessHistoryError, Storage, Unreachable } from "./ProcessHistory.ts";
@@ -55,7 +55,7 @@ export const layer: Layer.Layer<ProcessHistory, never, Ledger> = Layer.effect(
     const head = Effect.fnUntraced(function* (stream: string) {
       const waited = yield* ledger.wait(stream, 0).pipe(Effect.mapError(translate));
 
-      return waited._tag === "ready" ? waited.rev : 0;
+      return Waited.match(waited, { ready: ({ rev }) => rev, parked: () => 0 });
     });
 
     const read = Effect.fnUntraced(function* (stream: string, boundary: number) {

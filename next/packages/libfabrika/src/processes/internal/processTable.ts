@@ -92,9 +92,10 @@ export const ProcessEvent = Schema.TaggedUnion({
 type To = typeof Recipient.Type;
 
 const canonical = (to: To): To =>
-  to._tag === "process"
-    ? Recipient.cases.process.make({ process: to.process })
-    : Recipient.cases.client.make({ client: to.client, session: to.session });
+  Recipient.match(to, {
+    process: (to) => Recipient.cases.process.make({ process: to.process }),
+    client: (to) => Recipient.cases.client.make({ client: to.client, session: to.session }),
+  });
 
 /**
  * The canonical (recipient, ref) key a watch is held under.
@@ -115,6 +116,13 @@ const watched = { ref: Text, process: ProcessId, to: Recipient, round: Count, na
 
 /** `round` counts this (recipient, ref)'s monitored events, so a monitor after a cancel is new. */
 const Watch = Schema.TaggedUnion({ live: watched, canceled: watched });
+
+/**
+ * A watch that is still live, not canceled.
+ *
+ * @internal
+ */
+export const liveWatch = Watch.isAnyOf(["live"]);
 
 const Life = Schema.Struct({
   name: Schema.String,
@@ -158,6 +166,93 @@ const lifeFor = (s: Model, process: string): Life => {
   return life;
 };
 
+/** One process event folded into the table, by its case. */
+const fold = (s: Model, entry: Entry, event: typeof ProcessEvent.Type): Model =>
+  ProcessEvent.match(event, {
+    registered: (event): Model => ({ ...s, names: put(s.names, event.name, event) }),
+    started: (event): Model => {
+      const code = { program: event.program, hash: event.hash };
+
+      const life = {
+        name: event.name,
+        state: State.cases.live.make({ process: event.process, code }),
+        request: Start.cases.first.make({
+          id: entry.id,
+          name: event.name,
+          code,
+          ...(event.requester === undefined ? {} : { requester: event.requester }),
+          ...(event.member === undefined ? {} : { member: event.member }),
+        }),
+        from: entry,
+        rev: entry.rev,
+      };
+
+      return {
+        ...s,
+        lives: put(s.lives, event.process, life),
+        current: put(s.current, event.name, event.process),
+      };
+    },
+    monitored: (event): Model => {
+      const key = watchKey(event.to, event.ref);
+      const round = (s.watches.get(key)?.round ?? 0) + 1;
+
+      const watch = Watch.cases.live.make({
+        ref: event.ref,
+        process: event.process,
+        to: event.to,
+        round,
+        ...(event.name === undefined ? {} : { name: event.name }),
+      });
+
+      return { ...s, watches: put(s.watches, key, watch) };
+    },
+    demonitored: (event): Model => {
+      const key = watchKey(event.to, event.ref);
+      const watch = s.watches.get(key);
+
+      if (watch === undefined || Watch.isAnyOf(["canceled"])(watch)) {
+        return s;
+      }
+
+      const { _tag: _live, ...held } = watch;
+      const canceled = Watch.cases.canceled.make(held);
+
+      return { ...s, watches: put(s.watches, key, canceled) };
+    },
+    restarted: (event): Model => {
+      const life = lifeFor(s, event.process);
+
+      const request = Start.cases.again.make({
+        id: life.request.id,
+        name: event.name,
+        code: life.state.code,
+        after: event.after,
+        reason: event.reason,
+      });
+
+      const times = [...(s.restarts.get(event.name) ?? []), entry.arrivedAt];
+
+      return {
+        ...s,
+        lives: put(s.lives, event.process, { ...life, request }),
+        restarts: put(s.restarts, event.name, times),
+      };
+    },
+    exited: (event): Model => {
+      const life = lifeFor(s, event.process);
+      const state = State.cases.ended.make({ process: event.process, code: life.state.code, reason: event.reason });
+
+      return { ...s, lives: put(s.lives, event.process, { ...life, exited: event.reason, state }) };
+    },
+    down: (event): Model => {
+      const life = lifeFor(s, event.process);
+      const state = State.cases.down.make({ ...event, code: life.state.code });
+
+      return { ...s, lives: put(s.lives, event.process, { ...life, state }) };
+    },
+  });
+
 /**
  * The process table's fold: one `recorded` entry at a time. An entry counts only when it is a
  * process event and `by` is the brain's own writer.
@@ -185,103 +280,7 @@ export const processTableFor = (by: string) =>
           return [s, []];
         }
 
-        const event = decodeEvent(valueFor(entry));
-
-        if (event._tag === "registered") {
-          return [{ ...s, names: put(s.names, event.name, event) }, []];
-        }
-
-        if (event._tag === "started") {
-          const code = { program: event.program, hash: event.hash };
-
-          const life = {
-            name: event.name,
-            state: State.cases.live.make({ process: event.process, code }),
-            request: Start.cases.first.make({
-              id: entry.id,
-              name: event.name,
-              code,
-              ...(event.requester === undefined ? {} : { requester: event.requester }),
-              ...(event.member === undefined ? {} : { member: event.member }),
-            }),
-            from: entry,
-            rev: entry.rev,
-          };
-
-          return [
-            {
-              ...s,
-              lives: put(s.lives, event.process, life),
-              current: put(s.current, event.name, event.process),
-            },
-            [],
-          ];
-        }
-
-        if (event._tag === "monitored") {
-          const key = watchKey(event.to, event.ref);
-          const round = (s.watches.get(key)?.round ?? 0) + 1;
-
-          const watch = Watch.cases.live.make({
-            ref: event.ref,
-            process: event.process,
-            to: event.to,
-            round,
-            ...(event.name === undefined ? {} : { name: event.name }),
-          });
-
-          return [{ ...s, watches: put(s.watches, key, watch) }, []];
-        }
-
-        if (event._tag === "demonitored") {
-          const key = watchKey(event.to, event.ref);
-          const watch = s.watches.get(key);
-
-          if (watch === undefined || watch._tag === "canceled") {
-            return [s, []];
-          }
-
-          const { _tag: _live, ...held } = watch;
-          const canceled = Watch.cases.canceled.make(held);
-
-          return [{ ...s, watches: put(s.watches, key, canceled) }, []];
-        }
-
-        const life = lifeFor(s, event.process);
-
-        if (event._tag === "restarted") {
-          const request = Start.cases.again.make({
-            id: life.request.id,
-            name: event.name,
-            code: life.state.code,
-            after: event.after,
-            reason: event.reason,
-          });
-
-          const times = [...(s.restarts.get(event.name) ?? []), entry.arrivedAt];
-
-          return [
-            {
-              ...s,
-              lives: put(s.lives, event.process, { ...life, request }),
-              restarts: put(s.restarts, event.name, times),
-            },
-            [],
-          ];
-        }
-
-        const code = life.state.code;
-
-        if (event._tag === "exited") {
-          const state = State.cases.ended.make({ process: event.process, code, reason: event.reason });
-          const ended = { ...life, exited: event.reason, state };
-
-          return [{ ...s, lives: put(s.lives, event.process, ended) }, []];
-        }
-
-        const state = State.cases.down.make({ ...event, code });
-
-        return [{ ...s, lives: put(s.lives, event.process, { ...life, state }) }, []];
+        return [fold(s, entry, decodeEvent(valueFor(entry))), []];
       },
     },
   });

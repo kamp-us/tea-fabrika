@@ -195,7 +195,7 @@ export const layer = (config: {
             .transact((turn) => look(manager.table(turn), turn, watch, sender, may))
             .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));
 
-          if (found._tag === "fresh") {
+          if (Found.$is("fresh")(found)) {
             yield* bind(watch, found.watched, found.member, from);
           }
 

@@ -6,7 +6,7 @@
  * allows, in the same ledger turn.
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import { Equal, Option, Predicate, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -17,6 +17,7 @@ import {
   Code,
   Count,
   type Life,
+  liveWatch,
   type Model,
   Owner,
   ProcessEvent,
@@ -259,14 +260,16 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   const value = saved.success;
 
   return Result.succeed(
-    value._tag === "idle"
-      ? value
-      : Recovered.cases.interrupted.make({
-          process: value.process,
-          letter: value.letter,
-          build: value.build,
+    Activity.match(value, {
+      idle: (idle): typeof Recovered.Type => idle,
+      stepping: (stepping): typeof Recovered.Type =>
+        Recovered.cases.interrupted.make({
+          process: stepping.process,
+          letter: stepping.letter,
+          build: stepping.build,
           reason: "interrupted",
         }),
+    }),
   );
 };
 
@@ -359,6 +362,9 @@ export type ProcessInfo = {
 };
 
 const decodeDown = Schema.decodeUnknownOption(Down);
+const live = State.isAnyOf(["live"]);
+const toProcess = Recipient.isAnyOf(["process"]);
+const toClient = Recipient.isAnyOf(["client"]);
 
 const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({ reason }));
 
@@ -547,9 +553,9 @@ export class ProcessTable {
 
     const name = this.#model.names.get(request.name);
 
-    if (request._tag === "first") {
+    if (Start.isAnyOf(["first"])(request)) {
       // A child's requester must still be live in the turn that would write its start.
-      if (request.requester?._tag === "process" && !this.isLive(request.requester.process)) {
+      if (request.requester !== undefined && toProcess(request.requester) && !this.isLive(request.requester.process)) {
         return denied("stale");
       }
 
@@ -593,9 +599,12 @@ export class ProcessTable {
   /** The registered name that asked for this name's first life, when a child start wrote one. */
   starter(name: string): Option.Option<string> {
     const first = [...this.#model.lives.values()].find((life) => life.name === name);
-    const requester = first?.request._tag === "first" ? first.request.requester : undefined;
+    const requester =
+      first === undefined
+        ? undefined
+        : Start.match(first.request, { first: (request) => request.requester, again: () => undefined });
 
-    return requester?._tag === "process"
+    return requester !== undefined && toProcess(requester)
       ? Option.map(this.life(requester.process), (life) => life.name)
       : Option.none();
   }
@@ -659,7 +668,7 @@ export class ProcessTable {
 
     const { state, exited } = parent.success;
 
-    return state._tag !== "live" && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
+    return !live(state) && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
   }
 
   /** The life a supervisor gives up on; refused while that process still lives. */
@@ -674,7 +683,7 @@ export class ProcessTable {
       return parent;
     }
 
-    return parent.success.state._tag === "live" ? denied("alive") : parent;
+    return live(parent.success.state) ? denied("alive") : parent;
   }
 
   /** The round to write for a new or renewed watch; none when this watch is already live. */
@@ -683,7 +692,7 @@ export class ProcessTable {
       return denied("bad_text");
     }
 
-    if (to._tag === "client" && !Schema.is(ClientId)(to.client)) {
+    if (toClient(to) && !Schema.is(ClientId)(to.client)) {
       return denied("bad_name");
     }
 
@@ -693,11 +702,11 @@ export class ProcessTable {
       return denied("bad_ref");
     }
 
-    if (watch !== undefined && watch._tag === "live") {
+    if (watch !== undefined && liveWatch(watch)) {
       return Result.succeed(Option.none());
     }
 
-    if (to._tag === "process" && !this.isLive(to.process)) {
+    if (toProcess(to) && !this.isLive(to.process)) {
       return denied("ended");
     }
 
@@ -716,13 +725,13 @@ export class ProcessTable {
 
   inbound(process: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
-      .filter((watch) => watch._tag === "live" && watch.process === process)
+      .filter((watch) => liveWatch(watch) && watch.process === process)
       .map(shown);
   }
 
   outbound(process: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
-      .filter(({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process)
+      .filter((watch) => liveWatch(watch) && toProcess(watch.to) && watch.to.process === process)
       .map(shown);
   }
 
@@ -734,8 +743,7 @@ export class ProcessTable {
   held(session: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
       .filter(
-        ({ _tag, to, process }) =>
-          _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
+        (watch) => liveWatch(watch) && toClient(watch.to) && watch.to.session === session && this.isLive(watch.process),
       )
       .map(shown);
   }
@@ -746,7 +754,7 @@ export class ProcessTable {
    * its own recipient, and only while its watch is live. Anything else is plain mail.
    */
   deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
-    if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
+    if (!Predicate.isTagged(m, "DOWN")) {
       return "mail";
     }
 
@@ -770,14 +778,14 @@ export class ProcessTable {
     }
 
     // An earlier round's signal belongs to a watch already canceled.
-    const current = round === watch.round && watch._tag === "live";
+    const current = round === watch.round && liveWatch(watch);
 
-    return current && to._tag === "process" && to.process === process ? "signal" : "drop";
+    return current && toProcess(to) && to.process === process ? "signal" : "drop";
   }
 
   get info(): ReadonlyArray<ProcessInfo> {
     return [...this.#model.lives.values()]
-      .filter((life) => life.state._tag === "live")
+      .filter((life) => live(life.state))
       .map((life) => ({
         process: life.state.process,
         name: life.name,
