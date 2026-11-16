@@ -63,14 +63,14 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
 
   initialize(
     client: ConnectionId,
-    input: Parameters<ContextProject["initialize"]>[1],
+    input: unknown,
     trusted: { url: string; tab: string; name: string; session?: string },
   ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }
 
-  route(client: ConnectionId, method: string, params: Parameters<ContextProject["route"]>[2], reader?: string) {
+  route(client: ConnectionId, method: string, params: unknown, reader?: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.route(client, method, params, reader)));
   }
@@ -80,7 +80,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => p.knock(client, input)));
   }
 
-  grant(input: Parameters<ContextProject["grant"]>[0]) {
+  grant(input: unknown) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.grant(input)));
   }
@@ -135,7 +135,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => p.wait(stream, after, reader)));
   }
 
-  append(stream: string, id: string, line: Parameters<ContextProject["append"]>[2]) {
+  append(stream: string, id: string, line: unknown) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.append(stream, id, line)));
   }
@@ -150,13 +150,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => commitReply(p.commit(pid, input))));
   }
 
-  own(
-    pid: string,
-    id: string,
-    stream: string,
-    event: Parameters<ContextProject["own"]>[3],
-    trace?: { traceId: string; spanId: string },
-  ) {
+  own(pid: string, id: string, stream: string, event: unknown, trace?: { traceId: string; spanId: string }) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, event, trace)));
   }
@@ -176,7 +170,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
   }
 
-  publish(client: string, update: Parameters<ContextProject["publish"]>[1]) {
+  publish(client: string, update: unknown) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }

@@ -118,7 +118,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  */
 export const read = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
   group: Setting.Group<A, R>,
-  input: unknown,
+  input: Schema.Json,
 ) {
   const strict = { onExcessProperty: "error" } as const;
   const paths = group.declarations.map((d) => d.path);
