@@ -5,6 +5,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Effect } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import type { Activity } from "../processes/Process.ts";
+import type { News } from "../runtime/News.ts";
 import type { Descriptor, Opened, Sent, Swapped } from "../runtime/Runner.ts";
 import type { Failure } from "../settings/Start.ts";
 import type { ProjectBinding } from "./bindings.ts";
@@ -64,7 +65,7 @@ export type ConnectionShape = {
   readonly webSocketClose: (socket: Cloudflare.WebSocket, code: number) => Effect.Effect<void>;
   readonly webSocketError: (socket: Cloudflare.WebSocket) => Effect.Effect<void>;
   readonly ring: (stream: string, rev: number) => Effect.Effect<void, LedgerError>;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>;
   readonly probe: (session: string) => Effect.Effect<number | null, LedgerError>;
 };
 

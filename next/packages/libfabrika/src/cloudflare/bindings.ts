@@ -20,6 +20,7 @@ import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type { Ask, Reply as HandsReply } from "../runtime/HandsTasks.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
+import type { News, Published } from "../runtime/News.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
 import type * as SettingsStart from "../settings/Start.ts";
@@ -264,7 +265,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         trace?: { traceId: string; spanId: string },
       ) => Effect.Effect<Appended>
     >;
-    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<typeof Publication.Type>>;
+    publish: RemoteCall<(client: string, update: Published) => Effect.Effect<typeof Publication.Type>>;
     brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
     /** The registered name whose Process object holds this process ID's storage. */
     processObject: RemoteCall<(pid: string) => Effect.Effect<string>>;
@@ -312,7 +313,7 @@ export type ConnectionBinding = Rpc.DurableObjectBranded &
   Remote<{
     fetch: (request: Request) => Effect.Effect<Response>;
     ring: (stream: string, rev: number) => Effect.Effect<void>;
-    notify: (client: string, news: unknown) => Effect.Effect<void>;
+    notify: (client: string, news: News) => Effect.Effect<void>;
     probe: (session: string) => Effect.Effect<number | null>;
   }>;
 

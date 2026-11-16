@@ -11,6 +11,7 @@ import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Start } from "@kampus/libfabrika/processes/Process";
+import type { Published } from "@kampus/libfabrika/runtime/News";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
@@ -166,7 +167,7 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
   }
 
-  publish(client: string, update: unknown) {
+  publish(client: string, update: Published) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }

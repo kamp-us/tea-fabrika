@@ -382,7 +382,7 @@ const tag = (word: string): string => `fab.runner.${word}`;
 type Live = {
   readonly loaded: Omit<Loaded, "stepper">;
   readonly model: unknown;
-  readonly view: unknown;
+  readonly view: View;
   readonly wake: number | null;
   readonly v: number;
   /** The last inbox rev folded, and that letter's inbox position. */
@@ -684,6 +684,10 @@ export class ProgramRunner extends Context.Service<
           const cmds = yield* Schema.decodeUnknownEffect(Schema.Array(Dispatched))(kept.cmds).pipe(
             Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
           );
+          // The saved swap keeps its view open; a process holds it as JSON.
+          const view = yield* Schema.decodeUnknownEffect(Schema.Json)(change.view).pipe(
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
           const next: Live = prepared ?? {
             loaded,
             model: kept.saved.model,
@@ -691,7 +695,7 @@ export class ProgramRunner extends Context.Service<
             after: kept.saved.after,
             cmds,
             pos: change.pos,
-            view: change.view,
+            view,
             wake: change.wake,
           };
           yield* store.save(kept);

@@ -2,6 +2,7 @@ import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "ef
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { News, type Published } from "../runtime/News.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
@@ -21,6 +22,12 @@ import {
   type Env,
   type ProjectOptions,
 } from "./runtime.ts";
+
+/** The method each kind of view update is sent under, keyed by the update's own `type`. */
+const METHOD = { whole: "view.whole", patch: "view.patch" } as const satisfies Record<Published["type"], string>;
+
+/** One JSON-RPC notification, as the text a socket is sent. */
+const frame = (method: string, params: Schema.Json) => JSON.stringify({ jsonrpc: "2.0", method, params });
 
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
   const checked = yield* RecordedStart;
@@ -158,7 +165,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
               )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
-              yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
+              // The waiting room's notice goes to the knocking socket itself, beside the knock's answer.
+              yield* Effect.try({
+                try: () => ws.send(frame("gateway.waiting", waiting)),
+                catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
+              });
               return Answer.cases.ok.make({ result: waiting });
             }
 
@@ -233,22 +244,22 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
     return yield* new LedgerError({ reason: "unreachable" });
   });
-  const notify = Effect.fn("connection.notify")(function* (client: string, news: unknown) {
+  // Another object's call is decoded on arrival: its sender may run another build.
+  const notify = Effect.fn("connection.notify")(function* (client: string, news: News) {
+    const told = yield* Schema.decodeUnknownEffect(News)(news).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
+    yield* Effect.annotateCurrentSpan("fab.gateway.news", told._tag);
+
     for (const ws of ctx.getWebSockets()) {
       if ((yield* attached(ws)).client === client) {
         yield* Effect.try({
-          try: () => {
-            if (typeof news === "object" && news !== null && "close" in news && typeof news.close === "number") {
-              ws.close(news.close, "permission changed");
-            } else {
-              ws.send(
-                JSON.stringify({
-                  jsonrpc: "2.0",
-                  ...(typeof news === "object" && news !== null ? news : {}),
-                }),
-              );
-            }
-          },
+          try: () =>
+            News.match(told, {
+              close: ({ code }) => ws.close(code, "permission changed"),
+              granted: ({ nonce }) => ws.send(frame("client.granted", { nonce })),
+              view: ({ update }) => ws.send(frame(METHOD[update.type], update)),
+            }),
           catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
         });
       }
@@ -307,7 +318,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     }),
     ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),
     probe: (session: string) => recorded(probe(session)),
-    notify: Effect.fnUntraced(function* (client: string, news: unknown) {
+    notify: Effect.fnUntraced(function* (client: string, news: News) {
       const states = yield* Effect.forEach(ctx.getWebSockets(), attached, { concurrency: 1 });
       const online = states.some((state) => state.client === client && state._tag === "online");
       return yield* online ? recorded(notify(client, news)) : notify(client, news);
@@ -325,7 +336,7 @@ export class ConnectionService extends Context.Service<
     readonly close: (ws: WebSocket, code?: number) => Effect.Effect<void, LedgerError | SinkError>;
     readonly ring: (stream: string, rev: number) => Effect.Effect<void, unknown>;
     readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
-    readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
+    readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError | SinkError>;
   }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
