@@ -15,6 +15,10 @@ its plan and its steps.
   product hits or red laws remain for it), then review. A fix round after a send-back is one fresh
   build (or tests) subagent with the review's faults, then the SAME review subagent rechecks it
   (0177: continue it with SendMessage). A second send-back stops the slice: report it.
+- **Start every code step with the Agent tool's `isolation: "worktree"`,** so its working
+  directory is its own worktree root. Never hand a step a worktree you made in a scratchpad: its
+  shell resets to the main checkout, and the step-rules' plain-git rule then cannot be met
+  (seen five times on 2026-11-16). A read-only review may share the worktree of the step it reads.
 - **Each step's prompt** must stand alone: the slice, the plan path and row, the branch, that the
   step reads `step-rules.md` and its step brief from `fabrikalfa/twin-tools`
   (`git fetch -q origin fabrikalfa/twin-tools; git show FETCH_HEAD:<file>`), and these two lines:
