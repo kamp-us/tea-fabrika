@@ -40,6 +40,7 @@ import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { letterLine, Mailbox, type From } from "../processes/Mailbox.ts";
 import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../processes/Process.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -250,6 +251,7 @@ type Failure =
   | NotGranted
   | WatchersError
   | RecoveryStoreError
+  | QuotasError
   | SessionManagerError;
 
 type Sent =
