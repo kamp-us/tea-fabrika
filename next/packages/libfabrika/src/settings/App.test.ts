@@ -28,7 +28,7 @@ import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
 import * as Snapshot from "./Snapshot.ts";
 import * as Sources from "./Sources.ts";
-import { Toml } from "./Toml.ts";
+import { Toml, type TomlDocument } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -349,7 +349,7 @@ describe("K2, every name comes from the app", () => {
               repo: Sources.file(a.repo, empty),
               person: Sources.file(a.person, empty),
             });
-            const at = (document: typeof empty) => ({
+            const at = (document: TomlDocument) => ({
               repo: { file: a.repo, document },
               person: { file: a.person, document: empty },
             });
@@ -371,8 +371,9 @@ describe("K2, every name comes from the app", () => {
               ...snapshot,
               origins: { ...snapshot.origins, [first]: { _tag: "default" } },
             });
-            const homes = yield* Effect.all(
-              [a, b].map((app) =>
+            const homes = yield* Effect.forEach(
+              [a, b],
+              (app) =>
                 Snapshot.read(group, {
                   ...snapshot,
                   origins: {
@@ -380,7 +381,6 @@ describe("K2, every name comes from the app", () => {
                     [first]: { _tag: "file", file: `$${app.prefix}_HOME/${app.name}.toml`, line: 1 },
                   },
                 }).pipe(Effect.exit),
-              ),
               { concurrency: 1 },
             );
             return { resolved, unknown, asTable, refused, partial, homes };

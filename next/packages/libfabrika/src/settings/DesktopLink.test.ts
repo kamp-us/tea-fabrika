@@ -2,8 +2,8 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Result, Schema } from "effect";
 import * as Declarations from "./Declarations.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
-import * as Sources from "./Sources.ts";
 
 const seed = 119120;
 const ttl = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));

@@ -14,8 +14,8 @@
 import { Effect, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "../settings/Declarations.ts";
+import * as Sources from "../settings/Fabrika.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
-import * as Sources from "../settings/Sources.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";

@@ -259,6 +259,13 @@ No law needs the real machine: K1 to K5 run on in-memory sources and a `FileSyst
 its file contents given, and C1 to C4 on the same. `Load.integration.test.ts` keeps its real files
 and stays on the schedule (0536).
 
+**Amendment to F1, 2026-11-15 (Pacific), the lead's answer in tests round 2.** Besides import
+lines, an expected row gains a field the plan's own K-law requires. The one case is
+`Files.test.ts` "T753 L3": its exact `Reference.Row` gains
+`app: { name: "fabrika", list: "fabrika settings" }`, which K2 needs so `Print.report` names the
+app's list command. The match stays exact, with one more field, so it is not a loosening. This
+amendment overrides the F1 row and the Files table's "import lines only" for that file.
+
 ## Files
 
 | File | Owner | Product lines expected | Change |
