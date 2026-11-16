@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1331",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "step": "tests",
+  "run": "2026-11-15-p39-s5-fix3",
+  "started": "2026-11-15T13:53:10-08:00",
+  "ended": "2026-11-15T15:33:01-08:00",
+  "parent": "2026-11-15-p39-s5-fix2",
+  "outcome": "pass",
+  "minutes": null,
+  "why": "Fix round 3 of P39 slice 4b, in next/, commit 8e101db24. The launcher law fixture adds its own Control that takes only the three test-only calls (requestHandsTask, readHandsTask, allRows) and hands every other request to the real Control, and S2 asks for 3 runs at both depths. This row was written after the round by the next tests round (fix4): the fix agent stopped before it wrote its own row, so its T2 plant result here is relayed from what that agent reported to the lead, not seen again by the writer of this row.",
+  "note": "Relayed from the fix agent before it stopped, not rerun: T2 plant red at next/packages/libfabrika/src/node/client/HandsNode.types.test.ts:28 and next/packages/libfabrika/src/node/client/KeyFile.ts:217 (the KeyFile layer error check and its ClientKey.of call). The started time is the commit before the round (c9d0238e7) and the ended time is the commit 8e101db24; the round minutes are not known.",
+  "plants": [
+    {
+      "law": "node/client/HandsNode.types.test.ts T2",
+      "plant": "relayed from the fix agent: a KeyFile layer whose error type T2 forbids",
+      "result": "red"
+    }
+  ]
+}
