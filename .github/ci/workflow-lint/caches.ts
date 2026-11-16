@@ -57,7 +57,6 @@ export const lintCaches = (files: CacheFiles): string[] => {
 
   const actionSteps = steps(map(action["runs"]));
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
-  // mutation.yaml runs by hand on main, so its setup-node cache saves on main.
   const perRef = workflows.filter(([, workflow]) => {
     const on = workflow["on"];
     return ["pull_request", "merge_group"].some((event) =>
@@ -76,9 +75,23 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // C1. Neither of these can be told to restore only: each saves from whatever ref it runs on.
   for (const [path, step] of everyStep) {
     require(!uses(step, "actions/cache"), `${path}: use actions/cache/restore, and actions/cache/save on main only`);
+  }
+
+  // C1b. setup-node's own cache is a pnpm store cache, which did not pay on any ref, main included
+  // (action.yml gives the seconds), so no workflow keeps it.
+  const allSteps: [string, Record<string, unknown>][] = [
+    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+    ...workflows.flatMap(([path, workflow]) =>
+      Object.values(map(workflow["jobs"])).flatMap((job) =>
+        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+      ),
+    ),
+  ];
+
+  for (const [path, step] of allSteps) {
     require(!(
       uses(step, "actions/setup-node") && "cache" in map(step["with"])
-    ), `${path}: setup-node's cache saves on every ref; use .github/actions/pnpm`);
+    ), `${path}: setup-node's cache is a pnpm store cache; use .github/actions/pnpm`);
   }
 
   // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
