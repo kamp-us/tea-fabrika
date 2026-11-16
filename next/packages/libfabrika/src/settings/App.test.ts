@@ -32,12 +32,17 @@ import { Toml, type TomlDocument } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: runsFor({ fast: 25, full: 100 }) };
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const DEFAULT = 18787;
+
 const ROOT = "/work";
+
 const HOME = "/people/one";
+
 const VERSION = "1.2.3";
 
 const services = Layer.mergeAll(TomlParser.layer, Digest.layerWebCrypto);
@@ -48,6 +53,7 @@ const services = Layer.mergeAll(TomlParser.layer, Digest.layerWebCrypto);
 
 /** One lowercase word, never one that holds fabrika's name, so a message search stays exact. */
 const word = fc.stringMatching(/^[a-z][a-z0-9]{3,7}$/).filter((n) => !n.includes("fabrika"));
+
 const verb = fc.constantFrom("settings", "config get", "prefs");
 
 /**
@@ -132,6 +138,7 @@ const disk = (input: Disk, reads: Array<string>) =>
       readFileString: (path) => {
         reads.push(path);
         const text = input.files[path];
+
         return path === input.broken
           ? Effect.fail(
               PlatformError.systemError({
@@ -159,6 +166,7 @@ const disk = (input: Disk, reads: Array<string>) =>
 /** Where an app's two files sit on the disk, with or without `<APP>_HOME` set. */
 const placesFor = (app: App.App, homeSet: boolean) => {
   const home = `/apps/${app.name}`;
+
   return {
     repo: { path: `${ROOT}/.${app.name}/${app.name}.toml`, name: app.repo },
     person: homeSet
@@ -170,6 +178,7 @@ const placesFor = (app: App.App, homeSet: boolean) => {
 
 const run = (group: Parameters<typeof Load.load>[0], input: Disk, env: Readonly<Record<string, string>>) => {
   const reads: Array<string> = [];
+
   return Effect.runPromise(
     Load.load(group, { repo: ROOT, home: HOME, flags: {}, env, version: VERSION }).pipe(
       Effect.exit,
@@ -185,6 +194,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+
   return reason?._tag === "Fail" ? reason.error : undefined;
 };
 
@@ -193,6 +203,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
 // ---------------------------------------------------------------------------------------------
 
 const PLACES = ["b-repo", "b-person", "b-env", "a-repo", "a-person", "a-env", "none"] as const;
+
 type Place = (typeof PLACES)[number];
 
 describe("K1, a second app reads only its own", () => {
@@ -215,14 +226,17 @@ describe("K1, a second app reads only its own", () => {
         async (pair, [list, picks], aHome, bHome) => {
           const { a, b } = apps(pair);
           const group = groupFor(a, list);
+
           const own = placesFor(a, aHome),
             other = placesFor(b, bHome);
+
           const entries: Record<"a-repo" | "a-person" | "b-repo" | "b-person", Array<readonly [string, string]>> = {
             "a-repo": [],
             "a-person": [],
             "b-repo": [],
             "b-person": [],
           };
+
           const env: Record<string, string> = { ...own.env, ...other.env };
           list.forEach((path, n) => {
             const [place, value] = picks[n]!;
@@ -236,18 +250,21 @@ describe("K1, a second app reads only its own", () => {
               entries[place].push([path, String(value)]);
             }
           });
+
           const texts = {
             "a-repo": toml(entries["a-repo"]),
             "a-person": toml(entries["a-person"]),
             "b-repo": toml(entries["b-repo"]),
             "b-person": toml(entries["b-person"]),
           };
+
           const files = {
             [own.repo.path]: texts["a-repo"].text,
             [own.person.path]: texts["a-person"].text,
             [other.repo.path]: texts["b-repo"].text,
             [other.person.path]: texts["b-person"].text,
           };
+
           const { exit, reads } = await run(group, { files }, env);
           expect(failure(exit)).toBeUndefined();
 
@@ -258,6 +275,7 @@ describe("K1, a second app reads only its own", () => {
           const loaded = exit.value;
           list.forEach((path, n) => {
             const [place, value] = picks[n]!;
+
             const want =
               place === "a-repo"
                 ? { value, origin: { _tag: "file", file: a.repo, line: texts["a-repo"].at[path] } }
@@ -266,6 +284,7 @@ describe("K1, a second app reads only its own", () => {
                   : place === "a-env"
                     ? { value, origin: { _tag: "env", name: envName(a.prefix, path) } }
                     : { value: DEFAULT, origin: { _tag: "default" } };
+
             expect({ value: loaded.snapshot.values[path], origin: loaded.snapshot.origins[path] }).toEqual(want);
           });
           // The other app's files are never opened.
@@ -298,12 +317,14 @@ describe("K1, a second app reads only its own", () => {
 /** The message of a failed effect, or the empty string. */
 const message = (exit: Exit.Exit<unknown, unknown>) => {
   const error = failure(exit);
+
   return Schema.is(Files.SettingsError)(error) ? error.message : "";
 };
 
 const parse = (text: string) =>
   Effect.gen(function* () {
     const parser = yield* Toml;
+
     return yield* parser.parse(text);
   });
 
@@ -341,6 +362,7 @@ describe("K2, every name comes from the app", () => {
         const first = list[0]!;
         const table = first.split(".")[0]!;
         const empty = { value: {}, spans: [] };
+
         const ran = await Effect.runPromise(
           Effect.gen(function* () {
             const resolved = yield* Sources.resolve(group, {
@@ -349,28 +371,35 @@ describe("K2, every name comes from the app", () => {
               repo: Sources.file(a.repo, empty),
               person: Sources.file(a.person, empty),
             });
+
             const at = (document: TomlDocument) => ({
               repo: { file: a.repo, document },
               person: { file: a.person, document: empty },
             });
+
             const unknown = yield* Files.validate(group, at(yield* parse("[zzzzzz]\nunknown = 1\n")), {
               version: VERSION,
             }).pipe(Effect.exit);
+
             const asTable = yield* Files.validate(group, at(yield* parse(`${table} = 1\n`)), {
               version: VERSION,
             }).pipe(Effect.exit);
+
             const refused = yield* Sources.resolve(group, {
               flags: Sources.flags({}),
               env: a.Sources.env({ [envName(upper, first)]: "not a port" }),
               repo: Sources.file(a.repo, empty),
               person: Sources.file(a.person, empty),
             }).pipe(Effect.exit);
+
             const snapshot = yield* Snapshot.make(group, resolved);
+
             // One key left at its default, so the report closes with its `--all` line.
             const partial = Reference.rows(group, {
               ...snapshot,
               origins: { ...snapshot.origins, [first]: { _tag: "default" } },
             });
+
             const homes = yield* Effect.forEach(
               [a, b],
               (app) =>
@@ -383,9 +412,11 @@ describe("K2, every name comes from the app", () => {
                 }).pipe(Effect.exit),
               { concurrency: 1 },
             );
+
             return { resolved, unknown, asTable, refused, partial, homes };
           }).pipe(Effect.provide(services)),
         );
+
         // The flag is `--section.key`, the variable `<APP>_<SECTION>_<KEY>`.
         expect(ran.resolved.origins[first]).toEqual({ _tag: "flag", name: `--${first}` });
 
@@ -411,6 +442,7 @@ describe("K2, every name comes from the app", () => {
     await fc.assert(
       fc.asyncProperty(names, paths, ports, async (pair, list, value) => {
         const { a, b } = apps(pair);
+
         const group = a.Setting.group(
           Object.fromEntries(
             list.map((path, n) => [
@@ -427,7 +459,9 @@ describe("K2, every name comes from the app", () => {
             ]),
           ),
         );
+
         const empty = { value: {}, spans: [] };
+
         const rows = await Effect.runPromise(
           Effect.gen(function* () {
             const resolved = yield* Sources.resolve(group, {
@@ -436,9 +470,11 @@ describe("K2, every name comes from the app", () => {
               repo: Sources.file(a.repo, empty),
               person: Sources.file(a.person, empty),
             });
+
             return Reference.rows(group, yield* Snapshot.make(group, resolved));
           }).pipe(Effect.provide(services)),
         );
+
         const lines = Print.warnings(Reference.warnings(rows, "1.0.0"));
         expect(lines).toHaveLength(list.length);
 
@@ -539,6 +575,7 @@ describe("K3, an app name is one lowercase word, and a group holds one app", () 
 // ---------------------------------------------------------------------------------------------
 
 const triple = fc.tuple(fc.nat(20), fc.nat(20), fc.nat(20));
+
 const dotted = ([x, y, z]: readonly [number, number, number]) => `${x}.${y}.${z}`;
 
 const later = (w: readonly number[], r: readonly number[]) =>
@@ -554,9 +591,11 @@ describe("K4, each app checks its own minimum version", () => {
         const group = a.Setting.group({ ...groupFor(a, list).settings, version: a.version });
         const owner = theirs ? b : a;
         const text = `${owner.version.path} = ${JSON.stringify(dotted(wanted))}\n`;
+
         const exit = await Effect.runPromise(
           Effect.gen(function* () {
             const document = yield* parse(text);
+
             return yield* Files.validate(
               group,
               { repo: { file: a.repo, document }, person: { file: a.person, document: { value: {}, spans: [] } } },
@@ -564,6 +603,7 @@ describe("K4, each app checks its own minimum version", () => {
             ).pipe(Effect.exit);
           }).pipe(Effect.provide(services)),
         );
+
         const error = failure(exit);
         const newer = later(wanted, running);
         reached.add(`${theirs ? "theirs" : "own"}-${newer ? "newer" : "older"}`);
@@ -627,12 +667,15 @@ describe("K5 [secrets], another app's values never reach an output", () => {
         fc.asyncProperty(names, paths, secret, async (pair, list, word) => {
           const { a, b } = apps(pair);
           const group = groupFor(a, list);
+
           const own = placesFor(a, false),
             other = placesFor(b, false);
+
           const first = list[0]!;
           const [table, ...rest] = first.split(".");
           const s = JSON.stringify(word);
           const env: Record<string, string> = place === "b-env" ? { [envName(b.prefix, first)]: word } : {};
+
           const files: Record<string, string> = {
             [own.repo.path]:
               place === "a-table"
@@ -648,6 +691,7 @@ describe("K5 [secrets], another app's values never reach an output", () => {
             [other.repo.path]: place === "b-repo" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
             [other.person.path]: place === "b-person" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
           };
+
           const { exit } = await run(group, { files, ...(unreadable ? { broken: own.person.path } : {}) }, env);
           const outputs: Array<string> = [printed(exit), String(exit)];
 

@@ -141,6 +141,7 @@ const conflict = (app: App, declarations: ReadonlyArray<Setting<unknown>>) => {
 
   if (stranger !== undefined) {
     const own = declarations.find((d) => d.app === app);
+
     return own === undefined
       ? `${stranger.path} belongs to ${stranger.app.name}, not ${app.name}`
       : `${own.path} and ${stranger.path} belong to two apps, ${app.name} and ${stranger.app.name}`;
