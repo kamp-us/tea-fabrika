@@ -111,11 +111,12 @@ const Report = Schema.fromJsonString(
   }),
 );
 
-const levelOf = (setting: Setting): string => (Array.isArray(setting) ? setting[0] : setting);
+// `Predicate.isString` is the guard: `Array.isArray` does not narrow a readonly tuple out of the union.
+const levelOf = (setting: Setting): string => (Predicate.isString(setting) ? setting : setting[0]);
 
 /** A printed setting as a config writes it: `["deny", [options]]` becomes `["deny", options]`. */
 const written = (setting: Setting): string | ReadonlyArray<unknown> =>
-  Array.isArray(setting) ? [setting[0], ...setting[1]] : setting;
+  Predicate.isString(setting) ? setting : [setting[0], ...setting[1]];
 
 /** `anti-slop/no-runtime-typeof` as oxlint prints its code: `anti-slop(no-runtime-typeof)`. */
 const codeOf = (rule: string): string => `${rule.replace("/", "(")})`;

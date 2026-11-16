@@ -12,7 +12,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -71,7 +71,7 @@ const printed = Schema.decodeUnknownSync(Printed)(
   }).stdout,
 );
 
-const levelOf = (setting: typeof Setting.Type): string => (Array.isArray(setting) ? setting[0] : setting);
+const levelOf = (setting: typeof Setting.Type): string => (Predicate.isString(setting) ? setting : setting[0]);
 const ofThePlugins = (rule: string): boolean => rule.startsWith("anti-slop/") || rule.startsWith("anti-slop-effect/");
 
 /** The folders a rule's blocks list, as the config holds them: each override that names it at error. */
