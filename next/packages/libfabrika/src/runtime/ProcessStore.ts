@@ -243,8 +243,10 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
           );
         return {
           select: Effect.fn("process.select")(function* (process: string) {
-            const selected = ProcessStore.pipe(
-              Effect.provide(ProcessStore.layer(sql, { ...options, process })),
+            // The selected store opens nothing, so its scope closes as soon as it is built, as before.
+            const selected = Layer.build(ProcessStore.layer(sql, { ...options, process })).pipe(
+              Effect.map(Context.get(ProcessStore)),
+              Effect.scoped,
               Effect.provideService(Ledger, ledger),
             );
             return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));

@@ -6,7 +6,7 @@
  *
  * @stability unstable
  */
-import { Effect, Schema, SchemaGetter } from "effect";
+import { Context, Effect, Layer, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
 import { ProgramName } from "../packs/ProgramName.ts";
 
@@ -24,17 +24,19 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+// The WebCrypto digest holds no resource, so its scope closes as soon as the service is built.
+const webCrypto = Layer.build(Digest.layerWebCrypto).pipe(Effect.map(Context.get(Digest.Digest)), Effect.scoped);
+
 /**
  * Computes the SHA-256 of a text's UTF-8 bytes, as lowercase hex.
  *
  * @stability unstable
  * @category combinators
  */
-export const hash = Effect.fn("build.hash")((text: string) =>
-  Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
-    Effect.provide(Digest.layerWebCrypto),
-  ),
-);
+export const hash = Effect.fn("build.hash")(function* (text: string) {
+  const digest = yield* webCrypto;
+  return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
+});
 
 /**
  * Schema for a code hash: 64 lowercase hex characters, the form `hash` returns.
