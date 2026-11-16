@@ -16,7 +16,7 @@ const Request = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
   id: Schema.Union([Schema.String, Schema.Number]),
   method: Schema.String,
-  params: Schema.Unknown,
+  params: Schema.Json,
 });
 
 const decodeRequest = Schema.decodeUnknownResult(Schema.fromJsonString(Request));
@@ -35,7 +35,7 @@ type Options<E, ReadError> = {
   readonly send: (text: string) => void;
   readonly close: (code: number) => void;
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<typeof Waited.Type, E>;
-  readonly call: (method: string, params: unknown) => Effect.Effect<typeof Answer.Type, E>;
+  readonly call: (method: string, params: Schema.Json) => Effect.Effect<typeof Answer.Type, E>;
 };
 
 /**
@@ -193,7 +193,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     save(next);
     return yield* register(wait);
   });
-  const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
+  const parked = Effect.fnUntraced(function* (id: string | number, params: Schema.Json) {
     if (!State.online(yield* read)) {
       return respond(id, Answer.cases.refused.make({ reason: "no_hello" }));
     }

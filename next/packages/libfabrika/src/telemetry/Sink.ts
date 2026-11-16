@@ -447,7 +447,9 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return done;
   };
 
-  const countRefusal = (span: SinkSpan, at: number, inherited?: unknown): boolean => {
+  const countRefusal = (span: SinkSpan, at: number, ancestor?: Tracer.Span): boolean => {
+    const inherited = ancestor?.attributes.get(REFUSED);
+
     if (!span.attributes.has(REFUSED) && inherited === undefined) {
       return false;
     }
@@ -499,9 +501,9 @@ const make = (sql: Sql, options: { readonly object: string }) => {
                   ancestor = Option.getOrUndefined(ancestor.parent);
                 }
 
-                const refused = ancestor?._tag === "Span" ? ancestor.attributes.get(REFUSED) : undefined;
+                const marked = ancestor?._tag === "Span" ? ancestor : undefined;
 
-                if (!countRefusal(span, Number(time / 1_000_000n), refused)) {
+                if (!countRefusal(span, Number(time / 1_000_000n), marked)) {
                   rows.push(ended(span, time, exit, options.object));
                 }
               }

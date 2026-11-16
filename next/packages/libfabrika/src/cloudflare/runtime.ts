@@ -1899,10 +1899,10 @@ const projectLogic = Effect.fn("project.init")(function* (
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
     initialize: (
       client: ConnectionId,
-      input: unknown,
+      input: Schema.Json | undefined,
       trusted: { url: string; tab: string; name: string; session?: string },
     ) => wrapped(door.initialize(client, input, trusted)),
-    route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
+    route: (client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) =>
       wrapped(
         door.route(client, method, params, reader).pipe(
           // Invalid target messages answer as checked refusals so the connection stays open.
@@ -2037,12 +2037,7 @@ export class ProjectService extends Context.Service<
     readonly connect: () => Effect.Effect<ConnectionId, ProjectFailure>;
     readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
     readonly initialize: GatewayCalls["initialize"];
-    readonly route: (
-      client: ConnectionId,
-      method: string,
-      params: unknown,
-      reader?: string,
-    ) => Effect.Effect<typeof Answer.Type, unknown>;
+    readonly route: GatewayCalls["route"];
     readonly knock: (client: ConnectionId, input: { label: string }) => Effect.Effect<typeof Answer.Type, unknown>;
     readonly grant: GatewayCalls["grant"];
     readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
