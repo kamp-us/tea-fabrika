@@ -204,6 +204,33 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC14: the gate checks out the whole repository",
     (w) => Reflect.deleteProperty(gate(w).steps.find((s) => typeof s["uses"] === "string")!.with!, "sparse-checkout"),
   ],
+  // SC14, the review of pull request 1404: a gate that ends with no `start` and no failure leaves
+  // main unproven with no sev1. A job that hits its own limit ends `cancelled`, read as stopped by
+  // a person; `continue-on-error` reads a failed read as a success. Plants, each run once on
+  // scheduled.ts and restored: the step-limit check dropped (red on the first three); the
+  // continue-on-error check dropped (red on the last two).
+  [
+    "SC14: the gate's step has no time limit of its own, so only the job's limit stops it",
+    (w) =>
+      Reflect.deleteProperty(
+        gate(w).steps.find((s) => s["id"] === "decide")!,
+        "timeout-minutes",
+      ),
+  ],
+  [
+    "SC14: the gate's checkout has no time limit of its own",
+    (w) =>
+      Reflect.deleteProperty(
+        gate(w).steps.find((s) => typeof s["uses"] === "string")!,
+        "timeout-minutes",
+      ),
+  ],
+  ["SC14: the gate job's limit is no backstop past its steps'", (w) => (gate(w)["timeout-minutes"] = 1)],
+  [
+    "SC14: the gate's step continues on error",
+    (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["continue-on-error"] = true),
+  ],
+  ["SC14: the gate job continues on error", (w) => (gate(w)["continue-on-error"] = true)],
   // SC15: the tests start only on the gate's `true`.
   ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
   ["SC15: the tests run when the gate passed", (w) => (w.jobs["tests"]!["if"] = "needs.gate.result == 'success'")],

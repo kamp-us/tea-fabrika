@@ -1036,12 +1036,18 @@ const notLeg = fc.oneof(
 const listed = fc.array(
   fc.oneof(
     shard.map((s) => ({ leg: true, name: `tests (${s})` })),
+    // The legs before the gate, of the two jobs `next` and `tooling` (run 43780996689).
+    fc.tuple(fc.constantFrom("next", "tooling"), shard).map(([suite, s]) => ({ leg: true, name: `${suite} (${s})` })),
     notLeg.map((name) => ({ leg: false, name })),
   ),
   { maxLength: 12 },
 );
 
-it("L1 property: a run is full exactly when one of its jobs is a test leg, tests (<shard>)", () => {
+it("L1 property: a run is full exactly when one of its jobs is a test leg, tests (<shard>), or before the gate next (<shard>) or tooling (<shard>)", () => {
+  // The review of pull request 1404: every green full run on main when the gate landed named its
+  // legs `next (1)`, `tooling (1)` and so on, so lastGreen named none until a new-shape run was
+  // green. Plant, run once on scheduled.mjs and restored: isFull knows only `tests (<shard>)` (red
+  // on an old-shape run, here and in the last-green law).
   // Plant, after build, on scheduled.mjs and restored: isFull reads any job starting `tests`
   // (red: a skipped run's one `tests` job counts).
   const reached = { full: 0, skipped: 0 };
@@ -1074,6 +1080,8 @@ const greens = fc.array(
     branch: fc.constantFrom("main", "main", "main", "fabrikalfa/probe"),
     conclusion: fc.constantFrom("success", "success", "failure"),
     full: fc.boolean(),
+    // A full run from before the gate names its legs `next (<shard>)` and `tooling (<shard>)`.
+    old: fc.boolean(),
     sha,
   }),
   { maxLength: 30 },
@@ -1082,7 +1090,7 @@ const greens = fc.array(
 it("L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none", async () => {
   // Plant: today's lastGreen, which takes main's first `success` run (red: a skipped run's commit
   // is named as the last green one).
-  const reached = { stepped: 0, none: 0, first: 0 };
+  const reached = { stepped: 0, none: 0, first: 0, old: 0 };
   await fc.assert(
     fc.asyncProperty(greens, async (list) => {
       const runs = list.map((r, i) => ({ ...r, id: 500 + i }));
@@ -1112,7 +1120,11 @@ it("L1 property: the last green run is main's newest green run whose test legs r
             }
           : (() => {
               const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
-              const names = run?.full ? ["gate", "tests (e2e-1)", "tests (1)", "report"] : ["gate", "tests", "report"];
+              const names = !run?.full
+                ? ["gate", "tests", "report"]
+                : run.old
+                  ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
+                  : ["gate", "tests (e2e-1)", "tests (1)", "report"];
               return {
                 total_count: names.length,
                 jobs: names.map((name) => ({ name, status: "completed", conclusion: "success" })),
@@ -1128,6 +1140,7 @@ it("L1 property: the last green run is main's newest green run whose test legs r
       reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
       reached.none += expected === null && green.length > 0 ? 1 : 0;
       reached.first += green[0]?.full ? 1 : 0;
+      reached.old += green.find((r) => r.full)?.old ? 1 : 0;
     }),
     options,
   );

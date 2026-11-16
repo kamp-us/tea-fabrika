@@ -17,8 +17,9 @@
 // No installed dependencies and no type stripping, like scheduled.mjs, so the job runs on the
 // runner's own Node with no setup. A pure core (`decide`), a thin reader with the job's own token
 // (`read`), and `main`, which writes `start=true` or `start=false` for the next jobs and one line
-// for the run's summary. When GitHub cannot be read after three tries the step fails and writes no
-// `start`, so the tests do not run and the report judges the run red.
+// for the run's summary. When GitHub cannot be read after three tries, or the read runs out of its
+// deadline, the step fails and writes no `start`, so the tests do not run and the report judges the
+// run red.
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isFull, jobsOf } from "./scheduled.mjs";
@@ -75,6 +76,15 @@ export const decide = ({ event, now, gap, last, tested }) => {
 /** How many times a call is tried, and the wait before each try after the first. */
 const TRIES = 3;
 const BACKOFF = 2000;
+/** A call's own limit. */
+const CALL = 10_000;
+/**
+ * The whole read's limit, well inside the gate step's `timeout-minutes` in scheduled.yaml: a read
+ * that runs out of time fails here, loudly, so the step ends `failure` with no `start` and the
+ * report judges the run red. Never the job's own limit, which ends it `cancelled`, a run a person
+ * stopped (the review of pull request 1404).
+ */
+const DEADLINE = 90_000;
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isMap = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -104,9 +114,21 @@ export const read = async (env, io = {}) => {
   }
 
   const api = env["GITHUB_API_URL"] || "https://api.github.com";
+  const end = now() + DEADLINE;
+  const left = () => {
+    const ms = end - now();
+
+    if (ms <= 0) {
+      throw new Error(`gate: the read ran out of its ${DEADLINE / 1000} s`);
+    }
+
+    return ms;
+  };
   /** @param {string} path */
   const get = async (path) => {
     for (let attempt = 1; ; attempt++) {
+      const limit = Math.min(CALL, left());
+
       try {
         const response = await send(`${api}/repos/${repository}/${path}`, {
           method: "GET",
@@ -115,7 +137,7 @@ export const read = async (env, io = {}) => {
             authorization: `Bearer ${token}`,
             "x-github-api-version": "2022-11-28",
           },
-          signal: AbortSignal.timeout(10_000),
+          signal: AbortSignal.timeout(limit),
         });
 
         if (!response.ok) {
@@ -128,7 +150,7 @@ export const read = async (env, io = {}) => {
           throw error;
         }
 
-        await sleep(BACKOFF * attempt);
+        await sleep(Math.min(BACKOFF * attempt, left()));
       }
     }
   };
@@ -140,8 +162,22 @@ export const read = async (env, io = {}) => {
     const answer = await get(`actions/workflows/${workflow}/runs?branch=main&status=completed${also}&per_page=100`);
     return (isMap(answer) && Array.isArray(answer["workflow_runs"]) ? answer["workflow_runs"] : []).filter(isMap);
   };
+  // Each run's jobs are read once: the head's runs are mostly the runs the walk just read.
+  /** @type {Map<string, import("./scheduled.mjs").Job[]>} */
+  const asked = new Map();
   /** @param {Record<string, unknown>} run */
-  const jobs = async (run) => jobsOf(await get(`actions/runs/${String(run["id"])}/jobs?filter=latest&per_page=100`));
+  const jobs = async (run) => {
+    const id = String(run["id"]);
+    const known = asked.get(id);
+
+    if (known !== undefined) {
+      return known;
+    }
+
+    const found = jobsOf(await get(`actions/runs/${id}/jobs?filter=latest&per_page=100`));
+    asked.set(id, found);
+    return found;
+  };
 
   /** @type {Seen["last"]} */
   let last = null;
@@ -172,6 +208,7 @@ export const read = async (env, io = {}) => {
     }
   }
 
+  left();
   return { event, now: now(), gap: Number(env["GAP_MINUTES"]), last, tested };
 };
 
@@ -191,7 +228,7 @@ export const main = async (env, io = {}) => {
     seen = await read(env, io);
   } catch (error) {
     const why = error instanceof Error ? `${error.name}: ${error.message}` : "an unknown error";
-    return { code: 1, output: "", summary: "", line: `gate: cannot read GitHub after ${TRIES} tries (${why})` };
+    return { code: 1, output: "", summary: "", line: `gate: cannot read GitHub (${why})` };
   }
 
   const decision = decide(seen);

@@ -247,11 +247,13 @@ export const jobsOf = (answer) => {
 /**
  * Whether a run's jobs show its test legs ran: a leg `tests (<shard>)` is in the list. GitHub lists
  * a skipped matrix as one job named `tests`, with no shard (probe run 43795273918), so a run whose
- * gate said `false` is never full. The gate and `lastGreen` read runs by it.
+ * gate said `false` is never full. The gate and `lastGreen` read runs by it. `next (<shard>)` and
+ * `tooling (<shard>)` are the legs of the shape before the gate, when the two suites were two jobs:
+ * every green full run on main when the gate landed has only those (run 43780996689).
  * @param {readonly Job[]} jobs
  * @returns {boolean}
  */
-export const isFull = (jobs) => jobs.some((job) => /^tests \(.+\)$/.test(job.name));
+export const isFull = (jobs) => jobs.some((job) => /^(tests|next|tooling) \(.+\)$/.test(job.name));
 
 /**
  * Each failing test in Vitest's JSON reports, as `file > test`, each once, in report order. A file

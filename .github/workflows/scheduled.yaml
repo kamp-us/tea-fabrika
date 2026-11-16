@@ -98,18 +98,26 @@ jobs:
   # has ended. It reads the run list with the workflow's own token, which cannot cancel a run, and
   # its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
   # skip and the report judges the run red. No install: the runner's own Node runs gate.mjs.
+  #
+  # Every way it ends with no `start` ends the job `failure`, so the report judges the run red:
+  # each step has its own limit, which ends that step `failure`, and gate.mjs gives up loudly well
+  # inside its step's (its `DEADLINE`). The job's own limit is only a backstop past both, since a job
+  # that hits it ends `cancelled`, which the report reads as a run a person stopped (the review of
+  # pull request 1404). Nothing here continues on error. workflow-lint.ts holds it (SC14).
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     outputs:
       start: ${{ steps.decide.outputs.start }}
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 1
         with:
           sparse-checkout: .github/ci
           persist-credentials: false
       - id: decide
         name: gate
+        timeout-minutes: 2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .github/ci/gate.mjs

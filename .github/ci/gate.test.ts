@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { parse } from "yaml";
 import * as gate from "./gate.mjs";
 
 // Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (0581): a push
@@ -162,16 +164,21 @@ const job = (name: string, conclusion: string | null, start: number | null, end:
 /**
  * A run's jobs as GitHub lists them. A full run's test legs are named `tests (<shard>)`; a run whose
  * gate said `false` or failed lists its skipped matrix as one job, `tests`. A full run from before
- * the gate has no gate job. Each job starts at `start` or later.
+ * the gate has no gate job, and names its legs by their old two jobs, `next (<shard>)` and
+ * `tooling (<shard>)`, as every green full run on main did when the gate landed (run 43780996689).
+ * Each job starts at `start` or later.
  */
 const jobsOf = (kind: "full" | "skipped" | "gate failed", start: number, gated: boolean): Job[] => {
   if (kind === "full") {
     const legs = gated ? start + 0.5 : start;
+    const [e2e, next, tooling] = gated
+      ? ["tests (e2e-1)", "tests (1)", "tests (tooling-1)"]
+      : ["next (e2e-1)", "next (1)", "tooling (1)"];
     return [
       ...(gated ? [job("gate", "success", start, start + 0.5)] : []),
-      job("tests (e2e-1)", "success", legs + 0.2, legs + 9),
-      job("tests (1)", "success", legs, legs + 12),
-      job("tests (tooling-1)", "success", legs + 0.1, legs + 20),
+      job(e2e, "success", legs + 0.2, legs + 9),
+      job(next, "success", legs, legs + 12),
+      job(tooling, "success", legs + 0.1, legs + 20),
       job("report", "success", legs + 20.2, legs + 20.5),
     ];
   }
@@ -188,7 +195,8 @@ const jobsOf = (kind: "full" | "skipped" | "gate failed", start: number, gated: 
   ];
 };
 
-const isLeg = (j: Job) => /^tests \(.+\)$/.test(j.name);
+/** A test leg, of the one matrix or of the two jobs before the gate. */
+const isLeg = (j: Job) => /^(tests|next|tooling) \(.+\)$/.test(j.name);
 
 // ---------------------------------------------------------------- G1, the rule
 
@@ -312,7 +320,7 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
   // (red: a newer full branch run is taken as the last one, and a full branch run at the head as
   // tested); count a canceled full run at the head as tested (red where the head has only canceled
   // full runs).
-  const reached = { none: 0, walked: 0, branchNewer: 0, canceledHeadOnly: 0, tested: 0, untested: 0 };
+  const reached = { none: 0, walked: 0, branchNewer: 0, canceledHeadOnly: 0, tested: 0, untested: 0, oldShape: 0 };
   await fc.assert(
     fc.asyncProperty(
       history,
@@ -367,9 +375,13 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
         });
         expect(walked.every((r) => asked.includes(r.id))).toBe(true);
         expect(asked.every((id) => walked.some((r) => r.id === id) || atHead.some((r) => r.id === id))).toBe(true);
+        // Each run's jobs are read once: the head's runs that the walk read are not read again
+        // (the review of pull request 1404: the walk was 2K+4 calls for K skipped runs).
+        expect(new Set(asked).size, JSON.stringify(asked)).toBe(asked.length);
         expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
 
         reached.none += full === undefined ? 1 : 0;
+        reached.oldShape += full !== undefined && !full.jobs.some((j) => j.name === "gate") ? 1 : 0;
         reached.walked += walked.length >= 2 && full !== undefined ? 1 : 0;
         const newestBranchFull = runs.filter((r) => r.head_branch === BRANCH && r.jobs.some(isLeg)).at(-1);
         reached.branchNewer +=
@@ -677,6 +689,119 @@ it("G5 property: a call that fails is tried 3 times, and after the third failure
         reached.retried += calls.length > asks.length && !gaveUp ? 1 : 0;
         reached.gaveUp += gaveUp ? 1 : 0;
         reached.clean += calls.length === asks.length ? 1 : 0;
+      },
+    ),
+    options,
+  );
+  expect(
+    Object.values(reached).every((count) => count > 0),
+    JSON.stringify(reached),
+  ).toBe(true);
+});
+
+// ---------------------------------------------------------------- G6, the walk's cost
+
+it("G6 property: after K runs at the head whose gate said false, the gate makes K + 3 calls: two run lists and one jobs list per run it walks", async () => {
+  // The review of pull request 1404: the head's loop read again the jobs of every run the walk had
+  // read, 2K + 4 calls, up to about 200 after a quiet stretch. Plant, run once on gate.mjs and
+  // restored: the head loop reads its runs' jobs again (red: 2K + 4).
+  await fc.assert(
+    fc.asyncProperty(fc.integer({ min: 0, max: 40 }), fc.constantFrom<Event>("push", "schedule"), async (k, event) => {
+      // The last full run, at an older commit, then K catch-ups at the head that skipped.
+      const list = [
+        {
+          kind: "full" as const,
+          branch: "main",
+          sha: OLD[0]!,
+          conclusion: "success",
+          event: "push",
+          waited: 0,
+          gated: true,
+        },
+        ...Array.from({ length: k }, () => ({
+          kind: "skipped" as const,
+          branch: "main",
+          sha: HEAD,
+          conclusion: "success",
+          event: "schedule",
+          waited: 0,
+          gated: true,
+        })),
+      ];
+      const { calls, send } = github(runsOf(list));
+      const result = await gate.main(envOf(event, HEAD, 60), {
+        send,
+        sleep: waits().sleep,
+        now: () => BASE + 9999 * MINUTE,
+      });
+      expect(result.code).toBe(0);
+      expect(calls).toHaveLength(k + 3);
+    }),
+    options,
+  );
+});
+
+// ---------------------------------------------------------------- G7, a walk that runs out of time
+
+/** The gate step's own time limit in scheduled.yaml, which ends the step `failure` when it is hit. */
+const stepLimit = (() => {
+  const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8"));
+  const steps: { id?: string; "timeout-minutes"?: unknown }[] = workflow?.jobs?.gate?.steps ?? [];
+  const limit = steps.find((step) => step.id === "decide")?.["timeout-minutes"];
+  return typeof limit === "number" ? limit * MINUTE : Number.NaN;
+})();
+
+it("G7 property: a gate whose calls would run past its step's time limit stops before it, with a non-zero exit and no start line, and one that finishes in time answers", async () => {
+  // The review of pull request 1404: a gate that ran into its job's limit ended `cancelled`, read
+  // as stopped by a person, so no sev1 opened. Plant, run once on gate.mjs and restored: no
+  // deadline (red: a slow walk ends past the step's limit).
+  expect(Number.isFinite(stepLimit), "scheduled.yaml's decide step has a timeout-minutes").toBe(true);
+  const reached = { answered: 0, outOfTime: 0 };
+  await fc.assert(
+    fc.asyncProperty(
+      history,
+      // A quiet stretch after it: catch-ups at the head whose gate said false, each one more call.
+      fc.integer({ min: 0, max: 60 }),
+      fc.constantFrom<Event>("push", "schedule", "workflow_dispatch"),
+      // How long each call takes, up to a call's own 10 s limit.
+      fc.integer({ min: 100, max: 10_000 }),
+      async (list, quiet, event, cost) => {
+        let clock = BASE;
+        const skipped = {
+          kind: "skipped" as const,
+          branch: "main",
+          sha: HEAD,
+          conclusion: "success",
+          event: "schedule",
+          waited: 0,
+          gated: true,
+        };
+        const fake = github(runsOf([...list, ...Array.from({ length: quiet }, () => skipped)]));
+        const send = (url: string, init?: Init) => {
+          clock += cost;
+          return fake.send(url, init);
+        };
+        const sleep = (ms: number) => {
+          clock += ms;
+          return Promise.resolve();
+        };
+        const result = await gate.main(envOf(event, HEAD, 60), { send, sleep, now: () => clock });
+        const lines = result.output.split("\n").filter((l: string) => /^start=/.test(l));
+
+        // Whatever the walk costs, the gate ends inside its step's limit.
+        expect(clock - BASE).toBeLessThan(stepLimit);
+
+        if (result.code === 0) {
+          expect(lines).toHaveLength(1);
+        } else {
+          expect(lines).toEqual([]);
+        }
+
+        // A walk that fits well inside the limit answers.
+        const needed = fake.calls.length * cost;
+        expect(result.code === 0 || needed >= stepLimit / 2, `${fake.calls.length} calls of ${cost} ms`).toBe(true);
+        reached.answered += result.code === 0 ? 1 : 0;
+        reached.outOfTime += result.code === 0 ? 0 : 1;
       },
     ),
     options,

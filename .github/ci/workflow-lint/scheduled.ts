@@ -275,6 +275,23 @@ export const lintScheduled = (text: string, check: string): string[] => {
     gateCheckouts.length === 1 &&
     map(gateCheckouts[0]?.["with"])["sparse-checkout"] ===
       ".github/ci", `SC14: the ${GATE_JOB} job needs nothing, runs ${GATE} once with the token alone, and gives its start as its one output`);
+  // Every way the gate ends with no `start` ends its job `failure`, so the report judges the run
+  // red: each of its steps has a whole time limit of its own, which ends that step `failure`, and
+  // the job's own limit is a backstop past their sum, since a job that hits its own limit ends
+  // `cancelled`, which the report reads as a run a person stopped (the review of pull request 1404).
+  // No `continue-on-error` on the job or a step, which would turn a failed read into a success with
+  // an empty `start`.
+  const gateLimits = steps(gateJob).map((s) => s["timeout-minutes"]);
+  const gateLimit = gateJob["timeout-minutes"];
+  require(gateLimits.length > 0 &&
+    gateLimits.every((limit) => typeof limit === "number" && Number.isInteger(limit) && limit > 0) &&
+    typeof gateLimit === "number" &&
+    (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) <
+      gateLimit, `SC14: each step of the ${GATE_JOB} job has its own whole timeout-minutes, and the job's own limit is past their sum`);
+  require(!("continue-on-error" in gateJob) &&
+    steps(gateJob).every(
+      (s) => !("continue-on-error" in s),
+    ), `SC14: neither the ${GATE_JOB} job nor any of its steps continues on error, so a gate that gives no start fails`);
 
   // SC15. The tests run only when the gate said `true`: a gate that said `false` or failed starts
   // none.
