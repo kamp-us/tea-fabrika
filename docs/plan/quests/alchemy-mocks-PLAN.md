@@ -244,6 +244,64 @@ it is the code's seam to Alchemy, as `RuntimeLifecycle` is Alchemy's own. `Stub.
 that runs programs on Worker Loader needs them. `StackLayers` and the test providers stay in the
 app, since the stack is the app's own deployment.
 
+### Slice 4, pending the lead's yes to move it from the mock sweep's app-src s1: A5's `getEntrypoint` spy
+
+Added 2026-11-16 at the sweep's request. Not in slices 1 to 3. It joins this plan only if the lead
+says yes to moving it from the app-src plan's slice 1.
+
+The hit is `next/apps/fabrika/src/instance-one-file.integration.test.ts:441`:
+`vi.spyOn(stub, "getEntrypoint").mockReturnValue(rpc)`. It sits in law A5, "p33 loader: actual
+config uses recorded bytes/hash and exact process, empty env, null outbound; unknown is typed
+no_program", at `:421`. It spies on the Worker Loader's isolate stub. It does not mock a module.
+
+**Why a plain stand-in does not type.** `workerLoader` (`next/packages/libfabrika/src/cloudflare/index.ts:89`)
+takes the platform's raw ambient `WorkerLoader` (`index.ts:63` to `:71`), and its code calls
+`worker.getEntrypoint<Calls>()` (`:132`). There, `getEntrypoint` is generic over
+`Rpc.WorkerEntrypointBranded | undefined`. So a plain stand-in fails with TS2322, a one-overload
+form fails with TS2589, and a cast is not allowed. These failures were reported by the sweep's
+session, not run here. `next/` declares `@cloudflare/workers-types` 5.20261027.1. The lockfile
+also holds 5.20261109.1, and the build reads which one each package resolves. That raw type goes
+around Alchemy, which 0042's table already lists ("`WorkerLoader`, `loader.get`,
+`getEntrypoint`": Alchemy's `Cloudflare.WorkerLoader` service). So, by 0042, the first fix sends
+the code through Alchemy.
+
+**What Alchemy offers.** `@alchemy.run/cloudflare` 2.0.0-beta.85, `src/Workers/WorkerLoader.ts:33`
+to `:44`. Its `get(name, getCode)` answers `Effect<WorkerStub>`. Its
+`WorkerStub.getEntrypoint<Shape = unknown>(name?)` answers `Fetcher & Shape`. That is still
+generic, so a law that stubs Alchemy's stub meets the same typing problem. The generic must stay
+in the live layer and out of the law.
+
+```ts
+// next/packages/libfabrika/src/cloudflare/Isolates.ts, a sketch: the contract only (0095).
+/** One program isolate's RPC, the calls a brain makes on it. Monomorphic: no type parameter. */
+export class Isolates extends Context.Service<Isolates, {
+  readonly open: (key: string, code: () => IsolateCode) => Effect.Effect<IsolateCalls, ProgramDown>;
+}>()("libfabrika/Isolates") {}
+
+// next/packages/libfabrika/src/cloudflare/IsolatesAlchemy.ts: the live layer, the one place the
+// generic is named, on Alchemy's service. Here the Shape is ours, so it needs no cast.
+export const layer = (loader: Cloudflare.WorkerLoader) => Layer.succeed(Isolates, {
+  open: (key, code) => loader.get(key, code).pipe(Effect.map((stub) => stub.getEntrypoint<IsolateCalls>())),
+});
+
+// the law: a test layer of the monomorphic contract, recorded with Recorder (0579). No spy, no cast.
+const isolates = Recorder.layer(Isolates, { open: (_key, _code) => Effect.succeed(rpc) });
+// `rpc` is a plain IsolateCalls value; Recorder.calls(Isolates, "open") gives [key, config] per call.
+```
+
+`workerLoader` then asks for `Isolates` in place of taking `Loader`. Its callers,
+`runtime.ts:984` and `:2289` and `control.ts:69`, provide `IsolatesAlchemy.layer` over Alchemy's
+`Cloudflare.WorkerLoader` for `env.LOADER`. Call, 70%. The doubt is whether Alchemy's
+`WorkerLoader` can be built from the brain's `env.LOADER` today, before 0042's port moves the
+brain onto Alchemy's Worker. If not, the live layer wraps the raw binding at that one edge with its
+marked line, and the law is unchanged.
+
+**What else it touches.** Five other test files call `workerLoader` with a hand-made platform
+object: `cloudflare/index.test.ts:18`, `cloudflare/tail.test.ts:148`,
+`cloudflare/error-cause.test.ts:143` and `:162`, and `node/IsolateUsage.integration.test.ts:214`.
+Each moves to a test layer of `Isolates` in the same slice. They are not `vi` hits, so no other
+plan counts them. With them moved, `index.ts` names no raw platform type.
+
 ## One value traced: the counter program on the real runtime, after slice 1
 
 1. `bundlePrograms` writes the entry for `counter`:
@@ -267,6 +325,7 @@ app, since the stack is the app's own deployment.
 | C4. Every law of the twelve files keeps its checks with the `vi.mock("cloudflare:workers")` line gone; the eight that call `programBox` hand it `Stub.Base` | test | scenario: each file's own laws, unchanged, at their own run counts | each file loads and passes as it did with the mock | none of its own: C1's plant (a) is what reddens all eight at once | next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts |
 | S1. The stack hands Alchemy the completed brain file, no second bundle, and an env with no code that is under 5 KB per setting; a setting at or over 5 KB is refused before any deploy, on the real `Stack` over `inMemoryState()` and the test providers | test | fc.integer: the founder name's length, 1600 to 1800, with fc.boolean for a multibyte name, as today, 3 runs | the props the test Worker provider was asked to create: `main` is the built brain, `bundle` is false, each env value is a binding or a text under the limit and holds no program source | (a) `bundle: true` in `alchemy.run.ts`: red; (b) the program source added to `env`: red; (c) `stack` reads `Cloudflare.providers()` past `layers`: the law reaches a real provider and fails | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | S2. `startDev` deploys through Alchemy's real `deploy`, and its laws (the quota start, the outbox link, the two runs on one home) hold as today, with the pid and the control port coming from the test Worker provider | test | scenario: the three existing laws of the file, unchanged, at their own run counts | the start event with pid 27001 reaches `startDev`'s lifecycle queue, and the control plugin starts on 27002 | `startDev` reads `StackLayers.defaultValue()` past the reference: the law reaches the real local runtime and fails on `unused.mjs`, red | next/apps/fabrika/src/local-instance.integration.test.ts |
+| W1 (slice 4, pending the lead's yes). Law A5 keeps every check with no spy: the loader is asked for `<hash>/<process>` by the whole qualified name, with the recorded bytes and hash, an empty env and a null outbound, and an unknown name fails typed `no_program`; `Isolates.open` is recorded through `Recorder`, and no cast or spy is in the file | test | fc.string: the source, with fc.uuid for the process and fc.string for the missing name, as today, 3 runs | the recorded `open` calls and the typed failure, with the law typed by the monomorphic `Isolates` contract, so no generic reaches the law | (a) `workerLoader` answers the bare short name: the `no_program` check is red; (b) `workerLoader` loads with `env: { CODE: source }`: the recorded config check is red; (c) `workerLoader` calls `open` twice for one load: `Recorder.calls` has two entries, red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | M11 (cloudflare), M1 (node/dev), A6 and A8 (app src). Each folder's `vi` lock, as its own plan writes it, lands whole the day the folder is at zero | lint | lint | the five-method block of `vitest/no-restricted-vi-methods` for the folder's glob, with node's `VI_METHODS` plants run in its paths (node's M1, ruling 2 of 2026-11-15); A8: `pnpm lint` passes with the lock an error and no disable line names it | each plan's own plant: drop `mock` from the block and the planted `vi.mock("x")` line in the folder is taken, red; put back one `vi.mock("cloudflare:workers")` and `pnpm lint` exits 1 | oxlint-plugins/plants.test.ts |
 
 - **Lint, type or test?** C1 to C4, S1 and S2 are tests: they hold what code does. The locks are
@@ -310,6 +369,14 @@ app, since the stack is the app's own deployment.
 | next/apps/fabrika/src/stack.test-support.ts | tests | tests | slice 2: new, the test Worker and bucket providers and `layers` |
 | next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 2: the two `vi.doMock` calls and `vi.resetModules()` go; S1 on the real `Stack`; C3 read, not changed |
 | next/apps/fabrika/src/local-instance.integration.test.ts | tests | tests | slice 2: the two `vi.mock` calls go; S2 provides `StackLayers` |
+| next/packages/libfabrika/src/cloudflare/Isolates.ts | build | 12 | slice 4, pending: new, the `Isolates` contract, `IsolateCode` and `IsolateCalls` |
+| next/packages/libfabrika/src/cloudflare/IsolatesAlchemy.ts | build | 10 | slice 4, pending: new, the live layer over Alchemy's `Cloudflare.WorkerLoader` |
+| next/packages/libfabrika/src/cloudflare/index.ts | build | 12 | slice 4, pending: `workerLoader` asks for `Isolates`; the raw `Loader` and `Code` types go |
+| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 6 | slice 4, pending: the two loaders get `IsolatesAlchemy.layer` |
+| next/packages/libfabrika/src/cloudflare/control.ts | build | 3 | slice 4, pending: the same |
+| next/packages/libfabrika/src/cloudflare/index.test.ts | tests | tests | slice 4, pending: a test layer of `Isolates` |
+| next/packages/libfabrika/src/cloudflare/tail.test.ts | tests | tests | slice 4, pending: the same |
+| next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts | tests | tests | slice 4, pending: the same |
 | .oxlintrc.json | tests | tests | slice 3: each folder's five-method block, as its plan writes it, once the folder is at zero |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 3: each block's paths join node's `VI_METHODS` scenario |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 3: only if a block adds a plant line node's set lacks |
@@ -331,6 +398,11 @@ app, since the stack is the app's own deployment.
 - The test providers in `next/apps/fabrika/src/stack.test-support.ts`: searched `alchemy` and
   `@alchemy.run/cloudflare` for test providers to reuse; the packages ship none, and their own tests
   are not in the package (`src/core/test/` in the runtime package has runtime helpers only).
+
+- `next/packages/libfabrika/src/cloudflare/Isolates.ts` (slice 4, pending), searched with its
+  live layer `next/packages/libfabrika/src/cloudflare/IsolatesAlchemy.ts`: searched Alchemy's `src/Workers/WorkerLoader.ts`, whose service it wraps,
+  and found no monomorphic form. Its `getEntrypoint` is generic, and a law cannot stand it in
+  without a cast. Effect's `Layer.mock` and our `Recorder.layer` give the law's side.
 
 ## Order
 
@@ -382,6 +454,10 @@ the guard allows in a cloud box since PR 1508), and `pnpm lint` with
    test lines changed. 17 lines.
 3. Slice 3, the three folders' locks: tests and lint only, about 40 lines of `.oxlintrc.json` and
    plant rows. 0 lines.
+
+4. Slice 4, pending the lead's yes to move A5 from the app-src plan's slice 1: 43 product lines in
+   two new files and three changed ones, and about 80 test lines in four law files. It adds 3 steps
+   and about $11 if moved; the Estimate below does not count it. 43 lines.
 
 Confidence in the line counts: 70%. The doubt is slice 2: how much of the two Alchemy laws'
 setup (the engine layers `instance.ts` provides) the real `deploy` asks of a law.
