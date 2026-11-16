@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e19-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00-08:00",
+  "ended": "2026-11-16T04:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E19 of the Effect-check sweep (unnecessaryFailYieldableError). Recount found 9 hits: 3 in exam paths (fixed by hand edit, each Effect.fail(x) yielded as yield* x), 2 in product files (.agents chain.ts, tuval key.ts) left for the build, 4 in files of pull request 1366 (Runner.ts 1, Sink.ts 3) left for the after-1366 slice. Lock: .agents and tuval at package level in their own tsconfig, libfabrika src/node/** as an overrides entry. libfabrika runtime/ and telemetry/ stay out of the lock.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig. After the lock the check shows as error on 2 hits (chain.ts, key.ts) and libfabrika src/node is at 0. pnpm lint: every part passed except lint:dead, killed with SIGABRT in this box. EffectFunctions.test.ts ran green (11 tests).",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a block with yield* Effect.fail(new Planted()) added in libfabrika src/node: reported at error",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node/**/*.ts changed away in libfabrika's override: the planted line fell back to a message, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

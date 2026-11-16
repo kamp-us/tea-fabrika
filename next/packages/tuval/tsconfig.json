@@ -4,7 +4,14 @@
     // The window is React in a browser tab; its machines and their laws also run on Node.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // A yieldable error is yielded as it is, never wrapped in `Effect.fail` (E19). All of tuval.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryFailYieldableError": "error" }
+      }
+    ]
   },
   "include": ["src"]
 }

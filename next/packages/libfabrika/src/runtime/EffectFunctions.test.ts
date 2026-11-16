@@ -672,7 +672,7 @@ describe("T285, sink keep-law", () => {
                     now += sample.ms;
 
                     if (sample.failure === "fail") {
-                      return yield* Effect.fail(new LedgerError({ reason: "storage" }));
+                      return yield* new LedgerError({ reason: "storage" });
                     }
 
                     if (sample.failure === "die") {

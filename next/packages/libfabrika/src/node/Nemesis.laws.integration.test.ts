@@ -200,7 +200,7 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
-          return yield* Effect.fail(lower);
+          return yield* lower;
         }
 
         const captured = yield* ledger.wait(stream, after);

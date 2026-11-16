@@ -3,7 +3,20 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A yieldable error is yielded as it is, never wrapped in `Effect.fail` (E19). On for the
+        // folders at zero. The globs read from this folder; runtime/ and telemetry/ wait for 1366.
+        "overrides": [
+          {
+            "include": ["src/node/**/*.ts"],
+            "options": { "diagnosticSeverity": { "unnecessaryFailYieldableError": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
