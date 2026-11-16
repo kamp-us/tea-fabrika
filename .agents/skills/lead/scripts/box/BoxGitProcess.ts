@@ -72,7 +72,7 @@ export const layer = (
           );
 
           if (Number(code) !== 0 || err.length > 0) {
-            return yield* new BoxGitError({ command: args[0] ?? "" });
+            return yield* BoxGitError.make({ command: args[0] ?? "" });
           }
 
           return text.decode(out);
@@ -80,7 +80,7 @@ export const layer = (
         Effect.scoped,
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         (effect, _at, args) =>
-          Effect.catchTag(effect, "PlatformError", (cause) => new BoxGitError({ command: args[0] ?? "", cause })),
+          Effect.catchTag(effect, "PlatformError", (cause) => BoxGitError.make({ command: args[0] ?? "", cause })),
       );
 
       return BoxGit.of({

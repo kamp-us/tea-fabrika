@@ -7,7 +7,8 @@
 // tile's own name gives, and no exit reason, which the guideline did not study.
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { spoken } from "./spoken.ts";
 
 const SEED = 119120;

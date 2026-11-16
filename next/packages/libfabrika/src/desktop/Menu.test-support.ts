@@ -1,7 +1,8 @@
 import { applyCell } from "@demlik/tea";
 // next/, P21 slice 1. The factory takes checked settings at start; no provider is read by update.
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
-import { Equal, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";

@@ -4,15 +4,12 @@
  * **Details**
  *
  * The Config keeps Effect's own prototype, so `yield*` and `parse(provider)` behave as Effect's do. The declaration's fields are added to that same object, never copied beside it. `group` joins declarations into one Config and refuses a set that cannot be read together.
- *
- * @stability unstable
  */
 import { Config, Schema, String as Str } from "effect";
 
 /**
  * The two settings files: the person's own, and the repo's.
  *
- * @stability unstable
  * @category models
  */
 export type File = "person" | "repo";
@@ -20,7 +17,6 @@ export type File = "person" | "repo";
 /**
  * The files a setting may be set in, at least one.
  *
- * @stability unstable
  * @category models
  */
 export type Scope = readonly [File, ...Array<File>];
@@ -28,7 +24,6 @@ export type Scope = readonly [File, ...Array<File>];
 /**
  * When a changed value takes effect: a `live` setting reaches a running process, and a `restart` setting waits for the next start.
  *
- * @stability unstable
  * @category models
  */
 export type Reload = "live" | "restart";
@@ -36,7 +31,6 @@ export type Reload = "live" | "restart";
 /**
  * Whether a file holds native JSON values (`json`) or text decoded by Effect's StringTree codec (`text`).
  *
- * @stability unstable
  * @category models
  */
 export type Format = "json" | "text";
@@ -48,7 +42,6 @@ export type Format = "json" | "text";
  *
  * `path` is the dotted key, `segments` its parts, and `env` the environment name derived from it. `schema` and `default` define the value, `format` says how a file spells it, `doc` is the sentence shown to a person, and `scope`, `reload` and `since` say where it may be set, when a change applies and which release introduced it.
  *
- * @stability unstable
  * @category settings
  */
 export interface Setting<
@@ -79,7 +72,6 @@ export interface Setting<
  *
  * The environment name is `FABRIKA_` and the constant-cased segments, and `format` defaults to `json`. Reading the result gives the default only when no source holds the key. A value that is present but refused by the schema, an empty container included, fails and never falls back to the default. A failure of the source itself also fails.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope>(
@@ -122,7 +114,6 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
  *
  * `settings` keeps each declaration under the name it has in the record, and `declarations` lists them as plain declarations.
  *
- * @stability unstable
  * @category settings
  */
 export interface Group<
@@ -166,7 +157,6 @@ const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
 /**
  * The record of values a group reads, inferred from Config and readonly like the generated value Struct.
  *
- * @stability unstable
  * @category models
  */
 export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Success<ReturnType<typeof Config.all<R>>>>;
@@ -178,7 +168,6 @@ export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Suc
  *
  * Throws an `Error` when the declarations cannot be read together: a path segment that is empty, or is not a lowercase letter or digit followed by lowercase letters, digits and hyphens, a default its own schema refuses, two paths that are equal or where one is a table of the other, or two paths with the same environment name.
  *
- * @stability unstable
  * @category constructors
  */
 export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>, R> => {

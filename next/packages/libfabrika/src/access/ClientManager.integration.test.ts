@@ -23,7 +23,13 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -372,9 +378,9 @@ describe("p96, founded is written once, by the first call", () => {
   it.effect("plant, founded written at Layer build: a Ledger that always fails still builds", () =>
     check(leaf, ["t1"], (key) => {
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "storage" })),
-        read: () => Stream.fail(new LedgerError({ reason: "storage" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "storage" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
       return Effect.gen(function* () {
         const failed = yield* Effect.flip(members);

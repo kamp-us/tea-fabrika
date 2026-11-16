@@ -3,7 +3,8 @@
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
