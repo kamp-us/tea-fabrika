@@ -1,3 +1,6 @@
+> **Owner ruling, overrides anything below:** open NO pull request; push to your branch only. Your
+> report goes in your field row and RESULT. See `step-rules.md`, "Pull request".
+
 # Tests step for one mechanical slice of the Effect-checker sweep
 
 Ticket 1075, in `next/` and our tooling; today's version is not touched. The plan is approved:

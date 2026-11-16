@@ -26,17 +26,22 @@ continue from its head; if not, create it from `origin/main`. Push only to that 
 3. `git push -u origin <branch>`, retry up to 4 times on a network error.
 Never amend, rebase, reset or force-push. Stage your own paths by name.
 
-**Pull request.** If the branch has no pull request yet, the first step that pushes opens a
-DRAFT one with the GitHub MCP tool `create_pull_request` (owner `kamp-us`, repo `tea-fabrika`,
-base `main`, `draft: true`). Its title and body are written with the pr skill
-(`.agents/skills/pr/SKILL.md`). Write the body to a file first and run
-`sh .agents/skills/lead/scripts/leakgrep.sh --text <file>`; stop if non-zero. A later step that
-changes what the PR says updates the body the same way (`update_pull_request`). Never merge, arm
-auto-merge, approve, close, or mark ready. End the body with:
+**Pull request: one per sweep, never one per slice (owner ruling).** A slice opens NO pull
+request. It works on its own branch and pushes there; an integrator folds reviewed slice branches
+into the sweep's one PR (`fabrikalfa/effect-mechanical`, `fabrikalfa/effect-judgment`,
+`fabrikalfa/reflect-rest`, `fabrikalfa/mock-plans`, `fabrikalfa/antislop-mechanical`,
+`fabrikalfa/antislop-judgment`). What a PR body would have said goes in your field row and your
+RESULT instead: per check or rule, hits met, fixed by which tool, left with file:line and why,
+waiting on 1366, tests run at which head, and the review's verdict. If a slice PR was opened
+earlier, leave it exactly as it is. Only an integrator, or a job your brief names as its own PR
+(pipe slice 1, @kalfa/config, the review checker, the flaky door law), opens a PR, as a draft, with
+the pr skill, its body leakgrepped first (`leakgrep.sh --text <file>`), ending with:
 
 ```
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
+
+Never merge, arm auto-merge, approve, close, or mark ready.
 
 **Fixes.** Use whatever tool is fastest and correct (owner ruling, 2026-11-16): the Edit tool, the
 checker's quick fix through the client on this branch, a lint autofix through `pnpm format`, or a

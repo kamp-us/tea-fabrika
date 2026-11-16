@@ -1,3 +1,6 @@
+> **Owner ruling, overrides anything below:** open NO pull request; push to your branch only. Your
+> report goes in your field row and RESULT. See `step-rules.md`, "Pull request".
+
 # Tests step for one slice of the Reflect ban
 
 Ticket 1056, decision 0554, in `next/`. The plan is approved and on main:

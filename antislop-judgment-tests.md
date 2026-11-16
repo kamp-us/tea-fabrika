@@ -1,3 +1,6 @@
+> **Owner ruling, overrides anything below:** open NO pull request; push to your branch only. Your
+> report goes in your field row and RESULT. See `step-rules.md`, "Pull request".
+
 # Tests step for one anti-slop judgment slice (one rule, one package)
 
 Ticket 1057, in `next/` and our tooling. Decisions 0560 to 0563 (and 0563's amendment), 0566,

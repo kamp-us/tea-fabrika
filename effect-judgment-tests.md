@@ -1,3 +1,6 @@
+> **Owner ruling, overrides anything below:** open NO pull request; push to your branch only. Your
+> report goes in your field row and RESULT. See `step-rules.md`, "Pull request".
+
 # Tests step for one judgment slice of the Effect-checker sweep
 
 Ticket 1075, in `next/` and our tooling. Owner ruling: a judgment slice is its own draft pull

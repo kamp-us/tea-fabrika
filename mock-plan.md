@@ -1,3 +1,6 @@
+> **Owner ruling, overrides anything below:** open NO pull request; push to your branch only. Your
+> report goes in your field row and RESULT. See `step-rules.md`, "Pull request".
+
 # Plan step for one folder of the mock sweep
 
 The Recorder landed (PR 1401). `docs/plan/quests/recorder-PLAN.md` on main, "Size", lists the
