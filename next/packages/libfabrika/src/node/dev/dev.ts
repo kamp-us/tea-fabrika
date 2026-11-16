@@ -153,7 +153,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const config = options,
     scope = yield* Effect.scope,
     ids = yield* ProcessIdGenerator,
-    client = yield* HttpClient.HttpClient;
+    client = yield* HttpClient.HttpClient,
+    // The services a binding's Promise call runs on, so it keeps the brain's clock, logger and tracer.
+    context = yield* Effect.context<never>();
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
     events = yield* Queue.unbounded<{ readonly event: RuntimeEvent; readonly cause: Cause }>(),
@@ -560,11 +562,14 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
-        return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));
+        return (...args: ReadonlyArray<unknown>) => Effect.runPromiseWith(context)(work(args));
       },
     });
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
+  // A Worker Loader's start: the program's init, answering its binding.
+  const loaded = (name: string, pid: string) =>
+    call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)));
   return {
     recording,
     install: (code: Install): Effect.Effect<Installed, ControlError> =>
@@ -593,15 +598,15 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     loader: {
       load: (name: string, pid: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Worker Loader proxy matches the platform's Promise API
-        Effect.runPromise(call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)))),
+        Effect.runPromiseWith(context)(loaded(name, pid)),
     },
     bucket: {
       put: (key: string, body: Uint8Array, options: { sha256: string }) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
+        Effect.runPromiseWith(context)(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
       head: (key: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
+        Effect.runPromiseWith(context)(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
     },
   };
 });
