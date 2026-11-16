@@ -127,8 +127,10 @@ const entries =
   ): Entry<C> =>
   (args) =>
     Schema.decodeEffect(payload)(args).pipe(
-      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-      Effect.map((decoded) => (client: C) => call(client, decoded)),
+      Effect.mapBoth({
+        onFailure: (cause) => new LedgerError({ reason: "bad_row", cause }),
+        onSuccess: (decoded) => (client: C) => call(client, decoded),
+      }),
     );
 
 const onProject = entries<ProjectClient["Service"]>();
