@@ -97,6 +97,9 @@ const plants: [string, (w: Workflow) => void][] = [
   // SC2: one run at a time, never cut short.
   ["SC2: a newer run cancels the running one", (w) => (w.concurrency["cancel-in-progress"] = true)],
   ["SC2: one group per commit, so runs overlap", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
+  // SC12: a newer run never cancels a waiting one.
+  ["SC12: no queue, so a newer run cancels the waiting one", (w) => Reflect.deleteProperty(w.concurrency, "queue")],
+  ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
   // SC3: the token.
   [
     "SC3: the workflow's token writes issues",
