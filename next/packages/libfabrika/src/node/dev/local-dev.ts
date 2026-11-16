@@ -79,7 +79,7 @@ export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
 
 type LifeCell = Effect.Success<ReturnType<typeof lifeCell>>;
 
-class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
+class BrainError extends Schema.TaggedError<BrainError, { readonly brand: unique symbol }>()("BrainError", {
   reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -119,7 +119,7 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
 const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
 
 // A signal the OS refused: `missing` when the pid has no process (ESRCH), `refused` for any other.
-class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
+class SignalError extends Schema.TaggedError<SignalError, { readonly brand: unique symbol }>()("SignalError", {
   reason: Schema.Literals(["missing", "refused"]),
   /** The error `process.kill` threw, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),

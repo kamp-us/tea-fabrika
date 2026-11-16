@@ -139,7 +139,7 @@ export const make = (name: string): Model<Record<never, never>> => build(name, n
  * @stability unstable
  * @category errors
  */
-export class Denied extends Schema.TaggedError<Denied>()("Denied", {
+export class Denied extends Schema.TaggedError<Denied, { readonly brand: unique symbol }>()("Denied", {
   /** The subject checked, as a ref: `person:<person>`. */
   subject: Schema.String,
   permission: Schema.String,

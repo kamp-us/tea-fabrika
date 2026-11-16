@@ -64,7 +64,7 @@ export const armor = (blob: Uint8Array): string => {
 };
 
 /** @internal */
-export class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
+export class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
   cause: Schema.Defect(),
 }) {}
 

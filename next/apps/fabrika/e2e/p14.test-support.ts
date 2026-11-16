@@ -43,13 +43,19 @@ export const fault =
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
-class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", { output: Schema.String }) {}
+class DevFailed extends Schema.TaggedError<DevFailed, { readonly brand: unique symbol }>()("DevFailed", {
+  output: Schema.String,
+}) {}
 
-class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Finite }) {}
+class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", { exitCode: Schema.Finite }) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
@@ -580,7 +586,7 @@ const identity = () => {
   };
 };
 
-class WireClosed extends Schema.TaggedError<WireClosed>()("WireClosed", {}) {}
+class WireClosed extends Schema.TaggedError<WireClosed, { readonly brand: unique symbol }>()("WireClosed", {}) {}
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Unknown),

@@ -22,7 +22,7 @@ import type { Change, Tuples } from "./Relation.ts";
  * @stability unstable
  * @category errors
  */
-export class RelationsError extends Schema.TaggedError<RelationsError>()("RelationsError", {
+export class RelationsError extends Schema.TaggedError<RelationsError, { readonly brand: unique symbol }>()("RelationsError", {
   reason: Schema.Literals(["bad_row", "storage"]),
   cause: Schema.Defect(),
 }) {}

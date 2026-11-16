@@ -1,17 +1,26 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
-    // Effect's `schemaNumber` (E4). The globs read from this folder.
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "overrides": [
-          { "include": ["**/*.ts", "**/*.mjs"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }
-        ]
-      }
-    ]
+  "plugins": [
+    {
+      "name": "@effect/language-service",
+      // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+      // The globs read from this folder. One entry per set of folders; its comment names its checks.
+      "overrides": [
+        // Whole package: schemaNumber (E4), schemaClassMissingBrand (E6).
+        {
+          "include": ["**/*.ts", "**/*.mjs"],
+          "options": {
+            "diagnosticSeverity": {
+              "schemaNumber": "error",
+              "schemaClassMissingBrand": "error"
+            }
+          }
+        }
+      ]
+    }
+  ]
   },
+  "compilerOptions": { "allowJs": true, "checkJs": true },
   "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
 }

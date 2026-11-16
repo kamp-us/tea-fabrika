@@ -65,13 +65,13 @@ const Commits = Schema.fromJsonString(
 );
 
 /** A `gh api` read that failed, with its stderr. */
-class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", {
+class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
   path: Schema.String,
   reason: Schema.String,
 }) {}
 
 /** The heartbeat is late; its line is already printed. */
-class Late extends Schema.TaggedError<Late>()("Late", {}) {}
+class Late extends Schema.TaggedError<Late, { readonly brand: unique symbol }>()("Late", {}) {}
 
 /** One `gh api` read: its stdout, or a failure with its stderr. */
 const gh = Effect.fn("heartbeat.gh")(function* (path: string) {

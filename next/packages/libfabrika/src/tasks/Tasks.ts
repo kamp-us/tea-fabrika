@@ -17,7 +17,7 @@ import type { Collection, Executor, Task, Recorded, Request, Result } from "./Ta
  * @stability unstable
  * @category errors
  */
-export class TasksError extends Schema.TaggedError<TasksError>()("TasksError", {
+export class TasksError extends Schema.TaggedError<TasksError, { readonly brand: unique symbol }>()("TasksError", {
   /** `not_found`: no task has that id. `conflict`: other bytes than the saved ones under that id.
    *  `not_target`: a key the request did not select. `lacks_capability`: a need the take did not
    *  advertise. `wrong_execution`: not the saved execution identity. `wrong_state`: a call out of

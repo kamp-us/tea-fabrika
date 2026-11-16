@@ -28,7 +28,7 @@ export interface TomlDocument {
  * @stability unstable
  * @category errors
  */
-export class Syntax extends Schema.TaggedError<Syntax>()("Syntax", {
+export class Syntax extends Schema.TaggedError<Syntax, { readonly brand: unique symbol }>()("Syntax", {
   cause: Schema.Defect(),
 }) {}
 
@@ -38,7 +38,7 @@ export class Syntax extends Schema.TaggedError<Syntax>()("Syntax", {
  * @stability unstable
  * @category errors
  */
-export class Value extends Schema.TaggedError<Value>()("Value", {
+export class Value extends Schema.TaggedError<Value, { readonly brand: unique symbol }>()("Value", {
   cause: Schema.Defect(),
 }) {}
 
@@ -48,7 +48,7 @@ export class Value extends Schema.TaggedError<Value>()("Value", {
  * @stability unstable
  * @category errors
  */
-export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
+export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
   path: Schema.Array(Schema.String),
   cause: Schema.Defect(),
 }) {}
@@ -63,7 +63,7 @@ export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
  * @stability unstable
  * @category errors
  */
-export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
+export class TomlError extends Schema.TaggedError<TomlError, { readonly brand: unique symbol }>()("TomlError", {
   reason: Schema.Union([Syntax, Value, Conflict]),
   message: Schema.String,
   line: Schema.Int,

@@ -9,7 +9,7 @@ import * as Wire from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
-class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
+class Offline extends Schema.TaggedError<Offline, { readonly brand: unique symbol }>()("Offline", {}) {}
 
 type Route = (method: string, params: unknown, identity: typeof Who.Type) => Effect.Effect<typeof Answer.Type, Offline>;
 

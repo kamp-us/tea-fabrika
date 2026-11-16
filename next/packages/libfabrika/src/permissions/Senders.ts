@@ -38,7 +38,7 @@ export type Sender = typeof Sender.Type;
  * @stability unstable
  * @category errors
  */
-export class SendersError extends Schema.TaggedError<SendersError>()("SendersError", {
+export class SendersError extends Schema.TaggedError<SendersError, { readonly brand: unique symbol }>()("SendersError", {
   reason: Schema.Literals(["removed", "ended", "storage"]),
   cause: Schema.optional(Schema.Defect()),
 }) {}

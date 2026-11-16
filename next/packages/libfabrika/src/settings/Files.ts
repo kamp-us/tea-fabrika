@@ -23,7 +23,7 @@ import type { TomlDocument } from "./Toml.ts";
  * @stability unstable
  * @category errors
  */
-export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
+export class SettingsError extends Schema.TaggedError<SettingsError, { readonly brand: unique symbol }>()("SettingsError", {
   reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),

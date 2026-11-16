@@ -251,7 +251,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
 };
 
 /** WebCrypto refused to make or export the test key: the test's own failure, never the product's. */
-class TestKeyError extends Schema.TaggedError<TestKeyError>()("TestKeyError", {}) {}
+class TestKeyError extends Schema.TaggedError<TestKeyError, { readonly brand: unique symbol }>()("TestKeyError", {}) {}
 
 /** A constructor's refusal, as a browser's `new WebSocket` throws one: a DOMException of a platform class. */
 const refuse = (message: string, name: string): never => {

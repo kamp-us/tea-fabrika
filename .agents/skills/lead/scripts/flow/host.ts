@@ -120,7 +120,7 @@ export type HostArgs = typeof HostArgs.Type;
 export type Hosted = { readonly outcome: Outcome.Outcome; readonly head: string; readonly log: string | null };
 
 /** Another live process holds the lock; the take is tried again on its schedule. */
-class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Finite }) {}
+class Held extends Schema.TaggedError<Held, { readonly brand: unique symbol }>()("Held", { pid: Schema.Finite }) {}
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(

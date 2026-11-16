@@ -16,6 +16,15 @@
               }
             }
           },
+          // These folders: schemaClassMissingBrand (E6).
+          {
+            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/codehost/**/*.ts", "src/desktop/**/*.ts", "src/gateway/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/transport/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaClassMissingBrand": "error"
+              }
+            }
+          },
           // These folders: preferTypedSchemaDecoder (E5).
           {
             "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],

@@ -19,7 +19,7 @@ import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
-class TrustLawFailed extends Schema.TaggedError<TrustLawFailed>()("TrustLawFailed", {
+class TrustLawFailed extends Schema.TaggedError<TrustLawFailed, { readonly brand: unique symbol }>()("TrustLawFailed", {
   cause: Schema.Defect(),
 }) {}
 

@@ -16,6 +16,15 @@
                 "preferTypedSchemaDecoder": "error"
               }
             }
+          },
+          // These folders: schemaClassMissingBrand (E6).
+          {
+            "include": ["*.ts", "e2e/**/*.ts", "src/exam/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaClassMissingBrand": "error"
+              }
+            }
           }
         ]
       }

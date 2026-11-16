@@ -35,9 +35,12 @@ const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }
  * @stability unstable
  * @category errors
  */
-export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError>()("ScheduledJobError", {
-  reason: Schema.Literals(["bad_period"]),
-}) {}
+export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { readonly brand: unique symbol }>()(
+  "ScheduledJobError",
+  {
+    reason: Schema.Literals(["bad_period"]),
+  },
+) {}
 
 /**
  * Returns the time the runner should wake the job next, or null while the job is running.

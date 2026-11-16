@@ -1,13 +1,24 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    // Effect's `schemaNumber`: a finite number is `Schema.Finite`, since `Schema.Number` also takes NaN and Infinity (E4). All of this package is at zero.
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "overrides": [{ "include": ["**/*.ts"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }]
-      }
-    ]
+  "plugins": [
+    {
+      "name": "@effect/language-service",
+      // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+      // The globs read from this folder. One entry per set of folders; its comment names its checks.
+      "overrides": [
+        // Whole package: schemaNumber (E4).
+        {
+          "include": ["**/*.ts"],
+          "options": {
+            "diagnosticSeverity": {
+              "schemaNumber": "error"
+            }
+          }
+        }
+      ]
+    }
+  ]
   },
   "include": ["src"]
 }

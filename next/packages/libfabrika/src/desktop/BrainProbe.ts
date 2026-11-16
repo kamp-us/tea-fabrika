@@ -21,27 +21,36 @@ export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
  * @category schemas
  */
 export const Children = Schema.TaggedUnion({ waiting: {}, gone: {} });
+
 /**
  * Readiness could not be checked.
  *
  * @stability unstable
  * @category errors
  */
-export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
+  cause: Schema.Defect(),
+}) {}
+
 /**
  * Another instance owns the fixed address.
  *
  * @stability unstable
  * @category errors
  */
-export class Foreign extends Schema.TaggedError<Foreign>()("Foreign", { cause: Schema.Defect() }) {}
+export class Foreign extends Schema.TaggedError<Foreign, { readonly brand: unique symbol }>()("Foreign", {
+  cause: Schema.Defect(),
+}) {}
+
 /**
  * Owned resources could not be checked.
  *
  * @stability unstable
  * @category errors
  */
-export class Cleanup extends Schema.TaggedError<Cleanup>()("Cleanup", { cause: Schema.Defect() }) {}
+export class Cleanup extends Schema.TaggedError<Cleanup, { readonly brand: unique symbol }>()("Cleanup", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Probe failure with its protected cause.
@@ -49,9 +58,12 @@ export class Cleanup extends Schema.TaggedError<Cleanup>()("Cleanup", { cause: S
  * @stability unstable
  * @category errors
  */
-export class BrainProbeError extends Schema.TaggedError<BrainProbeError>()("BrainProbeError", {
-  reason: Schema.Union([Unreachable, Foreign, Cleanup]),
-}) {}
+export class BrainProbeError extends Schema.TaggedError<BrainProbeError, { readonly brand: unique symbol }>()(
+  "BrainProbeError",
+  {
+    reason: Schema.Union([Unreachable, Foreign, Cleanup]),
+  },
+) {}
 
 /**
  * Probes supplied by the client that owns the instance.

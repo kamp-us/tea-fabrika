@@ -24,12 +24,16 @@ import * as Runners from "./Runners.ts";
 import { ending, runFlow, Usage } from "./walk.ts";
 
 /** The flow parked on an ask: exit 20. */
-export class Parked extends Schema.TaggedError<Parked>()("Parked", { reason: Schema.String }) {
+export class Parked extends Schema.TaggedError<Parked, { readonly brand: unique symbol }>()("Parked", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 20;
 }
 
 /** The flow is stuck: exit 30. */
-export class Stuck extends Schema.TaggedError<Stuck>()("Stuck", { reason: Schema.String }) {
+export class Stuck extends Schema.TaggedError<Stuck, { readonly brand: unique symbol }>()("Stuck", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 30;
 }
 
