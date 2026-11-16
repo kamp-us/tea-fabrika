@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1075-e82-tests",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:16:27-08:00",
+  "ended": "2026-11-16T00:53:18-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E82 of the Effect-checker sweep, in next/: anyUnknownInErrorContext over lib:cloudflare, app:src, lib:runtime and lib:settings, fixing code only, with no lock line and no pull request (owner ruling). Counted with only the check at error through --lspconfig, one effect-tsgo run each on next/packages/libfabrika and next/apps/fabrika, at b510ed2e8 (main after PR 1366): 545 hits in the slice's folders (lib:cloudflare 154, app:src 168, lib:runtime 213, lib:settings 10), 486 in exam paths and 59 in product files. Owner ruling applied: each shared suite or law helper typed with an unknown error became generic over its error (QuotaRunnerTest, IsolateUsageTest, SettingsTest, StartsTest, RuntimeCauseTest, ProjectAuditTest's Register, ProgramMailTest's pipeProperty, ReloadTest's and the other files' law helpers, RecoveryStoreReadsTest's both, the P80 driver scenario); every other hit names the error the code fails with (ProgramDown, SchemaIssue.Issue, LedgerError, StartsError, DeliveryError, the runner's own failure read as Effect.Error of ProgramRunner msg, the never error Alchemy's RecordPart.make takes, control's own error), or wraps a flip in Effect.asVoid where the law only reads the failure. Callers of the generic suites name their error: node/QuotaRunner.test.ts and node/IsolateUsage.integration.test.ts (lib:node, E41's folder, type-only), cloudflare/SettingsStarts.test.ts and cloudflare/entry-flows.laws.test.ts. 287 hits fixed, all by hand edits (the Edit tool and small scratch scripts, none committed); no quick fix. Recount after merging origin/main (b490a3203, PR 1462): 258 left in the slice, 59 product and 199 exam. The 199 exam hits: 188 have their root in product types the build must name, ProjectService's declared methods in cloudflare/runtime.ts (2038 to 2115, which declare unknown and which the checker does not count as hits), the door option's error in cloudflare/runtime.ts:391, projectLayer and projectLogic, and ConnectionService's message, ring and probe in cloudflare/connection.ts:324, 326 and 327; 11 (app file-services.laws.integration.test.ts 9, grant-readers.laws.test.ts 2) come from a program captured through a module mock of NodeRuntime.runMain, whose error dev.ts and the CLI do not export, left as the fix is not clear. 59 product hits are left for the build: cloudflare/runtime.ts 27, app brain.ts 13, cloudflare/connection.ts 7, ConnectionObject.ts 4, control.ts 3, Runner.ts 2, quotas.ts 1, index.ts 1, Entry.ts 1. No law is new or changed in what it asserts: every edit is a type, a generic parameter, or an Effect.asVoid before a flip whose success the law never read; one helper in hands-client.test.ts keeps each socket's ignored ring instead of the whole driver.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at 163f65a3e (main merged), one file at a time with --maxWorkers=3: 58 files, the touched test files and every caller of a touched suite; 56 green. Two files time out in this box on main's own versions too (checked by running origin/main's copies of start-child.laws.integration.test.ts and StartsTest.ts): runtime-recovery.laws.integration.test.ts T753 L16 and start-child.laws.integration.test.ts L11 hit the 60 s limit, and start-child's L9, L10 and Desk S1 scenarios timed out in some runs and not others. The edits in those files are types only. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet pass. Narrow tsc --noEmit on next/packages/libfabrika and next/apps/fabrika: clean. vitest --changed origin/main was refused by the config as a broad run after the merge, so the narrow list ran instead. No pnpm typecheck run.",
+  "plants": [
+    {
+      "law": "L1 as a count (no lock in a judgment slice): lib:runtime exam paths hold no anyUnknownInErrorContext hit",
+      "plant": "QuotaRunnerTest.ts World.drain back to Effect.Effect<void, unknown>: lib:runtime exam hits go from 0 to 14, then back to 0 when restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
