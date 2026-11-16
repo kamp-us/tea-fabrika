@@ -40,3 +40,16 @@ with a find-and-replace script run over the tree", in the same pull request.
   PR names the tool and lists the changes, and the review reads the diff as it reads any other.
 - "Move files with `git mv`, so history follows" stays. It is about history, not about how an edit
   is made.
+
+## Amendments
+
+### 2026-11-15: a mechanical fold pull request gets no review agent
+
+The owner ruled the same day that a mechanical fold pull request gets no review agent. That means
+the cloud twin's `fabrikalfa/effect-mechanical` (Effect-check slices E4 to E25, and any later slice
+a tool fixes whole) and the laptop's `fabrikalfa/effect-laptop-fold` (E0 to E3). For these, the
+checks passing is the review: the pull request check, then the full run in the merge queue. Each
+goes through the merge queue like any pull request, with no admin merge.
+
+Judgment slices (E26 to E39) keep their review agent. They come as separate pull requests that add
+no lock lines, and their locks land in one small pull request at the end.
