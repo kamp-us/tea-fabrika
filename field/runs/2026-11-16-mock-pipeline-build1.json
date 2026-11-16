@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-pipeline-build1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T02:06:00-08:00",
+  "ended": "2026-11-16T02:21:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step for slice 1 of the mock sweep's pipeline plan, in next/ (next/programs/pipeline, libfabrika's CodeHostTest.ts) and our lint tooling, branch fabrikalfa/mock-pipeline-s1 at head 7212b667c97. The plan's Steps item 2 (amendment 2026-11-15, ruling 5) says no product file changes in this slice, so this step changed no product file and no file other than this row. Checks at that head, on node v26.13.0: pnpm format changed nothing (run on the box's default node 22, 0 files changed); NODE_OPTIONS=--max-old-space-size=6144 pnpm lint passed all 18 parts, lint:layers included; vitest one file per call passed for CodeHost.test.ts (3), handlers.test.ts (2), oxlint-plugins/plants.test.ts (255), scripts/effect-testconsole.test.ts (1), runner.laws.integration.test.ts (4) and queue.laws.integration.test.ts (8); one pnpm typecheck exited 0, which reads L7, the type law. L8 and the tea 0.27.0 patch still wait on tea-s2's demlik 966 patch. The tests step's edit to layer-rules.json (next-vitest added to next-codehost's imports) is held for the owner's yes, with no plan row: every edit to layer-rules.json waits for the owner's own yes. It is not reverted, and this step added no other layer-rules.json line.",
+  "laws": [],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "No product file changed. No finding rows. The 0178 guard was not hit: both integration laws ran in the box with no override.",
+  "step": "build"
+}
