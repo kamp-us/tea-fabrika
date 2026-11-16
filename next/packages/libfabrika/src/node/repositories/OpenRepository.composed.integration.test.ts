@@ -1,5 +1,7 @@
 // T878, next/, L3/L8/L9. prepare pins/checks before dev builds; open records through RepositoryTrust.
 // The real-git half of L8 runs git itself, so it is in OpenRepository.integration.test.ts (0536).
+// The injected L8 writes its tripwires to a real temp folder on Node's layer, so this file is
+// `.integration.` too (0584); it was OpenRepository.test.ts, whose integration name was taken.
 // Public contract for the builder: prepare(path, settings options), then open(prepared, operator options).
 import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions are the ledger's driver contract
 import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable diagnostic fields
