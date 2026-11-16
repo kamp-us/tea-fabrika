@@ -5,19 +5,27 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest", "import", "promise"],
   // Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
-  // oxlint-plugins/README.md.
-  "jsPlugins": ["./oxlint-plugins/index.ts"],
+  // oxlint-plugins/README.md. After them, the anti-slop plugin's two plugins, as they ship (0563):
+  // their code sits unchanged in vendor/anti-slop/, and only the rules the owner took are on, each in
+  // its own block at the end.
+  "jsPlugins": [
+    "./oxlint-plugins/index.ts",
+    { "name": "anti-slop", "specifier": "./vendor/anti-slop/src/index.ts" },
+    { "name": "anti-slop-effect", "specifier": "./vendor/anti-slop/src/effect/index.ts" }
+  ],
   // Each rule is named here, so a new oxlint release adds none on its own.
   "categories": { "correctness": "off" },
   "options": { "reportUnusedDisableDirectives": "error" },
   // `.claude/skills/*` are symlinks into `.agents/skills/`: walked there too, a file of `.agents/` is
   // read a second time outside its override, where an edge comment looks unused and fails.
+  // `vendor/**` is code we take as it ships and never edit (0563), so none of our rules read it.
   "ignorePatterns": [
     "**/fixtures/**",
     "**/experiments/results/**",
     "unreachable-ledger.json",
     "agents-ledger.json",
-    ".claude/**"
+    ".claude/**",
+    "vendor/**"
   ],
   "rules": {
     // These two block in every folder at zero (0523), a new folder included. An override near the
@@ -2342,6 +2350,7 @@
         "next/apps/fabrika/src/entry/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
         "next/packages/libfabrika/src/packs/**",
@@ -2351,11 +2360,14 @@
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/src/*",
+        "next/packages/tuval/src/browser/**",
         "next/packages/tuval/src/window/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": {
@@ -2390,7 +2402,9 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/telemetry/**"
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**"
       ],
       "rules": {
         "eslint/no-restricted-properties": [
@@ -2490,7 +2504,7 @@
       // change them together.
       "files": [
         "next/apps/fabrika/src/exam/**",
-        "next/apps/fabrika/src/settings-generated.test.ts",
+        "next/apps/fabrika/src/settings-generated.integration.test.ts",
         "next/apps/fabrika/src/build.test.ts",
         "next/apps/fabrika/src/build.integration.test.ts",
         "next/apps/fabrika/src/build-command.integration.test.ts",
@@ -2626,6 +2640,177 @@
           }
         ]
       }
+    },
+
+    // The anti-slop rules the owner took, last, so nothing after them turns one down (0563). Each
+    // block lists the folders where its rule has no hit, and is on as an error there and nowhere
+    // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
+    // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
+    // is on a list, the list becomes the four globs of the scope. `anti-slop/require-readable-spacing`
+    // has no block yet: no folder is at zero for it, so its first block comes with the first sweep.
+    {
+      // 0558: no ternary nests more than 2 deep.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop/max-ternary-depth": ["error", { "maxDepth": 2 }] }
+    },
+    {
+      // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**"
+      ],
+      "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
+    },
+    {
+      // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/vitest/**",
+        "next/programs/inbox/**"
+      ],
+      "rules": { "anti-slop/no-unknown-parameters": "error" }
+    },
+    {
+      // 0563: no function returns `unknown`.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop/no-unknown-returns": "error" }
+    },
+    {
+      // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/inbox/**"
+      ],
+      "rules": { "anti-slop/no-runtime-typeof": "error" }
+    },
+    {
+      // 0562: no tagged value written by hand.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**"
+      ],
+      "rules": { "anti-slop-effect/no-manual-tagged-construction": "error" }
+    },
+    {
+      // 0562: no tagged type written by hand.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/inbox/**"
+      ],
+      "rules": { "anti-slop-effect/no-manual-tagged-type": "error" }
+    },
+    {
+      // 0567: a tagged value is matched by its union's matcher or Effect's Match, never by comparing `_tag`.
+      "files": [
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/vitest/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**"
+      ],
+      "rules": { "anti-slop-effect/no-manual-tag-comparison": "error" }
+    },
+    {
+      // 0567: a ternary chain over one value's literals is a Match.
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**",
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop-effect/prefer-effect-match": "error" }
     }
   ]
 }

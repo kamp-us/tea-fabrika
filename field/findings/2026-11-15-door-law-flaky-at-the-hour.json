@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-door-law-flaky-at-the-hour",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "line": 1822
+  },
+  "says": "In next/, law Q9/Q12 (the assembled door refuses before an envelope, binding, reply or local step is saved) went red in about 0.4% of full runs when a refused send crossed an hour boundary, because the runtimes read the real wall clock; the crossing adds one write to the program's local quota account. Fixed the same day in this pull request: the law pins Date inside one hour per property run.",
+  "proof": "With the real Date.now set 3 ms before an hour at refusal 0, the old law fails at refusal 1: 'expected { program: { writes: 16 } } to deeply equal { program: { writes: 15 } }'; the new law passes the same harness, and the whole file runs 13/13 green (nice -n 15 pnpm exec vitest run --maxWorkers=3 next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts). Both runs are in field/runs/2026-11-15-flaky-door-law-hour-tests1.json and -review1.json.",
+  "cost": "A red full run about one time in 250, on a law that guards what a refused send may save.",
+  "head": "1328ca9050880c38c4d1b3ba91df8746febeb200",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1488"
+}

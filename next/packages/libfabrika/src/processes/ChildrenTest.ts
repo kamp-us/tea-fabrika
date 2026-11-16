@@ -19,6 +19,7 @@ import {
   Cause,
   Context,
   DateTime,
+  Deferred,
   Effect,
   Exit,
   Fiber,
@@ -1557,10 +1558,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.effect("scenario: L13: an interrupted walk gives back every handle its scope acquired", () =>
       Effect.gen(function* () {
         let probe: Store["probe"] | undefined;
+        // Set once the walk holds its store. A count of yields is no wait for real IO.
+        const ready = yield* Deferred.make<void>();
         const held = Effect.scoped(
           Effect.gen(function* () {
             const store = yield* open;
             probe = store.probe;
+            yield* Deferred.succeed(ready, undefined);
             yield* Children.use((c) =>
               c.start(
                 {
@@ -1576,11 +1580,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           }),
         );
         const fiber = yield* Effect.forkChild(held);
-
-        for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
-          yield* Effect.yieldNow;
-        }
-
+        // The walk never ends on its own, so its join wins only when the walk fails before it is ready.
+        yield* Effect.raceFirst(Deferred.await(ready), Fiber.join(fiber));
         yield* Fiber.interrupt(fiber);
         expect(probe, "the walk acquired its store").toBeDefined();
         expect(probe?.open(), "L13: no database handle outlives its scope").toBe(0);

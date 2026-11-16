@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1073-tests2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1420",
+  "started": "2026-11-15T20:36:00-08:00",
+  "ended": "2026-11-15T20:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round for ticket 1073 slice 1 (decision 0584), in our lint tooling, after review 2026-11-15-t1073-review1 sent it back. Starters added to starters.ts from the plan's own classes: request and get on node:http and node:https, createServer and connect on node:tls, createSocket on node:dgram, new Server() on node:net (the http and https connect and createConnection names, which do not exist there, are gone); a socket client call to a remote literal URL and new WebSocket(\"wss://…\") count as the network; mkdtemp through fs.promises in a default import or an import of promises counts as disk. K1 now runs every starter on its own, so every name in the table is reached, and asserts the message names what it drives (DRIVES) and the backticked .integration.test.ts name, as L1 did. K2 gets back L2's fake.spawnSync(), readFileSync and chromium.name() cases. The review's finding is fixed and each case is in K2, silent: a fetch after vi.stubGlobal(\"fetch\", …) (the reader drops global fetches in a file that stubs it); a fake object's spawn in a file that provides NodeServices.layer (a spawner's spawn and a FileSystem's makeTemp* now count only on the service, a const bound by yield* ChildProcessSpawner.ChildProcessSpawner or yield* FileSystem.FileSystem, or that yield* in place); tmpdir() only naming a path (tmpdir is no longer a starter; a write into tmpdir() with no mkdtemp is the case code cannot tell, since that takes following the value into the write, and type information would not help). Re-measured on next/ at the branch merged with main at 2a1f1b91e: the rule fires on 0 of 198 plain files, test-kind.ts fails 0 of 153 .integration. files, 18 advice lines as before.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Plants, each run once and restored, all red: drop launchServer, createSocket, or the service spawn (K1, Should have 1 error but had 0); ignore the fetch stub (K2, fetch(…) fired); count every const as a spawner (K2, fake.spawn(…) fired); drop {{drives}} from the message, or a fixed name for {{name}} (K1, message did not match). Run one file at a time on Node 26.13.0: integration-test-name.test.ts (4 green) and test-kind.test.ts (2 green; its needs-layer plant now uses the FileSystem service). pnpm format, pnpm lint (exit 0), one pnpm typecheck (exit 0; the first run stopped at one oxlint-plugins type error in the test, fixed, then run again whole). Not run: any .integration. file.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "K1",
+      "plant": "starters.ts: the process.kill branch matches a name no call has; the planted kill in a plain file gave 0 errors",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "starters.ts: rolldown and build from rolldown kept as openers; client-manager-contract's in-memory Rolldown case fired",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "test-kind.ts: the walk queues only the test file's own imports; in memory a two-hop advice chain was missing, and through the command a two-hop relative integration chain failed",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "test-kind.ts: exit 1 when there is any finding; a tree of only advice exited 1",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "client-manager-contract.test.ts named .integration. again; lint:kind exited 1 naming it",
+      "result": "red"
+    },
+    {
+      "law": "K11",
+      "plant": "edge-config.test.ts named .integration.; vitest list --project next listed the mirror law 0 times, then 1 when restored",
+      "result": "red"
+    },
+    {
+      "law": "node-kinds L6",
+      "plant": "node-kinds.json given a made-up export MadeUp1073; the stand-in read the tree and named it twice",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
