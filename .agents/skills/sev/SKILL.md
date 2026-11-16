@@ -54,12 +54,14 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 - **What the lead does:** the response only. Find each cause the same day and ticket it. Put each
   fix first on the merge line, ahead of other changes. The queue no longer runs the full suite
   (0534), so a fix lands at the speed of its own changed tests.
-- **A fix is proven only by the next full run.** Visual and real-resource tests do not run on pull
+- **A fix is proven only by main's next full run,** never by a branch's own full run: a fix's pull
+  request is armed once its review passed, as any other is
+  ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)). Visual and real-resource tests do not run on pull
   requests ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)), and
   tooling tests run only locally and on the schedule
   ([0539](../../../.decisions/0539-the-merge-line-runs-no-tooling-tests.md)). On 2026-11-14 a
   rename broke a visual law, and nothing showed it until a pull request with the `visual` label ran.
-  Read one full scheduled run after the fix before you call it fixed.
+  Read main's first full run after the fix lands before you call it fixed.
 - **A full run's word is its verdict.** A red full run ends `failure`, on main and on a branch.
   `cancelled` means a person or the freeze stopped it, or a leg hung past its job's backstop limit;
   read its report job's line before you call it harmless. On 2026-11-15 a red full run on a branch
