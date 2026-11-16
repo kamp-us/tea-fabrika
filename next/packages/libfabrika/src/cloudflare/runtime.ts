@@ -384,11 +384,12 @@ export interface ProjectOptions {
   readonly bootstrap: Boots | ((person: string) => Boots);
   /** Which program may start which (P42), a host right. None when absent. */
   readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
+  /** Builds the door; it fails with the door's own error, named here only by its base, as in `GatewayCalls`. */
   readonly door: (
     options: ProjectDoorOptions,
   ) => Effect.Effect<
     GatewayCalls,
-    unknown,
+    Cause.YieldableError,
     | Ledger
     | LedgerTransaction
     | Id.Generator
@@ -441,39 +442,43 @@ export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect
 });
 
 // Only checked refusals become RPC data. Storage and transport failures still fail the call.
-const checkedReply = Effect.fnUntraced(function* <A, B>(work: Effect.Effect<A, unknown>, ok: (value: A) => B) {
+const checkedReply = Effect.fnUntraced(function* <A, B, E>(work: Effect.Effect<A, E>, ok: (value: A) => B) {
   return yield* work.pipe(
     Effect.map(ok),
     Effect.catchIf(
-      (error): error is SigningRefused => error instanceof SigningRefused,
+      (error): error is typeof error & SigningRefused => error instanceof SigningRefused,
       (error) => Effect.succeed(SigningReply.cases.SigningRefused.make({ reason: error.reason })),
     ),
     Effect.catchIf(
-      (error): error is NotGranted => error instanceof NotGranted,
+      (error): error is typeof error & NotGranted => error instanceof NotGranted,
       () => Effect.succeed(SigningReply.cases.NotGranted.make({})),
     ),
   );
 });
 
 /**
- * Converts a signing call into its RPC reply: `ok` with the `Session`, or a `SigningRefused` or
- * `NotGranted` refusal as data. Any other failure still fails the call.
+ * Converts a `ProjectService` signing call into its RPC reply: `ok` with the `Session`, or a
+ * `SigningRefused` or `NotGranted` refusal as data. Any other failure still fails the call.
  *
  * @stability unstable
  * @category error handling
  */
-export const signingReply = Effect.fn("project.signingReply")(function* (work: Effect.Effect<Session, unknown>) {
+export const signingReply = Effect.fn("project.signingReply")(function* (
+  work: Effect.Effect<Session, Effect.Error<ReturnType<ProjectService["Service"]["sign"]>>>,
+) {
   return yield* checkedReply(work, (value) => SigningReply.cases.ok.make({ value }));
 });
 
 /**
- * Converts a commit into its RPC reply: `ok` with the `Appended` entry, or a `SigningRefused` or
+ * Converts a `ProjectService` commit into its RPC reply: `ok` with the `Appended` entry, or a `SigningRefused` or
  * `NotGranted` refusal as data. Any other failure still fails the call.
  *
  * @stability unstable
  * @category error handling
  */
-export const commitReply = Effect.fn("project.commitReply")(function* (work: Effect.Effect<Appended, unknown>) {
+export const commitReply = Effect.fn("project.commitReply")(function* (
+  work: Effect.Effect<Appended, Effect.Error<ReturnType<ProjectService["Service"]["commit"]>>>,
+) {
   return yield* checkedReply(work, (value) => CommitReply.cases.ok.make({ value }));
 });
 
@@ -523,7 +528,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
 });
 
 /** Checked refusals are replies; storage and descriptor failures remain retryable rejections. */
-const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
+const childReply = <E>(work: Effect.Effect<Started, E>): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
   work.pipe(
     Effect.map((value) => ChildReplies.cases.ok.make({ value })),
     Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
@@ -534,7 +539,7 @@ const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof
   );
 
 /** A stop's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
-const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
+const stopReply = <E>(work: Effect.Effect<void, E>): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
   work.pipe(
     Effect.as(StopReplies.cases.ok.make({})),
     Effect.catch((error): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
@@ -545,8 +550,8 @@ const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof Sto
   );
 
 /** A watch's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
-const monitorReply = (
-  work: Effect.Effect<typeof Watched.Type, unknown>,
+const monitorReply = <E>(
+  work: Effect.Effect<typeof Watched.Type, E>,
 ): Effect.Effect<typeof MonitorReplies.Type, LedgerError> =>
   work.pipe(
     Effect.map((value) => MonitorReplies.cases.ok.make({ value })),
@@ -2033,19 +2038,22 @@ export class ProjectService extends Context.Service<
     readonly target: GatewayCalls["target"];
     readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
     readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
-    // The door's calls. A door fails with `unknown`, which takes in every other failure.
+    // The door's calls. A door fails with its own error, named by its base as in `GatewayCalls`.
     readonly connect: () => Effect.Effect<ConnectionId, ProjectFailure>;
-    readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, Cause.YieldableError | ProjectFailure>;
     readonly initialize: GatewayCalls["initialize"];
     readonly route: (
       client: ConnectionId,
       method: string,
       params: unknown,
       reader?: string,
-    ) => Effect.Effect<typeof Answer.Type, unknown>;
-    readonly knock: (client: ConnectionId, input: { label: string }) => Effect.Effect<typeof Answer.Type, unknown>;
+    ) => Effect.Effect<typeof Answer.Type, Cause.YieldableError | ProjectFailure>;
+    readonly knock: (
+      client: ConnectionId,
+      input: { label: string },
+    ) => Effect.Effect<typeof Answer.Type, Cause.YieldableError | ProjectFailure>;
     readonly grant: GatewayCalls["grant"];
-    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, Cause.YieldableError | ProjectFailure>;
     // Presence.
     readonly join: (row: {
       readonly key: string;
@@ -2071,7 +2079,11 @@ export class ProjectService extends Context.Service<
       request: Start,
       origin: From,
     ) => Effect.Effect<StartAnswer, ProcessError | ProgramDown | ProjectFailure>;
-    readonly exit: (pid: string, reason: ExitReason, origin: From) => Effect.Effect<void, unknown>;
+    readonly exit: (
+      pid: string,
+      reason: ExitReason,
+      origin: From,
+    ) => Effect.Effect<void, ProcessError | SessionManagerError | ProjectFailure>;
     // The ledger, through the referee.
     readonly read: (
       stream: string,
@@ -2086,7 +2098,12 @@ export class ProjectService extends Context.Service<
       input: unknown,
     ) => Effect.Effect<Appended, ProgramDown | ProjectFailure>;
     // A process's own writes.
-    readonly sign: (pid: string, id: string, parent: string, kind: string) => Effect.Effect<Session, unknown>;
+    readonly sign: (
+      pid: string,
+      id: string,
+      parent: string,
+      kind: string,
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | SessionManagerError | ProjectFailure>;
     readonly commit: (
       pid: string,
       input: {
@@ -2096,8 +2113,8 @@ export class ProjectService extends Context.Service<
         readonly stream: string;
         readonly event: unknown;
       },
-    ) => Effect.Effect<Appended, unknown>;
-    readonly inbox: (pid: string, input: Incoming) => Effect.Effect<Appended, unknown>;
+    ) => Effect.Effect<Appended, Cause.YieldableError | ProjectFailure>;
+    readonly inbox: (pid: string, input: Incoming) => Effect.Effect<Appended, Cause.YieldableError | ProjectFailure>;
     readonly own: (
       pid: string,
       id: string,
@@ -2112,7 +2129,11 @@ export class ProjectService extends Context.Service<
       request: Start,
       origin: From,
     ) => Effect.Effect<ProcessReply<StartAnswer>, ProgramDown | ProjectFailure>;
-    readonly processExit: (pid: string, reason: ExitReason, origin: From) => Effect.Effect<ProcessReply<void>, unknown>;
+    readonly processExit: (
+      pid: string,
+      reason: ExitReason,
+      origin: From,
+    ) => Effect.Effect<ProcessReply<void>, SessionManagerError | ProjectFailure>;
     readonly processStatus: (owner: string) => Effect.Effect<
       ProcessReply<{
         readonly name: string;

@@ -109,9 +109,9 @@ export const admitsInput = Effect.fnUntraced(function* (
  *
  * @category combinators
  */
-export const runtimeAppend = <A, E, R>(
+export const runtimeAppend = <A, E, R, L, LE>(
   stream: string,
-  life: Effect.Effect<unknown, unknown>,
+  life: Effect.Effect<L, LE>,
   work: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {

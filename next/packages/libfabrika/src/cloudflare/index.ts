@@ -77,10 +77,10 @@ type Loader = Omit<WorkerLoader, "get"> & {
  *
  * @category constructors
  */
-export const workerLoader = (
+export const workerLoader = <E = never>(
   loader: Loader,
   programs: Readonly<Record<string, ProgramSource>>,
-  lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
+  lookup?: (hash: string) => Effect.Effect<ProgramSource | null, E>,
 ) => ({
   load: Effect.fn("loader.load")(function* (
     name: string,

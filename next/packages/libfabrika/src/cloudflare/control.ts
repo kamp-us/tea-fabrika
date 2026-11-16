@@ -52,6 +52,13 @@ const methods = {
   record: new Set(["write", "read", "content", "deleteContent"]),
 };
 
+/** What a call of a client fails with: the union of its methods' errors. */
+type Failure<Client> = Client extends unknown
+  ? {
+      [K in keyof Client]: Client[K] extends (...args: never) => Effect.Effect<unknown, infer E> ? E : never;
+    }[keyof Client]
+  : never;
+
 const dispatch = Effect.fnUntraced(function* (
   env: Env,
   programs: Readonly<Record<string, ProgramSource>>,
@@ -119,7 +126,11 @@ const dispatch = Effect.fnUntraced(function* (
           )
         : RecordClient.make(recordStub(env, project, name));
   // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
-  const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);
+  const answer: Effect.Effect<unknown, Failure<typeof client>> = Reflect.apply(
+    Reflect.get(client, method),
+    client,
+    args,
+  );
   return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
 });
 
@@ -165,9 +176,7 @@ export const control = Effect.fn("runtime.control")(function* (
             reason:
               typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
                 ? answer.failure.reason
-                : typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
-                  ? answer.failure.reason
-                  : "unreachable",
+                : "unreachable",
           },
         },
         { status: 500 },

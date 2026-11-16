@@ -2,9 +2,15 @@
  * The RPC shapes of the Cloudflare objects: what each Durable Object binding answers, and the reply
  * schemas that carry a refusal across the RPC as data.
  */
-import { type Brand, type Effect, Schema } from "effect";
-import { Session, SigningRefused, type Writer } from "../access/SessionManager.ts";
-import type { LedgerCalls } from "../ledger/Ledger.ts";
+import { type Brand, type Cause, type Effect, Schema } from "effect";
+import {
+  type NotGranted,
+  Session,
+  type SessionManagerError,
+  SigningRefused,
+  type Writer,
+} from "../access/SessionManager.ts";
+import type { LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
 import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
@@ -149,16 +155,22 @@ export const MonitorReplies = Schema.TaggedUnion({
  * The door's calls on the Project, as Effects: connecting a client, its hello, routing its calls,
  * knocks and grants, and the signing and appends a process asks for.
  *
+ * **Details**
+ *
+ * The signing calls name their errors. A call that can fail with the door's own error, the
+ * gateway's `GatewayError`, which this module may not import (0043), names only its base,
+ * `Cause.YieldableError`: the Project passes it on unread.
+ *
  * @category models
  */
 export interface GatewayCalls {
   readonly connect: () => Effect.Effect<ConnectionId>;
-  readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
+  readonly challenge: (client: ConnectionId) => Effect.Effect<string, Cause.YieldableError>;
   readonly initialize: (
     client: ConnectionId,
     input: unknown,
     trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
-  ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
+  ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, Cause.YieldableError>;
   readonly target: (
     name: string,
     code: string,
@@ -170,23 +182,31 @@ export interface GatewayCalls {
       code: string;
       label: string;
     } | null,
-    unknown
+    Cause.YieldableError
   >;
   readonly route: (
     client: ConnectionId,
     method: string,
     params: unknown,
     reader?: string,
-  ) => Effect.Effect<typeof Answer.Type, unknown>;
+  ) => Effect.Effect<typeof Answer.Type, Cause.YieldableError>;
   readonly knock: (
     client: ConnectionId,
     input: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
-  ) => Effect.Effect<typeof Answer.Type, unknown>;
-  readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
-  readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
-  readonly sign: (process: string, id: string, parent: string, kind: string) => Effect.Effect<Session, unknown>;
+  ) => Effect.Effect<typeof Answer.Type, Cause.YieldableError>;
+  readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, Cause.YieldableError>;
+  readonly disconnect: (client: ConnectionId) => Effect.Effect<void, Cause.YieldableError>;
+  readonly sign: (
+    process: string,
+    id: string,
+    parent: string,
+    kind: string,
+  ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError>;
   /** Who sent `parent`, an input delivered to `process`; the brain asks it before a start (0170). */
-  readonly sender: (process: string, parent: string) => Effect.Effect<Writer, unknown>;
+  readonly sender: (
+    process: string,
+    parent: string,
+  ) => Effect.Effect<Writer, SigningRefused | NotGranted | SessionManagerError>;
   readonly append: (input: {
     readonly process: string;
     readonly id: string;
@@ -194,9 +214,9 @@ export interface GatewayCalls {
     readonly kind: string;
     readonly stream: string;
     readonly event: unknown;
-  }) => Effect.Effect<Appended, unknown>;
-  readonly retire: (process: string) => Effect.Effect<void, unknown>;
-  readonly checkDelivery: (process: string, incoming: Incoming) => Effect.Effect<void, unknown>;
+  }) => Effect.Effect<Appended, Cause.YieldableError>;
+  readonly retire: (process: string) => Effect.Effect<void, SessionManagerError>;
+  readonly checkDelivery: (process: string, incoming: Incoming) => Effect.Effect<void, Cause.YieldableError>;
 }
 
 type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;

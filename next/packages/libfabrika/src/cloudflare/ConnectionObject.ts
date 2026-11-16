@@ -67,9 +67,9 @@ export const layer = (options: {
         ConnectionService,
         connectionLayer(raw, bindings, undefined, options.input(bindings)),
       );
-      const event = (
+      const event = <E>(
         socket: Cloudflare.WebSocket,
-        slot: (gateway: Service, ws: WebSocket) => Effect.Effect<void, unknown>,
+        slot: (gateway: Service, ws: WebSocket) => Effect.Effect<void, E>,
       ) =>
         service.pipe(
           Effect.flatMap((gateway) => platformSocket(socket).pipe(Effect.flatMap((ws) => slot(gateway, ws)))),

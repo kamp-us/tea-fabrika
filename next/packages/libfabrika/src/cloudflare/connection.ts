@@ -126,7 +126,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>
     complete(work, counted).pipe(Effect.provideContext(recording));
   yield* recorded(Effect.void);
-  const connections = new Map<WebSocket, ReturnType<typeof connection>>();
+  const connections = new Map<WebSocket, ReturnType<typeof connection<ConnectionFailure, LedgerError>>>();
   const attached = Effect.fnUntraced(function* (ws: WebSocket) {
     return yield* Schema.decodeUnknownEffect(Attached)(ws.deserializeAttachment()).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
@@ -136,7 +136,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     const [session, tab, key] = yield* Schema.decodeUnknownEffect(
       Schema.Tuple([Schema.String, Schema.String, Schema.String]),
     )(ctx.getTags(ws)).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
-    const c = connection({
+    // Named, as the map above names it: its two calls are context-typed, so TypeScript would not infer it.
+    const c = connection<ConnectionFailure, LedgerError>({
       reader: gateway,
       session,
       read: () => attached(ws),
@@ -367,16 +368,20 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   };
 });
 
+/** What a socket's frame, ring or probe fails with: a project call, its recording, or a refused wait. */
+type ConnectionFailure = LedgerError | SinkError | typeof Answer.cases.refused.Type;
+
 export class ConnectionService extends Context.Service<
   ConnectionService,
   {
     readonly fetch: (request: Request) => Effect.Effect<Response, LedgerError>;
-    // A frame, a ring and a probe go through the socket's connection, whose calls are door calls. A door
-    // fails with `unknown`, which takes in every other failure.
-    readonly message: (ws: WebSocket, text: string | ArrayBuffer) => Effect.Effect<void, unknown>;
+    // A frame, a ring and a probe go through the socket's connection, whose calls are door calls over
+    // the project's RPC, or a wait refused by its project.
+    readonly message: (ws: WebSocket, text: string | ArrayBuffer) => Effect.Effect<void, ConnectionFailure>;
     readonly close: (ws: WebSocket, code?: number) => Effect.Effect<void, LedgerError | SinkError>;
-    readonly ring: (stream: string, rev: number) => Effect.Effect<void, unknown>;
-    readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
+    // A ring reads its own span, which `Effect.currentSpan` types as a possible `NoSuchElementError`.
+    readonly ring: (stream: string, rev: number) => Effect.Effect<void, ConnectionFailure | Cause.NoSuchElementError>;
+    readonly probe: (session: string) => Effect.Effect<number | null, ConnectionFailure>;
     readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
   }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
