@@ -1,5 +1,7 @@
-// next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
+// next/: TypeIDs with UUIDv7 suffixes. It draws random bits from Effect's SecureRandom;
+// `Generator.layer` provides the WebCrypto one.
 import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const low62 = (1n << 62n) - 1n;
@@ -127,8 +129,9 @@ export const Order = Ordering.make<Schema>((left, right) => {
   return Ordering.String(ls, rs) || Ordering.String(lp, rp);
 });
 
-const entropy = (): bigint =>
-  crypto.getRandomValues(new Uint8Array(10)).reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & maxRandom;
+const toRandom = (bytes: Uint8Array): bigint => bytes.reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & maxRandom;
+
+const validClock = (now: number): boolean => Number.isSafeInteger(now) && now >= 0 && now <= maxTime;
 
 // RFC 9562 5.7: 48 clock bits, version 7, 12 random bits, variant 10, 62 random bits.
 const encode = (at: number, random: bigint): string => {
@@ -143,6 +146,75 @@ const encode = (at: number, random: bigint): string => {
   return suffix;
 };
 
+/** One writer's last clock and random bits. `at` only grows. */
+interface Last {
+  readonly at: number;
+  readonly random: bigint;
+}
+
+// RFC 9562 6.2, method 2: a fresh millisecond takes `fresh`, a repeated one counts up, and the
+// all-ones field moves the clock by one. `undefined` once the last millisecond is used up.
+const advance = (last: Last, now: number, fresh: bigint | undefined): Last | undefined => {
+  if (now > last.at && fresh !== undefined) {
+    return { at: now, random: fresh };
+  }
+
+  if (last.random !== maxRandom) {
+    return { at: last.at, random: last.random + 1n };
+  }
+
+  return last.at === maxTime ? undefined : { at: last.at + 1, random: 0n };
+};
+
+/** The generator's service, drawing its random bits from SecureRandom. */
+export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRandom.SecureRandom> = Effect.gen(
+  function* () {
+    const secure = yield* SecureRandom.SecureRandom;
+    let last: Last = { at: -1, random: 0n };
+    // A throw from the random source is a defect of SecureRandom; the generator translates it.
+    const draw = secure.randomBytes(10).pipe(
+      Effect.map(toRandom),
+      Effect.catchDefect((cause) => Effect.fail(new IdError({ reason: "entropy", cause }))),
+    );
+    return {
+      next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
+        const prefix = prefixes.get(schema);
+
+        if (prefix === undefined) {
+          return yield* new IdError({ reason: "prefix" });
+        }
+
+        yield* Effect.annotateCurrentSpan({ type: prefix });
+        const now = yield* Clock.currentTimeMillis;
+
+        // The clock is checked before any draw, so a bad clock is `clock` even when entropy fails.
+        if (!validClock(now)) {
+          return yield* new IdError({ reason: "clock" });
+        }
+
+        // The draw is an Effect, so it runs before the step. `at` only grows, so a millisecond that
+        // is fresh at the step was fresh at the draw, and `fresh` is there when it is needed.
+        const fresh = now > last.at ? yield* draw : undefined;
+        // Nothing yields between reading and writing `last`, so fibers observe IDs in allocation order.
+        const moved = advance(last, now, fresh);
+
+        if (moved === undefined) {
+          return yield* new IdError({ reason: "exhausted" });
+        }
+
+        last = moved;
+        const decoded = S.decodeUnknownResult(schema)(`${prefix}_${encode(last.at, last.random)}`);
+
+        if (Result.isFailure(decoded)) {
+          return yield* new IdError({ reason: "prefix", cause: decoded.failure });
+        }
+
+        return decoded.success;
+      }),
+    };
+  },
+);
+
 /** One writer's clock and random state, shared across all its ID types. */
 export class Generator extends Context.Service<
   Generator,
@@ -150,57 +222,8 @@ export class Generator extends Context.Service<
     readonly next: <P extends string>(schema: IdSchema<P>) => Effect.Effect<IdValue<P>, IdError>;
   }
 >()("@kampus/libfabrika/Id.Generator") {
-  static readonly layer = Layer.effect(
-    Generator,
-    Effect.sync(() => {
-      let at = -1,
-        random = 0n;
-      // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
-      const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
-        if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
-          throw new IdError({ reason: "clock" });
-        }
-
-        let nextAt = at,
-          nextRandom = random;
-
-        if (now > at) {
-          nextAt = now;
-          nextRandom = entropy();
-        } else if (random === maxRandom) {
-          if (at === maxTime) {
-            throw new IdError({ reason: "exhausted" });
-          }
-
-          nextAt++;
-          nextRandom = 0n;
-        } else {
-          nextRandom++;
-        }
-
-        at = nextAt;
-        random = nextRandom;
-        return Result.getOrThrowWith(
-          S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-          (cause) => new IdError({ reason: "prefix", cause }),
-        );
-      };
-      return {
-        next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
-          const prefix = prefixes.get(schema);
-
-          if (prefix === undefined) {
-            return yield* new IdError({ reason: "prefix" });
-          }
-
-          yield* Effect.annotateCurrentSpan({ type: prefix });
-          const now = yield* Clock.currentTimeMillis;
-          return yield* Effect.try({
-            try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
-          });
-        }),
-      };
-    }),
+  // Callers keep one layer that needs nothing; makeGenerator is there for one that picks its source.
+  static readonly layer: Layer.Layer<Generator> = Layer.effect(Generator, makeGenerator).pipe(
+    Layer.provide(SecureRandom.layerWebCrypto),
   );
 }
