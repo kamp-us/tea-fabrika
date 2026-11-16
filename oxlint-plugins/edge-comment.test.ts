@@ -3,15 +3,19 @@
 // names only those two rules, and gives a reason. Each wrong comment stands over a line that really
 // fires, so only this rule speaks. And no line of `.oxlintrc.json` turns an edge rule off for a
 // `next/` file that is not a test, so the list of edge files cannot come back through the config.
+// These laws were the exam's (next/apps/fabrika/src/exam/edge-comment.integration.test.ts) until 0591
+// moved them here. Plants: accept `Edge:` as `edge:` in the rule, and the `edge-capital` case passes; add
+// an off line for `fabrika/no-promises` on a `next/` product glob in `.oxlintrc.json`, and the config
+// law fails.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
-import { plant } from "../../../../../oxlint-plugins/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(edge-comment)";
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+const ROOT = join(import.meta.dirname, "..");
 
 const PRELUDE = ['import {Effect} from "effect";', "declare const p: Promise<number>, thing: Effect.Effect<number>;"];
 
@@ -70,7 +74,7 @@ describe("edge-comment", async () => {
     ].join("\n"),
   });
 
-  it("refuses each wrong edge comment, at the top of the file", () => {
+  it("scenario: refuses each wrong edge comment, at the top of the file", () => {
     const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
     expect(refused).toHaveLength(8);
 
@@ -79,7 +83,7 @@ describe("edge-comment", async () => {
     }
   });
 
-  it("passes a right one for each rule and for both, and leaves other comments alone", () => {
+  it("scenario: passes a right one for each rule and for both, and leaves other comments alone", () => {
     const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
     expect(passed).toHaveLength(4);
 
@@ -88,7 +92,7 @@ describe("edge-comment", async () => {
     }
   });
 
-  it("speaks alone: the line under each comment is silenced and no comment is unused", () => {
+  it("scenario: speaks alone: the line under each comment is silenced and no comment is unused", () => {
     for (const name of Object.keys(CASES)) {
       for (const code of [
         "fabrika(no-promises)",
@@ -103,7 +107,7 @@ describe("edge-comment", async () => {
     }
   });
 
-  it("an edge comment over a line where nothing fires is unused, which fails", () => {
+  it("scenario: an edge comment over a line where nothing fires is unused, which fails", () => {
     expect(all("", UNUSED)).toEqual([3]);
     expect(all(CODE, UNUSED)).toEqual([]);
   });
@@ -148,7 +152,7 @@ describe(".oxlintrc.json", () => {
   const off = (setting: unknown): boolean =>
     setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
 
-  it("turns the three rules on in next/**", () => {
+  it("scenario: turns the three rules on in next/**", () => {
     const next = config.overrides.find((o) => o.files.length === 1 && o.files[0] === "next/**");
 
     for (const rule of RULES) {
@@ -156,7 +160,7 @@ describe(".oxlintrc.json", () => {
     }
   });
 
-  it("turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
+  it("scenario: turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
     const loosened = config.overrides.filter((o) => RULES.some((rule) => off(o.rules[rule])));
 
     for (const o of loosened) {
