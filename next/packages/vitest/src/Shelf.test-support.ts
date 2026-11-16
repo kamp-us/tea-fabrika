@@ -7,7 +7,9 @@ import { Context, Schema } from "effect";
 import type { Effect, Sink, Stream } from "effect";
 
 /** The shelf has no room: what `put`, `size` and `watch` fail with. */
-export class Full extends Schema.TaggedError<Full>()("Full", { item: Schema.String }) {}
+export class Full extends Schema.TaggedError<Full, { readonly brand: unique symbol }>()("Full", {
+  item: Schema.String,
+}) {}
 
 /** The shelf's own symbol key, a member the Recorder passes through. */
 export const ShelfId: unique symbol = Symbol.for("@kampus/vitest/Shelf");
