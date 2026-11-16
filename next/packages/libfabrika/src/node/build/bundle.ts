@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import { Cause, Effect, Exit, Formatter, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
   rolldown,
@@ -189,7 +189,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const programs: Record<string, ProgramSource> = {};
 
   for (const [name, entry] of Object.entries(options.programs)) {
-    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
+    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
     const output = yield* bundle(
       "fabrika:program",
       [

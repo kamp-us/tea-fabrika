@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Formatter, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -1404,7 +1404,7 @@ const handlers = (s: Setup) => {
           saveStep({ ...last, judged: { box, answer } });
         }
 
-        return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
+        return { text: Formatter.formatJson(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
     // CI's typecheck job alone, polled until it ends: never the whole run or ci-required (0133).
     typecheck_read: (cmd: { pr: number; head: string }) =>
@@ -1651,6 +1651,15 @@ export const stepsTable = (
 
 // ---------------------------------------------------------------- the command
 
+/** What a restart takes from the quest's state file: drive.ts writes these, and the rest stays drive's. */
+const SavedQuest = Schema.fromJsonString(
+  Schema.Struct({
+    ticket: Schema.optional(Schema.String),
+    branch: Schema.optional(Schema.String),
+    plan: Schema.optional(Schema.String),
+  }),
+);
+
 const flag = (args: string[], name: string) => {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];
@@ -1688,8 +1697,15 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     }
 
     const statePath = join(env.BOXES, "state", `${quest}.json`);
-    const saved: { ticket?: string; branch?: string; plan?: string } = existsSync(statePath)
-      ? JSON.parse(readFileSync(statePath, "utf8"))
+    const saved: typeof SavedQuest.Type = existsSync(statePath)
+      ? yield* Schema.decodeUnknownEffect(SavedQuest)(readFileSync(statePath, "utf8")).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              console.error(`chain.ts: the quest's state file ${statePath} does not read: ${error.message}`);
+              return process.exit(2);
+            }),
+          ),
+        )
       : {};
     const ticket = flag(args, "--ticket") ?? saved.ticket;
 
@@ -1781,7 +1797,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     }
 
     console.log(
-      JSON.stringify({
+      Formatter.formatJson({
         outcome: end.end.kind,
         quest,
         rounds: end.quest.round,

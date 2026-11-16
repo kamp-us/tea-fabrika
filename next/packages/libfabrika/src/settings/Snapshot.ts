@@ -49,9 +49,15 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError>()("Snapshot
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
-  const text = JSON.stringify(sorted, (_key, value: unknown) =>
-    Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
-  );
+  // The values are encoded JSON already, so a failure here is a bug, as in `make`'s own encode.
+  const text = yield* Schema.encodeUnknownEffect(
+    Schema.fromJsonString(Schema.Unknown, {
+      replacer: (_key, value: unknown) =>
+        Predicate.isObject(value)
+          ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)))
+          : value,
+    }),
+  )(sorted).pipe(Effect.orDie);
   const digest = yield* Digest.Digest;
   return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
 });

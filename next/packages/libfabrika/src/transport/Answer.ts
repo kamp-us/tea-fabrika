@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import { Effect, Exit, Formatter, Option, Result, Schema } from "effect";
 import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
 import { Answer, Attached, RateCountFailure } from "./Wire.ts";
@@ -78,7 +78,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 
   if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "gateway.knock")) {
     return {
-      send: JSON.stringify({
+      send: Formatter.formatJson({
         jsonrpc: "2.0",
         id,
         error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },

@@ -9,7 +9,7 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Config, Effect, FileSystem, Formatter, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -145,7 +145,7 @@ const command = Command.make("dev", flags, (options) => {
           return { file, state };
         }).pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         yield* fs
-          .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
+          .writeFileString(file, Formatter.formatJson(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
         const instance = yield* localInstance(built, {
@@ -185,7 +185,7 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
-          process.stdout.write(`${JSON.stringify(selected)}\n`);
+          process.stdout.write(`${Formatter.formatJson(selected)}\n`);
 
           if (selected._tag === "refused") {
             return yield* new InstanceError({ reason: "repository_refused" });
@@ -226,7 +226,7 @@ const command = Command.make("dev", flags, (options) => {
         );
 
         process.stdout.write(
-          `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
+          `${Formatter.formatJson({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
         return yield* Effect.never;
       }),

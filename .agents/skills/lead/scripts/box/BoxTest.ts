@@ -6,7 +6,7 @@
 //
 // Each case is a generated plan: one box, then what is planted in it. The oracle below names the
 // verdict the old Python rm gave that plan, check by check in its order.
-import { Effect, FileSystem, Layer, type Path, type Scope } from "effect";
+import { Effect, FileSystem, Formatter, Layer, type Path, type Scope } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -275,7 +275,7 @@ const law = Effect.fnUntraced(function* (world: World, plan: Plan) {
   );
   const verdict = expected(plan);
   const removed = verdict._tag === "removed";
-  expect(removal.verdict, JSON.stringify(plan)).toEqual(verdict);
+  expect(removal.verdict, Formatter.formatJson(plan)).toEqual(verdict);
   expect(Remove.exitCode(removal.verdict)).toBe(verdict._tag === "kept" ? verdict.code : 0);
   expect(removal.runs).toBe(removed && plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}` : "");
   expect([yield* present(fs, work), yield* present(fs, data)]).toEqual(removed ? [false, false] : before);

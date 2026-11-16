@@ -9,7 +9,7 @@
  * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Context, Effect, Exit, FileSystem, Formatter, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -316,7 +316,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",
     cwd,
-    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
     minify: true,
   });
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
@@ -586,7 +586,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
           phase: "window",
           cwd: root,
           split: true,
-          define: { "process.env.NODE_ENV": JSON.stringify("production") },
+          define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
         },
       ).pipe(Effect.flatMap((o) => collect(o.output)))
     : {};

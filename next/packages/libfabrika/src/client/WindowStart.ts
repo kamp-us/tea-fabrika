@@ -7,7 +7,7 @@
  * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import { Clock, DateTime, Deferred, Effect, Schema, type Stream } from "effect";
+import { Clock, DateTime, Deferred, Effect, Formatter, Schema, type Stream } from "effect";
 import { Socket } from "effect/socket";
 import * as Id from "../Id.ts";
 import { TileId } from "../tezgah/Workspace.ts";
@@ -151,7 +151,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         const message = wire(cmd.call, options.client.label);
         const written = handles.get(cmd.dial)?.written;
         written?.set(cmd.id, yield* Clock.currentTimeMillis);
-        yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(
+        yield* send(cmd.dial, Formatter.formatJson({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(
           Effect.mapError(() => {
             written?.delete(cmd.id);
             return F.unreachable.make({});
@@ -188,14 +188,14 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
           sentAt: yield* sentAt,
           signed,
         };
-        yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, method: "initialize", params })).pipe(
+        yield* send(cmd.dial, Formatter.formatJson({ jsonrpc: "2.0", id: cmd.id, method: "initialize", params })).pipe(
           Effect.mapError(() => F.closed.make({})),
         );
         return null;
       }),
       enroll: Effect.fn("Client.enroll")(function* (cmd) {
         const knock = { jsonrpc: "2.0", id: cmd.id, method: "gateway.knock", params: { label: options.client.label } };
-        yield* send(cmd.dial, JSON.stringify(knock)).pipe(Effect.mapError(() => F.closed.make({})));
+        yield* send(cmd.dial, Formatter.formatJson(knock)).pipe(Effect.mapError(() => F.closed.make({})));
         return null;
       }),
       persist: Effect.fn("Client.persist")(function* () {

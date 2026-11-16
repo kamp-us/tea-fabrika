@@ -22,7 +22,7 @@
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, Effect, FileSystem, Formatter, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -253,7 +253,7 @@ const appendTo = (events: string, line: object) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs
-      .writeFileString(events, `${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
+      .writeFileString(events, `${Formatter.formatJson({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
       .pipe(Effect.ignore);
   });
 

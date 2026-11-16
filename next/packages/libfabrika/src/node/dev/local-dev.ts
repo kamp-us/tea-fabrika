@@ -10,6 +10,7 @@ import {
   type Duration,
   Effect,
   FileSystem,
+  Formatter,
   Option,
   Path,
   Result,
@@ -311,7 +312,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return;
     }
 
-    yield* durableWrite(lastFile, JSON.stringify(start));
+    yield* durableWrite(lastFile, Formatter.formatJson(start));
   });
   return {
     last: last().pipe(turn.withPermit),
@@ -325,7 +326,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         const old = rows.find((row) => row.id === event.id);
 
         if (old !== undefined) {
-          if (JSON.stringify(old) !== JSON.stringify(event)) {
+          if (Formatter.formatJson(old) !== Formatter.formatJson(event)) {
             return yield* new BrainError({ reason: "id_reused" });
           }
 

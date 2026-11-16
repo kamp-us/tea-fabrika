@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
+import { Effect, Fiber, FileSystem, Formatter, Layer, Path, Redacted, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
@@ -189,7 +189,7 @@ export const layer = (options: { readonly person: string }) =>
               .replace(/^(https?:\/\/)[^/@]*@/i, "$1")
               .replace(/^(ssh:\/\/)[^/@]*@/i, "$1")
               .replace(/^[^/@:]+@(?=[^/:]+:)/, "");
-            const key = yield* hash(JSON.stringify([common, identity])).pipe(
+            const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
             );

@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Formatter, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -1484,7 +1484,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           head: accepted ? e.head : (saved.head ?? ask.base),
           steps: [...saved.steps, entry],
         };
-        writeFileSync(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
+        writeFileSync(`${state}.tmp`, `${Formatter.formatJson(quest, { space: "\t" })}\n`);
         renameSync(`${state}.tmp`, state);
         appendFileSync(
           join(env.BOXES, "state", `${ask.quest}.md`),
@@ -2398,14 +2398,14 @@ const main = () => {
   const program = Effect.gen(function* () {
     const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
-    console.log(JSON.stringify(line));
+    console.log(Formatter.formatJson(line));
     process.exitCode = line.exit;
   }).pipe(
     // A crash is still one JSON line, and the box is kept for the lead to read.
     Effect.catchCause((cause) =>
       Effect.sync(() => {
         console.log(
-          JSON.stringify({
+          Formatter.formatJson({
             outcome: "stuck:crash",
             quest,
             step,

@@ -28,7 +28,7 @@
 // rules are the app's own: a start with a `FABRIKA_HOME` and no `FABRIKA_FOREGROUND` is quiet
 // (apps/fabrika/src/launch.ts), so this step sets the one and removes the other.
 
-import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
+import { Duration, Effect, FileSystem, Formatter, Option, Path, Schedule, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
@@ -452,7 +452,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
     ended,
   };
   const quest = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
-  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
+  yield* fs.writeFileString(`${state}.tmp`, `${Formatter.formatJson(quest, { space: "\t" })}\n`);
   yield* fs.rename(`${state}.tmp`, state);
 });
 

@@ -13,6 +13,7 @@ import {
   Deferred,
   Effect,
   Exit,
+  Formatter,
   Option,
   Queue,
   Redacted,
@@ -210,10 +211,13 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
     const url = `http://127.0.0.1:${port}`;
     const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
-    const body = yield* Effect.try({
-      try: () => JSON.stringify({ target, project, name, method, args }),
-      catch: fail,
-    });
+    const body = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))({
+      target,
+      project,
+      name,
+      method,
+      args,
+    }).pipe(Effect.mapError(fail));
     const response = yield* HttpClientRequest.post(url).pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
       HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(token)}`),
@@ -299,7 +303,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             name: "user-worker",
             entrypoint: "Control",
             // oxlint-disable-next-line fabrika/no-redacted-value -- Alchemy sends these entrypoint props to workerd
-            props: { json: JSON.stringify({ token: Redacted.value(token) }) },
+            props: { json: Formatter.formatJson({ token: Redacted.value(token) }) },
           },
         },
       ],
