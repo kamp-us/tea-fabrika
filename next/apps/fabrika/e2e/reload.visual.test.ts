@@ -94,6 +94,7 @@ const driver = (p: Page, url: string, tab: string) =>
         const publicBytes = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
         const raw = b64(publicBytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
         const fingerprint = `SHA256:${b64(new Uint8Array(await crypto.subtle.digest("SHA-256", publicBytes))).replace(/=+$/, "")}`;
+        // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
         const proof = async (text: string) => {
           const blob = concat(field("ssh-ed25519"), field(publicBytes));
           const digest = new Uint8Array(await crypto.subtle.digest("SHA-512", bytes(text)));
@@ -124,6 +125,7 @@ const driver = (p: Page, url: string, tab: string) =>
             pending.set(id, done);
             socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
           });
+        // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
         const hello = async (nonce: string) =>
           call("initialize", {
             versions: [1],

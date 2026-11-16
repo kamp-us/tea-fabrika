@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect, Schema } from "effect";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -16,39 +17,50 @@ export const stale = (table: Readonly<Record<string, number>>, files: readonly s
     .toSorted();
 };
 
+/** Vitest could not start, select or close: the check's own failure, with Vitest's error as its cause. */
+class VitestFailure extends Schema.TaggedError<VitestFailure>()("VitestFailure", { cause: Schema.Defect() }) {}
+
+/** One call of Vitest's Promise API, as `Effect.tryPromise` in its object form. */
+const vitestCall = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new VitestFailure({ cause }) });
+
 /**
  * Test files under `root` as Vitest itself selects them from one project's `include` and
  * `exclude`, read on each call, in path order. A glob of our own drifted from Vitest's twice
  * (`dist`, then dot folders), so Vitest does the selecting.
  */
-const selected = async (root: string, name: string): Promise<string[]> => {
+const selected = Effect.fnUntraced(function* (root: string, name: string) {
   const project = projects.find((each) => each.test.name === name);
 
   if (project === undefined) {
-    throw new Error(`shard-rows: vitest.config.ts has no project ${name}`);
+    return yield* Effect.die(new Error(`shard-rows: vitest.config.ts has no project ${name}`));
   }
 
   const { include, exclude } = project.test;
-  const vitest = await createVitest("test", { root, config: false, watch: false, include, exclude });
-
-  try {
-    return (await vitest.globTestSpecifications())
-      .map((spec) => relative(vitest.config.root, spec.moduleId))
-      .toSorted();
-  } finally {
-    await vitest.close();
-  }
-};
+  return yield* Effect.acquireUseRelease(
+    vitestCall(() => createVitest("test", { root, config: false, watch: false, include, exclude })),
+    (vitest) =>
+      vitestCall(() => vitest.globTestSpecifications()).pipe(
+        Effect.map((specs) => specs.map((spec) => relative(vitest.config.root, spec.moduleId)).toSorted()),
+      ),
+    (vitest) => vitestCall(() => vitest.close()).pipe(Effect.orDie),
+  );
+});
 
 /**
  * next/'s vitest-leg files: the `next` project, which pull requests and the merge queue run, and
- * `next-integration`, which the schedule runs beside it (0536).
+ * `next-integration`, which the schedule runs beside it (0536). A Promise, since the tests and this
+ * file's own check await it.
  */
-export const nextFiles = async (root: string) =>
-  [...(await selected(root, "next")), ...(await selected(root, "next-integration"))].toSorted();
+export const nextFiles = (root: string) =>
+  Effect.runPromise(
+    Effect.all([selected(root, "next"), selected(root, "next-integration")], { concurrency: 1 }).pipe(
+      Effect.map(([plain, integration]) => [...plain, ...integration].toSorted()),
+    ),
+  );
 
 /** next/'s visual files, the `next-visual` project: the end-to-end legs run them. */
-export const visualFiles = (root: string) => selected(root, "next-visual");
+export const visualFiles = (root: string) => Effect.runPromise(selected(root, "next-visual"));
 
 /** Write the lint diagnostic for each stale row of `table` and return its exit code. */
 export const main = (rows: readonly string[], write: (line: string) => void, table = "vitest.shards.json"): number => {

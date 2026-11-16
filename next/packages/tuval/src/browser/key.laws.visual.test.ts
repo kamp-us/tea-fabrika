@@ -129,6 +129,7 @@ const stored = (page: Page) =>
       const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
       const hex = (b: ArrayBufferLike | ArrayBufferView) =>
         [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+      // @effect-diagnostics-next-line asyncFunction:off -- runs inside the browser page, where no Effect runtime is loaded (0565)
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(

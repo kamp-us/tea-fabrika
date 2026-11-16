@@ -20,7 +20,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import fc from "fast-check";
-import { rolldown, type Plugin } from "rolldown";
+import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -401,8 +401,23 @@ const browserEntries = (
     });
   });
 
+/** Rolldown refused or failed: the bundle's own failure, with Rolldown's error as its cause. */
+class BundleFailure extends Schema.TaggedError<BundleFailure>()("BundleFailure", { cause: Schema.Unknown }) {}
+
+/** One call of Rolldown's Promise API, as `Effect.tryPromise` in its object form. */
+const bundling = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new BundleFailure({ cause }) });
+
+/** A Rolldown bundle of `file` for a browser, closed when `use` ends, however it ends. */
+const bundled = <A, E>(file: string, plugin: Plugin, use: (bundle: RolldownBuild) => Effect.Effect<A, E>) =>
+  Effect.acquireUseRelease(
+    bundling(() => rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [plugin] })),
+    use,
+    (bundle) => bundling(() => bundle.close()).pipe(Effect.orDie),
+  );
+
 /** Bundles `file` for a browser with no Node shims and lists each forbidden module it reaches. */
-const reach = async (next: string, label: string, file: string): Promise<ReadonlyArray<string>> => {
+const reach = Effect.fnUntraced(function* (next: string, label: string, file: string) {
   const hits: Array<string> = [];
   const watch: Plugin = {
     name: "forbidden",
@@ -417,35 +432,25 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
       return { id: source, external: true };
     },
   };
-  let bundle: Awaited<ReturnType<typeof rolldown>> | undefined;
 
-  try {
-    bundle = await rolldown({
-      input: file,
-      platform: "browser",
-      logLevel: "silent",
-      plugins: [watch],
-    });
-    await bundle.generate({ format: "esm" });
-    return hits;
-  } catch (error) {
-    return [...hits, `${label} does not bundle: ${String(error)}`];
-  } finally {
-    await bundle?.close();
-  }
-};
+  return yield* bundled(file, watch, (bundle) => bundling(() => bundle.generate({ format: "esm" }))).pipe(
+    Effect.as<ReadonlyArray<string>>(hits),
+    Effect.catchTag("BundleFailure", (error) =>
+      Effect.succeed([...hits, `${label} does not bundle: ${String(error.cause)}`]),
+    ),
+  );
+});
 
-const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
-  const all = await Promise.all(browserEntries(packagesIn(next)).map(({ label, file }) => reach(next, label, file)));
+const bundleFaults = Effect.fnUntraced(function* (next: string) {
+  const all = yield* Effect.forEach(browserEntries(packagesIn(next)), ({ label, file }) => reach(next, label, file), {
+    concurrency: "unbounded",
+  });
   return all.flat();
-};
+});
 
 /** What a browser bundle of `file` loads, and what its output keeps, each relative to `next`. Tree
- *  shaking drops a module from the output, never from the loaded list. A bundle that fails throws. */
-const bundleContents = async (
-  next: string,
-  file: string,
-): Promise<{ readonly loaded: ReadonlyArray<string>; readonly output: ReadonlyArray<string> }> => {
+ *  shaking drops a module from the output, never from the loaded list. A bundle that fails fails. */
+const bundleContents = Effect.fnUntraced(function* (next: string, file: string) {
   const loaded: Array<string> = [];
   const watch: Plugin = {
     name: "loaded",
@@ -454,16 +459,10 @@ const bundleContents = async (
       return null;
     },
   };
-  const bundle = await rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [watch] });
-
-  try {
-    const { output } = await bundle.generate({ format: "esm" });
-    const kept = output.flatMap((chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
-    return { loaded, output: kept.map((id) => shown(next, id)) };
-  } finally {
-    await bundle.close();
-  }
-};
+  const { output } = yield* bundled(file, watch, (bundle) => bundling(() => bundle.generate({ format: "esm" })));
+  const kept = output.flatMap((chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+  return { loaded, output: kept.map((id) => shown(next, id)) };
+});
 
 /** The Ledger contract's implementation: its two layers, their helpers, the referee and its store
  *  (ticket 702's plan: `Ledger.ts` imports neither implementation, nor either helper, nor `Referee`). */
@@ -483,11 +482,9 @@ describe("the real next/", () => {
       expect(library).toBeDefined();
       const entry = exportAt(exportMap(library!), "./gateway/Gateway");
       expect(entry.kind, "P17a exports the library gateway front").toBe("file");
-      expect(
-        yield* Effect.promise(() =>
-          reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : ""),
-        ),
-      ).toEqual([]);
+      expect(yield* reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
+        [],
+      );
     }),
   );
   it.live("P11: libfabrika exports its required browser entry instead of silently skipping it", () =>
@@ -496,7 +493,7 @@ describe("the real next/", () => {
       expect(library).toBeDefined();
       const entry = exportMap(library!).get(".");
       expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
-      expect(yield* Effect.promise(() => reach(NEXT, "@kampus/libfabrika", entry!))).toEqual([]);
+      expect(yield* reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
     }),
   );
   it("P11: every front file the browser check lists is exported and exists, so none is silently skipped", () => {
@@ -519,7 +516,7 @@ describe("the real next/", () => {
       expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
       const file = entry.kind === "file" ? entry.file : "";
       expect(existsSync(file), "the Ledger contract file exists").toBe(true);
-      const { loaded, output } = yield* Effect.promise(() => bundleContents(NEXT, file));
+      const { loaded, output } = yield* bundleContents(NEXT, file);
       expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
       expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
       expect(loaded.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
@@ -537,7 +534,7 @@ describe("the real next/", () => {
 
   it.live("bundles each top level for a browser without node, electron, cloudflare or MCP", () =>
     Effect.gen(function* () {
-      expect(yield* Effect.promise(() => bundleFaults(NEXT))).toEqual([]);
+      expect(yield* bundleFaults(NEXT)).toEqual([]);
     }),
   );
 });
@@ -574,7 +571,7 @@ describe("planted breaks", () => {
         "packages/libfabrika/src/gateway/Gateway.ts": lines('export {readFileSync} from "node:fs";'),
       });
       expect(
-        (yield* Effect.promise(() => bundleFaults(tree))).some(
+        (yield* bundleFaults(tree)).some(
           (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
         ),
       ).toBe(true);
@@ -698,7 +695,7 @@ describe("planted breaks", () => {
         "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
         "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
       });
-      expect([...(yield* Effect.promise(() => bundleFaults(bundles)))].sort()).toEqual(
+      expect([...(yield* bundleFaults(bundles))].sort()).toEqual(
         [
           '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
           '@kampus/libfabrika/transport/Wire reaches node:*: "node:crypto" from packages/libfabrika/src/transport/Wire.ts',
@@ -829,7 +826,7 @@ it.live("format: L12 desktop contracts bundle for a browser without their implem
       expect(entry.kind).toBe("file");
       const file = entry.kind === "file" ? entry.file : "";
       expect(existsSync(file)).toBe(true);
-      const { loaded, output } = yield* Effect.promise(() => bundleContents(NEXT, file));
+      const { loaded, output } = yield* bundleContents(NEXT, file);
       expect(loaded).toContain(shown(NEXT, file));
       expect(loaded.filter((path) => implementation.test(path))).toEqual([]);
       expect(output.filter((path) => implementation.test(path))).toEqual([]);
