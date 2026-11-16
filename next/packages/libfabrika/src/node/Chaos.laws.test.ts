@@ -14,6 +14,8 @@ const moves = Arbitrary.array(
   { minLength: 8, maxLength: 60 },
 );
 
+const armed = StepFaultTest.Model.isAnyOf(["armed"]);
+
 it.prop(
   "the fault controller charges only fresh attempts of its stable letter and survives every saved cut",
   [moves],
@@ -24,7 +26,7 @@ it.prop(
 
     for (const { pick, error } of moves) {
       const msg: typeof StepFaultTest.Msg.Type =
-        model._tag === "off" || model.attempts.length === model.errors.length
+        StepFaultTest.Model.isAnyOf(["off"])(model) || model.attempts.length === model.errors.length
           ? {
               type: "arm",
               name: "checklist:1",
@@ -43,7 +45,7 @@ it.prop(
       [model] = applyCell(StepFaultTest.controller, model, msg);
       msgs.push(msg);
 
-      if (previous._tag === "armed" && model._tag === "armed" && msg.type === "before") {
+      if (armed(previous) && armed(model) && msg.type === "before") {
         const charge =
           msg.phase === "fresh" &&
           msg.name === previous.name &&

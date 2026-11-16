@@ -513,7 +513,7 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
             expect(place.named).toBeDefined();
-            const error = exit.cause.reasons.find((r) => r._tag === "Fail");
+            const error = exit.cause.reasons.find(Cause.isFailReason);
             expect(error?._tag === "Fail" ? error.error : undefined).toBeInstanceOf(Files.SettingsError);
             outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.

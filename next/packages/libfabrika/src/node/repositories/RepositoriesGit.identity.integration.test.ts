@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -41,7 +42,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
 
                   const key = (location: string, destination: string) => {
                     const spawner = ChildProcessSpawner.make((command) => {
-                      if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
+                      if (!ChildProcess.isStandardCommand(command) || !command.args.includes("--get-url")) {
                         return real.spawn(command);
                       }
 

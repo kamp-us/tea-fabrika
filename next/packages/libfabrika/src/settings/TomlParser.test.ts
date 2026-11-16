@@ -10,7 +10,7 @@
 // - Broken TOML fails with `TomlError`, carrying the parser's `line` and its `cause`.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -66,7 +66,7 @@ it.effect.prop(
           return yield* Effect.die(new Error("Invalid TOML succeeded"));
         }
 
-        const failure = exit.cause.reasons.find((r) => r._tag === "Fail");
+        const failure = exit.cause.reasons.find(Cause.isFailReason);
         expect(failure?._tag).toBe("Fail");
 
         if (failure?._tag !== "Fail") {
@@ -208,7 +208,7 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
         expect(exit._tag).toBe("Failure");
 
         if (Exit.isFailure(exit)) {
-          const error = exit.cause.reasons.find((r) => r._tag === "Fail");
+          const error = exit.cause.reasons.find(Cause.isFailReason);
           expect(error?._tag === "Fail" ? error.error._tag : "none").toBe("TomlError");
           expect(error?._tag === "Fail" ? error.error.line : 0).toBe(n + 1);
         }

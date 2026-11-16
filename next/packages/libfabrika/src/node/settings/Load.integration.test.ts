@@ -14,11 +14,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Cause from "effect/Cause";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -27,6 +29,7 @@ import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
+import { Origin } from "../../settings/Sources.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
@@ -45,6 +48,10 @@ type File =
   | { readonly _tag: "text"; readonly text: string }
   | { readonly _tag: "folder" };
 
+/** The file's text, or null when it holds none. */
+const contents = (file: File) =>
+  Match.valueTags(file, { missing: () => null, text: (file) => file.text, folder: () => null });
+
 /** The repo text is already pinned. Only the person's file is read from disk. */
 const lay = (repo: File, person: File) =>
   Effect.gen(function* () {
@@ -58,20 +65,18 @@ const lay = (repo: File, person: File) =>
         const at = path.join(root, name, "fabrika.toml");
         yield* fs.makeDirectory(path.dirname(at), { recursive: true });
 
-        if (file._tag === "text") {
-          yield* fs.writeFileString(at, file.text);
-        }
-
-        // A folder where the file should be: present, and unreadable as a file.
-        if (file._tag === "folder") {
-          yield* fs.makeDirectory(at);
-        }
+        yield* Match.valueTags(file, {
+          missing: () => Effect.void,
+          text: (file) => fs.writeFileString(at, file.text),
+          // A folder where the file should be: present, and unreadable as a file.
+          folder: () => fs.makeDirectory(at),
+        });
 
         return at;
       });
 
     return {
-      repo: { text: repo._tag === "text" ? repo.text : null, name: REPO },
+      repo: { text: contents(repo), name: REPO },
       person: { path: yield* place("person", person), name: PERSON },
     };
   });
@@ -112,7 +117,7 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
     return "none";
   }
 
-  const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+  const fail = exit.cause.reasons.find(Cause.isFailReason);
 
   return fail?._tag === "Fail" && Schema.is(SettingsError)(fail.error) ? fail.error.reason : "not a SettingsError";
 };
@@ -205,7 +210,12 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
           expect(Exit.isSuccess(exit)).toBe(true);
 
           if (Exit.isSuccess(exit)) {
-            const fromFile = person._tag === "text" ? /port = (\d+)/.exec(person.text)?.[1] : undefined;
+            const fromFile = Match.valueTags(person, {
+              missing: () => undefined,
+              text: (file) => /port = (\d+)/.exec(file.text)?.[1],
+              folder: () => undefined,
+            });
+
             const want = flag ?? env ?? (fromFile === undefined ? DEFAULT : Number(fromFile));
             expect(exit.value.values.port).toBe(want);
             expect(exit.value.snapshot.values["instance.port"]).toBe(want);
@@ -286,7 +296,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(row.value).toBe(wanted);
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
-            expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
+            expect(report.includes(`${row.path} =`)).toBe(v.all || !Origin.isAnyOf(["default"])(row.origin));
             expect(touched).toEqual([PERSON]);
           }
         }
@@ -310,6 +320,13 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
     release.map((minimum) => ({ _tag: "stated" as const, minimum })),
   );
 
+  type RepoFile = typeof repoFile extends fc.Arbitrary<infer R> ? R : never;
+
+  const MISSING: File = { _tag: "missing" };
+
+  const none = (repo: RepoFile) =>
+    Match.valueTags(repo, { none: () => true, missing: () => false, unstated: () => false, stated: () => false });
+
   it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -323,17 +340,18 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
             Effect.scoped(
               Effect.gen(function* () {
                 const places = yield* lay(
-                  repo._tag === "stated"
-                    ? text(`fabrika-version = "${repo.minimum}"\n`)
-                    : repo._tag === "unstated"
-                      ? text("# no version\n")
-                      : { _tag: "missing" },
+                  Match.valueTags(repo, {
+                    stated: ({ minimum }) => text(`fabrika-version = "${minimum}"\n`),
+                    unstated: () => text("# no version\n"),
+                    missing: () => MISSING,
+                    none: () => MISSING,
+                  }),
                   text(""),
                 );
 
                 const exit = yield* Load.load({
                   person: places.person,
-                  ...(repo._tag === "none" ? {} : { repo: places.repo }),
+                  ...(none(repo) ? {} : { repo: places.repo }),
                   flags: flag === undefined ? {} : { [d.path]: flag },
                   env: env === undefined ? {} : { [d.env]: env },
                   // Newer than every generated release, so no stated minimum refuses the load.
@@ -348,12 +366,16 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
           expect(Exit.isSuccess(exit), String(exit)).toBe(true);
 
           if (Exit.isSuccess(exit)) {
-            const stated = repo._tag === "stated" ? repo.minimum : d.default;
-            expect(exit.value.repo).toEqual(repo._tag === "none" ? undefined : { minimum: stated });
+            const stated = Match.valueTags(repo, {
+              stated: ({ minimum }) => minimum,
+              unstated: () => d.default,
+              missing: () => d.default,
+              none: () => d.default,
+            });
+
+            expect(exit.value.repo).toEqual(none(repo) ? undefined : { minimum: stated });
             // The resolved value still follows the sources' order.
-            expect(exit.value.snapshot.values[d.path]).toBe(
-              flag ?? env ?? (repo._tag === "stated" ? repo.minimum : d.default),
-            );
+            expect(exit.value.snapshot.values[d.path]).toBe(flag ?? env ?? stated);
           }
         },
       ),

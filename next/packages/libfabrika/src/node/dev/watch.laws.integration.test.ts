@@ -19,6 +19,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
@@ -31,6 +32,9 @@ import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
 
 const SEED = 119120;
+
+/** Whether a span has ended, matched by its status's own tags. */
+const ended = (status: Tracer.SpanStatus) => Match.valueTags(status, { Started: () => false, Ended: () => true });
 
 const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
@@ -223,7 +227,7 @@ const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
     while (true) {
       const next = yield* Queue.take(queue).pipe(Effect.timeoutOption(ms));
 
-      if (next._tag === "None") {
+      if (Option.isNone(next)) {
         return got;
       }
 
@@ -378,7 +382,7 @@ describe("P15 slice 1: the watcher", () => {
               }
 
               yield* Effect.sleep("20 millis").pipe(
-                Effect.repeat({ until: () => rebuilds().every((rebuild) => rebuild.status._tag === "Ended") }),
+                Effect.repeat({ until: () => rebuilds().every((rebuild) => ended(rebuild.status)) }),
                 Effect.timeoutOrElse({
                   duration: "10 seconds",
                   orElse: () => Effect.die(new Error("a repeated rebuild never ended")),
@@ -496,7 +500,7 @@ describe("P15 slice 1: the watcher", () => {
                 // notice". So per save: exactly one rebuild that changed or failed, plus any `same`.
                 const saved = () => spans.slice(before).filter((span) => span.name === "watch.rebuild");
                 yield* Effect.sleep("20 millis").pipe(
-                  Effect.repeat({ until: () => saved().every((rebuild) => rebuild.status._tag === "Ended") }),
+                  Effect.repeat({ until: () => saved().every((rebuild) => ended(rebuild.status)) }),
                   Effect.timeoutOrElse({
                     duration: "10 seconds",
                     orElse: () => Effect.die(new Error("a rebuild for the save never ended")),

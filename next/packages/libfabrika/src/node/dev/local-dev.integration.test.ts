@@ -269,14 +269,14 @@ describe("P12 durable brain outbox", () => {
                   yield* outbox.add(row);
                   expected.push(...durable(file, encoded(rows.slice(0, index + 1))));
 
-                  if (row._tag === "started") {
+                  if (BrainEvent.isAnyOf(["started"])(row)) {
                     expected.push(...durable(last, JSON.stringify(row.start)));
                   }
 
                   expect(calls).toEqual(expected);
                 }
 
-                const latest = rows.filter((row) => row._tag === "started").at(-1);
+                const latest = rows.filter(BrainEvent.isAnyOf(["started"])).at(-1);
                 const sent: Array<typeof BrainEvent.Type> = [];
                 yield* outbox.flush((row) =>
                   Effect.sync(() => {
@@ -349,7 +349,7 @@ describe("P12 durable brain outbox", () => {
             yield* outbox.add(event);
             expect(yield* outbox.pending).toEqual([event]);
 
-            if (event._tag === "started") {
+            if (BrainEvent.isAnyOf(["started"])(event)) {
               const build = event.build === "build-b" ? "build-c" : "build-b";
               expect(yield* Effect.flip(outbox.add({ ...event, build }))).toMatchObject({
                 _tag: "BrainError",

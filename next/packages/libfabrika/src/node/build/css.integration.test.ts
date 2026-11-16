@@ -11,6 +11,7 @@ import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
@@ -101,7 +102,7 @@ const fixture = (id: number) => {
 const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
   const result = await Effect.runPromise(Effect.result(stylesheet));
 
-  if (result._tag !== "Failure") {
+  if (!Result.isFailure(result)) {
     throw new Error("expected stylesheet failure");
   }
 
@@ -331,7 +332,7 @@ describe("P16 CSS tokens", () => {
 
           const output = await Effect.runPromise(Effect.result(inlineStylesheet(f.file)));
 
-          if (output._tag === "Failure") {
+          if (Result.isFailure(output)) {
             expect(graph.named || graph.between || remoteAfterLocal, "a supported graph must bundle").toBe(true);
             expect(output.failure).toMatchObject({ _tag: "BuildError", reason: "bundle" });
             expect(await refusedBuild(f.home)).toMatchObject({

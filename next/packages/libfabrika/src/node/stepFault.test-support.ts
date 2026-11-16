@@ -41,7 +41,12 @@ export const controller = Machine.make({
   update: {
     arm: (_model, msg) => [Model.cases.armed.make({ ...msg, attempts: [] }), []],
     before: (model, msg) => {
-      if (model._tag !== "armed" || msg.phase !== "fresh" || msg.name !== model.name || msg.letter !== model.letter) {
+      if (
+        !Model.isAnyOf(["armed"])(model) ||
+        msg.phase !== "fresh" ||
+        msg.name !== model.name ||
+        msg.letter !== model.letter
+      ) {
         return [model, []];
       }
 

@@ -20,6 +20,7 @@ import { type Descriptor, ProgramRunner, Supervision } from "../../runtime/Runne
 import { mailChunk } from "../../settings/Declarations.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
+import { Content } from "../../telemetry/Trace.ts";
 
 const policy = {
   maxDeliveries: 3,
@@ -31,6 +32,8 @@ const policy = {
 const NAME = "counter:1";
 
 const PRIVATE = "private failure text P34";
+
+const keptContent = Content.isAnyOf(["kept"]);
 
 const owner = Writer.cases.person.make({ key: "SHA256:caller", for: from().for });
 
@@ -340,7 +343,7 @@ for (const adapter of ["node", "worker"] as const) {
                 concurrency: 1,
               });
 
-              const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
+              const kept = contents.flatMap((c) => (Option.isSome(c) && keptContent(c.value) ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
@@ -494,7 +497,7 @@ describe("P34 supervision recording", () => {
               const at = contents.findIndex((content) =>
                 Option.match(content, {
                   onNone: () => false,
-                  onSome: (c) => c._tag === "kept" && c.message.includes(secret),
+                  onSome: (c) => keptContent(c) && c.message.includes(secret),
                 }),
               );
 

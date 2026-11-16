@@ -7,8 +7,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { DevState } from "./DevLife.ts";
-import { address, devLife, pending, reachable, target } from "./DevLife.ts";
+import { address, DevState, devLife, pending, reachable, target } from "./DevLife.ts";
 
 const SEED = 119120;
 
@@ -17,6 +16,10 @@ type State = typeof DevState.Type;
 type Msg = typeof devLife.msg.Type;
 
 type Phase = State["_tag"];
+
+const replacing = DevState.isAnyOf(["replacing"]);
+
+const shuttingDown = DevState.isAnyOf(["stopping", "stopped"]);
 
 type Case<T extends Phase> = Extract<State, { readonly _tag: T }>;
 
@@ -535,7 +538,7 @@ describe("T708 dev life laws", () => {
           const holds = ref.phase === "spawned" || ref.phase === "online" || ref.phase === "replacing";
           expect(target(next)).toBe(ref.phase === "spawned" || ref.phase === "online" ? ref.pid : null);
           expect(pids(next)).toEqual(holds ? [ref.pid] : []);
-          expect(next._tag === "replacing" ? next.signal : null).toBe(ref.signal);
+          expect(replacing(next) ? next.signal : null).toBe(ref.signal);
 
           // A process keeps its start and the start before it for the driver's events.
           if (ref.start !== null && ref.phase !== "stopped") {
@@ -562,10 +565,10 @@ describe("T708 dev life laws", () => {
         let replaces = 0;
         walk(w, ({ prev, msg, next, choice }) => {
           // No state but a running process is a sample target, and a replace is not one.
-          expect(next._tag === "replacing" ? target(next) : null).toBeNull();
+          expect(replacing(next) ? target(next) : null).toBeNull();
           // Once replaced, a sample over the limit changes nothing until a new start.
           expect(armed && msg.type === "replacing" ? next : prev).toEqual(prev);
-          const began = msg.type === "replacing" && next._tag === "replacing" && prev._tag !== "replacing";
+          const began = msg.type === "replacing" && replacing(next) && !replacing(prev);
           // A second replace in one walk came after a new start re-armed the sampler.
           seen.again += began && replaces > 0 ? 1 : 0;
           replaces += began ? 1 : 0;
@@ -583,7 +586,7 @@ describe("T708 dev life laws", () => {
           seen.repeats += repeats.length;
           expect(repeats).toEqual(repeats.map(() => [next, []]));
 
-          if (msg.type === "started" && (next._tag === "spawned" || next._tag === "online")) {
+          if (msg.type === "started" && DevState.isAnyOf(["spawned", "online"])(next)) {
             armed = false;
           }
         });
@@ -628,7 +631,7 @@ describe("T708 dev life laws", () => {
         walk(w, ({ index, prev, choice }) => {
           // A replacing process already listened, so its listener is not a startup's: the plan's
           // `replacing` ignores it until the exit.
-          if (!active(prev._tag) || prev._tag === "replacing") {
+          if (!active(prev._tag) || replacing(prev)) {
             return;
           }
 
@@ -709,7 +712,7 @@ describe("T708 dev life laws", () => {
           count(seen, step);
           const { prev, msg, next, before } = step;
           // Only a stop enters shutdown, and nothing leaves it but its own finish.
-          expect(next._tag === "stopping" || next._tag === "stopped").toBe(
+          expect(shuttingDown(next)).toBe(
             msg.type === "stop" || before.phase === "stopping" || before.phase === "stopped",
           );
 
@@ -723,10 +726,10 @@ describe("T708 dev life laws", () => {
             }
           }
 
-          if (prev._tag === "stopping" || prev._tag === "stopped") {
+          if (shuttingDown(prev)) {
             expect(target(next)).toBeNull();
 
-            if (msg.type !== "listened" && !(prev._tag === "stopping" && msg.type === "stopped")) {
+            if (msg.type !== "listened" && !(DevState.isAnyOf(["stopping"])(prev) && msg.type === "stopped")) {
               // Queued lifecycle work and a second stop change nothing.
               expect(next).toEqual(prev);
             }

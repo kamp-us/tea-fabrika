@@ -21,6 +21,7 @@ import {
   ByteSize,
   JsonSchema as EffectJsonSchema,
   Exit,
+  Match,
   Predicate,
   Schema,
   SchemaAST,
@@ -220,11 +221,11 @@ type Contents = typeof contents extends (i: Declared) => fc.Arbitrary<infer C> ?
 const tree = ([, ds]: Declared, c: Contents) => {
   const out: Record<string, Record<string, unknown>> = {};
   ds.forEach((d, n) => {
-    const v = c.values[n]!;
+    const put = ({ value }: { readonly value: unknown }) => {
+      out[d.table] = { ...out[d.table], [d.key]: value };
+    };
 
-    if (v._tag !== "absent") {
-      out[d.table] = { ...out[d.table], [d.key]: v.value };
-    }
+    Match.valueTags(c.values[n]!, { absent: () => undefined, valid: put, invalid: put });
   });
 
   if (c.empty) {
@@ -418,15 +419,25 @@ describe("L4, generated local references resolve, with every definition present"
               return;
             }
 
-            if (v._tag === "valid") {
-              valid[d.table] = { ...valid[d.table], [d.key]: v.value };
-            } else if (c.empty) {
-              valid[d.table] ??= {};
-            }
+            Match.valueTags(v, {
+              valid: ({ value }) => {
+                valid[d.table] = { ...valid[d.table], [d.key]: value };
+              },
+              absent: () => {
+                if (c.empty) {
+                  valid[d.table] ??= {};
+                }
+              },
+              invalid: ({ value }) => {
+                if (c.empty) {
+                  valid[d.table] ??= {};
+                }
 
-            if (v._tag === "invalid" && broken === undefined) {
-              broken = { [d.table]: { [d.key]: v.value } };
-            }
+                if (broken === undefined) {
+                  broken = { [d.table]: { [d.key]: value } };
+                }
+              },
+            });
           });
           const decoded = Schema.decodeUnknownExit(editor)(valid, { onExcessProperty: "error" });
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);

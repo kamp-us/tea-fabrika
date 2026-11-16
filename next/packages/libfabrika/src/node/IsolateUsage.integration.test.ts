@@ -34,7 +34,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
-import { Owner, Recipient, Start } from "../processes/Process.ts";
+import { Owner, Recipient, Start, State } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
@@ -621,7 +621,7 @@ it.effect(
               const status = yield* manager.status(NAME).pipe(Effect.provideContext(context));
               expect(status.state._tag).toBe("live");
 
-              if (status.state._tag === "live") {
+              if (State.isAnyOf(["live"])(status.state)) {
                 expect(seen.at(-1)?.key).toBe(`${CODE.hash}/${status.state.process}`);
               }
             }

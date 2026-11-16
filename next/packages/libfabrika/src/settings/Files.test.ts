@@ -17,7 +17,7 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Cause, Effect, Exit, Match, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -57,7 +57,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
     return undefined;
   }
 
-  const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+  const reason = exit.cause.reasons.find(Cause.isFailReason);
 
   return reason?._tag === "Fail" && Schema.is(Files.SettingsError)(reason.error) ? reason.error : "not a SettingsError";
 };
@@ -91,17 +91,31 @@ const text = (entries: ReadonlyArray<Entry>) => {
   const tables: Array<string> = [];
   let port = false;
 
-  for (const e of entries) {
-    if (e._tag === "version") {
-      top.splice(0, top.length, 'fabrika-version = "1.0.0"');
-    } else if ((e._tag === "port" || e._tag === "bad-port") && !port) {
+  const portLine = (value: number | string) => {
+    if (!port) {
       port = true;
-      instance.push(`port = ${e._tag === "port" ? e.port : e.raw}`);
-    } else if (e._tag === "sibling" && !instance.some((l) => l.startsWith(`${e.key} =`))) {
-      instance.push(`${e.key} = ${e.raw}`);
-    } else if (e._tag === "table" && !tables.includes(`[${e.name}]`)) {
-      tables.push(`[${e.name}]`, ...(e.empty ? [] : ["key = 1"]));
+      instance.push(`port = ${value}`);
     }
+  };
+
+  for (const e of entries) {
+    Match.valueTags(e, {
+      version: () => {
+        top.splice(0, top.length, 'fabrika-version = "1.0.0"');
+      },
+      port: (e) => portLine(e.port),
+      "bad-port": (e) => portLine(e.raw),
+      sibling: (e) => {
+        if (!instance.some((l) => l.startsWith(`${e.key} =`))) {
+          instance.push(`${e.key} = ${e.raw}`);
+        }
+      },
+      table: (e) => {
+        if (!tables.includes(`[${e.name}]`)) {
+          tables.push(`[${e.name}]`, ...(e.empty ? [] : ["key = 1"]));
+        }
+      },
+    });
   }
 
   const lines = [...top, ...(instance.length > 0 ? ["[instance]", ...instance] : []), ...tables];
@@ -111,23 +125,38 @@ const text = (entries: ReadonlyArray<Entry>) => {
 
 /** The plan's scope table: what a file may hold. Repeated keys keep only their first in `text`. */
 const allowed = (entries: ReadonlyArray<Entry>, file: "repo" | "person") => {
-  const firstPort = entries.find((e) => e._tag === "port" || e._tag === "bad-port");
+  const firstPort = entries.find((e) =>
+    Match.valueTags(e, {
+      port: () => true,
+      "bad-port": () => true,
+      version: () => false,
+      sibling: () => false,
+      table: () => false,
+    }),
+  );
 
-  return entries.every((e) => {
-    if (e._tag === "version") {
-      return file === "repo";
-    }
-
-    if (e._tag === "port" || e._tag === "bad-port") {
-      return file === "person" && (e !== firstPort || e._tag === "port");
-    }
-
-    return false;
-  });
+  return entries.every((e) =>
+    Match.valueTags(e, {
+      version: () => file === "repo",
+      port: () => file === "person",
+      "bad-port": (e) => file === "person" && e !== firstPort,
+      sibling: () => false,
+      table: () => false,
+    }),
+  );
 };
 
 const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
-  entries.length > 0 && entries.every((e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
+  entries.length > 0 &&
+  entries.every((e) =>
+    Match.valueTags(e, {
+      port: () => file === "repo",
+      version: () => file === "person",
+      "bad-port": () => false,
+      sibling: () => false,
+      table: () => false,
+    }),
+  );
 
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
   it("both files pass only when every key in each is declared, valid and in scope", async () => {
@@ -445,12 +474,16 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           const tree: Record<string, Record<string, unknown>> = {};
           let ok = true;
           ds.forEach((d, n) => {
-            const v = doc.values[n]!;
+            const put = (value: unknown, valid: boolean) => {
+              tree[d.table] = { ...tree[d.table], [d.key]: value };
+              ok &&= valid && d.scope.includes(doc.file);
+            };
 
-            if (v._tag !== "absent") {
-              tree[d.table] = { ...tree[d.table], [d.key]: v.value };
-              ok &&= v._tag === "valid" && d.scope.includes(doc.file);
-            }
+            Match.valueTags(doc.values[n]!, {
+              absent: () => undefined,
+              valid: ({ value }) => put(value, true),
+              invalid: ({ value }) => put(value, false),
+            });
           });
 
           if (doc.empty) {

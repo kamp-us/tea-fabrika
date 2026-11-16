@@ -7,7 +7,7 @@
 //   `mailChunk` at `mail.chunk`, a byte size from 1 KiB to 1 MiB written as text ("64 KiB"), both in
 //   `all`, scope `["repo"]`, reload on restart.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Result, Schema } from "effect";
+import { ByteSize, Cause, Effect, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
@@ -99,7 +99,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
               expect(Exit.isFailure(answer), `${setting.path} = ${text} from ${source} is out of range`).toBe(true);
 
               if (Exit.isFailure(answer)) {
-                const failure = answer.cause.reasons.find((r) => r._tag === "Fail");
+                const failure = answer.cause.reasons.find(Cause.isFailReason);
                 expect(failure?._tag === "Fail" && failure.error, "the refusal is a settings error").toBeInstanceOf(
                   Files.SettingsError,
                 );

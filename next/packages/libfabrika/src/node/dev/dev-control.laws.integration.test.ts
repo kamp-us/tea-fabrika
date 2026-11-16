@@ -20,7 +20,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
-import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
@@ -79,17 +79,28 @@ type Walk = typeof Walk.Type;
 
 type Row = typeof BrainEvent.Type;
 
-type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: number };
+const Cause = Schema.Struct({
+  reason: Schema.Literals(["open", "crash", "memory"]),
+  bytes: Schema.optionalKey(Schema.Finite),
+});
+
+type Cause = typeof Cause.Type;
+
+const Exit = Schema.Struct({ exitCode: Schema.NullOr(Schema.Finite), signal: Schema.NullOr(Schema.String) });
+
+type Exit = typeof Exit.Type;
 
 // What a row must say, before its start ids are known.
-type Fact =
-  | { readonly _tag: "started"; readonly at: number; readonly pid: number; readonly cause: Cause }
-  | { readonly _tag: "replacing"; readonly at: number; readonly pid: number; readonly bytes: number }
-  | { readonly _tag: "exited" | "restarting"; readonly at: number; readonly cause: Cause; readonly exit: Exit }
-  | { readonly _tag: "braked"; readonly at: number; readonly reason: string; readonly exit: Exit }
-  | { readonly _tag: "stopped"; readonly at: number };
+const Fact = Schema.TaggedUnion({
+  started: { at: Schema.Finite, pid: Schema.Finite, cause: Cause },
+  replacing: { at: Schema.Finite, pid: Schema.Finite, bytes: Schema.Finite },
+  exited: { at: Schema.Finite, cause: Cause, exit: Exit },
+  restarting: { at: Schema.Finite, cause: Cause, exit: Exit },
+  braked: { at: Schema.Finite, reason: Schema.String, exit: Exit },
+  stopped: { at: Schema.Finite },
+});
 
-type Exit = { readonly exitCode: number | null; readonly signal: string | null };
+type Fact = typeof Fact.Type;
 
 type Call = {
   readonly url: string;
@@ -683,7 +694,7 @@ describe("T708 dev control laws", () => {
           const fact = facts[index]!;
           const bytes = (cause: Cause) => (cause.bytes === undefined ? {} : { bytes: cause.bytes });
 
-          if (row._tag === "started" && fact._tag === "started") {
+          if (BrainEvent.isAnyOf(["started"])(row) && Fact.isAnyOf(["started"])(fact)) {
             // Each start links to the one before it; the first had no durable predecessor.
             expect(row).toMatchObject({ after: start, pid: fact.pid, build: "test", reason: fact.cause.reason });
             expect(row.bytes).toBe(fact.cause.bytes);
@@ -693,15 +704,15 @@ describe("T708 dev control laws", () => {
 
           expect(row.start).toBe(start);
 
-          if (row._tag === "exited" && fact._tag === "exited") {
+          if (BrainEvent.isAnyOf(["exited"])(row) && Fact.isAnyOf(["exited"])(fact)) {
             expect(row).toMatchObject({ reason: fact.cause.reason, ...fact.exit, ...bytes(fact.cause) });
             expect(row.bytes).toBe(fact.cause.bytes);
-          } else if (row._tag === "restarting" && fact._tag === "restarting") {
+          } else if (BrainEvent.isAnyOf(["restarting"])(row) && Fact.isAnyOf(["restarting"])(fact)) {
             expect(row).toMatchObject({ reason: fact.cause.reason, ...fact.exit });
             expect(row.bytes).toBe(fact.cause.bytes);
-          } else if (row._tag === "braked" && fact._tag === "braked") {
+          } else if (BrainEvent.isAnyOf(["braked"])(row) && Fact.isAnyOf(["braked"])(fact)) {
             expect(row).toMatchObject({ reason: fact.reason, ...fact.exit });
-          } else if (row._tag === "replacing" && fact._tag === "replacing") {
+          } else if (BrainEvent.isAnyOf(["replacing"])(row) && Fact.isAnyOf(["replacing"])(fact)) {
             // The replace names the process it signaled and the size the sampler saw.
             expect(row).toMatchObject({ reason: "memory", pid: fact.pid, bytes: fact.bytes, limit: BRAIN.memory });
           } else {

@@ -401,7 +401,7 @@ const flow = async (sample: Flow) => {
                 exit: { exitCode: 1, signal: null, stderr: "" },
               });
               observe({ type: "start", worker: config.name, pid: 27003 });
-              yield* awaitEvent((row) => row._tag === "started" && row.after === previous);
+              yield* awaitEvent((row) => BrainEvent.isAnyOf(["started"])(row) && row.after === previous);
               // A call waits for a replacement until it listens, as the real one does.
               yield* listen;
             }
@@ -436,7 +436,7 @@ const flow = async (sample: Flow) => {
             reason: "intensity",
             exit: { exitCode: 1, signal: null, stderr: "" },
           });
-          yield* awaitEvent((row) => row._tag === "braked");
+          yield* awaitEvent(BrainEvent.isAnyOf(["braked"]));
           outputs.outbox.push(yield* outbox.pending);
         }),
       ).pipe(

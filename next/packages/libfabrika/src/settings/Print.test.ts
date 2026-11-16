@@ -183,7 +183,7 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         ] as const) {
           const shown = blocks(report, paths);
           // Visibility by origin alone: an explicit value equal to its default still shows.
-          const want = rows.filter((r) => every || r.origin._tag !== "default").map((r) => r.path);
+          const want = rows.filter((r) => every || !Sources.Origin.isAnyOf(["default"])(r.origin)).map((r) => r.path);
           expect(
             shown.map((b) => b.path),
             report,
@@ -197,21 +197,24 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
             expect(block.text).toContain(String(row.default));
             expect(collapse(block.text)).toContain(collapse(row.doc));
 
-            if (origin._tag === "file") {
-              expect(block.text).toContain(origin.file);
-              expect(block.text).toMatch(new RegExp(`(^|\\D)${origin.line}(\\D|$)`));
-            }
-
-            if (origin._tag === "flag" || origin._tag === "env") {
-              expect(block.text).toContain(origin.name);
-            }
+            Sources.Origin.match(origin, {
+              default: () => undefined,
+              file: ({ file, line }) => {
+                expect(block.text).toContain(file);
+                expect(block.text).toMatch(new RegExp(`(^|\\D)${line}(\\D|$)`));
+              },
+              flag: ({ name }) => expect(block.text).toContain(name),
+              env: ({ name }) => expect(block.text).toContain(name),
+            });
           }
         }
 
         // --all changes visibility only: an explicit row reads the same in both reports. The last
         // row's lines run to the end, so a closing line after it may differ.
         const explicit = (report: string) =>
-          blocks(report, paths).filter((b) => rows.find((r) => r.path === b.path)!.origin._tag !== "default");
+          blocks(report, paths).filter(
+            (b) => !Sources.Origin.isAnyOf(["default"])(rows.find((r) => r.path === b.path)!.origin),
+          );
 
         const [a, b] = [explicit(all), explicit(plain)];
         expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));

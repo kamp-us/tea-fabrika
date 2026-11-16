@@ -29,6 +29,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
@@ -1192,7 +1193,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
             );
 
-            if (result._tag === "Failure") {
+            if (Result.isFailure(result)) {
               reached.add("failure");
               clean(JSON.stringify(result.failure), "an error");
               clean(String(result.failure), "an error's text");

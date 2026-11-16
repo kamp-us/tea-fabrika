@@ -26,6 +26,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as PlatformError from "effect/PlatformError";
 import * as References from "effect/References";
 import * as Sink from "effect/Sink";
@@ -100,18 +101,19 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
     FileSystem.makeNoop({
       readFileString: (path) => {
         if (path === at) {
-          return person._tag === "text"
-            ? Effect.succeed(person.text)
-            : person._tag === "unreadable"
-              ? Effect.fail(
-                  PlatformError.systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "readFileString",
-                    pathOrDescriptor: path,
-                  }),
-                )
-              : Effect.fail(missing("readFileString", path));
+          return Match.valueTags(person, {
+            text: ({ text }) => Effect.succeed(text),
+            unreadable: () =>
+              Effect.fail(
+                PlatformError.systemError({
+                  _tag: "PermissionDenied",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+            missing: () => Effect.fail(missing("readFileString", path)),
+          });
         }
 
         return path.endsWith(".fabrika/fabrika.toml")

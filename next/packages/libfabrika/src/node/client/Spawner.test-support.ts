@@ -8,7 +8,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
-import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
@@ -42,7 +42,7 @@ export const spawner = (child: Child, seen: Seen) =>
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
-        if (command._tag !== "StandardCommand") {
+        if (!ChildProcess.isStandardCommand(command)) {
           return yield* Effect.die("the hands spawn one command, never a pipeline");
         }
 

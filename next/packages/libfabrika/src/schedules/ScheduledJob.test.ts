@@ -18,6 +18,10 @@ const make = (period: number) =>
 
 const ctx = stubCtxThrowingProxy<unknown>();
 
+const idle = ScheduledJob.Model.isAnyOf(["idle"]);
+
+const running = ScheduledJob.Model.isAnyOf(["running"]);
+
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
 // Fast-check supplies boundary times and invalid durations; there is no domain schema for them.
@@ -78,14 +82,14 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
             outstanding += cmds.length;
             expect(outstanding).toBeLessThanOrEqual(1);
 
-            if (msg.type === "timer" && prev._tag === "idle" && msg.at >= prev.next) {
+            if (msg.type === "timer" && idle(prev) && msg.at >= prev.next) {
               expect(cmds).toEqual([write({ due: msg.at, period: prev.period })]);
               expect(next).toEqual({ _tag: "running", due: msg.at, period: prev.period });
             } else {
               expect(cmds).toEqual([]);
             }
 
-            if (prev._tag === "idle") {
+            if (idle(prev)) {
               const [due, jobs] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
                 machine,
                 prev,
@@ -96,7 +100,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
               expect(jobs).toEqual([write({ due: prev.next, period: prev.period })]);
             }
 
-            if (msg.type !== "timer" && prev._tag === "idle") {
+            if (msg.type !== "timer" && idle(prev)) {
               expect(next).toEqual(prev);
             }
           }
@@ -123,10 +127,10 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
         fc.constant(messages),
         (steps) => {
           for (const { prev, msg, next } of steps) {
-            expect(ScheduledJob.wake(next)).toBe(next._tag === "idle" ? next.next : null);
+            expect(ScheduledJob.wake(next)).toBe(idle(next) ? next.next : null);
             expect(next.period).toBe(ms);
 
-            if (prev._tag === "running" && msg.type !== "timer") {
+            if (running(prev) && msg.type !== "timer") {
               expect(next).toEqual({ _tag: "idle", next: msg.at + prev.period, period: prev.period });
             }
           }
@@ -151,7 +155,7 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
         (steps) => {
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
-            const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
+            const at = ScheduledJob.Model.match(prev, { idle: ({ next }) => next - 1, running: ({ due }) => due });
 
             const [unchanged, sent] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
               machine,
@@ -161,7 +165,7 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
 
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
-            const ignored = msg.type === "timer" && (prev._tag === "running" || msg.at < prev.next);
+            const ignored = msg.type === "timer" && (running(prev) || msg.at < prev.next);
             expect(ignored ? next : prev).toEqual(prev);
             expect(ignored ? cmds : []).toEqual([]);
           }

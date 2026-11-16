@@ -5,6 +5,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import type * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
@@ -12,6 +13,26 @@ import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 
 type Model = typeof Open.machine.model.Type;
+
+// The state union is internal to the module, so its own matcher is out of reach: Effect's Match it is.
+const ready = Match.type<Model>().pipe(
+  Match.tag("ready", () => true),
+  Match.orElse(() => false),
+);
+
+const closed = Match.type<Model>().pipe(
+  Match.tag("closed", () => true),
+  Match.orElse(() => false),
+);
+
+const saving = Match.type<Model>().pipe(
+  Match.tag("saving", () => true),
+  Match.orElse(() => false),
+);
+
+// Ready is reached only from ready, or from saving on its acknowledgement.
+const readyOnlyFromSaved = ({ prev, next, msg }: { prev: Model; next: Model; msg: Msg }) =>
+  !ready(next) || ready(prev) || (saving(prev) && msg.type === "saved");
 
 type Msg = typeof Open.machine.msg.Type;
 
@@ -98,23 +119,30 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           decision?._tag === "accepted" ? "saving" : decision?._tag === "denied" ? "refused" : "awaiting_trust",
         );
 
-        if (result._tag === "saving") {
-          expect(result.snapshot).toEqual(snapshot);
-          expect(result.request).toBe(selection);
-          const other = draw.selections.find((id) => id !== selection)!;
-          const receipt = draw.receipts[pick % draw.receipts.length]!;
-          expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
-          expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
-          const ready = send({ type: "saved", selection, request: selection, receipt });
-          expect(ready._tag).toBe("ready");
+        Match.value(result).pipe(
+          Match.tag("saving", (result) => {
+            expect(result.snapshot).toEqual(snapshot);
+            expect(result.request).toBe(selection);
+            const other = draw.selections.find((id) => id !== selection)!;
+            const receipt = draw.receipts[pick % draw.receipts.length]!;
+            expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
+            expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
+            const done = send({ type: "saved", selection, request: selection, receipt });
+            expect(done._tag).toBe("ready");
 
-          if (ready._tag === "ready") {
-            expect(ready.snapshot).toEqual(snapshot);
-            expect(ready.receipt).toEqual(receipt);
-          }
-        } else if (result._tag === "refused") {
-          expect(result.reason).toBe("denied");
-        }
+            Match.value(done).pipe(
+              Match.tag("ready", (done) => {
+                expect(done.snapshot).toEqual(snapshot);
+                expect(done.receipt).toEqual(receipt);
+              }),
+              Match.orElse(() => undefined),
+            );
+          }),
+          Match.tag("refused", (result) => {
+            expect(result.reason).toBe("denied");
+          }),
+          Match.orElse(() => undefined),
+        );
 
         send({ type: "close" });
         expect(model._tag).toBe("closed");
@@ -164,14 +192,10 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
       replay(1);
       answer(past, true);
       replay(2);
-      propertyInvariant(
-        Open.machine,
-        undefined,
-        fc.constant(messages),
-        ({ prev, next, msg }) =>
-          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg.type === "saved"),
-        { seed: 119120, numRuns: 1 },
-      );
+      propertyInvariant(Open.machine, undefined, fc.constant(messages), readyOnlyFromSaved, {
+        seed: 119120,
+        numRuns: 1,
+      });
     }),
     { seed: 119120, numRuns: 300 },
   );
@@ -194,22 +218,28 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         messages.push(msg);
         expect(next._tag).toBe(expected === "history" ? "checking" : expected);
 
-        if (next._tag !== "closed") {
-          expect(next.selection).toBe(selection);
-        }
+        Match.value(next).pipe(
+          Match.tag("closed", () => undefined),
+          Match.orElse((next) => {
+            expect(next.selection).toBe(selection);
+          }),
+        );
 
-        if (next._tag === "ready") {
-          expect(accepted).toBe(true);
-          expect(msg.type === "saved" || model._tag === "ready").toBe(true);
-          expect(next.snapshot).toEqual(snapshot);
-        }
+        Match.value(next).pipe(
+          Match.tag("ready", (next) => {
+            expect(accepted).toBe(true);
+            expect(msg.type === "saved" || ready(model)).toBe(true);
+            expect(next.snapshot).toEqual(snapshot);
+          }),
+          Match.orElse(() => undefined),
+        );
 
         model = next;
         cursor.phase = expected;
       };
 
       const select = (pick: number) => {
-        if (model._tag !== "closed") {
+        if (!closed(model)) {
           old.push({ type: "checked", selection, snapshot });
           old.push({ type: "history", selection, events: [] });
           old.push({
@@ -358,14 +388,10 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       send(stale, "awaiting_trust");
       expect(model).toEqual(pending);
       // tea's own runner checks the same list from the actual init as well.
-      propertyInvariant(
-        Open.machine,
-        undefined,
-        fc.constant(messages),
-        ({ prev, next, msg }) =>
-          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg.type === "saved"),
-        { seed: 119120, numRuns: 1 },
-      );
+      propertyInvariant(Open.machine, undefined, fc.constant(messages), readyOnlyFromSaved, {
+        seed: 119120,
+        numRuns: 1,
+      });
     }),
     { seed: 119120, numRuns: 1000 },
   );

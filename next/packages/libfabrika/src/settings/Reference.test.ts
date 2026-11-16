@@ -239,7 +239,7 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
         const rows = Reference.rows(group, snapshot);
 
         const want = rows
-          .filter((r) => r.origin._tag !== "default" && newer(r.since, minimum))
+          .filter((r) => !Sources.Origin.isAnyOf(["default"])(r.origin) && newer(r.since, minimum))
           .map((r) => ({ path: r.path, since: r.since, minimum }));
 
         const got = Reference.warnings(rows, minimum).map((w) => ({

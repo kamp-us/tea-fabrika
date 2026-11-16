@@ -14,6 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
@@ -1112,9 +1113,10 @@ describe("P16 cleanup and recording", () => {
             for (const row of data) {
               expect(row.status._tag).toBe("Ended");
 
-              if (row.status._tag === "Ended") {
-                expect(row.status.endTime >= row.status.startTime).toBe(true);
-              }
+              Match.valueTags(row.status, {
+                Started: () => undefined,
+                Ended: ({ endTime, startTime }) => expect(endTime >= startTime).toBe(true),
+              });
 
               expect(Object.values(row.attributes).some((v) => v === "failure" || v === "success")).toBe(true);
             }

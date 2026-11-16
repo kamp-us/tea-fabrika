@@ -12,7 +12,7 @@
 // - T730, P38 slice 2, L10: `since`, the release that introduced the key, is a required string
 //   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
+import { Config, ConfigProvider, Effect, Exit, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -122,7 +122,13 @@ describe("L1, a Setting remains a Config", () => {
       fc.asyncProperty(segments, supplied, async (path, value) => {
         const setting = declare(path.join("."));
         expect(Config.isConfig(setting)).toBe(true);
-        const provider = ConfigProvider.fromUnknown(value._tag === "absent" ? {} : nest(path, value.value));
+        const provider = ConfigProvider.fromUnknown(
+          Match.valueTags(value, {
+            absent: () => ({}),
+            valid: ({ value }) => nest(path, value),
+            invalid: ({ value }) => nest(path, value),
+          }),
+        );
         const parsed = await run(setting.parse(provider));
         const yielded = await run(setting.pipe(Effect.provide(ConfigProvider.layer(provider))));
         expect(Exit.isSuccess(yielded)).toBe(Exit.isSuccess(parsed));
@@ -205,11 +211,19 @@ describe("L3, absence gives the default, and an invalid present value never does
     await fc.assert(
       fc.asyncProperty(segments, supplied, fc.boolean(), async (path, value, emptyFile) => {
         const setting = declare(path.join("."));
-        const root = value._tag === "absent" ? (emptyFile ? {} : nest(path.slice(0, -1), {})) : nest(path, value.value);
+        const root = Match.valueTags(value, {
+          absent: () => (emptyFile ? {} : nest(path.slice(0, -1), {})),
+          valid: ({ value }) => nest(path, value),
+          invalid: ({ value }) => nest(path, value),
+        });
         // An explicit empty string is supplied, not absent: it must fail, never become the default.
         const exit = await run(setting.parse(ConfigProvider.fromUnknown(root, { preserveEmptyStrings: true })));
 
-        const want = value._tag === "absent" ? DEFAULT : value._tag === "valid" ? value.expected : "a failure";
+        const want = Match.valueTags(value, {
+          absent: () => DEFAULT,
+          valid: ({ expected }) => expected,
+          invalid: () => "a failure",
+        });
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,

@@ -10,7 +10,7 @@
 //   decoded values, and per dotted path the Origin of the source that supplied it, or `default`.
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Setting from "./Setting.ts";
 import * as Sources from "./Sources.ts";
@@ -202,7 +202,7 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         expect(Exit.isFailure(exit)).toBe(true);
 
         if (Exit.isFailure(exit)) {
-          expect(exit.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
+          expect(exit.cause.reasons.some(Cause.isFailReason)).toBe(true);
         }
       }),
       check,

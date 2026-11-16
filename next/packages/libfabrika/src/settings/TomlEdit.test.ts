@@ -3,7 +3,7 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -210,7 +210,7 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, T
     return yield* Effect.die(new Error("A refused edit returned text"));
   }
 
-  const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+  const reason = exit.cause.reasons.find(Cause.isFailReason);
   expect(reason?._tag).toBe("Fail");
 
   if (reason?._tag !== "Fail") {

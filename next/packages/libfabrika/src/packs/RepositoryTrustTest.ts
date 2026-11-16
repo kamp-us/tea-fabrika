@@ -3,11 +3,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -161,7 +163,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
-                    expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
+                    expect(same.filter(Event.isAnyOf(["decision"]))).toEqual([accepted]);
 
                     const reopened = Schema.decodeSync(Id.InputId)(
                       `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
@@ -198,7 +200,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
                       expect(state._tag).toBe(candidate.known ? "saving" : "awaiting_trust");
 
-                      if (state._tag === "saving") {
+                      const saving = Match.value(state).pipe(
+                        Match.tag("saving", () => true),
+                        Match.orElse(() => false),
+                      );
+
+                      if (saving) {
                         const ready = yield* session.send({
                           type: "saved",
                           selection: reopened,
@@ -304,8 +311,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
 
                       const history = yield* trust.history(key, operator);
-                      expect(history.filter((fact) => fact._tag === "decision")).toEqual([decision]);
-                      expect(history.filter((fact) => fact._tag === "opened")).toEqual([opened]);
+                      expect(history.filter(Event.isAnyOf(["decision"]))).toEqual([decision]);
+                      expect(history.filter(Event.isAnyOf(["opened"]))).toEqual([opened]);
                     }
 
                     // The adapter's actual writes, observed before the real ledger sees them.
@@ -425,7 +432,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(Exit.isFailure(result)).toBe(true);
 
                     if (Exit.isFailure(result)) {
-                      const failure = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                      const failure = result.cause.reasons.find(Cause.isFailReason);
                       expect(failure?._tag).toBe("Fail");
 
                       if (failure?._tag === "Fail") {

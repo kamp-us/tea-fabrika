@@ -9,13 +9,16 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -180,8 +183,8 @@ describe("T878 composed repository opening", () => {
                   expect(saved.hash).toBe(checked.snapshot.hash);
                   expect(result.value.snapshot.commit).toBe(repoSnapshot(body).commit);
                 } else {
-                  expect(result.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
-                  const failure = result.cause.reasons.find((r) => r._tag === "Fail");
+                  expect(result.cause.reasons.some(Cause.isFailReason)).toBe(true);
+                  const failure = result.cause.reasons.find(Cause.isFailReason);
 
                   if (failure?._tag === "Fail") {
                     expect(failure.error.reason._tag).toBe("InvalidDocument");
@@ -432,7 +435,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 });
 
                 const spawner = ChildProcessSpawner.make((command) => {
-                  if (command._tag !== "StandardCommand") {
+                  if (!ChildProcess.isStandardCommand(command)) {
                     return Effect.die("unexpected pipeline");
                   }
 
@@ -545,9 +548,12 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     );
                     outputs.state.push(opened.value);
 
-                    if (opened.value._tag === "awaiting_trust") {
-                      outputs.pending.push(opened.value);
-                    }
+                    Match.value(opened.value).pipe(
+                      Match.tag("awaiting_trust", (pending) => {
+                        outputs.pending.push(pending);
+                      }),
+                      Match.orElse(() => undefined),
+                    );
 
                     outputs.report.push(JSON.stringify(opened.value));
                   } else {

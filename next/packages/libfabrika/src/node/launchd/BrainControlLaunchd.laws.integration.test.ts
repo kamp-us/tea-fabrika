@@ -13,7 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
-import { BrainControl } from "../../desktop/BrainControl.ts";
+import { BrainControl, Status } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
 import { BrainProbe, Readiness, Children } from "../../desktop/BrainProbe.ts";
 import { BrainService } from "../../desktop/BrainService.ts";
@@ -79,7 +79,7 @@ it.effect.prop(
             return { code: 0, stdout: "", stderr: "" };
           }
 
-          if ((yield* outside.read).job._tag === "absent") {
+          if (Status.isAnyOf(["absent"])((yield* outside.read).job)) {
             return {
               code: 113,
               stdout: "",

@@ -5,6 +5,7 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
+import { DevState } from "./DevLife.ts";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
 
 const SEED = 119120;
@@ -38,7 +40,7 @@ const running = Effect.fnUntraced(function* (pid: number) {
 
   const vouches = (name: Signal) =>
     SubscriptionRef.get(life.state).pipe(
-      Effect.map((s) => s._tag === "replacing" && s.pid === pid && s.signal === name),
+      Effect.map((s) => DevState.isAnyOf(["replacing"])(s) && s.pid === pid && s.signal === name),
     );
 
   // What the brain records once a step moved the state: the fact its new signal names.
@@ -154,7 +156,7 @@ describe("the memory restart's bounded stop, next/", () => {
         if (code === "ESRCH") {
           expect(exit).toEqual(Exit.void);
         } else {
-          expect(Exit.isFailure(exit) && exit.cause.reasons.every((reason) => reason._tag === "Die")).toBe(true);
+          expect(Exit.isFailure(exit) && exit.cause.reasons.every(Cause.isDieReason)).toBe(true);
         }
       }).pipe(Effect.scoped),
     { arbitrary: { seed: SEED, runs: 50 } },

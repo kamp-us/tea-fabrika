@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -29,7 +30,7 @@ const checkRead = (value: unknown, committed: boolean, commit: string, text: str
   expect(read._tag).toBe(committed ? "committed" : "disk");
   expect(new TextDecoder().decode(read.bytes)).toBe(text);
 
-  if (read._tag === "committed") {
+  if (SourceMetadata.isAnyOf(["committed"])(read)) {
     expect(read.commit).toBe(commit);
   } else {
     expect(Object.hasOwn(read, "commit")).toBe(false);
@@ -324,7 +325,7 @@ it.effect.prop(
             checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
             expect(JSON.stringify(source.value)).not.toContain(root);
           } else {
-            const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
+            const fail = source.cause.reasons.find(Cause.isFailReason);
             expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
           }
 
@@ -502,13 +503,13 @@ it.each(GitLaws.gits)(
                         root,
                       );
 
-                      if (resolved.value._tag === "committed") {
+                      if (SourceMetadata.isAnyOf(["committed"])(resolved.value)) {
                         expect(resolved.value.commit).toBe(pinned);
                       }
 
                       expect(JSON.stringify(resolved.value)).not.toContain(root);
                     } else {
-                      const reason = resolved.cause.reasons.find((r) => r._tag === "Fail");
+                      const reason = resolved.cause.reasons.find(Cause.isFailReason);
                       expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");
                     }
 

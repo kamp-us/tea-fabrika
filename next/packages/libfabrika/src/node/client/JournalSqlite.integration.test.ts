@@ -24,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
@@ -47,7 +48,7 @@ const everyKeyWhole = (label: string) =>
       const read = yield* journal.read(task).pipe(Effect.result);
       const shown = JSON.stringify(read).slice(0, 200);
       expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
-      const entry = read._tag === "Success" ? read.success : null;
+      const entry = Result.isSuccess(read) ? read.success : null;
       expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();
       expect(entry?._tag, `J2: ${task} ${label} holds a whole result entry`).toBe("result");
       const n = entry?._tag === "result" ? Number(entry.execution.replace(/^execution-/, "")) : Number.NaN;

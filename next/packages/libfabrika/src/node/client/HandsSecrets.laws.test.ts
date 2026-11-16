@@ -33,10 +33,12 @@ import * as Hex from "effect/encoding/Hex";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as References from "effect/References";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
@@ -46,6 +48,7 @@ import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test
 import { start } from "../../client/HandsStart.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import * as Id from "../../Id.ts";
+import { Result as TaskResult } from "../../tasks/Task.ts";
 import { fcTypeId } from "../../tasks/TasksTest.ts";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey } from "../../transport/ClientKey.ts";
@@ -72,7 +75,7 @@ const decodeStored = Schema.decodeUnknownOption(
 const forms = (d: string): ReadonlyArray<string> => {
   const bytes = Base64Url.decode(d);
 
-  if (bytes._tag === "Failure") {
+  if (Result.isFailure(bytes)) {
     return [d];
   }
 
@@ -106,7 +109,7 @@ const spanText = (span: Tracer.NativeSpan): string =>
     text([...span.attributes]),
     text(span.events),
     text(span.links.map((l) => l.attributes)),
-    span.status._tag === "Ended" ? exitText(span.status.exit) : "",
+    Match.valueTags(span.status, { Started: () => "", Ended: ({ exit }) => exitText(exit) }),
   ].join("\n");
 
 const bytes = (s: string) => new TextEncoder().encode(s);
@@ -353,7 +356,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
         yield* stop;
         yield* change(CHANGES[cell.pick % CHANGES.length] ?? "none", cell.ms);
         // A refused hello holds for one process at most, so a later one can be online again.
-        hello = hello._tag === "refuse" ? HelloAnswer.cases.not_granted.make({}) : hello;
+        hello = HelloAnswer.isAnyOf(["refuse"])(hello) ? HelloAnswer.cases.not_granted.make({}) : hello;
         live = yield* boot(cell.pick + ++starts);
       }
     }
@@ -385,7 +388,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
       done.add(
         t.result === undefined
           ? "result:none"
-          : `result:${t.result._tag === "failed" ? t.result.reason : t.result._tag}`,
+          : `result:${TaskResult.matchOrElse(t.result, { failed: ({ reason }) => reason }, (r) => r._tag)}`,
       );
     }
   });

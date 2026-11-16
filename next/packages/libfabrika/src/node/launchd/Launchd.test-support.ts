@@ -7,10 +7,11 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
@@ -88,7 +89,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
-        if (command._tag !== "StandardCommand") {
+        if (!ChildProcess.isStandardCommand(command)) {
           return yield* failure("pipeline");
         }
 
@@ -277,30 +278,40 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     const entry = replacement.competing;
     const staged = path.join(competing, "dirent");
 
-    if (entry._tag === "opaque") {
-      yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
+    const regular = (bytes: string, mode: number) =>
+      Effect.andThen(fs.writeFileString(staged, bytes), fs.chmod(staged, mode));
 
-      // A file system that refuses these bytes throws above. One that changes them stops here.
-      if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
-        return yield* Effect.die("this file system did not keep the link's target bytes");
-      }
-    } else if (entry._tag === "file" || entry._tag === "private" || entry._tag === "copy") {
-      yield* fs.writeFileString(staged, entry._tag === "copy" ? ours : entry.bytes);
-      yield* fs.chmod(staged, entry._tag === "file" ? entry.mode : 0o600);
-    } else if (entry._tag === "symlink") {
-      const target = path.join(home, "other.plist");
+    yield* Match.valueTags(entry, {
+      opaque: (entry) =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
 
-      if (!entry.dangling) {
-        yield* fs.writeFileString(target, "foreign-target");
-      }
+          // A file system that refuses these bytes throws above. One that changes them stops here.
+          if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
+            return yield* Effect.die("this file system did not keep the link's target bytes");
+          }
+        }),
+      file: (entry) => regular(entry.bytes, entry.mode),
+      private: (entry) => regular(entry.bytes, 0o600),
+      copy: () => regular(ours, 0o600),
+      symlink: (entry) =>
+        Effect.gen(function* () {
+          const target = path.join(home, "other.plist");
 
-      yield* fs.symlink(entry.path === "relative" ? "other.plist" : target, staged);
-    } else {
-      yield* fs.makeDirectory(staged);
-      yield* fs.writeFileString(path.join(staged, "kept"), entry.bytes);
-      // A rename cannot put a directory over a file, so the competing writer removes the file first.
-      yield* fs.remove(plist, { force: true });
-    }
+          if (!entry.dangling) {
+            yield* fs.writeFileString(target, "foreign-target");
+          }
+
+          yield* fs.symlink(entry.path === "relative" ? "other.plist" : target, staged);
+        }),
+      directory: (entry) =>
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(staged);
+          yield* fs.writeFileString(path.join(staged, "kept"), entry.bytes);
+          // A rename cannot put a directory over a file, so the competing writer removes the file first.
+          yield* fs.remove(plist, { force: true });
+        }),
+    });
 
     // Rename a distinct inode into place, so the old job's bytes are not what sits at the path.
     yield* fs.rename(staged, plist);

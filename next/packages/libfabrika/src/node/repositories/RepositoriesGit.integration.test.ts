@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -185,7 +186,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
 
                   const injected = ChildProcessSpawner.make((command) => {
                     if (
-                      command._tag === "StandardCommand" &&
+                      ChildProcess.isStandardCommand(command) &&
                       command.args.includes(fault.operation) &&
                       command.args.includes(fault.flag)
                     ) {
@@ -225,7 +226,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   expect(Exit.isFailure(exit)).toBe(true);
 
                   if (Exit.isFailure(exit)) {
-                    const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                    const fail = exit.cause.reasons.find(Cause.isFailReason);
                     expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
                   }
                 }
@@ -482,7 +483,7 @@ it.effect.prop(
           Effect.gen(function* () {
             expect(command._tag).toBe("StandardCommand");
 
-            if (command._tag !== "StandardCommand") {
+            if (!ChildProcess.isStandardCommand(command)) {
               return yield* Effect.die("unexpected pipeline");
             }
 
@@ -582,7 +583,7 @@ it.effect.prop(
               if (Exit.isSuccess(result)) {
                 expect(result.value.snapshot.text).toBeNull();
               } else {
-                const reason = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                const reason = result.cause.reasons.find(Cause.isFailReason);
                 expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
               }
 

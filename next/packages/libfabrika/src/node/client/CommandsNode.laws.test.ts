@@ -24,10 +24,11 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
-import { Command, type Result } from "../../tasks/Task.ts";
+import { Command, Result } from "../../tasks/Task.ts";
 import { property } from "../../Testing.test-support.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
@@ -207,7 +208,7 @@ describe("P39 slice 4b: the real command layer", () => {
 
               expect(exit.value._tag, "C1: a child past its cap is stopped, never waited on forever").toBe("Some");
 
-              if (exit.value._tag !== "Some") {
+              if (Option.isNone(exit.value)) {
                 return;
               }
 
@@ -219,11 +220,11 @@ describe("P39 slice 4b: the real command layer", () => {
                 seen.spawns,
               );
               reached.add(
-                want._tag === "failed"
-                  ? want.reason
-                  : want._tag === "exited" && want.version === ""
-                    ? "exited:empty"
-                    : "exited",
+                Result.match(want, {
+                  failed: ({ reason }) => reason,
+                  exited: ({ version }) => (version === "" ? "exited:empty" : "exited"),
+                  unknown: () => "exited",
+                }),
               );
 
               if (child.endless) {
@@ -255,7 +256,7 @@ describe("P39 slice 4b: the real command layer", () => {
         };
 
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
-        const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
+        const answer = Exit.isSuccess(exit) && Option.isSome(exit.value) ? exit.value.value : null;
         expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
       }
     }),

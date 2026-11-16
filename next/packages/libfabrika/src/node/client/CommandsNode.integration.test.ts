@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
 import { Commands } from "../../client/Commands.ts";
-import { Command } from "../../tasks/Task.ts";
+import { Command, Result } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import { capped } from "./internal/capped.ts";
 
@@ -32,7 +32,7 @@ describe("P39 slice 4b: the real command on a real host", () => {
         const answer = yield* commands.execute(Command.cases.git_version.make({}));
         expect(answer._tag, `C4: real git exits: ${JSON.stringify(answer)}`).toBe("exited");
 
-        if (answer._tag !== "exited") {
+        if (!Result.isAnyOf(["exited"])(answer)) {
           return;
         }
 

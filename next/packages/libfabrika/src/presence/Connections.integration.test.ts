@@ -6,6 +6,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Match from "effect/Match";
+import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
@@ -132,7 +134,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
             const result = yield* Effect.result(action);
             expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "storage" } });
 
-            if (result._tag === "Failure") {
+            if (Result.isFailure(result)) {
               expect(result.failure).toBeInstanceOf(LedgerError);
             }
           }
@@ -344,7 +346,9 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 
         for (const name of ["connections.join", "connections.online", "connections.probe", "connections.leave"]) {
           expect(
-            spans.filter((span) => span.name === name && span.status._tag === "Ended"),
+            spans.filter(
+              (span) => span.name === name && Match.valueTags(span.status, { Started: () => false, Ended: () => true }),
+            ),
             name,
           ).toHaveLength(1);
         }

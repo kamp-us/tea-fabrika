@@ -116,7 +116,11 @@ const faultControl = Effect.fnUntraced(function* () {
     before: Effect.fnUntraced(function* (input: typeof StepFaultTest.Before.Type) {
       const [previous, next] = yield* send({ type: "before", ...input });
 
-      if (previous._tag === "armed" && next._tag === "armed" && next.attempts.length > previous.attempts.length) {
+      if (
+        StepFaultTest.Model.isAnyOf(["armed"])(previous) &&
+        StepFaultTest.Model.isAnyOf(["armed"])(next) &&
+        next.attempts.length > previous.attempts.length
+      ) {
         const attempt = next.attempts.at(-1);
 
         if (attempt !== undefined) {

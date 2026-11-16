@@ -16,7 +16,7 @@ import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Line, lineFor, PAGE } from "../ledger/Log.ts";
+import { Appended, type Line, lineFor, PAGE, Waited } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { inbox, letterLine } from "../processes/Mailbox.ts";
 import { ProcessEvent } from "../processes/Process.ts";
@@ -67,7 +67,7 @@ const append = Effect.fnUntraced(function* (ledger: Ledger["Service"], stream: s
   const placed = yield* ledger.append(stream, key, line);
   expect(placed._tag).toBe("placed");
 
-  if (placed._tag !== "placed") {
+  if (!Appended.isAnyOf(["placed"])(placed)) {
     throw new Error("test history was refused");
   }
 
@@ -78,7 +78,7 @@ const head = Effect.fnUntraced(function* (sql: Sql, stream: string) {
   const ledger = yield* reader(sql);
   const waited = yield* ledger.wait(stream, 0);
 
-  return waited._tag === "ready" ? waited.rev : 0;
+  return Waited.match(waited, { ready: ({ rev }) => rev, parked: () => 0 });
 }, Effect.orDie);
 
 const restart = (reason: string) =>

@@ -23,7 +23,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
-import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import type { Install } from "../../runtime/Code.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { bodyText, fetchClient } from "./dev-client.test-support.ts";
@@ -200,7 +200,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 
               const assertExits = Effect.gen(function* () {
                 const rows = yield* outbox.pending;
-                const exits = rows.filter((event) => event._tag === "exited");
+                const exits = rows.filter(BrainEvent.isAnyOf(["exited"]));
                 expect(exits).toHaveLength(expected.length);
                 expect(new Set(exits.map((event) => event.id)).size).toBe(expected.length);
                 expect(
@@ -240,7 +240,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 
                 const rows = yield* outbox.pending;
                 // Startup may already be acknowledged; last remains durable in either case.
-                const start = rows.filter((event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
+                const start = rows.filter(BrainEvent.isAnyOf(["started"])).at(-1)?.start ?? (yield* outbox.last)!;
                 const exit = { exitCode: item.exitCode, signal: item.signal, stderr: "" };
                 expected.push({
                   start,
@@ -253,22 +253,30 @@ it("every observed exit is durable once across restart or brake, with its reason
 
                 if (index < restarts.length) {
                   observe({ type: "restart", worker: "life-test", exit, delay: item.delay });
-                  yield* waitForEvent((event) => event._tag === "restarting" && event.start === start);
+                  yield* waitForEvent((event) => BrainEvent.isAnyOf(["restarting"])(event) && event.start === start);
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "restarting" && event.start === start),
+                    (yield* outbox.pending).find(
+                      (event) => BrainEvent.isAnyOf(["restarting"])(event) && event.start === start,
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                   yield* assertExits;
                   observe({ type: "start", worker: "life-test", pid: 27002 + index });
-                  yield* waitForEvent((event) => event._tag === "started" && event.after === start);
+                  yield* waitForEvent((event) => BrainEvent.isAnyOf(["started"])(event) && event.after === start);
                   // The replacement listens, so calls that waited for it are answered.
                   yield* listen;
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "started" && event.after === start),
+                    (yield* outbox.pending).find(
+                      (event) => BrainEvent.isAnyOf(["started"])(event) && event.after === start,
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                 } else {
                   observe({ type: "stop", worker: "life-test", exit, reason });
-                  const pending = yield* waitForEvent((event) => event._tag === "braked" && event.start === start);
-                  expect(pending.filter((event) => event._tag === "braked")).toMatchObject([
+
+                  const pending = yield* waitForEvent(
+                    (event) => BrainEvent.isAnyOf(["braked"])(event) && event.start === start,
+                  );
+
+                  expect(pending.filter(BrainEvent.isAnyOf(["braked"]))).toMatchObject([
                     { start, reason, exitCode: exit.exitCode, signal: expected.at(-1)!.signal },
                   ]);
                   // Review 5: HEAD keeps braked but loses the final exited event and its RSS.
@@ -306,7 +314,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           ),
         );
 
-        expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
+        expect(pending.filter(BrainEvent.isAnyOf(["stopped"]))).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
         fetch.mockImplementation(async (_url, options) => {
@@ -530,7 +538,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
     observe({ type: "start", worker: REPLACE, pid: NEW.pid });
     yield* until("the replacement's started row", rows, (all) =>
-      all.some((row) => row._tag === "started" && row.after === first),
+      all.some((row) => BrainEvent.isAnyOf(["started"])(row) && row.after === first),
     );
   });
 
@@ -610,7 +618,7 @@ effectIt.effect.prop(
             (n) => n > 1,
           ).pipe(Effect.option);
 
-          if (seen._tag === "Some" && w.world.ended === "SIGKILL") {
+          if (Option.isSome(seen) && w.world.ended === "SIGKILL") {
             yield* w.replaced("SIGKILL");
           }
         }
@@ -636,7 +644,7 @@ effectIt.effect.prop(
         );
         expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
         const bytes = kib * 1024;
-        expect(rows.find((row) => row._tag === "replacing")).toMatchObject({
+        expect(rows.find(BrainEvent.isAnyOf(["replacing"]))).toMatchObject({
           start: w.first,
           at: sent.at,
           reason: "memory",
@@ -645,16 +653,16 @@ effectIt.effect.prop(
           limit,
           grace,
         });
-        expect(rows.filter((row) => row._tag === "killed")).toEqual(
+        expect(rows.filter(BrainEvent.isAnyOf(["killed"]))).toEqual(
           honors ? [] : [expect.objectContaining({ start: w.first, at: sent.at + grace, pid: OLD.pid })],
         );
-        expect(rows.find((row) => row._tag === "exited")).toMatchObject({
+        expect(rows.find(BrainEvent.isAnyOf(["exited"]))).toMatchObject({
           start: w.first,
           reason: "memory",
           bytes,
           signal: honors ? null : "SIGKILL",
         });
-        expect(rows.find((row) => row._tag === "started")).toMatchObject({
+        expect(rows.find(BrainEvent.isAnyOf(["started"]))).toMatchObject({
           after: w.first,
           pid: NEW.pid,
           reason: "memory",
@@ -860,7 +868,7 @@ effectIt.effect.prop(
           });
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
-          expect(rows.filter((row) => row._tag === "started")).toEqual([]);
+          expect(rows.filter(BrainEvent.isAnyOf(["started"]))).toEqual([]);
 
           return;
         }
@@ -871,7 +879,7 @@ effectIt.effect.prop(
         w.observe({ type: "exit", worker: REPLACE, exit });
         w.observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
         w.observe({ type: "start", worker: REPLACE, pid });
-        yield* until("the crash's exited row", w.rows, (all) => all.some((row) => row._tag === "exited"));
+        yield* until("the crash's exited row", w.rows, (all) => all.some(BrainEvent.isAnyOf(["exited"])));
 
         for (let n = 0; n < 5; n++) {
           yield* TestClock.adjust("1 second");
@@ -880,7 +888,9 @@ effectIt.effect.prop(
 
         expect(w.world.asked, "no sample of any process").toBe(0);
         expect(w.signals).toEqual([]);
-        expect((yield* w.rows).filter((row) => row._tag === "started" && row.after === w.first)).toEqual([]);
+        expect((yield* w.rows).filter((row) => BrainEvent.isAnyOf(["started"])(row) && row.after === w.first)).toEqual(
+          [],
+        );
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },

@@ -9,7 +9,9 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
@@ -297,9 +299,10 @@ describe("T518 Id format", () => {
           const status = made[0]!.status;
           expect(status._tag).toBe("Ended");
 
-          if (status._tag === "Ended") {
-            expect(Exit.isSuccess(status.exit)).toBe(validPrefix(name));
-          }
+          Match.valueTags(status, {
+            Started: () => undefined,
+            Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(validPrefix(name)),
+          });
         }
       }),
       options,
@@ -599,9 +602,10 @@ describe("T518 Id order and generation", () => {
           expect(span.attributes.get("type")).toBe(type);
           expect(span.status._tag).toBe("Ended");
 
-          if (span.status._tag === "Ended") {
-            expect(Exit.isSuccess(span.status.exit)).toBe(index === 0);
-          }
+          Match.valueTags(span.status, {
+            Started: () => undefined,
+            Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(index === 0),
+          });
         }
       }).pipe(Effect.provide(Id.Generator.layer), Effect.withTracer(tracer));
     },
@@ -1022,7 +1026,7 @@ describe("T518 shared Id generator", () => {
   const checkSchedule = async (schedule: Schedule) => {
     const Specific = Id.make(schedule.type);
     const allocated: Array<string> = [];
-    const check = Specific.ast.checks?.find((check) => check._tag === "Filter");
+    const check = Specific.ast.checks?.find((check) => check instanceof SchemaAST.Filter);
 
     if (check === undefined) {
       throw new Error("The Id schema needs its real format check");

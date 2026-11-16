@@ -350,7 +350,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
           accounting: accounting(name),
         }).load;
 
-        if (saved === null || saved.journal._tag === "idle") {
+        if (saved === null || QuotaRunnerTest.supervision.fields.journal.isAnyOf(["idle"])(saved.journal)) {
           yield* (yield* runner(name)).open("test");
 
           return;

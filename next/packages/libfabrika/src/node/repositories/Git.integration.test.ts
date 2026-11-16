@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -194,7 +195,7 @@ const session = (
         const stat = yield* fs.lstat(at).pipe(Effect.option);
         transcript.push(
           `disk ${file}: ${
-            stat._tag === "None"
+            Option.isNone(stat)
               ? "absent"
               : stat.value.type === "SymbolicLink"
                 ? `link ${yield* fs.readLink(at)}`

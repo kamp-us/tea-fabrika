@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1057-as-no-manual-tag-comparison-5-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:47:26-08:00",
+  "ended": "2026-11-16T01:29:46-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for anti-slop judgment slice AS-no-manual-tag-comparison-5 (rule anti-slop-effect/no-manual-tag-comparison, decision 0567 under 0563), in next/, on branch fabrikalfa/antislop-no-manual-tag-comparison-5 at eeb8ecdbb, which already holds main and pull request 1366. Counted with the rule forced to error in a scratch config outside the repo, over next/packages/libfabrika/src/ node, settings, packs, schedules, presence and the files right in src/: 303 hits (node 201, settings 49, packs 37, schedules 10, src root 3, presence 3), 180 in exam paths (node 114, settings 36, packs 18, schedules 7, src root 3, presence 2) and 123 in product files (node 87, packs 19, settings 13, schedules 3, presence 1). No hit waits on 1366: it is merged and in the base. All 180 exam hits were fixed by hand with the Edit tool, no quick fix and no codemod, by 0567's order: the union's own isAnyOf or match (BrainEvent, DevState, Content, SourceMetadata, Origin, Appended, Waited, State, Status, Task Result, HelloAnswer, Event, ScheduledJob.Model, the step-fault Model, the supervision journal), Effect's own guards for its own types (Cause.isFailReason, Cause.isDieReason, Option.isSome and isNone, Result.isSuccess and isFailure, ChildProcess.isStandardCommand, instanceof SchemaAST.Filter), and Effect's Match where no matcher is in reach (Match.valueTags on span status and on test-local plain unions, Match.value with Match.tag on the internal open-machine state, which its module does not export). One test-local oracle type, the expected facts in node/dev/dev-control.laws.integration.test.ts, became a Schema.TaggedUnion so its cases can be matched, with exited and restarting as two cases where the type had one member carrying both tags; its values and every assertion are unchanged. No assertion was deleted or narrowed, no Predicate.isTagged on a typed value, no disable line, no lock line and no .oxlintrc.json change. Left for the build: 123 product hits, listed by file in the note.",
+  "plants": [
+    {
+      "law": "settings/Files.test.ts L7 and T730 L2 (allowed, scopeOnly and the document tree rewritten with Match.valueTags)",
+      "plant": "settings/Files.ts schemaFor: the scope filter on declarations replaced by one that keeps every declaration, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "schedules/ScheduledJob.test.ts L2 (idle and running checks rewritten with ScheduledJob.Model.isAnyOf)",
+      "plant": "schedules/ScheduledJob.ts wake: answers due instead of null while running, then restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Checks, all at the branch head before the commit (eeb8ecdbb plus this step's edits): pnpm format, then NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 17 of 18 parts green; the one red is oxlint-plugins/lint.ts saying the rule has no hit left in next/packages/libfabrika/src/* and asking for the folder in the rule's block, which is the lock this slice may not write (owner ruling: locks come later in one small pull request). The list ratchet exits 0. One pnpm typecheck green. Narrow vitest under nice -n 15 --maxWorkers=3, all green: 20 plain files (128 tests), 21 integration files (169 tests, Git.integration.test.ts's real-only law skipped at the default depth and run again green with FABRIKA_TEST_DEPTH=full), and next/apps/fabrika/src/chaos.laws.integration.test.ts (17 tests), which reads node/Chaos.test-support.ts. Product hits left for the build (123): node 87 (node/dev/DevLife.ts 42, node/dev/local-dev.ts 7, node/repositories/OpenRepository.ts 7, node/launchd/BrainControlLaunchd.ts 6, node/dev/dev.ts 4, node/dev/watch.ts 4, node/client/KeyFile.ts 3, node/repositories/RepositoriesGit.ts 3, node/repositories/Sources.ts 3, node/repositories/internal/gitMemory.ts 3, node/settings/Load.ts 2, node/client/internal/capped.ts 1, node/dev/dev.fixture.ts 1, node/dev/internal/watcher.ts 1), packs 19 (packs/internal/open.ts 12, packs/RepositoryTrustLedger.ts 7), settings 13 (JsonSchema.ts 3, Print.ts 3, Snapshot.ts 3, Sources.ts 2, Reference.ts 1, Setting.ts 1), schedules 3 (ScheduledJob.ts), presence 1 (Connections.ts), src root 0. Committed with plain git (stepcommit.sh's own checks named in the report).",
+  "step": "tests"
+}
