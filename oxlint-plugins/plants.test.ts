@@ -409,6 +409,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-hand-tag",
       "one-store-hook",
       "no-clock-in-view",
+      // p65's import half, planted as the exam's deps trees at next/ paths in package-deps.test.ts (0591).
+      "package-deps",
       // Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
       "no-ledger-sql",
       "no-node-filesystem",

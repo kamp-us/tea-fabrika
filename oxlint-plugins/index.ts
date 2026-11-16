@@ -40,6 +40,7 @@ import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
+import { packageDeps } from "./package-deps.ts";
 import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
@@ -93,6 +94,7 @@ const plugin: Plugin = {
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
+    "package-deps": packageDeps,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,

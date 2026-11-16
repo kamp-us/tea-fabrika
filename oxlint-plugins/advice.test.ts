@@ -378,15 +378,16 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const folders = jsdocsWarnFolders(repo(config, {}));
     // A new package: no config line names it, and libfabrika's module rule does not reach it.
     const clean = "next/packages/planted/src";
-    const { lint, done } = repo(
-      config,
-      Object.fromEntries(
+    const { lint, done } = repo(config, {
+      ...Object.fromEntries(
         [clean, ...folders].flatMap((folder) => [
           [`${folder}/Planted.ts`, text],
           [`${folder}/Planted.test.ts`, text],
         ]),
       ),
-    );
+      // The new package's manifest, so `fabrika/package-deps` (p65) finds the file in a package.
+      "next/packages/planted/package.json": JSON.stringify({ name: "@kampus/planted" }),
+    });
 
     try {
       const blocked = lint(`${clean}/Planted.ts`);
