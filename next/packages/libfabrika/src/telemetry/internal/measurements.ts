@@ -9,7 +9,7 @@
 import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
-import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
+import { type Measurements, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -321,11 +321,10 @@ export const archiveDays = Effect.fn(
       try: () => sql.transaction(() => due(sql, object, now)),
       catch: sinkError,
     });
-    yield* Effect.forEach(
-      parts,
-      (part) => archivePart(sql, archive, part).pipe(Effect.catch((_: SinkError) => Effect.void)),
-      { concurrency: 1, discard: true },
-    );
+    yield* Effect.forEach(parts, (part) => archivePart(sql, archive, part).pipe(Effect.ignore), {
+      concurrency: 1,
+      discard: true,
+    });
   },
-  Effect.catch((_: SinkError) => Effect.void),
+  (effect) => Effect.ignore(effect),
 );

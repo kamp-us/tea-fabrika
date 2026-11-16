@@ -3,7 +3,20 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A catch that only discards the error is `Effect.ignore`. On for the folders at zero, their
+        // tests too. The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["src/telemetry/**/*.ts"],
+            "options": { "diagnosticSeverity": { "catchToIgnore": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
