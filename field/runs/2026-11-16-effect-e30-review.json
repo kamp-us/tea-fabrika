@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:24:48-08:00",
+  "ended": "2026-11-15T22:38:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of judgment slice E30 (strictEffectProvide), in next/, at 218dac0d3 from merge base f7169af, merge-ready with one finding. The 14 disable lines each quote the installed @effect/tsgo 0.63.0 message exactly ('If this is an entry point, you can safely disable this diagnostic.', read from the binary's strings) and sit directly above their hit: with only strictEffectProvide raised to error, effect-tsgo diagnostics shows none of the 14 and leaves 21 product hits, the 21 the brief says wait on 1366 (none of this diff's files is in 1366's 70). Verdicts: plant.ts:52 is a run edge, an entry point, keep the line; hands.ts:109 is an entry point (it wraps the program's whole rest); dev.ts:110 and :181 are weaker but right code, kept under the 0565 amendment; Headless.ts builds a stateless layer in the run's own Scope, the scope fix the checker asks for, not provide in disguise, though it changes nothing observable. Id.Generator.make is the old layer body unchanged (git diff -w), bundle.ts now requires Path as bundlePrograms already did, instance.ts ties the Alchemy state and engine to the runtime scope deploy forks into. loosening.sh hits are comment lines, imports and two expect calls rewrapped, none loosened. TS377000 warnings are the expected 14 in the app and plant.ts:52 in oxlint-plugins' typecheck, so the lock must also reach oxlint-plugins/tsconfig.json.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13.7,
+  "note": "Ran at 218dac0d3, one file at a time with TYPESAFE_API_KEY unset, all green: libfabrika Id.test.ts (29), OpenRepository.test.ts (4), error-cause.integration.test.ts (4), build-assets.integration.test.ts (25), watch.laws.integration.test.ts (4), client/Start.types.test.ts (1); the app's exam/no-of.integration.test.ts (4), local-instance.integration.test.ts (2), tezgah-runner.laws.integration.test.ts (2), and the workerd laws instance-one-file.integration.test.ts (7) and settings-start.integration.test.ts (7). tsc --noEmit for libfabrika (clean), next/apps/fabrika and oxlint-plugins (only TS377000). The e2e client-protocol suite (Playwright) was not run. Plants in a scratch worktree, removed after: main's instance.ts put back, instance-one-file stays green (the finding); Headless without provideContext, the app's tsc red with missing WebSocketConstructor; Id.Generator.make as one shared value, Id.test.ts 10 red.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "instance-one-file.integration.test.ts, the real Alchemy deploy through startDev",
+      "plant": "next/apps/fabrika/src/instance.ts back to main's Effect.provide(localState()) and Effect.provide(engine)",
+      "result": "green"
+    },
+    {
+      "law": "the app's typecheck over Headless.start's callers",
+      "plant": "Headless.ts builds the constructor layer but drops Effect.provideContext(sockets)",
+      "result": "red"
+    },
+    {
+      "law": "Id.test.ts, independent generators and ordered ids",
+      "plant": "Id.Generator.make returns one generator shared by every layer",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}
