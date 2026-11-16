@@ -465,7 +465,7 @@ const worldOn = async (
           },
   });
   // The undeclared Cmd is an explicit broken module, not supported authoring.
-  const loaded = (): unknown =>
+  const loaded = () =>
     options.unknownCmd
       ? {
           ...p,

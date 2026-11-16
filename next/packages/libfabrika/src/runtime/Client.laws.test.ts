@@ -503,8 +503,9 @@ const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKin
 const noteType = (note: unknown): string | null =>
   Predicate.hasProperty(note, "type") && Predicate.isString(note.type) ? note.type : null;
 
-const noteRev = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
+/** A notice's `rev` when it is a number: every note the walks make carries a number. */
+const noteRev = (note: unknown): number | null =>
+  Predicate.hasProperty(note, "rev") && Predicate.isNumber(note.rev) ? note.rev : null;
 
 // L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
 // notices it accepted, since a valid foreign whole can replace the brain's historical value.

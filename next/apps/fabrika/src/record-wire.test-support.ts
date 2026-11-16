@@ -27,7 +27,7 @@ export const startupFixture = <A extends StartsTest.Fixture & { readonly home: s
   return { ...input, ...(config.start === undefined ? {} : { start: config.start }) };
 };
 
-export const recordCall = Effect.fnUntraced(function* (invoke: () => Promise<unknown>) {
+export const recordCall = Effect.fnUntraced(function* <A>(invoke: () => Promise<A>) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance record proxy exposes Promise-returning stub calls
   return yield* Effect.tryPromise({
     try: invoke,
