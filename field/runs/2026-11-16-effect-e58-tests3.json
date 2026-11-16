@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e58-tests3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:14:19-08:00",
+  "ended": "2026-11-16T01:16:17-08:00",
+  "parent": "2026-11-16-effect-e58-review2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/, our tooling), from branch head a7145200c, no pull request. The lead ruled (step rules at 6fa6c757c, after 0589's no lock lines) that a judgment slice adds no @effect-diagnostics ignore line: while the check is off, the line does nothing and the typecheck fails with TS377000 'directive has no effect'. So this step took out the one line the tests2 step had put above the entry point, and oxlint-plugins/parallel.ts is back byte for byte to its state before 9e9f7a005. The site stays as it is and is listed here for the sweep's final lock PR, which adds the line together with the lock. Listed site: oxlint-plugins/parallel.ts:163 (column 33, the Effect.provide in NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true }) under if (import.meta.main), the script's own entry point). Line the lock PR adds directly above it: // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\" Hits: met 1, quick fix 0, hand edits 0, left 1 (listed, not fixed), waiting on 1366 0. No lock line, no tsconfig change, no LOCKED row, no law changed, so no plant was owed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2,
+  "note": "Ran at a7145200c plus this change: tsc --noEmit -p . in oxlint-plugins, exit 0 with no output, so no TS377000; effect-tsgo diagnostics --format text --file oxlint-plugins/parallel.ts with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true, 1 error at parallel.ts(163,33) strictEffectProvide, the listed site (the 5 unstableApiUsage warnings and 1 schemaClassMissingBrand message are other checks); vitest oxlint-plugins/parallel.test.ts, 7 passed; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 15 of 17 parts passed and lint:dead and lint:promise-types died while the kernel killed a process for lack of memory, so each ran again alone and passed (lint:dead: ledger PASS, none new; lint:promise-types: 0 findings); the list ratchet passed. Not run: the whole repo's pnpm typecheck (the package typecheck covers the one file), --changed origin/main (the config refuses broad runs), any .integration. law (none reached).",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "plants": [],
+  "listed": [
+    {
+      "site": "oxlint-plugins/parallel.ts:163",
+      "line": "// @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\""
+    }
+  ],
+  "step": "tests"
+}

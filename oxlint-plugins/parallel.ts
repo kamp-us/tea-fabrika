@@ -160,6 +160,5 @@ if (import.meta.main) {
     yield* parallel(yield* (yield* Stdio.Stdio).args);
   });
   // The run prints its own failure above, so the runtime only sets the exit code.
-  // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
   NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true });
 }
