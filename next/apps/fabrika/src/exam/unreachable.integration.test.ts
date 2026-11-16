@@ -74,7 +74,7 @@ const reported = (root: string) => {
     encoding: "utf8",
   });
   expect(run.status, run.stderr).toBe(0);
-  return Schema.decodeUnknownSync(Report)(run.stdout);
+  return Schema.decodeSync(Report)(run.stdout);
 };
 
 /** Every export the pass reports, by id, as `pnpm lint:dead` would gate it. */
