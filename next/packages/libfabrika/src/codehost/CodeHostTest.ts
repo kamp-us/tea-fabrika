@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -299,8 +300,8 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
             expect(Schema.is(merging ? Merged : Updated)(answer)).toBe(true);
 
             for (const key of ["head", "tree", "main", "commit"] as const) {
-              if (key in answer) {
-                expect(String(Reflect.get(answer, key)).length).toBe(head.length);
+              if (Predicate.hasProperty(answer, key)) {
+                expect(String(answer[key]).length).toBe(head.length);
               }
             }
 

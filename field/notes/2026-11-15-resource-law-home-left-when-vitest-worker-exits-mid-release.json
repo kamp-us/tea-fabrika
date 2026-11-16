@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-15-resource-law-home-left-when-vitest-worker-exits-mid-release",
+  "date": "2026-11-15",
+  "lanes": [],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The resource law L16 in next/apps/fabrika/e2e/resources.laws.visual.test.ts went red in full run 43798557082, leg tests (e2e-1), on a branch that changed nothing near it. The fault {at: port, kind: hold} was interrupted, and the first-window suite's temp home (a /tmp/fw. folder) still existed 10 seconds after the child Vitest exited. No process or listener was left. It is the first time this law failed in the last 60 scheduled runs.",
+  "cause": "The law signals only the child's main Vitest process, which exits 1 ms later and leaves its fork worker without a parent. The fixture's scope then starts its releases on the worker's disconnect. But Vitest's fork worker calls process.exit(1) at the first message it sends once the parent is gone (vitest 5.0.5, init-forks onError), and its runner sends a batched task update up to 100 ms after a test starts (the 100 ms throttle in run.js). A hold at the port comes a few tens of ms into the test, so a signal that lands in that window kills the worker between the port's release and the home's. A scratch repro with the same Vitest showed it: a worker holding a 500 ms cleanup died with exit code 1 when signalled 0, 20, 60 or 90 ms after its hold, and finished its cleanup at 120 ms and later. Not a product bug: no app code runs before the server is acquired. The law's 200 ms poll made the window rare.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Test files only. Each owned resource in the first-window fixture (next/apps/fabrika/e2e/p14.test-support.ts) and the one-file fixture can carry a synchronous undo, kept on the worker's process exit until the scope's release has run, as the tmp package's graceful cleanup does: the homes are removed with rmSync and dev.ts gets SIGTERM. The law now looks for the hold every 10 ms instead of 200, so it signals inside the window more often, and a pinned law runs the failing case, {at: port, kind: hold} with SIGINT.",
+  "test": "Not run here: visual laws do not run on the laptop. The next full run proves it, with the pinned law and the walks. The repro also showed that Node runs the exit listener on that exit (exit-handler code=1).",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43798557082"
+  ]
+}

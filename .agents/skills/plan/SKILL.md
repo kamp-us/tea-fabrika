@@ -62,6 +62,12 @@ when to keep going and how to write for a reader who saw none of the work.
   ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
+- **Existing tools first** ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
+  [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)). Before a new helper,
+  function or tool, look for one in the repo, in the packages it already installs and on npm. Give
+  each new one a line under `## Existing tools`: the path or name, what you searched, and the one
+  you found or why none fits. A new function inside a file that exists gets its line too.
+  `plancheck.sh --draft` holds the line for a new code file in the files table.
 - Ask "is this a setting?" of each new choice, and say why not when it is not
   ([0069](../../../.decisions/0069-choices-are-settings.md)).
 - Say what fact is lost if it is not recorded now.
