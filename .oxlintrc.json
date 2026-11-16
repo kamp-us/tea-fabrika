@@ -727,6 +727,15 @@
       }
     },
     {
+      // 0591: every machine in next/ has a laws file beside it with a property law, and runs the sync
+      // test or names why not (`oxlint-plugins/machine-has-laws.ts`), the exam's `laws-scan` made a
+      // rule. Its own override, so the `next/**` block above stays the `.agents/` block's twin.
+      "files": ["next/apps/**", "next/packages/**", "next/programs/**"],
+      "rules": {
+        "fabrika/machine-has-laws": "error"
+      }
+    },
+    {
       // p32 and p65, strict layers: the names of our own packages each part of next/ may import, as
       // written. `pnpm lint:layers` (code-graph, `layer-rules.json`) holds which part's files may
       // reach which; this holds the names, so it tells two front files of one module apart and
