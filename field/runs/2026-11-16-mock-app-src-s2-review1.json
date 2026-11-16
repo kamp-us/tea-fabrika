@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-src-s2-review1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:23:52-08:00",
+  "ended": "2026-11-16T01:44:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "The one review of slice 2 of the mock sweep in next/ (ticket 1067, decision 0555), branch fabrikalfa/mock-app-src-s2 at cd1e2352a, against docs/plan/quests/mock-app-src-PLAN.md at eb7e56100 (slice 2: B1 to B3, the Alchemy patch, its lockfile hash, the amended dev.ts row). Sent back to tests, which owns the patch, for one blocking class: the patch changes how a failed workerd start is reported, beyond the gap it was made for (0054; patch-upstream-locally.md: a patch adds what its issue asks). The patched Node Workerd's error() classifies only the last 4096 characters of stderr (patch line 379, makeTail), where the old Node code and Alchemy's own Bun path classify all of it (patch lines 347 and 350). A probe that drove the installed patched Workerd.mjs with a fake spawner whose workerd writes 'service core:user:brain: Uncaught SyntaxError' and then 9644 characters of stack, exit 1, got SystemError WorkerdStartFailed 'The Workers runtime failed to start.', 4 spawns (SystemError is retried 3 times) and a 4095-character detail.stderr without the service line; with 3804 characters it got ConfigError WorkerdUserScript and 1 spawn. The fix: keep the whole startup stderr for error(), for example by reusing the module's own makeStreamPump on Stream.toReadableStream(handle.stderr) as the Bun path does (which also drops the near-copy makeForward), keep the 4096 tail for exited(), and pin the case with a scenario in exam/alchemy-lifecycle.test.ts. The rest holds: the serve scope waiting for workerd's exit is Effect's spawner release with SIGKILL and detached false, correct and what B3 needs; the signal read matches Effect 4.1.3's message 'Process interrupted due to receipt of signal' (platform-node-shared NodeChildProcessSpawner.ts:755), and B1's SIGKILL check reaches it; src/ unpatched is acceptable since on Node only dist runs and src is read only under the bun and worker conditions, whose Bun path is unchanged; the lockfile changes only the patch hash, in 5 places; B1 keeps every old assertion and adds that each start came through its spawner; B3's wait awaits each handle's exitCode, a real wait, and the spawns floor of 1 proves the spawner reaches Alchemy; dev.ts's Context.add hands the caller's spawner to every Cloudflare provider, which on Node is the same NodeServices spawner Alchemy's own PlatformServices builds, so production behavior is unchanged. loosening.sh: 5 hits, none a loosening (import and header lines, the patch and lockfile, and the shutdown law's closed flag replaced by isRunning being false after the wait). git merge-tree with origin/main: one conflict, dev.ts's import line, since main moved dev.ts to namespace imports; trivial at the fold. Ran at cd1e2352a, each alone with nice -n 19 vitest --maxWorkers=1 and TYPESAFE_API_KEY unset: exam/alchemy-lifecycle.test.ts 2 of 2; instance-one-file.integration.test.ts 10 runs, 9 green with 7 of 7 and the first red on the p33 recovery law (line 792) after 115 s, which left one orphaned workerd that was stopped; dev.laws.integration.test.ts 5 of 5; local-instance.integration.test.ts 3 of 3. pnpm typecheck exit 0; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 of 18 parts passed. No workerd left after the runs.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Finding rows for the lead, in the review's answer: flaky_test on instance-one-file.integration.test.ts:792 (second sighting after the tests step's), doc_drift on dev.ts:114. The upstream issue is the merge session's; its patch section should carry the src/core/workerd/Workerd.ts change, since upstream edits src, not dist.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "B1",
+      "plant": "by reading: signalOf in the patch returns null; every exit event's signal is null, so the SIGKILL check is red",
+      "result": "red"
+    },
+    {
+      "law": "B1",
+      "plant": "by reading: the patch spawns with node:child_process again; os.children stays empty, so the spawned-through check is red (the tests step ran it red)",
+      "result": "red"
+    },
+    {
+      "law": "B3",
+      "plant": "by reading: the instance laws drop Effect.provide(spawner) or dev.ts drops its Context.add; exits.length is 0, under the floor of 1, red (the tests step saw this before the dev.ts line)",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}
