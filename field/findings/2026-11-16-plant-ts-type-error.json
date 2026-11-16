@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-plant-ts-type-error",
+  "date": "2026-11-16",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": ".agents/skills/tests/scripts/plant.ts",
+    "line": 24
+  },
+  "says": "In today's tooling, .agents/skills/tests/scripts/plant.ts is in no typecheck, so its type error (TS2769 at line 53, the vitest options as a readonly tuple) went unseen; the error is fixed, but plant.ts cannot join .agents/tsconfig.json yet, because it imports the root vitest.config.ts, and the files that config reaches outside .agents/ then fail the .agents program on duplicate @demlik/tea warnings.",
+  "proof": "With plant.ts, plant.test.ts and fixtures/plant/*.ts added to .agents/tsconfig.json's include (and allowJs, for oxlint-plugins/script-reads.mjs), `pnpm run typecheck` in .agents/ exits 1 with no error and five `warning TS377051: Multiple versions of package @demlik/tea` lines, on ../oxlint-plugins/script-reads.mjs, ../vitest.changed.ts, ../vitest.config.ts, ../vitest.hostrun.ts and ../vitest.shards.ts. The allowance in tsconfig.base.json (line 124) covers only `.agents/**/*.ts`, and oxlint-plugins/duplicate-packages.test.ts (law E3, line 74) refuses any include outside `.agents/`, so widening it would loosen that law. Before the fix, the same run printed `skills/tests/scripts/plant.ts(53,43): error TS2769: No overload matches this call`; after it, no error.",
+  "cost": "A type error in the tests step's plant tool lands unseen, and the next change to vitest's Node API or to the repo's test config breaks plant.ts only when a tests step runs it.",
+  "head": "34ecf4ca4c6454737c404fbb357007fb3f2f9ed0",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497"
+}
