@@ -201,7 +201,7 @@ describe("p92, every entry has every field: the type", () => {
   it("type law, ParentText keeps legacy text, and only input and parent schemas expose InputId", () => {
     // A missing schema fails this assertion while the tests precede the build, not the import.
     expect(ParentText, "the parent text schema is public").toBeDefined();
-    expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | InputId | null>();
+    expectTypeOf<Entry["parent"]>().toEqualTypeOf<string | InputId | null>();
     expectTypeOf<Line["parent"]>().toEqualTypeOf<string | InputId | null>();
     expectTypeOf<typeof ParentText.Type>().toEqualTypeOf<string | InputId>();
     // P17a's input schema and parent reader expose the brand. No other data export does.

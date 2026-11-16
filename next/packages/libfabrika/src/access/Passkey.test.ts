@@ -90,7 +90,7 @@ describe("P10 passkey records", () => {
   it("question 19: Signed keeps checked backup state and zero counter beside the original bytes", () => {
     fc.assert(
       fc.property(fc.record({ text, armored: text, signer: text, passkey: checkedArb }), (input) => {
-        const decoded = Schema.decodeUnknownSync(Signed)(input);
+        const decoded = Schema.decodeSync(Signed)(input);
         expect(decoded).toEqual(input);
         expect(Schema.encodeSync(Signed)(decoded)).toEqual(input);
       }),
@@ -134,7 +134,7 @@ describe("P10 passkey records", () => {
           })
           .map((value) => ({ _tag: "person" as const, ...value })),
         (input) => {
-          const decoded = Schema.decodeUnknownSync(Adds)(input);
+          const decoded = Schema.decodeSync(Adds)(input);
           expect(decoded).toEqual(input);
           expect(Schema.encodeSync(Adds)(decoded)).toEqual(input);
         },
@@ -145,7 +145,7 @@ describe("P10 passkey records", () => {
   it("P7 compatibility: plain Ed25519 signed events need no invented passkey fields", () => {
     fc.assert(
       fc.property(fc.record({ text, armored: text, signer: text }), (input) => {
-        expect(Schema.decodeUnknownSync(Signed)(input)).toEqual(input);
+        expect(Schema.decodeSync(Signed)(input)).toEqual(input);
       }),
       {
         seed: 119120,

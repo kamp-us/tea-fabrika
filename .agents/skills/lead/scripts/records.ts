@@ -149,7 +149,7 @@ type Top = { readonly fields: ReadonlyMap<string, string>; readonly heading: str
 const JsonString = Schema.fromJsonString(Schema.String);
 
 const unquoted = (raw: string): string =>
-  raw.startsWith('"') ? Option.getOrElse(Schema.decodeUnknownOption(JsonString)(raw), () => raw) : raw;
+  raw.startsWith('"') ? Option.getOrElse(Schema.decodeOption(JsonString)(raw), () => raw) : raw;
 
 /** Reads a record's top: a frontmatter block when the text opens with one, then the first heading. */
 export const readTop = (text: string): Top => {
@@ -425,7 +425,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
 export const Hit = Schema.Struct({
   path: Schema.String,
   title: Schema.String,
-  score: Schema.Number,
+  score: Schema.Finite,
   words: Schema.Array(Schema.String),
   notes: Schema.Array(Schema.String),
 });
@@ -436,8 +436,8 @@ export type Hit = typeof Hit.Type;
  * a rare word, or the corpus or the query is too thin for a ranking to mean anything.
  */
 export const Found = Schema.TaggedUnion({
-  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Number },
-  noOverlap: { ranked: Schema.Number },
+  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Finite },
+  noOverlap: { ranked: Schema.Finite },
   indeterminate: { reason: Schema.String },
 });
 export type Found = typeof Found.Type;
@@ -594,10 +594,14 @@ export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string
 // ---------------------------------------------------------------- the world
 
 /** origin/main could not be fetched or read, so the list and the next number are unknown. */
-class Unknown extends Schema.TaggedError<Unknown>()("Unknown", { reason: Schema.String }) {}
+class Unknown extends Schema.TaggedError<Unknown, { readonly brand: unique symbol }>()("Unknown", {
+  reason: Schema.String,
+}) {}
 
 /** `next` was asked of a folder whose records have no numbers. */
-class NoNumbers extends Schema.TaggedError<NoNumbers>()("NoNumbers", { folder: Schema.String }) {}
+class NoNumbers extends Schema.TaggedError<NoNumbers, { readonly brand: unique symbol }>()("NoNumbers", {
+  folder: Schema.String,
+}) {}
 
 const collected = (chunks: ReadonlyArray<Uint8Array>) => {
   const bytes = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0));
@@ -775,15 +779,13 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(records).pipe(
       Effect.as(0),
-      Effect.catchTag("Unknown", (e) =>
-        Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
-      ),
-      Effect.catchTag("NoNumbers", (e) =>
-        Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
-      ),
-      // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
-      Effect.catch(() => Effect.succeed(2)),
+      Effect.catchTags({
+        Unknown: (e) => Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
+        NoNumbers: (e) => Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
+        // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
+      Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
     {

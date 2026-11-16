@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e14-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "E14 tests step, in next/: mapMapErrorToMapBoth locked at error in libfabrika (client, cloudflare, desktop, ledger, node) and the app's src top, and every hit fixed by hand with the Edit tool and a small python replace of exact text (no quick-fix client, no bulk run). 7 met, 7 hand edits, 0 left, 0 waiting on pull request 1366. Shape changed mid-step: mechanical slices land in one pull request built by an integrator, so this slice's pull request (#1441) is left as opened.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Files: next/apps/fabrika/src/build.ts, libfabrika src/client/JournalStore.ts, src/cloudflare/box.ts, src/desktop/BrainControl.test-support.ts, src/ledger/LedgerStreamsSql.ts, src/node/repositories/RepositoriesGit.ts, src/node/settings/Load.ts. Each Effect.map plus Effect.mapError became one Effect.mapBoth. After the fixes effect-tsgo shows 0 errors in libfabrika and the app. pnpm format run; whole diff read, no comment lost.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "Effect.map then Effect.mapError added in src/client/Plant.ts: libfabrika count 5 -> 6, error at Plant.ts:5; removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node glob dropped from the entry: node hits vanish, count 5 -> 3; put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

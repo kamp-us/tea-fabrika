@@ -26,8 +26,8 @@ const Row = Schema.Struct({
   acquired: Schema.optionalKey(Schema.String),
   released: Schema.optionalKey(Schema.String),
   holding: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(Schema.Number),
-  port: Schema.optionalKey(Schema.Number),
+  pid: Schema.optionalKey(Schema.Finite),
+  port: Schema.optionalKey(Schema.Finite),
   home: Schema.optionalKey(Schema.String),
 });
 type Row = typeof Row.Type;
@@ -40,7 +40,7 @@ const rows = (file: string): ReadonlyArray<Row> =>
     ? readFileSync(file, "utf8")
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Row))(line))
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(Row))(line))
     : [];
 
 /** A folder for one child's trace, given back by the scope. */

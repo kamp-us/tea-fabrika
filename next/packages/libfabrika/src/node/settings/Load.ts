@@ -61,16 +61,17 @@ export const load = Effect.fnUntraced(function* (options: {
             ),
       ),
       Effect.flatMap(toml.parse),
-      Effect.mapError((cause) =>
-        cause._tag === "TomlError"
-          ? Files.SettingsError.make({
-              reason: "syntax",
-              message: `${place.name}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
-              cause,
-            })
-          : cause,
-      ),
-      Effect.map((document) => ({ file: place.name, document })),
+      Effect.mapBoth({
+        onFailure: (cause) =>
+          cause._tag === "TomlError"
+            ? Files.SettingsError.make({
+                reason: "syntax",
+                message: `${place.name}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
+                cause,
+              })
+            : cause,
+        onSuccess: (document) => ({ file: place.name, document }),
+      }),
     );
   const repo = {
     file: options.repo?.name ?? REPO,

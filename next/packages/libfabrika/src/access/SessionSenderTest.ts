@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import type * as Id from "../Id.ts";
@@ -114,9 +115,9 @@ const shown = (exit: Exit.Exit<unknown, unknown>): Shown => {
   }
 
   const error = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
-  return error instanceof NotGranted
+  return Schema.is(NotGranted)(error)
     ? { refused: "NotGranted" }
-    : error instanceof SigningRefused
+    : Schema.is(SigningRefused)(error)
       ? { refused: "SigningRefused", reason: error.reason }
       : { other: Predicate.hasProperty(error, "_tag") ? String(error._tag) : String(exit.cause) };
 };

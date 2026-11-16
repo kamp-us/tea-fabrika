@@ -94,7 +94,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 
     if (url?.protocol === "file:") {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
-      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.catch(() => Effect.succeed(url.pathname))));
+      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
     }
 
     return path.isAbsolute(local) ? path.relative(root, local) : local;

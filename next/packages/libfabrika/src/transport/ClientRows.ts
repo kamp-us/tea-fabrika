@@ -101,10 +101,13 @@ export const ClientRow = Schema.Struct({
 });
 export type ClientRow = typeof ClientRow.Type;
 
-export class ClientRowsError extends Schema.TaggedError<ClientRowsError>()("ClientRowsError", {
-  op: Schema.Literals(["open", "write"]),
-  error: ErrorClass,
-}) {}
+export class ClientRowsError extends Schema.TaggedError<ClientRowsError, { readonly brand: unique symbol }>()(
+  "ClientRowsError",
+  {
+    op: Schema.Literals(["open", "write"]),
+    error: ErrorClass,
+  },
+) {}
 
 export class ClientRows extends Context.Service<
   ClientRows,

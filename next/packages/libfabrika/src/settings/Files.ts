@@ -20,11 +20,14 @@ import type { TomlDocument } from "./Toml.ts";
  *
  * @category errors
  */
-export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
-  reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class SettingsError extends Schema.TaggedError<SettingsError, { readonly brand: unique symbol }>()(
+  "SettingsError",
+  {
+    reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 /**
  * The closing sentence of every settings message: "The instance did not start."

@@ -35,13 +35,20 @@ export const line = ({ shown, verdict }: Removal): string =>
 export const exitCode = (verdict: Verdict): number => (verdict._tag === "kept" ? verdict.code : 0);
 
 /** A check said no: the pair stays, for this reason. */
-class Keep extends Schema.TaggedError<Keep>()("Keep", { reason: Schema.String, code: Schema.Literals([1, 2]) }) {}
+class Keep extends Schema.TaggedError<Keep, { readonly brand: unique symbol }>()("Keep", {
+  reason: Schema.String,
+  code: Schema.Literals([1, 2]),
+}) {}
 
 /** Metadata in a shape nobody proved safe. Its words are the reason the line shows. */
-class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { reason: Schema.String }) {}
+class Unsupported extends Schema.TaggedError<Unsupported, { readonly brand: unique symbol }>()("Unsupported", {
+  reason: Schema.String,
+}) {}
 
 /** The disk could not be read or changed as asked. */
-class Unreadable extends Schema.TaggedError<Unreadable>()("Unreadable", { cause: Schema.optional(Schema.Defect()) }) {}
+class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand: unique symbol }>()("Unreadable", {
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
 const keep = (reason: string) => Keep.make({ reason, code: 1 });
 const unsupported = (reason: string) => Unsupported.make({ reason });

@@ -166,7 +166,7 @@ const realBrain = (all: ReadonlyArray<Observed>) => {
 const carried = (brain: Observed) =>
   brain.modules
     .filter((m) => m.id.startsWith(TEXT))
-    .map((m) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(m.code));
+    .map((m) => Schema.decodeSync(Schema.fromJsonString(Schema.String))(m.code));
 
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
 const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => c.code), ...graph.assets];

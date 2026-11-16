@@ -340,7 +340,7 @@ describe("P33, an inbox read is total", () => {
       ref: Schema.optionalKey(json(2)),
       to: Schema.optionalKey(json(2)),
     }),
-    Schema.Struct({ m: Schema.Struct({ _tag: Schema.Literal("DOWN"), ref: json(1) }) }),
+    Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
   const hasM = (body: unknown): body is { readonly m: unknown } =>
     typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");

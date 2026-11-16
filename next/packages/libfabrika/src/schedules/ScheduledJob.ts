@@ -15,8 +15,8 @@ import * as Schema from "effect/Schema";
  * @category models
  */
 export const Model = Schema.TaggedUnion({
-  idle: { next: Schema.Number, period: Schema.Int },
-  running: { due: Schema.Number, period: Schema.Int },
+  idle: { next: Schema.Finite, period: Schema.Int },
+  running: { due: Schema.Finite, period: Schema.Int },
 });
 /**
  * The job's state: `idle` with the next due time, or `running` with the time of the timer message
@@ -26,16 +26,19 @@ export const Model = Schema.TaggedUnion({
  */
 export type Model = typeof Model.Type;
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
 
 /**
  * The period given to `make` is not a whole, positive number of milliseconds.
  *
  * @category errors
  */
-export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError>()("ScheduledJobError", {
-  reason: Schema.Literals(["bad_period"]),
-}) {}
+export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { readonly brand: unique symbol }>()(
+  "ScheduledJobError",
+  {
+    reason: Schema.Literals(["bad_period"]),
+  },
+) {}
 
 /**
  * Returns the time the runner should wake the job next, or null while the job is running.

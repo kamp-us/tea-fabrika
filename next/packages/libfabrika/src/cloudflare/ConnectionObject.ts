@@ -76,7 +76,7 @@ export const layer = (options: {
           Effect.orDie,
         );
 
-      return Effect.succeed({
+      return {
         fetch: ObjectService.fromWebHandler((request) =>
           service.pipe(Effect.flatMap((gateway) => gateway.fetch(request))),
         ),
@@ -86,6 +86,6 @@ export const layer = (options: {
         ring: (stream, rev) => called(service.pipe(Effect.flatMap((gateway) => gateway.ring(stream, rev)))),
         notify: (client, news) => called(service.pipe(Effect.flatMap((gateway) => gateway.notify(client, news)))),
         probe: (session) => called(service.pipe(Effect.flatMap((gateway) => gateway.probe(session)))),
-      } satisfies ConnectionShape);
-    }),
+      } satisfies ConnectionShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

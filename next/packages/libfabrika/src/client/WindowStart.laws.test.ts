@@ -74,7 +74,7 @@ const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" 
 /** One JSON-RPC 2.0 call as the page frames it. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),
@@ -261,7 +261,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
 };
 
 /** WebCrypto refused to make or export the test key: the test's own failure, never the product's. */
-class TestKeyError extends Schema.TaggedError<TestKeyError>()("TestKeyError", {}) {}
+class TestKeyError extends Schema.TaggedError<TestKeyError, { readonly brand: unique symbol }>()("TestKeyError", {}) {}
 
 /** A constructor's refusal, as a browser's `new WebSocket` throws one: a DOMException of a platform class. */
 const refuse = (message: string, name: string): never => {
@@ -282,7 +282,7 @@ const identity = Effect.gen(function* () {
   );
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
   return {
     fingerprint: "SHA256:test",
     raw: btoa(String.fromCharCode(...raw))
@@ -808,7 +808,7 @@ const Act = Schema.Union([
 ]);
 
 /** The number id of a call the start wrote, read from the text it sent. */
-const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
 type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 

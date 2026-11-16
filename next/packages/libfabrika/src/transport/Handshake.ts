@@ -48,9 +48,9 @@ export const Handshake = Schema.TaggedUnion({
   /** The door said not granted, and `gateway.knock` went out with `id`. */
   knocking: { dial: Dial, since: Ms, sent: Count, id: Schema.String },
   /** The door shows `code` until `until`; only a grant moves on. */
-  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Number, ms: Ms },
+  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Finite, ms: Ms },
   /** The door admitted the hello. `ping` is its interval in ms; `person` is who the door admitted. */
-  admitted: { dial: Dial, since: Ms, ping: Schema.Number, ms: Ms, person: Schema.String },
+  admitted: { dial: Dial, since: Ms, ping: Schema.Finite, ms: Ms, person: Schema.String },
   /** The key could not sign the hello. */
   failed: { dial: Dial, error: ErrorClass },
   /** The door refused the hello for `reason`, its own word or `other`, `ms` after the dial began. */
@@ -78,7 +78,7 @@ export const HandshakeMsg = Schema.Union([
     type: Schema.Literal("waiting"),
     dial: Dial,
     code: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     at: Ms,
   }),
   Schema.Struct({
@@ -128,12 +128,12 @@ export const knock = Cmd.make("knock", {
 /** The door's admission, as it answers `initialize`. */
 const Admitted = Schema.Struct({
   version: Schema.Int,
-  ping: Schema.Number,
+  ping: Schema.Finite,
   identity: Schema.Struct({ key: Schema.String, person: Schema.String, as: Schema.String }),
 });
 
 /** The door's waiting code, as it answers a knock. */
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 
 /** The class a key error carries beside its tag, or `other`. */
 const KeyFailure = Schema.Struct({ error: ErrorClass });

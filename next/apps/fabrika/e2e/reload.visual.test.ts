@@ -44,7 +44,9 @@ declare global {
 }
 
 /** A Playwright call rejected: the browser, its page or a script run in the page failed. */
-class BrowserFailure extends Schema.TaggedError<BrowserFailure>()("BrowserFailure", { cause: Schema.Defect() }) {}
+class BrowserFailure extends Schema.TaggedError<BrowserFailure, { readonly brand: unique symbol }>()("BrowserFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 const browserCall = <A>(work: () => Promise<A>) =>
   Effect.tryPromise({ try: work, catch: (cause) => BrowserFailure.make({ cause }) });

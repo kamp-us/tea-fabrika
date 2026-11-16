@@ -57,7 +57,7 @@ export const PROCESS = "fab.process";
  *
  * @category schemas
  */
-export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+export const Tag = Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]);
 /**
  * One span tag's value.
  *
@@ -162,11 +162,11 @@ export const Measurements = Schema.Struct({
   piece: Schema.String,
   /** When the span ended, in ms on the object's clock. */
   at: Schema.Int,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   ok: Schema.Boolean,
   /** The error's class, never its message. */
   error: Schema.NullOr(Schema.String),
-  lag: Schema.NullOr(Schema.Number),
+  lag: Schema.NullOr(Schema.Finite),
   /** The span this row measured, so it joins its span row. Null when no span was current. */
   spanId: Schema.NullOr(Schema.String),
 });
@@ -189,8 +189,8 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
   hour: Schema.Int,
   count: Schema.Int,
   errors: Schema.Int,
-  ms: Schema.Struct({ p50: Schema.Number, p95: Schema.Number, max: Schema.Number }),
-  lag: Schema.NullOr(Schema.Number),
+  ms: Schema.Struct({ p50: Schema.Finite, p95: Schema.Finite, max: Schema.Finite }),
+  lag: Schema.NullOr(Schema.Finite),
 });
 /**
  * One piece's closed hour.
@@ -271,7 +271,7 @@ export const Archived = Schema.TaggedStruct("archived", {
  *
  * @category errors
  */
-export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
+export class SinkError extends Schema.TaggedError<SinkError, { readonly brand: unique symbol }>()("SinkError", {
   /** `unreachable`: a record or archive call that never answered. `bad_row`: an answer or a row
    *  that does not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),

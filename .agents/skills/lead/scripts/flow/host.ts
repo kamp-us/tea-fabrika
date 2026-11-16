@@ -106,7 +106,7 @@ const HostFields = Schema.Struct({
   /** The run's id, `<quest>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
   name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
-  minutes: Schema.Number.check(Schema.isGreaterThan(0)),
+  minutes: Schema.Finite.check(Schema.isGreaterThan(0)),
 });
 
 /**
@@ -120,7 +120,7 @@ export type HostArgs = typeof HostArgs.Type;
 export type Hosted = { readonly outcome: Outcome.Outcome; readonly head: string; readonly log: string | null };
 
 /** Another live process holds the lock; the take is tried again on its schedule. */
-class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Number }) {}
+class Held extends Schema.TaggedError<Held, { readonly brand: unique symbol }>()("Held", { pid: Schema.Finite }) {}
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
@@ -431,7 +431,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
   const path = yield* Path.Path;
   const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
-  const saved: typeof QuestFile.Type = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
     Option.map(questKeyed),
     Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
     Option.getOrElse(() => ({ quest: a.quest, steps: [] })),

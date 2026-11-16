@@ -23,10 +23,10 @@ const DRIFT = 1e-6;
  */
 export const Violation = Schema.TaggedUnion({
   twice: { tile: Schema.String },
-  sum: { dir: Dir, total: Schema.Number },
+  sum: { dir: Dir, total: Schema.Finite },
   one_part: { dir: Dir },
   same_direction: { dir: Dir },
-  no_share: { percent: Schema.Number },
+  no_share: { percent: Schema.Finite },
   focus: { tile: Schema.String },
   recent: { tile: Schema.String },
   recent_twice: { tile: Schema.String },

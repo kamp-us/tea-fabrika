@@ -64,7 +64,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const poll = yield* Schema.decodeUnknownEffect(Declarations.brainPoll.schema)(
     settings.values["desktop.brain-poll"],
   ).pipe(Effect.mapError(unsupported));
-  const job = yield* Schema.decodeUnknownEffect(Job)({
+  const job = yield* Schema.decodeEffect(Job)({
     Label: label,
     ProgramArguments: [spec.executable, ...spec.args],
     EnvironmentVariables: { ELECTRON_RUN_AS_NODE: "1", FABRIKA_HOME: spec.home, FABRIKA_BUILD: spec.build },
@@ -129,7 +129,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   });
   const domain = Effect.gen(function* () {
     const response = yield* success("/usr/bin/id", ["-u"]);
-    const uid = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
+    const uid = yield* Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: decode only the numeric UID from protected native output
       Redacted.value(response.stdout),
     ).pipe(Effect.mapError(unsupported));
@@ -285,7 +285,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     // Deletes the captured entry only when it is our own plist, which was on its way out anyway.
     // Any other entry is somebody's: it keeps its place in the folder and the caller hears why.
     const discard = Effect.gen(function* () {
-      if ((yield* readPlist(captured).pipe(Effect.catch(() => Effect.succeed(null)))) !== compiled.bytes) {
+      if ((yield* readPlist(captured).pipe(Effect.orElseSucceed(() => null))) !== compiled.bytes) {
         return yield* conflict("plist path taken before restore");
       }
 

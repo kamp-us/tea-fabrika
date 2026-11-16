@@ -100,12 +100,15 @@ export type Receipt = typeof Receipt.Type;
  * @category models
  */
 export type Recorded = Omit<Line, "_tag" | "body">;
+
 /**
  * Error for a ledger call that failed, or an append the ledger refused.
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a saved history, or an event about to be written, that cannot be trusted: an entry
@@ -114,9 +117,12 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  *
  * @category errors
  */
-export class InvalidHistory extends Schema.TaggedError<InvalidHistory>()("InvalidHistory", {
-  cause: Schema.Defect(),
-}) {}
+export class InvalidHistory extends Schema.TaggedError<InvalidHistory, { readonly brand: unique symbol }>()(
+  "InvalidHistory",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * Error for any `RepositoryTrust` failure. `reason` holds `Storage` or `InvalidHistory`, with its
@@ -124,9 +130,12 @@ export class InvalidHistory extends Schema.TaggedError<InvalidHistory>()("Invali
  *
  * @category errors
  */
-export class RepositoryTrustError extends Schema.TaggedError<RepositoryTrustError>()("RepositoryTrustError", {
-  reason: Schema.Union([Storage, InvalidHistory]),
-}) {}
+export class RepositoryTrustError extends Schema.TaggedError<RepositoryTrustError, { readonly brand: unique symbol }>()(
+  "RepositoryTrustError",
+  {
+    reason: Schema.Union([Storage, InvalidHistory]),
+  },
+) {}
 
 /**
  * Service that keeps repository trust: a person's accepted or denied answer for one clone, saved

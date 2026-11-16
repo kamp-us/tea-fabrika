@@ -24,7 +24,7 @@ const Home = Absolute.check(
  *
  * @category schemas
  */
-export class BrainSpec extends Schema.Opaque<BrainSpec>()(
+export class BrainSpec extends Schema.Opaque<BrainSpec, { readonly brand: unique symbol }>()(
   Schema.Struct({
     home: Home,
     executable: Absolute,

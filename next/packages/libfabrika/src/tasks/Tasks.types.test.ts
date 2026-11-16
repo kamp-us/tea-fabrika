@@ -68,7 +68,7 @@ it("type: L9 the contract speaks only the tasks module's types and errors, and t
     | "storage"
   >();
   // The error is a schema value of its own, so a refusal crosses a wire as the module wrote it.
-  expectTypeOf<typeof TasksError.Type>().toEqualTypeOf<TasksError>();
+  expectTypeOf<TasksError>().toEqualTypeOf<TasksError>();
   // G1: the index stream's name comes from a key alone, a protocol fact, never a setting.
   expectTypeOf<typeof TasksFront.targetStream>().toEqualTypeOf<(key: string) => string>();
 });

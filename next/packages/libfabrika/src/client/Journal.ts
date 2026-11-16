@@ -49,10 +49,13 @@ export type Entry = typeof Entry.Type;
  *
  * @category errors
  */
-export class JournalError extends Schema.TaggedError<JournalError>()("JournalError", {
-  reason: Schema.Literals(["storage", "bad_entry"]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class JournalError extends Schema.TaggedError<JournalError, { readonly brand: unique symbol }>()(
+  "JournalError",
+  {
+    reason: Schema.Literals(["storage", "bad_entry"]),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that keeps the hands client's journal: `read` answers a task's last entry, or null before
@@ -68,7 +71,7 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
 export class Journal extends Context.Service<
   Journal,
   {
-    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<Entry | null, JournalError>;
+    readonly write: (task: string, entry: Entry) => Effect.Effect<void, JournalError>;
   }
 >()("@kampus/libfabrika/client/Journal") {}

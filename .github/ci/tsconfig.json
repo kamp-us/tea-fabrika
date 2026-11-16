@@ -1,17 +1,35 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
-    // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
-    // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
     "plugins": [
       {
         "name": "@effect/language-service",
+        // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
+        // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" }
+        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), schemaClassMissingBrand (E6), unnecessaryArrowBlock
+          // (E8), schemaStructWithTag (E11), runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts", "**/*.mjs"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "schemaClassMissingBrand": "error",
+                "unnecessaryArrowBlock": "error",
+                "schemaStructWithTag": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          }
+        ]
       }
-    ]
+    ],
+    "allowJs": true,
+    "checkJs": true
   },
   "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
 }

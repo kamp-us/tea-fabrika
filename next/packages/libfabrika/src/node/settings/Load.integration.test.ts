@@ -104,7 +104,7 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
-  return fail?._tag === "Fail" && fail.error instanceof SettingsError ? fail.error.reason : "not a SettingsError";
+  return fail?._tag === "Fail" && Schema.is(SettingsError)(fail.error) ? fail.error.reason : "not a SettingsError";
 };
 
 const text = (t: string): File => ({ _tag: "text", text: t });

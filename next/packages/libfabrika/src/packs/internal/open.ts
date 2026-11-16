@@ -74,7 +74,7 @@ export const machine = Machine.make({
       }
 
       const snapshot = s.snapshot;
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       const selections = new Map<Id.InputId, typeof Event.cases.selected.Type>();
 
       for (const event of m.events) {

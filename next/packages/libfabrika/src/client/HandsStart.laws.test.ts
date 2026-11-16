@@ -66,7 +66,7 @@ const identity = (() => {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),
   };

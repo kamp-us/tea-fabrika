@@ -17,8 +17,8 @@ import type { Line } from "../ledger/Log.ts";
  */
 export class Exceeded extends Schema.TaggedError<Exceeded>()("Exceeded", {
   resource: Schema.Literals(["writes", "storage"]),
-  used: Schema.Number,
-  limit: Schema.Number,
+  used: Schema.Finite,
+  limit: Schema.Finite,
   cause: Schema.Defect(),
 }) {}
 
@@ -35,8 +35,8 @@ export class RecoveryReserveExhausted extends Schema.TaggedError<RecoveryReserve
     resource: Schema.Literals(["writes", "storage"]),
     location: Schema.Literals(["project", "process"]),
     process: Schema.String,
-    required: Schema.Number,
-    remaining: Schema.Number,
+    required: Schema.Finite,
+    remaining: Schema.Finite,
     cause: Schema.Defect(),
   },
 ) {}

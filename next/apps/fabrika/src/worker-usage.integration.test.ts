@@ -76,7 +76,7 @@ const identity = () => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -107,7 +107,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
-          frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
+          frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
         }
       });
       return socket;
@@ -123,7 +123,12 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
       "the signed client received no matching frame within 10 seconds",
     ).pipe(
-      Effect.flatMap((frame) => (frame === undefined ? Effect.die("the signed client closed") : Effect.succeed(frame))),
+      Effect.filterOrFail(
+        (frame) => frame !== undefined,
+        () => "the signed client closed",
+      ),
+      // The look cannot fail, so this only turns the filter's failure back into the die it was.
+      Effect.orDie,
     );
   let serial = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
@@ -238,7 +243,7 @@ const healthRows = (home: string) =>
           );
 
           for (const row of rows) {
-            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row));
+            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row));
           }
         }
       }

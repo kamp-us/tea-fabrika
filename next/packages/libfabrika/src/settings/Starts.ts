@@ -18,35 +18,45 @@ export const MissingTarget = Schema.TaggedUnion({ instance: { start: Schema.NonE
  *
  * @category errors
  */
-export class Decode extends Schema.TaggedError<Decode>()("Decode", { cause: Schema.Defect() }) {}
+export class Decode extends Schema.TaggedError<Decode, { readonly brand: unique symbol }>()("Decode", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * No start is recorded under the asked id.
  *
  * @category errors
  */
-export class Missing extends Schema.TaggedError<Missing>()("Missing", { target: MissingTarget }) {}
+export class Missing extends Schema.TaggedError<Missing, { readonly brand: unique symbol }>()("Missing", {
+  target: MissingTarget,
+}) {}
 
 /**
  * The ledger did not place the start's entry, or the id already holds a different start.
  *
  * @category errors
  */
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { cause: Schema.Defect() }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The ledger could not be read or written.
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The call to the object that keeps the starts did not get through.
  *
  * @category errors
  */
-export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The `Starts` service's own error. Its `reason` says what went wrong and, for every reason but
@@ -54,7 +64,7 @@ export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable"
  *
  * @category errors
  */
-export class StartsError extends Schema.TaggedError<StartsError>()("StartsError", {
+export class StartsError extends Schema.TaggedError<StartsError, { readonly brand: unique symbol }>()("StartsError", {
   reason: Schema.Union([Decode, Missing, Refused, Storage, Unreachable]),
 }) {}
 

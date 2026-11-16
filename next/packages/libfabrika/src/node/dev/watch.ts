@@ -240,7 +240,7 @@ export const watchPrograms = (options: {
                 ...code,
                 from: phase.getState()._tag === "booting" ? "boot" : "watch",
               })
-              .pipe(Effect.catch(() => Effect.succeed(Installed.cases.failed.make({ reason: "load" }))));
+              .pipe(Effect.orElseSucceed(() => Installed.cases.failed.make({ reason: "load" })));
             yield* phase.dispatch({ type: "attempted" }).pipe(Effect.orDie);
             return yield* finish(
               Option.some({ ...answer, program: selected.name, hash: code.hash }),

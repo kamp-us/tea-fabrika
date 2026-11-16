@@ -97,7 +97,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
 
               for (const [file] of reads) {
                 const value = yield* source.read(file);
-                const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
+                const read = Schema.decodeSync(Schema.NullOr(SourceRead))(value);
                 expect(JSON.stringify(value)).not.toContain(root);
                 values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
               }
@@ -216,7 +216,7 @@ it.effect.prop(
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
-        const commit = Schema.decodeUnknownSync(ObjectId)("a".repeat(40));
+        const commit = Schema.decodeSync(ObjectId)("a".repeat(40));
         const entries = new Map<string, { mode: string; type: string; id: string }>([
           [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
           ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],

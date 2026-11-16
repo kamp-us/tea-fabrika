@@ -59,7 +59,7 @@ export type PinState = typeof PinState.Type;
 export const pinState = (value: string | undefined): PinState =>
   value === undefined
     ? PinState.cases.unpinned.make({})
-    : Option.match(Schema.decodeUnknownOption(PinnedText)(value), {
+    : Option.match(Schema.decodeOption(PinnedText)(value), {
         onNone: () => PinState.cases.malformed.make({ value }),
         onSome: (pin) => PinState.cases.pinned.make({ pin }),
       });
@@ -86,7 +86,9 @@ export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
 // ---------------------------------------------------------------- the world
 
 /** A pin that could not be made, or a pinned run that could not start. */
-export class PinFailed extends Schema.TaggedError<PinFailed>()("PinFailed", { reason: Schema.String }) {}
+export class PinFailed extends Schema.TaggedError<PinFailed, { readonly brand: unique symbol }>()("PinFailed", {
+  reason: Schema.String,
+}) {}
 
 const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
   const handle = yield* command;

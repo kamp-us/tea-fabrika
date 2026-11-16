@@ -15,14 +15,26 @@ import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
 import * as Load from "../settings/Load.ts";
 
-class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
-class InvalidDocument extends Schema.TaggedError<InvalidDocument>()("InvalidDocument", { cause: Schema.Defect() }) {}
-class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", { cause: Schema.Defect() }) {}
-
-class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("OpenRepositoryError", {
-  reason: Schema.Union([Storage, InvalidDocument, ReadFailed]),
-  message: Schema.String,
+class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
 }) {}
+
+class InvalidDocument extends Schema.TaggedError<InvalidDocument, { readonly brand: unique symbol }>()(
+  "InvalidDocument",
+  { cause: Schema.Defect() },
+) {}
+
+class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
+  cause: Schema.Defect(),
+}) {}
+
+class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError, { readonly brand: unique symbol }>()(
+  "OpenRepositoryError",
+  {
+    reason: Schema.Union([Storage, InvalidDocument, ReadFailed]),
+    message: Schema.String,
+  },
+) {}
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
   OpenRepositoryError.make({

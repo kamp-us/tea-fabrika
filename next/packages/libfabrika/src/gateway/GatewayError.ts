@@ -11,7 +11,9 @@ import { Schema } from "effect";
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a saved gateway state value that does not decode. The decoder's failure is kept as
@@ -19,7 +21,9 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  *
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a WebCrypto call that failed: importing the challenge key, signing a nonce or
@@ -27,7 +31,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  *
  * @category errors
  */
-export class Crypto extends Schema.TaggedError<Crypto>()("Crypto", { cause: Schema.Defect() }) {}
+export class Crypto extends Schema.TaggedError<Crypto, { readonly brand: unique symbol }>()("Crypto", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error of the `Gateway` service for a fault below its rules: its own tables, or the crypto it
@@ -35,6 +41,9 @@ export class Crypto extends Schema.TaggedError<Crypto>()("Crypto", { cause: Sche
  *
  * @category errors
  */
-export class GatewayError extends Schema.TaggedError<GatewayError>()("GatewayError", {
-  reason: Schema.Union([Storage, BadRow, Crypto]),
-}) {}
+export class GatewayError extends Schema.TaggedError<GatewayError, { readonly brand: unique symbol }>()(
+  "GatewayError",
+  {
+    reason: Schema.Union([Storage, BadRow, Crypto]),
+  },
+) {}

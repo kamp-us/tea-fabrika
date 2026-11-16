@@ -155,7 +155,7 @@ const makeKey = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ED, false, USES), catch: bad });
 
   if (!("privateKey" in pair)) {
-    return yield* Effect.fail(bad(new TypeError("not a key pair")));
+    return yield* bad(new TypeError("not a key pair"));
   }
 
   const pub = pair.publicKey;
@@ -180,7 +180,7 @@ const lineFor = Effect.fnUntraced(function* (raw: string): Effect.fn.Return<KeyL
 
   const type = new TextEncoder().encode("ssh-ed25519");
   const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
-  return yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
+  return yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
     Effect.mapError(() => StoreError.make({ op: "read", error: "DataError" })),
   );
 });

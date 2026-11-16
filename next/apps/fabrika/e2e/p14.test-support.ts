@@ -39,17 +39,25 @@ const Fault = Schema.Struct({
 export const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
-class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", { output: Schema.String }) {}
+class DevFailed extends Schema.TaggedError<DevFailed, { readonly brand: unique symbol }>()("DevFailed", {
+  output: Schema.String,
+}) {}
 
-class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Number }) {}
+class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", {
+  exitCode: Schema.Finite,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
@@ -424,7 +432,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
       const sent = wire
         .split("\n")
         .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
+        .map((line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line));
       const seen: GrantSeen = {
         urls: sent.map((row) => row.url),
         signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
@@ -607,7 +615,7 @@ const identity = () => {
   };
 };
 
-class WireClosed extends Schema.TaggedError<WireClosed>()("WireClosed", {}) {}
+class WireClosed extends Schema.TaggedError<WireClosed, { readonly brand: unique symbol }>()("WireClosed", {}) {}
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Unknown),
@@ -641,7 +649,7 @@ export const reader = (h: Home, dev: Dev) =>
           const text = String(data);
 
           if (text !== "pong") {
-            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+            frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(text));
           }
         });
         socket.addEventListener("close", () => {

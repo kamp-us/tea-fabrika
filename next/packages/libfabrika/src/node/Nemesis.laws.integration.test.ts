@@ -34,12 +34,17 @@ const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-history-" });
-  const file = path.join(folder, "history.sqlite");
-  return Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(Effect.map(nodeSql));
-}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+  return path.join(folder, "history.sqlite");
+}).pipe(
+  Effect.map((file) =>
+    Effect.acquireRelease(
+      Effect.sync(() => new DatabaseSync(file)),
+      (db) => Effect.sync(() => db.close()),
+    ).pipe(Effect.map(nodeSql)),
+  ),
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
+);
 
 const process = "process_0000000000e008000000000000";
 const successor = "process_0000000000e008000000000001";
@@ -208,7 +213,7 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
-          return yield* Effect.fail(lower);
+          return yield* lower;
         }
 
         const captured = yield* ledger.wait(stream, after);

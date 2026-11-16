@@ -17,7 +17,7 @@ import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
@@ -171,7 +171,7 @@ const command = Command.make("dev", flags, (options) => {
           const selected = yield* OpenRepository.open(prepared, {
             selection: yield* ids.next(Id.InputId),
             request: yield* ids.next(Id.InputId),
-            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            actor: yield* Schema.decodeEffect(Id.Person)(state.person),
             by: "brain",
             build: built.build,
             interactive: process.stdin.isTTY === true,

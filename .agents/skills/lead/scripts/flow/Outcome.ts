@@ -29,13 +29,13 @@ export const stuck = (reason: string): Outcome => Outcome.cases.stuck.make({ rea
  * hands a turn's spend on as it is. Both token measures, and dollars where the maker says.
  */
 export const Spent = Schema.Struct({
-  input: Schema.Number,
-  cached: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  cached: Schema.Finite,
+  output: Schema.Finite,
   counted: Schema.Literals(["turn", "requests", "last", "none"]),
-  usd: Schema.NullOr(Schema.Number),
-  requests: Schema.NullOr(Schema.Number),
-  tools: Schema.Number,
+  usd: Schema.NullOr(Schema.Finite),
+  requests: Schema.NullOr(Schema.Finite),
+  tools: Schema.Finite,
 });
 export type Spent = typeof Spent.Type;
 

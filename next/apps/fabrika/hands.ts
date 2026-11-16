@@ -29,7 +29,7 @@ const VERSION = "0.0.0";
 /** What the launcher prints, one line per change: the protocol between it and its parent. */
 const Line = Schema.TaggedUnion({
   /** The key is not granted yet: a person approves `code` before `until`. */
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });

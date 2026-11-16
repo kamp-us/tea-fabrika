@@ -37,7 +37,7 @@ const checkTypes = (raw: string) => {
   expectTypeOf<"IdGenerator" extends keyof typeof Public ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Front ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Id ? true : false>().toEqualTypeOf<false>();
-  expectTypeOf<typeof Id.InputId.Type>().toEqualTypeOf<IdValue<"input">>();
+  expectTypeOf<Id.InputId>().toEqualTypeOf<IdValue<"input">>();
   const takeProcess = (_id: typeof ProcessId.Type): void => {};
   const takeLetter = (_id: typeof LetterId.Type): void => {};
   const checkBrands = (process: typeof ProcessId.Type, letter: typeof LetterId.Type) => {
@@ -74,7 +74,7 @@ const checkTypes = (raw: string) => {
     return yield* letter;
   });
   const made = ProcessId.makeEffect(raw);
-  const decoded = Schema.decodeUnknownEffect(ProcessId)(raw);
+  const decoded = Schema.decodeEffect(ProcessId)(raw);
   expectTypeOf(made).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, SchemaIssue.Issue>>();
   expectTypeOf(decoded).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, Schema.SchemaError>>();
   expectTypeOf(Id.makeEffect("process")).toEqualTypeOf<Effect.Effect<typeof ProcessId, IdError>>();

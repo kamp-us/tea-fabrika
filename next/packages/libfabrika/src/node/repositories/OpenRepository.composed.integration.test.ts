@@ -56,7 +56,7 @@ const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
-  Schema.decodeUnknownSync(RepoSnapshot)({
+  Schema.decodeSync(RepoSnapshot)({
     key: "a".repeat(64),
     branch: "release",
     commit: "b".repeat(40),

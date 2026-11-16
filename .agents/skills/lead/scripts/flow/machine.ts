@@ -24,8 +24,8 @@ import { Step } from "./Step.ts";
 export const Attempt = Schema.Struct({
   position: Schema.Int,
   name: Schema.String,
-  startedAt: Schema.Number,
-  endedAt: Schema.NullOr(Schema.Number),
+  startedAt: Schema.Finite,
+  endedAt: Schema.NullOr(Schema.Finite),
   outcome: Schema.NullOr(Outcome),
   spent: Schema.NullOr(Spent),
 });

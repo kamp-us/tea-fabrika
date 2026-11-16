@@ -119,8 +119,8 @@ const open = Effect.gen(function* () {
   } satisfies IsolateUsageTest.Store;
 }).pipe(Effect.provide(NodeServices.layer));
 
-const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
-  return Effect.acquireUseRelease(
+const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
+  Effect.acquireUseRelease(
     Effect.sync(() => new AbortController()),
     (controller) => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- fake platform namespace routes to the real recorder under the receiving object's tracer
@@ -138,7 +138,6 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
     },
     (controller) => Effect.sync(() => controller.abort()),
   );
-};
 
 const fixture = (executed: () => void) => {
   const Model = Schema.Struct({ sum: Schema.Int });
@@ -285,7 +284,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         service.msg({
           id,
           envelope: {
-            id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+            id: Schema.decodeSync(InputId)("input_0000000000e008000000000001"),
             by: OWNER,
             arrivedAt: 0,
             input: { type: "add", n },

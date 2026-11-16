@@ -428,7 +428,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
     (steps, final) => {
       for (const state of [Test.machine.init(null, Test.ctx)[0], ...steps.map((s) => s.next), final]) {
         const items = Menu.view(state);
-        const clone = Schema.decodeUnknownSync(Test.modelJson)(Test.encoded(state));
+        const clone = Schema.decodeSync(Test.modelJson)(Test.encoded(state));
 
         if (!Test.same(items, Menu.view(clone)) || !Test.same(items, Menu.view(state))) {
           return "equal models rendered differently";

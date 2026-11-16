@@ -16,7 +16,7 @@ const maxTime = 2 ** 48 - 1;
 export type IdValue<P extends string> = Brand.Branded<string, P>;
 export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
-export class IdError extends S.TaggedError<IdError>()("IdError", {
+export class IdError extends S.TaggedError<IdError, { readonly brand: unique symbol }>()("IdError", {
   reason: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: S.optional(S.Defect()),
@@ -187,7 +187,7 @@ export class Generator extends Context.Service<
 
         at = nextAt;
         random = nextRandom;
-        return Result.getOrThrowWith(S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`), (cause) =>
+        return Result.getOrThrowWith(S.decodeResult(schema)(`${prefix}_${encode(at, random)}`), (cause) =>
           IdError.make({ reason: "prefix", cause }),
         );
       };
@@ -203,7 +203,7 @@ export class Generator extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : IdError.make({ reason: "entropy", cause: error })),
+            catch: (error) => (S.is(IdError)(error) ? error : IdError.make({ reason: "entropy", cause: error })),
           });
         }),
       };

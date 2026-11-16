@@ -260,7 +260,7 @@ describe("P10 WebAuthn SSHSIG", () => {
               yield* Effect.flip(
                 writeWebauthnSshsig({
                   text,
-                  line: Schema.decodeUnknownSync(PasskeyLine)(line),
+                  line: Schema.decodeSync(PasskeyLine)(line),
                   assertion: {
                     authenticatorData: new Uint8Array(Buffer.from(real.authenticatorData, "base64url")),
                     clientDataJSON: new Uint8Array(Buffer.from(real.clientDataJSON, "base64url")),
@@ -383,7 +383,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       expect(assertion.signature.length).toBe(72);
       const armored = yield* writeWebauthnSshsig({
         text,
-        line: Schema.decodeUnknownSync(PasskeyLine)(line),
+        line: Schema.decodeSync(PasskeyLine)(line),
         assertion,
       });
       expect(armored).toBe(realArmor);
@@ -635,8 +635,8 @@ describe("P10 WebAuthn SSHSIG", () => {
     // Plant: ignore the outer key type word. The ordinary ECDSA line must still throw.
     fc.assert(
       fc.property(passkeyLineArb, (line) => {
-        expect(Schema.decodeUnknownSync(PasskeyLine)(line)).toBe(line);
-        expect(() => Schema.decodeUnknownSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
+        expect(Schema.decodeSync(PasskeyLine)(line)).toBe(line);
+        expect(() => Schema.decodeSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
       }),
       { ...runs, examples: [[line]] },
     );

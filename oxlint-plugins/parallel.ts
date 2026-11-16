@@ -41,7 +41,9 @@ type Ran = {
 };
 
 /** The run's one failure: the parts that did not exit 0, in the order they were given. */
-class Failed extends Schema.TaggedError<Failed>()("Failed", { parts: Schema.Array(Schema.String) }) {}
+class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol }>()("Failed", {
+  parts: Schema.Array(Schema.String),
+}) {}
 
 const passed = (end: End) => end._tag === "exited" && end.code === 0;
 

@@ -82,7 +82,7 @@ const uncertainExperiments = Arbitrary.flatMap(experiments, (input) =>
   Arbitrary.map(bounded(1, input.most + 1), (ordinal) => ({ ...input, most: input.most + 1, ordinal })),
 );
 
-const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
+const experimentId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
 const now = () => Effect.succeed(Outcome.ok(100));
@@ -528,7 +528,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const release = yield* Deferred.make<void>();
             const nextEntered = yield* Deferred.make<void>();
             const nextRelease = yield* Deferred.make<void>();
-            const nextId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
+            const nextId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
             const calls: Array<Chaos.Fire> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
@@ -633,23 +633,24 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.open("before-callback");
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(before);
 
-                const newer =
-                  delivery === "replaced"
-                    ? yield* Effect.gen(function* () {
-                        expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
-                        expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
-                        yield* advance(runner, input.ordinal - 1);
-                        const deadline = yield* nextDeadline(world);
+                let newer: Fiber.Fiber<
+                  Effect.Success<ReturnType<typeof runner.due>>,
+                  Effect.Error<ReturnType<typeof runner.due>>
+                > | null = null;
 
-                        if (deadline === null) {
-                          return yield* Effect.die(new Error("the new experiment lost its matching fault"));
-                        }
+                if (delivery === "replaced") {
+                  expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
+                  expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
+                  yield* advance(runner, input.ordinal - 1);
+                  const deadline = yield* nextDeadline(world);
 
-                        const pending = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
-                        yield* Deferred.await(nextEntered);
-                        return pending;
-                      })
-                    : null;
+                  if (deadline === null) {
+                    return yield* Effect.die(new Error("the new experiment lost its matching fault"));
+                  }
+
+                  newer = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
+                  yield* Deferred.await(nextEntered);
+                }
 
                 const current = phase((yield* world.snapshot(NAME)).model);
                 const count = calls.length;
@@ -846,7 +847,7 @@ export const suite = (open: Open, checklist: unknown) =>
               const answers = letters.filter(
                 (l) =>
                   Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                  /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
+                  /_(ok|err)$/.test(Schema.decodeSync(Schema.Struct({ type: Schema.String }))(l.m).type),
               );
               expect(answers.length).toBeGreaterThanOrEqual(3);
 

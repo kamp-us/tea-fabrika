@@ -101,13 +101,11 @@ process.stdout.write(JSON.stringify({model,records,updates}));
                 { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
               ),
             );
-            const actual = Schema.decodeUnknownSync(
+            const actual = Schema.decodeSync(
               Schema.fromJsonString(
                 Schema.Struct({
                   model: Schema.Struct({ count: Schema.Int }),
-                  records: Schema.Array(
-                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ type: Schema.String }) }),
-                  ),
+                  records: Schema.Array(Schema.TaggedStruct("ok", { value: Schema.Struct({ type: Schema.String }) })),
                   updates: Schema.Int,
                 }),
               ),

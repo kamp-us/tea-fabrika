@@ -29,7 +29,10 @@ import * as RevokeHold from "./chaos-revoke.test-support.ts";
 const PERSON = "person_0000000000e008000000000001";
 const PROJECT = "p17b-revoke";
 const SENT = "2026-11-12T00:00:00.000Z";
-class WireFailure extends Schema.TaggedError<WireFailure>()("WireFailure", { cause: Schema.Defect() }) {}
+
+class WireFailure extends Schema.TaggedError<WireFailure, { readonly brand: unique symbol }>()("WireFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 const field = (raw: string | Uint8Array) => {
   const bytes = Buffer.from(raw);
@@ -57,7 +60,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
     try: () => crypto.subtle.digest("SHA-256", bytes),
     catch: (cause) => WireFailure.make({ cause }),
   });
-  const line = Schema.decodeUnknownSync(KeyLine)(
+  const line = Schema.decodeSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
   );
   return {
@@ -79,7 +82,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
 });
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number, Schema.Null])),
+  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -444,7 +447,7 @@ it.live(
           yield* RevokeTest.until(
             hold("p90.status"),
             (answer) =>
-              Schema.is(Schema.Struct({ _tag: Schema.Literal("ok"), result: RevokeHold.Model }))(answer) &&
+              Schema.is(Schema.TaggedStruct("ok", { result: RevokeHold.Model }))(answer) &&
               answer.result._tag === "held",
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });
@@ -457,7 +460,7 @@ it.live(
           client: oldKey.fingerprint,
           key: oldKey.raw,
         });
-        const id = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
+        const id = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
         const start = Chaos.Start.make({ id, seed: SEED, target: binding, most: 64, gap: 1000 });
         let schedule = ChaosSchedule.seed(start.seed);
         let most = 0;
@@ -486,7 +489,7 @@ it.live(
             expect(request.target).toEqual(binding);
             expect(request.fault.key).toBe(oldKey.raw);
             const model = yield* world.snapshot(NAME);
-            const saved = Schema.decodeUnknownSync(chaos.state.schema)(model.model);
+            const saved = Schema.decodeSync(chaos.state.schema)(model.model);
             expect(saved.phase._tag).toBe("checking");
 
             if (saved.phase._tag !== "checking") {
@@ -526,7 +529,7 @@ it.live(
             expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
 
             for (let n = 0; n < most; n++) {
-              const saved = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+              const saved = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
               const deadline = chaos.wake(saved);
 
               if (deadline === null) {
@@ -537,7 +540,7 @@ it.live(
             }
           }),
         );
-        const final = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+        const final = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
         const revoked = (yield* rows("gateway/access")).find((row) => row._tag === "revoked");
         expect(revoked).toBeDefined();
@@ -615,7 +618,7 @@ it.live(
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
             yield* runner.open("reopen");
             yield* runner.due(Number.MAX_SAFE_INTEGER);
-            expect(Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
+            expect(Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
           }),
         );
         expect((yield* rows("gateway/access")).filter((row) => row._tag === "revoked")).toHaveLength(1);
