@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e52-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:47:38-08:00",
+  "ended": "2026-11-15T20:54:01-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one review, and the review of record, of judgment slice E52 of the Effect-checker sweep (next/, check multipleEffectProvide) at d1950de35, merge-ready with no finding. All 25 hits sit in exam paths in the row's folders (lib:node 14, app:e2e 5, lib:access 2, lib:telemetry 2, lib:top 1, lib:processes 1), none in pull request 1366's files, and all 25 were fixed by hand-written edits from a scratchpad codemod: each chain Effect.provide(A), Effect.provide(B), ... became one Effect.provide(A.pipe(Layer.provideMerge(B), ...)), in the chain's own order. Every hunk was read: the order is kept in all 25, no comment line was removed, and the only other changes are five Layer imports (one a type import made a value import) and one import list re-wrapped by the formatter. Effect 4.1.3's provideMerge builds the dependency first, builds the layer with it, and merges with the layer's own services winning (Context.merge(that, self)), which matches the chain, where the inner layer is built last and shadows the outer ones; this matters where both give the same service (dev-errors' spawner, dev-recording's platform and local-dev's fs over NodeServices.layer). The checker's own quick fix, Layer.mergeAll, would have lost both the inner layer's view of the outer ones and that shadowing. No lock line, no LOCKED row and no law changed, as the owner's ruling for judgment slices says. Recount with only this check at error: 0 in libfabrika, 0 in app:e2e; the 21 left are app:src, slice E94 after 1366. 13 test files green, one pnpm typecheck green, pnpm lint green, merge of origin/main clean.",
+  "plants": [
+    {
+      "law": "the merged form is the chain: build order, release order, which service wins on a clash, and what the effect sees (probe on installed effect 4.1.3, scratchpad, outside the repo)",
+      "plant": "three layers A needs B needs C, A and C both giving X; chain against A.pipe(provideMerge(B), provideMerge(C))",
+      "result": "equal: build C, B, A; release A, B, C; X from A in both"
+    },
+    {
+      "law": "the same probe, order kept",
+      "plant": "the order reversed, C.pipe(provideMerge(B), provideMerge(A))",
+      "result": "red: Service not found: B"
+    },
+    {
+      "law": "sharing: a layer both A and B use is built once (probe)",
+      "plant": "chain against one provideMerge with a shared inner layer",
+      "result": "equal: one build in both"
+    },
+    {
+      "law": "dev-recording law (next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts:53), planted by reading",
+      "plant": "NodeServices.layer.pipe(Layer.provideMerge(platform)): NodeServices' real FileSystem and Path would shadow the recording platform",
+      "result": "red by reading: the law asserts the recorded mkdir and join calls, which only the platform layer records"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6.4,
+  "note": "Tests run at d1950de35, one file at a time with --maxWorkers=1: Id.test.ts, access/Authorization.integration, node/dev dev-control, dev-errors, dev-recording, dev-secrets, dev.laws and local-dev integration laws, node/settings/Command.test.ts, processes/ProcessSpans.integration, telemetry/internal/measurements.integration, e2e/chaos-revoke.integration and src/chaos.laws.integration (which reads Chaos.test-support.ts): all green. The two .visual. files were judged by reading only. loosening.sh flagged every touched file as an unrecognized change; each is the provide merge or an import, and no assertion moved. The plan's slice table still says every slice locks its folders; the owner's no-lock ruling for judgment slices lives in the twin-tools step brief, not yet in the plan.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "review"
+}
