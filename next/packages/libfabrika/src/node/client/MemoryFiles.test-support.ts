@@ -1,8 +1,5 @@
 import * as ByteSize from "effect/ByteSize";
-import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as FileSystem from "effect/FileSystem";
 // P39 slice 4b, next/: a file system in memory for the node client's merge-line laws (C1 to C3, K1,
 // K2), over Effect's own `FileSystem.layerNoop`. It keeps POSIX's facts the laws lean on: a mode

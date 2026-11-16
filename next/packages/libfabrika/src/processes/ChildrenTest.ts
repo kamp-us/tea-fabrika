@@ -321,7 +321,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 const reorder = (value: Schema.Json): Schema.Json =>
   Array.isArray(value)
     ? value.map(reorder)
-    : Predicate.isObjectOrArray(value)
+    : Predicate.isObjectKeyword(value)
       ? Object.fromEntries(
           Object.entries(value)
             .reverse()

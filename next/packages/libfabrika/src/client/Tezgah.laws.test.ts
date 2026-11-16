@@ -114,6 +114,9 @@ const PatchStep = Schema.Struct({
 
 const both = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg);
 
+/** The two view Msgs the L11 walk sends: a whole view or a patch, each with its `rev`. */
+type ViewMsg = Extract<TezgahMsg, { readonly type: "server" | "patch" }>;
+
 /** A view as the wire carries it, JSON. */
 const onWire = (view: TezgahView): Schema.Json =>
   Schema.decodeSync(Schema.fromJsonString(Schema.Json))(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
@@ -161,21 +164,21 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         const rev = m.rev;
 
         const msg = Match.value(kind).pipe(
-          Match.when("whole", (): TezgahMsg => ({ type: "server", rev: rev + skew, view: target })),
-          Match.when("next", (): TezgahMsg => ({ type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) })),
-          Match.when("gap_base", (): TezgahMsg => ({
+          Match.when("whole", (): ViewMsg => ({ type: "server", rev: rev + skew, view: target })),
+          Match.when("next", (): ViewMsg => ({ type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) })),
+          Match.when("gap_base", (): ViewMsg => ({
             type: "patch",
             base: rev - skew,
             rev: rev + 1,
             patch: diff(shown, target),
           })),
-          Match.when("gap_rev", (): TezgahMsg => ({
+          Match.when("gap_rev", (): ViewMsg => ({
             type: "patch",
             base: rev,
             rev: rev + 1 + skew,
             patch: diff(shown, target),
           })),
-          Match.orElse((): TezgahMsg => ({
+          Match.orElse((): ViewMsg => ({
             type: "patch",
             base: rev - skew - 1,
             rev: rev - skew + 1,

@@ -426,7 +426,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
     );
   }
 
-  return Schema.decodeUnknownSync(p.msg)(moves[cell.move % moves.length]!());
+  return Schema.decodeSync(p.msg)(moves[cell.move % moves.length]!());
 };
 
 for (const law of [
