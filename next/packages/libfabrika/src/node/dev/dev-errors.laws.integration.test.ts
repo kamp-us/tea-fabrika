@@ -42,6 +42,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 const deploy = (port: number) => (local: Context.Context<never>) =>
   Effect.gen(function* () {
+    // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
     const plugin = [...local.mapUnsafe.values()].find(
       (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };

@@ -42,7 +42,7 @@ const node: Driver = Effect.fnUntraced(function* (name: string, cap: number) {
   const sql = nodeSql(db);
 
   // Only the state handles read by the four exported services; real SQLite, no fake queries.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real record service reads
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies only the platform handles the real record service reads
   const state = {
     id: { name },
     storage: {

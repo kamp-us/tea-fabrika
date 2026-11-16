@@ -381,6 +381,7 @@ class Client {
   }
 
   async challenge() {
+    // SAFETY: the instance's challenge frame carries its nonce as a string.
     return (await this.next((f) => !Predicate.isString(f) && f.method === "challenge")).params.nonce as string;
   }
 
@@ -452,11 +453,13 @@ const read = async (client: Client, stream: string, after = 0): Promise<Readonly
 
 const counter = async (c: Client) => {
   const rows = await read(c, "processes/counter:1");
+  // SAFETY: a `started` row's body is the start record, whose `name` is the process's name.
   const started = rows.findLast((r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1");
   expect(started, "instance must start the real counter:1").toBeDefined();
   // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
   expect(started!.body).toMatchObject({ program: "fabrika/counter" });
 
+  // SAFETY: the expect above matched this body as a start record, which names its `process`.
   return (started!.body as { process: string }).process;
 };
 
@@ -537,6 +540,7 @@ const placing = (r: Frame) => {
     pos: expect.any(Number),
   });
 
+  // SAFETY: the expect above matched an accepted result with a numeric rev and pos.
   return r.result as { rev: number; pos: number };
 };
 
@@ -544,6 +548,7 @@ const view = async (c: Client, pid: string) => {
   const response = await c.call("view.open", { pid });
   expect(response.error).toBeUndefined();
 
+  // SAFETY: the expect above saw no error, and view.open answers the rev and the counter's view.
   return response.result as { rev: number; view: { count: number } };
 };
 
@@ -719,6 +724,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
     while (Date.now() < end) {
       const rows = await read(c, stream, seen);
       tags.push(...rows.map((row) => row._tag));
+      // SAFETY: a `restarted` row's body (ProcessEvent in libfabrika's processes/internal/processTable.ts) names the process it came `after`.
       const hit = rows.find((row) => row._tag === "restarted" && (row.body as { after?: string }).after === after);
 
       if (hit !== undefined) {
@@ -749,6 +755,7 @@ const crashStarts = (c: Client, firstStart: string) =>
       signal.throwIfAborted();
       const starts = (await read(c, "gateway/brain")).filter((r) => r._tag === "started");
 
+      // SAFETY: a `started` row's body names the start it came `after`, or null for the first.
       if (starts.some((row) => (row.body as { after: string | null }).after === firstStart)) {
         return starts;
       }
@@ -773,6 +780,7 @@ describe("P12 real dev.ts wire", () => {
 
     const now = (await read(reopened, "gateway/brain")).filter((row) => row._tag === "started");
     expect(now).toHaveLength(2);
+    // SAFETY: starts holds only `started` rows, whose body names its `start`.
     expect(now[1]!.body).toMatchObject({ after: (starts[0]!.body as { start: string }).start });
   });
   it("scenario: p10 plant: save twice or accept changed content; return the original placing", async () => {
@@ -1125,9 +1133,11 @@ describe("P12 real dev.ts wire", () => {
         expect(yield* Effect.promise(() => counter(resumed))).toBe(pid);
         // The kill missed every step, so no process restarted.
         expect(restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1")))).toEqual([]);
+        // SAFETY: firstStart is a `started` row, whose body names its `start`.
         const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
         expect(starts).toHaveLength(2);
         expect(starts[1]!.body).toMatchObject({
+          // SAFETY: firstStart is a `started` row, whose body names its `start`.
           after: (firstStart.body as { start: string }).start,
           build: expect.any(String),
           reason: "crash",
@@ -1220,6 +1230,7 @@ describe("P12 real dev.ts wire", () => {
         expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
 
         const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
+          // SAFETY: restartedRows keeps only `restarted` rows, whose body names the process it came `after`.
           (row) => (row.body as { after?: string }).after === pid,
         );
 
@@ -1233,13 +1244,16 @@ describe("P12 real dev.ts wire", () => {
           expect(refused.map((r) => r.call)).toHaveLength(1);
           expect(refused[0]!.retry.error).toBeUndefined();
           expect(restarted).toHaveLength(1);
+          // SAFETY: a `restarted` row's body names the new `process`.
           expect(live).toBe((restarted[0]!.body as { process: string }).process);
           expect(live).not.toBe(pid);
         }
 
+        // SAFETY: firstStart is a `started` row, whose body names its `start`.
         const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
         expect(starts).toHaveLength(2);
         expect(starts[1]!.body).toMatchObject({
+          // SAFETY: firstStart is a `started` row, whose body names its `start`.
           after: (firstStart.body as { start: string }).start,
           build: expect.any(String),
           reason: "crash",

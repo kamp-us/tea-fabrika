@@ -8,7 +8,9 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 
 const cli = vi.hoisted(() => ({
+  // SAFETY: work starts unset; the CLI mock stores the Effect it was handed.
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
+  // SAFETY: layer starts unset; a law sets it to the spawner layer it runs the handed work on.
   layer: undefined as Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> | undefined,
 }));
 
@@ -39,7 +41,9 @@ const run = () => Effect.runPromiseExit(cli.work!.pipe(Effect.provideService(Fet
 /** What one `fetch` call puts on the wire: its method, every header, and its body as text. */
 const wire = (options: RequestInit | undefined) => ({
   method: options?.method,
+  // SAFETY: grant.ts runs on Effect's FetchHttpClient, which hands `fetch` the request's Headers, a plain record of strings.
   headers: { ...(options?.headers as Record<string, string> | undefined) },
+  // SAFETY: grant.ts sets its body with HttpClientRequest.bodyText, which FetchHttpClient hands `fetch` as Uint8Array bytes.
   body: options?.body == null ? undefined : new TextDecoder().decode(options.body as Uint8Array),
 });
 
@@ -166,6 +170,7 @@ const results = {
   applied: null,
 } as const;
 
+// SAFETY: results is a const object literal, so its own keys are exactly its declared keys.
 for (const mode of Object.keys(results) as Array<keyof typeof results>) {
   it(`grant ${mode} path preserves the signed fields and exact error reason`, async () => {
     await fc.assert(

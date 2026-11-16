@@ -209,7 +209,7 @@ export const homeWithCredential = (credential: string) =>
       key,
       credential,
       publicKey: (yield* fs.readFileString(`${key}.pub`)).trim().split(/\s+/).slice(0, 2).join(" "),
-      grants: [] as Array<GrantSeen>,
+      grants: Array.of<GrantSeen>(),
     };
   }).pipe(Effect.provide(NodeServices.layer));
 

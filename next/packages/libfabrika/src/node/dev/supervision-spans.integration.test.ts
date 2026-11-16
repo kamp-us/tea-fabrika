@@ -313,7 +313,7 @@ const generatedThrow = fc.oneof(
       fc.constant(Symbol("made-up-throw")),
       fc.func(fc.jsonValue()),
     )
-    .map((value) => ({ value, message: null, private: [] as string[] })),
+    .map((value) => ({ value, message: null, private: Array.of<string>() })),
 );
 
 for (const adapter of ["node", "worker"] as const) {

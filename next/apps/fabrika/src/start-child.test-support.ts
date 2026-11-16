@@ -325,7 +325,7 @@ export const childProject = Effect.fnUntraced(function* () {
     },
   };
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
   const ctx = {
     id: { name: PROJECT },
     storage,
@@ -333,7 +333,7 @@ export const childProject = Effect.fnUntraced(function* () {
     exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
   } as unknown as DurableObjectState;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: only platform transports are supplied; authority, ledger and start logic are real
   const env = {
     INSTANCE: JSON.stringify(
       RecordWireTest.settingsFixture({
@@ -348,6 +348,7 @@ export const childProject = Effect.fnUntraced(function* () {
     ),
     PROCESS: {
       getByName: (name: string) => {
+        // SAFETY: the name is the JSON pair of namespace and registered name that the runtime writes for getByName.
         const [, registered] = JSON.parse(name) as [string, string];
 
         return {

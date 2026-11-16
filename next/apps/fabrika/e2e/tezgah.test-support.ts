@@ -301,6 +301,7 @@ export const focused = (view: TezgahView): Tile => {
   const tile = view.tiles.find((t) => t.id === space?.focus);
   expect(tile, "tezgah's workspace 1 has a focused tile").toBeDefined();
 
+  // SAFETY: the expect above fails the law when no focused tile is found, so here it is defined.
   return tile as Tile;
 };
 

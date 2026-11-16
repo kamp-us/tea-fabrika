@@ -393,6 +393,7 @@ describe("P34 recovery storage", () => {
                 expect(yield* s.receipt(r.letter)).toEqual(r);
               }
 
+              // SAFETY: the store's load answers its saved receipts and its sequence number.
               const loaded = (yield* s.load) as { receipts: ReadonlyArray<unknown>; seq: number };
               expect(loaded.seq).toBe(4);
               expect(loaded.receipts).toHaveLength(all.length);

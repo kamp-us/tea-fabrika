@@ -143,6 +143,7 @@ export const keysProblem = (text: string | null): string | null => {
     }
 
     const [, role = "", namespace = "", key = ""] = m;
+    // SAFETY: the wider element type only lets `includes` take any role text; the list is read, never written.
     const step = (ROLES as ReadonlyArray<string>).includes(role);
     const person = /^person:[A-Za-z0-9._:-]+$/.test(role);
 
@@ -805,6 +806,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       continue;
     }
 
+    // SAFETY: the check above ruled out null and every non-object, and `attested` is read as unknown.
     const links = (row as { attested?: unknown }).attested;
 
     if (links === undefined) {

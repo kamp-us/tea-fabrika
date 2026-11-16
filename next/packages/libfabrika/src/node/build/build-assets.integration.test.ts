@@ -43,6 +43,7 @@ const serving = async () => {
 
 // The installed packages' own versions, read now. A build report must say what really ran.
 const installed = (name: string) =>
+  // SAFETY: every installed package.json names its `version` as a string.
   (
     JSON.parse(readFileSync(join(import.meta.dirname, "../../../node_modules", name, "package.json"), "utf8")) as {
       version: string;

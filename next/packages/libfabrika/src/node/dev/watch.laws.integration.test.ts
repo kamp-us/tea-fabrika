@@ -37,8 +37,8 @@ const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
 /** Every real Rolldown watcher and result the laws saw, and which were closed. */
 const opened = vi.hoisted(() => ({
-  watchers: [] as Array<{ closed: boolean; repeat: Effect.Effect<void> }>,
-  results: [] as Array<{ code: string; closed: boolean }>,
+  watchers: Array.of<{ closed: boolean; repeat: Effect.Effect<void> }>(),
+  results: Array.of<{ code: string; closed: boolean }>(),
 }));
 
 vi.mock("rolldown", async (original) => {
@@ -58,6 +58,7 @@ vi.mock("rolldown", async (original) => {
       };
 
       const on = watcher.on.bind(watcher);
+      // SAFETY: the wrapper has only the `event` overload of Rolldown's `on`, the one watch.ts calls (`watcher.on("event", ...)`).
       watcher.on = ((
         name: "event",
         listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,

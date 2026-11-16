@@ -79,6 +79,7 @@ const program = (faults: Faults) => ({
     cmds: [],
     init: (loaded) => [loaded ?? { count: 0 }, []],
     update: {
+      // SAFETY: faults.model is a wrong model on purpose: the law checks that the runtime refuses it.
       inc: (s) => [(faults.model === undefined ? { count: s.count + 1 } : faults.model) as typeof s, []],
     },
   }),
@@ -86,6 +87,7 @@ const program = (faults: Faults) => ({
   msg: Msg,
   view: {
     data: Model,
+    // SAFETY: faults.view is a wrong view on purpose: the law checks that the runtime refuses it.
     select: (s: typeof Model.Type) => (faults.view === undefined ? s : faults.view) as typeof s,
   },
   refuse: () => (faults.refusal === undefined ? null : faults.refusal),
@@ -107,6 +109,7 @@ const seenProgram = (faults: Faults) => ({
     cmds: [],
     init: (loaded) => [loaded ?? { count: 0, seen: {} }, []],
     update: {
+      // SAFETY: faults.model is a wrong model on purpose: the law checks that the runtime refuses it.
       inc: (s) => [(faults.model === undefined ? { ...s, count: s.count + 1 } : faults.model) as typeof s, []],
     },
   }),
@@ -264,8 +267,11 @@ describe("T695, a declaration that does not load keeps why", () => {
         );
 
         expect(error).toBeInstanceOf(ProgramDown);
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect((error as ProgramDown).reason).toBe("load");
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's SchemaError").toBe(true);
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect((error as ProgramDown).cause).toEqual(Result.isFailure(expected) ? expected.failure : null);
       }),
   );
@@ -306,6 +312,7 @@ const causedAt = {
 law(
   "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
   fc.record({
+    // SAFETY: causedAt is a const object literal, so its own keys are exactly its declared keys.
     site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
     // Never a valid Int, number, string or name: each site fails for this value alone.
     bad: fc.oneof(fc.boolean(), failures),

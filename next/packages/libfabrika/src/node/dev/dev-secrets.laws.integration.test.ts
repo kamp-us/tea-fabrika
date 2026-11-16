@@ -285,10 +285,10 @@ const flow = async (sample: Flow) => {
     close: () => {},
   };
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies attachment, send and close; workerd owns the complete socket
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the fixture supplies attachment, send and close; workerd owns the complete socket
   const socket = ws as unknown as WebSocket;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- workerd owns the full handles; the fixture supplies every member these real services call
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: workerd owns the full handles; the fixture supplies every member these real services call
   const ctx = {
     id: { name: "gateway" },
     storage: {
@@ -305,7 +305,7 @@ const flow = async (sample: Flow) => {
     getWebSocketAutoResponseTimestamp: () => null,
   } as unknown as DurableObjectState;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
     INSTANCE: JSON.stringify(connectionInput),
     PROJECT: {
@@ -349,6 +349,7 @@ const flow = async (sample: Flow) => {
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
 
+              // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
               const plugin = [...local.mapUnsafe.values()].find(
                 (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
               ) as {

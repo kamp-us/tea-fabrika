@@ -68,7 +68,8 @@ const specific = <const P extends string>(prefix: P) => {
 
   const schema = Object.assign(
     S.String.check(S.isPattern(new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`))).pipe(
-      // Prefixes may come from runtime input; make and makeEffect validate them first.
+      // SAFETY: brand's type takes only one literal key, but at run time any string is a key. Prefixes may
+      // come from runtime input; make and makeEffect validate them first.
       S.brand<P>(prefix as Parameters<typeof S.brand<P>>[0]),
     ),
     { prefix } as const,

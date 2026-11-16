@@ -36,7 +36,7 @@ type Observed = {
   readonly assets: ReadonlyArray<string>;
 };
 
-const observations = vi.hoisted(() => ({ builds: [] as Observed[] }));
+const observations = vi.hoisted(() => ({ builds: Array.of<Observed>() }));
 
 const moduleReport = (modules: ReadonlyArray<string>): string =>
   modules.map((id) => `P8 module: ${JSON.stringify(id)}\n`).join("");

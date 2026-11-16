@@ -302,6 +302,7 @@ export const supervisor = Machine.make({
   model: Supervision,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
   init: (saved, ctx) => [
     saved ??

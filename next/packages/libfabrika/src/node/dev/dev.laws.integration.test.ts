@@ -72,6 +72,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
             Effect.scoped(
               startDev({ name: "port-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
                 Effect.suspend(() => {
+                  // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
                   const plugin = [...local.mapUnsafe.values()].find(
                     (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
                   ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
@@ -134,6 +135,7 @@ it("every observed exit is durable once across restart or brake, with its reason
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
 
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+        // SAFETY: the dev client posts each call as JSON that names its `method`.
         const call = JSON.parse(bodyText(options)) as { method: string };
 
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
@@ -152,6 +154,7 @@ it("every observed exit is durable once across restart or brake, with its reason
               platform.rss = 0;
               // The first info call succeeds. Startup flush has no events until deployment yields.
               fetch.mockImplementation(async (_url, options) => {
+                // SAFETY: the dev client posts each call as JSON that names its `method`.
                 const call = JSON.parse(bodyText(options)) as { method: string };
 
                 return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
@@ -166,6 +169,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                 }),
               );
               fetch.mockImplementation(async (_url, options) => {
+                // SAFETY: the dev client posts each call as a JSON Call: target, project, name, method and args.
                 const call = JSON.parse(bodyText(options)) as Call;
                 calls.push(call);
 
@@ -310,6 +314,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
         fetch.mockImplementation(async (_url, options) => {
+          // SAFETY: the dev client posts each call as a JSON Call: target, project, name, method and args.
           const call = JSON.parse(bodyText(options)) as Call;
           calls.push(call);
 
@@ -360,6 +365,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           .filter((call) => call.target === "record" && call.method === "write")
           .flatMap(
             (call) =>
+              // SAFETY: a record write's third argument is its list of spans, or absent.
               (call.args[2] as Array<{
                 span: { name: string; ok: boolean; attributes: Record<string, unknown> };
               }>) ?? [],

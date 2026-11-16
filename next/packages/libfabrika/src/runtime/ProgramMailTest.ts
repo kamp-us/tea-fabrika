@@ -142,6 +142,7 @@ const requesterName = (k: Pair) => `requester:${k}`;
 
 const responderName = (k: Pair) => `responder:${k}`;
 
+// SAFETY: PAIRS.map gives one entry for each Pair, so the record has every Pair key.
 const REQUESTERS = Object.fromEntries(
   PAIRS.map((k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
@@ -461,6 +462,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         const pair = PAIRS.find((k) => responderName(k) === name || requesterName(k) === name);
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
+        // SAFETY: stall is defined only when pair was found above.
         if (stall !== undefined && name === responderName(pair as Pair)) {
           yield* Deferred.succeed(stall.entered, undefined);
           yield* Deferred.await(stall.release);

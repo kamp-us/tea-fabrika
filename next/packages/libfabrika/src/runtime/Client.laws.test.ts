@@ -88,6 +88,7 @@ const SHAPES = {
 
 type Kind = keyof typeof SHAPES;
 
+// SAFETY: SHAPES is a const object literal, so its own keys are exactly the Kind union.
 const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
 
 type ListView = typeof SHAPES.list.Type;
@@ -105,6 +106,7 @@ const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
 /** One generated edit of a value of `kind`, chosen from what the value holds now. */
 const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): unknown => {
   if (kind === "list") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a list value has the list shape.
     const v = value as ListView;
     const i = v.items.length === 0 ? 0 : at % v.items.length;
 
@@ -121,6 +123,7 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
   }
 
   if (kind === "tags") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a tags value is an array of strings.
     const v = value as TagsView;
     const i = v.length === 0 ? 0 : at % v.length;
 
@@ -133,6 +136,7 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
           : [word, ...v];
   }
 
+  // SAFETY: the two branches above handled list and tags, so this value has the record shape.
   const v = value as RecordView;
   const i = v.rows.length === 0 ? 0 : at % v.rows.length;
 
@@ -524,6 +528,7 @@ const viewWalks = fc.tuple(
   fc.array(viewChoice, { minLength: 1, maxLength: 50 }),
 );
 
+// SAFETY: every pid the walk makes ends in `_` and its kind, as `pid_${i}_${kind}`.
 const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
 
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
@@ -553,6 +558,7 @@ const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["view
     return views;
   }
 
+  // SAFETY: decodes just checked the view against its kind's schema, and each of those is JSON.
   return decodes(pid, view) ? { ...views, [pid]: { rev: body.rev, view: view as Schema.Json } } : views;
 };
 
@@ -567,6 +573,7 @@ describe("L5: client views (p3)", () => {
 
           if (notice.foreign === "whole" && decodes(notice.pid, Object(notice.note).view)) {
             foreign.accepted++;
+            // SAFETY: a `foreign: "whole"` notice is built in the walk above with `rev: b.rev`, the brain's own rev, which Brain types as a number.
             foreign.different +=
               JSON.stringify(Object(notice.note).view) !==
               JSON.stringify(w.brains.get(notice.pid)!.views[noteRev(notice.note) as number])

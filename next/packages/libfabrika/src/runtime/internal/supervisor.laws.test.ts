@@ -60,6 +60,7 @@ const policy = {
 
 const ctx = (p: Policy = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
 
+// SAFETY: the walk builds each msg from a move the supervisor accepts in the folded model, so it is one of the supervisor's own messages.
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
@@ -1040,6 +1041,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           msgs.push(move.msg);
         });
         syncTest(supervisor, ctx(p), {
+          // SAFETY: these msgs are the walk's moves, each one of the supervisor's own messages.
           msgs: msgs as never,
           seed: SEED,
           encode: (model) => Schema.encodeSync(Supervision)(model),
@@ -1054,6 +1056,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
+  // SAFETY: saved is an encoded Supervision model, which holds a journal and a list of receipts.
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
   const fields = Object.keys(journal).filter((key) => key !== "_tag");
@@ -1066,6 +1069,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   ];
 
   if (journal._tag === "writing_dead") {
+    // SAFETY: a writing_dead journal holds its `failure`, a fresh Failure (internal/recovery.ts), which names its `letter`.
     const failure = journal.failure as { letter: string };
     // The exact fresh failure's receipt must be there, terminal and its own.
     broken.push({ ...raw, receipts: raw.receipts.filter((r) => r.letter !== failure.letter) });
@@ -1084,10 +1088,14 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   if (journal._tag === "stepping") {
+    // SAFETY: a stepping journal holds its attempt, an object.
     broken.push({ ...raw, journal: { ...journal, attempt: { ...(journal.attempt as object), seq: 0 } } });
   }
 
   // A crash origin names the process its journal replaces; a foreign failure process is refused.
+  // SAFETY: in supervisor.ts's Journal, the writing_exit, writing_down, waiting_recovery, waiting_start and
+  // checkpointing cases hold `origin`, an Origin (crash with its failure, or manual with its request); the
+  // other seven cases have none and read `undefined`, which is why the next line reads `origin?._tag`.
   const origin = journal.origin as { _tag: string; failure?: object; request?: { id: string; build: string } };
 
   if (origin?._tag === "crash") {
@@ -1097,6 +1105,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
   // A person's restart starts with its own saved request ID and build.
   if (journal._tag === "waiting_start" && origin._tag === "manual") {
+    // SAFETY: every waiting_start journal holds its `request`, a Start `again` (processes/internal/processTable.ts) with its id and code.
     const request = journal.request as { id: string; code: Record<string, unknown> };
     broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
     broken.push({
@@ -1241,6 +1250,7 @@ describe("P13 A11 saved admission work", () => {
               message.receipt.input,
             );
             expect(
+              // SAFETY: roundTrip answers an encoded Supervision model, an object.
               decodes({ ...(roundTrip(after) as object), receipts: [] }),
               "fresh stepping without the admitted input cannot load",
             ).toBe(false);

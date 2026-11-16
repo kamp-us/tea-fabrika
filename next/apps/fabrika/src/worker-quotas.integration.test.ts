@@ -206,6 +206,9 @@ export const program = Program.make({name: ${JSON.stringify(name)}, maxDeliverie
 `;
 
 const rpc = Effect.fnUntraced(function* (binding: object, method: string, ...args: ReadonlyArray<unknown>) {
+  // SAFETY: every binding passed here is a localInstance project or process, a dev.ts binding proxy,
+  // and that proxy answers each name outside its own members with a function that returns
+  // Effect.runPromise(...); start, read, info, abort and restart are none of its members.
   return yield* Effect.promise(() => Reflect.apply(Reflect.get(binding, method), binding, args) as Promise<unknown>);
 });
 

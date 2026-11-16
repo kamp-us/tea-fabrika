@@ -67,6 +67,7 @@ const keepSockets = () => {
 
 /** Closes every socket the page opened, in the page: the link is lost until the page dials again. */
 const loseLink = () => {
+  // SAFETY: keepSockets set `__deskSockets` to its own Array<WebSocket> before the page script ran.
   for (const socket of Reflect.get(globalThis, "__deskSockets") as Array<WebSocket>) {
     socket.close(4000, "the law loses the link");
   }

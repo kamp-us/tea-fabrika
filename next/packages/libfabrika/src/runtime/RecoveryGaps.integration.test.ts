@@ -77,7 +77,7 @@ const world = Effect.fnUntraced(function* () {
 
   const controls = {
     cut: "",
-    hits: [] as string[],
+    hits: Array.of<string>(),
     steps: 0,
     commands: 0,
     owns: 0,

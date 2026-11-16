@@ -139,9 +139,11 @@ const client = async (instance: Instance, key: Key, tab: string) => {
 
 /** The project's rows of one stream, through the instance's private local capability. */
 const rows = async (instance: Instance, stream: string): Promise<Array<any>> =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>;
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
+  // SAFETY: info answers the project's process rows as an array.
   ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
 
 describe("T953: a start is checked against the member who caused it, end to end", () => {

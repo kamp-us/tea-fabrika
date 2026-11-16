@@ -403,6 +403,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const reader = await fixture.start("reader:1");
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
+    // SAFETY: the reader program's Model above holds `log` as an array, and `[]` stands in until a view arrives.
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
 
     const send = async (pid: string, id: string, m: Schema.Json) =>

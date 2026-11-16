@@ -41,6 +41,8 @@ import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+// SAFETY: the program table starts empty, and world() writes only `built(...)` rows into it, each a
+// `{ hash, source }` pair.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
 vi.mock("./table.ts", () => table);
@@ -281,6 +283,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
 
+  // SAFETY: cloudflare/runtime.ts's Project reads `id.name`, the `storage` handles and, for the tail,
+  // `exports.IsolateTail`, all supplied here; the WebSocket members are read only by the Connection
+  // object, which this file never builds, and workerd's own state class cannot be made in Node.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project service reads
   const ctx = {
     id: { name: PROJECT },
@@ -302,6 +307,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   };
 
   const everyone = Object.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
+  // SAFETY: `undefined` is a member of the union, so the cast only widens the declared type, and
+  // each read below goes through required(), which refuses the value while boot has not set it.
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
 
   // What the Project class hands off: one service call on the object's runtime.
@@ -333,6 +340,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       }),
     );
 
+  // SAFETY: the runtime reaches each Durable Object namespace only through `getByName` and the
+  // loader through `get`, which these doubles answer; DurableObjectNamespace is workerd's abstract
+  // class with RPC brand types, which no plain Node object can carry.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
     INSTANCE: instance(limits),
@@ -382,6 +392,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             made.alarm = at;
           });
 
+          // SAFETY: a Process runtime reads its object's `id.name`, its `storage` (SQL, values, alarm)
+          // and the IsolateTail loopback in `exports`; this object holds those three and nothing else
+          // a Process touches.
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor and alarm handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const made: Store = { db: processDb, ctx: processCtx, values: handles.values, alarm: null };
@@ -404,6 +417,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                         Match.when("configure", () =>
                           configureProcess(
                             current.ctx,
+                            // SAFETY: the Project's deliver in cloudflare/runtime.ts sends
+                            // `configure(descriptor, drain)` through ProcessClient, whose binding types
+                            // that first argument as a Descriptor; this proxy hands it on unchanged.
                             args[0] as Descriptor,
                             required(runtimes.get(current)),
                             args[1] === true,
