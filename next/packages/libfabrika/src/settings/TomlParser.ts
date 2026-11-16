@@ -32,7 +32,16 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
         });
       }
 
-      parent = Reflect.get(parent, segment);
+      const next =
+        Predicate.hasProperty(parent, segment) && Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+
+      // An array of tables is a step too. The parser refuses a document that writes through a
+      // scalar, so a scalar here is a bug in this walk, and it fails as main's defineProperty did.
+      if (!Predicate.isObjectOrArray(next)) {
+        throw new TypeError("A TOML path steps through a value that is not a table or an array.");
+      }
+
+      parent = next;
     }
   }
 };
