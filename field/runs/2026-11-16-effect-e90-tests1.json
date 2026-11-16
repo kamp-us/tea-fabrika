@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e90-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:45:21-08:00",
+  "ended": "2026-11-16T01:08:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E90 of the Effect-check sweep (strictBooleanExpressions in next/packages/libfabrika/src/runtime and the top src/ files of next/apps/fabrika), in next/, on branch fabrikalfa/effect-e90 from fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds PR 1366. The plan gives this row the steps tests and review only, so this step fixes every hit. Recount with only strictBooleanExpressions at error through an --lspconfig on the libfabrika and app tsconfigs, joined by file and offset: 55 hits, 29 in lib:runtime and 26 in app:src, the same as the plan's row. All 55 sit in exam paths (*.test.ts, *.integration.test.ts, *Test.ts, *.test-support.ts); 0 are in product files, so nothing is left for a build. All 55 fixed by hand with the Edit tool in 19 files: lib:runtime Client.laws.test.ts 4, internal/supervisor.laws.test.ts 6, WatchersTest.ts 4, Runner.integration.test.ts 4, StartChildTest.ts 3, ProgramMailTest.ts 2, internal/handsDelivery.test.ts 2, internal/watchers.test.ts 2, MonitorTest.ts 1, RecoveryGaps.integration.test.ts 1; app:src instance-one-file.integration.test.ts 6, door.integration.test.ts 5, instance-records.integration.test.ts 4, instance-wire.integration.test.ts 4, runtime-recovery.laws.integration.test.ts 2, workerd.test-support.ts 2, brain-life.integration.test.ts 1, build.integration.test.ts 1, checklist-instance.laws.integration.test.ts 1. Branch fabrikalfa/effect-e45 (another session, not yet merged) had already fixed these same 55 sites while working beyond its own row. To keep the two branches from conflicting, each fix here writes the same text E45 wrote; a sort of the changed lines of both diffs matches exactly. Each was read in place and keeps the old truthiness answer: !== undefined on an optional value, !== null on a RegExp match, > 0 on a length, % n !== 0 on a number, === true on an optional boolean, (x ?? \"\") === \"\" on an env var, and two && or || chains turned into ternaries with the same values. Recount after, with the project configs: 0 errors in both projects.",
+  "plants": [
+    {
+      "law": "L1 by hand: strictBooleanExpressions at error in lib:runtime and app:src fails the type check on a new hit",
+      "plant": "with a temporary overrides entry in tsconfig.base.json at strictBooleanExpressions error for next/apps/fabrika/src/*.ts and next/packages/libfabrika/src/runtime/**/*.ts, the 55 hits read as errors before the fixes and 0 after; then two planted files, runtime/plant-e90.ts (n ? ... on a number) and the app's src/plant-e90.ts (s ? ... on string | undefined): effect-tsgo diagnostics named runtime/plant-e90.ts(1,48) and src/plant-e90.ts(1,60) effect(strictBooleanExpressions) at error. Both plant files deleted",
+      "result": "red"
+    },
+    {
+      "law": "L2: oxlint-plugins/effect-checks.test.ts with a temporary strictBooleanExpressions LOCKED row for the same two globs",
+      "plant": "the runtime glob dropped from the temporary overrides entry: the law listed 106 runtime files at off; tsconfig.base.json restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "The lock entry and the LOCKED row were written first, as the brief asked, then taken out when the lead said judgment slices add neither (decision 0589's amendment: their locks land in one pull request at the end). tsconfig.base.json and oxlint-plugins/effect-checks.test.ts are back to the base, byte for byte. The plants above ran while they were in. No law changed what it asserts, no assertion was dropped, no cast, disable comment or ledger row was added. Tests under nice -n 19, --maxWorkers=1 and the pinned Node, one file at a time, all green: oxlint-plugins/effect-checks.test.ts (1), runtime/Client.laws.test.ts (10), runtime/internal/handsDelivery.test.ts (1), runtime/internal/supervisor.laws.test.ts (9), runtime/internal/watchers.test.ts (2). Not run, since the brief keeps .integration. files to a box: the 10 touched .integration.test.ts files, and the integration tests that run MonitorTest, ProgramMailTest, StartChildTest, WatchersTest and workerd.test-support (node/Monitor, node/ProgramMail, node/ProgramMailRuntime, node/StartChild, node/StartChildBoundary, node/StartChildExit, node/Watchers, and the app's settings-start, instance-wire and worker-supervision). Checks: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; ratchet.ts exit 0; one pnpm typecheck, exit 0. Not run: the full suite.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}

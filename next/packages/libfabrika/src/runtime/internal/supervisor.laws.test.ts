@@ -456,7 +456,7 @@ const walk = (p: Policy, tape: ReadonlyArray<Cell>, observe: Observer, swaps = f
     w.model = after;
     observe(before, move, after, w);
 
-    if (!move.stale && move.name !== "advance") {
+    if (move.stale !== true && move.name !== "advance") {
       w.sent.push(move.msg);
     }
   }
@@ -466,7 +466,7 @@ const walk = (p: Policy, tape: ReadonlyArray<Cell>, observe: Observer, swaps = f
 
 /** Keeps the fold's own account. It reads only its own moves and which way the journal went. */
 const account = (before: Model, move: Move, after: Model, w: World, p: Policy): void => {
-  if (move.stale) {
+  if (move.stale === true) {
     return;
   }
 
@@ -725,7 +725,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           // healthy interval while idle.
           expect(after.crashes, "crashes follow the fold's account").toBe(w.crashes);
 
-          if (move.stale) {
+          if (move.stale === true) {
             return;
           }
 
@@ -963,7 +963,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             `a stale ${move.msg.type} changed the journal`,
           ).toBe(false);
 
-          if (move.stale) {
+          if (move.stale === true) {
             seen.add("stale_completion");
           }
         });
@@ -1005,10 +1005,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
                 expect(after, `swapped in ${j._tag} for ${move.name}`).toEqual(before);
                 seen.add(j._tag === "idle" ? "swapped_foreign" : "swapped_busy");
               }
-            } else if (!move.stale && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
+            } else if (move.stale !== true && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
               const origin = before.journal.origin;
               build = origin._tag === "manual" ? origin.request.build : build;
-            } else if (!move.stale && move.name === "adopted" && after !== before) {
+            } else if (move.stale !== true && move.name === "adopted" && after !== before) {
               build = String(move.msg.build);
             }
 

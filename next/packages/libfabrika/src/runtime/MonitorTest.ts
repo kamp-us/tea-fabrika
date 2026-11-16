@@ -666,7 +666,7 @@ const walk = (
         }
       }
 
-      if (again) {
+      if (again === true) {
         yield* life.manager.exit(target.pid, reason, brainFrom()).pipe(Effect.orDie);
         done.add("end:retried");
       }

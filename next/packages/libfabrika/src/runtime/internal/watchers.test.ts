@@ -95,7 +95,7 @@ describe("saved view membership, next/", () => {
 
       for (const [pick, fresh] of walk) {
         const held = clients(state);
-        const client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+        const client = held.length > 0 && pick % 3 !== 0 ? nth(held, pick).client : fresh.client;
 
         if (pick % 3 === 2) {
           [state] = applyCell(watchers, state, { type: "end", client });

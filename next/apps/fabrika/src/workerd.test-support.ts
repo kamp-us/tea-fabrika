@@ -77,7 +77,7 @@ const Saved = Schema.fromJsonString(
 const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, name: string) => {
   const table = (t: string) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
-  if (!table("process_recovery")) {
+  if (table("process_recovery") === undefined) {
     return null;
   }
 
@@ -88,7 +88,8 @@ const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, nam
   }
 
   // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
-  const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
+  const kv =
+    table("_cf_KV") !== undefined ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
 
   return {
     journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,

@@ -292,7 +292,7 @@ const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
     // The instance is running, so its own writes may hold the lock this read waits for.
     const read = instanceDatabase(join(entry.parentPath, entry.name), { readOnly: true }).pipe(
       Effect.map((db) =>
-        db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
+        db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) !== undefined
           ? db
               .prepare(
                 table === "gateway_bindings"
@@ -497,10 +497,10 @@ const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: strin
     );
 
     // Drain every reply: calls after the first refusal can still spend a later window's budget.
-    allowed.push(...calls.filter((call) => !call.reply.error));
+    allowed.push(...calls.filter((call) => call.reply.error === undefined));
     const refused = calls.find((call) => call.reply.error);
 
-    if (refused) {
+    if (refused !== undefined) {
       const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
 
       return { allowed, refused, last };
@@ -888,7 +888,9 @@ describe("P12 real dev.ts wire", () => {
       pid = await counter(a);
 
     expect(await view(a, pid)).toEqual({ rev: 0, view: { count: 0 } });
-    const replies = await Promise.all(Array.from({ length: 12 }, (_, n) => send(n % 2 ? a : b, pid, `burst-${n}`)));
+    const replies = await Promise.all(
+      Array.from({ length: 12 }, (_, n) => send(n % 2 !== 0 ? a : b, pid, `burst-${n}`)),
+    );
     const placed = replies.map(placing).sort((x, y) => x.pos - y.pos);
     expect(placed.map((p) => p.pos)).toEqual(Array.from({ length: 12 }, (_, n) => n + 1));
     let count = 0;

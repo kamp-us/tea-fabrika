@@ -408,7 +408,7 @@ const world = Effect.fnUntraced(function* (
   const part = (name: string) => {
     let p = partFiles.get(name);
 
-    if (!p) {
+    if (p === undefined) {
       p = open(join(dir, `${name.replaceAll("/", "_")}.db`));
       partFiles.set(name, p);
     }
@@ -1025,7 +1025,7 @@ describe("T843 sender budget, next/", () => {
             expect(
               (yield* d.route(client, "process.send", {
                 ...request(`budget-${n}`),
-                pid: n % 2 ? OTHER_PROCESS : PROCESS,
+                pid: n % 2 !== 0 ? OTHER_PROCESS : PROCESS,
               }))._tag,
             ).toBe("ok");
           }
@@ -1095,7 +1095,7 @@ describe("T843 sender budget, next/", () => {
           });
           const tables = w.sql.exec("SELECT name FROM sqlite_schema WHERE type='table' AND name='gateway_limits'");
 
-          if (tables.length) {
+          if (tables.length > 0) {
             expect(w.sql.exec("SELECT * FROM gateway_limits")).toEqual([]);
           }
 
@@ -1481,7 +1481,7 @@ describe("T843 sender budget, next/", () => {
                 ? { stream: markerValue, after: 0 }
                 : {
                     ...request(`denied-${n}`, comment(markerValue)),
-                    pid: n % 2 ? OTHER_PROCESS : PROCESS,
+                    pid: n % 2 !== 0 ? OTHER_PROCESS : PROCESS,
                     ...(move === "stamped" ? { by: markerValue } : {}),
                   };
 
@@ -1573,7 +1573,7 @@ const entries = (stream: string) => Ledger.use((l: typeof Ledger.Service) => Str
 const stamped = () => entries("gateway/inputs");
 
 const rawRows = (db: DatabaseSync, stream: string) =>
-  db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get()
+  db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get() !== undefined
     ? db.prepare("SELECT * FROM entries WHERE stream=? ORDER BY rev").all(stream)
     : [];
 
