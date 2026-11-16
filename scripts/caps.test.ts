@@ -22,6 +22,9 @@ import { testConfig } from "../vitest.config.ts";
 const root = resolve(import.meta.dirname, "..");
 const options = { seed: 325, numRuns: 4 };
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
+// A compiler name no process has, so the laptop wait in typecheck.sh never holds up a law whose
+// subject is something else, even while a real tsgo runs on the machine.
+const idle = "tc-idle-compiler";
 
 const load = `
 if (process.env.TEST_NODE_VERSION) {
@@ -233,6 +236,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: temp,
                   FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+                  FABRIKA_TYPECHECK_COMPILER: idle,
                   TEST_EVENTS: events,
                   TEST_ID: id,
                   TEST_RELEASE: join(dir, `release-${id}`),
@@ -887,6 +891,7 @@ exit 0
             ...process.env,
             PATH: `${bin}:${process.env.PATH}`,
             FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+            FABRIKA_TYPECHECK_COMPILER: idle,
             TYPESAFE_API_KEY: undefined,
             INSTALL_FAILS: outcome === "install failed" ? "1" : undefined,
           },
@@ -972,6 +977,7 @@ exit 0
                   PATH: `${bin}:${process.env.PATH}`,
                   TMPDIR: dir,
                   FABRIKA_TYPECHECK_LOCK: join(dir, "typecheck.lock"),
+                  FABRIKA_TYPECHECK_COMPILER: idle,
                   TEST_ID: id,
                   TEST_EXIT: String(code),
                   TEST_EVENTS: events,
