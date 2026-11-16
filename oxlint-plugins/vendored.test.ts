@@ -149,13 +149,11 @@ describe("L1 the vendored folder is the pinned commit's code", () => {
         fc.pre(edit.kind !== "tree" || edit.tree !== tree);
         apply(root, Object.keys(files), edit);
         seen.add(`${edit.kind} ${edit.committed}`);
-        const lines = verify(root);
-
-        if (edit.kind === "none") {
-          expect(lines).toEqual([]);
-        } else {
-          expect(lines.length).toBeGreaterThan(0);
-        }
+        // Refused exactly when the copy was edited: an untouched copy gets no line, every edit one at least.
+        expect({ kind: edit.kind, refused: verify(root).length > 0 }).toEqual({
+          kind: edit.kind,
+          refused: edit.kind !== "none",
+        });
       }),
       { ...runs, examples: EXAMPLES },
     );
