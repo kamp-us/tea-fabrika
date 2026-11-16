@@ -6,6 +6,7 @@
  */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
 import type { Accounting } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Model, Reply, reply as machine } from "./internal/reply.ts";
@@ -34,8 +35,11 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
   const saved = decode(row.value);
 
   if (Result.isFailure(saved)) {
-    const paths = issues(saved.failure.issue).issues.map((i) => (i.path ?? []).map(String).join(".") || "row");
-    throw badRow(`a stored reply does not decode at ${paths.join(", ")}`);
+    const paths = Arr.map(
+      issues(saved.failure.issue).issues,
+      (i) => Arr.join(Arr.map(i.path ?? [], String), ".") || "row",
+    );
+    throw badRow(`a stored reply does not decode at ${Arr.join(paths, ", ")}`);
   }
 
   if (saved.success.name !== name || saved.success.id !== id) {

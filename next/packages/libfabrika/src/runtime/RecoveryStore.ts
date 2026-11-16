@@ -5,6 +5,8 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
 import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
@@ -181,9 +183,10 @@ export const recoveryStore = <S extends Kept>(
     known !== null && known.generation === generation
       ? known.receipts
       : new Map(
-          sql
-            .exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name)
-            .map((row) => [String(row.letter), String(row.value)]),
+          Arr.map(sql.exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name), (row) => [
+            String(row.letter),
+            String(row.value),
+          ]),
         );
   const readJournal = () => sql.exec(JOURNAL, options.name)[0];
   const snapshot = (row = readJournal()) => {
@@ -207,7 +210,7 @@ export const recoveryStore = <S extends Kept>(
       return null;
     }
 
-    const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
+    const receipts = new Map(Arr.map(saved.receipts, (r) => [r.letter, r]));
     const texts = new Map<string, string>();
 
     for (const row of sql.exec(
@@ -229,7 +232,8 @@ export const recoveryStore = <S extends Kept>(
 
       // Read old single-row snapshots until their next atomic save splits the receipts.
       if (row === undefined) {
-        return snapshot()?.receipts.find((r) => r.letter === letter) ?? null;
+        const saved = snapshot();
+        return saved === null ? null : Option.getOrNull(Arr.findFirst(saved.receipts, (r) => r.letter === letter));
       }
 
       return receiptFor(row.value, letter);
@@ -250,7 +254,7 @@ export const recoveryStore = <S extends Kept>(
           const journal = textIn(old?.value);
           const generation = generationIn(old?.generation);
           // Omitted receipts are retained, including during migration from the old snapshot.
-          const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
+          const receipts = new Map(Arr.map(old === undefined ? [] : decode(old.value).receipts, (r) => [r.letter, r]));
 
           for (const receipt of saved.receipts) {
             receipts.set(receipt.letter, receipt);
@@ -265,7 +269,7 @@ export const recoveryStore = <S extends Kept>(
           const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added + counted;
           const next: Known = {
             generation: writes ? (generation ?? 0) + 1 : generation,
-            receipts: new Map([...prior, ...changed.map((c) => [c.letter, c.text] as const)]),
+            receipts: new Map([...prior, ...Arr.map(changed, (c) => [c.letter, c.text] as const)]),
           };
 
           if (sql.size() + growth > options.capacity) {

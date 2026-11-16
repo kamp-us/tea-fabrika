@@ -6,6 +6,7 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
@@ -298,13 +299,16 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             // An empty head names a checkpoint split across rows in the same transaction.
             const text =
               row.checkpoint === ""
-                ? sql
-                    .exec(
-                      "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
-                      options.process,
-                    )
-                    .map((part) => part.checkpoint)
-                    .join("")
+                ? Arr.join(
+                    Arr.map(
+                      sql.exec(
+                        "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                        options.process,
+                      ),
+                      (part) => String(part.checkpoint ?? ""),
+                    ),
+                    "",
+                  )
                 : row.checkpoint;
             return decodeCheckpoint(text);
           }),
@@ -334,13 +338,16 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                   old === undefined
                     ? undefined
                     : old.checkpoint === ""
-                      ? sql
-                          .exec(
-                            "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
-                            options.process,
-                          )
-                          .map((part) => part.checkpoint)
-                          .join("")
+                      ? Arr.join(
+                          Arr.map(
+                            sql.exec(
+                              "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                              options.process,
+                            ),
+                            (part) => String(part.checkpoint ?? ""),
+                          ),
+                          "",
+                        )
                       : String(old.checkpoint);
                 const isRecovery = recovering(sql);
                 options.accounting?.change(
