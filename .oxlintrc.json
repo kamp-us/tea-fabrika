@@ -2350,6 +2350,7 @@
         "next/apps/fabrika/src/entry/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
         "next/packages/libfabrika/src/packs/**",
@@ -2359,11 +2360,14 @@
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/src/*",
+        "next/packages/tuval/src/browser/**",
         "next/packages/tuval/src/window/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": {
@@ -2398,7 +2402,9 @@
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/telemetry/**"
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**"
       ],
       "rules": {
         "eslint/no-restricted-properties": [

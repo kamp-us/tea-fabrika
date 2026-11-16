@@ -790,6 +790,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.has(t, key);
     },
     get: (t, key, receiver) => {
@@ -801,6 +802,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.get(t, key, receiver);
     },
   });

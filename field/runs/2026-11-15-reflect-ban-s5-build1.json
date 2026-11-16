@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s5-build1",
+  "ticket": "1056",
+  "pr": "1411",
+  "started": "2026-11-15T18:39:00-08:00",
+  "ended": "2026-11-15T18:46:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "cleared the 2 Reflect.get lint fires in next/packages/libfabrika/src/settings (TomlParser.ts put, internal/edit.ts read) with the own-key shape of the plan's kind 8; every settings law stays green, TomlEdit.test.ts at both depths",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": null,
+  "step": "build"
+}

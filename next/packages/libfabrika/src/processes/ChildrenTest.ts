@@ -18,6 +18,7 @@ import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Cause,
   Context,
+  Deferred,
   Effect,
   Exit,
   Fiber,
@@ -61,7 +62,6 @@ const PIDS: ReadonlyArray<string> = Array.from(
 
 const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
-
   return {
     next: Effect.sync(() => {
       const value = values[calls++];
@@ -104,23 +104,15 @@ const Reasons = Schema.TaggedUnion({
 });
 
 const NORMAL = Reasons.cases.normal.make({});
-
 const SHUTDOWN = Reasons.cases.shutdown.make({});
-
 const CRASHED = Reasons.cases.crashed.make({ phase: "step", error: "Error" });
 
 const SEED = 119120;
-
 const HASH = "build-a";
-
 const QUEUE = "queue";
-
 const MERGER = "merger";
-
 const WORKER = "worker";
-
 const ROGUE = "rogue";
-
 const PROGRAMS = [MERGER, MERGER, WORKER, QUEUE, ROGUE] as const;
 
 /** The host's start grants, by program, duplicated and out of order: they are read as a set. */
@@ -149,7 +141,6 @@ const POOL = ["merger:1", "merger:2", "merger:3", "worker:1", "worker:2"] as con
 const ROW_LIMIT = 2_000_000;
 
 type Answer = Result.Result<typeof Started.Type, ChildrenError>;
-
 type Reason = ChildrenError["reason"];
 
 /** The first letter's entry id in `<name>/inbox`. */
@@ -179,7 +170,6 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-
   return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
@@ -191,7 +181,6 @@ const body = (entry: Entry): Record<string, unknown> =>
 /** The store's Sql with two cuts: on the next INSERT, or on the first transaction after an INSERT. */
 const cutting = (sql: Sql) => {
   const fault = { insert: false, afterWrite: false, wrote: false, hit: false, message: "SQLITE_FULL planted" };
-
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
@@ -217,7 +206,6 @@ const cutting = (sql: Sql) => {
     },
     size: () => sql.size(),
   };
-
   const arm = (kind: "insert" | "afterWrite", message = "SQLITE_FULL planted") => {
     fault.insert = kind === "insert";
     fault.afterWrite = kind === "afterWrite";
@@ -225,16 +213,13 @@ const cutting = (sql: Sql) => {
     fault.hit = false;
     fault.message = message;
   };
-
   const disarm = () => {
     const hit = fault.hit;
     fault.insert = false;
     fault.afterWrite = false;
     fault.hit = false;
-
     return hit;
   };
-
   return { sql: wrapped, arm, disarm };
 };
 
@@ -242,14 +227,12 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** A transaction gate: runs before every turn this layer opens, with the turn's index. */
 type Gate = (turn: number) => Effect.Effect<void>;
-
 /** Runs after every turn's own step, inside the turn. */
 type Seen = (turn: LedgerTurn) => void;
 
 /** The real ledger, the real process manager and the real start piece, all on one Sql. */
 const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) => {
   const tx = LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet));
-
   const gated =
     gate === undefined && seen === undefined
       ? tx
@@ -258,7 +241,6 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
           Effect.gen(function* () {
             const real = yield* LedgerTransaction;
             let turns = 0;
-
             return LedgerTransaction.of({
               transact: <A>(step: (turn: LedgerTurn) => A) =>
                 Effect.suspend(() => (gate === undefined ? Effect.void : gate(turns++))).pipe(
@@ -266,7 +248,6 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
                     real.transact((turn) => {
                       const out = step(turn);
                       seen?.(turn);
-
                       return out;
                     }),
                   ),
@@ -274,9 +255,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
             });
           }),
         ).pipe(Layer.provide(tx));
-
   const data = Layer.merge(LedgerSql.layer(sql, { reader: "connection:test" }).pipe(Layer.provide(quiet)), gated);
-
   return ChildrenLedger.layer({ grants: GRANTS, fabrika: Model.ref("fabrika", "p42") }).pipe(
     Layer.provideMerge(
       ProcessManager.layer({ ...brain(), by: BRAIN }, next).pipe(
@@ -348,9 +327,7 @@ const Cell = fc.record({
   build: fc.constantFrom("writer-a", "writer-b"),
   trace: fc.stringMatching(/^[0-9a-f]{32}$/),
 });
-
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
-
 type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, unknown> };
 
 const Tape = fc
@@ -370,7 +347,6 @@ const Tape = fc
 /** The input a cell picks: absent, `null`, `{}`, `[]`, or a generated JSON value. */
 const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
   const kind = cell.input % 6;
-
   return kind === 0
     ? {}
     : { input: kind === 1 ? null : kind === 2 ? {} : kind === 3 ? [] : (copied({ v: cell.m }).v as Schema.Json) };
@@ -529,24 +505,19 @@ const walk = (
     const { sql, arm, disarm } = cutting(store.sql);
     const next = ids(...PIDS);
     const world: World = { names: new Map(), saved: new Map(), unsaved: new Map(), letters: new Map(), n: 0, big: 0 };
-
     const run = <A, E>(effect: Effect.Effect<A, E, Children | ProcessManager | Mailbox>, gate?: Gate) =>
       effect.pipe(Effect.provide(layer(sql, next.next, gate)), Effect.result);
-
     const rowsNow = (names: Iterable<string>) =>
       entries(names).pipe(Effect.provide(layer(sql, next.next)), Effect.orDie);
-
     const startChild = (child: Child, said: From, gate?: Gate) =>
       run(
         Children.use((c) => c.start(child, said)),
         gate,
       );
-
     const manager = <A>(f: (p: ProcessManager["Service"]) => Effect.Effect<A, unknown>) =>
       run(ProcessManager.use(f)).pipe(
         Effect.map((answer) => {
           expect(Result.isSuccess(answer), "a lifecycle move of the walk's own succeeds").toBe(true);
-
           return Result.getOrThrow(answer);
         }),
       );
@@ -555,13 +526,11 @@ const walk = (
       const placed = yield* manager((p) =>
         p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: HASH } }), from()),
       );
-
       world.names.set(name, { program, lives: [placed.process], current: placed.process, state: "live" });
     }
 
     /** A parent the ledger takes: an input of one known process. */
     const parentFor = () => `in-${PIDS[0]}-${++world.n}`;
-
     const childFor = (cell: Cell, requester: string): Child => ({
       id: `${requester}/${++world.n}/0`,
       name: choose([...POOL, ...world.names.keys()], cell.name),
@@ -611,7 +580,6 @@ const walk = (
       if (want.outcome === "fresh") {
         placed(child, said, answer, label);
         seen.add("started");
-
         return;
       }
 
@@ -621,7 +589,6 @@ const walk = (
       if (want.outcome === "refused") {
         refused(answer, want.reason, `${label}: ${want.reason}`);
         seen.add(want.reason);
-
         return;
       }
 
@@ -643,11 +610,9 @@ const walk = (
           lives.map((e) => body(e)["process"]),
           `${name}'s lives, in order`,
         ).toEqual(held.lives);
-
         const registered = all.filter(
           (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name,
         );
-
         expect(registered.length, `${name} is registered once`).toBe(1);
         expect(body(registered[0] as Entry), "L5: the brain owns every registered name").toMatchObject({
           program: held.program,
@@ -687,7 +652,6 @@ const walk = (
         const registration = all.find(
           (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === child.name,
         );
-
         const turn = [registration?.rev ?? 0, line.rev, ...(letter === undefined ? [] : [letter.rev])];
         expect(Math.max(...turn) - Math.min(...turn), "L1: registered, started and the first letter are one turn").toBe(
           turn.length - 1,
@@ -710,7 +674,6 @@ const walk = (
       // Every fresh write takes a process id; keep spare for the longest tape.
       const live = liveProcesses(world).length > 0;
       const spare = next.calls() < PIDS.length - 2;
-
       const can: Record<Move, boolean> = {
         start: live && spare,
         start_stale: staleProcesses(world).length > 0 && spare,
@@ -727,7 +690,6 @@ const walk = (
         exit_between: live && spare,
         reopen: true,
       };
-
       return moves.filter((move) => can[move]);
     };
 
@@ -748,23 +710,19 @@ const walk = (
           yield* ask(child, said(cell, `in-${child.requester.process}-${world.n}`), "start");
           break;
         }
-
         case "start_stale": {
           const child = childFor(cell, choose(staleProcesses(world), cell.pick));
           yield* ask(child, said(cell, `in-${child.requester.process}-${world.n}`), "a stale requester");
           break;
         }
-
         case "retry_saved": {
           const [id, first] = choose([...world.saved], cell.pick);
-
           // The same caller fields, its input in another key order and copied, after a rebuild or not.
           const again: Child = {
             ...first.child,
             code: { program: first.child.code.program, hash: cell.alt % 2 === 0 ? HASH : "build-b" },
             ...(first.child.input === undefined ? {} : { input: reorder(copied(first.child.input)) as Schema.Json }),
           };
-
           const answer = yield* startChild(again, said(cell, first.from.parent ?? "none"));
           expect(Result.isSuccess(answer), `L3: a retry of saved ${id} answers`).toBe(true);
           expect(Result.getOrThrow(answer), `L3: a retry of saved ${id} answers its saved started`).toEqual(
@@ -774,16 +732,13 @@ const walk = (
           seen.add("retried");
           break;
         }
-
         case "retry_changed": {
           const [id, first] = choose([...world.saved], cell.pick);
           const field = cell.alt % 4;
           const others = [...POOL, ...world.names.keys()].filter((n) => n !== first.child.name);
-
           const processes = [...world.names.values()]
             .flatMap((h) => h.lives)
             .filter((p) => p !== first.child.requester.process);
-
           const changed: Child =
             field === 0 && others.length > 0
               ? { ...first.child, name: choose(others, cell.name) }
@@ -802,14 +757,12 @@ const walk = (
                     : cell.input % 2 === 0
                       ? (({ input: _input, ...rest }) => rest)(first.child)
                       : { ...first.child, input: ["changed", first.child.input] };
-
           const answer = yield* startChild(changed, said(cell, first.from.parent ?? "none"));
           refused(answer, "id_reused", `L3: saved ${id} asked again with another caller field`);
           unchanged("L3: id_reused writes nothing");
           seen.add("id_reused");
           break;
         }
-
         case "retry_unsaved": {
           const [, child] = choose([...world.unsaved], cell.pick);
           yield* ask(
@@ -820,7 +773,6 @@ const walk = (
           seen.add("asked_afresh");
           break;
         }
-
         case "exit": {
           const name = choose(liveNames(world), cell.pick);
           const held = world.names.get(name) as Held;
@@ -828,7 +780,6 @@ const walk = (
           held.state = "ended";
           break;
         }
-
         case "down": {
           const name = choose(liveNames(world), cell.pick);
           const held = world.names.get(name) as Held;
@@ -839,11 +790,9 @@ const walk = (
           held.state = "down";
           break;
         }
-
         case "restart": {
           const name = choose(stoppedNames(world), cell.pick);
           const held = world.names.get(name) as Held;
-
           const placed = yield* manager((p) =>
             p.start(
               Start.cases.again.make({
@@ -856,23 +805,19 @@ const walk = (
               from(),
             ),
           );
-
           held.lives.push(placed.process);
           held.current = placed.process;
           held.state = "live";
           break;
         }
-
         case "bad": {
           // One field of a start off its schema, on a fresh id or on a saved one: decode comes first.
           const base =
             world.saved.size > 0 && cell.pick % 3 === 0
               ? choose([...world.saved.values()], cell.pick).child
               : childFor(cell, choose(liveProcesses(world), cell.pick));
-
           const names = ["", "m".repeat(257), "processes", "gateway", "Merger:1", "merger/1", "client:x", "-merger"];
           const kind = cell.alt % 7;
-
           const bad: { child: unknown; reason: Reason } =
             kind === 0
               ? { child: { ...base, name: choose(names, cell.name) }, reason: "bad_name" }
@@ -903,18 +848,15 @@ const walk = (
                             reason: "bad_input",
                           }
                         : { child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" };
-
           const answer = yield* startChild(bad.child as Child, said(cell, parentFor()));
           refused(answer, bad.reason, `L6: ${bad.reason}`);
           unchanged(`L6: ${bad.reason} writes nothing`);
           seen.add(bad.reason);
           break;
         }
-
         case "big": {
           world.big++;
           const over = cell.alt % 2 === 0;
-
           const child: Child = {
             ...childFor(cell, choose(liveProcesses(world), cell.pick)),
             input: "x".repeat(over ? ROW_LIMIT + 1 : ROW_LIMIT - 10_000),
@@ -931,7 +873,6 @@ const walk = (
 
           break;
         }
-
         case "cut_write": {
           const child = childFor(cell, choose(liveProcesses(world), cell.pick));
           const want = expected(world, child);
@@ -951,7 +892,6 @@ const walk = (
 
           break;
         }
-
         case "cut_answer": {
           const child = childFor(cell, choose(liveProcesses(world), cell.pick));
           const want = expected(world, child);
@@ -972,11 +912,9 @@ const walk = (
 
           // The write landed and the answer was lost: the rows say what was saved.
           expect(Result.isFailure(answer), "a cut after the write turn fails").toBe(true);
-
           const line = (yield* rowsNow([child.name])).find(
             (e) => e.stream === `processes/${child.name}` && e.id === child.id,
           );
-
           expect(line, "L3: the write turn that committed keeps its start").toBeDefined();
           const process = String(body(line as Entry)["process"]);
           placed(
@@ -988,7 +926,6 @@ const walk = (
           seen.add("cut_answer");
           break;
         }
-
         case "exit_between": {
           // The requester exits before one of the start's own turns, or after all of them.
           const requester = choose(liveProcesses(world), cell.pick);
@@ -998,16 +935,13 @@ const walk = (
           const at = cell.alt % 5;
           let fired = false;
           const exit = manager((p) => p.exit(requester, SHUTDOWN, from())).pipe(Effect.asVoid);
-
           const gate: Gate = (turn) =>
             turn === at
               ? Effect.suspend(() => {
                   fired = true;
-
                   return exit;
                 })
               : Effect.void;
-
           const call = said(cell, parentFor());
           const answer = yield* startChild(child, call, gate);
 
@@ -1029,7 +963,6 @@ const walk = (
           }
 
           held.state = "ended";
-
           const exited = (yield* rowsNow([holder(world, requester)?.name ?? ""])).find(
             (e) => e._tag === "exited" && body(e)["process"] === requester && e.stream.startsWith("processes/"),
           ) as Entry;
@@ -1059,7 +992,6 @@ const walk = (
 
           break;
         }
-
         case "reopen":
           yield* store.reopen;
           break;
@@ -1068,7 +1000,6 @@ const walk = (
       done.add(move);
       yield* check();
     });
-
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
@@ -1128,17 +1059,14 @@ const Race = fc.record({
   /** 0 exits the child once it exists; any other number exits one requester. */
   exits: fc.array(fc.nat(3), { maxLength: 3 }),
 });
-
 type Race = typeof Race extends fc.Arbitrary<infer A> ? A : never;
 
 const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
   Effect.fnUntraced(function* (s: fc.Scheduler, plan: Race) {
     const store = yield* open;
     const next = ids(...PIDS);
-
     const plain = <A, E>(effect: Effect.Effect<A, E, Children | ProcessManager | Mailbox | Ledger>) =>
       effect.pipe(Effect.provide(layer(store.sql, next.next)));
-
     const pids = new Map<string, string>();
 
     for (const [name, program] of BOOT) {
@@ -1147,18 +1075,15 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
           p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: HASH } }), from()),
         ),
       ).pipe(Effect.orDie);
-
       pids.set(name, placed.process);
     }
 
     // Each racer's child: ids drawn from two shared slots and fresh ones; a shared id keeps the first
     // racer's content, or changes one field of it.
     const first = new Map<string, Child>();
-
     const children = plan.racers.map((r, index): { child: Child; requester: string } => {
       const id = r.id < 2 ? `race/${r.id}` : `race/u${index}`;
       const [requester] = choose(REQUESTERS, r.requester);
-
       const own: Child = {
         id,
         name: plan.name,
@@ -1166,12 +1091,10 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         requester: Recipient.cases.process.make({ process: pids.get(requester) as string }),
         ...inputFor({ input: r.input, m: r.m } as Cell),
       };
-
       const prior = first.get(id);
 
       if (prior === undefined) {
         first.set(id, own);
-
         return { child: own, requester };
       }
 
@@ -1189,11 +1112,9 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
     const answers: Array<Answer | undefined> = children.map(() => undefined);
     let finished = 0;
     const total = children.length + plan.exits.length;
-
     const turn = (label: string) =>
       // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's scheduler releases each turn as a Promise
       Effect.promise(() => s.schedule(Promise.resolve(label), label)).pipe(Effect.asVoid);
-
     const tasks = [
       ...children.map(({ child }, index) =>
         Children.use((c) => c.start(child, from({ parent: `in-${PIDS[0]}-${index + 1}` }))).pipe(
@@ -1219,12 +1140,9 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
             Effect.gen(function* () {
               const all = yield* plain(entries([plan.name, ...BOOT.map(([n]) => n)]));
               const child = all.find((x) => x.stream === `processes/${plan.name}` && x._tag === "started");
-
               const exited = (process: string) =>
                 all.some((x) => x._tag === "exited" && body(x)["process"] === process);
-
               const [name] = choose(REQUESTERS, e);
-
               const target =
                 e === 0 ? (child === undefined ? undefined : String(body(child)["process"])) : pids.get(name);
 
@@ -1238,7 +1156,6 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         ),
       ),
     ];
-
     const fibers = yield* Effect.forEach(
       tasks,
       (task) => Effect.forkChild(task.pipe(Effect.ensuring(Effect.sync(() => finished++)))),
@@ -1263,17 +1180,13 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
     const lives = all.filter((e) => e.stream === `processes/${plan.name}` && e._tag === "started");
     expect(lives.length, "L2: racing starts of one free name make at most one process").toBeLessThanOrEqual(1);
     const p = lives[0];
-
     const registered = all.find(
       (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === plan.name,
     );
-
     const exitedAt = (process: string) =>
       all.find((e) => e._tag === "exited" && body(e)["process"] === process)?.rev ?? Number.POSITIVE_INFINITY;
-
     const letter =
       p === undefined ? undefined : all.find((e) => e.stream === `${plan.name}/inbox` && e.id === letterId(p.id));
-
     let starts = 0;
 
     children.forEach(({ child, requester }, index) => {
@@ -1307,7 +1220,6 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       if (exitedAt(child.requester.process) <= at) {
         refused(answer, "stale_sender", label);
         seen.add("stale_sender");
-
         return;
       }
 
@@ -1316,7 +1228,6 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       if (!granted(program, child.code.program)) {
         refused(answer, "forbidden", label);
         seen.add("forbidden");
-
         return;
       }
 
@@ -1327,7 +1238,6 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       if (body(registered as Entry)["program"] !== child.code.program) {
         refused(answer, "name_taken", label);
         seen.add("name_taken");
-
         return;
       }
 
@@ -1357,17 +1267,14 @@ const capture = Effect.fnUntraced(function* (sql: Sql) {
   const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
   const tracer = Context.get(context, Tracer.Tracer);
   const lines: Array<string> = [];
-
   const logger = Logger.make((options) => {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
-
   // Inspect the real sink's saved span and failure content, including nested storage causes.
   const exported = () =>
     sql
       .exec("SELECT row, content FROM unsent")
       .flatMap((row) => [JSON.stringify(row), String(row.row), String(row.content)]);
-
   return { tracer, logger, lines, exported };
 });
 
@@ -1378,21 +1285,18 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
     const pids = ids(...PIDS);
     let defect = false;
     const next = Effect.suspend(() => (defect ? Effect.die(new Error(`defect ${secret}`)) : pids.next));
-
     const boot = yield* ProcessManager.use((p) =>
       p.start(
         Start.cases.first.make({ id: "boot:queue:1", name: "queue:1", code: { program: QUEUE, hash: HASH } }),
         from(),
       ),
     ).pipe(Effect.provide(layer(sql, next)), Effect.orDie);
-
     const seenBy = yield* capture(store.sql);
     const saved = new Map<string, { child: Child; answer: Started }>();
     const pending = new Map<string, Child>();
     const ended = new Set<string>();
     const done = new Set<string>();
     let n = 0;
-
     const inspect = (exit: Exit.Exit<Started, ChildrenError>) => {
       const outputs = [...seenBy.exported(), ...seenBy.lines];
 
@@ -1419,7 +1323,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         }
       }
     };
-
     const step = Effect.fnUntraced(function* (cell: Cell) {
       const available = [
         "start",
@@ -1430,7 +1333,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         ...(pending.size === 0 ? [] : ["recover"]),
         ...([...saved.keys()].some((id) => !ended.has(id)) ? ["exit"] : []),
       ];
-
       const missing = available.filter((move) => !done.has(move));
       const move = choose(missing.length === 0 ? available : missing, cell.move);
 
@@ -1441,7 +1343,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         if (saved.size === 0) {
           done.add(move);
           seen.add(move);
-
           return;
         }
       }
@@ -1451,7 +1352,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
           [...saved].filter(([id]) => !ended.has(id)),
           cell.pick,
         );
-
         yield* ProcessManager.use((p) => p.exit(held.answer.process, NORMAL, from())).pipe(
           Effect.provide(layer(sql, next)),
           Effect.orDie,
@@ -1463,7 +1363,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         move === "retry" || move === "exit" || (move === "reopen" && saved.size > 0)
           ? choose([...saved.values()], cell.pick)
           : undefined;
-
       const child: Child =
         held?.child ??
         (move === "recover"
@@ -1481,14 +1380,12 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       }
 
       defect = move === "defect";
-
       const exit = yield* Children.use((c) => c.start(child, from())).pipe(
         Effect.provide(layer(sql, next)),
         Effect.withTracer(seenBy.tracer),
         Effect.provide(Logger.layer([seenBy.logger])),
         Effect.exit,
       );
-
       const hit = disarm();
       defect = false;
       // Inspect before the behavior checks, so a leaking successful answer has its own failure.
@@ -1535,7 +1432,6 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       done.add(move);
       seen.add(move);
     });
-
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: { saved, pending, ended }, real: { step } }), tape));
     expect(done.size, "L11: the operation walk was not empty").toBeGreaterThan(0);
@@ -1562,7 +1458,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
           const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
-
           const checks = {
             seed: SEED,
             // 20 races never answer already_present at this seed.
@@ -1570,7 +1465,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             includeErrorInReport: true,
             endOnFailure: true,
           };
-
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort(), "every answer a race can give was given").toEqual(
@@ -1643,14 +1537,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
-
           const checks = {
             seed: SEED,
             numRuns: runsFor({ fast: 20, full: 100 }),
             includeErrorInReport: true,
             endOnFailure: true,
           };
-
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(
@@ -1665,11 +1557,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.effect("scenario: L13: an interrupted walk gives back every handle its scope acquired", () =>
       Effect.gen(function* () {
         let probe: Store["probe"] | undefined;
-
+        // Set once the walk holds its store. A count of yields is no wait for real IO.
+        const ready = yield* Deferred.make<void>();
         const held = Effect.scoped(
           Effect.gen(function* () {
             const store = yield* open;
             probe = store.probe;
+            yield* Deferred.succeed(ready, undefined);
             yield* Children.use((c) =>
               c.start(
                 {
@@ -1681,17 +1575,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 from(),
               ),
             ).pipe(Effect.provide(layer(store.sql, ids(...PIDS).next)), Effect.result);
-
             return yield* Effect.never;
           }),
         );
-
         const fiber = yield* Effect.forkChild(held);
-
-        for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
-          yield* Effect.yieldNow;
-        }
-
+        // The walk never ends on its own, so its join wins only when the walk fails before it is ready.
+        yield* Effect.raceFirst(Deferred.await(ready), Fiber.join(fiber));
         yield* Fiber.interrupt(fiber);
         expect(probe, "the walk acquired its store").toBeDefined();
         expect(probe?.open(), "L13: no database handle outlives its scope").toBe(0);
