@@ -128,17 +128,15 @@ describe("the Recorder's types follow the service's own interface (0579)", () =>
     type Putting = Data & Pick<Service, "put">;
     type Counting = Data & Pick<Service, "count">;
     type Stray = Counting & { readonly nope: Service["count"] };
-    type Options<P extends Layer.PartialEffectful<Service>> = NonNullable<
-      Parameters<typeof Recorder.layer<Shelf, Service, P>>[2]
-    >;
+    type Options<K extends keyof Service> = NonNullable<Parameters<typeof Recorder.layer<Shelf, Service, K>>[2]>;
     // A method impl gives may fail.
-    assertType<Options<Putting>>({ fails: { put: full } });
+    assertType<Options<keyof Putting>>({ fails: { put: full } });
     // @ts-expect-error R17: put is left out of impl, so naming it in fails does not compile
-    assertType<Options<Counting>>({ fails: { put: full } });
+    assertType<Options<keyof Counting>>({ fails: { put: full } });
     // The same, when fails is a value typed for every method.
-    expectTypeOf<{ readonly fails: Recorder.Fails<Service> }>().not.toExtend<Options<Counting>>();
-    expectTypeOf<Putting>().toExtend<Parameters<typeof Recorder.layer<Shelf, Service, Putting>>[1]>();
-    // nope is no member of Shelf.
-    expectTypeOf<Stray>().not.toExtend<Parameters<typeof Recorder.layer<Shelf, Service, Stray>>[1]>();
+    expectTypeOf<{ readonly fails: Recorder.Fails<Service> }>().not.toExtend<Options<keyof Counting>>();
+    expectTypeOf<Putting>().toExtend<Parameters<typeof Recorder.layer<Shelf, Service, keyof Putting>>[1]>();
+    // @ts-expect-error R17: nope is no member of Shelf, so impl may not give it
+    type _Stray = typeof Recorder.layer<Shelf, Service, keyof Stray>;
   });
 });

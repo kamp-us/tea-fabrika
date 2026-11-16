@@ -7,7 +7,7 @@
 // does not run. `Recorder.calls(Service)` reads every record, and `Recorder.calls(Service, m)` reads
 // one method's argument lists. Each build of the layer starts with no calls.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Schema, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Schema, Sink, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as Recorder from "./Recorder.ts";
 import { Full, Shelf, ShelfId } from "./Shelf.test-support.ts";
@@ -300,6 +300,47 @@ describe("a call is a run, a Stream is watched, and each build starts empty (057
         expect(defect instanceof Error ? defect.name : null).toBe("UnimplementedError");
         expect(part.after).toEqual([]);
         expect(part.label).toBe("a part of a shelf");
+      }),
+  );
+
+  // scenario: the call as a law writes it, impl inline on Shelf, which has a symbol member. Its
+  // type half is read by the typecheck: the directive goes unused if the left-out put compiles.
+  // Plant: type fails as Fails<S>, every method again.
+  it.effect(
+    "R18 scenario: in the inferred call on a service with a symbol member, fails names only a method impl gives, and impl only the service's own members",
+    () =>
+      Effect.gen(function* () {
+        const given = Recorder.layer(
+          Shelf,
+          {
+            [ShelfId]: ShelfId,
+            label: "a part of a shelf",
+            drain: () => Sink.drain,
+            put: (name, count) => Effect.succeed(name.length + count),
+          },
+          { fails: { put: refusals.put } },
+        );
+        const left = Recorder.layer(
+          Shelf,
+          { [ShelfId]: ShelfId, label: "a part of a shelf", drain: () => Sink.drain },
+          // @ts-expect-error R18: put is left out of impl, so fails may not name it
+          { fails: { put: refusals.put } },
+        );
+        const exit = yield* Effect.gen(function* () {
+          const s = yield* Shelf;
+          return { exit: yield* Effect.exit(s.put("jar", 1)), after: yield* Recorder.calls(Shelf) };
+        }).pipe(Effect.provide(given));
+        expect(Exit.isFailure(exit.exit) ? Cause.squash(exit.exit.cause) : exit.exit).toBe(refusals.put);
+        expect(exit.after).toEqual([{ method: "put", args: ["jar", 1] }]);
+        const stray = Recorder.layer(Shelf, {
+          [ShelfId]: ShelfId,
+          label: "a part of a shelf",
+          drain: () => Sink.drain,
+          // @ts-expect-error R18: nope is no member of Shelf, so impl may not give it
+          nope: () => Effect.void,
+        });
+        expect(Layer.isLayer(left)).toBe(true);
+        expect(Layer.isLayer(stray)).toBe(true);
       }),
   );
 });
