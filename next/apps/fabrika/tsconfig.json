@@ -49,13 +49,15 @@
               }
             }
           },
-          // These folders: instanceOfSchema (E10), mapMapErrorToMapBoth (E14).
+          // These folders: instanceOfSchema (E10), mapMapErrorToMapBoth (E14), returnEffectInGen
+          // (E15).
           {
             "include": ["src/*.ts"],
             "options": {
               "diagnosticSeverity": {
                 "instanceOfSchema": "error",
-                "mapMapErrorToMapBoth": "error"
+                "mapMapErrorToMapBoth": "error",
+                "returnEffectInGen": "error"
               }
             }
           },

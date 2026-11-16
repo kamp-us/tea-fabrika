@@ -80,6 +80,15 @@
               }
             }
           },
+          // These folders: returnEffectInGen (E15).
+          {
+            "include": ["src/cloudflare/**/*.ts", "src/node/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "returnEffectInGen": "error"
+              }
+            }
+          },
           // These folders: preferSucceedSomeOrNone (E12).
           {
             "include": ["src/processes/**/*.ts", "src/runtime/**/*.ts", "src/telemetry/**/*.ts"],
