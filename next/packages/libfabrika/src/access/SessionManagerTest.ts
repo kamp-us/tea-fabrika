@@ -141,7 +141,7 @@ const setup = ({
     SessionManager.layer(
       sql,
       (key: string) =>
-        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(new NotGranted({})),
+        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(NotGranted.make({})),
       policy,
     );
   const signer = (writeId: string = id, kind: string = "answered", process = PROCESS, p: string = parent) =>

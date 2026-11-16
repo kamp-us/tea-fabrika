@@ -29,13 +29,13 @@ const causes = fc.oneof(
 
 /** One value of each translating class, made with `cause`. Each line compiles only with the field. */
 const made = (cause: unknown) => [
-  new LedgerError({ reason: "bad_row", cause }),
-  new IdError({ reason: "entropy", cause }),
-  new BuildError({ reason: "table", cause }),
-  new RunnerError({ reason: "bad_input", cause }),
-  new ProcessError({ reason: "bad_text", cause }),
-  new SinkError({ reason: "storage", held: 0, cause }),
-  new ProgramDown({ reason: "load", cause }),
+  LedgerError.make({ reason: "bad_row", cause }),
+  IdError.make({ reason: "entropy", cause }),
+  BuildError.make({ reason: "table", cause }),
+  RunnerError.make({ reason: "bad_input", cause }),
+  ProcessError.make({ reason: "bad_text", cause }),
+  SinkError.make({ reason: "storage", held: 0, cause }),
+  ProgramDown.make({ reason: "load", cause }),
 ];
 
 describe("T695, C8: error types accept a diagnostic cause", () => {
@@ -49,8 +49,8 @@ describe("T695, C8: error types accept a diagnostic cause", () => {
     expectTypeOf<ProgramDown["cause"]>().toEqualTypeOf<unknown>();
 
     // A refusal with no underlying failure still compiles without one.
-    expectTypeOf(new LedgerError({ reason: "refused" })).toEqualTypeOf<LedgerError>();
-    expectTypeOf(new RunnerError({ reason: "bad_client" })).toEqualTypeOf<RunnerError>();
+    expectTypeOf(LedgerError.make({ reason: "refused" })).toEqualTypeOf<LedgerError>();
+    expectTypeOf(RunnerError.make({ reason: "bad_client" })).toEqualTypeOf<RunnerError>();
 
     // The field never widens what a service may fail with.
     type Append = ReturnType<(typeof Ledger)["Service"]["append"]>;

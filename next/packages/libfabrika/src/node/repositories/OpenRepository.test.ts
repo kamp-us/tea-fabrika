@@ -75,7 +75,7 @@ const reader = (text: string | null, touches: Array<string>) =>
         resolve: () => {
           touches.push("outside source");
           return Effect.fail(
-            new RepositoriesError({ reason: new ReadFailed({ cause: Redacted.make("must not resolve code") }) }),
+            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
           );
         },
       }),
@@ -484,7 +484,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                             ...captured,
                             append: () =>
                               Effect.fail(
-                                new LedgerError({ reason: "storage", message: `${url} ${folder} ${secret}` }),
+                                LedgerError.make({ reason: "storage", message: `${url} ${folder} ${secret}` }),
                               ),
                           }
                         : captured,

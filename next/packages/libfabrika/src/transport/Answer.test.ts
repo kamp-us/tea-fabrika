@@ -185,7 +185,7 @@ describe("P10 JSON-RPC", () => {
     it.effect(`p23: ${mode} sends nothing and permits a real retry`, () =>
       Effect.gen(function* () {
         const attached = online();
-        const first = mode === "failure" ? Effect.fail(new Offline({})) : Effect.die("route crashed");
+        const first = mode === "failure" ? Effect.fail(Offline.make({})) : Effect.die("route crashed");
         const route = vi
           .fn<Route>()
           .mockReturnValueOnce(first)

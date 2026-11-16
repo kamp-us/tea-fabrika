@@ -1139,7 +1139,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
     ({ cause }) =>
       Effect.gen(function* () {
         const store = yield* open;
-        const lower = new LedgerStreamsError({ reason: new Storage({ cause }) });
+        const lower = LedgerStreamsError.make({ reason: Storage.make({ cause }) });
         const dependencies = Layer.mergeAll(
           Layer.succeed(LedgerStreams, { list: () => Stream.fail(lower) }),
           LedgerSql.layer(store.sql, { reader: "tasks-discovery-error" }).pipe(Layer.provide(quiet)),

@@ -673,9 +673,9 @@ describe("p97, the tags hold the right names and numbers", () => {
     examples([["notes:1", "letter_a"]], (name: string, id: string) => {
       const { tracer, ended } = capture();
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "storage" })),
-        read: () => Stream.fail(new LedgerError({ reason: "storage" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "storage" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
@@ -698,9 +698,9 @@ describe("p97, the tags hold the right names and numbers", () => {
     ([reason]) => {
       const { tracer, ended } = capture();
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason })),
-        read: () => Stream.fail(new LedgerError({ reason })),
-        wait: () => Effect.fail(new LedgerError({ reason })),
+        append: () => Effect.fail(LedgerError.make({ reason })),
+        read: () => Stream.fail(LedgerError.make({ reason })),
+        wait: () => Effect.fail(LedgerError.make({ reason })),
       });
       return Effect.gen(function* () {
         expect((yield* Effect.flip((yield* ClientManager).members)).reason).toBe(reason);

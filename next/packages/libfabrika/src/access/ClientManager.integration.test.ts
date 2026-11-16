@@ -378,9 +378,9 @@ describe("p96, founded is written once, by the first call", () => {
   it.effect("plant, founded written at Layer build: a Ledger that always fails still builds", () =>
     check(leaf, ["t1"], (key) => {
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "storage" })),
-        read: () => Stream.fail(new LedgerError({ reason: "storage" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "storage" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
       return Effect.gen(function* () {
         const failed = yield* Effect.flip(members);

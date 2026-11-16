@@ -134,7 +134,7 @@ export const cutJournal = (s: Seen) =>
           const before = take(s, op, "before");
 
           if (before === "fail") {
-            return yield* new JournalError({ reason: "storage" });
+            return yield* JournalError.make({ reason: "storage" });
           }
 
           if (before !== null) {
@@ -146,7 +146,7 @@ export const cutJournal = (s: Seen) =>
           const after = take(s, op, "after");
 
           if (after === "fail") {
-            return yield* new JournalError({ reason: "storage" });
+            return yield* JournalError.make({ reason: "storage" });
           }
 
           if (after !== null) {

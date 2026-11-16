@@ -199,7 +199,7 @@ const service = Effect.fnUntraced(function* (
 ) {
   const ledger = yield* reader(sql);
   const failure = options.failure;
-  const lower = failure === undefined ? undefined : new LedgerError({ reason: failure.reason, cause: failure.cause });
+  const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
   const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
   const controlled: Ledger["Service"] = {
     ...ledger,

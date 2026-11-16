@@ -381,11 +381,11 @@ const flow = async (sample: Flow) => {
                     .message(socket, move === "malformed" ? `${rawFrame}!` : rawFrame)
                     .pipe(Effect.provide(logger)),
                 ),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             });
             yield* Effect.tryPromise({
               try: () => Reflect.get(instance.project(config.name), "info")(),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);
           }
