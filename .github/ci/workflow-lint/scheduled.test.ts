@@ -85,7 +85,14 @@ it("property: a schedule varied only where its meaning holds passes", () => {
   );
 });
 
-const stopOf = (w: Workflow, job: string) => w.jobs[job]!.steps.at(-1)!;
+// The step that ended each test job until 2026-11-15: after a failure it canceled the job's own
+// run, and GitHub ended that run `cancelled`, never `failure`.
+const stop = {
+  name: "stop the run",
+  if: `\${{ failure() && github.event_name != 'push' }}`,
+  env: { GH_TOKEN: `\${{ github.token }}` },
+  run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
+};
 
 const plants: [string, (w: Workflow) => void][] = [
   // SC1: no merge line event runs the whole suite (0534's binding constraint).
@@ -100,11 +107,15 @@ const plants: [string, (w: Workflow) => void][] = [
   // SC3: the token.
   [
     "SC3: the workflow's token writes issues",
-    (w) => (w.permissions = { actions: "write", contents: "read", issues: "write" }),
+    (w) => (w.permissions = { actions: "read", contents: "read", issues: "write" }),
   ],
   ["SC3: the workflow's token is write-all", (w) => (w.permissions = "write-all")],
   [
-    "SC3: the workflow's token loses actions: write, so no stop step can cancel",
+    "SC3: the workflow's token writes actions, so a step could cancel the run again",
+    (w) => (w.permissions = { actions: "write", contents: "read" }),
+  ],
+  [
+    "SC3: the workflow's token loses actions: read, so no time table reads its job",
     (w) => (w.permissions = { contents: "read" }),
   ],
   [
@@ -117,22 +128,28 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC3: a test job takes issues: write",
-    (w) => (w.jobs["next"]!.permissions = { actions: "write", contents: "read", issues: "write" }),
+    (w) => (w.jobs["next"]!.permissions = { actions: "read", contents: "read", issues: "write" }),
   ],
-  // SC4: fail fast, time limits, the token out of .git/config.
-  ["SC4: next drops its stop step", (w) => void w.jobs["next"]!.steps.pop()],
-  ["SC4: tooling drops its stop step", (w) => void w.jobs["tooling"]!.steps.pop()],
+  ["SC3: a test job's own token writes actions", (w) => (w.jobs["tooling"]!.permissions = { actions: "write" })],
+  // SC4: no step cancels the run, time limits, the token out of .git/config.
   [
-    "SC4: the stop step comes before the upload",
-    (w) => {
-      const list = w.jobs["tooling"]!.steps;
-      list.splice(-2, 2, list.at(-1)!, list.at(-2)!);
-    },
-  ],
-  [
-    "SC4: the stop step force-cancels",
+    "SC4: a step calls the REST API's cancel",
     (w) =>
-      (stopOf(w, "next")["run"] = 'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"'),
+      void w.jobs["tooling"]!.steps.push({
+        if: "failure()",
+        run: 'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"',
+      }),
+  ],
+  [
+    "SC4: a step force-cancels",
+    (w) =>
+      void w.jobs["next"]!.steps.push({
+        run: 'gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/force-cancel"',
+      }),
+  ],
+  [
+    "SC4: an action cancels the run",
+    (w) => void w.jobs["next"]!.steps.push({ uses: "someone/cancel-workflow-action@v1" }),
   ],
   ["SC4: a test job runs on always()", (w) => (w.jobs["tooling"]!["if"] = "always()")],
   ["SC4: next has no time limit", (w) => Reflect.deleteProperty(w.jobs["next"]!, "timeout-minutes")],
@@ -147,7 +164,10 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   // SC5: the report.
   ["SC5: the report skips after a red leg", (w) => (w.jobs["report"]!["if"] = "github.ref == 'refs/heads/main'")],
-  ["SC5: the report runs on a branch too", (w) => (w.jobs["report"]!["if"] = "always()")],
+  [
+    "SC5: the report runs on main alone, so a branch's run with a timed-out leg ends cancelled",
+    (w) => (w.jobs["report"]!["if"] = `\${{ always() && github.ref == 'refs/heads/main' }}`),
+  ],
   ["SC5: the report waits on next alone", (w) => (w.jobs["report"]!.needs = ["next"])],
   ["SC5: the report's failure is hidden", (w) => (step(w, "report", "report")["continue-on-error"] = true)],
   ["SC5: the report runs another script", (w) => (step(w, "report", "report")["run"] = "node .github/ci/required.mjs")],
@@ -175,7 +195,9 @@ const plants: [string, (w: Workflow) => void][] = [
     },
   ],
   ["SC6: next has no max-parallel", (w) => Reflect.deleteProperty(w.jobs["next"]!.strategy!, "max-parallel")],
-  ["SC6: a red leg stops the matrix's other legs", (w) => (w.jobs["tooling"]!.strategy!["fail-fast"] = true)],
+  // GitHub's own fail fast stops a job's other legs and leaves the run's conclusion `failure`.
+  ["SC6: a red tooling leg holds the other's runner", (w) => (w.jobs["tooling"]!.strategy!["fail-fast"] = false)],
+  ["SC6: a red next leg holds the others' runners", (w) => (w.jobs["next"]!.strategy!["fail-fast"] = false)],
   [
     "SC6: a new job past the cap",
     (w) => {
@@ -366,12 +388,55 @@ const plants: [string, (w: Workflow) => void][] = [
       [`TT2: ${job}'s timings skip a red leg`, (w) => (own(w, "timings")["if"] = "success()")],
     ];
   }),
-  // SC5: the time table's exact step is the one test step but the stop step that gets the token.
+  // SC5: the time table's exact step is the one test step that gets the token.
   [
     "SC5: the results upload gets the token",
     (w) => (step(w, "tooling", "results").env = { GITHUB_TOKEN: `\${{ github.token }}` }),
   ],
 ];
+
+// SC4, 2026-11-15: a red run on a branch that had canceled itself ended `cancelled`, was read as cut
+// off, and its pull request merged with two red laws. The old step also takes the token, which SC5
+// names too, so this looks for SC4's own error on the job that gained it.
+// Plant, run once on scheduled.ts and restored: SC4's cancel check dropped (red on each job).
+it.each(["next", "tooling", "report"])(
+  "SC4: %s with the old stop step back is named by SC4's error for that job",
+  (job) => {
+    fc.assert(
+      fc.property(scheduled, (broken) => {
+        broken.jobs[job]!.steps.push(structuredClone(stop));
+        expect(lint(broken)).toContain(
+          `scheduled.yaml: SC4: no step of ${job} cancels the run: a canceled run ends cancelled, never failure`,
+        );
+      }),
+      { ...options, numRuns: 20 },
+    );
+  },
+);
+
+it("SC3, SC5 and SC6 scenario: on the real scheduled.yaml, what ends a red run as failure is each held by its one error", () => {
+  // Plants, each run once on scheduled.ts and restored: SC3's map check dropped; SC5's `if` check
+  // dropped; SC6's fail-fast check dropped.
+  const writes = real();
+  writes.permissions = { actions: "write", contents: "read" };
+  expect(lint(writes)).toEqual([
+    "scheduled.yaml: SC3: the workflow's token grants actions: read and contents: read, nothing more",
+  ]);
+
+  const mainOnly = real();
+  mainOnly.jobs["report"]!["if"] = `\${{ always() && github.ref == 'refs/heads/main' }}`;
+  expect(lint(mainOnly)).toEqual([
+    "scheduled.yaml: SC5: the report needs every other job, and runs after any result, on every branch",
+  ]);
+
+  for (const job of ["next", "tooling"]) {
+    const slow = real();
+    slow.jobs[job]!.strategy!["fail-fast"] = false;
+    expect(lint(slow)).toEqual([
+      `scheduled.yaml: SC6: ${job} sets max-parallel to at most its legs, and its first red leg stops the others`,
+    ]);
+  }
+});
 
 it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
   fc.assert(

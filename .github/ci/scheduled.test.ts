@@ -27,8 +27,8 @@ const BASE = Date.parse("2026-11-15T14:15:17Z");
 /** A time `ms` after the run started, as the jobs API writes one. */
 const at = (ms: number) => new Date(BASE + ms).toISOString();
 
-// A job of the run as the jobs API lists it, with no failure anywhere in it: what a leg canceled by
-// another leg's stop step, or by a person, leaves, and the report job still running. A canceled leg
+// A job of the run as the jobs API lists it, with no failure anywhere in it: what a leg stopped
+// after another leg failed, or by a person, leaves, and the report job still running. A canceled leg
 // here ran less than its limit, or its times are unknown, so it is never a time-out.
 const quiet = fc.constantFrom("success", "cancelled", "skipped", null);
 const stepName = fc.constantFrom("vitest", "end to end", "tooling tests", "results", "time table", "stop the run");
@@ -63,7 +63,7 @@ const calm = fc
 const calmJobs = fc.array(calm, { maxLength: 5 });
 
 // What proves a run red: a finished job with a failed step, whatever that job's own conclusion says
-// (a red leg's stop step cancels it too), or a failing test named in a leg's report.
+// (a cancel that lands on a red leg ends it `cancelled`), or a failing test named in a leg's report.
 const proof = fc.oneof(
   fc
     .tuple(steps, steps, stepName, fc.constantFrom("cancelled", "failure", "success", null), legName, stepEnd)
@@ -243,7 +243,8 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
         const red = fails.map((ms, i) => ({
           name: `next (${i + 1})`,
           status: "completed",
-          // A red leg's stop step cancels its own job too (run 43703058643), or the cancel misses it.
+          // A cancel can land on a red leg too (run 43703058643, from when a red leg's last step
+          // canceled its own run), or miss it.
           conclusion: seed % 2 === 0 ? "cancelled" : "failure",
           start: at(0),
           end: at(ms + 20_000),
@@ -316,8 +317,8 @@ it("property: the limits are each LIMIT_ variable's positive number, by its job 
   );
 });
 
-// Run 43673342835 on main: leg `next (2)` failed its vitest step, its stop step canceled the run and
-// the leg with it, so `needs` read `cancelled` twice. The report job is as it saw itself, running.
+// Run 43673342835 on main, from when a red leg's last step canceled its own run (until 2026-11-15):
+// leg `next (2)` failed its vitest step, its stop step canceled the run and the leg with it, so `needs` read `cancelled` twice. The report job is as it saw itself, running.
 const run43673342835 = JSON.parse(
   readFileSync(new URL("./fixtures/scheduled-run-43673342835.json", import.meta.url), "utf8"),
 ) as { needs: unknown; jobs: unknown; reports: unknown[] };
@@ -361,6 +362,7 @@ it.each([
   ],
   // On main, green: next (4) at 13 min 38 s of its 17.
   ["43726565395", "green", []],
+  // The three below are from when a red leg's last step canceled its own run (until 2026-11-15).
   // A branch: next (3) failed and its stop step canceled five legs, at about 10 minutes each.
   ["43723346561", "red", [{ _tag: "failed", leg: "next (3)" }]],
   // A branch: next (4) failed, and the cancel caught its own stop step.
@@ -613,6 +615,7 @@ const env = {
   GITHUB_TOKEN: "token-made-up",
   GITHUB_REPOSITORY: "owner/repo",
   GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/scheduled.yaml@refs/heads/main",
+  GITHUB_REF: "refs/heads/main",
   GITHUB_API_URL: "https://api.example",
   GITHUB_SERVER_URL: "https://github.example",
   GITHUB_SHA: "c".repeat(40),
@@ -749,6 +752,95 @@ it("property: an error from GitHub fails the report, so a red run's issue never 
     ),
     options,
   );
+});
+
+const branch = fc
+  .oneof(
+    fc.stringMatching(/^[a-z][a-z0-9/-]{0,20}$/).map((name) => `refs/heads/${name}`),
+    fc.constantFrom("refs/heads/main-2", "refs/heads/fabrikalfa/main", "refs/tags/main", "refs/pull/7/merge", ""),
+  )
+  .filter((ref) => ref !== "refs/heads/main");
+
+it("property: on any ref but main the report judges the run the same and writes nothing, reading only the run's jobs", async () => {
+  // A hand-started run on a branch is judged, so it can end `failure`, and it never touches the
+  // issue, which is main's. Plant: the report writes on any ref (red: a branch opened the issue).
+  await fc.assert(
+    fc.asyncProperty(
+      branch,
+      fc.boolean(),
+      needs,
+      runJobs,
+      fc.option(fc.integer({ min: 2, max: 9999 }), { nil: null }),
+      reports,
+      async (ref, unset, given, jobs, open, results) => {
+        const { GITHUB_REF: _main, ...bare } = env;
+        const away = unset ? bare : { ...env, GITHUB_REF: ref };
+        const { calls, send } = fake(answer(jobs), open, null);
+        const { result, action } = await scheduled.report({
+          needs: given,
+          reports: results,
+          env: away,
+          api: scheduled.github(away, send)!,
+        });
+        const failed = scheduled.failures(results, "/work/repo");
+
+        expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS }));
+        expect(action._tag).toBe("none");
+        expect(calls.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)).toEqual([JOBS_CALL]);
+      },
+    ),
+    options,
+  );
+});
+
+it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", async () => {
+  // 2026-11-15: a red run ended `cancelled` and was read as cut off. A failed leg is a failed job
+  // by itself; a leg that only timed out ends `cancelled` on GitHub, and this exit code is what
+  // makes its run a failure. Plants: exit 0 always, as before (red: every run that is not green);
+  // exit 1 on red alone (red: a `stopped` run passed, having proved nothing).
+  expect(scheduled.exitCode("green")).toBe(0);
+  expect(scheduled.exitCode("red")).toBe(1);
+  expect(scheduled.exitCode("stopped")).toBe(1);
+
+  await fc.assert(
+    fc.asyncProperty(
+      fc.constantFrom("refs/heads/main", "refs/heads/fabrikalfa/a-branch"),
+      needs,
+      runJobs,
+      fc.option(fc.integer({ min: 2, max: 9999 }), { nil: null }),
+      reports,
+      async (ref, given, jobs, open, results) => {
+        const here = { ...env, GITHUB_REF: ref, NEEDS: JSON.stringify(given) };
+        const { send } = fake(answer(jobs), open, null);
+        const { line, code } = await scheduled.main(here, results, send);
+        const failed = scheduled.failures(results, "/work/repo");
+        const result = scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS });
+
+        expect(code).toBe(result === "green" ? 0 : 1);
+        expect(line.startsWith(`scheduled: ${result}, `)).toBe(true);
+      },
+    ),
+    options,
+  );
+});
+
+it("pinned: run 43723335863, two legs that only timed out, fails the report job on a branch too; a run with needs it cannot read fails it", async () => {
+  // pinned: GitHub ended this run `cancelled` with every other job green, the report job among
+  // them. Plant: the exit code follows the action, not the verdict (red: a branch, which writes
+  // nothing, passed).
+  const run = fixture("43723335863");
+
+  for (const ref of ["refs/heads/main", "refs/heads/fabrikalfa/a-branch"]) {
+    const here = { ...env, GITHUB_REF: ref, NEEDS: JSON.stringify(run.needs) };
+    const { line, code } = await scheduled.main(here, [], fake(run.jobs, null, null).send);
+    expect(code).toBe(1);
+    expect(line).toBe(ref === "refs/heads/main" ? "scheduled: red, open" : "scheduled: red, nothing to report");
+  }
+
+  const unreadable = await scheduled.main({ ...env, NEEDS: "{" }, [], fake(answer([]), null, null).send);
+  expect(unreadable).toEqual({ line: "scheduled: stopped, nothing to report", code: 1 });
+  const { GITHUB_TOKEN: _token, ...bare } = env;
+  expect((await scheduled.main(bare, [], fake(answer([]), null, null).send)).code).toBe(1);
 });
 
 // The daily speed check's issue carries the same label (0541), with its own title (`TITLE` in

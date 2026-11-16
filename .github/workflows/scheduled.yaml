@@ -8,12 +8,20 @@ name: scheduled
 # break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
 # and a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
 #
+# A red run ends `failure`, on main and on a branch, and only a run a person, a sev0's freeze or
+# this workflow's concurrency group cut off ends `cancelled`. GitHub ends a run `cancelled` once
+# anything canceled the run, whatever failed in it, so no step here cancels it: a failed leg is a
+# failed job, each matrix's `fail-fast` stops that job's other legs, and the report job fails unless
+# the run is green, which also turns a leg that only timed out (GitHub ends it `cancelled`) into a
+# failure. On 2026-11-15 a red run on a branch that had canceled itself was read as cut off, and its
+# pull request merged with two red laws. workflow-lint.ts holds all of it (SC3 to SC6).
+#
 #   what            legs   how
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      the `tooling` project, every file, no `--changed`
-#   report          1      after the others, on any result
+#   report          1      after the others, on any result; it fails unless the run is green
 #
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
@@ -28,7 +36,8 @@ on:
   # change this line to change it.
   schedule:
     - cron: "17 */3 * * *"
-  # By hand, on main, or on a branch to try a change to this file. Only main's run reports.
+  # By hand, on main, or on a branch, to run every test on it or to try a change to this file. Only
+  # main's run writes the issue.
   workflow_dispatch:
 
 # One run at a time, and a running one is never cut short: a newer one waits its turn, and GitHub
@@ -37,12 +46,11 @@ concurrency:
   group: scheduled
   cancel-in-progress: false
 
-# `actions: write` lets each test job's last step, `stop the run`, cancel its own run, as in
-# check.yaml, and each leg's time table read its own job's steps. `contents: read` is the
-# checkout's. The report job alone takes `issues: write`, in its own map. workflow-lint.ts holds all
-# three.
+# `actions: read` lets each leg's time table read its own job's steps, and no more: a token that
+# cannot write actions cannot cancel a run. `contents: read` is the checkout's. The report job alone
+# takes `issues: write`, in its own map. workflow-lint.ts holds all three.
 permissions:
-  actions: write
+  actions: read
   contents: read
 
 jobs:
@@ -54,10 +62,13 @@ jobs:
   next:
     runs-on: ubuntu-latest
     # check.yaml's next limit, for the same legs with the same split. The report reads it through
-    # the alias, to tell a leg that ran into it from one another leg's stop step canceled.
+    # the alias, to tell a leg that ran into it from one stopped after another leg failed.
     timeout-minutes: &next-limit 17
+    # Fail fast, GitHub's own (ticket 990): the first red leg stops this job's other legs, so they
+    # free their runners, and the run still ends `failure`. It reaches no other job: tooling's legs
+    # run on after a red next leg, and next's after a red tooling leg.
     strategy:
-      fail-fast: false
+      fail-fast: true
       max-parallel: 7
       matrix:
         shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5"]
@@ -128,15 +139,6 @@ jobs:
           path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
           if-no-files-found: warn
           retention-days: 90
-      # Fail fast, as in check.yaml (ticket 990): the first red leg cancels the run, so the others
-      # free their runners. The report job's `always()` keeps it running, and it names the tests the
-      # red leg's report holds. workflow-lint.ts holds it last in every job but report.
-      - &stop
-        name: stop the run
-        if: ${{ failure() && github.event_name != 'push' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # Every tooling test: the tests of neither version's product code (CI's own, the lint plugins, the
   # root scripts and the skill scripts), on two machines, with no `--changed`: the `tooling` project,
@@ -148,7 +150,7 @@ jobs:
     # The limit check.yaml's tooling legs had, before 0539 took them off the merge line.
     timeout-minutes: &tooling-limit 30
     strategy:
-      fail-fast: false
+      fail-fast: true
       max-parallel: 2
       matrix:
         shard: [1, 2]
@@ -175,19 +177,19 @@ jobs:
           retention-days: 7
       - *time-table
       - *timings
-      - *stop
 
-  # The verdict, on main only: red opens one `ci-scheduled` issue naming the commits since the last
+  # The verdict. On main: red opens one `ci-scheduled` issue naming the commits since the last
   # green scheduled run, the legs that made it red and the failing tests, or comments on the open
   # one; a leg that ran into its time limit is red, named as a time-out; green closes it; a run
-  # stopped by hand does nothing (scheduled.mjs). `always()`, so it runs after a red leg stopped the
-  # run, as ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to
-  # read the run's jobs and steps and find the last green run: a red leg's stop step cancels its own
-  # job too, so `needs` says `cancelled` where a step says `failure`. No install: the runner's own
-  # Node runs scheduled.mjs.
+  # stopped by hand does nothing. On a branch it writes nothing. On both it fails unless the run is
+  # green, so a red run ends `failure` (scheduled.mjs). `always()`, so it runs after a red leg, as
+  # ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to read
+  # the run's jobs and steps and find the last green run: `needs` folds a matrix's legs into one
+  # result, and says `cancelled` for a leg that timed out. No install: the runner's own Node runs
+  # scheduled.mjs.
   report:
     needs: [next, tooling]
-    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -207,8 +209,8 @@ jobs:
           pattern: results-*
           path: ${{ runner.temp }}/results
       # Each test job's time limit, an alias of its own line, so the limit stays one setting: GitHub
-      # ends a leg that ran into it `cancelled`, as it ends one a stop step canceled, and only the
-      # leg's run time against its limit tells a time-out apart (scheduled.mjs's `ending`).
+      # ends a leg that ran into it `cancelled`, as it ends one stopped after another leg failed, and
+      # only the leg's run time against its limit tells a time-out apart (scheduled.mjs's `ending`).
       - name: report
         env:
           NEEDS: ${{ toJSON(needs) }}

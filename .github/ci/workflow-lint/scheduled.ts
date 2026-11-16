@@ -2,10 +2,10 @@
 import { parse } from "yaml";
 import {
   allSteps,
+  cancels,
   chromium,
   compact,
   ends,
-  isStop,
   legs,
   map,
   nextJob,
@@ -28,8 +28,13 @@ const TOOLING_PROJECT = "--project tooling";
 // opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull requests
 // keep theirs.
 const RUNNERS = 10;
+// What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
+// `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
+const READS = { actions: "read", contents: "read" };
 export const VERDICT = "report";
-const REPORT_IF = "always()&&github.ref=='refs/heads/main'";
+// On every branch: the report job fails unless the run is green, which is what ends a run whose
+// red leg only timed out as `failure`. scheduled.mjs writes the issue on main alone.
+const REPORT_IF = "always()";
 const REPORT = "node .github/ci/scheduled.mjs";
 
 const REPORT_ENV = {
@@ -90,13 +95,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
     !concurrency["group"].includes("${{") &&
     concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
 
-  // SC3. The stop steps' token may cancel the run; only the report may write issues, and it may
-  // read runs to find the last green one.
+  // SC3. The token reads runs (the time tables) and the checkout, and no more: `actions: write`
+  // is what canceling a run takes. Only the report may write issues, and it may read runs to find
+  // the last green one.
   require(JSON.stringify(workflow["permissions"]) ===
-    JSON.stringify({
-      actions: "write",
-      contents: "read",
-    }), "SC3: the workflow's token grants actions: write and contents: read, nothing more");
+    JSON.stringify(READS), "SC3: the workflow's token grants actions: read and contents: read, nothing more");
   require(JSON.stringify(map(jobs[VERDICT])["permissions"]) ===
     JSON.stringify({
       actions: "read",
@@ -105,44 +108,44 @@ export const lintScheduled = (text: string, check: string): string[] => {
     }), "SC3: the report job's token reads actions and contents and writes issues, nothing more");
 
   for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== VERDICT)) {
-    require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which its stop step needs`);
+    require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which cannot cancel a run`);
   }
 
-  // SC4. The same fail-fast and token rules as check.yaml's F1, F2 and F4, with the report job as
-  // the verdict: every other job ends with the stop step and runs on no `always()`, every job has a
-  // time limit, and no checkout keeps the token in .git/config.
+  // SC4. The same rules as check.yaml's F1, F2 and F4, with the report job as the verdict: no step
+  // cancels the run (a canceled run ends `cancelled`, never `failure`), no other job runs on
+  // `always()`, every job has a time limit, and no checkout keeps the token in .git/config.
   for (const [name, job] of Object.entries(jobs)) {
     const limit = map(job)["timeout-minutes"];
     require(typeof limit === "number" && limit > 0 && limit < 360, `SC4: ${name} sets timeout-minutes`);
 
-    for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+    for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       require(map(step["with"])["persist-credentials"] ===
         false, `SC4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);
     }
+
+    require(!allSteps(map(job)).some(
+      cancels,
+    ), `SC4: no step of ${name} cancels the run: a canceled run ends cancelled, never failure`);
 
     if (name === VERDICT) {
       continue;
     }
 
-    const list = allSteps(map(job));
-    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
-    require(list.length > 0 &&
-      isStop(list.at(-1) ?? {}) &&
-      cancels.length === 1, `SC4: ${name} ends with the stop step, its one step that cancels the run`);
     require(!compact(map(job)["if"]).includes(
       "always()",
     ), `SC4: ${name} stops with its run: only the report runs on always()`);
   }
 
-  // SC5. The report judges every other job, after any result, on main alone, with scheduled.mjs.
-  // It is the one step but the stop steps that gets the token.
+  // SC5. The report judges every other job, after any result, on every branch, with scheduled.mjs,
+  // and its failure shows: it is the job that fails for a red run. It and the time tables are the
+  // steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Object.keys(jobs).filter((name) => name !== VERDICT);
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
     compact(report["if"]) ===
-      REPORT_IF, "SC5: the report needs every other job, and runs after any result, on main alone");
+      REPORT_IF, "SC5: the report needs every other job, and runs after any result, on every branch");
   const judged = steps(report).filter((s) => "run" in s);
   // Each test job's limit, as `LIMIT_<ID>`, equal to its own `timeout-minutes`: scheduled.mjs tells
   // a timed-out leg from a canceled one by it, and reads a leg's job id from its name, so no job
@@ -165,10 +168,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
     steps(map(job)).every(
       (s) => s === judged[0] || s["run"] === TIME_TABLE || !/github\.token|secrets\./.test(JSON.stringify(s)),
     ),
-  ), "SC5: only the report step, the time tables and the stop steps get the token, and no step a secret");
+  ), "SC5: only the report step and the time tables get the token, and no step a secret");
 
   // SC6. At most RUNNERS machines: a matrix job counts its `max-parallel`, any other job one. Each
-  // matrix sets it, lets every leg finish, and runs no more at once than it has legs.
+  // matrix sets it, runs no more at once than it has legs, and stops its other legs once one failed
+  // (GitHub's own fail-fast, which leaves the run's conclusion `failure`).
   let machines = 0;
 
   for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
@@ -181,7 +185,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
         most >= 1 &&
         most <= listed(job).length &&
         strategy["fail-fast"] ===
-          false, `SC6: ${name} sets max-parallel to at most its legs, and lets every leg finish`);
+          true, `SC6: ${name} sets max-parallel to at most its legs, and its first red leg stops the others`);
     }
 
     machines += "strategy" in job && typeof most === "number" ? most : 1;
@@ -233,8 +237,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
         ["pnpm install --frozen-lockfile", WHOLE_TOOLING, TIME_TABLE].toSorted(),
       ), "SC9: next and tooling run only their install, their whole-suite commands and their time table");
 
-  // SC10. Each test job keeps its Vitest report after a red step, before its stop step, so the
-  // report job can name the failing tests.
+  // SC10. Each test job keeps its Vitest report after a red step, so the report job can name the
+  // failing tests.
   for (const name of ["next", "tooling"]) {
     const list = steps(map(jobs[name]));
     const kept = list.filter(
