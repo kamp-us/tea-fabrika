@@ -8,7 +8,7 @@
       // The globs read from this folder. One entry per set of folders; its comment names its checks.
       "overrides": [
         // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryTypeofType
-        // (E7), unnecessaryArrowBlock (E8).
+        // (E7), unnecessaryArrowBlock (E8), nestedEffectGenYield (E24).
         {
           "include": ["**/*.ts"],
           "options": {
@@ -16,7 +16,8 @@
               "schemaNumber": "error",
               "preferTypedSchemaDecoder": "error",
               "unnecessaryTypeofType": "error",
-              "unnecessaryArrowBlock": "error"
+              "unnecessaryArrowBlock": "error",
+              "nestedEffectGenYield": "error"
             }
           }
         }

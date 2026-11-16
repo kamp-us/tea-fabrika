@@ -128,6 +128,15 @@
               }
             }
           },
+          // These folders: nestedEffectGenYield (E24).
+          {
+            "include": ["src/runtime/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "nestedEffectGenYield": "error"
+              }
+            }
+          },
           // These folders: flatMapConditionalToFilterOrFail (E18).
           {
             "include": ["src/processes/**/*.ts", "src/telemetry/**/*.ts"],
