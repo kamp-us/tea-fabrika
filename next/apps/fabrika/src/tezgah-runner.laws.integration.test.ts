@@ -29,6 +29,7 @@ import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
 import { Array as Arr, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -126,10 +127,10 @@ const pause = (ms = 100) => new Promise<void>((done) => setTimeout(done, ms));
 
 /** Polls an observable fact; a timeout fails with the last observed value. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;

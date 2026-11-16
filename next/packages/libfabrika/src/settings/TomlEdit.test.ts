@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { ByteSize, Effect, Exit, Option, Schema } from "effect";
+import * as DateTime from "effect/DateTime";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
@@ -795,7 +796,7 @@ describe("T877 public TOML edits, next/", () => {
           -Infinity,
           Number.MAX_SAFE_INTEGER + 1,
           1n,
-          new Date(0),
+          DateTime.toDateUtc(DateTime.makeUnsafe(0)),
           new Map(),
           sparse,
         ];

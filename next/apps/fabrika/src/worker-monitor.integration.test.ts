@@ -16,6 +16,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Array as Arr, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -171,12 +172,15 @@ type Instance = any;
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = now() + WAIT;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -214,9 +218,9 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const index = Arr.findFirstIndex(frames, match);
 
       if (Option.isSome(index)) {

@@ -9,6 +9,7 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Array as Arr, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
@@ -196,6 +197,9 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(
   message: string,
@@ -203,10 +207,10 @@ const until = async <A>(
   done: (value: A) => boolean,
   ms = WAIT,
 ): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -246,9 +250,9 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const index = Arr.findFirstIndex(frames, match);
 
       if (Option.isSome(index)) {
@@ -424,12 +428,12 @@ const rows = async (instance: Instance, stream: string) =>
  *  fact in WAIT fails the test with the rows it saw, so a missing restart is a failure, never a hang. */
 const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after: string) =>
   Effect.promise(async () => {
-    const end = Date.now() + WAIT,
+    const end = now() + WAIT,
       seenRows: Array<unknown> = [];
 
     let seen = 0;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
       const found = Option.getOrUndefined(

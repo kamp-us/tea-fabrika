@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema, String as Str } from "effect";
+import { DateTime, Effect, Exit, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -557,7 +557,7 @@ const world = (
             }
           });
         },
-        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
+        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100,
       );
     };
     fire(0);
@@ -1426,10 +1426,10 @@ const FLOW_WAIT = 15_000;
 const BRAKE = 6;
 
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
-  const end = Date.now() + FLOW_WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + FLOW_WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;
@@ -1521,7 +1521,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
 
     if (held !== null) {
-      expect(Date.now()).toBeGreaterThanOrEqual(held);
+      expect(DateTime.toEpochMillis(DateTime.nowUnsafe())).toBeGreaterThanOrEqual(held);
     }
 
     expect(rows).toHaveLength(n);
@@ -2103,7 +2103,7 @@ describe("P34c live object accounting", () => {
               // the Project answers it, so that span starts in one hour and ends in the next.
               w.onProjectCall((method) => {
                 if (method === "route" && turned === null) {
-                  turned = Date.now();
+                  turned = DateTime.toEpochMillis(DateTime.nowUnsafe());
                   vi.setSystemTime(hour + late);
                 }
               });

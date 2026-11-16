@@ -44,6 +44,7 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as DateTime from "effect/DateTime";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -335,7 +336,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                     () => {
                       entry!.object.call("alarm", []).catch(() => {});
                     },
-                    Math.max(0, at - Date.now()),
+                    Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())),
                   );
                 }
               });

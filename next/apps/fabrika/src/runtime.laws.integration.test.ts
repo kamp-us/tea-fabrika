@@ -31,6 +31,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Tracer from "effect/Tracer";
+import * as DateTime from "effect/DateTime";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -1028,7 +1029,7 @@ describe("P12 Connection recording", () => {
         storage: storage(db),
         getWebSockets: () => [ws],
         getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-        getWebSocketAutoResponseTimestamp: () => new Date(42),
+        getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
       } as unknown as DurableObjectState;
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
@@ -1114,7 +1115,7 @@ describe("P12 Connection recording", () => {
       storage: storage(db),
       getWebSockets: () => [ws],
       getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-      getWebSocketAutoResponseTimestamp: () => new Date(42),
+      getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
     } as unknown as DurableObjectState;
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand

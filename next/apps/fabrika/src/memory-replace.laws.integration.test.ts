@@ -13,6 +13,8 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Array as Arr, String as Str } from "effect";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -104,6 +106,9 @@ type Instance = any;
 
 const pause = (ms = POLL) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /** A real WebSocket at the door, its hello answered: the founder's tab, held open by the caller. */
 const wire = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
@@ -125,9 +130,9 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + START;
+    const end = now() + START;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const index = Arr.findFirstIndex(frames, match);
 
       if (Option.isSome(index)) {
@@ -199,15 +204,15 @@ const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> =>
 
 /** Polls until `done` holds or `ms` pass, and answers what it last saw and when it held, if it did. */
 const watch = async <A>(look: () => Promise<A>, done: (value: A) => boolean, ms: number) => {
-  const began = Date.now();
+  const began = now();
   let last = await look();
 
-  while (!done(last) && Date.now() - began < ms) {
+  while (!done(last) && now() - began < ms) {
     await pause();
     last = await look();
   }
 
-  return { last, after: done(last) ? Date.now() - began : null };
+  return { last, after: done(last) ? now() - began : null };
 };
 
 // How one `info` call ended: answered, refused as offline by the brain, refused by the OS at the
@@ -323,7 +328,7 @@ describe("the memory restart on real workerd, next/", () => {
           }
         })();
 
-        const switched = Date.now();
+        const switched = yield* Clock.currentTimeMillis;
         sizes.set(old, OVER);
 
         // The next 1-second sample sends the SIGTERM; the grace and two seconds bound the old pid's end.
@@ -360,7 +365,7 @@ describe("the memory restart on real workerd, next/", () => {
 
         polling = false;
         yield* Effect.promise(() => poller);
-        const elapsed = Date.now() - switched;
+        const elapsed = (yield* Clock.currentTimeMillis) - switched;
 
         // The bug: a call dials the old control port while the old workerd drains.
         expect(seen.refused, `info calls refused at the control port in ${elapsed} ms`).toBe(0);
