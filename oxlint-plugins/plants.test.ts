@@ -682,7 +682,9 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
   it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
     inConfigCopy(({ printed, lint }) => {
-      const globs = globsHolding(printed, isReflectGet);
+      // One per glob: a later block that writes the entries out again, such as the mock lock's, lists
+      // a folder a second time, and oxlint reads that folder by the last block that sets the rule.
+      const globs = [...new Map(globsHolding(printed, isReflectGet).map((g) => [g.glob, g])).values()];
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(globs.map(({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
@@ -758,30 +760,70 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
   }, 120_000);
 });
 
+/**
+ * The files a vi plant is written to, for every glob a vi ban block lists: one plain file of the
+ * folder (the lib-top slice's form) and one law file, `-vi-<n>.test.ts` (the gateway slice's form),
+ * since the lock is there to hold laws. A glob whose plain file is not a `.ts` file, such as
+ * `src/*.tsx`, gets the one file.
+ */
+const viFiles = (globs: ReadonlyArray<{ readonly glob: string }>, n: number): ReadonlyArray<string> => {
+  const plain = globs.map(({ glob }) => plantPath(glob));
+  const laws = plain.map((file) => file.replace(/\.ts$/, `-vi-${n}.test.ts`));
+  expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
+  expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
+
+  return [...new Set([...plain, ...laws])];
+};
+
 describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's mocks", () => {
-  // scenario: T1067 L1 (lib-top) and M1 (node), the repo's own config, read by oxlint's own
-  // --print-config, so every folder a `vitest/no-restricted-vi-methods` block lists today gets
-  // VI_METHODS' lines, each later slice's folder included.
+  // scenario: T1067 L1 (lib-top), M1 (node) and M1 (gateway and telemetry), the repo's own config,
+  // read by oxlint's own --print-config, so every folder a `vitest/no-restricted-vi-methods` block
+  // lists today gets each plant of VI_METHODS, each in a law of its own, each later slice's folder
+  // included. The lock is a pair (amendment 2026-11-16): the same folders also get VI_PROPERTIES,
+  // under `no-restricted-properties`, which refuses the calls chained onto a vi call that the vitest
+  // rule misses (oxc#29656).
+  // Plant: delete one folder from the block of `.oxlintrc.json`, and that folder's lines are not refused.
   // Plant: delete `fn` (or `spyOn`) from the block in `.oxlintrc.json`, and that line is not refused.
-  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi ban block", () => {
-    inConfigCopy(({ printed, lint }) => {
+  it("scenario: the vi ban blocks list the slices' folders at deny, and the chained miss is planted and held", () => {
+    inConfigCopy(({ printed }) => {
       const globs = viGlobs(printed);
-      // Coverage: libfabrika's top files, both extensions, and the ban blocks in every folder it names.
+      // Coverage: libfabrika's top files, both extensions, and the gateway and telemetry slice's two
+      // folders, at least.
       expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+        expect.arrayContaining([
+          "next/packages/libfabrika/src/*.ts",
+          "next/packages/libfabrika/src/*.tsx",
+          "next/packages/libfabrika/src/gateway/**",
+          "next/packages/libfabrika/src/telemetry/**",
+        ]),
       );
       expect(globs.every(({ level }) => level === "deny")).toBe(true);
-
-      const { text, want } = textOf(VI_METHODS);
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
-      const diagnostics = lint(text, files);
-
-      for (const file of files) {
-        expect(refusedIn(diagnostics, file, VI_METHODS.code), file).toEqual(want);
-      }
+      // Coverage: each chained line the vitest rule takes alone is refused by the other half.
+      const chained = (line: string) => /\)\.mock\w*\(/.test(line);
+      const missed = VI_METHODS.flatMap((p) => p.lines.filter(([line, refused]) => !refused && chained(line)));
+      expect(missed.length, "VI_METHODS plants the vitest rule's chained miss").toBeGreaterThan(0);
+      expect(
+        VI_PROPERTIES.lines.filter(([line, refused]) => refused && chained(line)).length,
+        "VI_PROPERTIES refuses the chained lines, both slices' two",
+      ).toBe(4);
     });
   }, 120_000);
+
+  it.each(VI_METHODS.map((p, n) => [p.prelude.at(-2) ?? "", n, p] as const))(
+    "scenario: VI_METHODS' plant under %s is refused exactly, in every folder of every vi ban block",
+    (_from, n, p) => {
+      inConfigCopy(({ printed, lint }) => {
+        const { text, want } = textOf(p);
+        const files = viFiles(viGlobs(printed), n);
+        const diagnostics = lint(text, files);
+
+        for (const file of files) {
+          expect(refusedIn(diagnostics, file, p.code), `${p.code} in ${file}`).toEqual(want);
+        }
+      });
+    },
+    120_000,
+  );
 
   // scenario: T1067 L1 (lib-top), the lock as a pair (lead ruling 2026-11-16). The vitest rule
   // misses a call chained onto the vi call (https://github.com/oxc-project/oxc/issues/29656), so
@@ -793,14 +835,18 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
   it("scenario: VI_PROPERTIES' lines are refused exactly, and block, in every folder of every vi ban block", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
-      // Coverage: libfabrika's top files, both extensions.
+      // Coverage: libfabrika's top files, both extensions, and the gateway and telemetry folders.
       expect(globs.map(({ glob }) => glob)).toEqual(
-        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+        expect.arrayContaining([
+          "next/packages/libfabrika/src/*.ts",
+          "next/packages/libfabrika/src/*.tsx",
+          "next/packages/libfabrika/src/gateway/**",
+          "next/packages/libfabrika/src/telemetry/**",
+        ]),
       );
 
       const { text, want } = textOf(VI_PROPERTIES);
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const files = viFiles(globs, VI_METHODS.length);
       const diagnostics = lint(text, files);
 
       for (const file of files) {

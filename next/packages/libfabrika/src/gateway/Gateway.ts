@@ -7,6 +7,7 @@
 import { applyCell } from "@demlik/tea";
 import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import * as Cause from "effect/Cause";
+import { WebCrypto } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
 import * as Redacted from "effect/Redacted";
@@ -2259,6 +2260,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 
   const body = new Uint8Array(bytes.success);
   const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
+  const crypto = yield* WebCrypto.WebCrypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", body), catch: fail });
   const digest = yield* work;
@@ -2269,6 +2271,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 const hash = Effect.fnUntraced(function* (text: string) {
   const bytes = new TextEncoder().encode(text);
   const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
+  const crypto = yield* WebCrypto.WebCrypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;

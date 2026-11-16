@@ -60,17 +60,54 @@ export const REFLECT: Plant = {
   ],
 };
 
+const VI_CODE = "vitest(no-restricted-vi-methods)";
+
+/** The lines every `vi` import form must answer the same way: the five mocks refused, the rest taken. */
+const viLines = (vi: string): readonly (readonly [string, boolean])[] => [
+  [`export const a = ${vi}.fn();`, true],
+  [`${vi}.mock("./a.ts");`, true],
+  [`${vi}.doMock("./a.ts");`, true],
+  [`export const b = ${vi}.spyOn(console, "log");`, true],
+  [`${vi}.stubEnv("A", "b");`, true],
+  // 0555 and 0579 do not decide the rest of vi: a fake clock or a wait is not a mock.
+  [`${vi}.useFakeTimers();`, false],
+  [`export const c = ${vi}.waitFor(() => 1);`, false],
+  // Not a call of vi: a comment, a string, another object's member of the same name.
+  [`// ${vi}.fn() in a comment`, false],
+  [`export const d = "${vi}.spyOn(x)";`, false],
+  ["other.fn();", false],
+  // A documented miss of this rule alone (oxc#29656): a call chained onto the vi call passes. The
+  // lock's other half, `no-restricted-properties` (VI_PROPERTIES), refuses these.
+  [`${vi}.spyOn(console, "warn").mockImplementation(() => undefined);`, false],
+  [`export const e = ${vi}.fn().mockReturnValue(1);`, false],
+];
+
 /**
- * M1 of the mock sweep (decisions 0555, 0579; ticket 1067): `vi.fn`, `vi.mock`, `vi.doMock`,
+ * M1 of the mock sweep (decisions 0555 and 0579; ticket 1067): `vi.fn`, `vi.mock`, `vi.doMock`,
  * `vi.spyOn` and `vi.stubEnv` are refused in every folder a `vitest/no-restricted-vi-methods` block
- * lists, and the rest of `vi` passes. plants.test.ts runs these lines in a file of each such folder,
- * as it runs REFLECT's. They are not in BUILTIN_PLANTS: no block lists `oxlint-plugins/`.
- * Plant: delete one method from one block of `.oxlintrc.json`, and that folder's line is not refused.
+ * lists, and the rest of `vi` passes. One plant per form: `vi` imported from `vitest`, from
+ * `@effect/vitest`, and under a name of its own (oxlint 1.90.0 follows the import, as the gateway and
+ * telemetry slice's run found), and the lib-top slice's plant, which adds the computed and optional
+ * member forms and a call in parentheses. plants.test.ts runs each plant, in its own law, in a file
+ * of each such folder, as it runs REFLECT's. They are not in BUILTIN_PLANTS: no block lists
+ * `oxlint-plugins/`.
+ * Plant: delete one folder from the block of `.oxlintrc.json`, or one method from one block, and that
+ * folder's lines are not refused.
  */
-export const VI_METHODS: Plant = {
-  code: "vitest(no-restricted-vi-methods)",
-  prelude: [TEST, 'import {vi as renamed} from "vitest";', "declare const other: {fn: () => void};"],
-  lines: [
+export const VI_METHODS: readonly Plant[] = [
+  ...[
+    { from: 'import { vi } from "vitest";', vi: "vi" },
+    { from: 'import { vi } from "@effect/vitest";', vi: "vi" },
+    { from: 'import { vi as v } from "vitest";', vi: "v" },
+  ].map(({ from, vi }) => ({
+    code: VI_CODE,
+    prelude: [from, "declare const other: { fn: () => void };"],
+    lines: viLines(vi),
+  })),
+  {
+    code: VI_CODE,
+    prelude: [TEST, 'import {vi as renamed} from "vitest";', "declare const other: {fn: () => void};"],
+    lines: [
     ["export const a = vi.fn();", true],
     ['vi.mock("./a.ts");', true],
     ['vi.doMock("./a.ts");', true],
@@ -92,16 +129,20 @@ export const VI_METHODS: Plant = {
     ['export const g = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
     ["export const h = vi.fn().mockReturnValue(1);", false],
     ['export const i = (vi.spyOn(console, "warn")).mockImplementation(() => undefined);', true],
-  ],
-};
+    ],
+  },
+];
 
 /**
- * The lock's other half (T1067, lead ruling 2026-11-16: the lock is a pair): oxlint's
+ * The lock's other half (T1067, lead ruling 2026-11-16: the lock is a pair; M4 of the mock sweep,
+ * amendment 2026-11-16 of mock-gateway-processes-telemetry-PLAN.md): oxlint's
  * `no-restricted-properties`, with one `object: "vi"` entry per banned member, refuses the member
  * itself, so it holds the chained calls `vitest/no-restricted-vi-methods` misses
- * (https://github.com/oxc-project/oxc/issues/29656). A line is held by the lock when VI_METHODS or
- * this plant refuses it. plants.test.ts runs these lines in a file of every folder a vi ban block
- * lists. They are not in BUILTIN_PLANTS: no block lists `oxlint-plugins/`.
+ * (https://github.com/oxc-project/oxc/issues/29656). The rest of `vi` passes. A line is held by the
+ * lock when VI_METHODS or this plant refuses it. The lines are both slices' plants in one file, with
+ * one copy of a line both wrote the same, and the gateway slice's names moved past the lib-top ones
+ * so no name is declared twice. plants.test.ts runs these lines in a file of every folder a vi ban
+ * block lists. They are not in BUILTIN_PLANTS: no block lists `oxlint-plugins/`.
  * Plant: drop the block's `vi` entries from `no-restricted-properties`, and the chained lines are not
  * refused.
  */
@@ -112,18 +153,29 @@ export const VI_PROPERTIES: Plant = {
     // The chained calls the vitest rule misses.
     ['export const a = vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
     ["export const b = vi.fn().mockReturnValue(1);", true],
+    ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
+    ["export const i = vi.fn().mockReturnValue(1);", true],
     // One plain call of each banned member.
     ["export const c = vi.fn();", true],
+    ["export const j = vi.fn();", true],
     ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./a.ts");', true],
     ['vi.doMock("./b.ts");', true],
     ['export const d = vi.spyOn(console, "warn");', true],
+    ['export const k = vi.spyOn(console, "log");', true],
     ['vi.stubEnv("A", "1");', true],
-    // The rest of vi passes, as do a comment, a string and another object's fn.
+    ['vi.stubEnv("A", "b");', true],
+    // 0555 and 0579 do not decide the rest of vi.
     ["export const e = vi.hoisted(() => 1);", false],
     ["export const f = vi.waitFor(() => 1);", false],
+    ["export const l = vi.hoisted(() => 1);", false],
+    ["export const m = vi.waitFor(() => 1);", false],
+    // Not a member of vi: a comment, a string, another object's member of the same name.
     ["// vi.fn() in a comment", false],
     ['export const g = "vi.spyOn(console)";', false],
+    ['export const n = "vi.spyOn(x)";', false],
     ["export const h = other.fn();", false],
+    ["other.fn();", false],
   ],
 };
 

@@ -13,12 +13,14 @@ import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { WebCrypto } from "effect/crypto";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
+import { paused } from "../crypto.test-support.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -50,6 +52,24 @@ beforeEach(async () => {
 });
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
+// The three paused-hash laws report their first failure unshrunk: a hash that misses the stand-in
+// fails each run at `reached`'s timeout, and shrinking would spend the law's whole time on it.
+const pausedChecks = { ...checks, endOnFailure: true };
+
+/**
+ * Waits for a paused hash to be reached, on the live clock, since the laws run on a TestClock. A
+ * hash that no longer reads the `WebCrypto` reference never reaches the stand-in, so the law fails
+ * here and does not hang.
+ */
+const reached = (entered: Deferred.Deferred<void>) =>
+  TestClock.withLive(
+    Deferred.await(entered).pipe(
+      Effect.timeoutOrElse({
+        duration: "5 seconds",
+        orElse: () => Effect.die(new Error("the paused hash was never reached through the WebCrypto reference")),
+      }),
+    ),
+  );
 
 // Each world keeps its ledger file in its own temp folder. The law's scope closes every connection
 // the world opened, then removes the folder (0061).
@@ -641,6 +661,11 @@ describe("P17a, revoke stops writes at the final door", () => {
       },
     );
   });
+  // M1 and M5 of the mock sweep (0555), for this law and the two other paused-hash laws below: the
+  // hash pauses in a stand-in crypto handed in with `WebCrypto.layer`, so the door must hash through
+  // the `WebCrypto` reference. Plants: skip the grant recheck after the request hash in Gateway.ts,
+  // and the `revokeFirst` runs go red; hash with `globalThis.crypto.subtle` past the reference, and
+  // every run goes red at `reached`'s timeout.
   it("a route paused after its online check cannot record authenticated input after revoke", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -653,59 +678,34 @@ describe("P17a, revoke stops writes at the final door", () => {
               const w = yield* world(),
                 d = yield* setup(w);
 
-              const entered = yield* Deferred.make<void>(),
-                release = yield* Deferred.make<void>();
+              const marker = `queued-input-${token}`;
+              const pause = yield* paused(marker);
+              const pending = yield* Effect.forkChild(
+                Effect.result(send(d.a, d.old, w, target, marker, token)).pipe(
+                  Effect.provide(WebCrypto.layer(pause.crypto)),
+                ),
+              );
+              yield* reached(pause.entered);
 
-              const digest = crypto.subtle.digest.bind(crypto.subtle),
-                marker = `queued-input-${token}`;
-
-              let paused = false;
-
-              const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
-                const bytes = ArrayBuffer.isView(data)
-                  ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-                  : new Uint8Array(data);
-
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
-                  paused = true;
-
-                  return Effect.runPromise(
-                    Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(Deferred.await(release)),
-                      Effect.andThen(web(() => digest(algorithm, data))),
-                    ),
-                  );
-                }
-
-                return digest(algorithm, data);
-              });
-
-              try {
-                const pending = yield* Effect.forkChild(Effect.result(send(d.a, d.old, w, target, marker, token)));
-                yield* Deferred.await(entered);
-
-                if (revokeFirst) {
-                  yield* remove(d.b, w, "revoke");
-                }
-
-                yield* Deferred.succeed(release, undefined);
-                const result = yield* Fiber.join(pending);
-
-                const refused = Result.isFailure(result)
-                  ? result.failure._tag === "NotGranted"
-                  : result.success._tag === "refused" && result.success.reason === "not_granted";
-
-                expect(refused).toBe(revokeFirst);
-                expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
-                expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
-              } finally {
-                spy.mockRestore();
+              if (revokeFirst) {
+                yield* remove(d.b, w, "revoke");
               }
+
+              yield* Deferred.succeed(pause.release, undefined);
+              const result = yield* Fiber.join(pending);
+
+              const refused = Result.isFailure(result)
+                ? result.failure._tag === "NotGranted"
+                : result.success._tag === "refused" && result.success.reason === "not_granted";
+
+              expect(refused).toBe(revokeFirst);
+              expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
+              expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
             }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
-      checks,
+      pausedChecks,
     );
   });
   it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
@@ -737,75 +737,51 @@ describe("P17a, revoke stops writes at the final door", () => {
               expect(inbox).toHaveLength(1);
               const inputs = yield* rows(w, "gateway/inputs");
 
-              const entered = yield* Deferred.make<void>(),
-                release = yield* Deferred.make<void>();
+              const pause = yield* paused(marker);
+              const pending = yield* Effect.forkChild(
+                Effect.result(send(d.a, d.old, w, target, marker, text)).pipe(
+                  Effect.provide(WebCrypto.layer(pause.crypto)),
+                ),
+              );
+              // Request hashing follows online(); the settled reply is still pending.
+              yield* reached(pause.entered);
 
-              const digest = crypto.subtle.digest.bind(crypto.subtle);
-              let paused = false;
-
-              const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
-                const bytes = ArrayBuffer.isView(data)
-                  ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-                  : new Uint8Array(data);
-
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
-                  paused = true;
-
-                  return Effect.runPromise(
-                    Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(Deferred.await(release)),
-                      Effect.andThen(web(() => digest(algorithm, data))),
-                    ),
-                  );
-                }
-
-                return digest(algorithm, data);
-              });
-
-              try {
-                const pending = yield* Effect.forkChild(Effect.result(send(d.a, d.old, w, target, marker, text)));
-                // Request hashing follows online(); the settled reply is still pending.
-                yield* Deferred.await(entered);
-
-                if (revokeFirst) {
-                  yield* remove(d.b, w, "revoke");
-                }
-
-                yield* Deferred.succeed(release, undefined);
-                const result = yield* Fiber.join(pending);
-
-                if (!revokeFirst) {
-                  yield* remove(d.b, w, "revoke");
-                }
-
-                const answer = Result.isFailure(result)
-                  ? Schema.is(NotGranted)(result.failure)
-                    ? { reason: "not_granted" }
-                    : result.failure
-                  : result.success._tag === "refused"
-                    ? { reason: result.success.reason }
-                    : result.success;
-
-                // Plant: answer the cached placing without a final membership check.
-                expect({
-                  answer,
-                  inbox: yield* rows(w, `${processes[target]}/inbox`),
-                  inputs: yield* rows(w, "gateway/inputs"),
-                  deliveries: w.deliveries.length,
-                }).toEqual({
-                  answer: revokeFirst ? { reason: "not_granted" } : first,
-                  inbox,
-                  inputs,
-                  deliveries: 1,
-                });
-              } finally {
-                spy.mockRestore();
+              if (revokeFirst) {
+                yield* remove(d.b, w, "revoke");
               }
+
+              yield* Deferred.succeed(pause.release, undefined);
+              const result = yield* Fiber.join(pending);
+
+              if (!revokeFirst) {
+                yield* remove(d.b, w, "revoke");
+              }
+
+              const answer = Result.isFailure(result)
+                ? Schema.is(NotGranted)(result.failure)
+                  ? { reason: "not_granted" }
+                  : result.failure
+                : result.success._tag === "refused"
+                  ? { reason: result.success.reason }
+                  : result.success;
+
+              // Plant: answer the cached placing without a final membership check.
+              expect({
+                answer,
+                inbox: yield* rows(w, `${processes[target]}/inbox`),
+                inputs: yield* rows(w, "gateway/inputs"),
+                deliveries: w.deliveries.length,
+              }).toEqual({
+                answer: revokeFirst ? { reason: "not_granted" } : first,
+                inbox,
+                inputs,
+                deliveries: 1,
+              });
             }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
-      checks,
+      pausedChecks,
     );
   });
   it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
@@ -1061,72 +1037,43 @@ describe("P17a, revoke stops writes at the final door", () => {
               const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
               const remover = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.b;
 
-              const entered = yield* Deferred.make<void>(),
-                release = yield* Deferred.make<void>();
+              const marker = `p17-queued-${text}`;
+              // The event is hashed as JSON, so the pause looks for the marker as JSON writes it.
+              const pause = yield* paused(JSON.stringify(marker));
+              const pending = yield* Effect.forkChild(
+                Effect.result(
+                  door.append({
+                    id,
+                    parent,
+                    process: processes[target],
+                    kind: "saved",
+                    stream: "notes",
+                    event: Event.make({ text: marker }),
+                  }),
+                ).pipe(Effect.provide(WebCrypto.layer(pause.crypto))),
+              );
 
-              const digest = crypto.subtle.digest.bind(crypto.subtle),
-                marker = `p17-queued-${text}`,
-                encodedMarker = JSON.stringify(marker);
+              yield* reached(pause.entered);
 
-              let paused = false;
-
-              const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
-                const bytes = ArrayBuffer.isView(data)
-                  ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-                  : new Uint8Array(data);
-
-                if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
-                  paused = true;
-
-                  return Effect.runPromise(
-                    Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(Deferred.await(release)),
-                      Effect.andThen(web(() => digest(algorithm, data))),
-                    ),
-                  );
-                }
-
-                return digest(algorithm, data);
-              });
-
-              try {
-                const pending = yield* Effect.forkChild(
-                  Effect.result(
-                    door.append({
-                      id,
-                      parent,
-                      process: processes[target],
-                      kind: "saved",
-                      stream: "notes",
-                      event: Event.make({ text: marker }),
-                    }),
-                  ),
-                );
-
-                yield* Deferred.await(entered);
-
-                if (revokeFirst) {
-                  yield* remove(remover, w, "revoke");
-                }
-
-                yield* Deferred.succeed(release, undefined);
-                const result = yield* Fiber.join(pending);
-                expect(Result.isFailure(result)).toBe(revokeFirst);
-
-                if (revokeFirst && Result.isFailure(result)) {
-                  expect(result.failure).toMatchObject({ _tag: "NotGranted" });
-                }
-
-                expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
-              } finally {
-                spy.mockRestore();
+              if (revokeFirst) {
+                yield* remove(remover, w, "revoke");
               }
+
+              yield* Deferred.succeed(pause.release, undefined);
+              const result = yield* Fiber.join(pending);
+              expect(Result.isFailure(result)).toBe(revokeFirst);
+
+              if (revokeFirst && Result.isFailure(result)) {
+                expect(result.failure).toMatchObject({ _tag: "NotGranted" });
+              }
+
+              expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
             }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
       {
-        ...checks,
+        ...pausedChecks,
         // P17a regression: JSON-escaped text used to miss the pause after receipt checking.
         examples: [["notes", true, false, '"\n\\']],
       },

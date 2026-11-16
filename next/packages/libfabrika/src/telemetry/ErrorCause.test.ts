@@ -3,9 +3,11 @@
 // `Archive.ts:21` (a WebCrypto digest that rejects), `Archive.ts:58` (an R2 call that rejects),
 // `Archive.ts:68` (a `head` answer that does not decode), `Records.ts:444` (a part's answer that
 // does not decode). `Sink.ts:393` needs a database and runs in `node/ErrorCause.test.ts`.
-import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { WebCrypto } from "effect/crypto";
 import * as fc from "fast-check";
+import { rejecting } from "../crypto.test-support.ts";
 import { Archive, type BucketCalls, sha256 } from "./Archive.ts";
 import { type RecordCalls, RecordManager } from "./Records.ts";
 import { Chain, SinkError, sinkError } from "./Trace.ts";
@@ -30,13 +32,19 @@ const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effec
     ),
   );
 
-/** A spy on WebCrypto's digest that rejects with `failure`, restored when the Effect ends. */
-const digestRejects = <A, E>(failure: unknown, work: Effect.Effect<A, E>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => vi.spyOn(crypto.subtle, "digest").mockRejectedValue(failure)),
-    () => work,
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+/**
+ * The typed failure `work` ends with, run on a stand-in crypto whose digest rejects with `failure`,
+ * and every body that digest was asked to hash. A defect, or a success, is not a typed failure.
+ */
+const onRejecting = <A, E>(failure: unknown, work: Effect.Effect<A, E>) =>
+  Effect.gen(function* () {
+    const stand = rejecting(failure);
+    const exit = yield* Effect.exit(work.pipe(Effect.provide(WebCrypto.layer(stand.crypto))));
+    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause), "a rejected digest is no defect").toBe(false);
+    const error = Exit.findErrorOption(exit);
+    expect(Option.isSome(error), "the digest's rejection reached the work as a typed failure").toBe(true);
+    return { error: Option.getOrThrow(error), asked: stand.asked };
+  });
 
 const put = (body: Uint8Array) => Archive.use((archive) => archive.put("spans/1", body));
 
@@ -61,7 +69,11 @@ describe("T695, sinkError keeps the thrown value", () => {
 });
 
 describe("T695, the archive keeps what failed", () => {
-  // C1, Archive.ts:21. Plant: `const fail = () => new SinkError({ reason: "storage", held: 0 })`.
+  // C1, Archive.ts:21, and M2 and M5 of the mock sweep (0555): the archive hashes through the
+  // `WebCrypto` reference, so a stand-in crypto handed in with `WebCrypto.layer` is what it asks.
+  // Plants: `const fail = () => new SinkError({ reason: "storage", held: 0 })`; hash
+  // `body.slice(1)`, and `asked` is wrong; `Effect.promise` in place of `tryPromise`, and the
+  // rejection is a defect; read `globalThis.crypto` in place of the reference, and `asked` is empty.
   // A Promise may reject with anything, `undefined` and other primitives included.
   law(
     "C1: a digest that rejects is `storage` with the rejected value as its cause, on any archive",
@@ -69,17 +81,19 @@ describe("T695, the archive keeps what failed", () => {
     ({ failure, body, onBucket }) =>
       Effect.gen(function* () {
         const calls: BucketCalls = {
-          put: () => Promise.resolve(),
-          head: () => Promise.resolve(null),
+          put: () => Promise.reject(new Error("the archive called the bucket after a failed digest")),
+          head: () => Promise.reject(new Error("the archive called the bucket after a failed digest")),
         };
 
         const archive = onBucket ? Archive.bucket(calls) : Archive.memory;
-        const direct = yield* Effect.flip(digestRejects(failure, sha256(body)));
-        const stored = yield* Effect.flip(digestRejects(failure, Effect.provide(put(body), archive)));
+        const direct = yield* onRejecting(failure, sha256(body));
+        const stored = yield* onRejecting(failure, Effect.provide(put(body), archive));
 
-        for (const error of [direct, stored]) {
+        for (const { error, asked } of [direct, stored]) {
           expect(error.reason).toBe("storage");
           expect(error.cause).toBe(failure);
+          // One hash, of exactly the body the archive was given.
+          expect(asked).toEqual([body]);
         }
       }),
   );
