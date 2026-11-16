@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0170, 0531, 0526, 0536; body 2baf3d91494c
+
 Plancheck-Version: 3
 
 # Plan: a program can monitor another running program and gets one `DOWN` when it ends
@@ -513,3 +513,27 @@ table above says where they differ; nothing else in the plan changes.
 |---|---|---|---|
 | next/apps/fabrika/src/worker-monitor.integration.test.ts | tests | tests | M13, on real workerd, CI's full run only; replaces the libfabrika path above |
 | next/apps/fabrika/src/brain.ts | build | 10 | `programMonitor` and `programDemonitor` on the Project class, forwarding to `ProjectService` |
+
+## Amendment A-Recheck, 2026-11-15
+
+Found by the second review, after the build that wakes a watcher. The laws table stops at M14, but
+the branch holds two more laws, and M13 holds more than its row says. Each row below replaces or adds
+to the tables above; nothing else in the plan changes.
+
+- **M13 holds more.** Besides the `monitor_ok` and the `DOWN`, M13 holds a `no_name` refusal and a
+  demonitor across the Project's RPC, and its path is the app file amendment A-Workerd names.
+- **M15 is new.** A catch-up may fold the brain's saved `monitor_ok` before the runner's settle does.
+  The Cmds that step returns must still run once. It holds the `settled` rule in `runtime/Runner.ts`.
+- **M16 is new.** On workerd a Process object reads its inbox only once something calls it, so a
+  watcher that only waits needs the Project to wake it after the turn that wrote its `DOWN`.
+
+| Law | Kind (lint, type or test?) | Generator | Plant | Where |
+|---|---|---|---|---|
+| M13, across the objects: on the real Worker runtime, a program in one Process object is refused `no_name` for a name nobody registered, monitors a program in another by name twice, ends the first watch with a demonitor, and when the other exits folds one `DOWN`, for the watch it kept. Host-only (workerd): CI's scheduled full run only, never on the laptop | test | scenario: two programs on one local instance on workerd | (a) drop the `programDemonitor` forward: tsc and M13 red; (b) make the remote demonitor ignore its ref: the dropped watch's `DOWN` folds, M13 red; (c) answer a refusal as a transport failure: no `monitor_err` folds, M13 red | next/apps/fabrika/src/worker-monitor.integration.test.ts |
+| M15, a follow-up runs once: the Cmds a `monitor_ok` step returns run exactly once, whether a catch-up folds the brain's saved answer before the runner's settle or the settle folds it. 100 runs | test | fc.commands: `watch`, `watch_overtake`, `watch_lost`, `end`, `restart`, `wake`; must reach `overtake`, `settle`, `lose_after` and `noproc`; the program is `chaserProgram`, whose `monitor_ok` returns a `ping` | (a) drop the catch-up's handling of its own answer to a pending monitor Cmd: the follow-up never runs, M15 red; (b) run the follow-up twice: M15 red | next/packages/libfabrika/src/runtime/MonitorTest.ts, run by next/packages/libfabrika/src/node/Monitor.integration.test.ts |
+| M16, a watcher that only waits: on the real Worker runtime, a watcher that opens no view and gets no call into its object after its watch is set folds the `DOWN` from pushed frames alone, for an exit (`normal`) and for a child its parent ends with `stop_child` (`shutdown`). Host-only (workerd): CI's scheduled full run only | test | scenario: only workerd has an object that sleeps until called | (a) drop the Project's wake after an exit: the exit case red, CI full run 43772292846; (b) drop the wake after a child stop: the stop case red | next/apps/fabrika/src/worker-monitor.integration.test.ts |
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 25 | `wakeWatchers`, run after the turn of `exit` and of `stopChild`, wakes each process that watches the life that ended |
+| next/apps/fabrika/src/brain.ts | build | 1 | the Project class `implements ProjectBinding`, so a Project call it forgets to forward is a type error |

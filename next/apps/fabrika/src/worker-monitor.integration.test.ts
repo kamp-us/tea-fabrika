@@ -3,7 +3,8 @@
 // worker-mail.integration.test.ts sets up its two Process objects. M13: a program in one Process
 // object monitors a program in another by its registered name, is refused for a name nobody
 // registered, ends one of its watches, and when the other exits folds one `DOWN`, for the watch it
-// kept. M16: that `DOWN` folds with no call into the watcher's object after its watch is set.
+// kept. M16: that `DOWN` folds with no call into the watcher's object after its watch is set, when
+// the watched program exits and when its parent stops it with `stop_child`.
 // Host-only: it starts a real instance, so it runs in CI's full run only, never on the laptop
 // (0536, 0178).
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
@@ -11,7 +12,9 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
@@ -117,6 +120,34 @@ const machine = Machine.make({model: Model, msg: Msg, cmds: [exit],
  }});
 export const program = Program.make({name: "m13/writer", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
  inputs: {quit: "End this process"}, outputs: {}, writes: {}, wake: () => null});
+`;
+
+// The parent starts the writer as its own child and stops it, as a supervisor's terminate_child, and
+// keeps each answer it folds, in order.
+const PARENT = `
+import {Machine} from "@demlik/tea/effect";
+import {Schema} from "effect";
+import {Program} from "@kampus/libfabrika/runtime/Program";
+import {startChild, stopChild} from "@kampus/libfabrika/runtime/StartChild";
+const Model = Schema.Struct({log: Schema.Array(Schema.Json)});
+const Msg = Schema.Union([
+ Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String}),
+ Schema.Struct({type: Schema.Literal("stop"), name: Schema.String})
+]);
+const logged = (s, entry) => ({log: [...s.log, entry]});
+const why = (m) => m.reason ?? m.error ?? null;
+const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild, stopChild],
+ init: (loaded) => [loaded ?? {log: []}, []],
+ update: {
+  start: (s, m) => [s, [startChild({program: m.program, name: m.name})]],
+  start_child_ok: (s, m) => [logged(s, {type: "started", process: m.value.process, name: m.value.name}), []],
+  start_child_err: (s, m) => [logged(s, {type: "start_refused", reason: why(m)}), []],
+  stop: (s, m) => [s, [stopChild({name: m.name})]],
+  stop_child_ok: (s) => [logged(s, {type: "stopped"}), []],
+  stop_child_err: (s, m) => [logged(s, {type: "stop_refused", reason: why(m)}), []]
+ }});
+export const program = Program.make({name: "m13/parent", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+ inputs: {start: "Start a child", stop: "Stop a child"}, outputs: {}, writes: {}, wake: () => null});
 `;
 
 // The instance's private local capability, read call by call as worker-mail's test reads it.
@@ -246,6 +277,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
       for (const [role, source] of [
         ["reader", READER],
         ["writer", WRITER],
+        ["parent", PARENT],
       ] as const) {
         const path = join(home, `${role}.ts`);
         writeFileSync(path, source);
@@ -266,6 +298,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
             founder: key.line,
             window: key.raw,
             port: at.port,
+            starts: [{ source: "m13/parent", to: "m13/writer" }],
           }),
         );
         const scope = yield* Effect.scope;
@@ -426,6 +459,53 @@ it("scenario: M16, a watcher that only waits folds the DOWN with no call into it
         name: "writer:1",
         reason: { _tag: "normal" },
       },
+    ]);
+  });
+}, 180_000);
+
+// scenario: only workerd has a Process object that stays asleep until something calls it or its alarm fires.
+// Plant: delete the Project's wake after a child stop (`stopChild` in
+// next/packages/libfabrika/src/cloudflare/runtime.ts): no DOWN is pushed, and the wait for it fails.
+it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when the watched program's parent stops it, with no call into its object after the watch is set", async () => {
+  await world(async (_instance, fixture) => {
+    const parent = await fixture.start("parent:1");
+    const reader = await fixture.start("reader:1");
+    const client = await fixture.connect("stopped");
+    const send = async (pid: string, id: string, m: unknown) => {
+      const answer = await client.call("process.send", letter(pid, id, m));
+      expect(Sent.guards.accepted(answer.result), `M16: ${id} is accepted, got ${JSON.stringify(answer)}`).toBe(true);
+    };
+
+    // The parent starts the writer as its child; reading the parent's view never calls the reader.
+    await send(parent, "start-1", { type: "start", program: "m13/writer", name: "writer:2" });
+    const parentLog = async () => (await client.call("view.open", { pid: parent })).result?.view?.log ?? [];
+    const [started] = await until("the parent folds its child's start", parentLog, (rows) => rows.length > 0);
+    expect(started, "M16: the parent started the writer as its child").toEqual({
+      type: "started",
+      process: expect.any(String),
+      name: "writer:2",
+    });
+    const child = String(started.process);
+
+    // The one open of the reader: from here the brain pushes its view, and the law only listens.
+    expect((await client.call("view.open", { pid: reader })).result?.view, "M16: the reader starts empty").toEqual({
+      log: [],
+    });
+    await send(reader, "watch-1", { type: "watch", name: "writer:2" });
+    await pushed(client, reader, "monitor_ok");
+
+    // Nothing below calls the reader's object: the stop goes to the parent's, and the reader has no
+    // timer. The DOWN reaches the reader only if the Project wakes it after the stop's turn.
+    await send(parent, "stop-1", { type: "stop", name: "writer:2" });
+    await pushed(client, reader, "DOWN");
+
+    const watched = { ref: expect.stringMatching(new RegExp(`^${reader}/`)), process: child, name: "writer:2" };
+    expect(
+      (await client.call("view.open", { pid: reader })).result?.view?.log,
+      "M16: monitor_ok, then exactly one DOWN for the child's life, its name and shutdown",
+    ).toEqual([
+      { type: "monitor_ok", ...watched },
+      { type: "DOWN", ...watched, reason: ExitReason.cases.shutdown.make({}) },
     ]);
   });
 }, 180_000);
