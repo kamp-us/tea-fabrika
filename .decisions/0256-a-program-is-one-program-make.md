@@ -49,6 +49,6 @@ export const counter = Program.make({
 
 ## Consequences
 
-- tea's `Machine.make` keeps no schemas on its machine today; it is patched locally, and
-  [demlik#897](https://github.com/kamp-us/demlik/issues/897) asks upstream.
+- tea's `Machine.make` kept no schemas on its machine; tea 0.26.0 shipped it
+  ([demlik#897](https://github.com/kamp-us/demlik/issues/897)), and no patch is needed.
 - Not decided here: the exact generic signature, which its plan settles with type tests.
