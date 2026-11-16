@@ -12,7 +12,7 @@
         "overrides": [
           // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
           // (E8), preferUnsafeConstructor (E16), effectSucceedWithVoid (E20),
-          // catchConditionalRefailToCatchIf (E22).
+          // catchConditionalRefailToCatchIf (E22), runOfExitToRunExit (E25).
           {
             "include": ["**/*.ts", "**/*.tsx"],
             "options": {
@@ -22,7 +22,8 @@
                 "unnecessaryArrowBlock": "error",
                 "preferUnsafeConstructor": "error",
                 "effectSucceedWithVoid": "error",
-                "catchConditionalRefailToCatchIf": "error"
+                "catchConditionalRefailToCatchIf": "error",
+                "runOfExitToRunExit": "error"
               }
             }
           },

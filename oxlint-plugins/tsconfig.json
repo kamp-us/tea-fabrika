@@ -25,6 +25,15 @@
               "schemaClassMissingBrand": "error"
             }
           }
+        },
+        // These folders: runOfExitToRunExit (E25).
+        {
+          "include": ["**/*.ts", "**/*.tsx"],
+          "options": {
+            "diagnosticSeverity": {
+              "runOfExitToRunExit": "error"
+            }
+          }
         }
       ]
     }

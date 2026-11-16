@@ -24,7 +24,7 @@
           }
         },
         // These folders: schemaNumber (E4), preferTypedSchemaDecoder (E5), instanceOfSchema
-        // (E10), multipleCatchTag (E21).
+        // (E10), multipleCatchTag (E21), runOfExitToRunExit (E25).
         {
           "include": ["**/*.ts"],
           "options": {
@@ -32,7 +32,8 @@
               "schemaNumber": "error",
               "preferTypedSchemaDecoder": "error",
               "instanceOfSchema": "error",
-              "multipleCatchTag": "error"
+              "multipleCatchTag": "error",
+              "runOfExitToRunExit": "error"
             }
           }
         },

@@ -7,13 +7,14 @@
       // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
       // The globs read from this folder. One entry per set of folders; its comment names its checks.
       "overrides": [
-        // Whole package: schemaNumber (E4), unnecessaryArrowBlock (E8).
+        // Whole package: schemaNumber (E4), unnecessaryArrowBlock (E8), runOfExitToRunExit (E25).
         {
           "include": ["**/*.ts"],
           "options": {
             "diagnosticSeverity": {
               "schemaNumber": "error",
-              "unnecessaryArrowBlock": "error"
+              "unnecessaryArrowBlock": "error",
+              "runOfExitToRunExit": "error"
             }
           }
         }

@@ -19,12 +19,13 @@
             }
           }
         },
-        // These folders: schemaStructWithTag (E11).
+        // These folders: schemaStructWithTag (E11), runOfExitToRunExit (E25).
         {
           "include": ["*.ts", "workflow-lint/*.ts"],
           "options": {
             "diagnosticSeverity": {
-              "schemaStructWithTag": "error"
+              "schemaStructWithTag": "error",
+              "runOfExitToRunExit": "error"
             }
           }
         }

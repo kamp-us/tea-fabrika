@@ -8,14 +8,15 @@
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
           // Whole package: unnecessaryArrowBlock (E8), preferUnsafeConstructor (E16),
-          // unnecessaryEffectGen (E17).
+          // unnecessaryEffectGen (E17), runOfExitToRunExit (E25).
           {
             "include": ["**/*.ts"],
             "options": {
               "diagnosticSeverity": {
                 "unnecessaryArrowBlock": "error",
                 "preferUnsafeConstructor": "error",
-                "unnecessaryEffectGen": "error"
+                "unnecessaryEffectGen": "error",
+                "runOfExitToRunExit": "error"
               }
             }
           },
