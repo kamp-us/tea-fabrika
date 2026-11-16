@@ -5,7 +5,8 @@
 //   land   the top pull request is in an open stack -> each layer from the bottom up to it is open
 //          and not a draft -> the leak gate (./Leaks.ts) passes on each layer's change, its commits
 //          and its words -> each layer's new exported names are named under `## New names`
-//          (Names.ts, 0587) -> the open layers fit one merge group of the base branch's merge
+//          (Names.ts, 0587) -> `ci-required` is a success at each open layer's head, read once as
+//          `land.ts queue` reads it (ticket 1119) -> the open layers fit one merge group of the base branch's merge
 //          queue -> one stack merge, squashes, pinned to the heads the gates read
 //
 // Merge when ready is not offered for a stacked pull request (github/gh-stack#591), so `land.ts arm`
@@ -18,12 +19,43 @@
 // #616). The size is read from the base branch's rules each time, since it is the owner's setting.
 // Read through its module: `Stack.land(...)`.
 import { Effect, Option, Schema } from "effect";
+import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { type Detail, type MergeQueue, PullRequests } from "./PullRequests.ts";
+import { REQUIRED } from "./Queue.ts";
 
 /** The stack was not landed, and nothing was asked of GitHub's merge. */
 export class NotLanded extends Schema.TaggedError<NotLanded>()("NotLanded", { reason: Schema.String }) {}
+
+/** How a layer's required check stands when it is not a success: not made yet, not ended, or ended another way. */
+const Standing = Schema.Literals(["missing", "pending", "failed"]);
+
+/**
+ * A layer's `ci-required` is not a success at the head its gates read, so the stack was not landed
+ * and nothing was asked of GitHub's merge. The merge queue would test the stack anyway, but a red
+ * layer there throws the whole merge group out of the queue.
+ */
+export class RequiredNotGreen extends Schema.TaggedError<RequiredNotGreen>()("RequiredNotGreen", {
+  top: Schema.Finite,
+  pr: Schema.Finite,
+  oid: Schema.String,
+  state: Standing,
+}) {
+  get reason(): string {
+    return `stack of pr ${this.top}: pr ${this.pr}: ${REQUIRED} is ${this.state} at ${this.oid}, not a success; nothing was merged`;
+  }
+}
+
+/** How the required check stands, or `null` when it ended a success: read as `Queue.add` reads it. */
+const standing = (job: Option.Option<Job>): typeof Standing.Type | null =>
+  Option.isNone(job)
+    ? "missing"
+    : job.value.status !== "completed"
+      ? "pending"
+      : job.value.conclusion === "success"
+        ? null
+        : "failed";
 
 export type Ask = {
   /** A checkout of the repo, to fetch each head into for the leak gate. */
@@ -91,6 +123,16 @@ export const land = Effect.fn("Stack.land")(function* (a: Ask) {
 
     if (unnamed !== null) {
       return yield* refuse(`pr ${layer.number}: ${unnamed}`);
+    }
+  }
+
+  const checks = yield* Checks;
+
+  for (const layer of open) {
+    const state = standing(yield* checks.job(layer.oid, REQUIRED));
+
+    if (state !== null) {
+      return yield* new RequiredNotGreen({ top: a.top, pr: layer.number, oid: layer.oid, state });
     }
   }
 

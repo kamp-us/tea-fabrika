@@ -5,7 +5,8 @@
 // (github/gh-stack#591), each layer passes `arm`'s gates here or the stack is not merged at all.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
+import { Checks, type Job } from "../ci/Checks.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
@@ -23,7 +24,11 @@ type World = {
   readonly leaky?: number;
   /** The layer that exports a new name with no `## New names` section. */
   readonly unnamed?: number;
+  /** How `ci-required` stands at a layer's head, by layer: a finished success when absent. */
+  readonly required?: ReadonlyMap<number, Option.Option<Job>>;
 };
+
+const GREEN: Job = { id: 1, status: "completed", conclusion: "success" };
 
 /** Stack 1522's shape: layers 11, 12 and 13, bottom first, each open, ready and named. */
 const memory = (w: World = {}) => {
@@ -71,7 +76,15 @@ const memory = (w: World = {}) => {
     push: () => Effect.void,
   });
 
-  return { github, layer: Layer.mergeAll(PullRequestsTest.layer(github), pushes) };
+  // A Layer.mock stand-in for the required check, answering by head as GitHub's check runs do.
+  const byHead = new Map([11, 12, 13].map((n) => [head(n), w.required?.get(n) ?? Option.some(GREEN)]));
+
+  const checks = Recorder.layer(Checks, {
+    job: (at) => Effect.succeed(byHead.get(at) ?? Option.none()),
+    log: () => Effect.succeed(""),
+  });
+
+  return { github, layer: Layer.mergeAll(PullRequestsTest.layer(github), pushes, checks) };
 };
 
 const land = (m: ReturnType<typeof memory>, top: number) =>
@@ -187,4 +200,50 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
       ),
     ).toContain("pr 12");
   });
+
+  // Plant: drop the ci-required read, and the middle layer's stack is asked for and this law goes red.
+  it.effect(
+    "scenario: a stack whose middle layer has no ci-required at its head is refused, naming that layer, and nothing is merged",
+    () =>
+      Effect.gen(function* () {
+        const m = memory({ build: 3, required: new Map([[12, Option.none()]]) });
+        const answer = yield* land(m, 13);
+        expect(answer._tag).toBe("Failure");
+        const failure = answer._tag === "Failure" ? answer.failure : undefined;
+        expect(failure).toEqual(new Stack.RequiredNotGreen({ top: 13, pr: 12, oid: head(12), state: "missing" }));
+        expect(failure?.reason).toBe(
+          `stack of pr 13: pr 12: ci-required is missing at ${head(12)}, not a success; nothing was merged`,
+        );
+        expect(stackCalls(m)).toEqual([]);
+      }),
+  );
+
+  it.effect("scenario: a layer whose ci-required has not ended, or ended red, refuses with pending or failed", () =>
+    Effect.gen(function* () {
+      const pending = memory({
+        build: 3,
+        required: new Map([[11, Option.some({ ...GREEN, status: "in_progress", conclusion: null })]]),
+      });
+
+      const failed = memory({ build: 3, required: new Map([[13, Option.some({ ...GREEN, conclusion: "failure" })]]) });
+      const first = yield* land(pending, 13);
+      const second = yield* land(failed, 13);
+      expect(first._tag === "Failure" ? first.failure : undefined).toEqual(
+        new Stack.RequiredNotGreen({ top: 13, pr: 11, oid: head(11), state: "pending" }),
+      );
+      expect(second._tag === "Failure" ? second.failure : undefined).toEqual(
+        new Stack.RequiredNotGreen({ top: 13, pr: 13, oid: head(13), state: "failed" }),
+      );
+      expect([...stackCalls(pending), ...stackCalls(failed)]).toEqual([]);
+    }),
+  );
+
+  it.effect("scenario: a stack with ci-required a success at every layer's head merges", () =>
+    Effect.gen(function* () {
+      const m = memory({ build: 3 });
+      const answer = yield* land(m, 13);
+      expect(answer._tag).toBe("Success");
+      expect(stackCalls(m).map((call) => call.heads.map((pin) => pin.oid))).toEqual([[head(11), head(12), head(13)]]);
+    }),
+  );
 });

@@ -62,7 +62,8 @@
 //     `gh stack merge`, and `arm` cannot land a stacked pull request (github/gh-stack#591). Refuses
 //     unless the top is in an open stack whose layers from the bottom up to it are open and ready;
 //     runs `arm`'s gates on each layer, the leak gate on its change, commits and words and the
-//     `## New names` check; then refuses when more layers are open than the base branch's merge
+//     `## New names` check; refuses unless `ci-required` is a success at each layer's head
+//     (ticket 1119); then refuses when more layers are open than the base branch's merge
 //     queue builds at once (`max_entries_to_build`, read from its rules), naming both numbers, since
 //     the queue splits a larger stack and drops its upper layers. Then one stack merge, squashes,
 //     pinned to the heads the gates read.
@@ -742,7 +743,13 @@ const stackCommand = Command.make(
     const env = yield* loadEnv;
 
     const landed = yield* Stack.land({ dir: env.MAIN, top }).pipe(
-      Effect.provide(Layer.mergeAll(PullRequestsGh.layer(env.GH_REPO, env.MAIN), PushesProcess.layer(HERE))),
+      Effect.provide(
+        Layer.mergeAll(
+          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          PushesProcess.layer(HERE),
+          ChecksGh.layer(env.GH_REPO),
+        ),
+      ),
       Effect.mapError(refusedAt("stack")),
     );
 

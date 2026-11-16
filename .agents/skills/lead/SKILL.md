@@ -567,7 +567,8 @@ visible, and never weaken the rules to hide this message.
    quest merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
    refused by `gh pr merge` and by `land.ts arm` (github/gh-stack#591); land it with
    `land.ts stack <top-pr>`, never a bare `gh stack merge`. It runs `arm`'s leak gate and
-   `## New names` check on each layer, then one stack merge pinned to the heads it read. A stack
+   `## New names` check on each layer, refuses unless `ci-required` is a success at each layer's
+   head (ticket 1119), then one stack merge pinned to the heads it read. A stack
    may not be larger than the queue builds at once: `land.ts stack` refuses when more layers are
    open than main's `max_entries_to_build`, since the queue splits a larger stack and drops its
    upper layers (ticket 1115). Split it, or land it layer by layer.
