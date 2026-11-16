@@ -79,9 +79,18 @@ a check switched off. No personal names, machine paths or secrets in anything yo
 
 **Tests you may run, in this box only:** narrow vitest paths and `--changed origin/main`, under
 `nice -n 15 pnpm exec vitest run --maxWorkers=3`, plus any `.integration.` law your files reach.
-Never the full suite, never a `.visual.` test. One `pnpm typecheck` at the end at most; for a
+Never the full suite, and no `.visual.` test unless your brief names it. One `pnpm typecheck` at the end at most; for a
 narrow count use `pnpm exec effect-tsgo diagnostics --format json --project <dir>/tsconfig.json`.
 Say in the PR and RESULT which tests ran and at which head.
+
+**The 0178 guard in a cloud box (owner's standing rule, 2026-11-15).** Tests that start a real
+instance, workerd, or send real signals never run on the laptop; cloud boxes may run them. So a
+run of `.integration.` or `.visual.` laws in THIS cloud box sets `FABRIKA_HOST_RUN_OWNER_APPROVED=1`
+on that command (for example `FABRIKA_HOST_RUN_OWNER_APPROVED=1 nice -n 15 pnpm exec vitest run
+--maxWorkers=3 <path>`), and your field row and RESULT say: "cloud box, owner's standing yes for
+cloud boxes (2026-11-15)". Never set it anywhere but a cloud box, and never write it into a repo
+file. Once the merge session's narrowed guard is on main (it refuses only on the laptop), the
+override is no longer needed.
 
 **Files you never touch:** every file in pull request 1366's diff (read it with the GitHub MCP
 tool `pull_request_read`, method `get_files`, pull 1366, all pages). A hit in one of those files
