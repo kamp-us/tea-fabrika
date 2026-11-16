@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-as-no-unknown-parameters-1-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:02:51-08:00",
+  "ended": "2026-11-15T23:14:25-08:00",
+  "parent": "2026-11-16-as-no-unknown-parameters-1-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of anti-slop judgment slice AS-no-unknown-parameters-1, in next/, at 5c33df4d8 over merge-base bcad0080d: merge-ready, two finding rows, no blocker. Every line of the 53-file diff was read. Every fix is a type taken from where the value already lives (a product contract with the annotation dropped, Schema.Json or fc.JsonValue for JSON, a decode with a Schema first through flow, a real type guard, or the rule's own cause name for a thrown or rejected value); no assertion was dropped, no disable line, no .oxlintrc.json, vendor or tsconfig.base.json change, and none of the 70 files of pull request 1366 is in the diff. The counts hold: the rule, forced to error in a scratch config, meets 231 hits at this head in runtime, cloudflare, processes and tezgah, which is 78 in 1366's files plus 112 product plus 41 exam, matching 378 met, 139 fixed by the tests step and 8 by the build. Sampled leftovers are honest (door decodes, the Execution, ExecutionCalls and Stepper contracts, the replacers whose value the platform types as any, and platform.ts:357 StorageClient.put) except one: supervisor.laws.test.ts:64 canon is listed as a replacer but is canon's own parameter, which every caller feeds a Model. A second finding: ErrorCause.test.ts:282 leaves causedAt's doc block sitting above the new doc block of type Bad. Decisions 0563 (and its amendments) and 0566 are followed; governance.sh names no decision the diff walks back.",
+  "plants": [
+    {
+      "law": "anti-slop/no-unknown-parameters on tezgah, forced to error in a scratch config",
+      "plant": "scratch copy of tezgah/Layout.laws.test.ts with encode's parameter given back as unknown",
+      "result": "red: Layout.laws.test.ts:55:20 reported"
+    },
+    {
+      "law": "anti-slop/no-unknown-parameters on the build's processes/Process.ts deliver fix",
+      "plant": "scratch copy of processes/Process.ts with deliver's m typed unknown again",
+      "result": "red: Process.ts:763:28 reported, beside the known door hit at :265"
+    },
+    {
+      "law": "the rule's cause exemption is by name only, so the renames to cause are what keep the build's fixes",
+      "plant": "scratch copy of processes/internal/programMail.ts with businessRef taking failure: unknown",
+      "result": "red: programMail.ts:22:38 reported"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Read-only apart from this row. Ran at 5c33df4d8: the 25 changed plain test files one at a time and 5 plain importers of the changed helpers (RunnerHands.test, programMail.test, Audit.test, watchers.test, Entry.test), all passed; one whole pnpm typecheck passed; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) fails only on the expected .oxlintrc.json tezgah audit line. Not run: every .integration. law the diff reaches (node/Reload.integration.test.ts was tried and refused by the 0178 guard; PR 1508 is not on this branch). loosening.sh over bcad0080d..HEAD: 43 unrecognized-change hits, each a parameter annotation or import, and one removed-expect hit in runtime/Program.test.ts:876, a reformat of one expect's argument with all four expects kept; no law is loosened. git merge-tree with origin/main b510ed2e8: no conflict, though main also changed ChildrenTest.ts and StartChildTest.ts.",
+  "step": "review"
+}
