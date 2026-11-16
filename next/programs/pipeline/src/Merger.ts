@@ -80,7 +80,7 @@ const Model = Schema.TaggedUnion({
 const rounds = {
   name: "rounds",
   from: 1,
-  run: (raw: unknown) => {
+  run: (raw: Schema.Json) => {
     const s = Schema.decodeUnknownSync(Previous)(raw);
     return s._tag === "updating"
       ? { ...s, head: s.job.head, round: 0, checked: null }

@@ -7,7 +7,7 @@
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
 import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
-import type { Sql } from "../../Sql.ts";
+import type { Sql, SqlValue } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
@@ -91,7 +91,7 @@ const decodeSummary = Schema.decodeUnknownSync(
 const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Measurements> =>
   sql.exec(query, ...params).map((row) => toHealth(row));
 
-const toHealth = (row: unknown): Measurements => {
+const toHealth = (row: Record<string, SqlValue>): Measurements => {
   const { ok, ...rest } = decodeHealth(row);
   return { ...rest, ok: ok === 1 };
 };

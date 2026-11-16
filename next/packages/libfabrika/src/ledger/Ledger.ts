@@ -67,7 +67,7 @@ export class Doorbell extends Context.Service<
  * @category models
  */
 export type LedgerCalls = {
-  append(stream: string, id: string, line: unknown): Promise<unknown>;
+  append(stream: string, id: string, line: Line): Promise<unknown>;
   read(stream: string, after: number, reader: string): Promise<unknown>;
   wait(stream: string, after: number, reader: string): Promise<unknown>;
 };
