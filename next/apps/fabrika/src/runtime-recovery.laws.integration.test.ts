@@ -1963,11 +1963,24 @@ describe("P34c live object accounting", () => {
             };
           };
 
+          // The door object's span rows (0143: a quota refusal leaves no span rows). A refusal is only
+          // counted in `sums`, so neither an unsent span nor a measurements row may land for it.
+          const doorRows = () => {
+            const rows = counts(door.db);
+            return { unsent: rows["unsent"] ?? 0, measurements: rows["measurements"] ?? 0 };
+          };
+
           for (const [n, c] of tape.entries()) {
             const before = both();
             const counted = refusals();
+            const doorBefore = doorRows();
             expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
             const after = both();
+            const doorAfter = doorRows();
+
+            // Plant: Connection.ts ordinary() leaves `quota` off the frame span's refused tag, so the
+            // connection.frame span lands as an unsent row and one measurements row; red here.
+            expect(doorAfter, `refusal ${n} saved a span row in the door's store`).toEqual(doorBefore);
 
             // Plant (countRefusal answers false, Sink.ts): the refused call is never counted, red here.
             expect(refusals().total, `refusal ${n} was not counted`).toBeGreaterThan(counted.total);
