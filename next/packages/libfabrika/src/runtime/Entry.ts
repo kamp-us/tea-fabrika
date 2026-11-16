@@ -35,7 +35,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
  * @stability unstable
  * @category models
  */
-export type View = unknown;
+export type View = Schema.Json;
 
 /**
  * What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the inbox

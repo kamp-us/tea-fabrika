@@ -46,7 +46,7 @@ const CodeChange = Schema.Struct({
   ran: Schema.Array(Text),
   origin: From,
   pos: Millis,
-  view: Schema.Unknown,
+  view: Schema.Json,
   wake: Schema.NullOr(Millis),
   maxDeliveries: Schema.NullOr(Deliveries),
 }).check(
