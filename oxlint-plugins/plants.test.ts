@@ -9,12 +9,22 @@
 // The planted lines of our own rules also run in process through oxlint's RuleTester, and every
 // plant's file goes through one oxlint run, so the config is still what refuses each one.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -482,6 +492,108 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
   });
   expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
   expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
+});
+
+/** One override of oxlint's `--print-config`: its globs and its rules, a setting as `[level, options]`. */
+type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> };
+
+/** True for the ban's own entry, `{ object: "Reflect", property: "get" }`, in a rule's options. */
+const isReflectGet = (entry: unknown): boolean =>
+  typeof entry === "object" &&
+  entry !== null &&
+  "object" in entry &&
+  entry.object === "Reflect" &&
+  "property" in entry &&
+  entry.property === "get";
+
+/**
+ * Where a law plants a file for one folder glob of the config, such as `next/programs/chaos/**`:
+ * a file of that folder's own. A glob that names a file, not a folder, is answered unchanged.
+ */
+const plantPath = (glob: string): string => {
+  const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
+  return folder === glob ? glob : `${folder}/planted.ts`;
+};
+
+/** The globs of every override that holds the Reflect ban (0554), each with the rule's level there. */
+const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["no-restricted-properties"];
+    const options: unknown = Array.isArray(setting) ? setting[1] : undefined;
+    return Array.isArray(options) && options.some(isReflectGet)
+      ? files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }))
+      : [];
+  });
+
+describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
+  // lists today gets REFLECT's lines, a later slice's folder included.
+  // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
+  it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
+    const at = realpathSync(mkdtempSync(join(tmpdir(), "reflect-ban-")));
+
+    try {
+      copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+      // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
+      mkdirSync(join(at, "oxlint-plugins"));
+
+      for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+        if (entry.isFile()) {
+          copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
+        }
+      }
+
+      symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
+      symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+        cwd: at,
+        encoding: "utf8",
+        maxBuffer: 2 ** 28,
+      });
+      expect(printed.status, printed.stderr).toBe(0);
+      const parsed: Printed = JSON.parse(printed.stdout);
+      const globs = banGlobs(parsed);
+      // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
+      );
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
+      expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+
+      const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
+      const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
+      const files = globs.map(({ glob }) => plantPath(glob));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+
+      for (const file of files) {
+        mkdirSync(dirname(join(at, file)), { recursive: true });
+        writeFileSync(join(at, file), text);
+      }
+
+      const ran = spawnSync(
+        OXLINT,
+        [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
+        { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
+      );
+      const report: {
+        readonly diagnostics: ReadonlyArray<{
+          readonly code?: string;
+          readonly filename: string;
+          readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
+        }>;
+      } = JSON.parse(ran.stdout);
+
+      for (const file of files) {
+        const refused = report.diagnostics
+          .filter((d) => d.filename === file && d.code === REFLECT.code)
+          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
+          .sort((a, b) => a - b);
+        expect(refused, file).toEqual(want);
+      }
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
 
 describe("lint.ts, the first step of pnpm lint", () => {
