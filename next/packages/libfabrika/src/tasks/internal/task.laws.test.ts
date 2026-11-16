@@ -10,7 +10,7 @@
 // another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { syncTest } from "../../Testing.ts";
 import { type Executor, type Request, Result, State } from "../Task.ts";

@@ -4,8 +4,10 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import { syncTest } from "../../Testing.ts";
 import * as Quota from "./quota.ts";
 
 const limits = { writes: 5, bytes: 31, message: { writes: 3, bytes: 23 } };
@@ -267,5 +269,124 @@ describe("P34c quota machine", () => {
       }),
       options,
     );
+  });
+
+  // S2 (docs/direction/saved-state.md): the account saves as JSON text through `Model`, its saved
+  // schema, and a load at any cut goes on as the run that never stopped. The walk reads the state it
+  // folds: a faulted account is only advanced or resumed, a release and a settle only take back room
+  // that is there, and a replay names a message already replayed or a new one. Plant, run once
+  // (0093): `init` ignores the loaded account and starts fresh: red.
+  const Saved = Schema.fromJsonString(Quota.Model);
+  const accounts = [
+    Quota.Account.cases.program.make({ program: "sample/alpha" }),
+    Quota.Account.cases.recovery.make({ name: "alpha:1", location: "project" }),
+    Quota.Account.cases.local.make({ name: "alpha:1" }),
+  ];
+  type Move = "grow" | "release" | "replay" | "advance" | "resume" | "settle";
+
+  const walk = (
+    machine: ReturnType<typeof Quota.make>,
+    cells: ReadonlyArray<{ readonly move: number; readonly pick: number; readonly amount: number }>,
+  ) => {
+    let model = machine.init(null, {})[0];
+    let at = 1;
+    const replayed: Array<string> = [];
+    const msgs: Array<Quota.Msg> = [];
+    const reached = new Set<string>();
+
+    for (const [index, c] of cells.entries()) {
+      const moves: ReadonlyArray<Move> =
+        model._tag === "reserve_fault"
+          ? ["advance", "resume"]
+          : [
+              "grow",
+              "advance",
+              ...(model.bytes > 0 ? (["release"] as const) : []),
+              ...(model.account._tag === "recovery" ? (["replay"] as const) : []),
+              ...(model.ahead.writes > 0 || model.ahead.bytes > 0 ? (["settle"] as const) : []),
+            ];
+      const move = moves[c.move % moves.length]!;
+      const propose = (writes: number, bytes: number, ahead: { writes: number; bytes: number }) =>
+        ({ type: "propose", at, operation: `op:${index}`, writes, bytes, ahead }) as const;
+      let msg: Quota.Msg;
+
+      if (move === "advance") {
+        at = [at + 1, at + 60_000, Math.max(0, at - 1)][c.pick % 3]!;
+        msg = { type: "advance", at };
+      } else if (move === "resume") {
+        msg = { type: "resume", at };
+      } else if (move === "settle") {
+        msg = {
+          type: "settle",
+          bytes: c.amount % 10,
+          ahead: { writes: c.pick % (model.ahead.writes + 1), bytes: c.amount % (model.ahead.bytes + 1) },
+        };
+      } else if (move === "release") {
+        msg = propose(1, -Math.min(model.bytes, 1 + (c.amount % model.bytes)), { writes: 0, bytes: 0 });
+      } else if (move === "replay") {
+        const message =
+          c.pick % 2 === 0 && replayed.length > 0 ? replayed[c.amount % replayed.length]! : `accepted:${index}`;
+        replayed.push(message);
+        msg = {
+          ...propose(1, 1 + (c.amount % limits.message.bytes), { writes: 0, bytes: 0 }),
+          replay: { message, recovery: `restart:${c.pick % 3 === 0 ? 2 : 1}` },
+        };
+      } else {
+        msg = propose(1, 1 + (c.amount % (limits.bytes + 2)), {
+          writes: c.pick % 2,
+          bytes: c.pick % 2 === 0 ? 0 : c.amount % 5,
+        });
+      }
+
+      msgs.push(msg);
+      reached.add(move);
+      model = applyCell(machine, model, msg)[0];
+      reached.add(model._tag);
+    }
+
+    return { msgs, reached };
+  };
+
+  it("S2: every save and load of a quota walk resumes to the same account and decisions (100 runs)", () => {
+    const reached = new Set<string>();
+
+    fc.assert(
+      fc.property(fc.constantFrom(...accounts), tape, (account, cells) => {
+        const machine = Quota.make({ account, limits });
+        const run = walk(machine, cells);
+
+        for (const r of run.reached) {
+          reached.add(`${account._tag}:${r}`);
+        }
+
+        syncTest(
+          machine,
+          {},
+          {
+            msgs: run.msgs,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+            seed: options.seed,
+          },
+        );
+      }),
+      options,
+    );
+
+    // Coverage: every move on every account, and a faulted recovery account resumed.
+    for (const need of [
+      "program:grow",
+      "program:release",
+      "program:advance",
+      "program:settle",
+      "local:grow",
+      "local:settle",
+      "recovery:replay",
+      "recovery:reserve_fault",
+      "recovery:resume",
+    ]) {
+      expect(reached, `the walk never reached ${need}`).toContain(need);
+    }
   });
 });
