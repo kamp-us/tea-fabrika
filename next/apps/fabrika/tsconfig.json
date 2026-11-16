@@ -6,7 +6,17 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // The app imports `effect` from the barrel (0577). Held as an error for the whole package.
+    // `namespaceImportPackages` stays empty so the app never inherits `effect` from the base.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "barrelImportPackages": ["effect"],
+        "namespaceImportPackages": [],
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.

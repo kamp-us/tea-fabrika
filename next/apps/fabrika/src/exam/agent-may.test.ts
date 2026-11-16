@@ -24,7 +24,7 @@ import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 4096, concurrency: 1 } };
 const bounded = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e13-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E13 (preferBarrelImport), in next/apps/fabrika. Recount with only that check at error: 9 hits, all effect/persistence/RateLimiter or KeyValueStore imported by module path. 8 sit in 7 exam-path files, 1 in the product file src/runtime.ts. None is in a file of pull request 1366. Wrote the package-wide lock in next/apps/fabrika/tsconfig.json (barrelImportPackages effect, namespaceImportPackages empty so the app never inherits effect, preferBarrelImport error), nothing in tsconfig.base.json. Fixed the 8 exam-path hits by hand with the editor, taking the checker's suggested fix (import { RateLimiter } from \"effect/persistence\"). The package typecheck is red only on src/runtime.ts line 13, for the build step.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Hits met 9, fixed by quick fix 0 (the fix tool was not available and a later rule forbids it), hand edits 8, left 1, waiting on 1366 0. Counted with effect-tsgo diagnostics --project next/apps/fabrika/tsconfig.json: 9 red, 1 after the hand edits.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "import * as PlantOption from \"effect/Option\" added to src/door-spans.test.ts: count went from 1 to 2, removed again",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "the package-wide block has no glob to drop, so its diagnosticSeverity entry was emptied: the count went from 1 to 0, put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
