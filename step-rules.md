@@ -90,7 +90,8 @@ on that command (for example `FABRIKA_HOST_RUN_OWNER_APPROVED=1 nice -n 15 pnpm 
 --maxWorkers=3 <path>`), and your field row and RESULT say: "cloud box, owner's standing yes for
 cloud boxes (2026-11-15)". Never set it anywhere but a cloud box, and never write it into a repo
 file. Once the merge session's narrowed guard is on main (it refuses only on the laptop), the
-override is no longer needed.
+override is no longer needed. If your own permission check refuses that command, do not retry it
+and do not look for another way: stop, and report the refusal and the test's name in RESULT.
 
 **Files you never touch:** every file in pull request 1366's diff (read it with the GitHub MCP
 tool `pull_request_read`, method `get_files`, pull 1366, all pages). A hit in one of those files
