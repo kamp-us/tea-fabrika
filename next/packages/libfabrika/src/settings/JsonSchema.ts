@@ -58,10 +58,59 @@ export const make = (schema: Schema.Top) => {
   return { $schema: DIALECT, ...document.schema, $defs: document.definitions };
 };
 
+/** The repo formatter's line width, from `.oxfmtrc.json`. */
+const WIDTH = 120;
+
 /**
- * Returns a document as the text that is committed: two-space JSON and one trailing newline.
+ * One JSON value as the repo's formatter prints it: every object over several lines, and an array
+ * of plain values on one line when it fits the width, so the committed text needs no reformatting.
+ */
+const printed = (value: unknown, indent: string, taken: number): string => {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  const inner = `${indent}  `;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "[]";
+    }
+
+    const flat = value.every((item) => item === null || typeof item !== "object");
+    const line = `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
+
+    if (flat && indent.length + taken + line.length <= WIDTH) {
+      return line;
+    }
+
+    const items = value.map((item, n) => `${inner}${printed(item, inner, n < value.length - 1 ? 1 : 0)}`);
+    return `[\n${items.join(",\n")}\n${indent}]`;
+  }
+
+  const entries = Object.entries(value);
+
+  if (entries.length === 0) {
+    return "{}";
+  }
+
+  const fields = entries.map(([key, item], n) => {
+    const name = `${JSON.stringify(key)}: `;
+    return `${inner}${name}${printed(item, inner, name.length + (n < entries.length - 1 ? 1 : 0))}`;
+  });
+  return `{\n${fields.join(",\n")}\n${indent}}`;
+};
+
+/**
+ * Returns a document as the text that is committed: two-space JSON as the repo's formatter prints
+ * it, and one trailing newline.
+ *
+ * **Details**
+ *
+ * An object always takes several lines. An array of plain values takes one line when it fits in
+ * 120 columns, and one line per item when it does not, so `pnpm format` leaves the file as it is.
  *
  * @stability unstable
  * @category combinators
  */
-export const format = (document: ReturnType<typeof make>) => `${JSON.stringify(document, null, 2)}\n`;
+export const format = (document: ReturnType<typeof make>) => `${printed(document, "", 0)}\n`;
