@@ -25,7 +25,9 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject
 const SEED = 119120;
 
 /** The door's Response body did not read. */
-class Unread extends Schema.TaggedError<Unread>()("Unread", { cause: Schema.Defect() }) {}
+class Unread extends Schema.TaggedError<Unread, { readonly brand: unique symbol }>()("Unread", {
+  cause: Schema.Defect(),
+}) {}
 const TOKEN = "control-token-law";
 
 /** The names each target's door calls, from its doc block and today's sets. */
