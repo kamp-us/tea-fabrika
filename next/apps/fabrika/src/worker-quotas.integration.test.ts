@@ -271,7 +271,9 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const facts = Effect.fnUntraced(function* (stream: string) {
     return Schema.decodeUnknownSync(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
   });
-  return { instance, project, home, send, start, facts, limits, build: built.build };
+  // A restart names the build of the program it reloads: that program's code hash, never the brain file's.
+  const hash = (program: string) => built.programs[program]!.hash;
+  return { instance, project, home, send, start, facts, limits, hash };
 });
 
 // Locate stores by their committed data, never by a machine-specific directory or object ID.
@@ -399,7 +401,10 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               expect(yield* w.send(successor, "fill-cap", { type: "inc", text: "" })).toMatchObject({
                 result: { _tag: "accepted" },
               });
-              yield* rpc(w.instance.process(successor), "restart", { id: "person-at-cap", build: w.build });
+              yield* rpc(w.instance.process(successor), "restart", {
+                id: "person-at-cap",
+                build: w.hash("quota/alpha"),
+              });
               const restarted = yield* until(
                 w.facts("processes/alpha:1"),
                 (rows) => rows.filter((r) => r._tag === "restarted").length === 2,
@@ -409,6 +414,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               const current = Schema.decodeUnknownSync(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(w.project, "info")).find((r) => r.name === "alpha:1")!.process;
+              // Plant: a restart that loses the program's quota state answers this input accepted.
               expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
                 error: { data: { reason: "quota" } },
               });

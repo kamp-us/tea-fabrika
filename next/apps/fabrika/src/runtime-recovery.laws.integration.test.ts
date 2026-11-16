@@ -1843,7 +1843,6 @@ describe("P34c live object accounting", () => {
           const local = yield* w.localUsage(pid);
           expect(local.program.writes).toBeGreaterThan(0);
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
-          let baseline: unknown;
           const counts = (db: DatabaseSync) =>
             Object.fromEntries(
               db
@@ -1855,14 +1854,27 @@ describe("P34c live object accounting", () => {
                 ]),
             );
 
-          for (const [n, c] of tape.entries()) {
-            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
-            const current = { project: counts(w.db), process: counts(w.process(pid).db) };
+          // Both stores' row counts, read straight around each refused send. The checks between sends
+          // (the traced open below, a reopen) write their own span rows, so no count spans them.
+          const both = () => ({ project: counts(w.db), process: counts(w.process(pid).db) });
+          // The first refusal may open this hour's refusal count in `sums`; no other table may grow.
+          const withoutSums = ({ project, process }: ReturnType<typeof both>) => ({
+            project: { ...project, sums: null },
+            process: { ...process, sums: null },
+          });
 
-            if (baseline === undefined) {
-              baseline = current;
+          for (const [n, c] of tape.entries()) {
+            const before = both();
+            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
+            const after = both();
+
+            // Plant: a refused send that lands its span, an envelope or a reply as a row goes red here.
+            if (n === 0) {
+              expect(withoutSums(after), "the first refusal saved a row outside its hourly count").toEqual(
+                withoutSums(before),
+              );
             } else {
-              expect(current).toEqual(baseline);
+              expect(after, `refusal ${n} saved a row`).toEqual(before);
             }
 
             expect(yield* w.localUsage(pid)).toEqual(local);
