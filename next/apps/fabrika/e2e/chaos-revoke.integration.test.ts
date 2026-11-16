@@ -79,7 +79,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
 });
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number, Schema.Null])),
+  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),

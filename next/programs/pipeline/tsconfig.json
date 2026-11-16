@@ -1,4 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // Effect's `schemaNumber`: a finite number is `Schema.Finite`, since `Schema.Number` also takes NaN and Infinity (E4). All of this program joins.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [{ "include": ["**/*.ts"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }]
+      }
+    ]
+  },
   "include": ["src"]
 }

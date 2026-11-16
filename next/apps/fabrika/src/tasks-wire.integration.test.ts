@@ -68,7 +68,7 @@ const identity = () => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Json),
   result: Schema.optionalKey(Schema.Json),

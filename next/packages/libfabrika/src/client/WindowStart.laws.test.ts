@@ -64,7 +64,7 @@ const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" 
 /** One JSON-RPC 2.0 call as the page frames it. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),
@@ -798,7 +798,7 @@ const Act = Schema.Union([
 ]);
 
 /** The number id of a call the start wrote, read from the text it sent. */
-const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
 type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 

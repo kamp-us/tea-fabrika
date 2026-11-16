@@ -271,7 +271,7 @@ export const fakeResult = (n: number): Result =>
 /** One JSON-RPC call the client wrote. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),

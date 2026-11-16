@@ -3,7 +3,16 @@
   "compilerOptions": {
     // The window export is React in a browser tab; the program entry reaches neither.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // Effect's `schemaNumber`: a finite number is `Schema.Finite`, since `Schema.Number` also takes NaN and Infinity (E4). All of this package is at zero.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          { "include": ["**/*.ts", "**/*.tsx"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

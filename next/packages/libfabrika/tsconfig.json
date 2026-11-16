@@ -3,7 +3,42 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A finite number is `Schema.Finite`; `Schema.Number` also takes NaN and Infinity (E4).
+        // On for the folders at zero, their tests too. `runtime/`, `cloudflare/` and `gateway/`
+        // wait for pull request 1366 and join in E65. The globs read from this folder.
+        "overrides": [
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": { "diagnosticSeverity": { "schemaNumber": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

@@ -51,7 +51,7 @@ const NAME = "hands-launcher";
 
 /** The launcher's stdout protocol, as the plan writes it. */
 const Line = Schema.TaggedUnion({
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });

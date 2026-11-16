@@ -76,7 +76,7 @@ const identity = () => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -238,7 +238,7 @@ const healthRows = (home: string) =>
           );
 
           for (const row of rows) {
-            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Number }))(row));
+            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row));
           }
         }
       }

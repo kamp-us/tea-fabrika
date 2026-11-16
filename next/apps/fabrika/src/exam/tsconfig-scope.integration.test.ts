@@ -27,7 +27,7 @@ const Manifest = Schema.Struct({ scripts: Schema.optional(Schema.Record(Schema.S
 
 const readManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest));
 
-class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", { code: Schema.Number }) {}
+class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", { code: Schema.Finite }) {}
 
 /** A property fast-check found false, with its counterexample in the cause. */
 class Falsified extends Schema.TaggedError<Falsified>()("Falsified", { cause: Schema.Defect() }) {}

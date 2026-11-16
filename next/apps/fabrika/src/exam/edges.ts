@@ -104,7 +104,7 @@ export const asks = Effect.fn("exam.asks")(function* (
 
 class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", {
   args: Schema.String,
-  code: Schema.Number,
+  code: Schema.Finite,
 }) {}
 
 /** One git command's output; any exit but 0 fails. */

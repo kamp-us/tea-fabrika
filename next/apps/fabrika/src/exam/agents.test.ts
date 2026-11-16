@@ -89,7 +89,7 @@ const DeclarationCases = Arbitrary.array(
       name: `extra${i}`,
       schema: Schema.Struct({
         [input.field]:
-          input.type === "string" ? Schema.String : input.type === "number" ? Schema.Number : Schema.Boolean,
+          input.type === "string" ? Schema.String : input.type === "number" ? Schema.Finite : Schema.Boolean,
       }),
       readOnly: input.readOnly,
       personOnly: input.personOnly,

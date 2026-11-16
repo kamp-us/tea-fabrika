@@ -107,7 +107,7 @@ const Rated = Schema.Struct({
 
 const fields = {
   file: Schema.String,
-  line: Schema.Number,
+  line: Schema.Finite,
   field: Schema.String,
   reason: Schema.String,
 };

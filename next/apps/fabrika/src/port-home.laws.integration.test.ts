@@ -130,7 +130,7 @@ const identity = (key: typeof TestKey.Type) => {
 };
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Number),
+  id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -212,7 +212,7 @@ const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
   press(instance, key, pid, letter, { type: "inc" }).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
-        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Number }) }) }),
+        Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Finite }) }) }),
       ),
     ),
     Effect.map((answer) => answer.result.view.count),
@@ -511,7 +511,7 @@ const SavedProcess = Schema.Struct({
 });
 
 const Descriptors = Schema.Array(Schema.Struct({ value: Schema.fromJsonString(SavedProcess) }));
-const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Number) }));
+const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Finite) }));
 
 const Checkpoints = Schema.Array(
   Schema.Struct({
@@ -528,7 +528,7 @@ const Markers = Schema.Array(Schema.Struct({ value: Schema.Uint8Array }));
 
 const Lines = Schema.Array(
   Schema.Struct({
-    rev: Schema.Number,
+    rev: Schema.Finite,
     stream: Schema.String,
     _tag: Schema.String,
     build: Schema.String,
