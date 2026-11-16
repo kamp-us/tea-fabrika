@@ -371,12 +371,12 @@ export class StorageClient extends Context.Service<
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage delete enters Effect
         Effect.tryPromise({ try: () => storage.delete(key), catch: unreachable }),
       // A value, not a call: tryPromise runs its `try` afresh each time the Effect runs.
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
       sync: Effect.tryPromise({ try: () => storage.sync(), catch: unreachable }),
       setAlarm: (at) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm set enters Effect
         Effect.tryPromise({ try: () => storage.setAlarm(at), catch: unreachable }),
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
       deleteAlarm: Effect.tryPromise({ try: () => storage.deleteAlarm(), catch: unreachable }),
     };
   }
