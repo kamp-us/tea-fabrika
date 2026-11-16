@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { fcProcessIds, processId } from "../Id.test-support.ts";
+import { BrainState, brainLife } from "./BrainLife.ts";
 
 const SEED = 119120;
 const start = Effect.runSync(processId);
@@ -46,8 +47,7 @@ const messages = lifecycle.map(
 const message = messages.chain((msgs) => fc.constantFrom(...msgs));
 
 describe("P12 instance machine laws", () => {
-  it("p88 plant: missing start or stop transition cannot finish a normal life", async () => {
-    const { brainLife } = await import("./BrainLife.ts");
+  it("p88 plant: missing start or stop transition cannot finish a normal life", () => {
     fc.assert(
       fc.property(lifecycle, ({ start, after, build, until, reason }) => {
         const msgs = [
@@ -72,8 +72,7 @@ describe("P12 instance machine laws", () => {
       { seed: SEED, examples: [[normalLife]] },
     );
   });
-  it("p88 plant: saved pending stop is lost; every generated JSON cut must resume unchanged", async () => {
-    const { brainLife, BrainState } = await import("./BrainLife.ts");
+  it("p88 plant: saved pending stop is lost; every generated JSON cut must resume unchanged", () => {
     fc.assert(
       fc.property(fc.array(message, { maxLength: 30 }), (msgs) => {
         syncTest(
@@ -92,8 +91,7 @@ describe("P12 instance machine laws", () => {
     );
   });
   // Pin p81's replacement-after-stop plant; generated events also cover the restart brake.
-  it("pinned: p81 replacement-after-stop, a braked or cleanly stopped instance must never launch a replacement", async () => {
-    const { brainLife } = await import("./BrainLife.ts");
+  it("pinned: p81 replacement-after-stop, a braked or cleanly stopped instance must never launch a replacement", () => {
     propertyInvariant(
       brainLife,
       {},

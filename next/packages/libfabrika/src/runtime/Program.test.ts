@@ -1,5 +1,4 @@
 // P11, next/. Program is a declaration schema; stepper exposes init/step/fold from the plan.
-// Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
@@ -7,7 +6,7 @@ import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { Declaration } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Input, Program, ProgramDown, Refusal, Write, stepper } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
@@ -633,17 +632,14 @@ describe("Program.make authoring laws, next/", () => {
 
 describe("P11 program contract and p22 refusal", () => {
   for (const field of ["state", "msg", "view", "refuse", "inputs", "outputs", "writes", "wake"]) {
-    it(`plant, omit ${field}: incomplete declarations are refused`, async () => {
-      const { Program } = await import("./Program.ts");
+    it(`plant, omit ${field}: incomplete declarations are refused`, () => {
       const raw: Record<string, unknown> = { ...spec() };
       delete raw[field];
       expect(() => Schema.decodeUnknownSync(Program.schema)(raw)).toThrow();
     });
   }
 
-  it("plant, skip declaration checks: schemas and functions are checked, not mere presence", async () => {
-    const { Program } = await import("./Program.ts");
-
+  it("plant, skip declaration checks: schemas and functions are checked, not mere presence", () => {
     for (const broken of [
       { machine: { ...machine, update: 3 } },
       { state: { v: 0, schema: Model, upgrades: [] } },
@@ -665,7 +661,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [3, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const p = load(spec());
             const before = { count: 2, replies: 0 };
             const ok = { type: "save_ok", cmd: save({ n: value }), value, at: 42 };
@@ -702,7 +698,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [1, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const asyncSave = {
               ...save,
               schema: {
@@ -727,8 +723,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         ["bad", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { ProgramDown } = await import("./Program.ts");
+          Effect.sync(() => {
             let error: unknown;
 
             try {
@@ -744,8 +739,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
-    const { Program } = await import("./Program.ts");
+  it("plant, reject every declaration: a complete pure tea program loads and steps", () => {
     const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
     expect(p.init(null)).toMatchObject({
       _tag: "stepped",
@@ -768,7 +762,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [{ reason: "" }, { reason: "limit", now: 7, most: 10 }, generated],
         (refusal) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const p = load(spec());
             const before = { count: 7, replies: 0 };
             expect(p.step(before, { type: "add", n: "3" })).toEqual({
@@ -795,7 +789,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", async () => {
+  it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", () => {
     const p = load(spec());
     expect(p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 })).toMatchObject({
       _tag: "stepped",
@@ -810,7 +804,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [{ count: 0, replies: 0 }, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             expect(() => load(spec()).step(value, { type: "throw" })).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
             );
@@ -828,7 +822,7 @@ describe("P11 program contract and p22 refusal", () => {
         Effect.forEach(
           [{ count: 0, replies: 0 }, generated],
           (value) =>
-            Effect.promise(async () => {
+            Effect.sync(() => {
               const broken: unknown = {
                 ...spec(),
                 machine: {
@@ -860,7 +854,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [null, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: value })).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
             );
@@ -869,8 +863,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, give read ports write fields: read and write declarations are exclusive", async () => {
-    const { Input } = await import("./Program.ts");
+  it("plant, give read ports write fields: read and write declarations are exclusive", () => {
     const decode = Schema.decodeUnknownSync(Input);
     expect(
       decode({
@@ -902,8 +895,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         ["forged", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { Write } = await import("./Program.ts");
+          Effect.sync(() => {
             const decode = Schema.decodeUnknownSync(Write);
             expect(decode({ _tag: "own", event: { _tag: "polled", changed: false } })).toMatchObject({
               _tag: "own",
