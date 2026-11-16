@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Console, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -1876,12 +1876,9 @@ const isAlive = (pid: number) =>
  */
 export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
 
-const usage = () => {
-  console.error(
-    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
-  );
-  process.exit(2);
-};
+const usage = Console.error(
+  "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+).pipe(Effect.andThen(Effect.sync(() => process.exit(2))));
 
 const flag = (args: string[], name: string) => {
   const i = args.indexOf(name);
@@ -2010,7 +2007,7 @@ const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reas
  * and the prompt file. Reads of the main checkout and the laptop, beside the quest's lock, which
  * the process that took it gives back (`freeQuest`).
  */
-export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
+export const prepare = Effect.fnUntraced(function* (env: Env, p: StepArgs): Effect.fn.Return<Prepared | Refusal> {
   const { quest, step, agent, electron } = p;
 
   if (!/^[a-z0-9][a-z0-9-]*$/.test(quest) || !existsSync(p.brief)) {
@@ -2133,7 +2130,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
   if (refused) {
-    console.error(skipLine("agent cap"));
+    yield* Console.error(skipLine("agent cap"));
   } else if (agentCapFull(agents)) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
@@ -2210,7 +2207,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       verdict,
   );
   return Start.cases.prepared.make({ ask, electron, phases });
-};
+});
 
 /** drive's one line: how the step ended, as the chain and a reader of the log take it. */
 export interface DriveLine {
@@ -2262,7 +2259,7 @@ export const driveStep = (
         const tsgo = pgrepAnswer(r.code, r.out);
 
         if (tsgo._tag === "refused") {
-          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+          yield* Console.error(skipLine("one-typecheck wait"));
           break;
         }
 
@@ -2349,62 +2346,63 @@ const main = () => {
     !(AGENTS as readonly string[]).includes(agent) ||
     !existsSync(brief)
   ) {
-    usage();
+    NodeRuntime.runMain(usage);
+    return;
   }
 
   const env = loadEnv();
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
-  const prepared = prepare(env, {
-    quest,
-    step: step as StepName,
-    brief,
-    agent: agent as AgentName,
-    model: flag(args, "--model"),
-    electron: args.includes("--electron"),
-    ticket: flag(args, "--ticket"),
-    branch: flag(args, "--branch"),
-    plan: flag(args, "--plan"),
-    from: flag(args, "--from"),
-  });
+  const program = Effect.gen(function* () {
+    const prepared = yield* prepare(env, {
+      quest,
+      step: step as StepName,
+      brief,
+      agent: agent as AgentName,
+      model: flag(args, "--model"),
+      electron: args.includes("--electron"),
+      ticket: flag(args, "--ticket"),
+      branch: flag(args, "--branch"),
+      plan: flag(args, "--plan"),
+      from: flag(args, "--from"),
+    });
 
-  if (prepared._tag === "refused") {
-    if (prepared.exit === 2) {
-      console.error(`drive.ts: ${prepared.reason}`);
-      process.exit(2);
+    if (prepared._tag === "refused") {
+      if (prepared.exit === 2) {
+        yield* Console.error(`drive.ts: ${prepared.reason}`);
+        process.exit(2);
+      }
+
+      yield* Console.log(
+        JSON.stringify({
+          outcome: prepared.outcome,
+          reason: prepared.reason,
+          fault: faultFrom(prepared.outcome, prepared.reason),
+        }),
+      );
+      process.exit(prepared.exit);
     }
 
-    console.log(
-      JSON.stringify({
-        outcome: prepared.outcome,
-        reason: prepared.reason,
-        fault: faultFrom(prepared.outcome, prepared.reason),
-      }),
-    );
-    process.exit(prepared.exit);
-  }
+    if (args.includes("--plan-only")) {
+      yield* Console.log(
+        JSON.stringify({
+          outcome: "plan-only",
+          ...prepared.ask,
+          electron: holdsElectron(prepared.ask.step, prepared.electron),
+        }),
+      );
+      return;
+    }
 
-  if (args.includes("--plan-only")) {
-    console.log(
-      JSON.stringify({
-        outcome: "plan-only",
-        ...prepared.ask,
-        electron: holdsElectron(prepared.ask.step, prepared.electron),
-      }),
-    );
-    return;
-  }
-
-  const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
-    const line = yield* driveStep(env, agents, prepared);
-    console.log(JSON.stringify(line));
-    process.exitCode = line.exit;
-  }).pipe(
-    // A crash is still one JSON line, and the box is kept for the lead to read.
-    Effect.catchCause((cause) =>
-      Effect.sync(() => {
-        console.log(
+    yield* Effect.gen(function* () {
+      const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
+      const line = yield* driveStep(env, agents, prepared);
+      yield* Console.log(JSON.stringify(line));
+      process.exitCode = line.exit;
+    }).pipe(
+      // A crash is still one JSON line, and the box is kept for the lead to read.
+      Effect.catchCause((cause) =>
+        Console.log(
           JSON.stringify({
             outcome: "stuck:crash",
             quest,
@@ -2415,11 +2413,16 @@ const main = () => {
             kept: true,
             exit: 30,
           }),
-        );
-        process.exitCode = 30;
-      }),
-    ),
-  );
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              process.exitCode = 30;
+            }),
+          ),
+        ),
+      ),
+    );
+  });
   NodeRuntime.runMain(program);
 };
 

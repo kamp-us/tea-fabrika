@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-build1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T21:03:09-08:00",
+  "ended": "2026-11-15T21:21:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step of slice E47 of the Effect-checker sweep (ticket 1075), in our tooling (.agents): globalConsole and globalConsoleInEffect, a judgment slice that fixes code and adds no lock line (owner ruling). Counted with only the two checks at error through --lspconfig on .agents/tsconfig.json at f5fe346f: 41 hits, all product files (chain.ts 12, drive.ts 8, gc.ts 20, flow/walk.ts 1), none in a file of pull request 1366. All 41 fixed by hand with Effect's Console, so every line goes to the same stream with the same text: inside Effect code by yield* Console (chain.ts chainMain and backstopFor, drive.ts driveStep); in tea's onError callback, which cannot wait, by the Console service's own sync call, read once with yield* Console.Console (walk.ts); drive.ts prepare became an Effect.fnUntraced so its agent-cap skip line is a yield*, and chain.ts now yields it; drive.ts main runs as one NodeRuntime.runMain program, usage included; chain.ts's crash line moved from a .catch on runPromise's promise into Effect.catchCause, with the same reason text by Cause.squash under an edge comment for no-cause-squash, and its never-started line runs with NodeRuntime.runMain; gc.ts main became one Effect.gen run with Effect.runSync under an edge comment for no-effect-run-outside-edge, because gc is sync from start to end and gcloop stops it with SIGTERM, which runMain's handler would hold while the sweep goes on. agents-ledger.json lost one entry the lint run pruned (chain.ts no-promises on Effect.runPromise, which fired on the dropped .catch). Recount after: 0 in .agents. The 7 exam-path hits the tests step left (changes.mjs 1, required.mjs 2, scheduled.mjs 2, gitignore.mjs 1, program-package-layout.test.ts 1) were not touched; they wait on an owner call.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Ran at the uncommitted tree on f5fe346f, one file at a time: chain.test.ts 63, drive.test.ts 65, gc.test.ts 15, flow/walk.test.ts 6, quests.test.ts 20, gcloop.test.ts 11, plancheck.draft.test.ts 17, oxlint-plugins/ledger.test.ts 7, exam/commits.test.ts 39, exam/ratchet.integration.test.ts 5, exam/edges.integration.test.ts 11, all green. --changed origin/main is refused here because the tests step's oxlint-plugins files make it the full suite. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the ratchet and one pnpm typecheck all exit 0. No law covers the script edges, so each was run by hand against main's copy: drive.ts with no arguments, with a bad quest and with a mutation step on codex; gc.ts with a bad flag and with --dry-run; chain.ts with no arguments and with a malformed FABRIKA_PIN. Each printed the same bytes on the same stream with the same exit code. Not run: chain.ts's crash line and gc.ts on a real boxes folder.",
+  "step": "build"
+}

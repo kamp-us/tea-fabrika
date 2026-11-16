@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Cause, Console, Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -1257,7 +1257,7 @@ const handlers = (s: Setup) => {
           // prepare runs the start checks in this thread: a hung one stops the beat. Box cleanup is
           // not among them (gcloop.ts, 0101).
           s.beats.enter("cleanup", null);
-          const prepared = prepare(env, {
+          const prepared = yield* prepare(env, {
             quest: s.quest,
             step: cmd.step,
             brief,
@@ -1669,7 +1669,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const [quest = "", briefPath = ""] = args;
 
     if (!QUEST_NAME.test(quest) || !existsSync(briefPath)) {
-      console.error(
+      yield* Console.error(
         "usage: node chain.ts <quest> <quest-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] [--model sonnet|opus] [--start tests|build|mutation|review]",
       );
       process.exit(2);
@@ -1683,7 +1683,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     );
 
     if (running !== null) {
-      console.error(`chain.ts: ${questRunning(quest, running)}`);
+      yield* Console.error(`chain.ts: ${questRunning(quest, running)}`);
       process.exit(3);
     }
 
@@ -1694,7 +1694,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const ticket = flag(args, "--ticket") ?? saved.ticket;
 
     if (!ticket) {
-      console.error(`chain.ts: no ticket for quest ${quest} yet; pass --ticket`);
+      yield* Console.error(`chain.ts: no ticket for quest ${quest} yet; pass --ticket`);
       process.exit(2);
     }
 
@@ -1703,7 +1703,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const start = flag(args, "--start") ?? "tests";
 
     if (!isStep(start)) {
-      console.error(`chain.ts: --start takes one of ${STEPS.join(", ")}`);
+      yield* Console.error(`chain.ts: --start takes one of ${STEPS.join(", ")}`);
       process.exit(2);
     }
 
@@ -1711,14 +1711,14 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const missing = lacks(brief, start);
 
     if (missing.length > 0) {
-      console.error(`chain.ts: the quest brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);
+      yield* Console.error(`chain.ts: the quest brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);
       process.exit(2);
     }
 
     const host = Host.hostCommands(brief.sections.host);
 
     if (brief.sections.host !== undefined && host.length === 0) {
-      console.error("chain.ts: the quest brief's `## host` names no command in a fenced block");
+      yield* Console.error("chain.ts: the quest brief's `## host` names no command in a fenced block");
       process.exit(2);
     }
 
@@ -1726,7 +1726,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
 
     // A restart is a new choice of scripts: the record and the log say which commit, and the last.
     if (pin !== null) {
-      console.error(`chain.ts: ${Pin.pinLine(record.readRecord().scripts, pin)}`);
+      yield* Console.error(`chain.ts: ${Pin.pinLine(record.readRecord().scripts, pin)}`);
       record.writeRecord({ ...record.readRecord(), scripts: pin });
     }
 
@@ -1780,7 +1780,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
       record.writeRecord({ ...record.readRecord(), stop });
     }
 
-    console.log(
+    yield* Console.log(
       JSON.stringify({
         outcome: end.end.kind,
         quest,
@@ -1812,14 +1812,14 @@ const backstopFor = (plan: string, brief: string) =>
     })[0];
 
     if (found === undefined) {
-      console.error(
+      yield* Console.error(
         `chain.ts: no estimate in steps and dollars in ${plan} or ${brief}; the backstop is skipped, and MaxSteps (${maxSteps}) holds`,
       );
       return null;
     }
 
     const backstop = backstopFrom(found.estimate, times);
-    console.error(
+    yield* Console.error(
       `chain.ts: backstop ${backstop.steps} steps, $${backstop.dollars.toFixed(2)}: ${times} times the estimate in ${found.path}`,
     );
     return backstop;
@@ -1833,11 +1833,18 @@ const overridden =
     return process.env[name] !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
   };
 
-/** The last line of a quest that never started: its pin could not be made or read. */
-const unpinned = (reason: string, quest?: string) => {
-  console.log(JSON.stringify({ outcome: "stuck", ...(quest === undefined ? {} : { quest }), reason, exit: 30 }));
-  process.exitCode = 30;
-};
+/**
+ * The last line of a quest that never started, since its pin could not be made or read, or whose
+ * chain crashed: one JSON line on stdout, and exit 30.
+ */
+const stuck = (reason: string, quest?: string) =>
+  Console.log(JSON.stringify({ outcome: "stuck", ...(quest === undefined ? {} : { quest }), reason, exit: 30 })).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        process.exitCode = 30;
+      }),
+    ),
+  );
 
 /**
  * A quest started from a checkout pins its scripts first and runs chain.ts again from the pin, with
@@ -1856,7 +1863,7 @@ const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
       });
     }).pipe(
       Effect.scoped,
-      Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, quest))),
+      Effect.catchTag("PinFailed", (e) => stuck(`scripts not pinned: ${e.reason}`, quest)),
       Effect.provide(NodeServices.layer),
     ),
     { disableErrorReporting: true },
@@ -1869,7 +1876,7 @@ const main = () => {
   const [quest = ""] = args;
 
   if (state._tag === "malformed") {
-    unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
+    NodeRuntime.runMain(stuck(`${Pin.PIN_ENV} does not parse: ${state.value}`));
     return;
   }
 
@@ -1898,11 +1905,11 @@ const main = () => {
       overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
       overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
       overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
+      // A crash is still one line, and its reason is what the run failed with, as a rejection was.
+      // oxlint-disable-next-line fabrika/no-cause-squash -- edge: the chain's last line names whatever failed, typed or thrown, in the words runPromise's rejection gave it
+      Effect.catchCause((cause) => stuck(String(Cause.squash(cause)))),
     ),
-  ).catch((e: unknown) => {
-    console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
-    process.exitCode = 30;
-  });
+  );
 };
 
 if (import.meta.main) {

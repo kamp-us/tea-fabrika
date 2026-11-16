@@ -10,7 +10,7 @@
 import { refuse } from "@demlik/tea";
 import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
-import { Clock, Effect, FileSystem, Option, Runtime, Schema } from "effect";
+import { Clock, Console, Effect, FileSystem, Option, Runtime, Schema } from "effect";
 import * as Flow from "./Flow.ts";
 import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
@@ -86,10 +86,12 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
   }
 
   const at = yield* Clock.currentTimeMillis;
+  // tea calls onError where it cannot wait, so it writes through the Console service's own call.
+  const terminal = yield* Console.Console;
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
     store: fileStore(options.state, parse, { fenced: true }),
-    onError: (error, context) => console.error(`flow ${flow.name}: ${context.phase}: ${String(error)}`),
+    onError: (error, context) => terminal.error(`flow ${flow.name}: ${context.phase}: ${String(error)}`),
     interpret: {
       step_run: (cmd) => runners.run(cmd.step).pipe(Effect.mapError((e) => Failed.make({ reason: e.reason }))),
     },

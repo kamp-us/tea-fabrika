@@ -38,7 +38,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Result, Schema } from "effect";
+import { Console, Effect, Result, Schema } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -403,29 +403,30 @@ const sizeMb = (paths: readonly string[]) => {
 };
 
 /** Move a folder's runs/ into the main checkout's runs/ before it is removed; false: keep it. */
-const keepRuns = (dir: string): boolean => {
+const keepRuns = Effect.fnUntraced(function* (dir: string) {
   const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
 
   if (r.out.trim()) {
-    console.log(r.out.trim());
+    yield* Console.log(r.out.trim());
   }
 
   return r.code === 0;
-};
+});
 
-const main = () => {
+/** The sweep: one line per box, pin, state file and worktree, then the total, on stdout. */
+const main = Effect.gen(function* () {
   const args = process.argv.slice(2);
   const dry = args.includes("--dry-run");
 
   if (args.some((a) => a !== "--dry-run")) {
-    console.error("usage: box.sh gc [--dry-run]");
+    yield* Console.error("usage: box.sh gc [--dry-run]");
     process.exit(2);
   }
 
   const env = loadEnv();
 
   if (!existsSync(env.BOXES)) {
-    console.log("gc: no boxes folder");
+    yield* Console.log("gc: no boxes folder");
     return;
   }
 
@@ -450,7 +451,7 @@ const main = () => {
   ]);
 
   if (listed.code !== 0) {
-    console.error(`gc: gh could not list pull requests: ${listed.err.trim()}`);
+    yield* Console.error(`gc: gh could not list pull requests: ${listed.err.trim()}`);
     process.exit(1);
   }
 
@@ -527,7 +528,7 @@ const main = () => {
     const verdict = decide(seen);
 
     if (verdict._tag === "keep") {
-      console.log(`keep ${name}: ${verdict.reason}`);
+      yield* Console.log(`keep ${name}: ${verdict.reason}`);
       keptCount += 1;
       continue;
     }
@@ -537,7 +538,7 @@ const main = () => {
     // A merged quest's box may hold commits no remote has: keep its HEAD in the main checkout.
     if (verdict._tag === "remove" && !onRemote && !dry) {
       if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
-        console.log(`keep ${name}: could not save its HEAD`);
+        yield* Console.log(`keep ${name}: could not save its HEAD`);
         keptCount += 1;
         continue;
       }
@@ -552,14 +553,14 @@ const main = () => {
 
       // Only a box's own git data: a stash in a worktree of the main checkout would land in its refs.
       if (gitDir !== join(env.BOXES, `${name}-gitdata`)) {
-        console.log(`keep ${name}: ${seen.dirty} uncommitted files`);
+        yield* Console.log(`keep ${name}: ${seen.dirty} uncommitted files`);
         keptCount += 1;
         continue;
       }
 
       if (!dry) {
         if (!keepFiles(gitDir, box, env.MAIN, kept)) {
-          console.log(`keep ${name}: could not keep its ${seen.dirty} uncommitted files`);
+          yield* Console.log(`keep ${name}: could not keep its ${seen.dirty} uncommitted files`);
           keptCount += 1;
           continue;
         }
@@ -576,7 +577,7 @@ const main = () => {
         const ref = `refs/gc/${name}`;
 
         if (repo("fetch", "-q", "-f", box, `HEAD:${ref}`).code !== 0) {
-          console.log(`keep ${name}: could not fetch its HEAD`);
+          yield* Console.log(`keep ${name}: could not fetch its HEAD`);
           keptCount += 1;
           continue;
         }
@@ -591,7 +592,7 @@ const main = () => {
         repo("update-ref", "-d", ref);
 
         if (pushed === undefined) {
-          console.log(`keep ${name}: backup push refused (${verdict.to.join(", ")})`);
+          yield* Console.log(`keep ${name}: backup push refused (${verdict.to.join(", ")})`);
           keptCount += 1;
           continue;
         }
@@ -603,8 +604,8 @@ const main = () => {
     const twin = gitDir === join(env.BOXES, `${name}-gitdata`) ? [gitDir] : [];
     const mb = sizeMb([box, ...twin]);
 
-    if (!dry && !keepRuns(box)) {
-      console.log(`keep ${name}: could not keep its runs/`);
+    if (!dry && !(yield* keepRuns(box))) {
+      yield* Console.log(`keep ${name}: could not keep its runs/`);
       keptCount += 1;
       continue;
     }
@@ -624,7 +625,7 @@ const main = () => {
     removed += 1;
     freed += mb;
     gone.push(name);
-    console.log(`${dry ? "would remove" : "removed"} ${name}: ${reason}, ${mb} MB`);
+    yield* Console.log(`${dry ? "would remove" : "removed"} ${name}: ${reason}, ${mb} MB`);
   }
 
   const state = join(env.BOXES, "state");
@@ -636,7 +637,7 @@ const main = () => {
       rmSync(join(state, f), { force: true });
     }
 
-    console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
+    yield* Console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
   }
 
   // A quest's pinned scripts: its own scope removes them, so one left here is a quest that was
@@ -652,7 +653,7 @@ const main = () => {
       rmSync(folder, { recursive: true, force: true });
     }
 
-    console.log(
+    yield* Console.log(
       verdict._tag === "keep"
         ? `keep pins/${name}: ${verdict.reason}`
         : `${dry ? "would remove" : "removed"} pins/${name}: ${verdict.reason}`,
@@ -717,29 +718,29 @@ const main = () => {
     });
 
     if (verdict._tag !== "remove") {
-      console.log(`keep worktree ${path}: ${verdict._tag === "keep" ? verdict.reason : ""}`);
+      yield* Console.log(`keep worktree ${path}: ${verdict._tag === "keep" ? verdict.reason : ""}`);
       keptCount += 1;
       continue;
     }
 
     const mb = sizeMb([path]);
 
-    if (!dry && !keepRuns(path)) {
-      console.log(`keep worktree ${path}: could not keep its runs/`);
+    if (!dry && !(yield* keepRuns(path))) {
+      yield* Console.log(`keep worktree ${path}: could not keep its runs/`);
       keptCount += 1;
       continue;
     }
 
     // Without --force: git itself refuses a worktree with changes, a second guard.
     if (!dry && repo("worktree", "remove", path).code !== 0) {
-      console.log(`keep worktree ${path}: git worktree remove refused`);
+      yield* Console.log(`keep worktree ${path}: git worktree remove refused`);
       keptCount += 1;
       continue;
     }
 
     trees += 1;
     freed += mb;
-    console.log(`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`);
+    yield* Console.log(`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`);
   }
 
   // The mutation container's leftovers (0045): a container a dead run left, and images over a
@@ -755,15 +756,18 @@ const main = () => {
     process.stdout.write(swept.stdout ?? "");
 
     if (swept.error !== undefined) {
-      console.log(`mutbox gc: stopped after ${GC_SECONDS} s (${swept.error.message}); the rest waits for the next gc`);
+      yield* Console.log(
+        `mutbox gc: stopped after ${GC_SECONDS} s (${swept.error.message}); the rest waits for the next gc`,
+      );
     }
   }
 
-  console.log(
+  yield* Console.log(
     `gc: ${dry ? "would remove" : "removed"} ${removed} boxes and ${trees} worktrees, ${freed} MB; kept ${keptCount}`,
   );
-};
+});
 
 if (import.meta.main) {
-  main();
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: gc runs sync calls from start to end, and gcloop's time limit stops it with SIGTERM; runMain's signal handler would hold that signal while the sweep goes on
+  Effect.runSync(main);
 }
