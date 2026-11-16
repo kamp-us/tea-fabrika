@@ -5,6 +5,7 @@
  */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
 import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
@@ -43,7 +44,7 @@ const content = (node: AST.TOMLContentNode): unknown => {
   }
 
   if (node.type === "TOMLArray") {
-    return node.elements.map(content);
+    return Arr.map(node.elements, content);
   }
 
   const value = {};
@@ -73,7 +74,7 @@ const sectionStart = (text: string, node: AST.TOMLTable): number => {
 
 const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const nodes = program.body[0].body;
-  const tables = nodes.filter((node) => node.type === "TOMLTable");
+  const tables = Arr.filter(nodes, (node) => node.type === "TOMLTable");
   const value: Record<string, unknown> = {};
   const assignments: Array<Edit.Assignment> = [];
   const inlines: Array<Edit.Inline> = [];
@@ -93,16 +94,18 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
 
     if (node.value.type === "TOMLInlineTable") {
       const container = range(node.value);
-      const members = node.value.body.map((child) => visit(path, child, container));
-      const commas = program.tokens
-        .filter(
+      const members = Arr.map(node.value.body, (child) => visit(path, child, container));
+      const commas = Arr.map(
+        Arr.filter(
+          program.tokens,
           (token) =>
             token.value === "," &&
             token.range[0] > container.start &&
             token.range[1] < container.end &&
-            !members.some((member) => token.range[0] >= member.start && token.range[1] <= member.end),
-        )
-        .map(range);
+            !Arr.some(members, (member) => token.range[0] >= member.start && token.range[1] <= member.end),
+        ),
+        range,
+      );
       inlines.push({ ...container, path, members, commas });
     }
 
@@ -134,7 +137,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
     }
   }
 
-  return { value, assignments, inlines, sections, comments: program.comments.map(range) };
+  return { value, assignments, inlines, sections, comments: Arr.map(program.comments, range) };
 };
 
 const failure = (reason: Syntax | Value | Conflict, line: number): TomlError =>
@@ -164,14 +167,14 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
 
     const next = new Set([...ancestors, value]);
 
-    if (Array.isArray(value)) {
+    if (Arr.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
         if (!Object.hasOwn(value, i)) {
           throw new TypeError("A TOML array cannot contain a missing element.");
         }
       }
 
-      return value.map((child) => encoded(child, next));
+      return Arr.map(value, (child) => encoded(child, next));
     }
 
     if (
@@ -181,7 +184,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
       throw new TypeError("A TOML table must be a plain record with string keys.");
     }
 
-    return Object.fromEntries(Object.entries(value).map(([name, child]) => [name, encoded(child, next)]));
+    return Object.fromEntries(Arr.map(Object.entries(value), ([name, child]) => [name, encoded(child, next)]));
   }
 
   const result = scalar(value);
@@ -206,7 +209,7 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
         throw new TypeError("The encoder did not produce an assigned TOML value.");
       }
 
-      const keys = path.map((segment) => {
+      const keys = Arr.map(path, (segment) => {
         const text = stringify(Object.fromEntries([[segment, 0]]), format);
         const node = syntax(text).body[0].body[0];
 
@@ -232,10 +235,14 @@ const parse = Effect.fnUntraced(function* (text: string): Effect.fn.Return<TomlD
   return {
     value: source.value,
     spans: [
-      ...source.assignments.map((assignment) => ({ path: assignment.path.map(String), line: assignment.line })),
-      ...source.sections
-        .filter((section) => section.path.length > 0)
-        .map((section) => ({ path: section.path.map(String), line: section.line })),
+      ...Arr.map(source.assignments, (assignment) => ({
+        path: Arr.map(assignment.path, String),
+        line: assignment.line,
+      })),
+      ...Arr.map(
+        Arr.filter(source.sections, (section) => section.path.length > 0),
+        (section) => ({ path: Arr.map(section.path, String), line: section.line }),
+      ),
     ].sort((left, right) => left.line - right.line),
   };
 });

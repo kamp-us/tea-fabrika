@@ -8,6 +8,8 @@
  * @stability unstable
  */
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
@@ -51,12 +53,12 @@ interface Place {
 }
 
 const owner = { person: "a person's", repo: "a repo's" } as const;
-const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s === b[n]);
+const same = (a: Path, b: Path) => a.length === b.length && Arr.every(a, (s, n) => s === b[n]);
 /** Whether `path` is the declaration's own path or one of its tables. */
-const under = (d: Declaration, path: Path) => path.every((s, n) => d.segments[n] === s);
+const under = (d: Declaration, path: Path) => Arr.every(path, (s, n) => d.segments[n] === s);
 
 const at = (value: unknown, path: Path) =>
-  path.reduce<unknown>((v, key) => (Predicate.isObject(v) ? v[key] : undefined), value);
+  Arr.reduce(path, value, (v, key) => (Predicate.isObject(v) ? v[key] : undefined));
 
 /** The first key/value at or under `path`. */
 const leaf = (value: unknown, path: Path): Path => {
@@ -67,15 +69,15 @@ const leaf = (value: unknown, path: Path): Path => {
 
 /** A value as the message shows it: a scalar as written, an array or a table only by its shape. */
 const shape = (value: unknown) =>
-  Array.isArray(value) ? "[…]" : Predicate.isObject(value) ? "{…}" : JSON.stringify(value);
+  Arr.isArray(value) ? "[…]" : Predicate.isObject(value) ? "{…}" : JSON.stringify(value);
 
 /** "file, line n" for the key at `path`, or for its nearest table with a line. */
 const located = (place: Place, path: Path) => {
   for (let n = path.length; n > 0; n--) {
-    const span = place.document.spans.find((s) => same(s.path, path.slice(0, n)));
+    const span = Arr.findFirst(place.document.spans, (s) => same(s.path, path.slice(0, n)));
 
-    if (span !== undefined) {
-      return `${place.file}, line ${span.line}`;
+    if (Option.isSome(span)) {
+      return `${place.file}, line ${span.value.line}`;
     }
   }
 
@@ -121,10 +123,15 @@ const distance = (a: string, b: string) => {
 const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema.Codec<unknown, unknown> =>
   Schema.Struct(
     Object.fromEntries(
-      [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
-        const below = declarations.filter((d) => d.segments[depth] === key);
-        const own = below.find((d) => d.segments.length === depth + 1);
-        return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Codec.file(own))];
+      Arr.map([...new Set(Arr.flatMap(declarations, (d) => Arr.fromNullishOr(d.segments[depth])))], (key) => {
+        const below = Arr.filter(declarations, (d) => d.segments[depth] === key);
+        const own = Arr.findFirst(below, (d) => d.segments.length === depth + 1);
+        return [
+          key,
+          Schema.optionalKey(
+            Option.match(own, { onNone: () => struct(below, depth + 1), onSome: (d) => Codec.file(d) }),
+          ),
+        ];
       }),
     ),
   );
@@ -144,7 +151,7 @@ const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema
  * @category constructors
  */
 export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
-  const own = group.declarations.filter((d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
+  const own = Arr.filter(group.declarations, (d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
   return own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
 };
 
@@ -156,38 +163,51 @@ const explain = (
   issue: SchemaIssue.Issue,
 ) => {
   const place = files[file];
-  const path = (SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? []).map(String);
-  const own = declarations.filter((d) => d.scope.includes(file));
+  const path = Arr.map(SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? [], String);
+  const own = Arr.filter(declarations, (d) => d.scope.includes(file));
 
-  if (own.some((d) => under(d, path))) {
-    const d = own.find((d) => same(d.segments, path));
-    return d !== undefined
-      ? refused(located(place, path), d, shape(at(place.document.value, path)))
-      : new SettingsError({
-          reason: "invalid",
-          message: `${located(place, path)}: ${path.join(".")} is a table of settings.\n  fabrika settings lists every setting. ${STOP}`,
-        });
+  if (Arr.some(own, (d) => under(d, path))) {
+    return Option.match(
+      Arr.findFirst(own, (d) => same(d.segments, path)),
+      {
+        onSome: (d) => refused(located(place, path), d, shape(at(place.document.value, path))),
+        onNone: () =>
+          new SettingsError({
+            reason: "invalid",
+            message: `${located(place, path)}: ${Arr.join(path, ".")} is a table of settings.\n  fabrika settings lists every setting. ${STOP}`,
+          }),
+      },
+    );
   }
 
   const key = leaf(place.document.value, path);
   const location = located(place, key);
-  const other = declarations.find((d) => under(d, key));
+  const scoped = Arr.findFirst(declarations, (d) => under(d, key));
 
-  if (other !== undefined) {
+  if (Option.isSome(scoped)) {
+    const other = scoped.value;
+    const places = Arr.join(
+      Arr.map(other.scope, (f) => files[f].file),
+      " or ",
+    );
     return new SettingsError({
       reason: "scope",
       message:
         `${location}: ${other.path} is ${owner[other.scope[0]]} setting, so ${owner[file]} file may not set it.\n` +
-        `  Set it in ${other.scope.map((f) => files[f].file).join(" or ")}, as ${other.env}, or with --${other.path}. ${STOP}`,
+        `  Set it in ${places}, as ${other.env}, or with --${other.path}. ${STOP}`,
     });
   }
 
   // A guess names only a key this file may set.
-  const near = own.map((d) => d.path).find((p) => distance(p, key.join(".")) <= 2);
+  const near = Arr.findFirst(
+    Arr.map(own, (d) => d.path),
+    (p) => distance(p, Arr.join(key, ".")) <= 2,
+  );
+  const guess = Option.match(near, { onNone: () => "", onSome: (p) => ` Did you mean ${p}?` });
   return new SettingsError({
     reason: "unknown",
     message:
-      `${location}: there is no setting ${key.join(".")}.${near === undefined ? "" : ` Did you mean ${near}?`}\n` +
+      `${location}: there is no setting ${Arr.join(key, ".")}.${guess}\n` +
       `  fabrika settings lists every setting. ${STOP}`,
   });
 };
@@ -195,7 +215,7 @@ const explain = (
 type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+  const [major = 0, minor = 0, patch = 0] = Arr.map(version.split("."), Number);
   return [major, minor, patch] as const;
 };
 

@@ -9,6 +9,8 @@
  */
 import type { Config } from "effect";
 import { ConfigProvider, Effect, Schema, SchemaIssue, String as Str } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { refused, SettingsError, STOP } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
@@ -81,10 +83,10 @@ export interface Resolved<A> {
  */
 export const flags = (record: Readonly<Record<string, string>>): Source => ({
   provider: ConfigProvider.make((path) => {
-    const value = record[path.join(".")];
+    const value = record[Arr.join(Arr.map(path, String), ".")];
     return Effect.succeed(value === undefined ? undefined : ConfigProvider.makeValue(value));
   }),
-  origin: (path) => Origin.cases.flag.make({ name: `--${path.join(".")}` }),
+  origin: (path) => Origin.cases.flag.make({ name: `--${Arr.join(path, ".")}` }),
 });
 
 /**
@@ -102,7 +104,8 @@ export const env = (record: Readonly<Record<string, string>>): Source => ({
     ConfigProvider.nested("fabrika"),
     ConfigProvider.constantCase,
   ),
-  origin: (path) => Origin.cases.env.make({ name: ["FABRIKA", ...path.map(Str.configCase)].join("_") }),
+  origin: (path) =>
+    Origin.cases.env.make({ name: Arr.join(["FABRIKA", ...Arr.map(path, (p) => Str.configCase(p))], "_") }),
 });
 
 /**
@@ -120,8 +123,13 @@ export const file = (name: string, document: TomlDocument): Source => ({
   origin: (path) =>
     Origin.cases.file.make({
       file: name,
-      line:
-        document.spans.find((s) => s.path.length === path.length && s.path.every((p, n) => p === path[n]))?.line ?? 0,
+      line: Arr.findFirst(
+        document.spans,
+        (s) => s.path.length === path.length && Arr.every(s.path, (p, n) => p === path[n]),
+      ).pipe(
+        Option.map((s) => s.line),
+        Option.getOrElse(() => 0),
+      ),
     }),
 });
 
@@ -163,19 +171,23 @@ export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, 
     }
   }
 
-  const provider = [slots.env, slots.repo, slots.person].reduce(
-    (chain, source) => chain.pipe(ConfigProvider.orElse(source.provider)),
-    slots.flags.provider,
+  const provider = Arr.reduce([slots.env, slots.repo, slots.person], slots.flags.provider, (chain, source) =>
+    chain.pipe(ConfigProvider.orElse(source.provider)),
   );
   const values = yield* group.parse(provider).pipe(
     Effect.mapError((error: Config.ConfigError) => {
       const issue = error.cause instanceof Schema.SchemaError ? error.cause.issue : undefined;
       const path =
         issue === undefined ? [] : (SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? []);
-      const d = group.declarations.find((d) => d.segments.join(".") === path.join("."));
-      return d === undefined
-        ? new SettingsError({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error })
-        : refused(location(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? "");
+      const key = Arr.join(Arr.map(path, String), ".");
+      return Option.match(
+        Arr.findFirst(group.declarations, (d) => Arr.join(d.segments, ".") === key),
+        {
+          onNone: () =>
+            new SettingsError({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error }),
+          onSome: (d) => refused(location(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? ""),
+        },
+      );
     }),
   );
   const resolved: Resolved<A> = { values, origins };

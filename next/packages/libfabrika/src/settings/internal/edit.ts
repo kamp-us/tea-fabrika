@@ -1,4 +1,6 @@
 import { Equal, Predicate, Result } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;
@@ -52,16 +54,14 @@ interface Splice extends Range {
 
 /** @internal */
 export const prefix = (parent: Path, path: Path): boolean =>
-  parent.length <= path.length && parent.every((key, i) => key === path[i]);
+  parent.length <= path.length && Arr.every(parent, (key, i) => key === path[i]);
 
 const same = (left: Path, right: Path): boolean => left.length === right.length && prefix(left, right);
 
 /** @internal */
 export const read = (value: unknown, path: Path): unknown =>
-  path.reduce<unknown>(
-    (parent, key) =>
-      Predicate.isObjectOrArray(parent) && Object.hasOwn(parent, key) ? Reflect.get(parent, key) : undefined,
-    value,
+  Arr.reduce(path, value, (parent, key) =>
+    Predicate.isObjectOrArray(parent) && Object.hasOwn(parent, key) ? Reflect.get(parent, key) : undefined,
   );
 
 const equal = (left: unknown, right: unknown): boolean => {
@@ -69,15 +69,15 @@ const equal = (left: unknown, right: unknown): boolean => {
     return Equal.equals(left, right);
   }
 
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, i) => equal(value, right[i]));
+  if (Arr.isArray(left) && Arr.isArray(right)) {
+    return left.length === right.length && Arr.every(left, (value, i) => equal(value, right[i]));
   }
 
   if (Predicate.isObject(left) && Predicate.isObject(right)) {
     const keys = Object.keys(left);
     return (
       keys.length === Object.keys(right).length &&
-      keys.every((key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
+      Arr.every(keys, (key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
     );
   }
 
@@ -88,16 +88,21 @@ const ending = (text: string): string => /\r?\n/.exec(text)?.[0] ?? "\n";
 const lineStart = (text: string, at: number): number => text.lastIndexOf("\n", at - 1) + 1;
 
 const apply = (text: string, edits: ReadonlyArray<Splice>): string =>
-  [...edits]
-    .sort((a, b) => b.start - a.start || b.end - a.end)
-    .reduce((source, edit) => source.slice(0, edit.start) + edit.text + source.slice(edit.end), text);
+  Arr.reduce(
+    [...edits].sort((a, b) => b.start - a.start || b.end - a.end),
+    text,
+    (source, edit) => source.slice(0, edit.start) + edit.text + source.slice(edit.end),
+  );
 
 // Comments are parser ranges, including the #, never text guessed from a string's contents.
 const retained = (text: string, index: Index, range: Range): string =>
-  index.comments
-    .filter((comment) => comment.start >= range.start && comment.end <= range.end)
-    .map((comment) => text.slice(comment.start, comment.end) + ending(text))
-    .join("");
+  Arr.join(
+    Arr.map(
+      Arr.filter(index.comments, (comment) => comment.start >= range.start && comment.end <= range.end),
+      (comment) => text.slice(comment.start, comment.end) + ending(text),
+    ),
+    "",
+  );
 
 /** @internal */
 export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<void, Refusal> => {
@@ -105,13 +110,13 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
 
   for (let i = 0; i <= path.length; i++) {
     const at = path.slice(0, i);
-    const entry =
-      index.assignments.find((assignment) => same(assignment.path, at)) ??
-      index.sections.find((section) => same(section.path, at)) ??
-      index.sections.find((section) => i > 0 && prefix(at, section.path));
+    const entry = Arr.findFirst(index.assignments, (assignment) => same(assignment.path, at)).pipe(
+      Option.orElse(() => Arr.findFirst(index.sections, (section) => same(section.path, at))),
+      Option.orElse(() => Arr.findFirst(index.sections, (section) => i > 0 && prefix(at, section.path))),
+    );
 
-    if (entry) {
-      line = entry.line;
+    if (Option.isSome(entry)) {
+      line = entry.value.line;
     }
 
     const value = read(index.value, at);
@@ -119,7 +124,9 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
     if (
       path.length === 0 ||
       (i < path.length && value !== undefined && (!Predicate.isObject(value) || Predicate.isDate(value))) ||
-      (i === path.length && value !== undefined && !index.assignments.some((assignment) => same(assignment.path, path)))
+      (i === path.length &&
+        value !== undefined &&
+        !Arr.some(index.assignments, (assignment) => same(assignment.path, path)))
     ) {
       return Result.fail({ line, cause: new Error("The path does not name an editable setting.") });
     }
@@ -149,23 +156,28 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
     return Result.fail<Refusal>(checked.failure);
   }
 
-  const assignment = index.assignments.find((candidate) => same(candidate.path, path));
+  const found = Arr.findFirst(index.assignments, (candidate) => same(candidate.path, path));
 
-  if (!assignment) {
+  if (Option.isNone(found)) {
     return Result.succeed(text);
   }
+
+  const assignment = found.value;
 
   const edits: Array<Splice> = [{ ...assignment, text: "" }, ...commentEdits(text, index, assignment, assignment)];
 
   if (assignment.inline) {
     const start = assignment.inline.start;
-    const parent = index.inlines.find((inline) => inline.start === start);
-    const comma =
-      parent?.commas.find((token) => token.start >= assignment.end) ??
-      parent?.commas.findLast((token) => token.end <= assignment.start);
+    const comma = Arr.findFirst(index.inlines, (inline) => inline.start === start).pipe(
+      Option.flatMap((parent) =>
+        Arr.findFirst(parent.commas, (token) => token.start >= assignment.end).pipe(
+          Option.orElse(() => Arr.findLast(parent.commas, (token) => token.end <= assignment.start)),
+        ),
+      ),
+    );
 
-    if (comma) {
-      edits.push({ ...comma, text: "" });
+    if (Option.isSome(comma)) {
+      edits.push({ ...comma.value, text: "" });
     }
   }
 
@@ -196,9 +208,11 @@ export const set = (
     return Result.fail<Refusal>(checked.failure);
   }
 
-  const assignment = index.assignments.find((candidate) => same(candidate.path, path));
+  const found = Arr.findFirst(index.assignments, (candidate) => same(candidate.path, path));
 
-  if (assignment) {
+  if (Option.isSome(found)) {
+    const assignment = found.value;
+
     if (equal(read(index.value, path), value)) {
       return Result.succeed(text);
     }
@@ -211,20 +225,20 @@ export const set = (
     );
   }
 
-  const parent = [...index.inlines]
-    .filter((inline) => prefix(inline.path, path))
-    .sort((a, b) => b.path.length - a.path.length)[0];
+  const parent = Arr.filter(index.inlines, (inline) => prefix(inline.path, path)).sort(
+    (a, b) => b.path.length - a.path.length,
+  )[0];
 
   if (parent) {
     const at = parent.end - 1;
     const last = parent.members.at(-1);
-    const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
+    const separator = last && !Arr.some(parent.commas, (comma) => comma.start >= last.end) ? ", " : "";
     return Result.succeed(
       apply(text, [
         {
           start: at,
           end: at,
-          text: `${separator}${keys.slice(parent.path.length).join(".")} = ${rendered}`,
+          text: `${separator}${Arr.join(keys.slice(parent.path.length), ".")} = ${rendered}`,
         },
       ]),
     );
@@ -234,13 +248,15 @@ export const set = (
 
   if (parentPath.length > 0 && read(index.value, parentPath) === undefined) {
     return Result.succeed(
-      insertLine(text, text.length, `[${keys.slice(0, -1).join(".")}]${ending(text)}${keys.at(-1)} = ${rendered}`),
+      insertLine(text, text.length, `[${Arr.join(keys.slice(0, -1), ".")}]${ending(text)}${keys.at(-1)} = ${rendered}`),
     );
   }
 
   const section =
-    [...index.sections]
-      .filter((candidate) => prefix(candidate.path, parentPath))
-      .sort((a, b) => b.path.length - a.path.length)[0] ?? index.sections[0];
-  return Result.succeed(insertLine(text, section.end, `${keys.slice(section.path.length).join(".")} = ${rendered}`));
+    Arr.filter(index.sections, (candidate) => prefix(candidate.path, parentPath)).sort(
+      (a, b) => b.path.length - a.path.length,
+    )[0] ?? index.sections[0];
+  return Result.succeed(
+    insertLine(text, section.end, `${Arr.join(keys.slice(section.path.length), ".")} = ${rendered}`),
+  );
 };

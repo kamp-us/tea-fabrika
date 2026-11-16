@@ -8,6 +8,7 @@
  * @stability unstable
  */
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
@@ -74,7 +75,7 @@ const sorted = <A>(group: Setting.Group<A>) => [...group.declarations].sort((a, 
  * @category constructors
  */
 export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row> =>
-  sorted(group).map((d) => ({
+  Arr.map(sorted(group), (d) => ({
     path: d.path,
     value: snapshot.values[d.path] ?? encoded(d),
     origin: snapshot.origins[d.path] ?? Origin.cases.default.make({}),
@@ -96,9 +97,10 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
  * @category combinators
  */
 export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
-  rows
-    .filter((row) => row.origin._tag !== "default" && newer(row.since, minimum))
-    .map((row) => ({ path: row.path, since: row.since, minimum }));
+  Arr.map(
+    Arr.filter(rows, (row) => row.origin._tag !== "default" && newer(row.since, minimum)),
+    (row) => ({ path: row.path, since: row.since, minimum }),
+  );
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */
 const escape = (text: string) => text.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&").replace(/^(\s*\d+)\./gm, "$1\\.");
@@ -116,28 +118,32 @@ const code = (text: string) => `\`${text}\``;
  * @category constructors
  */
 export const markdown = <A>(group: Setting.Group<A>) =>
-  sorted(group)
-    .map((d) =>
-      [
-        `### ${code(d.path)}`,
-        "",
-        escape(d.doc),
-        "",
-        "| Field | Value |",
-        "|---|---|",
-        `| Scope | ${d.scope.join(", ")} |`,
-        `| Environment | ${code(d.env)} |`,
-        `| Flag | ${code(`--${d.path}`)} |`,
-        `| Default | ${code(JSON.stringify(encoded(d)))} |`,
-        ...(d.format === "text"
-          ? [
-              `| File default | ${code(JSON.stringify(Schema.encodeSync(Codec.file(d))(d.default)))} |`,
-              "| File input | Text, using the spelling shown by the file default. Recorded values use JSON. |",
-            ]
-          : []),
-        `| Reload | ${d.reload} |`,
-        `| Since | ${d.since} |`,
-        "",
-      ].join("\n"),
-    )
-    .join("\n");
+  Arr.join(
+    Arr.map(sorted(group), (d) =>
+      Arr.join(
+        [
+          `### ${code(d.path)}`,
+          "",
+          escape(d.doc),
+          "",
+          "| Field | Value |",
+          "|---|---|",
+          `| Scope | ${Arr.join(d.scope, ", ")} |`,
+          `| Environment | ${code(d.env)} |`,
+          `| Flag | ${code(`--${d.path}`)} |`,
+          `| Default | ${code(JSON.stringify(encoded(d)))} |`,
+          ...(d.format === "text"
+            ? [
+                `| File default | ${code(JSON.stringify(Schema.encodeSync(Codec.file(d))(d.default)))} |`,
+                "| File input | Text, using the spelling shown by the file default. Recorded values use JSON. |",
+              ]
+            : []),
+          `| Reload | ${d.reload} |`,
+          `| Since | ${d.since} |`,
+          "",
+        ],
+        "\n",
+      ),
+    ),
+    "\n",
+  );

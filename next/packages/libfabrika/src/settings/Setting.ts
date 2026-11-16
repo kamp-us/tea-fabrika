@@ -8,6 +8,7 @@
  * @stability unstable
  */
 import { Config, Schema, String as Str } from "effect";
+import * as Arr from "effect/Array";
 
 /**
  * The two settings files: the person's own, and the repo's.
@@ -96,7 +97,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
 ): Setting<C["Type"], S, C> => {
   // Effect reads a string path as one key, so the dotted path is split here.
   const segments = path.split(".");
-  const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
+  const env = Arr.join(["FABRIKA", ...Arr.map(segments, (s) => Str.configCase(s))], "_");
   // Config treats a container supplied to a scalar schema as absent. Before defaulting,
   // check every provider shape so a present value, including [], stays a failure.
   const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
@@ -139,7 +140,7 @@ const segment = /^[a-z0-9][a-z0-9-]*$/;
 /** Why a set of declarations cannot be read together, or undefined when it can. */
 const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
   for (const [n, a] of declarations.entries()) {
-    if (!a.segments.every((s) => segment.test(s))) {
+    if (!Arr.every(a.segments, (s) => segment.test(s))) {
       return `${a.path} is not a setting path`;
     }
 
@@ -150,7 +151,7 @@ const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
     for (const b of declarations.slice(n + 1)) {
       const [short, long] = a.segments.length <= b.segments.length ? [a, b] : [b, a];
 
-      if (short.segments.every((s, i) => long.segments[i] === s)) {
+      if (Arr.every(short.segments, (s, i) => long.segments[i] === s)) {
         return `${a.path} and ${b.path} are one path, or a value and its table`;
       }
 
