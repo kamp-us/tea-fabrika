@@ -1,7 +1,7 @@
 ---
 id: 0590
 title: A branch's proof run runs only the tests its change reaches, real-instance laws included, and main's own full run stays complete as the safety net
-status: accepted
+status: amended-in-part by [0591](0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)
 date: 2026-11-15
 tags: [ci, full-run, proof-run, vitest, changed, related, scheduled, arm, merge-queue]
 ---

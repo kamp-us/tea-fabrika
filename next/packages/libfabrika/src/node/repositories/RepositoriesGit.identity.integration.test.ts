@@ -1,6 +1,7 @@
 // T878, next/, L5. A clone's identity comes from git's own common directory, on the git layers of
 // GitLaws: memory git at every depth, and real git too at depth `full` (0535). Split out of
-// RepositoriesGit.test.ts unchanged, since L5 alone takes most of that file's time.
+// RepositoriesGit.test.ts unchanged, since L5 alone takes most of that file's time. Its spawner hands
+// commands to Node's real one (`real.spawn`), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";

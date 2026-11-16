@@ -2551,7 +2551,7 @@
       // change them together.
       "files": [
         "next/apps/fabrika/src/exam/**",
-        "next/apps/fabrika/src/settings-generated.test.ts",
+        "next/apps/fabrika/src/settings-generated.integration.test.ts",
         "next/apps/fabrika/src/build.test.ts",
         "next/apps/fabrika/src/build.integration.test.ts",
         "next/apps/fabrika/src/build-command.integration.test.ts",
