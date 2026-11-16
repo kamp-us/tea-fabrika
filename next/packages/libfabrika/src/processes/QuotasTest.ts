@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Layer, Result, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import type { Ledger } from "../ledger/Ledger.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -76,7 +77,7 @@ const rows = (sql: Sql) =>
 const bytes = (e: Entry) => new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(e))).length;
 
 const snapshot = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [String(name), sql.exec(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`)]),

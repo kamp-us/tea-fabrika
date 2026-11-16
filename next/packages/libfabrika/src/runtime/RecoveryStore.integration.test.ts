@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -228,7 +229,7 @@ describe("P34 recovery storage", () => {
               const table = quote(String(name));
 
               for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
-                for (const [column, value] of Object.entries(row)) {
+                for (const [column, value] of Rec.toEntries(row)) {
                   if (typeof value === "string" && value.includes('"journal"')) {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,

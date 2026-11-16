@@ -31,7 +31,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Queue, Record as Rec, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -366,7 +366,7 @@ const flow = Effect.fnUntraced(
           .prepare("SELECT name FROM sqlite_master WHERE type='table'")
           .all()
           .map((row) => String(row["name"]));
-        return Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
+        return Rec.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
       }),
     );
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
@@ -445,7 +445,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
 
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
-                  for (const [name, value] of Object.entries(outputs)) {
+                  for (const [name, value] of Rec.toEntries(outputs)) {
                     const text = JSON.stringify(value, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v));
 
                     for (const form of forms) {

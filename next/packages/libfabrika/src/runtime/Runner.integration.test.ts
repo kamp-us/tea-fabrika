@@ -28,6 +28,7 @@ import {
   Scope,
   Stream,
 } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { SessionManagerError, Storage } from "../access/SessionManager.ts";
@@ -1742,7 +1743,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
     },
     ({ asked, lag }) =>
       Effect.forEach(
-        Object.entries(drainFaults),
+        Rec.toEntries(drainFaults),
         ([fault, { failure, retries }]) =>
           Effect.gen(function* () {
             const w = yield* disks.pipe(
@@ -3318,7 +3319,7 @@ describe("P11 monitoring, content and storage failures", () => {
           expect(linked.some((row) => row.links.some((link) => link.traceId === TRACE && link.spanId === SPAN))).toBe(
             true,
           );
-          expect(linked.some((row) => Object.values(row.attributes).includes(w.signCalls[0]!.id))).toBe(true);
+          expect(linked.some((row) => Rec.values(row.attributes).includes(w.signCalls[0]!.id))).toBe(true);
           expect(w.sink.db().prepare("SELECT count(*) AS n FROM unsent").get()?.n).toBe(0);
         }).pipe(Effect.provide(w.layer())),
       );

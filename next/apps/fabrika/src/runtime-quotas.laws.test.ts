@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { ByteSize, Clock, Effect, Option, Record as Rec, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
@@ -193,7 +193,7 @@ const declared = (limits: Limits) => ({
 
 /** Row counts of every table, so a law can say "nothing was saved" without naming a table. */
 const counts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all()
@@ -268,7 +268,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     traceId: TRACE,
     build: "quota-laws",
   };
-  const everyone = Object.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
+  const everyone = Rec.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
   // What the Project class hands off: one service call on the object's runtime.
   const project = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
@@ -606,9 +606,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       "the live assembly installs accounting in both stores; a read never creates it",
     ).toEqual(rows);
     return {
-      program: Object.fromEntries(program),
-      recovery: Object.fromEntries(recovery),
-      local: Object.fromEntries(local),
+      program: Rec.fromEntries(program),
+      recovery: Rec.fromEntries(recovery),
+      local: Rec.fromEntries(local),
     };
   });
   return {

@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -435,7 +436,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
               records: own,
             };
 
-            for (const [name, output] of Object.entries(publicOutputs)) {
+            for (const [name, output] of Rec.toEntries(publicOutputs)) {
               for (const secret of [body, errorText, keyText]) {
                 noLeak(output, secret, name);
               }

@@ -50,7 +50,22 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -1207,9 +1222,9 @@ describe("T843 sender budget, next/", () => {
       yield* projectSink.flush;
 
       const rows = () =>
-        Object.fromEntries(
+        Rec.fromEntries(
           [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
-            Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+            Rec.toEntries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
           ),
         );
 
@@ -1217,9 +1232,9 @@ describe("T843 sender budget, next/", () => {
 
       const unchanged = () => {
         const current = rows();
-        expect(Object.keys(current)).toEqual(Object.keys(before));
+        expect(Rec.keys(current)).toEqual(Rec.keys(before));
 
-        for (const [table, total] of Object.entries(current)) {
+        for (const [table, total] of Rec.toEntries(current)) {
           expect(total, table).toBe(before[table]);
         }
       };
@@ -1348,9 +1363,9 @@ describe("T843 sender budget, next/", () => {
             const archived = c.archives.length;
 
             const rows = () =>
-              Object.fromEntries(
+              Rec.fromEntries(
                 [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
-                  Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+                  Rec.toEntries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
                 ),
               );
 
@@ -1393,11 +1408,11 @@ describe("T843 sender budget, next/", () => {
 
               const current = rows();
 
-              for (const [table, total] of Object.entries(current)) {
+              for (const [table, total] of Rec.toEntries(current)) {
                 expect(total, table).toBe(before[table]);
               }
 
-              expect(Object.keys(current)).toEqual(Object.keys(before));
+              expect(Rec.keys(current)).toEqual(Rec.keys(before));
               expect(c.saved).toHaveLength(recorded);
               expect(c.archives).toHaveLength(archived);
               expect(w.usedInputs).toEqual(inputs);
@@ -1490,7 +1505,7 @@ describe("T843 sender budget, next/", () => {
 
             const counts = [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [
               name,
-              Object.entries(allObjectRows(db)).map(([table, rows]) => [table, rows.length]),
+              Rec.toEntries(allObjectRows(db)).map(([table, rows]) => [table, rows.length]),
             ]);
 
             first ??= counts;
@@ -1624,7 +1639,7 @@ const spoofedParams = (write: typeof SpoofedWrite.Type, letter: string) => {
 };
 
 const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, unknown>>> =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all()
@@ -3600,9 +3615,10 @@ describe("P10 inputs, retries and signer", () => {
         yield* TestClock.setTime(1_790_000_000_000);
         expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
         const e = w.deliveries[0]!.envelope;
-        expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
+        expect(Rec.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
         expect(e.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-        expect(Object.values((yield* stamped()).at(-1)!.body ?? {})).toContain(1);
+        const body = (yield* stamped()).at(-1)!.body;
+        expect(Predicate.isObject(body) ? Rec.values(body) : []).toContain(1);
         expect(e.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
         expect(e.arrivedAt).toBe(1_790_000_000_000);
         expect(e.input).toEqual(comment());
@@ -3684,9 +3700,9 @@ describe("P10 inputs, retries and signer", () => {
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
 
-      const fields = Object.entries(state.schema.fields).filter(
+      const fields = Rec.toEntries(state.schema.fields).filter(
         ([key, field]) =>
-          Object.hasOwn(state.m, key) &&
+          Rec.has(state.m, key) &&
           (!missing || Schema.decodeResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
       );
 
@@ -3708,8 +3724,8 @@ describe("P10 inputs, retries and signer", () => {
                   key: Arbitrary.schema(Schema.String).pipe(
                     Arbitrary.filter(
                       (key) =>
-                        !Object.hasOwn(state.schema.fields, key) &&
-                        !Object.hasOwn(state.m, key) &&
+                        !Rec.has<string, unknown>(state.schema.fields, key) &&
+                        !Rec.has(state.m, key) &&
                         !Schema.is(SpoofedWrite.fields.key)(key),
                     ),
                   ),
@@ -3736,7 +3752,7 @@ describe("P10 inputs, retries and signer", () => {
 
     return Arbitrary.all({
       m: Arbitrary.schema(schema),
-      edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Object.keys(schema.fields).length }),
+      edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Rec.keys(schema.fields).length }),
       key: Arbitrary.schema(SpoofedWrite.fields.key),
       inner: Arbitrary.schema(SpoofedWrite.fields.inner),
       value: Arbitrary.schema(SpoofedWrite.fields.value),
@@ -3784,8 +3800,8 @@ describe("P10 inputs, retries and signer", () => {
           const unchangedRows = (databases: ReturnType<typeof snapshot>) =>
             databases.map(([name, tables]) => [
               name,
-              Object.fromEntries(
-                Object.entries(tables).filter(
+              Rec.fromEntries(
+                Rec.toEntries(tables).filter(
                   ([table]) => name !== "object" || (table !== "sums" && table !== "gateway_limits"),
                 ),
               ),
@@ -3867,9 +3883,9 @@ describe("P10 inputs, retries and signer", () => {
           for (const [i, write] of writes.entries()) {
             expect((yield* d.route(client, write.method, spoofedParams(write, `bound-${i}`)))._tag).toBe("refused");
 
-            const counts = Object.fromEntries(
+            const counts = Rec.fromEntries(
               [...w.databases()].flatMap(([name, db]) =>
-                Object.entries(allObjectRows(db)).map(([table, rows]) => [`${name}/${table}`, rows.length]),
+                Rec.toEntries(allObjectRows(db)).map(([table, rows]) => [`${name}/${table}`, rows.length]),
               ),
             );
 
@@ -3959,7 +3975,7 @@ describe("P10 inputs, retries and signer", () => {
           expect((yield* d.route(client, "process.send", request(write.letter, m)))._tag).toBe("ok");
           expect(w.deliveries).toHaveLength(1);
           const envelope = w.deliveries[0]!.envelope;
-          expect(Object.keys(envelope).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
+          expect(Rec.keys(envelope).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
           expect(envelope.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
           expect(envelope.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
           expect(envelope.arrivedAt).toBe(REFUSED_HOUR + 1000);
@@ -4011,7 +4027,8 @@ describe("P10 inputs, retries and signer", () => {
           const { client } = yield* online(d, w);
           yield* d.route(client, "process.send", request(`letter-${i}`));
           ids.push(w.deliveries.at(-1)!.envelope.id);
-          const recorded = Object.values((yield* stamped()).at(-1)!.body ?? {});
+          const body = (yield* stamped()).at(-1)!.body;
+          const recorded = Predicate.isObject(body) ? Rec.values(body) : [];
           // P17a leaves the door's process and count as separate recorded fields.
           // The plan leaves their key names to the builder.
           expect(recorded).toContain(i === 0 ? START : OTHER_PROCESS);
@@ -4570,7 +4587,7 @@ describe("P33 the door never writes process lifecycle events", () => {
     it.effect(`the door refuses any append under processes/, here ${stream}`, () => refusedAppend("saved", stream));
   }
 
-  for (const kind of Object.keys(ProcessEvent.cases)) {
+  for (const kind of Rec.keys(ProcessEvent.cases)) {
     it.effect.prop(
       `the door refuses an event tagged ${kind} on any stream, from any receipt holder`,
       { generated: Schema.String },
@@ -6071,7 +6088,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
         const call = {
           ref: generated.ref,
           pid: processId(),
-          extra: Object.fromEntries(generated.extra.map((e) => [e.key, e.value])),
+          extra: Rec.fromEntries(generated.extra.map((e) => [e.key, e.value])),
         };
 
         yield* Effect.gen(function* () {
@@ -6100,8 +6117,8 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const extra = { ...call.extra, ref: `${call.ref}:x`, pid: call.pid };
           // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
           // `reserved` refusal; any other key is this method's `bad_input`.
-          const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Object.hasOwn(extra, k));
-          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject({
+          const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Rec.has<string, unknown>(extra, k));
+          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Rec.keys(extra))).toMatchObject({
             _tag: "refused",
             reason: reserved ? "reserved" : "bad_input",
           });

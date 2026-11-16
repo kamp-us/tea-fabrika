@@ -31,6 +31,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -173,7 +174,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const body = (entry: Entry): Record<string, unknown> =>
@@ -295,8 +296,8 @@ const reorder = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(reorder)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .reverse()
             .map(([k, v]) => [k, reorder(v)]),
         )
@@ -307,8 +308,8 @@ const sorted = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(sorted)
     : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value)
+      ? Rec.fromEntries(
+          Rec.toEntries(value)
             .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
             .map(([k, v]) => [k, sorted(v)]),
         )

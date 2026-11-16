@@ -9,6 +9,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -81,7 +82,7 @@ const counted = (sql: Sql) => {
       count.rows += rows.length;
 
       for (const row of rows) {
-        for (const value of Object.values(row)) {
+        for (const value of Rec.values(row)) {
           count.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
         }
       }

@@ -37,6 +37,7 @@ import {
   Schema,
   Scope,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -345,7 +346,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
   } as unknown as Env;
 
-  const door = Object.fromEntries(
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",

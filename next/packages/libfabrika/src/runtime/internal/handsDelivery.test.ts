@@ -16,6 +16,7 @@
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";
@@ -100,7 +101,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "ok" &&
               same(next.answer.result, r.result) &&
-              Object.keys(next.answer).sort().join() === "_tag,result") ||
+              Rec.keys(next.answer).sort().join() === "_tag,result") ||
             "D1: a finished reply settles the delivery with that result"
           );
         }
@@ -110,7 +111,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "err" &&
               next.answer.reason === r.reason &&
-              Object.keys(next.answer).sort().join() === "_tag,reason") ||
+              Rec.keys(next.answer).sort().join() === "_tag,reason") ||
             `D1: a ${r.reason} refusal settles a ${prev._tag} delivery with that reason`
           );
         }

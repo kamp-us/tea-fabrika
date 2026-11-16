@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Predicate, Record as Rec, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -103,7 +103,7 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
       }
     }
 
-    for (const child of Object.values(node)) {
+    for (const child of Rec.values(node)) {
       visit(child);
     }
   };
@@ -254,7 +254,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
 
     const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
 
-    return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
+    return Predicate.isObject(exports) && Rec.has(exports, "./window");
   });
 
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
@@ -274,7 +274,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
 
     assert(sample.load.length > 0, "load missing");
 
-    for (const value of Object.values(readings(sample))) {
+    for (const value of Rec.values(readings(sample))) {
       assert(Number.isFinite(value) && value >= 0, "invalid reading");
     }
   }
@@ -293,7 +293,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
     assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
   }
 
-  for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
+  for (const key of Rec.keys(bar.caps) as Array<keyof typeof bar.caps>) {
     assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 
     if (enforce) {
@@ -402,7 +402,7 @@ describe("P16 stack and sealed loader", () => {
           expect(call.main, "the instance runs the completed file").toBe(built.brain);
           expect(call.bundle, "no second bundle pass").toBe(false);
 
-          for (const [name, value] of Object.entries(call.env)) {
+          for (const [name, value] of Rec.toEntries(call.env)) {
             expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
             expect(JSON.stringify(value)).not.toContain("program-marker");
 
@@ -688,7 +688,7 @@ describe("P16 copied-file real instance, serial", () => {
               out: join(h, "dist"),
               files: [],
               ledger: [],
-              programs: Object.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
+              programs: Rec.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
             }).pipe(Effect.provide(NodeServices.layer)),
           );
 
@@ -725,9 +725,9 @@ describe("P16 copied-file real instance, serial", () => {
 
                       yield* Effect.tryPromise({
                         try: async () => {
-                          expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+                          expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-                          for (const name of Object.keys(built.programs)) {
+                          for (const name of Rec.keys(built.programs)) {
                             const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
 
                             if (name === "fabrika/counter") {

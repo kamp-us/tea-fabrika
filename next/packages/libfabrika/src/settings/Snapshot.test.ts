@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -53,7 +54,7 @@ StartsTest.law(
       const input = yield* StartsTest.input(recipe);
       const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
 
-      const origins = Object.fromEntries(
+      const origins = Rec.fromEntries(
         Declarations.all.declarations.map((declaration, index) => {
           const source = (choice + index) % 4;
 
@@ -127,7 +128,7 @@ const save = (v: SavedFlow) => {
   const group = Setting.group(settings);
   const values = { record: ByteSize.bytes(v.count), port: v.port, word: v.word };
 
-  const origins = Object.fromEntries(
+  const origins = Rec.fromEntries(
     group.declarations.map((d) => [
       d.path,
       v.source === "file"
@@ -154,23 +155,23 @@ const objectFlow = fc
   })
   .chain((value) =>
     fc
-      .shuffledSubarray(Object.entries(value), {
-        minLength: Object.keys(value).length,
-        maxLength: Object.keys(value).length,
+      .shuffledSubarray(Rec.toEntries(value), {
+        minLength: Rec.keys(value).length,
+        maxLength: Rec.keys(value).length,
       })
       .chain((entries) =>
         fc
           .tuple(
             ...entries.map(([key, inner]) =>
               fc
-                .shuffledSubarray(Object.entries(inner), {
-                  minLength: Object.keys(inner).length,
-                  maxLength: Object.keys(inner).length,
+                .shuffledSubarray(Rec.toEntries(inner), {
+                  minLength: Rec.keys(inner).length,
+                  maxLength: Rec.keys(inner).length,
                 })
-                .map((shuffled) => [key, Object.fromEntries(shuffled)] as const),
+                .map((shuffled) => [key, Rec.fromEntries(shuffled)] as const),
             ),
           )
-          .map((shuffled) => ({ value, reordered: Object.fromEntries(shuffled) })),
+          .map((shuffled) => ({ value, reordered: Rec.fromEntries(shuffled) })),
       ),
   );
 
@@ -254,10 +255,10 @@ describe("T753 complete checked snapshots", () => {
         const made = await digest(Snapshot.make(flow.group, flow));
 
         const reversed = Setting.group(
-          Object.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
+          Rec.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
         );
 
-        const origins = Object.fromEntries(
+        const origins = Rec.fromEntries(
           flow.group.declarations.map((d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
         );
 
@@ -267,8 +268,8 @@ describe("T753 complete checked snapshots", () => {
 
         const reordered = {
           ...made,
-          values: Object.fromEntries(Object.entries(made.values).reverse()),
-          origins: Object.fromEntries(Object.entries(origins).reverse()),
+          values: Rec.fromEntries(Rec.toEntries(made.values).reverse()),
+          origins: Rec.fromEntries(Rec.toEntries(origins).reverse()),
         };
 
         const checked = await digest(Snapshot.read(flow.group, reordered));
@@ -368,7 +369,7 @@ const declared = fc
 
 const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       paths.map(([a, b], n) => [
         `s${n}`,
         Setting.make(`${a}.${b}`, {
@@ -387,17 +388,17 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
   it("equal values give one hash, whatever source and declaration order; other values another", async () => {
     await fc.assert(
       fc.asyncProperty(declared, fc.integer({ min: 0, max: 2 }), async ([paths, values], changed) => {
-        const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
+        const flags = Rec.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
 
-        const env = Object.fromEntries(
+        const env = Rec.fromEntries(
           paths.map(([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
         );
 
         const fromFlags = await snapshot(portGroup(paths), sources({ flags: Sources.flags(flags) }));
         const fromEnv = await snapshot(portGroup([...paths].reverse()), sources({ env: Sources.env(env) }));
-        expect(fromFlags.values).toEqual(Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
+        expect(fromFlags.values).toEqual(Rec.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
         expect(fromEnv.hash).toBe(fromFlags.hash);
-        expect(Object.values(fromEnv.origins).map((o) => o._tag)).toEqual(paths.map(() => "env"));
+        expect(Rec.values(fromEnv.origins).map((o) => o._tag)).toEqual(paths.map(() => "env"));
 
         const at = changed % paths.length;
         const other = { ...flags, [`${paths[at]![0]}.${paths[at]![1]}`]: String((values[at]! % 65535) + 1) };

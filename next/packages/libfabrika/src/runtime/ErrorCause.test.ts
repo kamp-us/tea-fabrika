@@ -10,6 +10,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -307,7 +308,7 @@ const causedAt = {
 law(
   "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
   fc.record({
-    site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
+    site: fc.constantFrom(...(Rec.keys(causedAt) as Array<keyof typeof causedAt>)),
     // Never a valid Int, number, string or name: each site fails for this value alone.
     bad: fc.oneof(fc.boolean(), failures),
   }),

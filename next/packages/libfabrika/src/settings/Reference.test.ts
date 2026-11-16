@@ -17,6 +17,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -130,7 +131,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 const grouped = (ds: Declared) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -198,14 +199,14 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
       fc.asyncProperty(declared, fc.dictionary(segment, port, { maxKeys: 2 }), async (ds, stray) => {
         const { group, snapshot } = await loaded(ds);
         // Keys no declaration names, such as a field a later release dropped, stay out of the rows.
-        const extra = Object.fromEntries(Object.entries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
+        const extra = Rec.fromEntries(Rec.toEntries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
 
         const widened: Snapshot.Snapshot = {
           ...snapshot,
           values: { ...snapshot.values, ...extra },
           origins: {
             ...snapshot.origins,
-            ...Object.fromEntries(Object.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
+            ...Rec.fromEntries(Rec.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
           },
         };
 

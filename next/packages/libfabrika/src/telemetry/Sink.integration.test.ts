@@ -27,6 +27,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -123,7 +124,7 @@ const places = (db: DatabaseSync, marker: string): Array<string> => {
 
   for (const { name } of tables) {
     for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
-      for (const [column, value] of Object.entries(row)) {
+      for (const [column, value] of Rec.toEntries(row)) {
         if (typeof value === "string" && value.includes(marker)) {
           found.add(`${String(name)}.${column}`);
         }
@@ -1252,7 +1253,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe("NoteError");
 
           for (const x of rows) {
-            for (const value of Object.values(x.attributes)) {
+            for (const value of Rec.values(x.attributes)) {
               expect(String(value)).not.toContain(NOTE);
               expect(String(value)).not.toContain(NOTE_TWO);
             }
@@ -1314,7 +1315,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               const kept = row?.attributes ?? {};
               let dropped = 0;
 
-              for (const [k, v] of Object.entries(tags)) {
+              for (const [k, v] of Rec.toEntries(tags)) {
                 if (typeof v === "string") {
                   if (v.length <= 128) {
                     expect(kept[k]).toBe(v);
@@ -1335,7 +1336,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
               expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
 
-              for (const v of Object.values(kept)) {
+              for (const v of Rec.values(kept)) {
                 expect(["string", "number", "boolean"]).toContain(typeof v);
 
                 if (typeof v === "string") {

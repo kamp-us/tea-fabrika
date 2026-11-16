@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Record as Rec, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -90,10 +90,8 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
       return value.map(repair);
     }
 
-    if (value !== null && typeof value === "object") {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
-      );
+    if (Predicate.isObject(value)) {
+      return Rec.fromEntries(Rec.toEntries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]));
     }
 
     return value;

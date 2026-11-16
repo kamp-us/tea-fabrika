@@ -28,6 +28,7 @@ import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -120,7 +121,7 @@ const damaged = (
   }
 
   if (recipe._tag === "missing") {
-    const keys = Object.keys(good);
+    const keys = Rec.keys(good);
     const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
     return JSON.stringify(rest);
   }

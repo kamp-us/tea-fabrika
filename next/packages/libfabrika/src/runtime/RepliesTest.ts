@@ -4,6 +4,7 @@
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -368,7 +369,7 @@ const walk = (
         const [k, stored] = chosen;
 
         const located = dump(raw).flatMap(({ table, row }) =>
-          Object.entries(row).flatMap(([column, value]) => {
+          Rec.toEntries(row).flatMap(([column, value]) => {
             if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
@@ -389,9 +390,7 @@ const walk = (
           kind === "json"
             ? `${value.slice(0, -1)}${secret}`
             : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
+              ? JSON.stringify(Rec.fromEntries(Rec.toEntries(json).filter(([f]) => f !== fields[n % fields.length])))
               : kind === "key"
                 ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
                 : kind === "typed"
@@ -414,7 +413,7 @@ const walk = (
 
         note(yield* refusedWith(service.reply(stored.name, stored.id), "bad_row"));
         note(yield* refusedWith(service.rememberReply(stored), "bad_row"));
-        const cells = dump(raw).flatMap(({ row }) => Object.values(row));
+        const cells = dump(raw).flatMap(({ row }) => Rec.values(row));
         expect(cells, "a corrupt row is retained as it was").toContain(damaged);
       }
 
@@ -422,7 +421,7 @@ const walk = (
       const damaged = new Set(corrupt.values());
 
       const cells = dump(raw)
-        .flatMap(({ row }) => Object.values(row))
+        .flatMap(({ row }) => Rec.values(row))
         .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
 
       unleaked([...cells, ...errors, ...spans.text()], secrets);

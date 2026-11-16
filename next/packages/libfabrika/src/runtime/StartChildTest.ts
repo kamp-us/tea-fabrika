@@ -49,6 +49,7 @@ import {
   Schema,
   Scope,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -254,7 +255,7 @@ let withStoppers: Record<string, unknown> | undefined;
 
 /** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
 const stopperPrograms = (): Record<string, unknown> => {
-  withStoppers ??= { ...PROGRAMS, ...Object.fromEntries([...STOPPER_PROGRAMS].map((p) => [p, stopper(p)])) };
+  withStoppers ??= { ...PROGRAMS, ...Rec.fromEntries([...STOPPER_PROGRAMS].map((p) => [p, stopper(p)])) };
   return withStoppers;
 };
 
@@ -941,7 +942,7 @@ const walk = (
         case "forged": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
-          const extra = Object.fromEntries(cell.extra.map((field) => [field, forged(field, world)]));
+          const extra = Rec.fromEntries(cell.extra.map((field) => [field, forged(field, world)]));
           const before = (yield* answers(name)).length;
           yield* door(name, { type: "start", ask: { program: "merger", name: target, extra } });
           expect(yield* lastAnswer(name, before), "L5, L8: a Cmd with fields beyond its operands").toEqual({

@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -28,7 +29,7 @@ const numeric = (value: unknown): unknown => {
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, numeric(v)]));
+    return Rec.fromEntries(Rec.toEntries(value).map(([key, v]) => [key, numeric(v)]));
   }
 
   return value;
@@ -109,7 +110,7 @@ describe("P34c Q11 settings", () => {
           const defaults = new Map<string, number>([
             ["writes", 13_760],
             ["storage", 1_000_000_000],
-            ...Object.entries(measured).flatMap(([location, value]) => [
+            ...Rec.toEntries(measured).flatMap(([location, value]) => [
               [`recovery.${location}.writes`, value.writes] as const,
               [`recovery.${location}.bytes`, value.bytes] as const,
               [`recovery.${location}.message.writes`, value.message.writes] as const,
@@ -143,7 +144,7 @@ describe("P34c Q11 settings", () => {
             expect(numeric(restored.values)).toEqual({
               writes: selected.get("writes"),
               storage: selected.get("storage"),
-              recovery: Object.fromEntries(
+              recovery: Rec.fromEntries(
                 ["project", "process"].map((location) => [
                   location,
                   {

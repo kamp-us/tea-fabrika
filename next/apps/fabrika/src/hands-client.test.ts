@@ -58,7 +58,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
+import { Effect, Exit, Layer, Queue, Record as Rec, Schema, Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
@@ -601,7 +601,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       spans: spans.map((span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
-    for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
+    for (const [name, value] of focus === "S1" ? Rec.toEntries(outputs) : []) {
       const encoded = JSON.stringify(value, (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item));
 
       for (const secret of hands.secrets) {

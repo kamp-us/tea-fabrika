@@ -1,6 +1,7 @@
 // next/, U2 and U10. U4/U5's unknown platform words are exercised at the tail entrypoint.
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as IsolateUsage from "./IsolateUsage.ts";
@@ -77,7 +78,7 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
 
               expect(Number(span.status.endTime - span.status.startTime) / 1_000_000).toBeCloseTo(cpuMs, 5);
               expect(Exit.isSuccess(span.status.exit)).toBe(true);
-              expect(Object.fromEntries(span.attributes)).toEqual({
+              expect(Rec.fromEntries(span.attributes)).toEqual({
                 "fab.process": PROCESS,
                 "fab.isolate.method": method,
                 "fab.isolate.wall_ms": wallMs,

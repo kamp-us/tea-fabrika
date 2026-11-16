@@ -23,7 +23,8 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -70,9 +71,7 @@ const roundTrip = (model: Model): unknown =>
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
-      : v,
+    Predicate.isObject(v) ? Rec.fromEntries(Rec.toEntries(v).toSorted(([a], [b]) => a.localeCompare(b))) : v,
   );
 
 const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));
@@ -1060,12 +1059,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
-  const fields = Object.keys(journal).filter((key) => key !== "_tag");
+  const fields = Rec.keys(journal).filter((key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
 
   const broken: Array<unknown> = [
     { ...raw, journal: { ...journal, _tag: "starting" } },
-    { ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== dropped)) },
+    { ...raw, journal: Rec.fromEntries(Rec.toEntries(journal).filter(([key]) => key !== dropped)) },
     { ...raw, v: 1 },
   ];
 
@@ -1084,7 +1083,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   if (journal._tag === "checkpointing") {
-    broken.push({ ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== "after")) });
+    broken.push({ ...raw, journal: Rec.fromEntries(Rec.toEntries(journal).filter(([key]) => key !== "after")) });
   }
 
   if (journal._tag === "stepping") {

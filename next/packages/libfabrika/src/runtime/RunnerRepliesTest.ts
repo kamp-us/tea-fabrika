@@ -8,6 +8,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -196,7 +197,7 @@ const replyRows = (sql: Sql, id: string) =>
       sql
         .exec(`SELECT * FROM "${table}"`)
         .flatMap((row) =>
-          Object.entries(row).flatMap(([column, value]) =>
+          Rec.toEntries(row).flatMap(([column, value]) =>
             typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
           ),
         ),
@@ -208,7 +209,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
     .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
     .map(({ name }) => String(name))
     .filter((table) => !KNOWN.has(table))
-    .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Object.values(row)))
+    .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Rec.values(row)))
     .filter((cell): cell is string => typeof cell === "string");
 
 let counter = 0;
@@ -366,14 +367,14 @@ const walk = (
     const expected = (patchesNow: number) => ({
       letters: accepted,
       patches: patchesNow,
-      view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
+      view: { notes: Rec.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
       rev: accepted,
     });
 
     const sorted = (view: unknown) => {
       const notes = (view as Model).notes;
 
-      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
+      return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => a.localeCompare(b))) };
     };
 
     const letter = (note: string, base: number, body: string, by = { key: "SHA256:writer", for: "person-writer" }) =>
@@ -575,9 +576,7 @@ const walk = (
           kind === "json"
             ? `${value.slice(0, -1)}${step.secret}`
             : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
+              ? JSON.stringify(Rec.fromEntries(Rec.toEntries(json).filter(([f]) => f !== fields[n % fields.length])))
               : kind === "key"
                 ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
                 : kind === "accepted"

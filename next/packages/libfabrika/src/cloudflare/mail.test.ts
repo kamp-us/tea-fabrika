@@ -26,6 +26,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -546,7 +547,7 @@ const project = Effect.fnUntraced(function* () {
       bootstrap: [{ name: "counter:1", id: "counter:1", program: COUNTER }],
       door: () =>
         Effect.succeed(
-          Object.fromEntries(
+          Rec.fromEntries(
             [
               "connect",
               "challenge",

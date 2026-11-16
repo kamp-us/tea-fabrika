@@ -40,6 +40,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Rec from "effect/Record";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
@@ -1212,7 +1213,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         }
       }
 
-      for (const [name, value] of Object.entries(outputs)) {
+      for (const [name, value] of Rec.toEntries(outputs)) {
         const encoded = JSON.stringify(value, (_key, item: unknown) =>
           typeof item === "bigint"
             ? String(item)
@@ -1606,7 +1607,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     );
   }
 
-  for (const focus of Object.keys(moves) as Array<Focus>) {
+  for (const focus of Rec.keys(moves) as Array<Focus>) {
     it.effect(
       focus === "W1"
         ? "W1: an accepted or repeated tasks.finish wakes the requester's name after the write turn and before it answers; a failed wake answers refused unavailable and leaves the task finished; W2 and W2b: that wake joins the finish's trace, and each tasks call that reaches the tasks branch has one gateway.route span with its outcome"

@@ -1,7 +1,7 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Record as Rec, Schema, Sink, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -166,7 +166,7 @@ const results = {
   applied: null,
 } as const;
 
-for (const mode of Object.keys(results) as Array<keyof typeof results>) {
+for (const mode of Rec.keys(results) as Array<keyof typeof results>) {
   it(`grant ${mode} path preserves the signed fields and exact error reason`, async () => {
     await fc.assert(
       fc.asyncProperty(generated, async (data) => {

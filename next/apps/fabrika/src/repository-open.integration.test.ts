@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
+import { Effect, FileSystem, Path, Queue, Record as Rec, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -72,9 +72,7 @@ const reports = (text: string, commit: string, result: "ready" | "awaiting_trust
     const fields = Schema.decodeUnknownResult(Schema.Record(Schema.String, Schema.Unknown))(line);
 
     return (
-      Result.isSuccess(fields) &&
-      Object.values(fields.success).includes(result) &&
-      JSON.stringify(line).includes(commit)
+      Result.isSuccess(fields) && Rec.values(fields.success).includes(result) && JSON.stringify(line).includes(commit)
     );
   });
 

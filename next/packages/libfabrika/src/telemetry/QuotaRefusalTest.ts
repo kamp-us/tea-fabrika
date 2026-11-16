@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Archive, sha256 } from "./Archive.ts";
@@ -24,7 +25,7 @@ const Tape = Schema.Array(Schema.Struct({ pick: Nat, reopen: Schema.Boolean })).
 );
 
 const counts = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [

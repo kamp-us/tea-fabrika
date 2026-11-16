@@ -2,6 +2,7 @@
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -108,7 +109,7 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
       expect(text, row.name).not.toContain(mark);
     }
 
-    for (const value of Object.values(row.attributes)) {
+    for (const value of Rec.values(row.attributes)) {
       if (typeof value === "string") {
         expect(value.length, row.name).toBeLessThanOrEqual(128);
       }

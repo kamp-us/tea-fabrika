@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -106,7 +107,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
       out.push(...paths(one, [...at, String(i)]));
     }
   } else if (typeof value === "object" && value !== null) {
-    for (const [key, one] of Object.entries(value)) {
+    for (const [key, one] of Rec.toEntries(value)) {
       out.push(...paths(one, [...at, key]));
     }
   }
@@ -164,7 +165,7 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
       return change(value, parent, (p) =>
         Array.isArray(p)
           ? p.filter((_, i) => String(i) !== last)
-          : Object.fromEntries(Object.entries(Object(p)).filter(([k]) => k !== last)),
+          : Rec.fromEntries(Rec.toEntries(Object(p)).filter(([k]) => k !== last)),
       );
     }
 

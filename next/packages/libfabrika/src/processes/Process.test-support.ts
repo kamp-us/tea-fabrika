@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterAll } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -131,7 +132,7 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
     fc.constant(raw("noproc", reason)),
     fc
       .stringMatching(/^[a-z_]{1,20}$/)
-      .filter((tag) => !Object.hasOwn(ExitReason.cases, tag))
+      .filter((tag) => !Rec.has<string, unknown>(ExitReason.cases, tag))
       .map((tag) => raw(tag, reason)),
     fc.constant(raw("crashed")),
     fc.constant(raw("crashed", { error: "Error" })),

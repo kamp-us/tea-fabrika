@@ -24,6 +24,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result as R, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import type { From } from "../processes/Mailbox.ts";
 import { Command, type Task, type Result, State } from "../tasks/Task.ts";
@@ -326,7 +327,10 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
     expect(reply, `S2: another process's ask is refused id_reused and nothing else (${tape.state})`).toEqual(
       Reply.cases.refused.make({ reason: "id_reused" }),
     );
-    expect(Object.keys(reply).sort(), "S2: the refusal carries no receipt or result").toEqual(["_tag", "reason"]);
+    expect(Rec.keys<string, unknown>(reply).sort(), "S2: the refusal carries no receipt or result").toEqual([
+      "_tag",
+      "reason",
+    ]);
 
     const after = answered(yield* tasks((j) => j.read(id)), "the saved task still reads back");
     expect(after, `S2: another process's ask writes nothing (${tape.state})`).toEqual(before);

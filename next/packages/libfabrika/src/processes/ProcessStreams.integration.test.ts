@@ -1,7 +1,8 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import { Arbitrary, Effect, Predicate, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -128,8 +129,8 @@ describe("P33, every process event lives on a stream only the brain may write", 
           }),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         const rows = store.rows();
-        const events = rows.filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
-        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
+        const events = rows.filter((row) => Rec.has<string, unknown>(ProcessEvent.cases, row._tag));
+        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Rec.keys(ProcessEvent.cases)));
         expect(events.filter((row) => !brainSide(row.stream))).toEqual([]);
         // The start request's own id is a lifecycle line too.
         expect(rows.find((row) => row.id === "start:counter:1")?.stream).toSatisfy(brainSide);
@@ -362,8 +363,7 @@ describe("P33, an inbox read is total", () => {
     Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
 
-  const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+  const hasM = (body: unknown): body is { readonly m: unknown } => Predicate.isObject(body) && Rec.has(body, "m");
 
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(

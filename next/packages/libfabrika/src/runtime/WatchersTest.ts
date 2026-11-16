@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
@@ -58,7 +59,7 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
 /** Copy saved rows into `sql`'s watcher table, column for column. */
 const restore = (sql: Sql, saved: ReadonlyArray<Record<string, SqlValue>>) => {
   for (const row of saved) {
-    const columns = Object.keys(row);
+    const columns = Rec.keys(row);
     sql.exec(
       `INSERT INTO process_watchers (${columns.map((c) => `"${c}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
       ...columns.map((c) => row[c] ?? null),
@@ -223,7 +224,7 @@ export const suite = (database: Database) =>
               const [row] = rows(sql).filter((r) => r.name === "counter:fault");
               expect(row).toBeDefined();
 
-              const column = Object.keys(row ?? {}).find(
+              const column = Rec.keys(row ?? {}).find(
                 (k) => typeof (row ?? {})[k] === "string" && String((row ?? {})[k]).startsWith("{"),
               );
 

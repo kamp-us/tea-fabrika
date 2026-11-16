@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
+import { Effect, FileSystem, Layer, type Path, PlatformError, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -252,9 +252,9 @@ describe("P12 Rolldown build", () => {
       const built = await runNode(build({ out: join(home(), "dist") }));
       expect(built.brain).toEqual(expect.any(String));
       // P40: the app's own selections build under qualified names, the core counter as `fabrika/counter`.
-      expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+      expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-      for (const key of Object.keys(built.programs)) {
+      for (const key of Rec.keys(built.programs)) {
         expect(key, "one pack and one program segment").toMatch(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/);
       }
 

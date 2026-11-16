@@ -26,6 +26,7 @@ import {
   SchemaAST,
   SchemaRepresentation,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -120,7 +121,7 @@ const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
   const { made } = build(input);
 
   return Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -151,7 +152,7 @@ const target = (document: Json, ref: string) => {
   expect(ref.startsWith(prefix), ref).toBe(true);
   const name = decodeURIComponent(ref.slice(prefix.length)).replaceAll("~1", "/").replaceAll("~0", "~");
   const defs = document.$defs;
-  expect(Predicate.isObject(defs) && Object.hasOwn(defs, name), `${ref} names no definition`).toBe(true);
+  expect(Predicate.isObject(defs) && Rec.has(defs, name), `${ref} names no definition`).toBe(true);
 
   return (defs as Json)[name] as Json;
 };
@@ -170,7 +171,7 @@ const leaf = (document: Json, segments: ReadonlyArray<string>) =>
   segments.reduce<Json | undefined>((node, key) => {
     const properties = node === undefined ? undefined : resolve(document, node).properties;
 
-    return Predicate.isObject(properties) && Object.hasOwn(properties, key)
+    return Predicate.isObject(properties) && Rec.has(properties, key)
       ? resolve(document, (properties as Json)[key] as Json)
       : undefined;
   }, document);
@@ -180,7 +181,7 @@ const refs = (value: unknown): Array<string> =>
   Array.isArray(value)
     ? value.flatMap(refs)
     : Predicate.isObject(value)
-      ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
+      ? Rec.toEntries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
       : [];
 
 /** The generated document read back by Effect's own JSON Schema reader. */
@@ -432,7 +433,7 @@ describe("L4, generated local references resolve, with every definition present"
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);
 
           if (broken !== undefined) {
-            const [[table, keys]] = Object.entries(broken) as [[string, Record<string, unknown>]];
+            const [[table, keys]] = Rec.toEntries(broken) as [[string, Record<string, unknown>]];
             const document = { ...valid, [table]: { ...valid[table], ...keys } };
             expect(Exit.isFailure(Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" }))).toBe(
               true,

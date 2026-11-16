@@ -5,6 +5,7 @@
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -42,8 +43,8 @@ const clients = (fault: Error) => ({
   Bucket: BucketClient.make(rejecting(fault)),
 });
 
-const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, service]) =>
-  Object.keys(service).map((method) => `${client}.${method}`),
+const methods = Rec.toEntries(clients(new Error("probe"))).flatMap(([client, service]) =>
+  Rec.keys<string, unknown>(service).map((method) => `${client}.${method}`),
 );
 
 it.effect.prop(
@@ -78,7 +79,7 @@ it.effect.prop(
 // answer is `unreachable`, with Alchemy's RpcCallError kept as its cause. The methods come from the
 // client's own keys. Plants: map every failure to `unreachable`; build `unreachable` from the
 // thrown value alone, so the RpcCallError is dropped.
-const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
+const processMethods: ReadonlyArray<string> = Rec.keys(ProcessClient.make(rejecting(new Error("probe"))));
 
 /** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
 const answeringProcess = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
@@ -136,7 +137,7 @@ it.effect.prop(
 // above and error-cause.test.ts hold it.
 // Plants: no `errors: [LedgerError]` on the stub; map every failure to `unreachable`; keep the
 // thrown value and drop the RpcCallError.
-const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
+const calls = Rec.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
 
 /** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
 const answering = <A>(answer: unknown) =>

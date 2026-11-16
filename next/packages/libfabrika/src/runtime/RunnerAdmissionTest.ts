@@ -3,7 +3,8 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -93,7 +94,7 @@ const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
   if (typeof value === "string") {
     const prior = cache.get(value);
 
@@ -121,8 +122,8 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
 
   return Array.isArray(value)
     ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+    : Predicate.isObject(value)
+      ? Rec.values(value).flatMap((part) => texts(part, cache))
       : [];
 };
 
@@ -613,7 +614,7 @@ const walk = Effect.fnUntraced(function* (
   const check = Effect.fnUntraced(function* () {
     const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
-      versions: Object.fromEntries(versions),
+      versions: Rec.fromEntries(versions),
     });
 
     for (const prior of failures) {

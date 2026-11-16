@@ -15,6 +15,7 @@ import {
   Tracer,
   type Scope,
 } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -410,9 +411,9 @@ export const suite = (rig: Rig) =>
                     expect(JSON.stringify(logs[0])).toContain("DeliveryError");
                   }
 
-                  expect(
-                    JSON.stringify([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
-                  ).not.toContain(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
+                  expect(JSON.stringify([logs, spans.map((span) => Rec.fromEntries(span.attributes))])).not.toContain(
+                    JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1),
+                  );
                 }
 
                 yield* Fiber.interrupt(pending);

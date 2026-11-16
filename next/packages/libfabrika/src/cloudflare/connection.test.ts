@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
@@ -201,12 +202,12 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
 };
 
 const tableCounts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
+        String(name),
         db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
       ]),
   );
@@ -518,12 +519,12 @@ const t864Due = (db: DatabaseSync, now: number) =>
   );
 
 const t864Tables = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
+        String(name),
         db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
       ]),
   );
@@ -856,7 +857,7 @@ it.effect.prop(
           reached.add(category);
         }
 
-        expect([...reached].sort()).toEqual([...Object.keys(answerCases), "too_many_waits"].sort());
+        expect([...reached].sort()).toEqual([...Rec.keys(answerCases), "too_many_waits"].sort());
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },

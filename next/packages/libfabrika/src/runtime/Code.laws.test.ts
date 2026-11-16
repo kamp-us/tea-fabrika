@@ -22,6 +22,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
@@ -286,7 +287,7 @@ describe("P15 slice 1: the brain's code per program", () => {
         }
 
         // The machine's model is the walk's selection, whole.
-        expect(w.model).toEqual(Object.fromEntries(w.selected));
+        expect(w.model).toEqual(Rec.fromEntries(w.selected));
       }),
       { seed: SEED, numRuns: RUNS },
     );

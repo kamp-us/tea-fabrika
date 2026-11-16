@@ -25,6 +25,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -88,7 +89,7 @@ const SHAPES = {
 
 type Kind = keyof typeof SHAPES;
 
-const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
+const KINDS = Rec.keys(SHAPES) as ReadonlyArray<Kind>;
 
 type ListView = typeof SHAPES.list.Type;
 
@@ -581,7 +582,7 @@ describe("L5: client views (p3)", () => {
             expect(out).toEqual([{ type: "ask", pid: notice.pid }]);
           }
 
-          for (const [pid, shown] of Object.entries(next.views)) {
+          for (const [pid, shown] of Rec.toEntries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
             arrays += JSON.stringify(shown.view).includes("[") && shown.rev > 0 ? 1 : 0;
           }
@@ -635,11 +636,11 @@ describe("L5: client views (p3)", () => {
           expect(asks.length).toBeLessThanOrEqual(1);
           expect(asks.every((o) => o.pid === notice.pid)).toBe(true);
           expect(
-            Object.keys(next.views)
+            Rec.keys(next.views)
               .filter((p) => p !== notice.pid)
               .map((p) => next.views[p]),
           ).toEqual(
-            Object.keys(next.views)
+            Rec.keys(next.views)
               .filter((p) => p !== notice.pid)
               .map((p) => prev.c.views[p]),
           );
@@ -686,7 +687,7 @@ describe("L5: client views (p3)", () => {
             `${notice.pid}'s notice checked by ${w.log.join(",")}`,
           ).toBe(true);
 
-          for (const pid of Object.keys(next.views).filter((p) => p !== notice.pid)) {
+          for (const pid of Rec.keys(next.views).filter((p) => p !== notice.pid)) {
             expect(next.views[pid]).toBe(prev.c.views[pid]);
           }
         });

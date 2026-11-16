@@ -28,6 +28,7 @@ import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer } from "effect";
 import { Effect, Option, Schema, Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -196,7 +197,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
             const rolled = parts.rows(part(p), "rolled");
             expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
-            const values = Object.values(rolled[0] ?? {});
+            const values = Rec.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
               values.some((v) => typeof v === "number" && v >= CAP),

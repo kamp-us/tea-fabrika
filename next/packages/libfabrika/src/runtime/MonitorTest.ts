@@ -46,6 +46,7 @@ import {
   Schema,
   Scope,
 } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
@@ -203,7 +204,7 @@ const ROWS: ReadonlyArray<Relation.Change> = [
 ];
 
 /** Each writer may mail each reader. */
-const GRANTS = Object.fromEntries(TARGETS.map((t) => [t, [...READERS]]));
+const GRANTS = Rec.fromEntries(TARGETS.map((t) => [t, [...READERS]]));
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",

@@ -27,6 +27,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
@@ -394,7 +395,7 @@ describe("p101, no raw row is ever lost", () => {
           expect(lines).toHaveLength(8);
 
           for (const line of lines) {
-            expect(Object.keys(line).sort()).toEqual(["at", "error", "lag", "ms", "ok", "piece", "spanId"]);
+            expect(Rec.keys(line).sort()).toEqual(["at", "error", "lag", "ms", "ok", "piece", "spanId"]);
           }
 
           expect(lines.map((line) => [line["piece"], line["ms"], line["ok"]]).sort()).toEqual(

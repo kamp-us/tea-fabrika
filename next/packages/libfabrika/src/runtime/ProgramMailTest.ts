@@ -38,6 +38,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
@@ -140,8 +141,8 @@ const requesterName = (k: Pair) => `requester:${k}`;
 
 const responderName = (k: Pair) => `responder:${k}`;
 
-const REQUESTERS = Object.fromEntries(
-  PAIRS.map((k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
+const REQUESTERS = Rec.fromEntries(
+  PAIRS.map((k) => [String(k), mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
 
 const TimerModel = Schema.Struct({
@@ -213,14 +214,14 @@ const alarmPolicy = {
 };
 
 const PROGRAMS: Record<string, unknown> = {
-  ...Object.fromEntries(PAIRS.map((k) => [REQUESTERS[k].name, REQUESTERS[k]])),
+  ...Rec.fromEntries(PAIRS.map((k) => [REQUESTERS[k].name, REQUESTERS[k]])),
   [mailResponder.name]: mailResponder,
   [timerProgram.name]: timerProgram,
 };
 
 /** The host's closed grant: each requester reaches its own responder and a missing name; each
  *  responder reaches its own requester. */
-const GRANTS: Grants = Object.fromEntries(
+const GRANTS: Grants = Rec.fromEntries(
   PAIRS.flatMap((k) => [
     [requesterName(k), [responderName(k), GHOST]],
     [responderName(k), [requesterName(k)]],
@@ -512,7 +513,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           cap: 16_384,
           grants: {
             ...GRANTS,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               (world.records?.secrets ?? []).map((secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
             ),
           },

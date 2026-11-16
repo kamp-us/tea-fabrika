@@ -16,6 +16,7 @@ import {
   Logger,
   Path,
   PlatformError,
+  Record as Rec,
   References,
   Schema,
   Sink,
@@ -516,7 +517,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           port,
         };
 
-        const selected = Object.entries(overrides).filter(
+        const selected = Rec.toEntries(overrides).filter(
           ([field]) =>
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
@@ -543,7 +544,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           });
           const calls = w.calls.filter(([, path]) => path === folder || path === file);
           // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
-          const { port: _flag, ...founding } = Object.fromEntries(selected);
+          const { port: _flag, ...founding } = Rec.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
           const { port: _override, ...named } = overrides;
 

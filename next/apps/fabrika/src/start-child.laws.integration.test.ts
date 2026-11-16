@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Record as Rec, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -279,7 +279,7 @@ const outputText = (value: unknown): Array<string> => {
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
+    return Rec.toEntries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
   }
 
   return [];
@@ -771,7 +771,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
       outputs.log.push(...(printed ?? []));
 
-      for (const [output, texts] of Object.entries(outputs)) {
+      for (const [output, texts] of Rec.toEntries(outputs)) {
         if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }

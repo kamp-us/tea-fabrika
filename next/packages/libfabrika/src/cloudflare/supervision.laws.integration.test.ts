@@ -2,6 +2,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -387,7 +388,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
               cmds: [],
               inputs: {},
               writes: {},
-              ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+              ...(Rec.has(r.raw, "policy") ? { policy: r.raw.policy } : {}),
             };
 
             const decoded = Schema.decodeUnknownOption(Declaration)(r.described ?? raw);

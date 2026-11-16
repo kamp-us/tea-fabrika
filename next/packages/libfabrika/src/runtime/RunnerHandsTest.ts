@@ -41,6 +41,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -1216,7 +1217,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
         const law = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
           // A handler offered under each name, `hands` among them: a built-in Cmd's is never given.
-          const offered = Object.fromEntries(
+          const offered = Rec.fromEntries(
             [...names, "hands"].map((cmd) => [cmd, () => Effect.die(`B1: the ${cmd} handler ran`)]),
           );
 

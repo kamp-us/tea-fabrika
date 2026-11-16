@@ -20,7 +20,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Predicate, Record as Rec, Result, Schema, Stream, Tracer } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -44,7 +44,7 @@ const text = fc.string({ minLength: 1, maxLength: 100 });
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
   if (typeof value === "string") {
     const prior = cache.get(value);
 
@@ -72,8 +72,8 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
 
   return Array.isArray(value)
     ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+    : Predicate.isObject(value)
+      ? Rec.values(value).flatMap((part) => texts(part, cache))
       : [];
 };
 
@@ -505,7 +505,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
 const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
   expect(span.traceId).toBe(a.traceId);
   expect(Option.getOrThrow(span.parent).spanId).toBe(a.spanId);
-  expect(Object.fromEntries(span.attributes)).toEqual(attributes);
+  expect(Rec.fromEntries(span.attributes)).toEqual(attributes);
   expect(span.status._tag).toBe("Ended");
 
   if (span.status._tag === "Ended") {
