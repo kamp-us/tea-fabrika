@@ -1,5 +1,9 @@
 // The React Compiler check (exam item 13, C1 and C5): every skip and purity finding fails, and the
 // one way out is `"use no memo"` with a ledger row.
+// These laws were the exam's (next/apps/fabrika/src/exam/compiler.test.ts) until 0591 moved them beside
+// the check they read, which `pnpm lint:compiler` and the build share. Each view is a fixed input: the
+// eight planted views of the exam, each a case of the check's findings. Plant: ignore `"use no memo"`
+// with no row, and the no-row law fails.
 import { describe, expect, it } from "vitest";
 import { check, type Row } from "./compiler.ts";
 
@@ -34,26 +38,26 @@ const NAMED = [
 const ROW: Row = { file: "next/a.tsx", fn: "Tip", reason: "a planted row" };
 
 describe("the compile step's check", () => {
-  it("passes a view that compiles", () => {
+  it("scenario: passes a view that compiles", () => {
     expect(at("next/a.tsx", CLEAN)).toEqual([]);
   });
 
-  it("fails a skipped function, with its reason and line", () => {
+  it("scenario: fails a skipped function, with its reason and line", () => {
     expect(at("next/a.tsx", REF_IN_RENDER)).toEqual(["Tip:4 Cannot access refs during render"]);
   });
 
-  it('passes a function named with "use no memo" and a ledger row', () => {
+  it('scenario: passes a function named with "use no memo" and a ledger row', () => {
     expect(at("next/a.tsx", NAMED, [ROW])).toEqual([]);
   });
 
-  it('fails "use no memo" with no row', () => {
+  it('scenario: fails "use no memo" with no row', () => {
     expect(at("next/a.tsx", NAMED)).toEqual([
       expect.stringMatching(/^Tip:5 Cannot access refs/),
       expect.stringMatching(/^Tip:2 "use no memo" with no row/),
     ]);
   });
 
-  it("fails a stale row: no directive now, or no file", () => {
+  it("scenario: fails a stale row: no directive now, or no file", () => {
     expect(at("next/a.tsx", CLEAN, [ROW])).toEqual([
       expect.stringMatching(/^Tip:0 a stale row in compiler-ledger.json: this function/),
     ]);
@@ -62,19 +66,19 @@ describe("the compile step's check", () => {
     ]);
   });
 
-  it("fails a clock read in render", () => {
+  it("scenario: fails a clock read in render", () => {
     const text = ["export const Clock = () => <b>{Date.now()}</b>;"].join("\n");
     expect(at("next/a.tsx", text)).toEqual([
       expect.stringMatching(/^Clock:1 Cannot call impure function during render/),
     ]);
   });
 
-  it("counts lines in characters, not bytes, past non-ASCII text", () => {
+  it("scenario: counts lines in characters, not bytes, past non-ASCII text", () => {
     const text = ["// Görünüm: çok satırlı bir açıklama ✨", REF_IN_RENDER].join("\n");
     expect(at("next/a.tsx", text)).toEqual(["Tip:5 Cannot access refs during render"]);
   });
 
-  it("compiles a dropped store value with no word, so one-store-hook must hold it", () => {
+  it("scenario: compiles a dropped store value with no word, so one-store-hook must hold it", () => {
     const text = [
       "declare const useModel: (s: unknown) => number;",
       "declare const store: unknown;",
