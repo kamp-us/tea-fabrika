@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e56-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:51:37-08:00",
+  "ended": "2026-11-15T20:54:43-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one review of judgment slice E56 (extendsNativeError) of the Effect-checker sweep, in next/, at head aa54428657b942839a158b295e038c6113842844: merge-ready with one finding. The branch holds only the tests step's field row. The checker, run with only extendsNativeError at error through --lspconfig over all 13 tsconfigs in scope (.agents, .github/ci, oxlint-plugins, next/apps/fabrika, libfabrika, tuval, vitest and the six programs), found 6 hits, the tests row's 6 and the plan's 6, all in test files: libfabrika/src/cloudflare/platform.test.ts:15, cloudflare/supervision.laws.integration.test.ts:34, ledger/LedgerSpans.integration.test.ts:584, node/dev/supervision-spans.integration.test.ts:216, telemetry/Sink.integration.test.ts:1169 and apps/fabrika/src/runtime.laws.integration.test.ts:985. A grep for every class extending a native error in scope finds 8 classes; the other 2 are anonymous class expressions (runtime/RecoveryJournalTest.ts:73, runtime/RunnerSupervision.integration.test.ts:95) that the checker does not flag, which a --file run confirmed. Each of the 6 is a plain error standing for a throw from outside Effect, and a Data.TaggedError would break its law: Data.TaggedError takes a props object, not a message string, and adds a _tag; for NoteError, telemetry/Sink.ts summary() swaps a tagged error's message for its reason word, so the law's check that the message reaches unsent.content would fail. Nothing is hidden or disabled: no ignore or @effect-diagnostics line names the check anywhere, and loosening.sh found 0 hits. No lock was written, so the check stays off in these folders, as 0565 says a check that does not fit goes back to the owner; that choice (six reasoned ignore lines and a lock, or the check off for test files) is the owner's. One finding: the tests row's ended time, 20:52:00, is after its own commit at 20:50:52, so it is not a real reading.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3.1,
+  "note": "Three breaks planted by reading only, never run: NoteError, WireFault (platform.test.ts) and ProgramError (supervision.laws) as a Data.TaggedError; each law would go red, as the why says. Tests run at aa54428657b942839a158b295e038c6113842844: next/packages/libfabrika/src/cloudflare/platform.test.ts, 9 passed; next/packages/libfabrika/src/telemetry/Sink.integration.test.ts, 41 passed. node .github/ci/field-check.ts --local passed on the tests row, with warnings only. No typecheck: the branch changes no code. No pull request, by owner ruling.",
+  "step": "review"
+}
