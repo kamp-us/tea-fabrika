@@ -1,0 +1,87 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-transport-s2-tests1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T01:36:22-08:00",
+  "ended": "2026-11-16T01:58:06-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for slice 2 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md at 4a17276e0 on fabrikalfa/mock-plans, next/ only), on the new branch fabrikalfa/mock-transport-s2 cut from main at e9b103103 with the reviewed slice 1 (fdb4324d6) merged in. The plan read was redone on main after pull request 1366: the hello's admission did not move. checkHello still takes consume and admit callbacks (next/packages/libfabrika/src/transport/Hello.ts on main), the gateway's initializeChecked still closes them over one attempt's state (next/packages/libfabrika/src/gateway/Gateway.ts:545-599 on main), 1366's admit option (Gateway.ts:316) is the separate quota admission for process input, and cloudflare/bindings.ts:157-161 still reads initialize's success type from checkHello's return, so the plan's slice 2 shape fits as written. Laws written: H1 to H4 in transport/Hello.test.ts on Recorder.layer(Admissions, ...) and Layer.mock(Admissions, ...); H5 in gateway/GatewayCauseTest.ts, run by node/ErrorCause.test.ts on the real node:sqlite driver; K2 in node/client/KeyFile.laws.test.ts on Layer.mock(Admissions, ...); C6 in transport/ErrorCause.test.ts on Layer.mock(Admissions, ...). Every vi.fn, .mock.calls and toHaveBeenCalled* in Hello.test.ts is gone, so the transport folder holds no vi mock or call matcher (rg over next/packages/libfabrika/src/transport finds none). All old law titles are kept. L1, the folder's lock block in .oxlintrc.json and its plants in oxlint-plugins/builtin-plants.ts and oxlint-plugins/plants.test.ts, waits on node-s1 (fabrikalfa/mock-node-s1, not reviewed yet), whose shared VI_METHODS and VI_PROPERTIES sets and lock pair it extends; none of those three files is touched.",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: d2: any refused signed hello names its own checked fingerprint (H1)",
+      "red": "the file does not load: Cannot find module './Admissions.ts', the build's new file"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: p26: an unsigned tab or nonce claim, p26: changed trusted nonce, url, tab or name, p26/p82: signature, key, version or unknown refusal (H2)",
+      "red": "the file does not load: Cannot find module './Admissions.ts'"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: p26: a checked window goes online with the fold's identity and chosen version (H3)",
+      "red": "the file does not load: Cannot find module './Admissions.ts'"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: H4: a failing admission fails checkHello with that very AdmissionError, and consume is never run",
+      "red": "the file does not load: Cannot find module './Admissions.ts'"
+    },
+    {
+      "law": "next/packages/libfabrika/src/node/ErrorCause.test.ts (GatewayCauseTest suite): H5: a store throw inside the hello's admission reaches initialize's caller as AdmissionError, its cause the door's own Storage error",
+      "red": "expected 'GatewayError' to be 'AdmissionError': on main the door's own error passes through checkHello unwrapped; the other 29 laws in the file stay green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts: K2: the key file's identity passes the door's own hello check",
+      "red": "the file does not load: Cannot find module '../../transport/Admissions.ts'; K1 in the same file waits on the build the same way"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C6 scenario: with a WebCrypto whose digest rejects, checkHello on a signed hello fails with WebCryptoError",
+      "red": "the file does not load: Cannot find module './Admissions.ts'; C3 and C5 in the same file wait on the build the same way"
+    }
+  ],
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: d2 (H1)",
+      "plant": "return the admission's refusal without the fingerprint in transport/Hello.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: d2 (H1), the online law (H3) and H4",
+      "plant": "consume before admitting in transport/Hello.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: the ten H2 laws (unsigned tab and nonce, changed trusted nonce, url, tab and name, signature, key, version and unknown refusals)",
+      "plant": "admit before the signature check: admissions.admit(a.name) right after the hello decodes, in transport/Hello.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: H4",
+      "plant": "catch the admission error and answer refused not_granted, in transport/Hello.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/node/ErrorCause.test.ts: H5",
+      "plant": "map the admission's error to a new AdmissionError with no cause, in gateway/Gateway.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts: K2",
+      "plant": "compute the fingerprint over the key line instead of the raw bytes, in node/client/KeyFile.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C6 scenario (and C5)",
+      "plant": "read globalThis.crypto.subtle in transport/internal/binary.ts again",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Node 26.13.0, TYPESAFE_API_KEY unset, vitest at 3 workers under nice 15, one file at a time. The plants ran on a dry build, never committed: the plan's sketch of transport/Admissions.ts, checkHello asking for Admissions in transport/Hello.ts, and the gateway providing Admissions per attempt with Effect.mapError to AdmissionError in gateway/Gateway.ts, written in place from saved copies. On it the four files ran green: Hello.test.ts 26 of 26, transport/ErrorCause.test.ts 3 of 3, KeyFile.laws.test.ts 2 of 2, node/ErrorCause.test.ts 30 of 30. Each plant was one change on that build, one law run, then restored by copy; the dry build was then undone by copy, Admissions.ts deleted, and git status showed only the five test files. tsc --noEmit on next/packages/libfabrika/tsconfig.json on the dry build: no error in a test file; its only errors were Gateway.ts:2100 (initialize's error type lacks AdmissionError), the change the build owns and the dry build left out. Gap in the plan: its Files row says node/ErrorCause.test.ts needs no change, but H5 needs the real door, and gateway/ may not import ledger/ (0043 rule 11, eslint(no-restricted-imports) refused GatewayCauseTest.ts importing LedgerSql, LedgerTransactionSql and Ledger). So GatewayCauseTest's Harness gains a ledger field, typed from Gateway.layer's own needs minus what the suite builds, and node/ErrorCause.test.ts, the module that owns the driver, hands in LedgerSql and LedgerTransactionSql over the same Sql, as TasksTest's driver does: 8 lines there. pnpm format: clean. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 16 of 18 parts passed in the full run; lint:kind and lint:promise-types died with EPIPE, then each passed run alone (lint:promise-types 0 findings). lint:layers lists the three test imports of the not yet written transport/Admissions.ts as unresolved, which the build's file resolves. The list ratchet against e9b103103 exits 0. No law here sends a signal, is host-only or is an .integration. file, and the 0178 guard refused nothing.",
+  "step": "tests"
+}

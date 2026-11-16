@@ -11,13 +11,30 @@
 // state row that does not decode), `GatewayNonce.ts:26` (a saved key that does not decode, and one
 // of the wrong length, which has no cause), `GatewayNonce.ts:29` (the one WebCrypto callback that
 // importKey, sign and verify share).
+//
+// Ticket 1067 slice 2, H5: the door hands `checkHello` its admission as the transport's
+// `Admissions` service, whose one error is `AdmissionError`. A failure inside the door's admission
+// reaches `initialize`'s caller as that `AdmissionError`, with the door's own error as its cause.
 import { describe, expect } from "@effect/vitest";
-import { Effect, Predicate, Result, Schema } from "effect";
-import { Base64Url } from "effect/encoding";
+import { Effect, Layer, Predicate, Result, Schema } from "effect";
+import { Base64, Base64Url } from "effect/encoding";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as fc from "fast-check";
+import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
+import * as Id from "../Id.ts";
+import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import type { Sql } from "../Sql.ts";
+import { Tasks } from "../tasks/Tasks.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
+import { helloText } from "../transport/Hello.ts";
+import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
+import { Gateway } from "./Gateway.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
+import * as RateLimiterSql from "./RateLimiterSql.ts";
 
 /** A failure as a platform gives one: an Error, a subclass with its own cause, or a plain object. */
 const failures: fc.Arbitrary<object> = fc.oneof(
@@ -26,10 +43,19 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-/** What the module that owns the driver gives: fresh storage. */
+/** Every service the door's layer needs, read from its own type. */
+type Needs = Layer.Services<ReturnType<typeof Gateway.layer<Schema.Json, never, never, never>>>;
+
+/**
+ * What the module that owns the driver gives: fresh storage, and the ledger's layers over it. The
+ * door's module never imports `ledger/` (0043 rule 11), so the ledger's part of the door comes in
+ * here: every service the door needs that this suite does not build itself.
+ */
 export type Harness = {
   /** A fresh, empty database. */
   readonly fresh: () => Sql;
+  /** The ledger's layers over `sql`. */
+  readonly ledger: (sql: Sql) => Layer.Layer<Exclude<Needs, Layer.Success<ReturnType<typeof own>>>>;
 };
 
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
@@ -40,6 +66,18 @@ const throwing = (sql: Sql, failure: unknown): Sql => ({
   ...sql,
   transaction: () => {
     throw failure;
+  },
+});
+
+/** The same `Sql`, but once `armed.on` is set, each transaction throws `failure`. */
+const throwingWhenArmed = (sql: Sql, armed: { readonly on: boolean }, failure: unknown): Sql => ({
+  ...sql,
+  transaction: (step) => {
+    if (armed.on) {
+      throw failure;
+    }
+
+    return sql.transaction(step);
   },
 });
 
@@ -93,7 +131,112 @@ const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unkno
 const TTL = 60_000;
 const CAP = 100;
 
-export const suite = (law: Law, { fresh }: Harness) => {
+// A shared suite is not a `*.test.ts` file, so its own failures are tagged like product code's.
+class KeyFailed extends Schema.TaggedError<KeyFailed>()("KeyFailed", { cause: Schema.Defect() }) {}
+
+const keyFailed = (cause: unknown) => new KeyFailed({ cause });
+
+/** RFC 4251's `string`: a u32 length, then the bytes. */
+const sshString = (bytes: Uint8Array) => {
+  const out = new Uint8Array(4 + bytes.length);
+  new DataView(out.buffer).setUint32(0, bytes.length);
+  out.set(bytes, 4);
+  return out;
+};
+
+const hashed = Effect.fnUntraced(function* (bytes: Uint8Array) {
+  const value = new Uint8Array(bytes);
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes a generated public key
+  const hash = yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", value), catch: keyFailed });
+  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+});
+
+/** A fresh Ed25519 client key: its raw base64url form, its line, both fingerprints, and its signer. */
+const clientKey = Effect.fnUntraced(function* () {
+  const s = crypto.subtle;
+  const uses = ["sign", "verify"] as const;
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto generates the law's key
+  const pair = yield* Effect.tryPromise({ try: () => s.generateKey("Ed25519", false, uses), catch: keyFailed });
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the generated public key
+  const exported = yield* Effect.tryPromise({ try: () => s.exportKey("raw", pair.publicKey), catch: keyFailed });
+  const raw = new Uint8Array(exported);
+  const name = sshString(new TextEncoder().encode("ssh-ed25519"));
+  const blob = new Uint8Array([...name, ...sshString(raw)]);
+  const line = yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const sign = (bytes: Uint8Array) =>
+    // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs with the generated test key
+    Effect.tryPromise({ try: () => s.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)), catch: keyFailed }).pipe(
+      Effect.map((signature) => new Uint8Array(signature)),
+    );
+  return {
+    raw: Base64Url.encode(raw),
+    line,
+    fingerprint: yield* hashed(raw),
+    by: yield* hashed(blob),
+    hello: (url: string, tab: string, nonce: string) =>
+      writeSshsig({ text: helloText({ url, tab, nonce }), space: "fabrika-client", line, sign }),
+  };
+});
+
+const DOOR = "https://fabrika.test/h5";
+const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
+type Owner = Parameters<typeof ClientManagerLedger.layer>[0];
+
+/** The door's layers this suite builds itself, over `sql`; the membership reads the ledger. */
+const own = (sql: Sql, owner: Owner) =>
+  Layer.mergeAll(
+    ClientManagerLedger.layer(owner),
+    SpanSink.layer(sql, { object: PROCESS }),
+    RecordManager.memory(4 * 1024 * 1024),
+    Archive.memory,
+    Layer.mock(MailWakeups, {}),
+    Layer.mock(Tasks, {}),
+    ProcessIdGenerator.layer,
+    Id.Generator.layer,
+    RateLimiter.layer.pipe(
+      Layer.provide(RateLimiterSql.layer(sql, { build: "h5", policy: { limit: 100_000, window: 60_000 } })),
+    ),
+  );
+
+/**
+ * The real door over `sql`, its ledger from the harness. `door` is the `Sql` the gateway's own store
+ * runs on; the ledger and the rest read `sql` itself.
+ */
+const doorOver = (harness: Harness, sql: Sql, door: Sql, founder: Effect.Success<ReturnType<typeof clientKey>>) => {
+  const owner: Owner = {
+    name: "h5",
+    person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    keys: [founder.line],
+    window: null,
+    by: founder.by,
+    build: "h5",
+  };
+  const ledger = harness.ledger(sql);
+  return Gateway.layer<Schema.Json, never, never, never>({
+    sql: door,
+    founder: owner,
+    name: "h5",
+    url: DOOR,
+    origins: ["https://fabrika.test"],
+    versions: [1],
+    location: "test",
+    build: "h5",
+    waiting: { most: 20, ttl: 600_000 },
+    rateLimit: { limit: 100_000, window: 60_000 },
+    ping: { min: 10_000, max: 60_000 },
+    inputCap: 1000,
+    spentCap: 1000,
+    nextProcess: () => Effect.succeed(PROCESS),
+    deliver: () => Effect.void,
+    notify: () => Effect.void,
+    inputs: { schema: Schema.Json, personOnly: [], raw: [] },
+    events: { personOnly: [] },
+  }).pipe(Layer.provide(own(sql, owner).pipe(Layer.provideMerge(ledger))));
+};
+
+export const suite = (law: Law, harness: Harness) => {
+  const { fresh } = harness;
   describe("T695, the door's store keeps what failed", () => {
     // C1, GatewayStore.ts:27. Plant: build the `Storage` reason without the caught value.
     law(
@@ -202,6 +345,57 @@ export const suite = (law: Law, { fresh }: Harness) => {
             expect(error.reason._tag).toBe("Crypto");
             expect(error.reason.cause).toBe(failure);
           }
+        }),
+    );
+  });
+
+  describe("T695, the door's hello admission keeps what failed (ticket 1067 slice 2)", () => {
+    // H5, Gateway.ts `initializeChecked`: the door provides `Admissions` per attempt and wraps its own
+    // admission errors as `AdmissionError` with the cause kept. A hello that passes every check
+    // reaches admission, whose first step is the store's atomic nonce spend; the door's store throws
+    // there, so the door's own `Storage` error is what admission failed with. Plant: map the error
+    // to a new `AdmissionError` with no cause.
+    law(
+      "H5: a store throw inside the hello's admission reaches initialize's caller as AdmissionError, its cause the door's own Storage error",
+      fc.record({ failure: failures, tab: fc.string({ minLength: 1, maxLength: 20 }) }),
+      ({ failure, tab }) =>
+        Effect.gen(function* () {
+          const sql = fresh();
+          // Armed once the challenge is issued: no store transaction runs after it before admission.
+          const armed = { on: false };
+          const door = throwingWhenArmed(sql, armed, failure);
+          const key = yield* clientKey();
+          const error = yield* Effect.gen(function* () {
+            const gateway = yield* Gateway;
+            const client = yield* gateway.connect();
+            const nonce = yield* gateway.challenge(client);
+            const hello = {
+              versions: [1],
+              has: [],
+              ping: "30s",
+              key: key.raw,
+              tab,
+              nonce,
+              platform: "headless",
+              os: "linux",
+              sentAt: "2026-11-16T10:00:00.000Z",
+              signed: yield* key.hello(DOOR, tab, nonce),
+            };
+            armed.on = true;
+            return yield* Effect.flip(gateway.initialize(client, hello, { url: DOOR, tab, name: key.fingerprint }));
+          }).pipe(Effect.provide(doorOver(harness, sql, door, key)));
+          const found = chain(error);
+          expect(Predicate.hasProperty(found[0], "_tag") ? found[0]._tag : null).toBe("AdmissionError");
+          const inner = found[1];
+          expect(Predicate.hasProperty(inner, "_tag") ? inner._tag : null, "its cause is the door's own error").toBe(
+            "GatewayError",
+          );
+          expect(
+            Predicate.hasProperty(inner, "reason") && Predicate.hasProperty(inner.reason, "_tag")
+              ? inner.reason._tag
+              : null,
+          ).toBe("Storage");
+          expect(found[2], "the door's error keeps the store's throw").toBe(failure);
         }),
     );
   });

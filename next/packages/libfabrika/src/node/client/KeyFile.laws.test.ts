@@ -19,6 +19,8 @@
 //
 // Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
 // the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
+// K2's door admits through `Layer.mock(Admissions, ...)`, the service `checkHello` asks for (ticket
+// 1067 slice 2).
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -28,6 +30,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
+import { Admissions } from "../../transport/Admissions.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { checkHello, helloText } from "../../transport/Hello.ts";
 import { writeSshsig } from "../../transport/Sshsig.ts";
@@ -306,12 +309,19 @@ describe("P39 slice 4b: the hands key file", () => {
               name: key.fingerprint,
               versions: [1],
               ping: { min: 1000, max: 60_000 },
-              consume: () => true,
-              admit: (fingerprint) =>
-                Effect.succeed(
-                  Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
-                ),
-            });
+            }).pipe(
+              Effect.provide(
+                Layer.mock(Admissions, {
+                  consume: Effect.succeed(true),
+                  admit: (fingerprint) =>
+                    Effect.succeed(
+                      Admission.cases.admitted.make({
+                        identity: { key: fingerprint, person: "person_k2", as: "hands" },
+                      }),
+                    ),
+                }),
+              ),
+            );
             expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
           }),
         { numRuns: 60 },
