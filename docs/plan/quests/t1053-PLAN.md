@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0215, 0209, 0214, 0562, 0563; body 05d0ea07f3e0
+Approved by the lead agent, builds 0215, 0209, 0214, 0562, 0563; body ab95bb59dc48
 Plancheck-Version: 3
 
 # Plan: the 97 `unknown` parameters in product code get a type, one Schema per wire value (ticket 1053)
@@ -375,6 +375,7 @@ calls `p.publish(client, { method: "gateway.waiting", params: waiting })`. Once 
 | next/packages/libfabrika/src/gateway/TasksTest.ts next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | the kept notices are `News` |
 | next/apps/fabrika/src/door.integration.test.ts next/apps/fabrika/src/checklist-instance.laws.integration.test.ts next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | tests | read a notice with `News.guards` or `News.match` and its fields, never by searching its JSON text; build `News` with `make` |
 | next/packages/libfabrika/src/runtime/Patch.test.ts next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/client/Tezgah.laws.test.ts next/packages/libfabrika/src/client/WindowMachine.laws.test.ts next/programs/checklist/src/client.laws.test.ts | tests | tests | only if the typecheck asks: a value handed to `diff` is typed as JSON |
+| next/apps/fabrika/src/instance-wire.integration.test.ts | tests | tests | reads the waiting notice's wire; stays green in CI's full run, changed only if the typecheck asks |
 
 `cloudflare/platform.ts` and `cloudflare/ConnectionObject.ts` need no edit: their `news` takes its
 type from the binding and the shape.
