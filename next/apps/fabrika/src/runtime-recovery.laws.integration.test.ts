@@ -13,6 +13,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Program } from "@kampus/libfabrika/runtime/Program";
 import { send } from "@kampus/libfabrika/runtime/Send";
@@ -20,6 +21,8 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import { Attached } from "@kampus/libfabrika/transport/Wire";
+import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
   commitReply,
   configureProcess,
@@ -472,6 +475,8 @@ const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
+  // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
+  values: StartsTest.Values = {},
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
@@ -599,6 +604,7 @@ const world = (
         port: 18787,
         build: "brain-test",
         mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+        values,
       }),
     ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
@@ -868,6 +874,11 @@ const world = (
     return found[1];
   };
   return {
+    localUsage: (pid: string) =>
+      QuotasSql.accounting(nodeSql(processFor(pid).db), {
+        name: nameFor(pid)!,
+        limits: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
+      }).status,
     close: async () => {
       const index = closers.indexOf(close);
 
@@ -1013,6 +1024,79 @@ const world = (
         ),
       ).toMatchObject({ _tag: "online" });
       return client;
+    },
+    /**
+     * The live door: the real Connection service on its own store, with one hibernating socket that
+     * says hello as a window does. Each call is one JSON-RPC frame, answered the way the wire says.
+     */
+    door: async () => {
+      const doorDb = new DatabaseSync(":memory:"),
+        handles = storage(doorDb),
+        frames: Array<string> = [],
+        // A session is named as a process is (fetch takes it from ProcessIdGenerator).
+        session = "process_01m6v5270hf3c8x2q7w9z4k5mp",
+        tab = "door-test";
+      const client = await project.clientConnect(),
+        nonce = await project.challenge(client);
+      let attached: unknown = Attached.cases.new.make({ client, nonce });
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
+      const socket = {
+        deserializeAttachment: () => attached,
+        serializeAttachment: (next: unknown) => {
+          attached = next;
+        },
+        send: (frame: string) => {
+          frames.push(frame);
+        },
+        close: () => {},
+      } as unknown as WebSocket;
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
+      const doorCtx = {
+        id: { name: "gateway-test" },
+        storage: handles,
+        getWebSockets: () => [socket],
+        getTags: () => [session, tab, key.fingerprint],
+        getWebSocketAutoResponseTimestamp: () => null,
+        setWebSocketAutoResponse: () => {},
+        exports: loopbacks,
+      } as unknown as DurableObjectState;
+      const runtime = connectionRuntime(doorCtx, env);
+      await project.register(client, "gateway-test", session);
+      let id = 0;
+      const call = async (method: string, params: unknown) => {
+        id++;
+        await runtime.runPromise(
+          ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
+        );
+        const answer = frames.map((frame) => JSON.parse(frame)).find((frame) => frame.id === id);
+        return answer === undefined
+          ? undefined
+          : "result" in answer
+            ? { _tag: "ok", result: answer.result }
+            : { _tag: "refused", reason: answer.error.data.reason };
+      };
+      expect(
+        await call("initialize", {
+          versions: [1],
+          has: ["seal"],
+          ping: "30s",
+          key: key.raw,
+          tab,
+          nonce,
+          platform: "headless",
+          os: "linux",
+          sentAt: SENT,
+          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+        }),
+      ).toMatchObject({ _tag: "ok" });
+      return {
+        db: doorDb,
+        call,
+        close: async () => {
+          await runtime.dispose();
+          doorDb.close();
+        },
+      };
     },
     start: () =>
       project.start(
@@ -1799,3 +1883,133 @@ it("scenario: W3, an evicted sender retries its owed Send from its alarm and add
   w.holdAlarm(requester, false);
   await oneExchange(w, requester, responder, "held-sender");
 }, 30_000);
+
+const QuotaCell = Schema.Struct({
+  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
+  reopen: Schema.Boolean,
+});
+
+const QuotaTape = Schema.Array(QuotaCell).check(Schema.isMinLength(3), Schema.isMaxLength(12));
+
+// The Project and Process implementations are real. Only object handles and loader RPC are supplied.
+describe("P34c live object accounting", () => {
+  effect.effect.prop(
+    "Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved",
+    { tape: QuotaTape },
+    ({ tape }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          // The objects' own runtimes read Effect's default Clock, which reads `Date.now()`, and the
+          // span sink keys its refusal counts, size rows and rollups by that clock's hour. A run that
+          // crossed an hour wrote that hour's rows mid-tape and went red with no refusal at fault.
+          // The wall clock starts at the top of SENT's hour and moves at real speed, so a run (well
+          // under its 120 s timeout) stays in one hour.
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+              vi.setSystemTime(Date.parse(SENT));
+            }),
+            () => Effect.sync(() => vi.useRealTimers()),
+          );
+          const w = yield* Effect.acquireRelease(
+            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            (w) => Effect.promise(() => w.close()),
+          );
+          yield* Effect.promise(() => w.project.info());
+          const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+          // The window's socket on the real Connection service: the live caller that counts a refusal (0143).
+          const door = yield* Effect.acquireRelease(
+            Effect.promise(() => w.door()),
+            (door) => Effect.promise(() => door.close()),
+          );
+          // `letter` is the door's own key for the message id (0547 keeps wire names).
+          const send = (pid: string, id: string) =>
+            Effect.promise(() =>
+              door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+            );
+          expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+            view: { count: 1 },
+          });
+          const local = yield* w.localUsage(pid);
+          expect(local.program.writes).toBeGreaterThan(0);
+          expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
+          const counts = (db: DatabaseSync) =>
+            Object.fromEntries(
+              db
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+                .all()
+                .map(({ name }) => [
+                  String(name),
+                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                ]),
+            );
+
+          // Both stores' row counts, read straight around each refused send. The checks between sends
+          // (the traced open below, a reopen) write their own span rows, so no count spans them.
+          const both = () => ({ project: counts(w.db), process: counts(w.process(pid).db) });
+          // The first refusal may open this hour's refusal count in `sums`; no other table may grow.
+          const withoutSums = ({ project, process }: ReturnType<typeof both>) => ({
+            project: { ...project, sums: null },
+            process: { ...process, sums: null },
+          });
+          // The door object's refusal counts (0143). The pinned clock keeps every one in SENT's hour, and
+          // a quota refusal is counted under `other`, so a count anywhere else is a wrong count.
+          const refusals = () => {
+            const rows = door.db.prepare("SELECT hour, refused, count FROM sums").all();
+            return {
+              total: rows.reduce((sum, row) => sum + Number(row.count), 0),
+              elsewhere: rows.filter((row) => row.hour !== Date.parse(SENT) || row.refused !== "other").length,
+            };
+          };
+
+          // The door object's span rows (0143: a quota refusal leaves no span rows). A refusal is only
+          // counted in `sums`, so neither an unsent span nor a measurements row may land for it.
+          const doorRows = () => {
+            const rows = counts(door.db);
+            return { unsent: rows["unsent"] ?? 0, measurements: rows["measurements"] ?? 0 };
+          };
+
+          for (const [n, c] of tape.entries()) {
+            const before = both();
+            const counted = refusals();
+            const doorBefore = doorRows();
+            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
+            const after = both();
+            const doorAfter = doorRows();
+
+            // Plant: Connection.ts ordinary() leaves `quota` off the frame span's refused tag, so the
+            // connection.frame span lands as an unsent row and one measurements row; red here.
+            expect(doorAfter, `refusal ${n} saved a span row in the door's store`).toEqual(doorBefore);
+
+            // Plant (countRefusal answers false, Sink.ts): the refused call is never counted, red here.
+            expect(refusals().total, `refusal ${n} was not counted`).toBeGreaterThan(counted.total);
+            expect(refusals().elsewhere, `refusal ${n} was counted outside its hour or tag`).toBe(0);
+
+            // Plant: a refused send that lands an envelope, a binding, a reply or a step as a row goes red here.
+            if (n === 0) {
+              expect(withoutSums(after), "the first refusal saved a row outside its hourly count").toEqual(
+                withoutSums(before),
+              );
+            } else {
+              expect(after, `refusal ${n} saved a row`).toEqual(before);
+            }
+
+            expect(yield* w.localUsage(pid)).toEqual(local);
+            expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+              view: { count: 1 },
+            });
+
+            if (c.reopen) {
+              yield* Effect.promise(() => w.reopenAll());
+            }
+          }
+
+          // A different checked program has its own room in the same Project.
+          const counterPid = w.attempts.find((d) => d.name === "counter:1")!.id;
+          expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        }),
+      ),
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
+  );
+});
