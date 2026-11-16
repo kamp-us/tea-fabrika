@@ -6,8 +6,6 @@
  *
  * @stability unstable
  */
-import * as Predicate from "effect/Predicate";
-
 /**
  * A stub of `A`. A name in `own` answers as `own` has it, `then` and symbol keys answer undefined,
  * and every other name answers `rest(name)`.
@@ -19,14 +17,17 @@ export const make = <A extends object>(
   rest: (method: string) => (...args: ReadonlyArray<unknown>) => unknown,
   own: Partial<A> = {},
 ): A => {
-  const members: object = own;
-  return new Proxy<A>(Object.create(null), {
+  const members: Readonly<Record<string, unknown>> = own;
+  // Sound: the Proxy answers every key through the trap below, and a test uses a stub only through
+  // the members it names, so the empty target never shows through as an `A`.
+  const target = Object.create(null) as A;
+  return new Proxy<A>(target, {
     get: (_target, key) => {
       if (typeof key === "symbol" || key === "then") {
         return undefined;
       }
 
-      return Predicate.hasProperty(members, key) ? members[key] : rest(key);
+      return Object.hasOwn(members, key) ? members[key] : rest(key);
     },
   });
 };

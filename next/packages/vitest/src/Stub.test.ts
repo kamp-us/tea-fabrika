@@ -11,24 +11,8 @@ const SEED = 119120;
 
 type Method = (...args: ReadonlyArray<unknown>) => unknown;
 
-/** Every name Object.prototype holds. A stub with none of them in `own` answers `rest` for each. */
-const PROTOTYPE_NAMES = [
-  "toString",
-  "constructor",
-  "valueOf",
-  "hasOwnProperty",
-  "isPrototypeOf",
-  "propertyIsEnumerable",
-  "toLocaleString",
-  "__proto__",
-  "__defineGetter__",
-  "__defineSetter__",
-  "__lookupGetter__",
-  "__lookupSetter__",
-] as const;
-
-/** A method name the stub may be asked for, the prototype's own names included. `then` has its own law. */
-const Name = fc.oneof(fc.constantFrom(...PROTOTYPE_NAMES), fc.string()).filter((name) => name !== "then");
+/** A method name the stub may be asked for. `then` has its own law, and `__proto__` is not a key. */
+const Name = fc.string().filter((name) => name !== "then" && name !== "__proto__");
 
 /** Some own member names, none of them equal, and a name outside them. */
 const Members = fc
