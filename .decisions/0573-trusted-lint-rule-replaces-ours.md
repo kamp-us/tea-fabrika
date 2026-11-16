@@ -63,8 +63,9 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
     [0562](0562-nothing-teaches-the-wrong-shape.md). That file leaves open which rule holds the ban;
     this one says theirs.
   - `no-redacted-value`, to oxlint's `no-restricted-properties` on `Redacted.value`.
-  - `no-secret-env`, to the checker's `processEnv` and `processEnvInEffect`, folder by folder as each
-    reaches zero. Tests and tooling are not left out.
+  - ~~`no-secret-env`, to the checker's `processEnv` and `processEnvInEffect`, folder by folder as
+    each reaches zero. Tests and tooling are not left out.~~ Wrong: it stays, since theirs misses
+    a destructured read (amendment 2026-11-16, second).
   - `no-expect-in-if`, to oxlint's `vitest/no-conditional-expect`, folder by folder.
 - **Also go, where theirs is the same or wider:**
   - `no-implicit-effect-concurrency`, to the checker's `missingConcurrencyOption`, after
@@ -133,3 +134,12 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
   more, keeps both. The proof is the Effect sweep's E89 review row,
   `field/runs/2026-11-16-effect-e89-review1.json` on `fabrikalfa/effect-e89`. Ruled by the merge
   session's coordinator for E89, as an application of the owner's principle here, not a new call.
+- 2026-11-16, second: `no-secret-env` stays, beside the checker's `processEnv` and
+  `processEnvInEffect`. The list above sent it to them, and that was wrong. A probe with both
+  checks at error flagged `process.env.GITHUB_TOKEN`, `process.env["GITHUB_TOKEN"]` and
+  `process?.env.GITHUB_TOKEN`, but not `const { GITHUB_TOKEN } = process.env`, nor the same inside
+  `Effect.sync`. Ours refuses the destructured form (`oxlint-plugins/no-secret-env.ts`, its
+  `VariableDeclarator` handler), and it also runs on today's version, outside the checker. So this
+  decision's own principle keeps ours. The proof is the Effect sweep's E86 review row,
+  `field/runs/2026-11-16-effect-e86-review.json` on `fabrikalfa/effect-e86`. It applies the owner's
+  principle, as the first 2026-11-16 amendment did, and is not a new call.
