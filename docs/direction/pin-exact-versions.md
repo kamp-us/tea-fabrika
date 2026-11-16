@@ -40,6 +40,7 @@ $ echo $?
   URL, an `npm:` alias. None of those is in the tree today, so there are no exceptions to carry.
 - **`workspace:*` passes, and `workspace:^` does not.** `workspace:*` is the sibling in this repo,
   never a release from the registry. In a pack, pnpm writes that sibling's exact version.
+- **A named catalog's pointer is exact as well.** `catalog:old` passes, since its entry in `pnpm-workspace.yaml` is checked exact.
 - **Peers use `catalog:` too.** A pack holds the version, not the word: pnpm swaps it on `pnpm pack`
   and `pnpm publish`.
 - **`savePrefix: ''` makes `pnpm add` write exact.** The default is `^`. Tried with a real `pnpm add`

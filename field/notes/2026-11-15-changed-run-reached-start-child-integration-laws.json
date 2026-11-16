@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-15-changed-run-reached-start-child-integration-laws",
+  "what": "A step agent ran vitest run --changed on the owner's laptop, and the run reached next/apps/fabrika/src/start-child.laws.integration.test.ts, a real-Worker law, which ran for about two minutes. The agent had not named the file; --changed's import graph picked it. Which step ran it was not recorded.",
+  "date": "2026-11-15",
+  "quests": [],
+  "stage": "harness",
+  "kind": "failure",
+  "cause": "Decision 0178 and AGENTS.md said it only in prose, and the 0410 guard in vitest.config.ts let any narrow path or --changed run through, whatever it reached. A brief line did not stop it.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "The test config refuses, outside CI, any local Vitest run whose resolved files include a *.integration.test.ts or *.visual.test.ts file, named by path, picked by a project or reached through --changed (vitest.config.ts, hostOnly). The one way in is FABRIKA_HOST_RUN_OWNER_APPROVED=1, after 0178's read and yes.",
+  "test": "scripts/caps.test.ts, 'host-only laws stay off the laptop': four laws that ask vitest list --filesOnly for the file list, each with a plant.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0178-host-only-laws-run-first.md"
+  ]
+}

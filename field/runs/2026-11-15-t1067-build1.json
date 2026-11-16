@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T18:29:18-08:00",
+  "ended": "2026-11-15T18:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step for ticket 1067 in next/ and our tooling: wrote next/packages/vitest/src/Recorder.ts (layer, both forms of calls, and Method, Args, Failure, Call, Fails, Recorded), exported it from the package index, and added the package description, the glossary row and the pattern doc .patterns/a-law-watches-calls-with-a-recorder.md. R1 to R13 green, one file at a time. The module holds no type assertion: impl goes through a Proxy into Effect's own Layer.mock, the store keeps plain { method, args } entries, and calls reads them back through two overload signatures. Every plant of R1 to R11 was run again on the real module and each was red.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Three calls the plan left open: Layer.unwrap over a fresh Ref in place of Layer.effectContext, so each build starts empty (85%); impl is typed Layer.PartialEffectful<S> & object, since a Proxy needs an object and the generic Simplify type does not prove one (85%); a method in fails that impl leaves out dies with UnimplementedError, because whether it answers an Effect or a Stream is read from impl's own answer (80%). R1 to R4 plants were run with the vitest package's own tsc, not a whole pnpm typecheck.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "R1",
+      "plant": "real module: Method<S> widened to string; the exact-keys check fails and the @ts-expect-error lines go unused in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R2",
+      "plant": "real module: Args made ReadonlyArray<unknown>; the tuple checks fail in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "real module: Fails values made unknown; both @ts-expect-error lines go unused in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R4",
+      "plant": "real module: the first calls overload given an environment of never; the Recorded<Shelf> check fails in tsc",
+      "result": "red"
+    },
+    {
+      "law": "R5",
+      "plant": "real module: record only a method's first call; R5, R6 and R8 red",
+      "result": "red"
+    },
+    {
+      "law": "R5",
+      "plant": "real module: drop a call's last arg; R5, R6, R8, R9 and R10 red",
+      "result": "red"
+    },
+    {
+      "law": "R6",
+      "plant": "real module: run the implementation before failing; R6 red",
+      "result": "red"
+    },
+    {
+      "law": "R6",
+      "plant": "real module: add one to the implementation's number answer; R6 red",
+      "result": "red"
+    },
+    {
+      "law": "R7",
+      "plant": "real module: calls(Service, m) answers its list reversed; R7 red",
+      "result": "red"
+    },
+    {
+      "law": "R8",
+      "plant": "real module: record when the function is called; R6 and R8 red",
+      "result": "red"
+    },
+    {
+      "law": "R9",
+      "plant": "real module: Stream members passed through unwatched; R5, R6 and R9 red",
+      "result": "red"
+    },
+    {
+      "law": "R10",
+      "plant": "real module: one store at module level; R5, R6, R8, R9 and R10 red",
+      "result": "red"
+    },
+    {
+      "law": "R11",
+      "plant": "real module: impl as unknown as PartialEffectful<S> & object at the Proxy; fabrika(no-type-assertions) fires at line 114",
+      "result": "red"
+    }
+  ],
+  "step": "build"
+}

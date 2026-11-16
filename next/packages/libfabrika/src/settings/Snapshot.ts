@@ -44,7 +44,7 @@ export type Snapshot = typeof Snapshot.Type;
  */
 export class SnapshotError extends Schema.TaggedError<SnapshotError>()("SnapshotError", {
   message: Schema.String,
-  cause: Schema.optionalKey(Schema.Defect()),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {

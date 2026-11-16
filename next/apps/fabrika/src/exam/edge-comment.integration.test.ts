@@ -1,17 +1,12 @@
 // `edge-comment` (Tier 1, P35; small-exam item 6): an ignore comment that names `fabrika/no-promises`
 // or `fabrika/no-effect-run-outside-edge` is `// oxlint-disable-next-line <rule> -- edge: <why>`,
 // names only those two rules, and gives a reason. Each wrong comment stands over a line that really
-// fires, so only this rule speaks. And no line of `.oxlintrc.json` turns an edge rule off for a
-// `next/` file that is not a test, so the list of edge files cannot come back through the config.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { Schema } from "effect";
-import { parseSync } from "oxc-parser";
+// fires, so only this rule speaks. `plant` spawns oxlint over the planted files in a temp folder, so
+// this half is `.integration.` (0584); the `.oxlintrc.json` laws are in edge-config.test.ts.
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(edge-comment)";
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 const PRELUDE = ['import {Effect} from "effect";', "declare const p: Promise<number>, thing: Effect.Effect<number>;"];
 
@@ -106,77 +101,5 @@ describe("edge-comment", async () => {
   it("an edge comment over a line where nothing fires is unused, which fails", () => {
     expect(all("", UNUSED)).toEqual([3]);
     expect(all(CODE, UNUSED)).toEqual([]);
-  });
-});
-
-// `.oxlintrc.json` is JSON with comments, which a JavaScript parser reads as one object.
-const Config = Schema.Struct({
-  ignorePatterns: Schema.Array(Schema.String),
-  overrides: Schema.Array(
-    Schema.Struct({
-      files: Schema.Array(Schema.String),
-      rules: Schema.Record(Schema.String, Schema.Unknown),
-    }),
-  ),
-});
-
-// oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
-type Tree = any;
-
-const toValue = (node: Tree): unknown => {
-  if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
-  }
-
-  if (node.type === "ArrayExpression") {
-    return node.elements.map(toValue);
-  }
-
-  if (node.type === "Literal") {
-    return node.value;
-  }
-
-  throw new Error(`.oxlintrc.json holds a ${node.type}`);
-};
-
-describe(".oxlintrc.json", () => {
-  const text = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
-  const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
-  const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
-  const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
-  const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
-  const off = (setting: unknown): boolean =>
-    setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
-
-  it("turns the three rules on in next/**", () => {
-    const next = config.overrides.find((o) => o.files.length === 1 && o.files[0] === "next/**");
-
-    for (const rule of RULES) {
-      expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
-    }
-  });
-
-  it("turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
-    const loosened = config.overrides.filter((o) => RULES.some((rule) => off(o.rules[rule])));
-
-    for (const o of loosened) {
-      expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
-    }
-
-    expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
-  });
-
-  // pinned: `.agents/` is held to next/'s rules by a second override that repeats the `next/**`
-  // rule block (0033), since the law above wants that override's files to be exactly `next/**`.
-  // Two copies drift, so the copies must stay equal.
-  it("pinned: the .agents/ override repeats the next/** rule block exactly (0033)", () => {
-    const next = config.overrides.filter((o) => o.files.length === 1 && o.files[0] === "next/**");
-    const agents = config.overrides.filter(
-      (o) => o.files.some((f) => f.startsWith(".agents/")) && !o.files.some((f) => f.includes(".test.")),
-    );
-
-    expect([next.length, agents.length]).toEqual([1, 1]);
-    expect(agents[0]?.files).toEqual([".agents/**/*.ts", ".agents/**/*.mjs"]);
-    expect(agents[0]?.rules).toEqual(next[0]?.rules);
   });
 });
