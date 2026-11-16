@@ -15,7 +15,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, String as Str } from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
@@ -292,7 +292,7 @@ const transcript = (model: string, calls: ReadonlyArray<Counts>, more = {}, name
     calls,
     Arr.map((call, i) =>
       assistant(
-        `2026-11-10T08:00:${String(i).padStart(2, "0")}.000Z`,
+        `2026-11-10T08:00:${pipe(String(i), Str.padStart(2, "0"))}.000Z`,
         `${name}_${i}`,
         model,
         usage(call.input, call.write5m, call.write1h, call.cached, call.output, more),
@@ -493,12 +493,12 @@ describe("clauderow's edge cases, each a law", () => {
 
       const made = clauderow("--run", "t593-hand1", "plain.jsonl", "a", "made-up", "reason");
       expect(made.status, made.stderr).toBe(0);
-      expect(made.stdout.endsWith("\n")).toBe(true);
+      expect(pipe(made.stdout, Str.endsWith("\n"))).toBe(true);
       same(made.stdout, PLAIN_ROW);
       // Flags may follow the transcript, as argparse let them.
       expect(clauderow("plain.jsonl", "--run", "t593-hand1", "a made-up reason").stdout).toBe(made.stdout);
       const curve = clauderow("--turns", "plain.jsonl");
-      sameLines(curve.stdout.trimEnd().split("\n"), PLAIN_TURNS);
+      sameLines(pipe(curve.stdout, Str.trimEnd, Str.split("\n")), PLAIN_TURNS);
 
       const unnamedRun = clauderow("plain.jsonl");
       expect([unnamedRun.status, unnamedRun.stdout]).toEqual([1, ""]);

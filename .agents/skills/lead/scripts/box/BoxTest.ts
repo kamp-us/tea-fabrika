@@ -6,7 +6,13 @@
 //
 // Each case is a generated plan: one box, then what is planted in it. The oracle below names the
 // verdict the old Python rm gave that plan, check by check in its order.
-import { Effect, FileSystem, Layer, type Path, type Scope, Array as Arr, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
+import * as Option from "effect/Option";
+import { Array as Arr, String as Str, pipe } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -56,11 +62,9 @@ export type World = {
   readonly make: (dir: string, plan: Plan) => Effect.Effect<Made, unknown, Platform>;
 };
 
-const TIP = "1".repeat(40);
-
-const LOST = "2".repeat(40);
-
-const OTHER = "3".repeat(40);
+const TIP = pipe("1", Str.repeat(40));
+const LOST = pipe("2", Str.repeat(40));
+const OTHER = pipe("3", Str.repeat(40));
 
 /** The world in memory: files written by hand, Git and the runs/ move answered from the plan. */
 export const memory: World = {
@@ -91,7 +95,7 @@ export const memory: World = {
       [`${data}/index`, "DIRC"],
       [`${data}/config`, "[core]\n"],
       [`${data}/refs/heads/main`, `${TIP}\n`],
-      [`${data}/logs/HEAD`, `${"0".repeat(40)} ${TIP} Fixture <fixture@example.test> 0 +0000\tclone\n`],
+      [`${data}/logs/HEAD`, `${pipe("0", Str.repeat(40))} ${TIP} Fixture <fixture@example.test> 0 +0000\tclone\n`],
     ] as const) {
       yield* fs.writeFileString(path, text);
     }

@@ -1,7 +1,11 @@
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
-import { Effect, Layer, Stream, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as Option from "effect/Option";
+import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Rec from "effect/Record";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
@@ -36,7 +40,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
   const env: Record<string, string> = {};
 
   for (const [key, value] of Rec.toEntries(inherited)) {
-    if (value !== undefined && !key.startsWith("GIT_")) {
+    if (value !== undefined && !pipe(key, Str.startsWith("GIT_"))) {
       env[key] = value;
     }
   }
@@ -46,7 +50,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
 
 const text = new TextDecoder();
 
-const lines = (out: string) => Arr.filter(out.split("\n"), (line) => line !== "");
+const lines = (out: string) => Arr.filter(Str.split(out, "\n"), (line) => line !== "");
 
 export const layer = (
   main: string,
@@ -87,15 +91,14 @@ export const layer = (
       );
 
       return BoxGit.of({
-        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => out.split("\0")),
+        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => Str.split(out, "\0")),
         trackedChanges: (at) =>
           Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
         refs: (at) =>
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
             Arr.map(lines(out), (line) => {
-              const space = line.indexOf(" ");
-
-              return { ref: line.slice(0, space), oid: line.slice(space + 1) };
+              const space = Option.getOrElse(pipe(line, Str.indexOf(" ")), () => -1);
+              return { ref: pipe(line, Str.slice(0, space)), oid: pipe(line, Str.slice(space + 1)) };
             }),
           ),
         objectsAt: (at, ref) => Effect.map(git(at, ["rev-parse", "--verify", `${ref}^{object}`]), lines),

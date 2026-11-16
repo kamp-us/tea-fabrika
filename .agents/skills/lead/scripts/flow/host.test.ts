@@ -2,7 +2,13 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, FileSystem, Option, Ref, type Scope, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import type * as Scope from "effect/Scope";
+import { Array as Arr, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -32,9 +38,8 @@ const temp = Effect.gen(function* () {
   return yield* fs.makeTempDirectoryScoped({ prefix: "host-" });
 });
 
-const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === c.trim());
-
-const sha = "a".repeat(40);
+const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === Str.trim(c));
+const sha = pipe("a", Str.repeat(40));
 
 const args = (commands: ReadonlyArray<string>) => ({
   main: "/nowhere/main",
@@ -272,10 +277,10 @@ describe("the quest's state file", () => {
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
         yield* recordInQuest(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;
-        yield* recordInQuest(at, { outcome: done, head: "b".repeat(40), log: "y.log" }, "t2");
+        yield* recordInQuest(at, { outcome: done, head: pipe("b", Str.repeat(40)), log: "y.log" }, "t2");
         const after = JSON.parse(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
-        expect(after.head).toBe("b".repeat(40));
+        expect(after.head).toBe(pipe("b", Str.repeat(40)));
         expect(after.steps.map((e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
           "build done",
           "host send:build:host_failed",
@@ -283,7 +288,7 @@ describe("the quest's state file", () => {
         ]);
         expect(after.steps[1]).toMatchObject({ head: sha, report: "x.log", box: "quest-host3", ended: "t1" });
         // A review is told the last host entry, read back from the file as written.
-        expect(lastHost(after.steps)).toBe(`done at ${"b".repeat(40)}: ok`);
+        expect(lastHost(after.steps)).toBe(`done at ${pipe("b", Str.repeat(40))}: ok`);
         expect(lastHost(before.steps)).toBeNull();
       }),
     ));

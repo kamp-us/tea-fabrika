@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -145,9 +145,9 @@ describe("box gc, today's tooling", () => {
 
         expect(to.at(-1)).toBe(`fabrikalfa/${name}-wip`);
         expect(new Set(to).size).toBe(to.length);
-        const base = git?.branch?.replace(/(-wip)+$/, "");
+        const base = git?.branch == null ? undefined : pipe(git.branch, Str.replace(/(-wip)+$/, ""));
 
-        if (base?.startsWith("fabrikalfa/")) {
+        if (base !== undefined && pipe(base, Str.startsWith("fabrikalfa/"))) {
           expect(to[0]).toBe(`${base}-wip`);
         }
       }),

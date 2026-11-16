@@ -45,7 +45,16 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema, Array as Arr, Order } from "effect";
+import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Order from "effect/Order";
+import { Array as Arr, String as Str, pipe } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
@@ -229,7 +238,7 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
   let first: string | null = null;
   let last: string | null = null;
 
-  for (const [i, json] of text.split("\n").entries()) {
+  for (const [i, json] of Str.split(text, "\n").entries()) {
     const line = decodeLine(json);
 
     if (Result.isFailure(line)) {
@@ -296,7 +305,7 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
  * of halves of the last place, so only that case is mended.
  */
 export const rounded = (x: number, places: number): number => {
-  const digits = Number(Math.abs(x).toFixed(places).replace(".", ""));
+  const digits = Number(pipe(Math.abs(x).toFixed(places), Str.replace(".", "")));
   const halves = Math.abs(x) * 2 ** (places + 1);
   const tie = Number.isInteger(halves) && halves % 2 === 1;
 
@@ -304,7 +313,7 @@ export const rounded = (x: number, places: number): number => {
 };
 
 /** A count with a comma between each three digits: 1,234,567. */
-const grouped = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+const grouped = (n: number): string => pipe(String(n), Str.replace(/\B(?=(\d{3})+(?!\d))/g, ","));
 
 /** A timestamp names its zone: `Z` or an offset, after a time. */
 const ZONED = /T.*(?:Z|[+-]\d{2}:?\d{2})$/;
@@ -321,8 +330,7 @@ const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
 /** An instant as that zone's clock reads it, to the second: `2026-11-10T00:12:15-08:00`. */
 const local = (zone: DateTime.TimeZone, at: DateTime.Utc): string => {
   const zoned = DateTime.setZone(at, zone);
-
-  return `${DateTime.formatIsoOffset(zoned).slice(0, 19)}${DateTime.zonedOffsetIso(zoned)}`;
+  return `${pipe(DateTime.formatIsoOffset(zoned), Str.slice(0, 19))}${DateTime.zonedOffsetIso(zoned)}`;
 };
 
 /** How a row's run was paid, when the caller says. */
@@ -404,10 +412,10 @@ const load = Effect.fn("clauderow.load")(function* (path: string) {
 /** What the `.meta.json` beside a transcript says, or nothing when there is none. */
 const beside = Effect.fn("clauderow.beside")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
-  const meta = `${path.slice(0, -".jsonl".length)}.meta.json`;
+  const meta = `${pipe(path, Str.slice(0, -".jsonl".length))}.meta.json`;
   const unreadable = Effect.mapError(() => Refused.make({ reason: `${meta} could not be read` }));
 
-  if (!path.endsWith(".jsonl") || !(yield* fs.exists(meta).pipe(unreadable))) {
+  if (!pipe(path, Str.endsWith(".jsonl")) || !(yield* fs.exists(meta).pipe(unreadable))) {
     return {};
   }
 
@@ -452,7 +460,7 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   );
 
   return encodeRow({
-    date: local(zone, begun).slice(0, 10),
+    date: pipe(local(zone, begun), Str.slice(0, 10)),
     run: ask.run,
     ticket: ask.ticket,
     pr: ask.pr,
@@ -464,7 +472,7 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
     model: Arr.join(models, "+"),
     effort: meta.effort ?? null,
     outcome: ask.outcome,
-    reason: reason.trim(),
+    reason: Str.trim(reason),
     tokens: tokens.input + tokens.write5m + tokens.write1h + tokens.read + tokens.output,
     tools: sum((call) => call.tools),
     // Seconds first, then minutes, as the Python script divided.

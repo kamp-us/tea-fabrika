@@ -52,19 +52,16 @@
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import {
-  Console,
-  DateTime,
-  Effect,
-  FileSystem,
-  Option,
-  Path,
-  Predicate,
-  Schema,
-  Array as Arr,
-  pipe,
-  Order,
-} from "effect";
+import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Order from "effect/Order";
+import { Array as Arr, pipe, String as Str } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
@@ -148,8 +145,8 @@ export type Line = typeof Line.Type;
 
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
-  for (const line of Arr.reverse(out.split("\n"))) {
-    const end = Schema.decodeOption(EndLine)(line.trim());
+  for (const line of Arr.reverse(Str.split(out, "\n"))) {
+    const end = Schema.decodeOption(EndLine)(Str.trim(line));
 
     if (Option.isSome(end)) {
       return { outcome: end.value.outcome, reason: end.value.reason ?? "" };
@@ -163,8 +160,8 @@ export const lastOutcome = (out: string): Omit<End, "at"> | null => {
 const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): string | null => {
   const head = `${quest}-${step}`;
   const runs = Arr.sort(
-    Arr.filter(boxes, (box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length))),
-    Order.mapInput(Order.Number, (box: string) => Number(box.slice(head.length))),
+    Arr.filter(boxes, (box) => pipe(box, Str.startsWith(head)) && /^\d+$/.test(pipe(box, Str.slice(head.length)))),
+    Order.mapInput(Order.Number, (box: string) => Number(pipe(box, Str.slice(head.length)))),
   );
   return runs.at(-1) ?? null;
 };
@@ -285,13 +282,13 @@ export const read = Effect.fn("quests.read")(function* (
     .pipe(Effect.orElseSucceed(() => Arr.empty<string>()));
   const recorded = pipe(
     names,
-    Arr.filter((name) => name.endsWith(CHAIN)),
-    Arr.map((name) => name.slice(0, -CHAIN.length)),
+    Arr.filter((name) => pipe(name, Str.endsWith(CHAIN))),
+    Arr.map((name) => pipe(name, Str.slice(0, -CHAIN.length))),
   );
   const standingBoxes = pipe(
     names,
-    Arr.filter((name) => name.endsWith(".box")),
-    Arr.map((name) => name.slice(0, -".box".length)),
+    Arr.filter((name) => pipe(name, Str.endsWith(".box"))),
+    Arr.map((name) => pipe(name, Str.slice(0, -".box".length))),
   );
   const asked = Arr.sort(options.named.length > 0 ? options.named : recorded, Order.String);
   const now = DateTime.toDate(yield* DateTime.now);

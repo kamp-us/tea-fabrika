@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -231,7 +231,7 @@ describe("countLines and diffLine", () => {
           expect(tally.product).toBe(product);
           expect(tally.binary).toBe(Arr.filter(rows, (row) => row._tag === "binary").length);
           const line = diffLine(tally, advice);
-          expect(line.includes("should it have been sliced?")).toBe(product > advice);
+          expect(pipe(line, Str.includes("should it have been sliced?"))).toBe(product > advice);
           expect(line).not.toMatch(/\bcap\b/);
         },
       ),
@@ -381,8 +381,7 @@ describe("the command", () => {
         );
 
         expect(got.status, got.stderr).toBe(0);
-
-        return got.stdout.trim();
+        return Str.trim(got.stdout);
       };
 
       const write = (path: string, text: string) => {

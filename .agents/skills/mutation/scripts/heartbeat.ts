@@ -27,7 +27,12 @@
  * - A merge stamped in the future (a skewed clock): never late on its own.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Console, Effect, Schema, Stream, Array as Arr } from "effect";
+import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
@@ -49,7 +54,8 @@ export const beat = (now: number, lastPass: number | null, merges: ReadonlyArray
     : Beat.cases.ok.make({ lastPass, merges: merges.length });
 };
 
-const iso = (ms: number | null) => (ms === null ? "none" : new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"));
+const iso = (ms: number | null) =>
+  ms === null ? "none" : pipe(new Date(ms).toISOString(), Str.replace(/\.\d{3}Z$/, "Z"));
 
 const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 
@@ -88,8 +94,7 @@ const gh = Effect.fn("heartbeat.gh")(function* (path: string) {
     ],
     { concurrency: 3 },
   );
-
-  return Number(code) === 0 ? out : yield* ReadFailed.make({ path, reason: err.trim() });
+  return Number(code) === 0 ? out : yield* ReadFailed.make({ path, reason: Str.trim(err) });
 }, Effect.scoped);
 
 const main = Effect.gen(function* () {

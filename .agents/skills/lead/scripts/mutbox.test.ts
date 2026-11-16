@@ -13,7 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
@@ -134,7 +134,7 @@ describe("mutbox, the pure parts", () => {
             `type=bind,src=${ask.output},dst=/out`,
           ]);
           // Nothing else crosses: no volume, no host network, no extra right, no device.
-          const flags = Arr.filter(args.slice(0, args.indexOf(ask.image)), (a) => a.startsWith("-"));
+          const flags = Arr.filter(args.slice(0, args.indexOf(ask.image)), (a) => pipe(a, Str.startsWith("-")));
           expect(new Set(flags)).toEqual(
             new Set([
               "--rm",
@@ -154,7 +154,7 @@ describe("mutbox, the pure parts", () => {
               "--env",
             ]),
           );
-          expect(Arr.map(pair("--env"), (e) => e.split("=")[0])).toEqual(["T", "BUILD", "RELATED"]);
+          expect(Arr.map(pair("--env"), (e) => Str.split(e, "=")[0])).toEqual(["T", "BUILD", "RELATED"]);
         },
       ),
       options,
@@ -168,7 +168,7 @@ describe("mutbox, the pure parts", () => {
         const path = `/${Arr.join(parts, "/ with spaces/")}`;
         expect(mountable(path)).toBe(true);
         expect(mountable(`${path}${bad}x`)).toBe(false);
-        expect(mountable(path.slice(1))).toBe(false);
+        expect(mountable(pipe(path, Str.slice(1)))).toBe(false);
       }),
       options,
     );
@@ -226,13 +226,13 @@ describe("mutbox, the pure parts", () => {
   it("format: the image's base is pinned by digest at the repo's own Node version", () => {
     expect(baseNode(dockerfile)).toBe(packageJson.engines.node);
     expect(baseNode("FROM node:26.13.0-bookworm\n")).toBeNull();
-    expect(baseNode(`FROM node:26-bookworm@sha256:${"a".repeat(64)}`)).toBeNull();
+    expect(baseNode(`FROM node:26-bookworm@sha256:${pipe("a", Str.repeat(64))}`)).toBeNull();
     expect(pnpmVersion(packageJson.packageManager)).not.toBeNull();
     expect(pnpmVersion("pnpm@^12.0.0")).toBeNull();
     expect(pnpmVersion("pnpm@latest")).toBeNull();
     expect(imageTag("0123456789abcdef0123")).toBe("fabrika-mutbox:0123456789abcdef");
     // The entry never asks for a network or a key, and the Dockerfile copies only what it names.
-    expect(dockerfile.match(/^COPY .*$/gm)).toEqual([
+    expect(Option.getOrNull(pipe(dockerfile, Str.match(/^COPY .*$/gm)))).toEqual([
       "COPY mutbox-entry.sh /usr/local/bin/mutbox-entry",
       "COPY --chown=node:node pnpm-lock.yaml pnpm-workspace.yaml ./",
       "COPY --chown=node:node patches ./patches",
@@ -356,7 +356,7 @@ describe("mutbox, the pure parts", () => {
           const key =
             file in map
               ? file
-              : Arr.filter(Rec.keys(map), (k) => k.endsWith("/") && file.startsWith(k)).sort(
+              : Arr.filter(Rec.keys(map), (k) => pipe(k, Str.endsWith("/")) && pipe(file, Str.startsWith(k))).sort(
                   (x, y) => y.length - x.length,
                 )[0];
           return key !== undefined && map[key] === "build";
@@ -381,8 +381,8 @@ describe("mutbox, the pure parts", () => {
           outcome: got.outcome,
           reason: got.reason,
           unknown: narrowingUnknown(got.reason),
-          said: got.detail.includes("narrowing is unknown"),
-          named: stuck !== "no_build_reach" || got.detail.includes(owned[0]?.file ?? ""),
+          said: pipe(got.detail, Str.includes("narrowing is unknown")),
+          named: stuck !== "no_build_reach" || pipe(got.detail, Str.includes(owned[0]?.file ?? "")),
           empty: got.detail === "",
         }).toEqual({
           outcome: stuck === null ? "done" : "stuck",
@@ -567,8 +567,7 @@ const run = (setup: Setup = {}) => {
     );
 
     expect(ran.status, ran.stderr).toBe(0);
-
-    return ran.stdout.trim();
+    return Str.trim(ran.stdout);
   };
 
   git("init", "-q");
@@ -651,26 +650,23 @@ const run = (setup: Setup = {}) => {
       },
     },
   );
-
-  const calls = existsSync(join(fake, "calls.log"))
-    ? readFileSync(join(fake, "calls.log"), "utf8").trim().split("\n")
+  const calls: string[] = existsSync(join(fake, "calls.log"))
+    ? pipe(readFileSync(join(fake, "calls.log"), "utf8"), Str.trim, Str.split("\n"))
     : [];
-
-  const line = ran.stdout.trim().split("\n").at(-1) ?? "";
-
+  const line = pipe(ran.stdout, Str.trim, Str.split("\n")).at(-1) ?? "";
   return {
     code: ran.status,
     text: ran.stdout + ran.stderr,
-    summary: line.startsWith("{") ? JSON.parse(line) : null,
-    saved: existsSync(join(out, "mutbox.json")) ? readFileSync(join(out, "mutbox.json"), "utf8").trim() : null,
+    summary: pipe(line, Str.startsWith("{")) ? JSON.parse(line) : null,
+    saved: existsSync(join(out, "mutbox.json")) ? Str.trim(readFileSync(join(out, "mutbox.json"), "utf8")) : null,
     line,
     calls,
-    ranContainer: Arr.some(calls, (c) => c.startsWith("run ")),
+    ranContainer: Arr.some(calls, (c) => pipe(c, Str.startsWith("run "))),
     context: existsSync(join(fake, "context.txt"))
-      ? readFileSync(join(fake, "context.txt"), "utf8").trim().split("\n")
+      ? pipe(readFileSync(join(fake, "context.txt"), "utf8"), Str.trim, Str.split("\n"))
       : null,
     commits: existsSync(join(fake, "commits.txt"))
-      ? readFileSync(join(fake, "commits.txt"), "utf8").trim().split("\n")
+      ? pipe(readFileSync(join(fake, "commits.txt"), "utf8"), Str.trim, Str.split("\n"))
       : null,
     lockLeft: existsSync(lock),
     inputLeft: existsSync(join(out, "in")),
@@ -723,7 +719,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(runCall).toContain("--network none");
     expect(runCall).toContain(`src=${join(got.dir, "out", "box")},dst=/out`);
     expect(got.calls.at(-1)).toMatch(/^rm -f fabrika-mutbox-483-\d+$/);
-    expect(Arr.some(got.calls, (c) => c.startsWith("build "))).toBe(false);
+    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")))).toBe(false);
   });
 
   // Plant: run the sample on the host when docker is missing.
@@ -770,7 +766,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     const got = run({ node: "20.0.0", image: false });
     expect(got.code, got.text).toBe(30);
     expect(got.summary).toMatchObject({ outcome: "stuck", reason: "node_mismatch" });
-    expect(Arr.some(got.calls, (c) => c.startsWith("build ") || c.startsWith("run "))).toBe(false);
+    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")) || pipe(c, Str.startsWith("run ")))).toBe(false);
   });
 
   // Plant: wait for the container for ever, or leave it running after the limit.
@@ -808,7 +804,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(taken.code, taken.text).toBe(0);
     expect(taken.calls).toContain("rm -f abc123");
     expect(taken.calls.indexOf("rm -f abc123")).toBeLessThan(
-      Option.getOrThrow(Arr.findFirstIndex(taken.calls, (c) => c.startsWith("run "))),
+      Option.getOrThrow(Arr.findFirstIndex(taken.calls, (c) => pipe(c, Str.startsWith("run ")))),
     );
     expect(taken.lockLeft).toBe(false);
   });
@@ -1030,7 +1026,7 @@ describe("mutbox gc against a stand-in docker", () => {
     return {
       code: ran.status,
       text: ran.stdout + ran.stderr,
-      calls: existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [],
+      calls: existsSync(log) ? pipe(readFileSync(log, "utf8"), Str.trim, Str.split("\n")) : [],
     };
   };
 
@@ -1045,7 +1041,9 @@ describe("mutbox gc against a stand-in docker", () => {
     const live = gc({ leftover: "abc123", lockPid: process.pid });
     expect(live.code, live.text).toBe(0);
     expect(live.text).toContain("keep mutbox");
-    expect(Arr.some(live.calls, (c) => c.startsWith("rm ") || c.startsWith("image prune"))).toBe(false);
+    expect(Arr.some(live.calls, (c) => pipe(c, Str.startsWith("rm ")) || pipe(c, Str.startsWith("image prune")))).toBe(
+      false,
+    );
 
     const down = gc({ down: true });
     expect(down.code, down.text).toBe(0);
@@ -1065,8 +1063,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
   const alive = (pid: number) => spawnSync("kill", ["-0", String(pid)]).status === 0;
 
   const readPid = (file: string) =>
-    Effect.sync(() => (existsSync(file) ? Number(readFileSync(file, "utf8").trim()) || 0 : 0));
-
+    Effect.sync(() => (existsSync(file) ? Number(Str.trim(readFileSync(file, "utf8"))) || 0 : 0));
   /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
   const lineAt = (delay: number) =>
     Stream.fromEffect(
@@ -1192,7 +1189,6 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
     const left = spawnSync("docker", ["ps", "-aq", "--filter", `name=fabrika-mutbox-probe-${process.pid}`], {
       encoding: "utf8",
     });
-
-    expect(left.stdout.trim()).toBe("");
+    expect(Str.trim(left.stdout)).toBe("");
   });
 });

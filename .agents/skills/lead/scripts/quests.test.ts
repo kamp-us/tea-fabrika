@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import * as Rec from "effect/Record";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -399,7 +399,7 @@ describe("Quests.read", () => {
         const whole = chain(record({ steps: [opened("tests", -MIN)], beat: beat("box", -MIN, -1000) }));
 
         const lines = yield* linesAt({
-          "state/half-chain.json": whole.slice(0, whole.length / 2),
+          "state/half-chain.json": pipe(whole, Str.slice(0, whole.length / 2)),
           "state/other-chain.json": '{"quest":"other","steps":"not a list"}',
           "state/t1-chain.json": whole,
           "state/t1.lock": "1\n",
