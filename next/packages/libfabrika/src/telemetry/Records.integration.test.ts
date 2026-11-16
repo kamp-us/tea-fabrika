@@ -31,9 +31,9 @@ import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
-import { RecordManager, type RecordCalls } from "./Records.ts";
+import { RecordManager, type RecordCalls, Written } from "./Records.ts";
 import { SinkError } from "./Sink.ts";
-import { type Chain, SpanRow } from "./Trace.ts";
+import { Chain, Content, SpanRow } from "./Trace.ts";
 
 type ChainValue = typeof Chain.Type;
 type Row = typeof SpanRow.Type;
@@ -93,8 +93,8 @@ const home = folder.pipe(
 );
 
 const PROCESS = Effect.runSync(processId);
-const job: ChainValue = { _tag: "job", process: PROCESS };
-const spans: ChainValue = { _tag: "spans" };
+const job: ChainValue = Chain.cases.job.make({ process: PROCESS });
+const spans: ChainValue = Chain.cases.spans.make({});
 const part = (n: number) => `job/${PROCESS}/${n}`;
 
 /** A span row; `fill` pads one tag so a part reaches a small cap in a few rows. */
@@ -214,15 +214,16 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
         }
 
-        expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
+        expect(answer).toEqual(Written.cases.rolled.make({ next: part(1), had: [] }));
         const held = n - 1;
 
         for (let again = 0; again < 3; again++) {
-          expect(yield* records.write(job, 0, [kept(row(id(1000 + again)))])).toEqual({
-            _tag: "rolled",
-            next: part(1),
-            had: [],
-          });
+          expect(yield* records.write(job, 0, [kept(row(id(1000 + again)))])).toEqual(
+            Written.cases.rolled.make({
+              next: part(1),
+              had: [],
+            }),
+          );
         }
 
         if (parts !== undefined) {
@@ -247,9 +248,9 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           const records = yield* RecordManager;
           const first = Array.from({ length: 40 }, (_, n) => kept(row(id(n), FILL)));
           // One batch may take a part past its cap: the check is before the write, so it lands whole.
-          expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
+          expect(yield* records.write(job, 0, first)).toEqual(Written.cases.written.make({}));
           // A full resend: every row is held, so nothing is left and nothing is written.
-          expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
+          expect(yield* records.write(job, 0, first)).toEqual(Written.cases.written.make({}));
           // A lost answer: the batch comes again with one new row. Part 0 is past its cap.
           const again = [...first.slice(30), kept(row(id(40)))];
           const answer = yield* records.write(job, 0, again);
@@ -280,7 +281,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
 
         for (let from = 0; from < made; from += 100) {
           const batch = Array.from({ length: Math.min(100, made - from) }, (_, n) => kept(row(id(from + n))));
-          expect(yield* records.write(job, 0, batch)).toEqual({ _tag: "written" });
+          expect(yield* records.write(job, 0, batch)).toEqual(Written.cases.written.make({}));
         }
 
         expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
@@ -330,7 +331,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
       const answer = yield* RecordManager.use((records) => records.write(job, 0, [kept(row(id(5)))])).pipe(
         Effect.provide(RecordManager.sql(parts.open, 1)),
       );
-      expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
+      expect(answer).toEqual(Written.cases.rolled.make({ next: part(1), had: [] }));
       expect(parts.rows(part(0), "spans")).toHaveLength(5);
       expect(parts.rows(part(0), "rolled")).toHaveLength(1);
     }),
@@ -386,7 +387,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
               };
               yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
               expect(yield* records.content(job, id(0))).toEqual(
-                Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+                Option.some(Content.cases.kept.make({ spanId: id(0), message: MESSAGE })),
               );
               expect(yield* records.content(job, id(1))).toEqual(Option.none());
               const before = yield* read(job);
@@ -397,13 +398,12 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
                 by: "owner",
                 reason: value,
               });
-              const deleted = {
-                _tag: "deleted",
+              const deleted = Content.cases.deleted.make({
                 spanId: id(0),
                 by: "owner",
                 at: T,
                 reason: value,
-              };
+              });
               expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
               yield* TestClock.setTime(T + 60_000);
@@ -439,12 +439,12 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
               const first = { ...row(id(0)), ok: false };
               yield* records.write(job, 0, [kept(first, MESSAGE)]);
               const other = { ...row(id(0)), name: "overwritten", attributes: { "fab.other": 1 } };
-              expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual({
-                _tag: "written",
-              });
+              expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual(
+                Written.cases.written.make({}),
+              );
               expect(yield* read(job)).toEqual([first]);
               expect(yield* records.content(job, id(0))).toEqual(
-                Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+                Option.some(Content.cases.kept.make({ spanId: id(0), message: MESSAGE })),
               );
               yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
               yield* records.write(job, 0, [kept(first, MESSAGE)]);
@@ -480,7 +480,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
               yield* TestClock.setTime(T);
               yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
               expect(yield* records.content(job, id(0))).toEqual(
-                Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
+                Option.some(Content.cases.deleted.make({ spanId: id(0), by: "owner", at: T, reason: value })),
               );
               expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
             }).pipe(Effect.provide(layer));
@@ -512,11 +512,11 @@ describe("RecordManager.remote, the record object's stub", () => {
   };
 
   it.effect("each call goes to the part's own object, by its name", () => {
-    const { make, calls } = stub(() => Effect.succeed({ _tag: "written" }));
+    const { make, calls } = stub(() => Effect.succeed(Written.cases.written.make({})));
     return Effect.gen(function* () {
       const records = yield* RecordManager;
-      expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual({ _tag: "written" });
-      expect(yield* records.write(spans, 0, [kept(row(id(1)))])).toEqual({ _tag: "written" });
+      expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual(Written.cases.written.make({}));
+      expect(yield* records.write(spans, 0, [kept(row(id(1)))])).toEqual(Written.cases.written.make({}));
       expect(calls.map((c) => c.name)).toEqual([part(2), "spans/0"]);
     }).pipe(Effect.provide(RecordManager.remote(make)));
   });

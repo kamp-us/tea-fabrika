@@ -35,7 +35,7 @@ import type { Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "./Archive.ts";
 import { RecordManager } from "./Records.ts";
 import { SinkError, SpanSink } from "./Sink.ts";
-import { type Chain, type SpanRow } from "./Trace.ts";
+import { Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -91,8 +91,9 @@ const home = folder.pipe(
 const OBJECT = Effect.runSync(processId);
 const P1 = OBJECT;
 const P2 = Effect.runSync(processId);
-const job = (process: string): ChainValue => ({ _tag: "job", process });
-const spans: ChainValue = { _tag: "spans" };
+// Checks off: one law reads the chain of a stored process id P37 must refuse, so `process` may be bad.
+const job = (process: string): ChainValue => Chain.cases.job.make({ process }, { disableChecks: true });
+const spans: ChainValue = Chain.cases.spans.make({});
 const BIG = 1024 * 1024 * 1024;
 
 const world = (
@@ -1407,11 +1408,11 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
     const word = fc.stringMatching(/^[A-Z][A-Za-z]{0,15}$/);
     await fc.assert(
       fc.asyncProperty(word, word, fc.string({ maxLength: 40 }), (outer, tag, text) => {
-        const reason = Object.assign(new Error(`${NOTE}-${text}`), {
-          _tag: tag,
+        // Foreign errors with generated tags, as code we do not own throws them: each tag from a maker.
+        const reason = Object.assign(new Error(`${NOTE}-${text}`), Schema.TaggedStruct(tag, {}).make({}), {
           cause: new Error(`${NOTE_TWO}-${text}`),
         });
-        const error = Object.assign(new Error(`${NOTE}-${text}`), { _tag: outer, reason });
+        const error = Object.assign(new Error(`${NOTE}-${text}`), Schema.TaggedStruct(outer, {}).make({}), { reason });
         return Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;

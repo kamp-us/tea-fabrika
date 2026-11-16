@@ -3,10 +3,11 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, type PlatformError, type Scope } from "effect";
+import { Effect, type PlatformError, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
-import type { SpanRow } from "./Trace.ts";
+import { Written } from "./Records.ts";
+import { Chain, Content, type SpanRow } from "./Trace.ts";
 
 /** One test store. Each `use` holds one handle open for its body and closes it before it returns. */
 export interface Store {
@@ -17,6 +18,10 @@ export interface Store {
 export type Open = (mode: "file" | "memory") => Effect.Effect<Store, PlatformError.PlatformError, Scope.Scope>;
 
 type Lookup = { _tag: "found"; content: unknown } | { _tag: "absent"; rolled: boolean };
+
+/** The exam's own makers for the two lookups above, from the content schema the part keeps. */
+const Found = Schema.TaggedStruct("found", { content: Schema.NullOr(Content) });
+const Absent = Schema.TaggedStruct("absent", { rolled: Schema.Boolean });
 
 type Part = {
   write: (rows: ReadonlyArray<{ span: SpanRow; content: string | null }>) => Effect.Effect<unknown, unknown>;
@@ -70,32 +75,34 @@ const reopen = (open: Open, total: number, content: string, at: number) =>
       }));
       yield* store.use((sql) =>
         Effect.gen(function* () {
-          const part: Part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);
-          expect(yield* part.write(rows)).toEqual({ _tag: "written" });
+          const part: Part = recordPart(sql, Chain.cases.spans.make({}), 0, 1_000_000_000);
+          expect(yield* part.write(rows)).toEqual(Written.cases.written.make({}));
         }),
       );
       // The first handle has closed; a new one reads the same file.
       yield* store.use((sql) =>
         Effect.gen(function* () {
-          const part: Part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);
+          const part: Part = recordPart(sql, Chain.cases.spans.make({}), 0, 1_000_000_000);
           // T641: the reopened file already holds the first write, before the retry writes again.
           expect((yield* part.read(0)).spans).toEqual(rows.slice(0, 500).map((r) => r.span));
-          expect(yield* part.write(rows)).toEqual({ _tag: "written" });
+          expect(yield* part.write(rows)).toEqual(Written.cases.written.make({}));
           const first = yield* part.read(0);
           const last = yield* part.read(first.after);
           expect(first.spans).toEqual(rows.slice(0, 500).map((r) => r.span));
           expect(last.spans).toEqual(rows.slice(500).map((r) => r.span));
-          expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
-            _tag: "found",
-            content: { _tag: "kept", message: content },
-          });
+          expect(yield* part.content(span(total - 1).spanId)).toMatchObject(
+            Found.make({
+              content: Content.cases.kept.make({ spanId: span(total - 1).spanId, message: content }),
+            }),
+          );
           const by = { by: "person-test", at, reason: "requested" };
           yield* part.deleteContent(span(total - 1).spanId, by);
           yield* part.deleteContent(span(total - 1).spanId, { ...by, at: at + 1 });
-          expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
-            _tag: "found",
-            content: { _tag: "deleted", ...by },
-          });
+          expect(yield* part.content(span(total - 1).spanId)).toMatchObject(
+            Found.make({
+              content: Content.cases.deleted.make({ spanId: span(total - 1).spanId, ...by }),
+            }),
+          );
           expect((yield* part.read(500)).spans).toHaveLength(total - 500);
         }),
       );
@@ -115,25 +122,27 @@ const separate = (open: Open, [oldId, freshId]: number[], cap: number, index: nu
           Effect.gen(function* () {
             let size = 0;
             const sql: Sql = { ...inner, size: () => size };
-            const first: Part = recordPart(sql, { _tag: "spans" }, index, cap);
-            const next: Part = recordPart(other, { _tag: "spans" }, index + 1, 1_000_000_000);
+            const first: Part = recordPart(sql, Chain.cases.spans.make({}), index, cap);
+            const next: Part = recordPart(other, Chain.cases.spans.make({}), index + 1, 1_000_000_000);
             const old = { span: span(oldId!), content: null };
             const fresh = { span: span(freshId!), content: null };
             yield* first.write([old]);
             size = cap;
-            expect(yield* first.write([old])).toEqual({ _tag: "written" });
-            expect(yield* first.write([old, fresh])).toEqual({
-              _tag: "rolled",
-              next: `spans/${index + 1}`,
-              had: [old.span.spanId],
-            });
+            expect(yield* first.write([old])).toEqual(Written.cases.written.make({}));
+            expect(yield* first.write([old, fresh])).toEqual(
+              Written.cases.rolled.make({
+                next: `spans/${index + 1}`,
+                had: [old.span.spanId],
+              }),
+            );
             yield* next.write([fresh]);
             expect((yield* first.read(0)).spans).toEqual([old.span]);
             expect((yield* next.read(0)).spans).toEqual([fresh.span]);
-            expect(yield* first.content(fresh.span.spanId)).toEqual({
-              _tag: "absent",
-              rolled: true,
-            });
+            expect(yield* first.content(fresh.span.spanId)).toEqual(
+              Absent.make({
+                rolled: true,
+              }),
+            );
           }),
         ),
       );

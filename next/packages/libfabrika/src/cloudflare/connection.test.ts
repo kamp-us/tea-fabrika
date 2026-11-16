@@ -26,11 +26,14 @@ import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
 import { Archive } from "../telemetry/Archive.ts";
-import { RecordManager } from "../telemetry/Records.ts";
+import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
 import * as Runtime from "./runtime.ts";
+
+/** A forged client's input to a program, made by a schema of the exam's own. */
+const Comment = Schema.TaggedStruct("comment", {});
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
@@ -146,7 +149,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
           stats.writes++;
           saved.push(...rows.map((row) => row.span));
           // edge: the platform record RPC returns a Promise
-          return Promise.resolve({ _tag: "written" });
+          return Promise.resolve(Written.cases.written.make({}));
         },
       }),
     },
@@ -366,7 +369,7 @@ it.effect.prop(
         const writes = w.stats.writes;
 
         for (let i = 0; i < count; i++) {
-          yield* send(i + 2, { by: `t844-forged-${i}`, m: { _tag: "comment" } });
+          yield* send(i + 2, { by: `t844-forged-${i}`, m: Comment.make({}) });
           expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
             id: i + 2,
             error: { data: { reason: "reserved" } },
@@ -406,7 +409,7 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       const baseline = saved.length;
       const baselineWrites = stats.writes;
       const beforeMeasurements = Number(db.prepare("SELECT count(*) AS n FROM measurements").get()?.n);
-      const params = { by: "t844-forged", m: { _tag: "comment" } };
+      const params = { by: "t844-forged", m: Comment.make({}) };
       yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
       expect(calls).toEqual([{ method: "process.send", params }]);
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({

@@ -14,16 +14,18 @@ import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Start } from "../processes/Process.ts";
+import { Swapped } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
+import { Written } from "../telemetry/Records.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { Attached } from "../transport/Wire.ts";
+import { Attached, Answer } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
-import { fetch } from "./fetch.ts";
-import type { RecordShape } from "./objects.ts";
 // Loading record.ts registers RecordPart's constructor, which the objects.ts mock below captures.
 import "./record.ts";
+import { fetch } from "./fetch.ts";
+import type { RecordShape } from "./objects.ts";
 import { ProcessService, ProjectService, processRuntime, projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsTest from "./SettingsTest.ts";
 
@@ -290,7 +292,7 @@ SettingsTest.suite((recipe, secret) =>
         PROJECT: {
           getByName: () => ({
             settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
-            route: async () => ({ _tag: "ok", result: {} }),
+            route: async () => Answer.cases.ok.make({ result: {} }),
           }),
         },
         PROCESS: {
@@ -301,7 +303,7 @@ SettingsTest.suite((recipe, secret) =>
             },
             // P15: a reopened Project asks each live process which build its object runs.
             descriptor: async () => configured.get(object),
-            swap: async () => ({ _tag: "same" }),
+            swap: async () => Swapped.cases.same.make({}),
           }),
         },
         CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 0 }) },
@@ -310,7 +312,7 @@ SettingsTest.suite((recipe, secret) =>
             write: async (...args: unknown[]) => {
               captured["record RPC"].push(args);
               captured["span attributes"].push(args);
-              return { _tag: "written" };
+              return Written.cases.written.make({});
             },
           }),
         },

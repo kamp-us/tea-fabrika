@@ -12,6 +12,9 @@ import { Activity } from "../processes/Process.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
+/** Alchemy's RPC error envelope (`RpcErrorEnvelope` in alchemy's Rpc.ts), the frame its bridge sends. */
+const Envelope = Schema.TaggedStruct(ErrorTag, { error: Schema.Unknown });
+
 class WireFault extends Error {
   override name = "WireFault";
 }
@@ -64,7 +67,8 @@ it.effect.prop(
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
       const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
-      expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
+      expect(error).toBeInstanceOf(LedgerError);
+      expect(error).toMatchObject({ reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
     }),
@@ -91,7 +95,7 @@ it.effect.prop(
   ({ method, reason, text }) =>
     Effect.gen(function* () {
       // The bridge answers a typed failure as data: Alchemy's error envelope around the encoded error.
-      const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason, message: text })) };
+      const envelope = Envelope.make({ error: encodeRpcError(new LedgerError({ reason, message: text })) });
       const call: () => Effect.Effect<unknown, unknown> = Reflect.get(
         ProcessClient.make(answeringProcess(envelope)),
         method,
@@ -116,7 +120,8 @@ it.effect.prop(
       const fault = faults.find((kind) => kind.name === name)!.make(text);
       const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
       const error = yield* Effect.flip(call());
-      expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
+      expect(error).toBeInstanceOf(LedgerError);
+      expect(error).toMatchObject({ reason: "unreachable" });
       const cause = Reflect.get(Object(error), "cause");
       expect(cause).toBeInstanceOf(RpcCallError);
       expect(cause).toMatchObject({ method });
@@ -163,7 +168,7 @@ it.effect.prop(
 
       // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`).
       const typed = yield* Effect.flip(
-        method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) })),
+        method(answering(Envelope.make({ error: encodeRpcError(new LedgerError({ reason })) }))),
       );
       expect(typed).toBeInstanceOf(LedgerError);
       expect(typed).toMatchObject({ reason });
@@ -330,7 +335,8 @@ it.effect.prop(
       const failure = yield* Effect.flip(lost).pipe(Effect.withTracer(captured.tracer));
 
       // The text did go through: the caller gets the lost call, with what the platform threw inside.
-      expect(failure).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
+      expect(failure).toBeInstanceOf(LedgerError);
+      expect(failure).toMatchObject({ reason: "unreachable" });
       expect(Reflect.get(Object(Reflect.get(Object(failure), "cause")), "cause")).toBe(thrown);
       RepliesTest.unleaked(captured.text(), [secret]);
     }),

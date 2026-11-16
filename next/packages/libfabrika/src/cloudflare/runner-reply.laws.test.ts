@@ -12,8 +12,10 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { workerExecution } from "../runtime/Execution.ts";
+import { Input, ProgramDown } from "../runtime/Program.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
@@ -50,7 +52,7 @@ const program = {
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
-  inputs: { work: { _tag: "write", schema: Msg, description: "Work", personOnly: false } },
+  inputs: { work: Input.cases.write.make({ schema: Msg, description: "Work", personOnly: false }) },
   outputs: {},
   writes: {},
   wake: () => null,
@@ -129,14 +131,13 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               }
 
               if (mode === "ok") {
-                expect(raw).toEqual({ _tag: "ok", value: { type: "save", base } });
+                expect(raw).toEqual(Audit.Answer.cases.ok.make({ value: { type: "save", base } }));
                 base++;
               } else if (Exit.isFailure(answer)) {
                 expect(Cause.hasDies(answer.cause)).toBe(false);
-                expect(Cause.squash(answer.cause)).toMatchObject({
-                  _tag: "AuditError",
-                  reason: { _tag: expect.any(String) },
-                });
+                const squashed = Cause.squash(answer.cause);
+                expect(squashed).toBeInstanceOf(Audit.AuditError);
+                expect(squashed instanceof Audit.AuditError ? squashed.reason._tag : null).toEqual(expect.any(String));
               }
             }
           }),
@@ -179,7 +180,7 @@ const replyCase = (
                   handlerCalls++;
                   expect(cmd).toEqual(work({ n }));
                   return mode === "refused"
-                    ? Outcome.err({ _tag: "disk" })
+                    ? Outcome.err(Schema.TaggedStruct("disk", {}).make({}))
                     : Outcome.ok(mode === "checked" ? "invalid integer" : n);
                 }),
             },
@@ -324,11 +325,9 @@ const replyCase = (
           });
 
           if (Exit.isFailure(result)) {
-            expect(Cause.squash(result.cause)).toMatchObject({
-              _tag: "ProgramDown",
-              reason: "step",
-              source: mode,
-            });
+            const down = Cause.squash(result.cause);
+            expect(down).toBeInstanceOf(ProgramDown);
+            expect(down).toMatchObject({ reason: "step", source: mode });
           }
 
           expect(yield* store.load).toMatchObject({
@@ -336,7 +335,9 @@ const replyCase = (
             cmds: [{ id: `${PID}/1/0`, state: "dispatched", cmd: work({ n }) }],
           });
           // Resending the accepted input must not repeat its uncertain outside action.
-          expect(yield* runner.msg(incoming)).toMatchObject({ _tag: "accepted", pos: 1 });
+          const again = yield* runner.msg(incoming);
+          expect(again._tag).toBe("accepted");
+          expect(again).toMatchObject({ pos: 1 });
           expect(yield* runner.open("audit")).toMatchObject({
             rev: 1,
             view: { replies: 0, reason: null },
@@ -344,17 +345,28 @@ const replyCase = (
           expect(checkpoint()).toBe(before);
         } else {
           const reason = mode === "checked" ? "bad_cmd" : "disk";
-          expect(result).toMatchObject({ _tag: "Success", value: { _tag: "accepted", pos: 1 } });
+          expect(Exit.isSuccess(result)).toBe(true);
+          expect(Exit.isSuccess(result) ? result.value._tag : null).toBe("accepted");
+          expect(Exit.isSuccess(result) ? result.value : null).toMatchObject({ pos: 1 });
           expect(rows).toHaveLength(2);
           expect(rows[1]).toMatchObject({
             id: `${PID}/1/0/answer`,
-            body: { m: { type: "work_err", cmd: work({ n }), reason: reason, error: { _tag: reason } } },
+            body: {
+              m: {
+                type: "work_err",
+                cmd: work({ n }),
+                reason: reason,
+                error: Schema.TaggedStruct(reason, {}).make({}),
+              },
+            },
           });
           expect(yield* store.load).toMatchObject({
             saved: { after: rows[1]!.rev, model: { replies: 1, reason } },
             cmds: [],
           });
-          expect(yield* runner.msg(incoming)).toMatchObject({ _tag: "accepted", pos: 1 });
+          const again = yield* runner.msg(incoming);
+          expect(again._tag).toBe("accepted");
+          expect(again).toMatchObject({ pos: 1 });
           expect(yield* Stream.runCollect(ledger.read(`${NAME}/inbox`, 0))).toHaveLength(2);
         }
 

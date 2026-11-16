@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { Archive, type BucketCalls, sha256 } from "./Archive.ts";
-import { type RecordCalls, RecordManager } from "./Records.ts";
+import { type RecordCalls, RecordManager, Written } from "./Records.ts";
 import { Chain, SinkError, sinkError } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -117,6 +117,8 @@ describe("T695, the archive keeps what failed", () => {
 
 describe("T695, a remote record part keeps what failed", () => {
   const chain = Chain.cases.spans.make({});
+  /** The part's `absent` answer as it crosses the wire, made by a schema of the exam's own. */
+  const Absent = Schema.TaggedStruct("absent", { rolled: Schema.Boolean });
 
   // C3, Records.ts:444. Plant: `Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 }))`.
   law(
@@ -125,11 +127,11 @@ describe("T695, a remote record part keeps what failed", () => {
     ({ spanId, bad }) =>
       Effect.gen(function* () {
         const calls: RecordCalls = {
-          write: () => Effect.succeed({ _tag: "written" }),
+          write: () => Effect.succeed(Written.cases.written.make({})),
           read: () => Effect.succeed({ spans: [], after: 0, rolled: false }),
           // A valid answer is `absent { rolled: boolean }`; this one's flag is the wrong type.
-          content: () => Effect.succeed({ _tag: "absent", rolled: bad }),
-          deleteContent: () => Effect.succeed({ _tag: "absent", rolled: false }),
+          content: () => Effect.succeed({ ...Absent.make({ rolled: false }), rolled: bad }),
+          deleteContent: () => Effect.succeed(Absent.make({ rolled: false })),
         };
         const error = yield* Effect.flip(
           Effect.provide(

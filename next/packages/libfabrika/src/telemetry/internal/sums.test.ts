@@ -10,6 +10,7 @@ import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SpanSink } from "../Sink.ts";
+import { Chain, type Refused, SumPoint } from "../Trace.ts";
 
 const HOUR = 3_600_000;
 const H = 1_790_002_800_000;
@@ -74,7 +75,7 @@ describe("0140 sums", () => {
           yield* sink.flush;
           yield* TestClock.setTime(H + HOUR);
           expect(yield* sink.sums(PIECE, H, H + HOUR)).toEqual([
-            { _tag: "sum", piece: PIECE, hour: H, refused: "rate_limited", count: count + 1 },
+            SumPoint.make({ piece: PIECE, hour: H, refused: "rate_limited", count: count + 1 }),
           ]);
           expect(db.prepare("SELECT * FROM sums WHERE piece=?").all(PIECE)).toHaveLength(1);
         }).pipe(
@@ -103,7 +104,7 @@ describe("0140 sums", () => {
           yield* TestClock.setTime(H - 1);
           // Ending, rather than starting, in H assigns the count to H.
           yield* TestClock.adjust(2).pipe(Effect.withSpan(PIECE, { attributes: { [TAG]: "reserved" } }));
-          const expected = new Map<string, number>([["reserved", 1]]);
+          const expected = new Map<Refused, number>([["reserved", 1]]);
 
           for (const value of values) {
             yield* Effect.void.pipe(Effect.withSpan(PIECE, { attributes: { [TAG]: value } }));
@@ -122,18 +123,22 @@ describe("0140 sums", () => {
           const sink = yield* SpanSink;
           expect(yield* sink.sums(PIECE, H - HOUR, H + HOUR)).toEqual([]);
           expect(yield* sink.flush).toEqual({ sent: 0 });
-          expect(yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })))).toEqual([]);
+          expect(
+            yield* RecordManager.use((records) => Stream.runCollect(records.read(Chain.cases.spans.make({})))),
+          ).toEqual([]);
           yield* Effect.void.pipe(Effect.withSpan(PIECE));
           expect(db.prepare("SELECT * FROM unsent").all()).toHaveLength(1);
           expect(db.prepare("SELECT * FROM measurements WHERE piece=?").all(PIECE)).toHaveLength(1);
           yield* sink.flush;
-          const kept = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          const kept = yield* RecordManager.use((records) =>
+            Stream.runCollect(records.read(Chain.cases.spans.make({}))),
+          );
           expect(kept.map((row) => row.name)).toEqual([PIECE]);
           yield* TestClock.setTime(H + HOUR);
           expect(yield* sink.sums(PIECE, H, H + HOUR)).toEqual(
             [...expected]
               .sort(([a], [b]) => a.localeCompare(b))
-              .map(([refused, count]) => ({ _tag: "sum", piece: PIECE, hour: H, refused, count })),
+              .map(([refused, count]) => SumPoint.make({ piece: PIECE, hour: H, refused, count })),
           );
           expect(yield* sink.sums("runtime.rpc", H, H + HOUR)).toEqual([]);
         }).pipe(Effect.provide(world(db)));

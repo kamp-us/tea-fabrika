@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -12,6 +12,15 @@ import type { Sql } from "../Sql.ts";
 import { projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 import * as SettingsStartsRemote from "./SettingsStartsRemote.ts";
+
+/** The cause holds one failure, and it is a `StartsError` whose reason is `Decode`. */
+const failsWithDecode = (cause: Cause.Cause<unknown>) => {
+  expect(cause.reasons).toHaveLength(1);
+  const [reason] = cause.reasons;
+  const error = reason !== undefined && Cause.isFailReason(reason) ? reason.error : null;
+  expect(error).toBeInstanceOf(StartsError);
+  expect(error instanceof StartsError ? error.reason : null).toBeInstanceOf(Decode);
+};
 
 // This throws at the synchronous platform edge, before the ledger translates the failure.
 const exec =
@@ -109,9 +118,7 @@ for (const kind of StartsTest.originKinds) {
           expect(Exit.isFailure(exit)).toBe(poisoned);
 
           if (Exit.isFailure(exit)) {
-            expect(exit.cause).toMatchObject({
-              reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Decode" } } }],
-            });
+            failsWithDecode(exit.cause);
           } else {
             expect(exit.value).toEqual(original);
           }
@@ -149,9 +156,7 @@ for (const kind of StartsTest.originKinds) {
           expect(Exit.isFailure(exit)).toBe(poisoned);
 
           if (Exit.isFailure(exit)) {
-            expect(exit.cause).toMatchObject({
-              reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Decode" } } }],
-            });
+            failsWithDecode(exit.cause);
           } else {
             expect(exit.value).toEqual(StartsTest.receipt(input));
           }

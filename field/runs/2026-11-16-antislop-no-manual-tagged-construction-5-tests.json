@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-5-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:51:34-08:00",
+  "ended": "2026-11-16T00:44:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-manual-tagged-construction-5 (ticket 1057, decisions 0562, 0563 and its amendments, 0214), on the new branch fabrikalfa/antislop-no-manual-tagged-construction-5 from origin/main at b490a3203, which already holds PR 1366, so its files are part of the slice. Counted with anti-slop-effect/no-manual-tagged-construction forced to error in a scratch config outside the repo, over next/packages/libfabrika/src/access, cloudflare, telemetry, gateway and .github/ci: 317 hits met (access 89, cloudflare 87, telemetry 56, .github/ci 53, gateway 32; cloudflare and .github/ci count more than the brief's 81 and 41 because PR 1366's files and the newer main are in). Every hit is in an exam path (exam-paths.json: next/**/*.test.ts, next/**/*Test.ts and .github/**), so no product hit is left for the build. Fixed 294, all by hand edits and a scratch codemod (never committed; it turns `{ _tag: \"x\", ... }` into the case's maker); the checker's quick fix was not used. How: a value of a product union now comes from its own maker (MemberEvent, Adds, Written of access and of telemetry, Change, Chain, Content, SumPoint, MetricPoint, Answer, Sent, Swapped, Installed, Input.cases.write, Audit.Answer, RuntimeRecord, Decision of the rate limit, Writer); a tagged error is checked with toBeInstanceOf and its fields, or by reading `_tag` where it crossed an RPC as data (StartsError in readers.laws, LedgerError where access and gateway may not import ledger/); `toMatchObject({ _tag, ... })` became a read of `_tag` and a match of the rest; an Exit or Result shape became Exit.isSuccess/isFailure and a read of its value; a union the product keeps private or a JSDoc union of a no-dependency .mjs file got the exam's own Schema maker beside the test, pinned to the product type with expectTypeOf where the type is reachable (0135): Live in AccessMachine.laws, Shape in sink.test, Found and Absent in RecordPartTest and ErrorCause, Cause and Action in scheduled.test, Decision in gate.test, Changed and HalfLoaded in reload.laws, Comment, OK, DEAD, Envelope (Alchemy's RpcErrorEnvelope); raw frames of a case no code knows, or damaged on purpose, now spread a maker's value and override one field, so no `_tag` is written by hand and no ignore line is needed. Product-side edits in exam paths: .github/ci/proof.ts's Proof became a Schema.TaggedUnion with its two makers; .github/ci/time-table.ts gained `sections<A>()`, Effect's Data.taggedEnum for the generic Section; .github/ci/field-schema.ts's Found and Rated became Schema.TaggedStruct. ObjectService.test's Damage recipe is a Data.TaggedEnum, since a Schema there trips fabrika/prefer-schema-arbitrary. Stronger, never weaker: ClientManager's walk now expects `applied` at rev head + 1 where it took any number, RecordPartTest's found content names its spanId. Left 23, each listed: .github/ci/gate.mjs:54, :58, :62, :65 and .github/ci/scheduled.mjs:172, :174, :176, :449, :450, :454, :457, :598, :604 (13): these two files run on the runner's own Node with no installed dependency and no type stripping, by design (their headers say so), so no Effect maker can be imported and every other way to make the value writes or hides the key; the right fix is a design call (allow the dependency, or an ignore line per 0563 C) for the owner or the plan. next/packages/libfabrika/src/access/AccessMachine.laws.test.ts:478, :480, :482, :484 (two) and next/packages/libfabrika/src/telemetry/internal/sink.test.ts:44, :46, :48, :50, :52 (10): @ts-expect-error type laws whose whole point is a hand-written value the type refuses, and both run at run time, where a maker would throw on the invalid value; 0562 sends a case where the hand-written _tag is the test's point to the owner. The uncalled type law in Trace.types.test.ts moved to SumPoint.make and keeps its @ts-expect-error. No disable line was added, no assertion deleted or narrowed, no law loosened, no .oxlintrc.json change and no lock line. Waiting on 1366: none.",
+  "plants": [
+    {
+      "law": ".github/ci/proof.test.ts: a rerun trigger makes the full set, its record pinned with Proof.cases.full.make",
+      "plant": ".github/ci/proof.ts choose drops the first trigger from the full proof (triggers.slice(1))",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/telemetry/internal/sink.test.ts: the exam's Shape maker pinned to the machine's Model",
+      "plant": "next/packages/libfabrika/src/telemetry/internal/sink.ts gives the clean case an optional note field",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 53,
+  "note": "Each plant ran once on a saved copy and was restored by copy; git status showed no product file after. Checks at the final tree: tsc --noEmit -p . in next/packages/libfabrika and tsc --noEmit -p .github/ci exit 0 (no root pnpm typecheck). pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 17 of its 18 parts; the one red part is oxlint-plugins/lint.ts asking that next/packages/libfabrika/src/cloudflare/** and gateway/**, now at zero for this rule, be added to the rule's block in .oxlintrc.json, which the owner ruled waits for the later lock pull request. pnpm format stops on the same ask, so oxlint-plugins/format.ts ran on its own after it. The list ratchet exits 0, and next-ledger.json is unchanged (two import lines that would have left it were put back as they were). Tests: each of the 37 touched test files and the two RecordPartTest runners ran green one at a time, the .integration. ones included (the box holds PR 1508's guard, none refused); then vitest --changed origin/main once: 84 files, 2243 passed, 16 skipped.",
+  "step": "tests"
+}

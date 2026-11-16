@@ -3,7 +3,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import { Adds, Grant } from "./Access.ts";
-import { grantText, revokeText, addText, enrollmentText } from "./Text.ts";
+import { Change, grantText, revokeText, addText, enrollmentText } from "./Text.ts";
 
 const ADD_SAW = {
   method: "device",
@@ -94,10 +94,11 @@ it.prop(
   ({ grant, as }) => {
     const signed = { ...grant, as };
     const text = grantText(signed);
-    expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual({
-      _tag: "granted",
-      grant: signed,
-    });
+    expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual(
+      Change.cases.granted.make({
+        grant: signed,
+      }),
+    );
     expect(text.endsWith("\n")).toBe(true);
   },
   { arbitrary: { seed: 119120, runs: 100 } },

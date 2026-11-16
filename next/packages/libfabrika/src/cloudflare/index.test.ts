@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
+import { ProgramDown } from "../runtime/Program.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";
 import type { Env } from "./runtime.ts";
@@ -16,10 +17,9 @@ it("an unknown program is refused before the Worker Loader is called", async () 
       Effect.runPromise(
         Effect.gen(function* () {
           const loader = workerLoader({ get: unexpected, load: unexpected }, {});
-          expect(yield* Effect.flip(loader.load(name, process))).toMatchObject({
-            _tag: "ProgramDown",
-            reason: "no_program",
-          });
+          const down = yield* Effect.flip(loader.load(name, process));
+          expect(down).toBeInstanceOf(ProgramDown);
+          expect(down).toMatchObject({ reason: "no_program" });
         }),
       ),
     ),

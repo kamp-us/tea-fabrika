@@ -43,11 +43,13 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Start } from "../processes/Process.ts";
 import { hash, type BuiltProgram } from "../runtime/Built.ts";
-import { CodeEvent } from "../runtime/Code.ts";
+import { CodeEvent, Installed } from "../runtime/Code.ts";
 import { ProgramLoader } from "../runtime/Entry.ts";
-import { Program } from "../runtime/Program.ts";
-import type { Descriptor } from "../runtime/Runner.ts";
+import { RuntimeRecord } from "../runtime/ProcessStore.ts";
+import { Program, ProgramDown } from "../runtime/Program.ts";
+import { type Descriptor, Sent, Swapped } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import { Written } from "../telemetry/Records.ts";
 import type { GatewayCalls, ProcessBinding } from "./bindings.ts";
 import { control } from "./control.ts";
 import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from "./runtime.ts";
@@ -65,6 +67,10 @@ const ProcessKey = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.Str
 
 const EntryBody = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
 const PROGRAM = "fabrika/counter";
+/** The counter program's own event, as the exam writes it through `own`. */
+const Changed = Schema.TaggedStruct("changed", { count: Schema.optionalKey(Schema.Int) });
+/** Half a code fact, `code.loaded` without `was` or `from`: what a program forges, and the door refuses. */
+const HalfLoaded = Schema.TaggedStruct("code.loaded", { program: Schema.String, hash: Schema.String });
 const BRAIN_BUILD = "brain-build-test";
 const TOKEN = "control-token-test";
 
@@ -239,7 +245,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const d = descriptors.get(name)!;
             return { ...d, id: pid ?? d.id, build: running.get(pid ?? d.id) ?? d.build };
           },
-          msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
+          msg: async () => Sent.cases.accepted.make({ rev: 1, pos: 1 }),
           swap: async (request: Omit<Pushed, "name">) => {
             pushed.push({ name, ...request });
             loadedAtPush.push(
@@ -263,11 +269,11 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             completed.push({ name, ...request });
 
             if (request.hash === was) {
-              return { _tag: "same" };
+              return Swapped.cases.same.make({});
             }
 
             if (refusing.has(name)) {
-              return { _tag: "refused", was, reason: "shape" };
+              return Swapped.cases.refused.make({ was, reason: "shape" });
             }
 
             running.set(pid, request.hash);
@@ -277,13 +283,13 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
               await Effect.runPromise(reply);
             }
 
-            return { _tag: "swapped", was };
+            return Swapped.cases.swapped.make({ was });
           },
         };
       },
     },
     CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }) },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
     LOADER: {
       get: (id: string, factory: () => { readonly modules: Readonly<Record<string, string>> }) => {
@@ -431,7 +437,7 @@ const checkPolicies = Effect.fnUntraced(function* (i: Instance, n: number, phase
     };
     expect(yield* i.policy(descriptor.id), `${name}'s running code decides its policy`).toEqual(expected);
     const id = `policy-own:${n}:${phase}:${name}`;
-    yield* i.run(i.p.own(descriptor.id, id, `app/${name}`, { _tag: "changed" }));
+    yield* i.run(i.p.own(descriptor.id, id, `app/${name}`, Changed.make({})));
     expect(i.entries().find((e) => e.id === id)?.build).toBe(code);
   }
 });
@@ -512,11 +518,11 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       const { digest, answer } = yield* install(i, `install_${n}`, next);
 
       if (digest === selected) {
-        expect(answer).toEqual({ _tag: "same" });
+        expect(answer).toEqual(Installed.cases.same.make({}));
         continue;
       }
 
-      expect(answer).toMatchObject({ _tag: "loaded" });
+      expect(answer._tag).toBe("loaded");
       const added = code(i).slice(before);
       expect(added.map((e) => [e.tag, e.body.hash, e.body.was, e.body.from])).toEqual([
         ["code.loaded", digest, selected, "watch"],
@@ -529,7 +535,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       current = next;
     } else if (move === "same") {
       const { answer } = yield* install(i, `install_${n}`, current);
-      expect(answer).toEqual({ _tag: "same" });
+      expect(answer).toEqual(Installed.cases.same.make({}));
       expect(code(i)).toHaveLength(before);
       expect(i.pushed).toHaveLength(pushes);
     } else if (move === "bundle" || move === "compiler") {
@@ -560,7 +566,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
     } else if (move === "own") {
       const live = [...i.descriptors.values()];
       const descriptor = live[g(fc.nat, { max: live.length - 1 })]!;
-      yield* i.run(i.p.own(descriptor.id, `record_${n}`, `app/${descriptor.id}`, { _tag: "changed", count: n }));
+      yield* i.run(i.p.own(descriptor.id, `record_${n}`, `app/${descriptor.id}`, Changed.make({ count: n })));
       expect(i.entries().find((e) => e.id === `record_${n}`)?.build).toBe(i.running.get(descriptor.id));
     } else if (move === "start") {
       const name = `counter:${++names}`;
@@ -582,7 +588,9 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
         move === "load" ? { ...next, throws: true } : move === "name" ? { ...next, name: "fabrika/other" } : next;
       const pad = move === "too_large" ? MOST + 1 : 0;
       const { digest, answer } = yield* install(i, `install_${n}`, bad, pad);
-      expect(answer).toEqual({ _tag: "failed", reason: move });
+      expect(answer).toEqual(
+        Installed.cases.failed.make({ reason: Schema.decodeUnknownSync(Installed.cases.failed.fields.reason)(move) }),
+      );
       const added = code(i).slice(before);
       expect(added.map((e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, digest]]);
       expect(i.pushed, "a failed hash reaches no process").toHaveLength(pushes);
@@ -899,17 +907,16 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const id = `code.swapped:publish_${n}`;
               const line = lineFor(
                 { ...origin, build: digest },
-                {
-                  _tag: "code.swapped",
+                RuntimeRecord.cases["code.swapped"].make({
                   program: PROGRAM,
                   hash: digest,
                   was,
-                },
+                }),
               );
               i.swapReplies.set(
                 digest,
                 Effect.gen(function* () {
-                  expect(yield* i.run(i.p.append(pid, id, line))).toMatchObject({ _tag: "placed" });
+                  expect((yield* i.run(i.p.append(pid, id, line)))._tag).toBe("placed");
                   yield* Deferred.succeed(published, undefined);
                   yield* Deferred.await(reply);
                 }),
@@ -1059,7 +1066,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               yield* Deferred.await(waiting).pipe(Effect.timeout("2 seconds"));
               const id = `turn_finished_${n}`;
               const result = yield* i
-                .run(i.p.own(pid, id, `app/${pid}`, { _tag: "changed", count: n }))
+                .run(i.p.own(pid, id, `app/${pid}`, Changed.make({ count: n })))
                 .pipe(
                   Effect.ensuring(Deferred.succeed(finished, undefined)),
                   Effect.andThen(Fiber.join(pending)),
@@ -1074,10 +1081,11 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 return;
               }
 
-              expect(result.value.answer).toEqual({
-                _tag: "loaded",
-                processes: [{ name: "counter:1", outcome: { _tag: "swapped", was } }],
-              });
+              expect(result.value.answer).toEqual(
+                Installed.cases.loaded.make({
+                  processes: [{ name: "counter:1", outcome: Swapped.cases.swapped.make({ was }) }],
+                }),
+              );
               expect(i.entries().filter((e) => e.id === id)).toHaveLength(1);
               expect(code(i).filter((e) => e.id === `concurrent_${n}`)).toHaveLength(1);
               expect(i.running.get(pid)).toBe(digest);
@@ -1180,12 +1188,11 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             const replacement = { ...baseFixture(), k: k + g(fc.integer, { min: 10, max: 99 }) };
             const before = new Set(i.isolates.keys());
             const exit = yield* Effect.exit(i.reopen(replacement));
-            expect(
-              Exit.isFailure(exit)
-                ? Cause.squash(exit.cause)
-                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) },
-              "the open fails loud, and counter:1 runs no other code",
-            ).toMatchObject({ _tag: "ProgramDown", reason: "no_program" });
+            const down = Exit.isFailure(exit)
+              ? Cause.squash(exit.cause)
+              : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) };
+            expect(down, "the open fails loud, and counter:1 runs no other code").toBeInstanceOf(ProgramDown);
+            expect(down).toMatchObject({ reason: "no_program" });
           }),
         50,
       ),
@@ -1333,9 +1340,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   const pid = info[0]!.process;
                   const stream = g(() => fc.constantFrom("gateway/code", "gateway/brain", "gateway/x"));
                   const exit = yield* i.run(
-                    Effect.exit(
-                      i.p.own(pid, `own_${n}`, stream, { _tag: "code.loaded", program: PROGRAM, hash: digest }),
-                    ),
+                    Effect.exit(i.p.own(pid, `own_${n}`, stream, HalfLoaded.make({ program: PROGRAM, hash: digest }))),
                   );
                   expect(Exit.isFailure(exit), `a program's write to ${stream}`).toBe(true);
                   expect(code(i)).toHaveLength(before);
@@ -1392,9 +1397,9 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   const id = `install_again_${n}`;
                   yield* i.run(i.p.codeInstall({ ...body, id, from: "watch" }));
                   const after = code(i).length;
-                  expect(yield* i.run(i.p.codeInstall({ ...body, id, from: "watch" }))).toEqual({
-                    _tag: "same",
-                  });
+                  expect(yield* i.run(i.p.codeInstall({ ...body, id, from: "watch" }))).toEqual(
+                    Installed.cases.same.make({}),
+                  );
                   expect(code(i)).toHaveLength(after);
                 }
 

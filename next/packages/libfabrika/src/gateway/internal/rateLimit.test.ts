@@ -82,8 +82,8 @@ it.prop(
           expect(cmds).toHaveLength(1);
           expect(cmds[0]!.decision).toEqual(
             allowed
-              ? { _tag: "allowed", count: admitted.length, ttl: end - at }
-              : { _tag: "refused", retryAfter: end - at },
+              ? RateLimit.Decision.cases.allowed.make({ count: admitted.length, ttl: end - at })
+              : RateLimit.Decision.cases.refused.make({ retryAfter: end - at }),
           );
           expect(next._tag).not.toBe("fresh");
 
@@ -119,7 +119,8 @@ it.prop(
     });
     expect(next).toEqual(state);
     expect(cmds).toHaveLength(1);
-    expect(cmds[0]!.decision).toMatchObject({ _tag: "invalid", cause: expect.anything() });
+    expect(cmds[0]!.decision._tag).toBe("invalid");
+    expect(cmds[0]!.decision).toMatchObject({ cause: expect.anything() });
   },
   { arbitrary: { seed: 119120, runs: 50 } },
 );
@@ -136,10 +137,10 @@ it("vector: expiry is half-open, just before, at and after the end", () => {
     state = result[0];
     return result[1][0]!.decision;
   };
-  expect(take(18)).toEqual({ _tag: "allowed", count: 1, ttl: 42 });
-  expect(take(59)).toEqual({ _tag: "refused", retryAfter: 1 });
-  expect(take(60)).toEqual({ _tag: "allowed", count: 1, ttl: 60 });
-  expect(take(61)).toEqual({ _tag: "refused", retryAfter: 59 });
+  expect(take(18)).toEqual(RateLimit.Decision.cases.allowed.make({ count: 1, ttl: 42 }));
+  expect(take(59)).toEqual(RateLimit.Decision.cases.refused.make({ retryAfter: 1 }));
+  expect(take(60)).toEqual(RateLimit.Decision.cases.allowed.make({ count: 1, ttl: 60 }));
+  expect(take(61)).toEqual(RateLimit.Decision.cases.refused.make({ retryAfter: 59 }));
 });
 
 it("T843 policy: positive safe integers only (50 runs)", () => {

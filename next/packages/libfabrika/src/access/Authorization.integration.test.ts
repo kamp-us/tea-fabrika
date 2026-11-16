@@ -26,9 +26,11 @@ import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { Chain } from "../telemetry/Trace.ts";
 import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
+import { NotGranted } from "./SessionManager.ts";
 
 let appendAdmitted: typeof import("./Authorization.ts").appendAdmitted;
 
@@ -244,12 +246,12 @@ describe("P17a, appendAdmitted", () => {
                 for (let n = 0; n < after; n++) {
                   expect(
                     yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: `after-${n}`, line: line(body) })),
-                  ).toMatchObject({ _tag: "NotGranted" });
+                  ).toBeInstanceOf(NotGranted);
                 }
 
                 expect(
                   yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: "before-0", line: line(body) })),
-                ).toMatchObject({ _tag: "NotGranted" });
+                ).toBeInstanceOf(NotGranted);
                 expect((yield* appendAdmitted(other, { stream: "notes", id: "other", line: line(body) }))._tag).toBe(
                   "placed",
                 );
@@ -323,7 +325,7 @@ describe("P17a, appendAdmitted", () => {
                   return yield* Effect.die(new Error("late append passed revoke"));
                 }
 
-                expect(result.failure).toMatchObject({ _tag: "NotGranted" });
+                expect(result.failure).toBeInstanceOf(NotGranted);
                 expect(yield* read("notes")).toEqual([]);
               }).pipe(Effect.provide(fresh.layer), Effect.provide(TestClock.layer()));
             }).pipe(Effect.scoped),
@@ -358,9 +360,11 @@ describe("P17a, appendAdmitted", () => {
 
               const fresh = reopen ? yield* world(w.path) : w;
               yield* Effect.gen(function* () {
-                expect(
-                  yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: "bad-history", line: line(body) })),
-                ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
+                const failed = yield* Effect.flip(
+                  appendAdmitted(old, { stream: "notes", id: "bad-history", line: line(body) }),
+                );
+                expect(failed._tag).toBe("LedgerError");
+                expect(failed).toMatchObject({ reason: "bad_row" });
                 expect(yield* read("notes")).toEqual([]);
               }).pipe(Effect.provide(fresh.layer));
             }).pipe(Effect.scoped),
@@ -392,7 +396,7 @@ describe("P17a, appendAdmitted", () => {
                       line: line(body),
                     }),
                   ),
-                ).toMatchObject({ _tag: "NotGranted" });
+                ).toBeInstanceOf(NotGranted);
               }
 
               expect(
@@ -436,7 +440,9 @@ describe("P17a, appendAdmitted", () => {
                 const result = yield* Effect.result(appendAdmitted(old, { stream: "notes", id, line: line(marker) }));
                 expect(Result.isSuccess(result)).toBe(outcome === "placed");
                 yield* SpanSink.use((sink) => sink.flush);
-                const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+                const rows = yield* RecordManager.use((records) =>
+                  Stream.runCollect(records.read(Chain.cases.spans.make({}))),
+                );
                 const operations = rows.filter(
                   (row) =>
                     Object.values(row.attributes).includes(id) &&

@@ -37,8 +37,9 @@ import { MailDelivery } from "../runtime/MailDelivery.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
 import { Program } from "../runtime/Program.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
-import type { Descriptor } from "../runtime/Runner.ts";
+import { type Descriptor, Sent, Swapped } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import { Written } from "../telemetry/Records.ts";
 import { mailLayer, wakeups } from "./mail.ts";
 import { type Env, ProjectService, projectLayer } from "./runtime.ts";
 
@@ -491,13 +492,13 @@ const project = Effect.fnUntraced(function* () {
           const d = descriptors.get(key)!;
           return { ...d, id: pid ?? d.id };
         },
-        msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
-        swap: async () => ({ _tag: "same" }),
+        msg: async () => Sent.cases.accepted.make({ rev: 1, pos: 1 }),
+        swap: async () => Swapped.cases.same.make({}),
         mailed: async () => {},
       }),
     },
     CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }) },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
     LOADER: {
       get: () => ({

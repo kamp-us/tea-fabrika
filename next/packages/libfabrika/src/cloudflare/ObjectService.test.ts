@@ -26,7 +26,7 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Context, Data, Effect, Layer, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -103,16 +103,21 @@ const shell = (env: Env, route: (typeof routes)[number]) => {
 };
 
 // The three kinds of bad setting the plan names. Each is a recipe applied to a good setting.
+type Damage = Data.TaggedEnum<{
+  broken: { readonly at: number };
+  missing: { readonly pick: number };
+  extra: { readonly key: string; readonly value: fc.JsonValue };
+}>;
+
+const Damage = Data.taggedEnum<Damage>();
+
 const damage = fc.oneof(
-  fc.record({ _tag: fc.constant("broken" as const), at: fc.double({ min: 0, max: 1, noNaN: true }) }),
-  fc.record({ _tag: fc.constant("missing" as const), pick: fc.nat() }),
-  fc.record({ _tag: fc.constant("extra" as const), key: fc.string(), value: fc.jsonValue() }),
+  fc.record({ at: fc.double({ min: 0, max: 1, noNaN: true }) }).map(Damage.broken),
+  fc.record({ pick: fc.nat() }).map(Damage.missing),
+  fc.record({ key: fc.string(), value: fc.jsonValue() }).map(Damage.extra),
 );
 
-const damaged = (
-  good: Readonly<Record<string, unknown>>,
-  recipe: typeof damage extends fc.Arbitrary<infer A> ? A : never,
-) => {
+const damaged = (good: Readonly<Record<string, unknown>>, recipe: Damage) => {
   if (recipe._tag === "broken") {
     // A proper prefix of a JSON object is never JSON: its closing brace is gone.
     const text = JSON.stringify(good);

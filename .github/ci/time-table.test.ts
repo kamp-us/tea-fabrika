@@ -10,9 +10,11 @@ import {
   markdown,
   readFiles,
   readSteps,
+  sections,
   SLOWEST,
   STEP,
   type Step,
+  type TestFile,
   settled,
   type Timings,
   TRIES,
@@ -133,17 +135,20 @@ it("TT1: a jobs API answer gives each step's result, start and end, a table of t
   fc.assert(
     fc.property(jobAnswer, (job) => {
       const steps = readSteps(job);
-      expect(steps).toEqual({
-        _tag: "read",
-        rows: job.steps.map((s) => ({
-          name: s.name,
-          result: s.conclusion ?? s.status,
-          start: s.started_at,
-          end: s.completed_at,
-        })),
-      });
+      expect(steps).toEqual(
+        sections<Step>().read({
+          rows: job.steps.map((s) => ({
+            name: s.name,
+            result: s.conclusion ?? s.status,
+            start: s.started_at,
+            end: s.completed_at,
+          })),
+        }),
+      );
       const started = job.steps.filter((s) => s.started_at !== null);
-      expect(rowsUnder(markdown({ ...leg, steps, files: { _tag: "read", rows: [] } }), "### Steps")).toEqual(
+      expect(
+        rowsUnder(markdown({ ...leg, steps, files: sections<TestFile>().read({ rows: [] }) }), "### Steps"),
+      ).toEqual(
         started.map((s) => {
           const took =
             s.completed_at === null
@@ -189,8 +194,8 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
         tests: file.assertionResults.length,
         result: file.status,
       }));
-      expect(files).toEqual({ _tag: "read", rows });
-      const text = markdown({ ...leg, steps: { _tag: "read", rows: [] }, files });
+      expect(files).toEqual(sections<TestFile>().read({ rows }));
+      const text = markdown({ ...leg, steps: sections<Step>().read({ rows: [] }), files });
       const total = rows.reduce((sum, file) => sum + file.seconds, 0);
       const count = Math.min(rows.length, SLOWEST);
       expect(text).toContain(`${rows.length} files, ${total.toFixed(1)} s in all. The ${count} slowest:`);
@@ -233,13 +238,12 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
     job: "next",
     leg: "3",
     steps: readSteps(job),
-    files: {
-      _tag: "read",
+    files: sections<TestFile>().read({
       rows: [
         { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
         { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
       ],
-    },
+    }),
   });
   expect(JSON.stringify(timings)).not.toContain("test output");
   expect(fileName(timings)).toBe("timings-next-3.json");
@@ -305,11 +309,11 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
         expect(timings.job).toBe(partial["GITHUB_JOB"] ?? "");
 
         if (dropped.includes("JOB_ID") || apiThrows) {
-          expect(timings.steps).toMatchObject({ _tag: "unavailable" });
+          expect(timings.steps._tag).toBe("unavailable");
         }
 
         if (dropped.includes("REPORT") || readThrows) {
-          expect(timings.files).toMatchObject({ _tag: "unavailable" });
+          expect(timings.files._tag).toBe("unavailable");
         }
 
         expect(() => markdown(timings)).not.toThrow();
@@ -368,8 +372,10 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
       }));
       const text = markdown({
         ...{ run: "", attempt: "", workflow: "", event: "", sha: "", job: "a|b", leg: "1\n2" },
-        steps: { _tag: "read", rows },
-        files: { _tag: "read", rows: names.map((path) => ({ path, seconds: 1, tests: 1, result: "passed" })) },
+        steps: sections<Step>().read({ rows }),
+        files: sections<TestFile>().read({
+          rows: names.map((path) => ({ path, seconds: 1, tests: 1, result: "passed" })),
+        }),
       });
       const lines = text
         .split("\n")

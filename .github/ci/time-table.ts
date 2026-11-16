@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { Data, type Duration, Effect, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -39,6 +39,9 @@ export type TestFile = {
 export type Section<A> =
   | { readonly _tag: "read"; readonly rows: readonly A[] }
   | { readonly _tag: "unavailable"; readonly reason: string };
+
+/** The makers of a section of rows `A`: `sections<A>().read({ rows })` and `.unavailable({ reason })`. */
+export const sections = <A>() => Data.taggedEnum<Section<A>>();
 
 /** Which leg of which run, each as GitHub's environment gives it. */
 export type Leg = {
@@ -87,21 +90,20 @@ export const reasonOf = (error: unknown): string =>
   (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
   "no reason given";
 
-const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", reason });
+const unavailable = <A>(reason: string): Section<A> => sections<A>().unavailable({ reason });
 
 /** The job's steps, in order, from a jobs API answer. */
 export const readSteps = (input: unknown): Section<Step> => {
   const decoded = Schema.decodeUnknownResult(Job)(input);
   return Result.isSuccess(decoded)
-    ? {
-        _tag: "read",
+    ? sections<Step>().read({
         rows: decoded.success.steps.map((step) => ({
           name: step.name,
           result: step.conclusion ?? step.status,
           start: step.started_at ?? null,
           end: step.completed_at ?? null,
         })),
-      }
+      })
     : unavailable(`the jobs API answer is not a job: ${reasonOf(decoded.failure)}`);
 };
 
@@ -109,15 +111,14 @@ export const readSteps = (input: unknown): Section<Step> => {
 export const readFiles = (input: unknown, root: string): Section<TestFile> => {
   const decoded = Schema.decodeUnknownResult(Report)(input);
   return Result.isSuccess(decoded)
-    ? {
-        _tag: "read",
+    ? sections<TestFile>().read({
         rows: decoded.success.testResults.map((file) => ({
           path: relative(root, file.name),
           seconds: Math.max(0, file.endTime - file.startTime) / 1000,
           tests: file.assertionResults.length,
           result: file.status,
         })),
-      }
+      })
     : unavailable(`the report is not Vitest's JSON: ${reasonOf(decoded.failure)}`);
 };
 

@@ -22,8 +22,9 @@ import { Recipient } from "../processes/Process.ts";
 import { hash } from "../runtime/Built.ts";
 import { ProgramLoader } from "../runtime/Entry.ts";
 import { Program } from "../runtime/Program.ts";
-import type { Descriptor } from "../runtime/Runner.ts";
+import { type Descriptor, Sent, Swapped } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import { Written } from "../telemetry/Records.ts";
 import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject: class {} }));
@@ -145,12 +146,12 @@ const instance = Effect.fnUntraced(function* () {
           const d = descriptors.get(key)!;
           return { ...d, id: pid ?? d.id };
         },
-        msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
-        swap: async () => ({ _tag: "same" }),
+        msg: async () => Sent.cases.accepted.make({ rev: 1, pos: 1 }),
+        swap: async () => Swapped.cases.same.make({}),
       }),
     },
     CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }) },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
     LOADER: {
       get: () => ({

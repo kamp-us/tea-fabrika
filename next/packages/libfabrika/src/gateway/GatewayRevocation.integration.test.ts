@@ -388,9 +388,9 @@ describe("P12, door laws retained after the library move", () => {
               plant
                 ? w.controls.open(pid, String(client)).pipe(Effect.map((result) => Answer.cases.ok.make({ result })))
                 : door.route(client, "view.open", { pid });
-            expect(yield* open(badPid)).toEqual({ _tag: "refused", reason: "bad_input" });
+            expect(yield* open(badPid)).toEqual(Answer.cases.refused.make({ reason: "bad_input" }));
             expect(opened).toEqual([]);
-            expect(yield* open(processes.counter)).toEqual({ _tag: "ok", result: { count } });
+            expect(yield* open(processes.counter)).toEqual(Answer.cases.ok.make({ result: { count } }));
             expect(opened).toEqual([{ pid: processes.counter, client: String(client) }]);
           }).pipe(Effect.scoped),
         ),
@@ -414,7 +414,7 @@ describe("P12, door laws retained after the library move", () => {
             const w = yield* world();
             const door = yield* Gateway.pipe(Effect.provide(w.layers().layer));
             const { client, result } = yield* hello(door, w.other, tab);
-            expect(result).toMatchObject({ _tag: "refused", reason: "not_granted" });
+            expect(result).toMatchObject(Answer.cases.refused.make({ reason: "not_granted" }));
             const knocked = yield* door.knock(client, { label });
             assert(knocked._tag === "ok");
             const { code } = yield* Schema.decodeUnknownEffect(Schema.Struct({ code: Schema.String }))(knocked.result);
@@ -470,12 +470,12 @@ describe("P17a, revoke stops writes at the final door", () => {
               const params = request(target, letter, text);
               expect((yield* send(door, client.client, w, target, letter, text))._tag).toBe("ok");
               const [received] = yield* rows(w, "gateway/inputs");
+              expect(received?._tag).toBe("received");
               expect(received).toMatchObject({
-                _tag: "received",
                 body: {
                   method: "process.send",
                   target: params.pid,
-                  by: { _tag: "person", key: w.old.fingerprint, for: person },
+                  by: Writer.cases.person.make({ key: w.old.fingerprint, for: person }),
                   input: params.m,
                   door: expect.stringMatching(/^process_/),
                   n: 1,
@@ -483,8 +483,9 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const refused = yield* door.route(client.client, "unknown.method", {});
               expect(refused._tag).toBe("refused");
-              expect((yield* rows(w, "gateway/inputs"))[1]).toMatchObject({
-                _tag: "refused",
+              const second = (yield* rows(w, "gateway/inputs"))[1];
+              expect(second?._tag).toBe("refused");
+              expect(second).toMatchObject({
                 body: {
                   method: "unknown.method",
                   reason: refused._tag === "refused" ? refused.reason : "",
@@ -497,10 +498,10 @@ describe("P17a, revoke stops writes at the final door", () => {
               const binding = { ...JSON.parse(String(saved.value)), [missing]: undefined };
               w.first.sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", JSON.stringify(binding), saved.id);
               const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
-              expect(yield* Effect.result(door.route(client.client, "process.send", params))).toMatchObject({
-                _tag: "Failure",
-                failure: { _tag: "LedgerError", reason: "bad_row" },
-              });
+              const broken = yield* Effect.result(door.route(client.client, "process.send", params));
+              expect(Result.isFailure(broken)).toBe(true);
+              expect(Result.isFailure(broken) ? broken.failure._tag : null).toBe("LedgerError");
+              expect(Result.isFailure(broken) ? broken.failure : null).toMatchObject({ reason: "bad_row" });
               expect(w.first.sql.exec("SELECT * FROM entries ORDER BY rev")).toEqual(before);
               expect(w.deliveries).toHaveLength(1);
             }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
@@ -577,31 +578,30 @@ describe("P17a, revoke stops writes at the final door", () => {
             const w = yield* world(input),
               d = yield* setup(w);
             w.controls.letter = letter;
+            // The input as the wire carries it: the exam's own schema, encoded.
+            const sent = Schema.encodeSync(input)(input.make({ n }));
             const answer = yield* d.a.route(d.old, "process.send", {
               pid: processes.counter,
               letter,
-              m: { _tag: "add", n: String(n) },
+              m: sent,
               sentAt,
               seen: 0,
             });
             expect(answer._tag).toBe("ok");
             expect(w.deliveries).toHaveLength(1);
             const incoming = last(w);
-            expect(incoming.envelope.input).toEqual({ _tag: "add", n });
+            expect(incoming.envelope.input).toEqual(input.make({ n }));
             // Mutation regression: safe transformed input must stay in the authenticated log.
             const recorded = (yield* rows(w, "gateway/inputs")).find((row) => row.id === incoming.envelope.id);
-            expect(recorded).toMatchObject({
-              _tag: "received",
-              body: { input: { _tag: "add", n: String(n) } },
-            });
+            expect(recorded?._tag).toBe("received");
+            expect(recorded).toMatchObject({ body: { input: sent } });
             // Plant: decode the already decoded input a second time in accept.
-            expect(yield* Effect.result(d.a.accept(incoming))).toMatchObject({
-              _tag: "Success",
-              success: { _tag: "placed" },
-            });
+            const accepted = yield* Effect.result(d.a.accept(incoming));
+            expect(Result.isSuccess(accepted)).toBe(true);
+            expect(Result.isSuccess(accepted) ? accepted.success._tag : null).toBe("placed");
             const inbox = yield* rows(w, `${processes.counter}/inbox`);
             expect(inbox).toHaveLength(1);
-            expect(inbox[0]?.body).toEqual({ m: { _tag: "add", n } });
+            expect(inbox[0]?.body).toEqual({ m: input.make({ n }) });
           }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         );
       }),
@@ -695,7 +695,8 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const marker = `settled-retry-${token}`;
               const first = yield* send(d.a, d.old, w, target, marker, text);
-              expect(first).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+              expect(first._tag).toBe("ok");
+              expect(Schema.is(Sent.cases.accepted)(first._tag === "ok" ? first.result : null)).toBe(true);
               const inbox = yield* rows(w, `${processes[target]}/inbox`);
               expect(inbox).toHaveLength(1);
               const inputs = yield* rows(w, "gateway/inputs");
@@ -867,7 +868,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   bindings: saved.sql.exec("SELECT * FROM gateway_bindings ORDER BY id"),
                   deliveries: w.deliveries,
                 }).toEqual({
-                  answer: Result.succeed({ _tag: "ok", result }),
+                  answer: Result.succeed(Answer.cases.ok.make({ result })),
                   entries,
                   bindings,
                   deliveries: [],
@@ -907,10 +908,9 @@ describe("P17a, revoke stops writes at the final door", () => {
               }
 
               for (let n = 0; n < after; n++) {
-                expect(yield* send(d.a, d.old, w, target, `late-${n}`, text)).toMatchObject({
-                  _tag: "refused",
-                  reason: "not_granted",
-                });
+                expect(yield* send(d.a, d.old, w, target, `late-${n}`, text)).toMatchObject(
+                  Answer.cases.refused.make({ reason: "not_granted" }),
+                );
               }
 
               expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
@@ -958,7 +958,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               expect(Result.isFailure(result)).toBe(revokeFirst);
 
               if (revokeFirst && Result.isFailure(result)) {
-                expect(result.failure).toMatchObject({ _tag: "NotGranted" });
+                expect(result.failure).toBeInstanceOf(NotGranted);
               }
 
               if (!revokeFirst && Result.isSuccess(result)) {
@@ -1050,7 +1050,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 expect(Result.isFailure(result)).toBe(revokeFirst);
 
                 if (revokeFirst && Result.isFailure(result)) {
-                  expect(result.failure).toMatchObject({ _tag: "NotGranted" });
+                  expect(result.failure).toBeInstanceOf(NotGranted);
                 }
 
                 expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
@@ -1084,17 +1084,15 @@ describe("P17a, revoke stops writes at the final door", () => {
               yield* remove(d.b, w, "revoke");
 
               if (pending !== null) {
-                expect(yield* d.a.initialize(pending.client, pending.params, pending.trusted)).toMatchObject({
-                  _tag: "refused",
-                  reason: "not_granted",
-                });
+                expect(yield* d.a.initialize(pending.client, pending.params, pending.trusted)).toMatchObject(
+                  Answer.cases.refused.make({ reason: "not_granted" }),
+                );
               }
 
               for (let n = 0; n < attempts; n++) {
-                expect((yield* hello(d.a, w.old, `reconnect-${n}`)).result).toMatchObject({
-                  _tag: "refused",
-                  reason: "not_granted",
-                });
+                expect((yield* hello(d.a, w.old, `reconnect-${n}`)).result).toMatchObject(
+                  Answer.cases.refused.make({ reason: "not_granted" }),
+                );
                 expect((yield* send(d.b, d.other, w, target, `live-${n}`, text))._tag).toBe("ok");
                 expect((yield* d.b.accept(last(w)))._tag).toBe("placed");
               }
@@ -1138,10 +1136,9 @@ describe("P17a, revoke stops writes at the final door", () => {
             const malformed = yield* Effect.result(
               d.a.accept({ ...incoming, envelope: { ...incoming.envelope, input: {} } }),
             );
-            expect(malformed).toMatchObject({
-              _tag: "Failure",
-              failure: { _tag: "LedgerError", reason: "bad_row" },
-            });
+            expect(Result.isFailure(malformed)).toBe(true);
+            expect(Result.isFailure(malformed) ? malformed.failure._tag : null).toBe("LedgerError");
+            expect(Result.isFailure(malformed) ? malformed.failure : null).toMatchObject({ reason: "bad_row" });
 
             for (const changed of [
               { ...incoming, id: "another-letter" },

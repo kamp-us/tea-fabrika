@@ -23,7 +23,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
+import { Adds, admitted, MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -66,37 +66,37 @@ const signed = (signer: string) => ({
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
-const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
-  _tag: "founded",
-  id: P,
-  name: NAME,
-  keys: [...keys],
-  window,
-});
+const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent =>
+  MemberEvent.cases.founded.make({
+    id: P,
+    name: NAME,
+    keys: [...keys],
+    window,
+  });
 
 const granted = (
   signer: string,
   key: string,
   over: { readonly as?: "window" | "agent" | "hands"; readonly for?: string; readonly id?: string } = {},
-): MemberEvent => ({
-  _tag: "granted",
-  grant: {
-    id: over.id ?? nextId("grant"),
-    key,
-    for: over.for ?? P,
-    to: TO,
-    as: over.as ?? "window",
-    saw: SAW,
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+): MemberEvent =>
+  MemberEvent.cases.granted.make({
+    grant: {
+      id: over.id ?? nextId("grant"),
+      key,
+      for: over.for ?? P,
+      to: TO,
+      as: over.as ?? "window",
+      saw: SAW,
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const revoked = (signer: string, key: string, over: { readonly for?: string } = {}): MemberEvent => ({
-  _tag: "revoked",
-  revoke: { id: nextId("revoke"), key, for: over.for ?? P, to: TO, saw: TOOK, sentAt: SENT },
-  signed: signed(signer),
-});
+const revoked = (signer: string, key: string, over: { readonly for?: string } = {}): MemberEvent =>
+  MemberEvent.cases.revoked.make({
+    revoke: { id: nextId("revoke"), key, for: over.for ?? P, to: TO, saw: TOOK, sentAt: SENT },
+    signed: signed(signer),
+  });
 
 const addedDevice = (
   signer: string,
@@ -107,45 +107,45 @@ const addedDevice = (
     readonly old?: "lost" | "kept" | null;
     readonly for?: string;
   } = {},
-): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: over.for ?? P,
-    to: TO,
-    adds: { _tag: "person", key, window },
-    drops: [...(over.drops ?? [])],
-    saw: addSaw(over.old == null ? "device" : "recovery", over.old ?? null),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: over.for ?? P,
+      to: TO,
+      adds: Adds.cases.person.make({ key, window }),
+      drops: [...(over.drops ?? [])],
+      saw: addSaw(over.old == null ? "device" : "recovery", over.old ?? null),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
 const addedSheet = (
   signer: string,
   key: string,
   over: { readonly drops?: ReadonlyArray<string>; readonly for?: string } = {},
-): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: over.for ?? P,
-    to: TO,
-    adds: { _tag: "recovery", key, v: 1 },
-    drops: [...(over.drops ?? [])],
-    saw: addSaw("sheet"),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: over.for ?? P,
+      to: TO,
+      adds: Adds.cases.recovery.make({ key, v: 1 }),
+      drops: [...(over.drops ?? [])],
+      saw: addSaw("sheet"),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const denied = (key: string, by: string): MemberEvent => ({
-  _tag: "denied",
-  id: nextId("deny"),
-  key,
-  saw: SAW,
-  by,
-});
+const denied = (key: string, by: string): MemberEvent =>
+  MemberEvent.cases.denied.make({
+    id: nextId("deny"),
+    key,
+    saw: SAW,
+    by,
+  });
 
 /** Access as plain data, so two folds compare whatever order their maps were filled in. */
 const view = (m: Access) => ({
@@ -262,15 +262,15 @@ const laterEvent: fc.Arbitrary<() => MemberEvent> = fc.oneof(
   },
   {
     weight: 1,
-    arbitrary: fc
-      .record({ keys: fc.constantFrom(["pC"], ["pD", "pB"]), window: fc.constantFrom("wC", null) })
-      .map((f) => (): MemberEvent => ({
-        _tag: "founded",
-        id: OTHER,
-        name: "another",
-        keys: f.keys,
-        window: f.window,
-      })),
+    arbitrary: fc.record({ keys: fc.constantFrom(["pC"], ["pD", "pB"]), window: fc.constantFrom("wC", null) }).map(
+      (f) => (): MemberEvent =>
+        MemberEvent.cases.founded.make({
+          id: OTHER,
+          name: "another",
+          keys: f.keys,
+          window: f.window,
+        }),
+    ),
   },
 );
 
@@ -479,13 +479,12 @@ describe("p28, founding", () => {
   });
 
   it("plant, a second founded accepted: any later founded, anywhere, changes nothing", () => {
-    const second: MemberEvent = {
-      _tag: "founded",
+    const second: MemberEvent = MemberEvent.cases.founded.make({
       id: OTHER,
       name: "another",
       keys: ["pC"],
       window: "wC",
-    };
+    });
     fc.assert(
       fc.property(
         fc.string().filter((key) => !["pA", "wA", "t1"].includes(key)),
@@ -630,7 +629,7 @@ describe("p28, a removed key stays out", () => {
             founded([root, "pB"], "wA"),
             revoked("pB", root),
             addedDevice("pB", root, "wA"),
-            { _tag: "founded", id: P, name: NAME, keys: [root], window: "wA" },
+            MemberEvent.cases.founded.make({ id: P, name: NAME, keys: [root], window: "wA" }),
           ]);
           expect(m.keys.get(root)?.live).toBe(false);
           expect(isIn(m, "wA")).toBe(false);

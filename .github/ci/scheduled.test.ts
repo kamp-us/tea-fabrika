@@ -1,7 +1,22 @@
 import { readFileSync } from "node:fs";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";
+
+/** The exam's own makers for scheduled.mjs's `Cause` and `Action`, the unions its JSDoc types say (0135). */
+const Cause = Schema.TaggedUnion({
+  failed: { leg: Schema.String },
+  "timed out": { leg: Schema.String, minutes: Schema.NullOr(Schema.Number) },
+  odd: { leg: Schema.String, conclusion: Schema.NullOr(Schema.String) },
+});
+
+const Action = Schema.TaggedUnion({
+  open: { title: Schema.String, body: Schema.String },
+  comment: { number: Schema.Number, body: Schema.String },
+  close: { number: Schema.Number, body: Schema.String },
+  none: {},
+});
 
 type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 
@@ -206,7 +221,7 @@ it("property: a leg whose failed step ran for its limit or longer timed out, and
         expect(scheduled.ending(leg(limit + by), LIMITS)).toBe("timed out");
         expect(scheduled.ending(leg(limit - by), LIMITS)).toBe("failed");
         expect(scheduled.causes([leg(limit + by)], LIMITS)).toEqual([
-          { _tag: "timed out", leg: name, minutes: limit / MINUTE },
+          Cause.cases["timed out"].make({ leg: name, minutes: limit / MINUTE }),
         ]);
         // With no known limit, a failed step is only red.
         expect(scheduled.ending(leg(limit + by), {})).toBe("failed");
@@ -246,7 +261,7 @@ it("property: a leg's suite is tooling when its shard starts tooling-, and next 
   expect(scheduled.ending(canceled("tests (tooling-1)", 30), LIMITS)).toBe("timed out");
   expect(scheduled.ending(canceled("tests (e2e-1)", 17), LIMITS)).toBe("timed out");
   expect(scheduled.causes([canceled("tests (tooling-2)", 31)], LIMITS)).toEqual([
-    { _tag: "timed out", leg: "tests (tooling-2)", minutes: 30 },
+    Cause.cases["timed out"].make({ leg: "tests (tooling-2)", minutes: 30 }),
   ]);
 });
 
@@ -378,7 +393,7 @@ it("property: a leg canceled at or past its limit is a time-out, named by its le
         };
         const jobs = [...others, leg];
         const found = scheduled.causes(jobs, LIMITS);
-        expect(found).toEqual([{ _tag: "timed out", leg: leg.name, minutes }]);
+        expect(found).toEqual([Cause.cases["timed out"].make({ leg: leg.name, minutes })]);
         const text = scheduled.body({ ...r, causes: found });
         expect(text).toContain(`- \`${leg.name}\` timed out: it ran into its ${minutes}-minute limit`);
       },
@@ -436,7 +451,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
         )[0]!;
         const first = red.toSorted((a, b) => Date.parse(a.steps[0]!.end) - Date.parse(b.steps[0]!.end));
         const found = scheduled.causes(jobs, LIMITS);
-        expect(found).toEqual(first.map((job) => ({ _tag: "failed", leg: job.name })));
+        expect(found).toEqual(first.map((job) => Cause.cases.failed.make({ leg: job.name })));
         expect(scheduled.verdict({ needs: { next: { result: "cancelled" } }, jobs, failed: [], limits: LIMITS })).toBe(
           "red",
         );
@@ -519,19 +534,19 @@ it.each([
     "43723335863",
     "red",
     [
-      { _tag: "timed out", leg: "next (4)", minutes: 17 },
-      { _tag: "timed out", leg: "next (e2e-1)", minutes: 17 },
+      Cause.cases["timed out"].make({ leg: "next (4)", minutes: 17 }),
+      Cause.cases["timed out"].make({ leg: "next (e2e-1)", minutes: 17 }),
     ],
   ],
   // On main, green: next (4) at 13 min 38 s of its 17.
   ["43726565395", "green", []],
   // The three below are from when a red leg's last step canceled its own run (until 2026-11-15).
   // A branch: next (3) failed and its stop step canceled five legs, at about 10 minutes each.
-  ["43723346561", "red", [{ _tag: "failed", leg: "next (3)" }]],
+  ["43723346561", "red", [Cause.cases.failed.make({ leg: "next (3)" })]],
   // A branch: next (4) failed, and the cancel caught its own stop step.
-  ["43721881250", "red", [{ _tag: "failed", leg: "next (4)" }]],
+  ["43721881250", "red", [Cause.cases.failed.make({ leg: "next (4)" })]],
   // On main: next (1) failed and stopped three legs; it opened issue 1308, a path that must hold.
-  ["43703058643", "red", [{ _tag: "failed", leg: "next (1)" }]],
+  ["43703058643", "red", [Cause.cases.failed.make({ leg: "next (1)" })]],
 ] as const)("pinned: run %s is %s, and its causes are its failed or timed-out legs alone", (id, expected, legs) => {
   // Plants: the old verdict (red: 43723335863 "stopped"); a canceled leg is a cause (red: five legs
   // named on 43723346561); a time-out without the limit (red: 43723335863 "stopped").
@@ -1047,16 +1062,19 @@ it("property: the report acts only on the open issue with its own title, never o
         expect(writes.some((w) => w.split(" ")[1]?.split("/")[1] === String(speed))).toBe(false);
 
         if (given === "red" && own === null) {
-          expect(action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
+          expect(action._tag).toBe("open");
+          expect(action).toMatchObject({ title: scheduled.TITLE });
           expect(writes).toEqual(["POST labels", "POST issues"]);
         } else if (given === "red") {
-          expect(action).toMatchObject({ _tag: "comment", number: own });
+          expect(action._tag).toBe("comment");
+          expect(action).toMatchObject({ number: own });
           expect(writes).toEqual([`POST issues/${own}/comments`]);
         } else if (own === null) {
           expect(action._tag).toBe("none");
           expect(writes).toEqual([]);
         } else {
-          expect(action).toMatchObject({ _tag: "close", number: own });
+          expect(action._tag).toBe("close");
+          expect(action).toMatchObject({ number: own });
           expect(writes).toEqual([`POST issues/${own}/comments`, `PATCH issues/${own}`]);
         }
       },
@@ -1076,7 +1094,8 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
     env,
     api: scheduled.github(env, red.send)!,
   });
-  expect(opened.action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
+  expect(opened.action._tag).toBe("open");
+  expect(opened.action).toMatchObject({ title: scheduled.TITLE });
   expect(red.calls.find((c) => c.method === "POST" && c.url.endsWith("/issues"))?.body).toMatchObject({
     title: scheduled.TITLE,
     labels: [scheduled.LABEL],
@@ -1089,7 +1108,7 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
     env,
     api: scheduled.github(env, green.send)!,
   });
-  expect(closed).toEqual({ result: "green", action: { _tag: "none" } });
+  expect(closed).toEqual({ result: "green", action: Action.cases.none.make({}) });
   expect(green.calls.filter((c) => c.method !== "GET")).toEqual([]);
 });
 

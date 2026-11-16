@@ -34,6 +34,7 @@ import type { Sql } from "../../Sql.ts";
 import { Archive, type BucketCalls } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SinkError, SpanSink } from "../Sink.ts";
+import { MetricPoint } from "../Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -150,20 +151,29 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
   }
 
   return [...groups.values()]
-    .map((group) => {
+    .flatMap((group) => {
+      const [head] = group;
+
+      // Never: a group holds the span that opened it.
+      if (head === undefined) {
+        return [];
+      }
+
       const ms = group.map((s) => s.ms).sort((x, y) => x - y);
       const n = ms.length;
       const lags = group.flatMap((s) => (s.lag === null ? [] : [s.lag]));
-      return {
-        _tag: "metric",
-        piece: group[0]?.piece,
-        hour: group[0]?.hour,
-        count: n,
-        errors: group.filter((s) => !s.ok).length,
-        // Nearest rank, in integers so no float rounding moves a rank.
-        ms: { p50: ms[Math.ceil(n / 2) - 1], p95: ms[Math.ceil((95 * n) / 100) - 1], max: ms[n - 1] },
-        lag: lags.length === 0 ? null : Math.max(...lags),
-      };
+      // Nearest rank, in integers so no float rounding moves a rank; a rank is always in the group.
+      const rank = (at: number) => ms[at] ?? Number.NaN;
+      return [
+        MetricPoint.make({
+          piece: head.piece,
+          hour: head.hour,
+          count: n,
+          errors: group.filter((s) => !s.ok).length,
+          ms: { p50: rank(Math.ceil(n / 2) - 1), p95: rank(Math.ceil((95 * n) / 100) - 1), max: rank(n - 1) },
+          lag: lags.length === 0 ? null : Math.max(...lags),
+        }),
+      ];
     })
     .sort(bySummary);
 };

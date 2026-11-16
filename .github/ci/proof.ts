@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -46,29 +47,30 @@ import { E2E_SETUP, fewest, list, room, seconds, split, withReaders } from "./le
 export const PROJECTS = ["next", "next-integration", "next-visual", "tooling"] as const;
 
 /** What the proof run tests, and the facts it was chosen from. */
-export type Proof =
-  | {
-      readonly _tag: "full";
-      readonly base: string;
-      readonly head: string;
-      readonly at: string;
-      readonly vitest: string;
-      /** The changed files that match a rerun trigger. */
-      readonly triggers: readonly string[];
-    }
-  | {
-      readonly _tag: "changed";
-      readonly base: string;
-      readonly head: string;
-      readonly at: string;
-      readonly vitest: string;
-      /** git's changed files, base to head. */
-      readonly changed: readonly string[];
-      /** Each leg's test files, by the leg's name: `"1"` to `"N"`. No leg for a set of zero files. */
-      readonly legs: Readonly<Record<string, readonly string[]>>;
-      /** Each leg's measured seconds, a file with no row at the table's median. */
-      readonly seconds: Readonly<Record<string, number>>;
-    };
+export const Proof = Schema.TaggedUnion({
+  full: {
+    base: Schema.String,
+    head: Schema.String,
+    at: Schema.String,
+    vitest: Schema.String,
+    /** The changed files that match a rerun trigger. */
+    triggers: Schema.Array(Schema.String),
+  },
+  changed: {
+    base: Schema.String,
+    head: Schema.String,
+    at: Schema.String,
+    vitest: Schema.String,
+    /** git's changed files, base to head. */
+    changed: Schema.Array(Schema.String),
+    /** Each leg's test files, by the leg's name: `"1"` to `"N"`. No leg for a set of zero files. */
+    legs: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+    /** Each leg's measured seconds, a file with no row at the table's median. */
+    seconds: Schema.Record(Schema.String, Schema.Number),
+  },
+});
+/** What the proof run tests, as `Proof` makes it. */
+export type Proof = typeof Proof.Type;
 
 /** What the select step read: the commits, git's changed files, and when. */
 export type Seen = {
@@ -109,7 +111,7 @@ export const legsOf = (files: readonly string[], sizing: Sizing): Record<string,
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
   if (triggers.length > 0) {
-    return { _tag: "full", base: seen.base, head: seen.head, at: seen.at, vitest: seen.vitest, triggers };
+    return Proof.cases.full.make({ base: seen.base, head: seen.head, at: seen.at, vitest: seen.vitest, triggers });
   }
 
   if (files.some((path) => /\s/.test(path))) {
@@ -117,8 +119,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
   }
 
   const legs = legsOf(files, sizing);
-  return {
-    _tag: "changed",
+  return Proof.cases.changed.make({
     base: seen.base,
     head: seen.head,
     at: seen.at,
@@ -128,7 +129,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
     seconds: Object.fromEntries(
       Object.entries(legs).map(([leg, list]) => [leg, Math.round(seconds(list, sizing.table) * 10) / 10]),
     ),
-  };
+  });
 };
 
 /**

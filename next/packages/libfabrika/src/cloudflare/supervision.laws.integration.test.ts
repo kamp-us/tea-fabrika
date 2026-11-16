@@ -1,7 +1,7 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -11,11 +11,14 @@ import { A, B, brain, data, first, from, ids, PIDS, read, storage } from "../pro
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { Declaration, workerExecution } from "../runtime/Execution.ts";
-import { Program, ProgramDown } from "../runtime/Program.ts";
+import { Input, Program, ProgramDown } from "../runtime/Program.ts";
 import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
 import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
+
+/** The dead refusal a supervisor answers once a process is given up, made as the runner makes it. */
+const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).make({ reason: "dead" });
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -92,7 +95,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
     msg: Msg,
     view: { data: Model, select: (s: typeof Model.Type) => s },
     refuse: () => null,
-    inputs: { add: { _tag: "write", schema: Msg, description: "Add", personOnly: false } },
+    inputs: { add: Input.cases.write.make({ schema: Msg, description: "Add", personOnly: false }) },
     outputs: {},
     writes: {},
     wake: () => null,
@@ -552,7 +555,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                     if (m.letter !== null) {
                       expect(yield* w.receipt(m.letter)).toMatchObject({
                         tries: 1,
-                        result: { _tag: "refused", reason: "dead" },
+                        result: DEAD,
                       });
                     }
 
@@ -637,7 +640,7 @@ for (const source of ["rpc", "decode"] as const) {
                 expect(receipt).toMatchObject({
                   tries: crashes,
                   errors: Array.from({ length: crashes }, () => "TypeError"),
-                  result: crashes === sample.limit ? { _tag: "refused", reason: "dead" } : null,
+                  result: crashes === sample.limit ? DEAD : null,
                 });
               }
 
@@ -646,10 +649,9 @@ for (const source of ["rpc", "decode"] as const) {
                 expect(Exit.isFailure(exit)).toBe(true);
                 const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
                 expect(Cause.hasDies(cause)).toBe(false);
-                expect(Cause.findErrorOption(cause)).toMatchObject({
-                  _tag: "Some",
-                  value: { _tag: "ProgramDown", source: move },
-                });
+                const down = Option.getOrUndefined(Cause.findErrorOption(cause));
+                expect(down).toBeInstanceOf(ProgramDown);
+                expect(down).toMatchObject({ source: move });
                 const saved = yield* w.snapshot;
                 // No attempt is left open: the journal is not stepping.
                 expect(saved?.journal._tag).not.toBe("stepping");
@@ -670,10 +672,9 @@ for (const source of ["rpc", "decode"] as const) {
 
             if (crashes < sample.limit) {
               w.move("ok");
-              expect(yield* ProgramRunner.use((r) => r.msg(input)).pipe(Effect.provide(w.layer()))).toMatchObject({
-                _tag: "accepted",
-                pos: 1,
-              });
+              const sent = yield* ProgramRunner.use((r) => r.msg(input)).pipe(Effect.provide(w.layer()));
+              expect(sent._tag).toBe("accepted");
+              expect(sent).toMatchObject({ pos: 1 });
               expect(yield* w.read(`${NAME}/inbox`)).toHaveLength(1);
             }
           }).pipe(Effect.provide(TestClock.layer())),
@@ -703,7 +704,7 @@ it("Node records the actual class for generated Error and non-Error throws", asy
           w.move("throw");
           expect(
             yield* ProgramRunner.use((r) => r.msg(incoming(letter, 1))).pipe(Effect.provide(w.layer())),
-          ).toMatchObject({ _tag: "refused", reason: "dead" });
+          ).toMatchObject(DEAD);
           expect(yield* w.receipt(letter)).toMatchObject({
             tries: 1,
             errors: [failureClass(failure)],
@@ -739,7 +740,8 @@ it("the real Worker box records the same thrown class as Node under supervision"
               Effect.provide(w.layer()),
               Effect.exit,
             );
-            expect(exit).toMatchObject({ _tag: "Success", value: { _tag: "refused", reason: "dead" } });
+            expect(Exit.isSuccess(exit)).toBe(true);
+            expect(Exit.isSuccess(exit) ? exit.value : null).toMatchObject(DEAD);
             receipts.push(yield* w.receipt(letter));
             dead.push(
               (yield* Effect.forEach([A, B], (p) => w.read(`${p}/dead`), { concurrency: 1 })).flat().map((r) => r.body),

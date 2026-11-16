@@ -38,7 +38,7 @@ describe("P10 passkey records", () => {
       fc.property(commonArb, text, text, (common, key, location) => {
         const add = {
           ...common,
-          adds: { _tag: "recovery", key, v: 1 },
+          adds: Adds.cases.recovery.make({ key, v: 1 }),
           drops: [],
           saw: {
             method: "sheet",
@@ -75,7 +75,8 @@ describe("P10 passkey records", () => {
       );
     fc.assert(
       fc.property(incomplete, text, text, (passkey, key, window) => {
-        expect(Schema.is(Adds)({ _tag: "person", key, window, passkey })).toBe(false);
+        // A made person with an incomplete proof put in after, on purpose: the maker itself would refuse it.
+        expect(Schema.is(Adds)({ ...Adds.cases.person.make({ key, window }), passkey })).toBe(false);
       }),
       {
         seed: 119120,
@@ -102,8 +103,7 @@ describe("P10 passkey records", () => {
     );
   });
   it("question 19: an added person keeps credential, RP, origin and enrollment proof", () => {
-    const example = {
-      _tag: "person" as const,
+    const example = Adds.cases.person.make({
       key: "sk-key",
       window: "window",
       passkey: {
@@ -115,7 +115,7 @@ describe("P10 passkey records", () => {
         nonce: "nonce",
         proof: "SSHSIG proof",
       },
-    };
+    });
     fc.assert(
       fc.property(
         fc
@@ -132,7 +132,7 @@ describe("P10 passkey records", () => {
               proof: text,
             }),
           })
-          .map((value) => ({ _tag: "person" as const, ...value })),
+          .map((value) => Adds.cases.person.make({ ...value })),
         (input) => {
           const decoded = Schema.decodeUnknownSync(Adds)(input);
           expect(decoded).toEqual(input);

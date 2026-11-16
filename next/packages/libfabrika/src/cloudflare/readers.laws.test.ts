@@ -10,15 +10,17 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Predicate, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
-import { Chain } from "../telemetry/Trace.ts";
-import { Attached } from "../transport/Wire.ts";
+import { Written } from "../telemetry/Records.ts";
+import { Chain, SinkError } from "../telemetry/Trace.ts";
+import { Answer, Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
 import { fetch } from "./fetch.ts";
@@ -235,10 +237,11 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
             if (Exit.isFailure(exit)) {
               expect(Cause.hasDies(exit.cause)).toBe(false);
               expect(Cause.hasFails(exit.cause)).toBe(true);
-              expect(Cause.findErrorOption(exit.cause)).toMatchObject({
-                _tag: "Some",
-                value: { _tag: "StartsError", reason: { _tag: "Decode" } },
-              });
+              // The error crossed the RPC as data, so its case is read from its tags, not its class.
+              const found = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+              expect(Predicate.hasProperty(found, "_tag") ? found._tag : undefined).toBe("StartsError");
+              const reason = Predicate.hasProperty(found, "reason") ? found.reason : undefined;
+              expect(Predicate.hasProperty(reason, "_tag") ? reason._tag : undefined).toBe("Decode");
             }
 
             expect(consumers).toBe(0);
@@ -270,15 +273,14 @@ const parserControl = (request: Request, env: Env) =>
     return yield* legacy;
   });
 
-const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
+const typed = (exit: Exit.Exit<unknown, unknown>, kind: typeof LedgerError | typeof SinkError = LedgerError) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
   expect(Cause.hasDies(cause)).toBe(false);
   expect(Cause.hasFails(cause)).toBe(true);
-  expect(Cause.findErrorOption(cause)).toMatchObject({
-    _tag: "Some",
-    value: { _tag: tag, reason: "bad_row" },
-  });
+  const found = Option.getOrUndefined(Cause.findErrorOption(cause));
+  expect(found).toBeInstanceOf(kind);
+  expect(found).toMatchObject({ reason: "bad_row" });
 };
 
 const world = () => {
@@ -326,7 +328,7 @@ const world = () => {
     acceptWebSocket: vi.fn(),
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+  const route = vi.fn(async (): Promise<unknown> => Answer.cases.parked.make({ stream: "stream", after: 0 }));
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
     INSTANCE: JSON.stringify(config),
@@ -340,7 +342,7 @@ const world = () => {
         challenge: async () => "nonce",
       }),
     },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
   } as unknown as Env;
   return {
@@ -447,7 +449,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
 
       try {
         const gateway = await runtime.runPromise(ConnectionService);
-        w.route.mockResolvedValue({ _tag: "ok", result: raw });
+        w.route.mockResolvedValue(Answer.cases.ok.make({ result: raw }));
         await runtime.runPromise(
           gateway
             .message(
@@ -571,7 +573,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
           const exit = await Effect.runPromiseExit(parserControl(request, w.env));
           expect(attempts).toHaveLength(1);
           typed(attempts[0]!);
-          expect(exit).toMatchObject({ _tag: "Success" });
+          expect(Exit.isSuccess(exit)).toBe(true);
           const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
           expect(response.status).toBe(500);
           expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
@@ -599,8 +601,8 @@ for (const service of ["process", "record"] as const) {
           const exit =
             service === "process"
               ? await runtime.runPromiseExit(ProcessService)
-              : await Effect.runPromiseExit(recordRead(w.ctx, undefined, { _tag: "spans" }, 0, 0));
-          typed(exit, service === "record" ? "SinkError" : "LedgerError");
+              : await Effect.runPromiseExit(recordRead(w.ctx, undefined, Chain.cases.spans.make({}), 0, 0));
+          typed(exit, service === "record" ? SinkError : LedgerError);
         } finally {
           await runtime.dispose();
           w.db.close();
@@ -738,15 +740,13 @@ StartsTest.law(
       const old = row(id);
       const next = row(id + 1);
       const fresh = row(id + 2);
-      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual(Written.cases.written.make({}));
       size = (cap ?? 1_000_000_000) - 1;
-      expect(yield* recordWrite(ctx, cap, chain, 0, [next])).toEqual({ _tag: "written" });
+      expect(yield* recordWrite(ctx, cap, chain, 0, [next])).toEqual(Written.cases.written.make({}));
       size++;
-      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
-      expect(yield* recordWrite(ctx, cap, chain, 0, [old, fresh])).toEqual({
-        _tag: "rolled",
-        next: "spans/1",
-        had: [old.span.spanId],
-      });
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual(Written.cases.written.make({}));
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old, fresh])).toEqual(
+        Written.cases.rolled.make({ next: "spans/1", had: [old.span.spanId] }),
+      );
     }),
 );

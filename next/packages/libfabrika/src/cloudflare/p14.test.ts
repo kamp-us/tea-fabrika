@@ -11,12 +11,15 @@
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 import { createHash } from "node:crypto";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
 import * as Route from "./fetch.ts";
 import type { Env } from "./runtime.ts";
+
+/** The bare `ok` every other call of the double answers, made by a schema of its own. */
+const OK = Schema.TaggedStruct("ok", {}).make({});
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 type Assets = Readonly<Record<string, Asset>>;
@@ -53,7 +56,7 @@ const world = (port: number) => {
             }
 
             calls.push(`${to}.${String(method)}`);
-            return Promise.resolve({ _tag: "ok" });
+            return Promise.resolve(OK);
           },
       },
     );

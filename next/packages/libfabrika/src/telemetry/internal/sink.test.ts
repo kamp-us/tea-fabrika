@@ -23,14 +23,23 @@ const Payload = Schema.Struct({
   content: Schema.NullOr(Schema.String),
 });
 
+/** The exam's own maker for the Model, from the payload above; the pin below holds it to the machine's. */
+const Shape = Schema.TaggedUnion({
+  clean: { checked: Schema.Number },
+  failed: { checked: Schema.Number },
+  holding: { checked: Schema.Number, spans: Schema.NonEmptyArray(Payload) },
+  reported: { checked: Schema.Number, spans: Schema.NonEmptyArray(Payload) },
+});
+
 /** Compiled, never meant to hold at run time: each `@ts-expect-error` is a Model tsc must refuse. */
 const contracts = (span: Ended, checked: number) => {
   expectTypeOf<typeof Payload.Type>().toEqualTypeOf<Ended>();
+  expectTypeOf<typeof Shape.Type>().toEqualTypeOf<Model>();
   expectTypeOf<Model["_tag"]>().toEqualTypeOf<"clean" | "failed" | "holding" | "reported">();
-  const holding: Model = { _tag: "holding", checked, spans: [span] };
-  const reported: Model = { _tag: "reported", checked, spans: [span, span] };
-  const clean: Model = { _tag: "clean", checked };
-  const failed: Model = { _tag: "failed", checked };
+  const holding: Model = Shape.cases.holding.make({ checked, spans: [span] });
+  const reported: Model = Shape.cases.reported.make({ checked, spans: [span, span] });
+  const clean: Model = Shape.cases.clean.make({ checked });
+  const failed: Model = Shape.cases.failed.make({ checked });
   // @ts-expect-error holding carries at least one span
   const emptyHolding: Model = { _tag: "holding", checked, spans: [] };
   // @ts-expect-error reported carries at least one span
@@ -135,7 +144,7 @@ type Visit = {
 const walk = (pool: ReadonlyArray<Ended>, draws: ReadonlyArray<Draw>): ReadonlyArray<Visit> => {
   const [start, boot] = machine.init(null, {});
   expect(boot).toEqual([]);
-  expect(start).toEqual({ _tag: "clean", checked: Number.NEGATIVE_INFINITY });
+  expect(start).toEqual(Shape.cases.clean.make({ checked: Number.NEGATIVE_INFINITY }));
   let model: Model = start;
   let history: History = { held: [], unreported: false, checked: Number.NEGATIVE_INFINITY };
   const visits: Array<Visit> = [];

@@ -37,9 +37,9 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
-import type { MemberEvent, Access } from "./Access.ts";
+import { Adds, type Access, MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
-import { ClientManager } from "./ClientManager.ts";
+import { ClientManager, Written } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -66,7 +66,7 @@ const FOUNDER = {
   build: FOUNDER_BUILD,
 } as const;
 
-const FOUNDED: MemberEvent = { _tag: "founded", id: P, name: NAME, keys: ["pA"], window: "wA" };
+const FOUNDED: MemberEvent = MemberEvent.cases.founded.make({ id: P, name: NAME, keys: ["pA"], window: "wA" });
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope that opens it closes
 // the connection, then removes the folder (0061).
@@ -187,66 +187,66 @@ const granted = (
   signer: string,
   key: string,
   over: { readonly as?: "window" | "agent"; readonly id?: string } = {},
-): MemberEvent => ({
-  _tag: "granted",
-  grant: {
-    id: over.id ?? nextId("grant"),
-    key,
-    for: P,
-    to: TO,
-    as: over.as ?? "window",
-    saw: SAW,
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+): MemberEvent =>
+  MemberEvent.cases.granted.make({
+    grant: {
+      id: over.id ?? nextId("grant"),
+      key,
+      for: P,
+      to: TO,
+      as: over.as ?? "window",
+      saw: SAW,
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const revoked = (signer: string, key: string): MemberEvent => ({
-  _tag: "revoked",
-  revoke: { id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT },
-  signed: signed(signer),
-});
+const revoked = (signer: string, key: string): MemberEvent =>
+  MemberEvent.cases.revoked.make({
+    revoke: { id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT },
+    signed: signed(signer),
+  });
 
 const addedDevice = (
   signer: string,
   key: string,
   window: string,
   over: { readonly drops?: ReadonlyArray<string>; readonly old?: "lost" | "kept" } = {},
-): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: P,
-    to: TO,
-    adds: { _tag: "person", key, window },
-    drops: [...(over.drops ?? [])],
-    saw: addSaw(over.old === undefined ? "device" : "recovery", over.old ?? null),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: P,
+      to: TO,
+      adds: Adds.cases.person.make({ key, window }),
+      drops: [...(over.drops ?? [])],
+      saw: addSaw(over.old === undefined ? "device" : "recovery", over.old ?? null),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const addedSheet = (signer: string, key: string): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: P,
-    to: TO,
-    adds: { _tag: "recovery", key, v: 1 },
-    drops: [],
-    saw: addSaw("sheet"),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+const addedSheet = (signer: string, key: string): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: P,
+      to: TO,
+      adds: Adds.cases.recovery.make({ key, v: 1 }),
+      drops: [],
+      saw: addSaw("sheet"),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const denied = (key: string, by: string): MemberEvent => ({
-  _tag: "denied",
-  id: nextId("deny"),
-  key,
-  saw: SAW,
-  by,
-});
+const denied = (key: string, by: string): MemberEvent =>
+  MemberEvent.cases.denied.make({
+    id: nextId("deny"),
+    key,
+    saw: SAW,
+    by,
+  });
 
 /** The id an event is appended under: its own, and `founded` for the founding. */
 const eventId = (event: MemberEvent): string => {
@@ -281,8 +281,10 @@ describe("p96 and p97, replay and write answers", () => {
         const ledger = yield* Ledger;
         yield* ledger.append(MEMBERS, "future", {
           ...from(),
-          _tag: "future_member_fact",
-          body: Schema.decodeUnknownSync(Schema.Json)({ value: body }),
+          // A member event of a later version, whose case this code does not know.
+          ...Schema.TaggedStruct("future_member_fact", { body: Schema.Json }).make({
+            body: Schema.decodeUnknownSync(Schema.Json)({ value: body }),
+          }),
         });
         const loaded = yield* Effect.exit(members);
         expect(loaded._tag, "unknown member events are skipped").toBe("Success");
@@ -291,7 +293,7 @@ describe("p96 and p97, replay and write answers", () => {
           expect(view(loaded.value)).toEqual(view(before));
         }
 
-        expect(yield* write(granted("pA", key))).toMatchObject({ _tag: "applied" });
+        expect((yield* write(granted("pA", key)))._tag).toBe("applied");
         expect((yield* entries).at(-1)?.seen).toBe(2);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -357,13 +359,12 @@ describe("p96, founded is written once, by the first call", () => {
         expect(view(m)).toEqual(
           view(
             foldAccess([
-              {
-                _tag: "founded",
+              MemberEvent.cases.founded.make({
                 id: founder.person,
                 name: founder.name,
                 keys: founder.keys,
                 window: founder.window,
-              },
+              }),
             ]),
           ),
         );
@@ -421,9 +422,9 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
         yield* members;
         const [founding, ...more] = yield* entries;
         expect(more).toEqual([]);
+        expect(founding?._tag).toBe("founded");
         expect(founding).toMatchObject({
           id: "founded",
-          _tag: "founded",
           by: founder.by,
           build: founder.build,
           for: founder.person,
@@ -461,7 +462,9 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
         read: real.read,
         wait: real.wait,
         append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
-          id === "founded" ? Effect.as(before, { _tag: "refused" as const, reason }) : real.append(stream, id, line),
+          id === "founded"
+            ? Effect.as(before, Schema.TaggedStruct("refused", { reason: Schema.Literal(reason) }).make({ reason }))
+            : real.append(stream, id, line),
       })),
     ).pipe(Layer.provide(onSql(sql)));
 
@@ -495,7 +498,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
         const raced = refusing(sql, "id_reused", other);
         return Effect.gen(function* () {
           expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
-          expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
+          expect(yield* write(granted("pA", key))).toEqual(Written.cases.applied.make({ rev: 2 }));
           expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
         }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
       }),
@@ -510,16 +513,16 @@ describe("p96, the traced history from the plan", () => {
         const t2 = granted("pB", key);
         const sheet = addedSheet("pB", "r1");
         const steps: ReadonlyArray<readonly [MemberEvent, unknown]> = [
-          [granted("pA", "t1"), { _tag: "applied", rev: 2 }],
-          [addedDevice("pA", "pB", "wB"), { _tag: "applied", rev: 3 }],
-          [t2, { _tag: "applied", rev: 4 }],
-          [sheet, { _tag: "applied", rev: 5 }],
-          [granted("pA", "g1", { as: "agent" }), { _tag: "applied", rev: 6 }],
-          [granted("wB", "t3"), { _tag: "refused", reason: "not_allowed" }],
-          [revoked("g1", "pB"), { _tag: "refused", reason: "not_allowed" }],
-          [addedDevice("r1", "pC", "wC", { drops: ["pA", "wA"], old: "lost" }), { _tag: "applied", rev: 7 }],
-          [addedDevice("r1", "pX", "wX", { old: "lost" }), { _tag: "refused", reason: "used" }],
-          [t2, { _tag: "applied", rev: 4 }], // the rev-4 grant resent after the drop: nothing new
+          [granted("pA", "t1"), Written.cases.applied.make({ rev: 2 })],
+          [addedDevice("pA", "pB", "wB"), Written.cases.applied.make({ rev: 3 })],
+          [t2, Written.cases.applied.make({ rev: 4 })],
+          [sheet, Written.cases.applied.make({ rev: 5 })],
+          [granted("pA", "g1", { as: "agent" }), Written.cases.applied.make({ rev: 6 })],
+          [granted("wB", "t3"), Written.cases.refused.make({ reason: "not_allowed" })],
+          [revoked("g1", "pB"), Written.cases.refused.make({ reason: "not_allowed" })],
+          [addedDevice("r1", "pC", "wC", { drops: ["pA", "wA"], old: "lost" }), Written.cases.applied.make({ rev: 7 })],
+          [addedDevice("r1", "pX", "wX", { old: "lost" }), Written.cases.refused.make({ reason: "used" })],
+          [t2, Written.cases.applied.make({ rev: 4 })], // the rev-4 grant resent after the drop: nothing new
         ];
         const kept: Array<MemberEvent> = [FOUNDED];
         yield* members; // founded first, so each step below counts only its own entry
@@ -560,9 +563,9 @@ describe("p96, the traced history from the plan", () => {
           yield* write(sheet, { seen: 0, parent: null, by: "SHA256:door-2" });
           const [founding, first, second] = yield* entries;
           expect(founding?.id).toBe("founded");
+          expect(first?._tag).toBe("granted");
           expect(first).toMatchObject({
             id: eventId(grant),
-            _tag: "granted",
             rev: 2,
             seen: 1,
             by: over.by,
@@ -572,9 +575,9 @@ describe("p96, the traced history from the plan", () => {
             traceId: TRACE,
             build: over.build,
           });
+          expect(second?._tag).toBe("added");
           expect(second).toMatchObject({
             id: eventId(sheet),
-            _tag: "added",
             rev: 3,
             seen: 2,
             parent: null,
@@ -596,16 +599,18 @@ describe("p96, why a write is refused", () => {
         yield* write(revoked("pB", "pA"));
         yield* write(addedDevice("r2", "pC", "wC", { old: "kept" }));
         const before = (yield* entries).length;
-        expect(yield* write(granted("x1", key))).toEqual({ _tag: "refused", reason: "not_member" });
-        expect(yield* write(granted("pA", key))).toEqual({ _tag: "refused", reason: "revoked" });
-        expect(yield* write(addedDevice("r1", "pD", "wD", { old: "lost" }))).toEqual({
-          _tag: "refused",
-          reason: "replaced",
-        });
-        expect(yield* write(addedDevice("r2", "pD", "wD", { old: "lost" }))).toEqual({
-          _tag: "refused",
-          reason: "used",
-        });
+        expect(yield* write(granted("x1", key))).toEqual(Written.cases.refused.make({ reason: "not_member" }));
+        expect(yield* write(granted("pA", key))).toEqual(Written.cases.refused.make({ reason: "revoked" }));
+        expect(yield* write(addedDevice("r1", "pD", "wD", { old: "lost" }))).toEqual(
+          Written.cases.refused.make({
+            reason: "replaced",
+          }),
+        );
+        expect(yield* write(addedDevice("r2", "pD", "wD", { old: "lost" }))).toEqual(
+          Written.cases.refused.make({
+            reason: "used",
+          }),
+        );
         expect((yield* entries).length).toBe(before);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -615,9 +620,9 @@ describe("p96, why a write is refused", () => {
     check(fc.string({ minLength: 1 }), ["grant_01m6v5270hf3c8x2q7w9z4k5aa"], (id) =>
       Effect.gen(function* () {
         const first = granted("pA", "t1", { id });
-        expect(yield* write(first)).toEqual({ _tag: "applied", rev: 2 });
+        expect(yield* write(first)).toEqual(Written.cases.applied.make({ rev: 2 }));
         const other = granted("pA", "t2", { id });
-        expect(yield* write(other)).toEqual({ _tag: "refused", reason: "id_reused" });
+        expect(yield* write(other)).toEqual(Written.cases.refused.make({ reason: "id_reused" }));
         expect((yield* entries).length).toBe(2);
         expect((yield* members).keys.has("t2")).toBe(false);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
@@ -664,12 +669,12 @@ describe("p96, the stolen sheet race", () => {
           ),
         };
         return Effect.gen(function* () {
-          expect(yield* write(sheet)).toEqual({ _tag: "applied", rev: 2 });
+          expect(yield* write(sheet)).toEqual(Written.cases.applied.make({ rev: 2 }));
           const answer = yield* write(macC);
           expect(hook.before).toBeNull(); // the other Mac did run in between
-          expect(xAnswer).toEqual({ _tag: "applied", rev: 3 });
-          expect(answer).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          expect(xAnswer).toEqual(Written.cases.applied.make({ rev: 3 }));
+          expect(answer).toEqual(Written.cases.ignored.make({ rev: 4, reason: "used" }));
+          expect(yield* write(macC)).toEqual(Written.cases.ignored.make({ rev: 4, reason: "used" }));
           const m = yield* members;
           expect(m.keys.get("pX")?.live).toBe(true);
           expect(m.keys.get("pC")?.live ?? false).toBe(false);
@@ -788,7 +793,7 @@ describe("p96, write tells the truth over any history", () => {
               expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
               if (changes) {
-                expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
+                expect(answer, next._tag).toEqual(Written.cases.applied.make({ rev: head + 1 }));
               }
 
               if (answer._tag === "refused") {
@@ -829,7 +834,7 @@ describe("p96, a write tells the truth about a key that is out", () => {
         yield* write(granted("pA", key));
         expect((yield* write(revoked("pB", key)))._tag).toBe("applied");
         const before = (yield* entries).length;
-        expect(yield* write(granted("pA", key))).toEqual({ _tag: "refused", reason: "revoked" });
+        expect(yield* write(granted("pA", key))).toEqual(Written.cases.refused.make({ reason: "revoked" }));
         expect((yield* entries).length).toBe(before);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -842,7 +847,7 @@ describe("p96, a write tells the truth about a key that is out", () => {
         yield* write(granted("pA", key));
         expect((yield* write(revoked("pA", key)))._tag).toBe("applied");
         const before = (yield* entries).length;
-        expect(yield* write(revoked("pB", key))).toEqual({ _tag: "refused", reason: "revoked" });
+        expect(yield* write(revoked("pB", key))).toEqual(Written.cases.refused.make({ reason: "revoked" }));
         expect((yield* entries).length).toBe(before);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -854,10 +859,11 @@ describe("p96, a write tells the truth about a key that is out", () => {
         yield* write(addedSheet("pA", "r1"));
         expect((yield* write(revoked("pA", "r1")))._tag).toBe("applied");
         expect((yield* write(addedSheet("pA", "r2")))._tag).toBe("applied");
-        expect(yield* write(addedDevice("r1", "pY", "wY", { old }))).toEqual({
-          _tag: "refused",
-          reason: "revoked",
-        });
+        expect(yield* write(addedDevice("r1", "pY", "wY", { old }))).toEqual(
+          Written.cases.refused.make({
+            reason: "revoked",
+          }),
+        );
         // The new sheet still works: the one it ended was the live one, and there was none.
         expect((yield* write(addedDevice("r2", "pY", "wY", { old })))._tag).toBe("applied");
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),

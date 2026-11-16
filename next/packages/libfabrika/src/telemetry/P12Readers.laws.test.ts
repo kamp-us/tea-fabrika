@@ -1,7 +1,7 @@
 // P12, next/. Corrupt saved rows at each synchronous decoder in the changed record files.
 import { DatabaseSync } from "node:sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -9,7 +9,7 @@ import type { Sql } from "../Sql.ts";
 import { Archive } from "./Archive.ts";
 import { recordPart, RecordManager } from "./Records.ts";
 import { SpanSink } from "./Sink.ts";
-import type { SpanRow } from "./Trace.ts";
+import { Chain, SinkError, type SpanRow } from "./Trace.ts";
 
 const span: SpanRow = {
   spanId: "00f067aa0ba902b7",
@@ -31,10 +31,11 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
   expect(Cause.hasDies(cause)).toBe(false);
   expect(Cause.hasFails(cause)).toBe(true);
-  expect(Cause.findErrorOption(cause)).toMatchObject({
-    _tag: "Some",
-    value: { _tag: "SinkError", reason: "bad_row" },
-  });
+  const found = Cause.findErrorOption(cause);
+  expect(Option.isSome(found)).toBe(true);
+  const error = Option.getOrUndefined(found);
+  expect(error).toBeInstanceOf(SinkError);
+  expect(error).toMatchObject({ reason: "bad_row" });
 };
 
 for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const) {
@@ -61,7 +62,7 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
         };
 
         try {
-          const part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);
+          const part = recordPart(sql, Chain.cases.spans.make({}), 0, 1_000_000_000);
           await Effect.runPromise(part.write([{ span, content: "deletable message" }]));
 
           if (reader === "span") {

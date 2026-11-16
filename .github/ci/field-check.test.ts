@@ -545,8 +545,7 @@ const Words = Schema.String.check(Schema.isPattern(/\S/));
 
 const rules = ["bug", "dead_code", "duplicate", "missing_test", "flaky_test", "doc_drift", "rule_break"];
 
-const Found = Schema.Struct({
-  _tag: Schema.Literal("finding"),
+const Found = Schema.TaggedStruct("finding", {
   id: Schema.String,
   date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
   by: Words,
@@ -564,8 +563,7 @@ const Found = Schema.Struct({
   pr: Text,
 });
 
-const Rated = Schema.Struct({
-  _tag: Schema.Literal("rated"),
+const Rated = Schema.TaggedStruct("rated", {
   finding: Schema.String,
   says: Schema.Literals(["fix", "noise"]),
   by: Words,
@@ -634,8 +632,8 @@ it("a finding blocks on a rule outside the closed list, on `at`, and on empty pr
             errorsOf({ ...row, location: { ...row.location, line } }).fields.includes("location"),
           ) &&
           errorsOf({ ...row, location: { line: row.location.line, path: empty } }).fields.includes("location") &&
-          errorsOf({ ...row, _tag: word }).fields.includes("_tag") &&
-          errorsOf({ ...row, says: "fix", _tag: "rated" }).exitCode !== 0
+          errorsOf({ ...row, ...Schema.TaggedStruct(word, {}).make({}) }).fields.includes("_tag") &&
+          errorsOf({ ...row, says: "fix", ...Schema.TaggedStruct("rated", {}).make({}) }).exitCode !== 0
         );
       },
       schemaOptions,

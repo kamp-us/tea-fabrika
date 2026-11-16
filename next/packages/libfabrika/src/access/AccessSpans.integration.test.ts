@@ -32,9 +32,9 @@ import { A, brain, first as firstStart, ids } from "../processes/Process.test-su
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { MemberEvent } from "./Access.ts";
+import { Adds, MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
-import { ClientManager } from "./ClientManager.ts";
+import { ClientManager, Written } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const READER = "connection:t1";
@@ -198,17 +198,17 @@ const signed = (signer: string) => ({
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
-const granted = (signer: string, key: string): MemberEvent => ({
-  _tag: "granted",
-  grant: { id: nextId("grant"), key, for: P, to: TO, as: "window", saw: SAW, sentAt: SENT },
-  signed: signed(signer),
-});
+const granted = (signer: string, key: string): MemberEvent =>
+  MemberEvent.cases.granted.make({
+    grant: { id: nextId("grant"), key, for: P, to: TO, as: "window", saw: SAW, sentAt: SENT },
+    signed: signed(signer),
+  });
 
-const revoked = (signer: string, key: string): MemberEvent => ({
-  _tag: "revoked",
-  revoke: { id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT },
-  signed: signed(signer),
-});
+const revoked = (signer: string, key: string): MemberEvent =>
+  MemberEvent.cases.revoked.make({
+    revoke: { id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT },
+    signed: signed(signer),
+  });
 
 const addSaw = (method: "sheet" | "recovery") => ({
   method,
@@ -220,41 +220,41 @@ const addSaw = (method: "sheet" | "recovery") => ({
   old: method === "recovery" ? ("lost" as const) : null,
 });
 
-const addedDevice = (signer: string, key: string, window: string, drops: ReadonlyArray<string> = []): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: P,
-    to: TO,
-    adds: { _tag: "person", key, window },
-    drops: [...drops],
-    saw: addSaw("recovery"),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+const addedDevice = (signer: string, key: string, window: string, drops: ReadonlyArray<string> = []): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: P,
+      to: TO,
+      adds: Adds.cases.person.make({ key, window }),
+      drops: [...drops],
+      saw: addSaw("recovery"),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const addedSheet = (signer: string, key: string): MemberEvent => ({
-  _tag: "added",
-  add: {
-    id: nextId("add"),
-    for: P,
-    to: TO,
-    adds: { _tag: "recovery", key, v: 1 },
-    drops: [],
-    saw: addSaw("sheet"),
-    sentAt: SENT,
-  },
-  signed: signed(signer),
-});
+const addedSheet = (signer: string, key: string): MemberEvent =>
+  MemberEvent.cases.added.make({
+    add: {
+      id: nextId("add"),
+      for: P,
+      to: TO,
+      adds: Adds.cases.recovery.make({ key, v: 1 }),
+      drops: [],
+      saw: addSaw("sheet"),
+      sentAt: SENT,
+    },
+    signed: signed(signer),
+  });
 
-const denied = (key: string): MemberEvent => ({
-  _tag: "denied",
-  id: nextId("deny"),
-  key,
-  saw: SAW,
-  by: "SHA256:menu",
-});
+const denied = (key: string): MemberEvent =>
+  MemberEvent.cases.denied.make({
+    id: nextId("deny"),
+    key,
+    saw: SAW,
+    by: "SHA256:menu",
+  });
 
 const write = (event: MemberEvent) => ClientManager.use((clients) => clients.write(event, from()));
 
@@ -322,8 +322,8 @@ describe("p97, mailbox spans", () => {
         yield* mailbox.send(name, "letter_a", M_MARK, from());
         yield* ledger.append(`${name}/inbox`, "x-1", {
           ...from(),
-          _tag: "exit",
-          body: { m: M_MARK },
+          // A line in the inbox that is no letter, the one receive must skip.
+          ...Schema.TaggedStruct("exit", { body: Schema.Json }).make({ body: { m: M_MARK } }),
         });
         yield* mailbox.send(name, "letter_b", M_MARK, from());
         const letters = yield* Stream.runCollect(mailbox.receive(name, 0));
@@ -482,7 +482,7 @@ describe("p97, member spans", () => {
         return Effect.gen(function* () {
           const clients = yield* ClientManager;
           yield* write(sheet);
-          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          expect(yield* write(macC)).toEqual(Written.cases.ignored.make({ rev: 4, reason: "used" }));
           // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
           const answers = ended("access.write")
             .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
@@ -629,7 +629,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         ).pipe(Layer.provide(onSql(sql)));
         return Effect.gen(function* () {
           yield* write(sheet);
-          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          expect(yield* write(macC)).toEqual(Written.cases.ignored.make({ rev: 4, reason: "used" }));
           const ignored = ended("access.write").find((span) => tagged(span, "answer") === "ignored");
 
           if (ignored === undefined) {
@@ -728,10 +728,11 @@ describe("p97, the tags hold the right names and numbers", () => {
           return expect.unreachable();
         }
 
-        expect(yield* write({ ...event, grant: { ...event.grant, as: "agent" } })).toEqual({
-          _tag: "refused",
-          reason: "not_allowed",
-        });
+        expect(yield* write({ ...event, grant: { ...event.grant, as: "agent" } })).toEqual(
+          Written.cases.refused.make({
+            reason: "not_allowed",
+          }),
+        );
         expect(yield* clients.members).toEqual(before);
       }).pipe(Effect.provide(all())),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }) } },

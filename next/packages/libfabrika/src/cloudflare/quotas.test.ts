@@ -1,6 +1,6 @@
 // P34c Q14 and the strict Worker handoff, next/. RPC encodings use product schemas.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Schema } from "effect";
+import { ByteSize, Effect, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { expectTypeOf } from "vitest";
 import { Appended } from "../ledger/Log.ts";
@@ -106,10 +106,10 @@ describe("P34c typed quota boundaries", () => {
           const path = paths[cell.pick % paths.length]!;
           const missing = { ...saved, values: { ...saved.values } };
           delete missing.values[path];
-          expect(yield* Effect.result(QuotaSettings.read(missing))).toMatchObject({ _tag: "Failure" });
+          expect(Result.isFailure(yield* Effect.result(QuotaSettings.read(missing)))).toBe(true);
           const corrupted = { ...saved, values: { ...saved.values, [path]: { invalid: cell.bytes } } };
-          expect(yield* Effect.result(QuotaSettings.read(corrupted))).toMatchObject({ _tag: "Failure" });
-          expect(yield* Effect.result(QuotaSettings.read(undefined))).toMatchObject({ _tag: "Failure" });
+          expect(Result.isFailure(yield* Effect.result(QuotaSettings.read(corrupted)))).toBe(true);
+          expect(Result.isFailure(yield* Effect.result(QuotaSettings.read(undefined)))).toBe(true);
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     { arbitrary: { seed: 119120, runs: 100 } },

@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import * as gate from "./gate.mjs";
+
+/** The exam's own maker for what gate.mjs decides, the union its JSDoc types say (0135). */
+const Decision = Schema.TaggedUnion({
+  start: { reason: Schema.Literals(["by_hand", "due"]) },
+  skip: { reason: Schema.Literals(["tested", "too_soon"]) },
+});
 
 // Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (0581): a push
 // to main or the hourly catch-up starts the full run only when no full run on main started within
@@ -237,12 +244,12 @@ it("G1 property: decide starts every hand start, and on a push or the catch-up s
 
         const expected =
           event === "workflow_dispatch"
-            ? { _tag: "start", reason: "by_hand" }
+            ? Decision.cases.start.make({ reason: "by_hand" })
             : tested
-              ? { _tag: "skip", reason: "tested" }
+              ? Decision.cases.skip.make({ reason: "tested" })
               : since < gap * MINUTE
-                ? { _tag: "skip", reason: "too_soon" }
-                : { _tag: "start", reason: "due" };
+                ? Decision.cases.skip.make({ reason: "too_soon" })
+                : Decision.cases.start.make({ reason: "due" });
         expect(decision).toEqual(expected);
       },
     ),

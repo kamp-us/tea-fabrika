@@ -18,9 +18,10 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
-import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
+import { type Access, access, Adds, admitted, type Folded, MemberEvent, members, type Reason } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -30,6 +31,12 @@ type Founded = Extract<Folded, { readonly _tag: "founded" }>;
 type Unfounded = Extract<Folded, { readonly _tag: "unfounded" }>;
 type Key = Founded["keys"] extends ReadonlyMap<string, infer K> ? K : never;
 type Standing = Key["_tag"];
+
+/** The exam's own maker for a live key, pinned to the machine's `Key` below (0135). */
+const Live = Schema.TaggedStruct("live", {
+  rank: Schema.Literals(["person", "window", "agent", "hands", "recovery"]),
+  under: Schema.NullOr(Schema.String),
+});
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const OTHER = "person_01m6v5270hg0000000000000zz";
@@ -197,13 +204,13 @@ const pickId = (model: Folded, c: Choice, refused: ReadonlyArray<string>, n: num
   return (c.id === 0 ? at(accepted, c.pick) : c.id === 1 ? at(refused, c.pick) : undefined) ?? `${kind}_${c.raw}#${n}`;
 };
 
-const founding = (c: Choice): MemberEvent => ({
-  _tag: "founded",
-  id: c.founder,
-  name: c.name,
-  keys: [...c.keys],
-  window: c.window,
-});
+const founding = (c: Choice): MemberEvent =>
+  MemberEvent.cases.founded.make({
+    id: c.founder,
+    name: c.name,
+    keys: [...c.keys],
+    window: c.window,
+  });
 
 /** Turn one choice into an event, reading the Model the walk has reached. */
 const choose = (
@@ -227,47 +234,46 @@ const choose = (
 
   switch (c.kind) {
     case "denied":
-      return { _tag: "denied", id, key: pickTarget(model, c, n, "denied"), saw: SAW, by: signer };
+      return MemberEvent.cases.denied.make({ id, key: pickTarget(model, c, n, "denied"), saw: SAW, by: signer });
     case "granted":
-      return {
-        _tag: "granted",
+      return MemberEvent.cases.granted.make({
         grant: { id, key: pickTarget(model, c, n, "leaf"), for: person, to: TO, as: c.as, saw: SAW, sentAt: SENT },
         signed: signed(signer),
-      };
+      });
     case "revoked":
-      return {
-        _tag: "revoked",
+      return MemberEvent.cases.revoked.make({
         revoke: { id, key: pickTarget(model, c, n, "gone"), for: person, to: TO, saw: TOOK, sentAt: SENT },
         signed: signed(signer),
-      };
+      });
     case "person":
-      return {
-        _tag: "added",
+      return MemberEvent.cases.added.make({
         add: {
           id,
           for: person,
           to: TO,
-          adds: { _tag: "person", key: pickTarget(model, c, n, "device"), window: pickTarget(model, c, n + 1, "tab") },
+          adds: Adds.cases.person.make({
+            key: pickTarget(model, c, n, "device"),
+            window: pickTarget(model, c, n + 1, "tab"),
+          }),
           drops: pickDrops(model, c, signer),
           saw: ADD_SAW,
           sentAt: SENT,
         },
         signed: signed(signer),
-      };
+      });
     default:
-      return {
-        _tag: "added",
+      return MemberEvent.cases.added.make({
         add: {
           id,
           for: person,
           to: TO,
-          adds: { _tag: "recovery", key: pickTarget(model, c, n, "sheet"), v: 1 },
+          adds: Adds.cases.recovery.make({ key: pickTarget(model, c, n, "sheet"), v: 1 }),
           drops: pickDrops(model, c, signer),
           saw: { ...ADD_SAW, method: "sheet", typed: true, kept: "print" },
           sentAt: SENT,
         },
         signed: signed(signer),
-      };
+      });
   }
 };
 
@@ -463,6 +469,7 @@ describe("ticket 706, the access machine's types", () => {
       expectTypeOf<Key>().not.toHaveProperty("live");
       expectTypeOf<Key>().not.toHaveProperty("spent");
       expectTypeOf<Key>().not.toHaveProperty("replaced");
+      expectTypeOf<typeof Live.Type>().toEqualTypeOf<Extract<Key, { readonly _tag: "live" }>>();
       expectTypeOf<Extract<Key, { readonly _tag: "spent" }>["rank"]>().toEqualTypeOf<"recovery">();
       expectTypeOf<Extract<Key, { readonly _tag: "spent" }>["under"]>().toEqualTypeOf<null>();
       expectTypeOf<Extract<Key, { readonly _tag: "replaced" }>["rank"]>().toEqualTypeOf<"recovery">();
@@ -505,15 +512,15 @@ describe("ticket 706, the access machine walked from init", () => {
           const [first] = event.keys;
 
           for (const key of event.keys) {
-            expect(post.keys.get(key), key).toEqual({ _tag: "live", rank: "person", under: null });
+            expect(post.keys.get(key), key).toEqual(Live.make({ rank: "person", under: null }));
           }
 
           const window = event.window;
           const extra = window !== null && first !== undefined && !event.keys.includes(window) ? 1 : 0;
           expect(post.keys.size).toBe(new Set(event.keys).size + extra);
 
-          if (extra === 1 && window !== null) {
-            expect(post.keys.get(window)).toEqual({ _tag: "live", rank: "window", under: first });
+          if (extra === 1 && window !== null && first !== undefined) {
+            expect(post.keys.get(window)).toEqual(Live.make({ rank: "window", under: first }));
           }
 
           continue;
@@ -600,7 +607,7 @@ describe("ticket 706, the access machine walked from init", () => {
           const target = event.grant.key;
           expect(added).toEqual(pre.keys.has(target) ? [] : [target]);
           expect(post.keys.get(target)).toEqual(
-            pre.keys.get(target) ?? { _tag: "live", rank: event.grant.as, under: signer },
+            pre.keys.get(target) ?? Live.make({ rank: event.grant.as, under: signer }),
           );
         }
 

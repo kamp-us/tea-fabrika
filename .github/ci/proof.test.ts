@@ -10,7 +10,7 @@ import {
   legsOf,
   outputs,
   PROJECTS,
-  type Proof,
+  Proof,
   type Seen,
   type Sizing,
   summary,
@@ -85,7 +85,7 @@ it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever
       real,
     );
     const { base, head, at, vitest } = seen([]);
-    expect(proof, path).toStrictEqual({ _tag: "full", base, head, at, vitest, triggers: [path] });
+    expect(proof, path).toStrictEqual(Proof.cases.full.make({ base, head, at, vitest, triggers: [path] }));
     expect(outputs(proof), path).toEqual(["scope=full", "legs=[]", "files={}"]);
   }
 
@@ -108,7 +108,7 @@ it("property: the full set's triggers are exactly the changed files that match, 
 it("pinned: a changed set of zero files is a green run with no leg, and its record and summary say so", () => {
   // Plant, run once on proof.ts and restored: `outputs` gives one empty leg (red: `legs=["1"]`).
   const proof = choose(seen(["docs/plan/README.md"]), [], [], real);
-  expect(proof).toEqual({ ...seen(["docs/plan/README.md"]), _tag: "changed", legs: {}, seconds: {} });
+  expect(proof).toEqual(Proof.cases.changed.make({ ...seen(["docs/plan/README.md"]), legs: {}, seconds: {} }));
   expect(outputs(proof)).toEqual(["scope=changed", "legs=[]", "files={}"]);
   expect(summary(proof)).toContain("no leg starts and the run is green");
 });

@@ -1,7 +1,7 @@
 import { it, expect } from "@effect/vitest";
 // T502 PR 2, next/. Plants: return the failed call unchanged; map all failures to unreachable.
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
-import { Effect, Result, Schema, Stream } from "effect";
+import { Effect, Option, Result, Schema, Stream } from "effect";
 import { RecordManager } from "../telemetry/Records.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
 import { reach } from "./reach.ts";
@@ -9,6 +9,8 @@ import { recordStub, type Env } from "./runtime.ts";
 
 const unreachable = (cause: RpcCallError) => new SinkError({ reason: "unreachable", held: 0, cause });
 const Method = Schema.Literals(["write", "read", "content", "deleteContent"]);
+/** Alchemy's RPC error envelope (`RpcErrorEnvelope` in alchemy's Rpc.ts), the frame its bridge sends. */
+const Envelope = Schema.TaggedStruct(ErrorTag, { error: Schema.Unknown });
 
 it.effect.prop(
   "reach keeps transport failures in SinkError's failure channel, with the same cause",
@@ -20,8 +22,9 @@ it.effect.prop(
       const translated: Effect.Effect<never, SinkError> = reach(Effect.fail(cause), unreachable);
       const result = yield* Effect.result(translated);
       expect(Result.isFailure(result)).toBe(true);
-      const error = Result.getFailure(result);
-      expect(error).toMatchObject({ _tag: "Some", value: { _tag: "SinkError", reason: "unreachable", held: 0 } });
+      const error = Option.getOrUndefined(Result.getFailure(result));
+      expect(error).toBeInstanceOf(SinkError);
+      expect(error).toMatchObject({ reason: "unreachable", held: 0 });
       expect(Result.match(result, { onSuccess: () => undefined, onFailure: (e) => e.cause })).toBe(cause);
     }),
   { arbitrary: { seed: 119120, runs: 100 } },
@@ -54,7 +57,7 @@ it.effect.prop(
           calls.push(method);
           // Platform RPC boundary: resolve the bridge envelope or reject the transport call.
           return typed
-            ? Promise.resolve({ _tag: ErrorTag, error: encodeRpcError(new SinkError({ reason, held })) })
+            ? Promise.resolve(Envelope.make({ error: encodeRpcError(new SinkError({ reason, held })) }))
             : Promise.reject(thrown);
         };
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only RECORD.getByName is consumed by recordStub; other platform handles are unused
