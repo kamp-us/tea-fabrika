@@ -27,14 +27,14 @@ export type Model = {
 const resolve = (model: Model, name: string): string | undefined =>
   model.refs[name] ?? (model.commits[name] === undefined ? undefined : name);
 
-/** Every commit `sha` reaches, itself first, nearest first. */
-const ancestry = (model: Model, sha: string): ReadonlyArray<string> => {
-  const seen: Array<string> = [];
+/** Every commit `sha` reaches, itself included. */
+const ancestry = (model: Model, sha: string): ReadonlySet<string> => {
+  const seen = new Set<string>();
   const queue = [sha];
 
   for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-    if (!seen.includes(next)) {
-      seen.push(next);
+    if (!seen.has(next)) {
+      seen.add(next);
       queue.push(...(model.commits[next]?.parents ?? []));
     }
   }
@@ -42,27 +42,64 @@ const ancestry = (model: Model, sha: string): ReadonlyArray<string> => {
   return seen;
 };
 
-/** The nearest commit both reach, found from `b`'s side, as `a...b` takes it. */
-const mergeBase = (model: Model, a: string, b: string): string | undefined => {
-  const fromA = new Set(ancestry(model, a));
-  return ancestry(model, b).find((sha) => fromA.has(sha));
+/**
+ * The best common ancestors of `a` and `b`, as `git merge-base --all` names them: the commits both
+ * reach that no other commit both reach has as an ancestor. `a...b` diffs from the one there is;
+ * with none or with several, the model does not answer.
+ */
+const mergeBases = (model: Model, a: string, b: string): ReadonlyArray<string> => {
+  const fromA = ancestry(model, a);
+  const common = [...ancestry(model, b)].filter((sha) => fromA.has(sha));
+  return common.filter((sha) => !common.some((other) => other !== sha && ancestry(model, other).has(sha)));
 };
 
-/** A file's lines, without the empty one after its last newline. */
-const splitLines = (text: string): ReadonlyArray<string> => {
-  const lines = text.split("\n");
-  return lines.at(-1) === "" ? lines.slice(0, -1) : lines;
+/** A file's lines, when the model knows its shape: not empty, and ending in a newline. */
+const splitLines = (text: string | undefined): ReadonlyArray<string> | undefined =>
+  text === undefined ? [] : text === "" || !text.endsWith("\n") ? undefined : text.slice(0, -1).split("\n");
+
+/** How many lines the two lists share, each line counted as often as both hold it. */
+const shared = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): number => {
+  const left = new Map<string, number>();
+
+  for (const line of a) {
+    left.set(line, (left.get(line) ?? 0) + 1);
+  }
+
+  let count = 0;
+
+  for (const line of b) {
+    const n = left.get(line) ?? 0;
+
+    if (n > 0) {
+      left.set(line, n - 1);
+      count += 1;
+    }
+  }
+
+  return count;
 };
 
 /**
- * One file's change as `git diff --unified=0` writes its header and its changed lines. The model
- * trims the lines both sides share at the start and at the end, and calls the rest removed and added.
- * That is git's answer whenever a change appends lines or swaps every line; the hunk header carries
- * no positions, so a reader of positions is not served by this model.
+ * One file's change as `git diff --unified=0` writes its header and its changed lines, or
+ * `undefined` for a shape the model does not know. The model trims the lines both sides share at the
+ * start and at the end, and calls the rest removed and added. It answers only when no other line is
+ * shared: then every smallest diff, git's included, changes exactly those lines, as when a change
+ * appends, inserts or removes lines in one place, or swaps every line. A moved or swapped line, an
+ * empty file and a file without its last newline are not answered. The hunk header carries no
+ * positions, so a reader of positions is not served by this model.
  */
-const fileDiff = (path: string, was: string | undefined, now: string | undefined): ReadonlyArray<string> => {
-  const old = was === undefined ? [] : splitLines(was);
-  const fresh = now === undefined ? [] : splitLines(now);
+const fileDiff = (
+  path: string,
+  was: string | undefined,
+  now: string | undefined,
+): ReadonlyArray<string> | undefined => {
+  const old = splitLines(was);
+  const fresh = splitLines(now);
+
+  if (old === undefined || fresh === undefined) {
+    return undefined;
+  }
+
   let start = 0;
 
   while (start < old.length && start < fresh.length && old[start] === fresh[start]) {
@@ -79,6 +116,10 @@ const fileDiff = (path: string, was: string | undefined, now: string | undefined
     end += 1;
   }
 
+  if (shared(old, fresh) !== start + end) {
+    return undefined;
+  }
+
   const removed = old.slice(start, old.length - end).map((line) => `-${line}`);
   const added = fresh.slice(start, fresh.length - end).map((line) => `+${line}`);
   return [
@@ -92,11 +133,27 @@ const fileDiff = (path: string, was: string | undefined, now: string | undefined
   ];
 };
 
-/** The diff from one tree to another, its files in path order. */
-const treeDiff = (from: Tree, to: Tree): string => {
+/** The diff from one tree to another, its files in path order, or the first file it cannot answer. */
+const treeDiff = (from: Tree, to: Tree): Effect.Effect<string, GitError> => {
   const paths = [...new Set([...Object.keys(from), ...Object.keys(to)])].toSorted();
-  const lines = paths.flatMap((path) => (from[path] === to[path] ? [] : fileDiff(path, from[path], to[path])));
-  return lines.map((line) => `${line}\n`).join("");
+  const lines: Array<string> = [];
+
+  for (const path of paths) {
+    const change = from[path] === to[path] ? [] : fileDiff(path, from[path], to[path]);
+
+    if (change === undefined) {
+      return Effect.fail(
+        GitError.make({
+          command: "diff",
+          reason: `the model does not answer the change to ${path}: a shape it does not know`,
+        }),
+      );
+    }
+
+    lines.push(...change);
+  }
+
+  return Effect.succeed(lines.map((line) => `${line}\n`).join(""));
 };
 
 /** The range a `diff` call names, `a...b` or `a..b`, and the options the model answers. */
@@ -108,7 +165,7 @@ const answerDiff = (model: Model, args: ReadonlyArray<string>): Effect.Effect<st
   const range = ranges.length === 1 ? RANGE.exec(ranges[0] ?? "") : null;
 
   if (range === null) {
-    return Effect.fail(new GitError({ command: "diff", reason: `the model does not answer diff ${args.join(" ")}` }));
+    return Effect.fail(GitError.make({ command: "diff", reason: `the model does not answer diff ${args.join(" ")}` }));
   }
 
   const [, left = "", dots, right = ""] = range;
@@ -116,16 +173,24 @@ const answerDiff = (model: Model, args: ReadonlyArray<string>): Effect.Effect<st
   const b = resolve(model, right);
 
   if (a === undefined || b === undefined) {
-    return Effect.fail(new GitError({ command: "diff", reason: `unknown revision ${a === undefined ? left : right}` }));
+    return Effect.fail(
+      GitError.make({ command: "diff", reason: `unknown revision ${a === undefined ? left : right}` }),
+    );
   }
 
-  const from = dots === "..." ? mergeBase(model, a, b) : a;
+  const bases = dots === "..." ? mergeBases(model, a, b) : [a];
+  const [from] = bases;
 
-  if (from === undefined) {
-    return Effect.fail(new GitError({ command: "diff", reason: `no merge base for ${left} and ${right}` }));
+  if (from === undefined || bases.length !== 1) {
+    return Effect.fail(
+      GitError.make({
+        command: "diff",
+        reason: `the model does not answer ${bases.length} merge bases for ${left} and ${right}`,
+      }),
+    );
   }
 
-  return Effect.succeed(treeDiff(model.commits[from]?.tree ?? {}, model.commits[b]?.tree ?? {}));
+  return treeDiff(model.commits[from]?.tree ?? {}, model.commits[b]?.tree ?? {});
 };
 
 export const layer = (model: Model): Layer.Layer<Git> =>
