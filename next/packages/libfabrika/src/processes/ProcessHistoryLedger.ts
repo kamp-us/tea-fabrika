@@ -4,6 +4,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Ledger, type LedgerError } from "../ledger/Ledger.ts";
@@ -18,12 +19,11 @@ const badRow = (cause: unknown) => new ProcessHistoryError({ reason: new BadRow(
 
 const translate = (cause: LedgerError): ProcessHistoryError =>
   new ProcessHistoryError({
-    reason:
-      cause.reason === "unreachable"
-        ? new Unreachable({ cause })
-        : cause.reason === "bad_row"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+    reason: Match.value(cause.reason).pipe(
+      Match.when("unreachable", () => new Unreachable({ cause })),
+      Match.when("bad_row", () => new BadRow({ cause })),
+      Match.orElse(() => new Storage({ cause })),
+    ),
   });
 
 const validate = Effect.fnUntraced(function* (entry: Entry) {

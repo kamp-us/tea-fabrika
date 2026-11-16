@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { DateTime, Effect, Redacted, Schema } from "effect";
+import { DateTime, Effect, Match, Redacted, Schema } from "effect";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -25,16 +25,18 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("Ope
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
   new OpenRepositoryError({
-    reason: new (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed)({
-      cause: Redacted.make(cause),
-    }),
+    reason: new (Match.value(reason).pipe(
+      Match.when("storage", () => Storage),
+      Match.when("document", () => InvalidDocument),
+      Match.orElse(() => ReadFailed),
+    ))({ cause: Redacted.make(cause) }),
     message:
       message ??
-      (reason === "document"
-        ? "Selected repository: settings document is invalid."
-        : reason === "read"
-          ? "Selected repository: read failed."
-          : "Selected repository: trust could not be saved."),
+      Match.value(reason).pipe(
+        Match.when("document", () => "Selected repository: settings document is invalid."),
+        Match.when("read", () => "Selected repository: read failed."),
+        Match.orElse(() => "Selected repository: trust could not be saved."),
+      ),
   });
 
 // A settings error's messages can include rejected values and parser input. Keep only known labels and keys.

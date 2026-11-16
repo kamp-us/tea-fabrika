@@ -6,7 +6,7 @@
  *
  * @stability unstable
  */
-import { Effect, FileSystem, Layer, Option, Path, PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Layer, Match, Option, Path, PlatformError, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
@@ -43,8 +43,11 @@ const isErrorClass = Schema.is(ErrorClass);
 /** A failure's class from a fixed list: a file system reason, or a WebCrypto error's name. Never a message. */
 const errorClass = (cause: unknown): ErrorClass => {
   if (PlatformError.isPlatformError(cause)) {
-    const reason = cause.reason._tag;
-    return reason === "NotFound" ? "NotFoundError" : reason === "PermissionDenied" ? "NotAllowedError" : "other";
+    return Match.value(cause.reason).pipe(
+      Match.tag("NotFound", (): ErrorClass => "NotFoundError"),
+      Match.tag("PermissionDenied", (): ErrorClass => "NotAllowedError"),
+      Match.orElse((): ErrorClass => "other"),
+    );
   }
 
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";

@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Cause, Effect, Exit, Path } from "effect";
+import { Cause, Effect, Exit, Match, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
   rolldown,
@@ -133,12 +133,11 @@ export const bundle = Effect.fn("build.bundle")(function* (
     },
     platform: "browser" as const,
     // A tab names no platform module, so nothing is external there: its build refuses one.
-    external:
-      options.phase === "brain"
-        ? ["cloudflare:workers", /^node:/]
-        : options.phase === "tab"
-          ? []
-          : ["cloudflare:workers"],
+    external: Match.value(options.phase).pipe(
+      Match.when("brain", () => ["cloudflare:workers", /^node:/]),
+      Match.when("tab", () => []),
+      Match.orElse(() => ["cloudflare:workers"]),
+    ),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };

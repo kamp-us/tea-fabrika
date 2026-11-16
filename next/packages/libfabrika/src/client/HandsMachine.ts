@@ -363,7 +363,8 @@ const refusal = (reason: string | null, result: unknown): string | null =>
   reason ??
   Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
     onNone: () => null,
-    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+    onSome: (reply) =>
+      TakeReply.match(reply, { idle: () => "idle", refused: ({ reason }) => reason, assigned: () => "not_allowed" }),
   });
 
 /** Skips `task` on this link while the list stays at its rev, and lists again at once. */

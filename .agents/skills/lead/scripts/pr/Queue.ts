@@ -12,7 +12,7 @@
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
 // it happened. Read through its module: `Queue.add(...)`.
-import { Duration, Effect, Option, Schedule, Schema } from "effect";
+import { Duration, Effect, Match, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
@@ -213,14 +213,13 @@ const standing = Effect.fn("Queue.standing")(function* (
   const said = (text: string) => `pr ${found.number}: ${text}`;
 
   if (found.state !== "MERGED" || found.mergeCommit === null) {
-    const stands =
-      found.state === "OPEN"
-        ? found.draft
-          ? "a draft, not in the queue"
-          : "open, not merged yet: in the queue, or put back out of it"
-        : found.state === "CLOSED"
-          ? "closed, not merged"
-          : "not confirmed merged";
+    const stands = Match.value(found.state).pipe(
+      Match.when("OPEN", () =>
+        found.draft ? "a draft, not in the queue" : "open, not merged yet: in the queue, or put back out of it",
+      ),
+      Match.when("CLOSED", () => "closed, not merged"),
+      Match.orElse(() => "not confirmed merged"),
+    );
     return Standing.cases.unmerged.make({ found, lines: [said(`${stands}; closed no tickets`)] });
   }
 

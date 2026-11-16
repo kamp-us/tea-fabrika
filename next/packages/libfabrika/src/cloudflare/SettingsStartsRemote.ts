@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Match, Schema } from "effect";
 import * as Start from "../settings/Start.ts";
 import {
   Decode,
@@ -84,15 +84,12 @@ const call = Effect.fnUntraced(function* (
     return saved;
   }
 
-  const reason =
-    reply._tag === "Missing"
-      ? new Missing({ target: MissingTarget.cases.instance.make({ start }) })
-      : reply._tag === "Decode"
-        ? new Decode({ cause: reply })
-        : reply._tag === "Refused"
-          ? new Refused({ cause: reply })
-          : reply._tag === "Storage"
-            ? new Storage({ cause: reply })
-            : new Unreachable({ cause: reply });
+  const reason = Match.valueTags(reply, {
+    Missing: () => new Missing({ target: MissingTarget.cases.instance.make({ start }) }),
+    Decode: (reply) => new Decode({ cause: reply }),
+    Refused: (reply) => new Refused({ cause: reply }),
+    Storage: (reply) => new Storage({ cause: reply }),
+    Unreachable: (reply) => new Unreachable({ cause: reply }),
+  });
   return yield* new StartsError({ reason });
 });

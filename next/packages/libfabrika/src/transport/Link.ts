@@ -136,7 +136,7 @@ export const socketDial = (link: Link): number | null =>
   link._tag === "dialing" || link._tag === "waiting_grant" || link._tag === "online" ? link.dial : null;
 
 const failures = (link: Link): number =>
-  link._tag === "dialing" ? (link.tries ?? 0) : link._tag === "retrying" ? link.tries : 0;
+  Link.matchOrElse(link, { dialing: (link) => link.tries ?? 0, retrying: (link) => link.tries }, () => 0);
 
 const failed = (link: Link & { readonly dial: number }): Link =>
   Link.cases.retrying.make({ dial: link.dial, tries: failures(link) + 1 });

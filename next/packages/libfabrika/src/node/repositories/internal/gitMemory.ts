@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Predicate, Sink, Stream } from "effect";
+import { Effect, FileSystem, Match, Path, Predicate, Sink, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
@@ -81,7 +81,13 @@ const concat = (parts: ReadonlyArray<Uint8Array>) => {
 
 const hexBytes = (hex: string) => Uint8Array.from(hex.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
 const isUrl = (remote: string) => /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || /^[^/]+:/.test(remote);
-const objectType = (mode: Mode) => (mode === "040000" ? "tree" : mode === "160000" ? "commit" : "blob");
+
+const objectType = (mode: Mode) =>
+  Match.value(mode).pipe(
+    Match.when("040000", () => "tree"),
+    Match.when("160000", () => "commit"),
+    Match.orElse(() => "blob"),
+  );
 
 /** Git sorts tree entries by name, a tree's name read as if it ended in a slash. */
 const treeOrder = (a: readonly [string, Entry], b: readonly [string, Entry]) => {
@@ -128,28 +134,32 @@ export const make = Effect.fnUntraced(function* () {
       concat([encoder.encode(`${type} ${body.length}\0`), body]),
     );
   const write = Effect.fnUntraced(function* (store: Store, object: GitObject) {
-    const body =
-      object.type === "blob"
-        ? object.bytes
-        : object.type === "tree"
-          ? concat(
-              [...object.entries]
-                .sort(treeOrder)
-                .flatMap(([name, entry]) => [
-                  encoder.encode(`${entry.mode === "040000" ? "40000" : entry.mode} ${name}\0`),
-                  hexBytes(entry.id),
-                ]),
-            )
-          : encoder.encode(
-              [
-                `tree ${object.tree}`,
-                ...object.parents.map((parent) => `parent ${parent}`),
-                `author ${object.author}`,
-                `committer ${object.committer}`,
-                "",
-                object.message,
-              ].join("\n"),
-            );
+    const body = Match.value(object).pipe(
+      Match.discriminators("type")({
+        blob: (object) => object.bytes,
+        tree: (object) =>
+          concat(
+            [...object.entries]
+              .sort(treeOrder)
+              .flatMap(([name, entry]) => [
+                encoder.encode(`${entry.mode === "040000" ? "40000" : entry.mode} ${name}\0`),
+                hexBytes(entry.id),
+              ]),
+          ),
+        commit: (object) =>
+          encoder.encode(
+            [
+              `tree ${object.tree}`,
+              ...object.parents.map((parent) => `parent ${parent}`),
+              `author ${object.author}`,
+              `committer ${object.committer}`,
+              "",
+              object.message,
+            ].join("\n"),
+          ),
+      }),
+      Match.exhaustive,
+    );
     const id = yield* hash(store.format, object.type, body);
     store.objects.set(id, object);
     return id;
@@ -1075,7 +1085,11 @@ export const make = Effect.fnUntraced(function* () {
       const [spelled = "", ...files] = rest;
       const id = revision(here, spelled);
       const object = id === null ? undefined : here.store.objects.get(id);
-      const tree = object?.type === "commit" ? object.tree : object?.type === "tree" ? id : null;
+      const tree = Match.value(object).pipe(
+        Match.when({ type: "commit" }, (object) => object.tree),
+        Match.when({ type: "tree" }, () => id),
+        Match.orElse(() => null),
+      );
 
       if (tree === null) {
         return fatal(`Not a valid object name ${spelled}`);

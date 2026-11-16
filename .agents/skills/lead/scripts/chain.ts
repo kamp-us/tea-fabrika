@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Match, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -524,7 +524,11 @@ export type Mark = (typeof MARKS)[number];
 
 export const markFrom = (line: Line): Mark => {
   const [verb] = line.outcome.split(":");
-  return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
+  return Match.value(verb).pipe(
+    Match.when("send", (): Mark => "send"),
+    Match.when("stuck", (): Mark => line.fault ?? "work"),
+    Match.orElse((): Mark => "pass"),
+  );
 };
 
 /** The marks the intensity counts against the quest: sends and work stucks. */
@@ -897,7 +901,11 @@ export const makeMachine = (limits: Limits) =>
         const { outcome, head, reason } = m.value;
         // 0076: the host step's mark joins the window like any step's. A send to build is a send
         // back; a stuck is the tool's (git, the signer, the push), never counted against the quest.
-        const mark: Mark = outcome === "send" ? "send" : outcome === "stuck" ? "tool" : "pass";
+        const mark = Match.value(outcome).pipe(
+          Match.when("send", (): Mark => "send"),
+          Match.when("stuck", (): Mark => "tool"),
+          Match.orElse((): Mark => "pass"),
+        );
         const quest: Quest = { ...s.quest, window: [...s.quest.window, mark].slice(-limits.intensity.within) };
         const intensity = intensityStop(quest, limits.intensity);
 

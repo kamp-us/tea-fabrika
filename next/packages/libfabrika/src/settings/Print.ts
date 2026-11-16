@@ -8,14 +8,14 @@
  * @stability unstable
  */
 import type { Row, Warning } from "./Reference.ts";
-import type { Origin } from "./Sources.ts";
+import { Origin } from "./Sources.ts";
 
 const from = (origin: Origin) =>
-  origin._tag === "file"
-    ? `${origin.file}, line ${origin.line}`
-    : origin._tag === "default"
-      ? "the default"
-      : origin.name;
+  Origin.matchOrElse(
+    origin,
+    { file: (origin) => `${origin.file}, line ${origin.line}`, default: () => "the default" },
+    (origin) => origin.name,
+  );
 
 const indent = (text: string) => text.replace(/\n/g, "\n  ");
 

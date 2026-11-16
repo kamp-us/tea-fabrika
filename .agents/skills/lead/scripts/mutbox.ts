@@ -61,7 +61,7 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Console, Effect, FileSystem, Match, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
@@ -590,7 +590,12 @@ export const droppedFromArmA = (
 export const narrowingUnknown = (reason: string) =>
   reason.split(",").some((r) => r.startsWith("no_reach:") || r.startsWith("no_arm_a:"));
 
-export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0 : outcome === "skip" ? 40 : 30);
+export const exitCode = (outcome: Summary["outcome"]) =>
+  Match.value(outcome).pipe(
+    Match.when("done", () => 0),
+    Match.when("skip", () => 40),
+    Match.orElse(() => 30),
+  );
 
 const text = (stream: Stream.Stream<Uint8Array, unknown>) => stream.pipe(Stream.decodeText(), Stream.mkString);
 
@@ -1116,11 +1121,13 @@ const run = Command.make(
       // Whatever went wrong, the answer is `stuck`: there is no other way to run the sample.
       Effect.catch((e) =>
         Effect.succeed(
-          e._tag === "Stuck"
-            ? stuckSummary(ask, started, e.reason, e.detail)
-            : e._tag === "CallTimeout"
-              ? stuckSummary(ask, started, "docker_timeout", timeoutLine(e))
-              : stuckSummary(ask, started, "crash", "a file or folder the run needs could not be read or written"),
+          Match.value(e).pipe(
+            Match.tag("Stuck", (e) => stuckSummary(ask, started, e.reason, e.detail)),
+            Match.tag("CallTimeout", (e) => stuckSummary(ask, started, "docker_timeout", timeoutLine(e))),
+            Match.orElse(() =>
+              stuckSummary(ask, started, "crash", "a file or folder the run needs could not be read or written"),
+            ),
+          ),
         ),
       ),
     );

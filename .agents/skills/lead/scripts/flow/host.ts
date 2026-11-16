@@ -416,7 +416,11 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
  * so readers of that file need no second shape.
  */
 export const outcomeName = (o: Outcome.Outcome): string =>
-  o._tag === "done" ? "done" : o._tag === "send" ? `send:${o.to}:host_failed` : `${o._tag}:host`;
+  Outcome.Outcome.matchOrElse(
+    o,
+    { done: () => "done", send: (o) => `send:${o.to}:host_failed` },
+    (o) => `${o._tag}:host`,
+  );
 
 /**
  * Write the host step's entry into the quest's state file (`state/<quest>.json`, drive.ts's), as a
