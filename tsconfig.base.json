@@ -115,6 +115,13 @@
               "namespaceImportPackages": ["effect"],
               "diagnosticSeverity": { "preferNamespaceImport": "error" }
             }
+          },
+          // The lead tooling imports tea 0.27.0 itself and today's agent runner, which runs on
+          // tea 0.25.0 (0217), so one program holds both; no tea value crosses between them.
+          // Goes with ticket 1065. `oxlint-plugins/duplicate-packages.test.ts` holds its scope.
+          {
+            "include": [".agents/**/*.ts"],
+            "options": { "allowedDuplicatedPackages": ["@demlik/tea"] }
           }
         ]
       }
