@@ -23,7 +23,7 @@ class Unfinished extends Schema.TaggedError<Unfinished>()("Unfinished", { cause:
 
 /** Stylelint's own call, with what it rejects with kept as the cause. */
 const attempt = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: (cause) => new Unfinished({ cause }) });
+  Effect.tryPromise({ try: call, catch: (cause) => Unfinished.make({ cause }) });
 
 /** Lints every tracked CSS file and answers the exit code; a run that did not finish says why. */
 const check = (files: readonly string[]) =>
@@ -32,7 +32,7 @@ const check = (files: readonly string[]) =>
     const config = yield* attempt(() => stylelint.resolveConfig(join(ROOT, files[0] ?? ""), { configFile }));
 
     if (config === undefined) {
-      return yield* new Unfinished({ cause: new Error("No stylelint config") });
+      return yield* Unfinished.make({ cause: new Error("No stylelint config") });
     }
 
     const counts = new Map<string, { fires: number; known: Set<string> }>();
@@ -58,7 +58,7 @@ const check = (files: readonly string[]) =>
       );
 
       if (report.results.length !== 1) {
-        return yield* new Unfinished({ cause: new Error(`No stylelint result for ${file}`) });
+        return yield* Unfinished.make({ cause: new Error(`No stylelint result for ${file}`) });
       }
 
       for (const result of report.results) {
@@ -76,7 +76,7 @@ const check = (files: readonly string[]) =>
           const total = counts.get(rule);
 
           if (total === undefined) {
-            return yield* new Unfinished({ cause: new Error(`Unconfigured CSS rule ${rule}`) });
+            return yield* Unfinished.make({ cause: new Error(`Unconfigured CSS rule ${rule}`) });
           }
 
           total.fires += hits.fires;
@@ -106,7 +106,7 @@ const check = (files: readonly string[]) =>
       const known: unknown = Array.isArray(setting) ? setting[1]?.known : undefined;
 
       if (!Array.isArray(known)) {
-        return yield* new Unfinished({ cause: new Error(`${rule} needs its known list`) });
+        return yield* Unfinished.make({ cause: new Error(`${rule} needs its known list`) });
       }
 
       for (const entry of known) {

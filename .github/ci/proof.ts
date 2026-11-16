@@ -36,6 +36,8 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -243,8 +245,12 @@ if (import.meta.main) {
   );
   const lines = outputs(proof);
   const said = summary(proof);
-  console.log(said);
-  console.log(lines.join("\n"));
+  Effect.runSync(
+    Effect.gen(function* () {
+      yield* Console.log(said);
+      yield* Console.log(lines.join("\n"));
+    }),
+  );
   const record = process.env["RECORD"];
 
   if (record !== undefined && record !== "") {
