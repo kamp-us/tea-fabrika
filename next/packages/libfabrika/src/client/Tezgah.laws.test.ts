@@ -16,6 +16,8 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -83,7 +85,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
 
       // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
       if (tiles.length > 0) {
-        const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
+        const dropped = { ...(wire as object), tiles: Arr.map(tiles, ({ child: _child, ...rest }) => rest) };
         const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
         expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
       }
@@ -131,12 +133,15 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
       start: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 6, maximum: 1_000_000 }))),
     },
     ({ first, steps, start }) => {
-      const wires = [
-        first,
-        { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
-        { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
-        { workspaces: [], tiles: [] },
-      ].map(onWire);
+      const wires = Arr.map(
+        [
+          first,
+          { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
+          { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
+          { workspaces: [], tiles: [] },
+        ],
+        onWire,
+      );
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
       let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
       let shown = wires[0];
@@ -168,7 +173,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
                   ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
                   : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
         const [next, cmds] = both(m, msg);
-        const asks = cmds.filter((c) => c.type === "ask").length;
+        const asks = Arr.filter(cmds, (c) => c.type === "ask").length;
 
         if (kind === "next" || kind === "whole") {
           seen.applied++;
@@ -375,20 +380,26 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
-  return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
+  return { workspaces: [{ ...w, focus: on, recent: [on, ...Arr.filter(w.recent, (t) => t !== on)] }], tiles };
 };
 
 /** The workspace a window draws: workspace 1 of its tezgah child's `optimisticState`. */
 const drawnSpace = (s: WindowModel) => {
   const client = s.tezgah?.client;
   const view = client === undefined ? null : optimisticState(client);
-  return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
+  return Option.getOrNull(
+    Option.flatMap(Option.fromNullishOr(view), (v) => Arr.findFirst(v.workspaces, (w) => w.n === client?.workspace)),
+  );
 };
 
 const drawnFocus = (s: WindowModel) => drawnSpace(s)?.focus ?? null;
 
 const serverFocus = (s: WindowModel) =>
-  s.tezgah?.client.serverState?.workspaces.find((w) => w.n === s.tezgah?.client.workspace)?.focus ?? null;
+  Option.getOrUndefined(
+    Option.flatMap(Option.fromNullishOr(s.tezgah?.client.serverState), (v) =>
+      Arr.findFirst(v.workspaces, (w) => w.n === s.tezgah?.client.workspace),
+    ),
+  )?.focus ?? null;
 
 /** A pending move's letter, wherever its state keeps it (plan amendment 10: `waiting {n}`, `sent
  *  {letter}`, `answered {letter, pos, ms}`), or null while it waits for one. */
@@ -448,7 +459,7 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
   const w = world.wins[i]!;
   const prev = w.s;
   const [next, cmds] = applyCell(focusWindow, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
-  w.waiting = [...w.waiting.filter((c) => !("cmd" in m) || m.cmd !== c), ...cmds];
+  w.waiting = [...Arr.filter(w.waiting, (c) => !("cmd" in m) || m.cmd !== c), ...cmds];
   w.s = next;
 
   for (const c of cmds) {
@@ -461,12 +472,12 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
       if (
         did?.type === "did" &&
         did.does.startsWith("tezgah.focus") &&
-        !w.outbox.some((o) => o.letter === letter) &&
+        !Arr.some(w.outbox, (o) => o.letter === letter) &&
         !w.got.has(letter)
       ) {
-        const move = w.moves.find((x) => x.letter === null);
+        const move = Option.getOrUndefined(Arr.findFirst(w.moves, (x) => x.letter === null));
 
-        if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
+        if (move !== undefined && !Arr.some(w.moves, (x) => x.letter === letter)) {
           move.letter = letter;
         }
       }
@@ -486,7 +497,9 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
 const housekeep = (world: World, i: number, each: (e: Event) => void) => {
   for (let guard = 0; guard < 200; guard++) {
     const w = world.wins[i]!;
-    const cmd = w.waiting.find((c) => ["record", "write", "ping", "persist"].includes(c.type));
+    const cmd = Option.getOrUndefined(
+      Arr.findFirst(w.waiting, (c) => ["record", "write", "ping", "persist"].includes(c.type)),
+    );
 
     if (cmd === undefined) {
       return;
@@ -523,8 +536,8 @@ const arrive = (world: World, i: number) => {
   world.pos++;
   const to = did.to as TileId;
   world.view = {
-    workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
-    tiles: world.view.tiles.map((t) =>
+    workspaces: [{ ...space, focus: to, recent: [to, ...Arr.filter(space.recent, (t) => t !== to)] }],
+    tiles: Arr.map(world.view.tiles, (t) =>
       t.id === did.from && did.cursor !== undefined ? { ...t, cursor: did.cursor } : t,
     ),
   };
@@ -557,7 +570,9 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
     return;
   }
 
-  const flight = w.s.flight.find((f) => f.id === r.id && f.dial === r.dial && f.call._tag === "send");
+  const flight = Option.getOrUndefined(
+    Arr.findFirst(w.s.flight, (f) => f.id === r.id && f.dial === r.dial && f.call._tag === "send"),
+  );
   const letter = flight?.call._tag === "send" ? flight.call.letter : null;
 
   if (letter !== null && r.pos >= 0) {
@@ -603,7 +618,7 @@ const notice = (world: World, i: number, each: (e: Event) => void) => {
 /** Window `i` takes its oldest `now` Cmd's answer: its letter id and clock. */
 const date = (world: World, i: number, each: (e: Event) => void) => {
   const w = world.wins[i]!;
-  const cmd = w.waiting.find((c) => c.type === "now");
+  const cmd = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "now"));
 
   if (cmd === undefined) {
     return;
@@ -661,7 +676,7 @@ const focusIn = (world: World, i: number, tile: string, cursor: string | null, e
  *  tezgah's view and every tile open. */
 const online = (world: World, i: number, each: (e: Event) => void) => {
   const w = world.wins[i]!;
-  const key = w.waiting.find((c) => c.type === "key");
+  const key = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "key"));
 
   if (key !== undefined) {
     stepWin(
@@ -679,7 +694,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
     { type: "frame", dial: 1, text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }), at: 1 } as WindowMsg,
     each,
   );
-  const hello = w.waiting.find((c) => c.type === "hello");
+  const hello = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "hello"));
 
   if (hello !== undefined) {
     stepWin(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, each);
@@ -693,7 +708,9 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
 
   for (let guard = 0; guard < 200; guard++) {
     housekeep(world, i, each);
-    const flight = w.s.flight.find((f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`));
+    const flight = Option.getOrUndefined(
+      Arr.findFirst(w.s.flight, (f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`)),
+    );
 
     if (flight === undefined) {
       return;
@@ -764,9 +781,9 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
   for (const [i, w] of world.wins.entries()) {
     expect(drawnFocus(w.s), `window ${i} draws tezgah's focus before the first key`).toBe(view.workspaces[0]!.focus);
     expect(
-      w.s.tiles.map((t) => t.reach._tag),
+      Arr.map(w.s.tiles, (t) => t.reach._tag),
       `window ${i}: every tile is open before the first key`,
-    ).toEqual(Layout.order(view.workspaces[0]!.layout).map(() => "open"));
+    ).toEqual(Arr.map(Layout.order(view.workspaces[0]!.layout), () => "open"));
   }
 
   return world;
@@ -817,7 +834,7 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
     () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", c.cursor, each),
     () => focusIn(world, i, drawnFocus(w.s) ?? "", c.cursor, each),
-    ...(w.waiting.some((x) => x.type === "now") ? [() => date(world, i, each)] : []),
+    ...(Arr.some(w.waiting, (x) => x.type === "now") ? [() => date(world, i, each)] : []),
     ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i), () => reject(world, i)] : []),
     ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
     ...(w.notices.length > 0 ? [() => notice(world, i, each)] : []),
@@ -830,13 +847,16 @@ const settle = (world: World, each: (e: Event) => void, batched = false) => {
   // Batched: every letter dated, arrived and replied before any view, so one view answers two or more
   // of one window's moves at once (plan amendment 10's case of an earlier move its next superseded).
   for (let guard = 0; batched && guard < 2_000; guard++) {
-    const busy = world.wins.findIndex(
-      (w) => w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0,
+    const found = Arr.findFirstIndex(
+      world.wins,
+      (w) => Arr.some(w.waiting, (x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0,
     );
 
-    if (busy < 0) {
+    if (Option.isNone(found)) {
       break;
     }
+
+    const busy = found.value;
 
     date(world, busy, each);
     arrive(world, busy);
@@ -849,14 +869,20 @@ const settle = (world: World, each: (e: Event) => void, batched = false) => {
   }
 
   for (let guard = 0; guard < 2_000; guard++) {
-    const busy = world.wins.findIndex(
+    const found = Arr.findFirstIndex(
+      world.wins,
       (w) =>
-        w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0 || w.notices.length > 0,
+        Arr.some(w.waiting, (x) => x.type === "now") ||
+        w.outbox.length > 0 ||
+        w.replies.length > 0 ||
+        w.notices.length > 0,
     );
 
-    if (busy < 0) {
+    if (Option.isNone(found)) {
       return;
     }
+
+    const busy = found.value;
 
     // Views before replies, so a reply can find the server already past its move: a jump back.
     date(world, busy, each);
@@ -898,7 +924,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
     expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Stored>>().toEqualTypeOf<never>();
     const fresh = tezgahMachine.init(null, { workspace: 1 })[0];
     expect(
-      Object.keys(fresh).filter((k) => STORED.test(k)),
+      Arr.filter(Object.keys(fresh), (k) => STORED.test(k)),
       "L23: the tezgah child stores no drawn focus",
     ).toEqual([]);
     expect(TABLE, "the laws' key table loads").not.toBeNull();
@@ -907,13 +933,14 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 4, maxLength: 40, size: "max" }), (d, picks) => {
         walk(makeDesk(d.cuts, d.focus), picks, ({ win, next, world }) => {
           const w = world.wins[win]!;
-          const open = w.moves.filter((m) => !answered(w, m));
+          const open = Arr.filter(w.moves, (m) => !answered(w, m));
           const pending = waitingMoves(next);
           seen[pending.length > 0 ? "pending" : "none"]++;
           expect(
-            [next, next.tezgah ?? {}, next.tezgah?.client ?? {}]
-              .flatMap((o) => Object.keys(o))
-              .filter((k) => STORED.test(k)),
+            Arr.filter(
+              Arr.flatMap([next, next.tezgah ?? {}, next.tezgah?.client ?? {}], (o) => Object.keys(o)),
+              (k) => STORED.test(k),
+            ),
             `L23: window ${win} stores no drawn focus`,
           ).toEqual([]);
           expect(pending, `L23: window ${win} keeps one pending mutation per move not answered`).toHaveLength(
@@ -938,20 +965,22 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, next, world: at }) => {
           const w = at.wins[win]!;
-          const open = w.moves.filter((x) => !answered(w, x));
+          const open = Arr.filter(w.moves, (x) => !answered(w, x));
           const pending = waitingMoves(next);
 
           // A mutation is matched by its letter: while it waits, its letter is in the pending list.
-          for (const x of open.filter((x) => x.letter !== null)) {
+          for (const x of Arr.filter(open, (x) => x.letter !== null)) {
             expect(
-              pending.map(letterIn),
+              Arr.map(pending, letterIn),
               `L24: window ${win}'s move to ${x.to} waits under its letter ${x.letter}`,
             ).toContain(x.letter);
           }
 
           // A view before its reply keeps the mutation: the reply has not come.
           seen.early +=
-            m.type === "view" && w.moves.some((x) => x.letter !== null && !w.got.has(x.letter) && w.seen > 0) ? 1 : 0;
+            m.type === "view" && Arr.some(w.moves, (x) => x.letter !== null && !w.got.has(x.letter) && w.seen > 0)
+              ? 1
+              : 0;
           expect(
             pending,
             `L24: window ${win} after ${m.type}: one pending mutation per move not answered`,
@@ -967,10 +996,10 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
 
         for (const [i, w] of world.wins.entries()) {
           seen.moves += w.moves.length;
-          seen.refused += w.moves.filter((x) => x.letter !== null && w.refused.has(x.letter)).length;
-          const dids = w.moves.map((x) => x.letter);
+          seen.refused += Arr.filter(w.moves, (x) => x.letter !== null && w.refused.has(x.letter)).length;
+          const dids = Arr.map(w.moves, (x) => x.letter);
           expect(
-            dids.every((l) => l !== null),
+            Arr.every(dids, (l) => l !== null),
             `L24: every move window ${i} drew went out as a letter`,
           ).toBe(true);
           expect(waitingMoves(w.s), `L24: window ${i} holds nothing pending once all is answered`).toEqual([]);
@@ -979,7 +1008,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
           seen.lost += last !== undefined && last.to !== focus ? 1 : 0;
         }
 
-        seen.both += world.wins.every((w) => w.moves.length > 0) ? 1 : 0;
+        seen.both += Arr.every(world.wins, (w) => w.moves.length > 0) ? 1 : 0;
       }),
       { seed: SEED, numRuns: 200 },
     );
@@ -1007,7 +1036,9 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
               readonly via?: { readonly _tag: string };
               readonly cursor?: string | null;
             };
-            const move = world.wins[win]!.moves.find((x) => x.letter === call["letter"]);
+            const move = Option.getOrUndefined(
+              Arr.findFirst(world.wins[win]!.moves, (x) => x.letter === call["letter"]),
+            );
             expect(move, `L24: window ${win}'s letter ${String(call["letter"])} is one of its moves`).toBeDefined();
             checked += move!.cursor === null ? 0 : 1;
             long += (move!.cursor?.length ?? 0) > 80 ? 1 : 0;
@@ -1063,14 +1094,15 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
 
               if (down) {
                 expect(
-                  cmds.filter((c) => c.type === "write"),
+                  Arr.filter(cmds, (c) => c.type === "write"),
                   "L25: nothing is written while the link is down",
                 ).toEqual([]);
               }
 
               const last =
                 m.type === "focus" ||
-                (FOCUS_KEYS.some((k) => k.keys.at(-1) === Reflect.get(m, "key")) && Reflect.get(m, "key") !== "ctrl+b");
+                (Arr.some(FOCUS_KEYS, (k) => k.keys.at(-1) === Reflect.get(m, "key")) &&
+                  Reflect.get(m, "key") !== "ctrl+b");
 
               if (!last) {
                 return;
@@ -1099,7 +1131,7 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Object.values(seen).every((n) => n > 0),
+      Arr.every(Object.values(seen), (n) => n > 0),
       `L25: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });
@@ -1113,18 +1145,18 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
         const rows = [new Map<string, number>(), new Map<string, number>()];
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, prev, next, cmds, world: at }) => {
           const w = at.wins[win]!;
-          const focusRows = cmds.flatMap((c) => {
+          const focusRows = Arr.flatMap(cmds, (c) => {
             const record =
               c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
             return record?._tag === "focus" ? [record] : [];
           });
-          const before = new Set(waitingMoves(prev).map(letterIn));
-          const after = new Set(waitingMoves(next).map(letterIn));
-          const dropped = w.moves.filter((x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));
+          const before = new Set(Arr.map(waitingMoves(prev), letterIn));
+          const after = new Set(Arr.map(waitingMoves(next), letterIn));
+          const dropped = Arr.filter(w.moves, (x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));
           expect(
-            focusRows.map((r) => r["letter"]).sort(),
+            Arr.map(focusRows, (r) => r["letter"]).sort(),
             `L29: window ${win} writes one focus row per move dropped on this step`,
-          ).toEqual(dropped.map((x) => x.letter).sort());
+          ).toEqual(Arr.map(dropped, (x) => x.letter).sort());
 
           seen.batch += dropped.length > 1 ? 1 : 0;
           // The amendment's rule, written here: drop the moves one by one, oldest first, against the
@@ -1132,15 +1164,15 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
           // moves the drawn focus (the newest still pending move's `to`, else the server's focus);
           // otherwise `kept`, so an earlier move its own next move superseded is kept.
           const drawnWith = (list: ReadonlyArray<Move>) => list.at(-1)?.to ?? serverFocus(next);
-          let current = w.moves.filter((x) => x.letter !== null && before.has(x.letter));
+          let current = Arr.filter(w.moves, (x) => x.letter !== null && before.has(x.letter));
 
           for (const move of dropped) {
             const was = drawnWith(current);
-            current = current.filter((x) => x !== move);
+            current = Arr.filter(current, (x) => x !== move);
             const jumped = drawnWith(current) !== was;
             const refused = w.refused.has(move.letter!);
             const want = refused || jumped ? "overridden" : "kept";
-            const row = focusRows.find((r) => r["letter"] === move.letter);
+            const row = Option.getOrUndefined(Arr.findFirst(focusRows, (r) => r["letter"] === move.letter));
             rows[win]!.set(move.letter!, (rows[win]!.get(move.letter!) ?? 0) + 1);
             seen[refused ? "refused" : jumped ? "overridden" : "kept"]++;
             seen.superseded += !refused && !jumped && move !== dropped.at(-1) ? 1 : 0;
@@ -1215,7 +1247,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
                   housekeep(world, 0, each);
                 }
 
-                const mint = w.waiting.find((x) => x.type === "mint");
+                const mint = Option.getOrUndefined(Arr.findFirst(w.waiting, (x) => x.type === "mint"));
 
                 if (mint !== undefined) {
                   due.push({ from, cursor });
@@ -1259,7 +1291,7 @@ describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
         const space = drawnSpace(w.s);
 
         for (const id of space === null ? [] : Layout.order(space.layout)) {
-          const tile = view!.tiles.find((t) => t.id === id)!;
+          const tile = Option.getOrThrow(Arr.findFirst(view!.tiles, (t) => t.id === id));
           const noted = w.cursors.has(id);
           const want = noted ? w.cursors.get(id)! : tile.cursor;
           seen.newer += noted && want !== null && want !== tile.cursor ? 1 : 0;
@@ -1307,7 +1339,7 @@ describe("Desk S3 L28: a tile lands where focus last sat in it", () => {
 /** What a person types: tezgah's focus keys, the splits and the close after the prefix, an answer, the
  *  prefix again or Escape after it, an unbound key, a key a browser keeps, and the prefix alone. */
 const CHORDS: ReadonlyArray<ReadonlyArray<string>> = [
-  ...FOCUS_KEYS.map((k) => k.keys),
+  ...Arr.map(FOCUS_KEYS, (k) => k.keys),
   ["ctrl+b", "%"],
   ["ctrl+b", '"'],
   ["ctrl+b", "|"],
@@ -1323,7 +1355,13 @@ const CHORDS: ReadonlyArray<ReadonlyArray<string>> = [
   ["ctrl+b"],
 ];
 
-const MOVES = new Set(FOCUS_KEYS.filter((k) => k.keys.length === 2).map((k) => k.keys[1]!));
+const MOVES = new Set(
+  Arr.map(
+    Arr.filter(FOCUS_KEYS, (k) => k.keys.length === 2),
+    (k) => k.keys[1]!,
+  ),
+);
+
 const SPLIT_KEYS = new Set(["%", '"', "|", "-"]);
 
 const Typed = fc.record({ chord: fc.nat(), reads: fc.nat() });
@@ -1383,7 +1421,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
   read(line.length);
 
   for (let minted = 0, guard = 0; guard < 200; guard++) {
-    const mint = w.waiting.find((c) => c.type === "mint");
+    const mint = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "mint"));
 
     if (mint === undefined) {
       break;
@@ -1410,13 +1448,13 @@ describe("Ticket 1043: a burst of presses is judged as the same presses one step
       fc.property(Desk, fc.array(Typed, { minLength: 1, maxLength: 24 }), (d, picks) => {
         const desk = makeDesk(d.cuts, d.focus);
         const apart = typed(desk, picks, "apart");
-        counts.splits += apart.letters.filter((m) =>
+        counts.splits += Arr.filter(apart.letters, (m) =>
           String(Reflect.get(Object(m), "does")).startsWith("tezgah.split"),
         ).length;
 
         for (const schedule of SCHEDULES) {
           const run = typed(desk, picks, schedule);
-          counts.unread += run.handlings.filter((h) => h.waiting > 0).length;
+          counts.unread += Arr.filter(run.handlings, (h) => h.waiting > 0).length;
 
           for (const [i, h] of run.handlings.entries()) {
             const before = run.handlings.slice(Math.max(0, i - 3), i);
@@ -1425,15 +1463,18 @@ describe("Ticket 1043: a burst of presses is judged as the same presses one step
               SPLIT_KEYS.has(h.key) &&
               h.waiting >= 3 &&
               MOVES.has(before[1]!.key) &&
-              [...before, h].every((x, k) => apart.handlings[i - 3 + k]!.handling === "take" && x.handling === "take")
+              Arr.every(
+                [...before, h],
+                (x, k) => apart.handlings[i - 3 + k]!.handling === "take" && x.handling === "take",
+              )
                 ? 1
                 : 0;
           }
 
           expect(
-            run.handlings.map((h) => `${h.key} ${h.handling}`),
+            Arr.map(run.handlings, (h) => `${h.key} ${h.handling}`),
             `1043 (${schedule}): each press keeps or stops its default as when the window has read every press before it`,
-          ).toEqual(apart.handlings.map((h) => `${h.key} ${h.handling}`));
+          ).toEqual(Arr.map(apart.handlings, (h) => `${h.key} ${h.handling}`));
           expect(run.world.view, `1043 (${schedule}): tezgah ends with the same tiles and layout`).toEqual(
             apart.world.view,
           );

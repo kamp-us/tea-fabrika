@@ -24,6 +24,7 @@
 // again. H5, move every work state to `offline` on a drop, losing the result.
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -145,10 +146,10 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       const now = work();
       const stopped = yield* Deferred.isDone(s.stopped);
       const held = yield* Deferred.isDone(s.paused);
-      const open = b.all().filter((j) => j.phase !== "finished");
+      const open = Arr.filter(b.all(), (j) => j.phase !== "finished");
       // A new task is asked for a process only when that process has no open task (0093): two open
       // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
-      const free = tape.processes.filter((p) => !open.some((j) => j.request.process === p));
+      const free = Arr.filter(tape.processes, (p) => !Arr.some(open, (j) => j.request.process === p));
       const asks = free.length === 0 ? [] : open.length === 0 ? ["request", "request"] : ["request"];
       const options: Array<string> =
         focus === "H2" && held
@@ -221,7 +222,7 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
       yield* crash;
     }
 
-    for (let i = 0; i < 400 && b.all().some((j) => j.phase !== "finished"); i++) {
+    for (let i = 0; i < 400 && Arr.some(b.all(), (j) => j.phase !== "finished"); i++) {
       yield* pass(i % 10 === 0 ? 30_000 : 1_000);
     }
 

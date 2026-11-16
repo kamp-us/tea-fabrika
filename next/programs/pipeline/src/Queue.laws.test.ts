@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -160,7 +160,7 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
       return { reason: "unset" };
     }
 
-    if (m.current?.change === msg.change || m.line.some((e) => e.change === msg.change)) {
+    if (m.current?.change === msg.change || Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "queued" };
     }
 
@@ -170,7 +170,7 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
   }
 
   if (msg.type === "drop") {
-    if (m.current?.change !== msg.change && !m.line.some((e) => e.change === msg.change)) {
+    if (m.current?.change !== msg.change && !Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "missing" };
     }
 
@@ -307,11 +307,11 @@ const step = (walk: Walk, input: Msg) => {
       });
       walk.seen.add("abandon_current");
     } else {
-      for (const entry of m.line.filter((e) => e.change === input.change)) {
+      for (const entry of Arr.filter(m.line, (e) => e.change === input.change)) {
         forward(entry, Mail.Reply.cases.abandoned.make({ type: "reply", ref: "dropped", change: entry.change }));
       }
 
-      m.line = m.line.filter((e) => e.change !== input.change);
+      m.line = Arr.filter(m.line, (e) => e.change !== input.change);
       walk.seen.add("drop_waiting");
     }
   } else if (input.type === "resume") {
@@ -328,7 +328,7 @@ const step = (walk: Walk, input: Msg) => {
     state: m.state,
     current: m.current === null ? null : { change: m.current.change, head: m.current.head, name: m.current.name },
     since: m.since,
-    line: m.line.map(({ change, head }) => ({ change, head })),
+    line: Arr.map(m.line, ({ change, head }) => ({ change, head })),
     attempt: m.attempt,
     late: m.late,
     reason: m.reason,
@@ -366,8 +366,8 @@ const open = (w: World, seen: Set<string>): Walk => {
 
 const choose = (walk: Walk, cell: Cell): Msg => {
   const { p, oracle: m } = walk;
-  const starts = walk.history.filter((c) => c.type === "start_child");
-  const sends = walk.history.filter((c) => c.type === "send");
+  const starts = Arr.filter(walk.history, (c) => c.type === "start_child");
+  const sends = Arr.filter(walk.history, (c) => c.type === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
   const moves: Array<() => unknown> = [
     () => enqueue(cell, (cell.pick % 10) + 1),

@@ -7,6 +7,7 @@
 // fakes keep their own timeline of what really ran and what was really saved, the oracle the laws
 // read; they never read the client's state.
 import { Deferred, Effect, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";
@@ -104,7 +105,7 @@ export const fakeCommands = (s: Seen) =>
           yield* hold(s, "execute", before === "fail" ? "stop" : before);
         }
 
-        const result = fakeResult(s.events.filter((e) => e._tag === "ran").length + 1);
+        const result = fakeResult(Arr.filter(s.events, (e) => e._tag === "ran").length + 1);
         s.events.push(Event.cases.ran.make({ command, result }));
         const after = take(s, "execute", "after");
 

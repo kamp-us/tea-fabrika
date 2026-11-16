@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, SchemaIssue, Array as Arr, Option } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -57,7 +57,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           },
         };
         const defaults = Object.fromEntries(
-          Object.entries(Settings.all.settings).map(([key, setting]) => [key, setting.default]),
+          Arr.map(Object.entries(Settings.all.settings), ([key, setting]) => [key, setting.default]),
         );
         const empty = read({});
         expect(Exit.isSuccess(empty)).toBe(true);
@@ -66,7 +66,9 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(empty.value).toEqual(defaults);
           // pinned: the approved settings table starts with five rounds and a 256-entry line.
           expect(empty.value).toMatchObject({ rounds: 5, most: 256 });
-          const checksDeclaration = Settings.all.declarations.find((d) => d.path === "queue.checks")!;
+          const checksDeclaration = Option.getOrThrow(
+            Arr.findFirst(Settings.all.declarations, (d) => d.path === "queue.checks"),
+          );
           expect(checksDeclaration.default).toEqual({ rows: [], docs: [], code: [] });
         }
 
@@ -75,10 +77,8 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 
         if (Exit.isSuccess(decoded)) {
           for (const [key, setting] of Object.entries(Settings.all.settings)) {
-            const from = setting.segments.reduce<unknown>(
-              (value, segment) =>
-                value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,
-              table,
+            const from = Arr.reduce(setting.segments, table, (value: unknown, segment) =>
+              value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,
             );
             expect(Reflect.get(decoded.value, key)).toEqual(from ?? setting.default);
           }
@@ -129,10 +129,13 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isFailure(refused)).toBe(true);
 
         if (Exit.isFailure(refused)) {
-          const keys = refused.cause.reasons.flatMap((reason) =>
+          const keys = Arr.flatMap(refused.cause.reasons, (reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
-              ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+              ? Arr.map(SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues, (issue) =>
+                  Arr.join(
+                    Arr.map(issue.path ?? [], (part) => String(typeof part === "object" ? part.key : part)),
+                    ".",
+                  ),
                 )
               : [],
           );
@@ -141,7 +144,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           for (const key of keys) {
             expect(key).toContain(path);
 
-            for (const good of paths.filter((p) => p !== path)) {
+            for (const good of Arr.filter(paths, (p) => p !== path)) {
               expect(key).not.toContain(good);
             }
           }
@@ -155,7 +158,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 it("L11: every declared numeric setting refuses zero, negatives and fractions at its own path", () => {
   fc.assert(
     fc.property(invalid, fc.nat(), (bad, pick) => {
-      const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
+      const declarations = Arr.filter(Settings.all.declarations, (d) => typeof d.default === "number");
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
@@ -167,14 +170,17 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
         expect(Exit.isFailure(refused)).toBe(true);
 
         if (Exit.isFailure(refused)) {
-          const paths = refused.cause.reasons.flatMap((reason) =>
+          const paths = Arr.flatMap(refused.cause.reasons, (reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
-              ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+              ? Arr.map(SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues, (issue) =>
+                  Arr.join(
+                    Arr.map(issue.path ?? [], (part) => String(typeof part === "object" ? part.key : part)),
+                    ".",
+                  ),
                 )
               : [],
           );
-          expect(paths.some((path) => path.includes(declaration.path))).toBe(true);
+          expect(Arr.some(paths, (path) => path.includes(declaration.path))).toBe(true);
         }
       }
     }),

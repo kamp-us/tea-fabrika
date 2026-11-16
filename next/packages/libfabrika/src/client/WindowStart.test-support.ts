@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // P18 slice 1, next/ (ticket 290): the window start's test socket. One in-memory WebSocket that
 // Effect's own `Socket.fromWebSocket` reads through an injected `Socket.WebSocketConstructor`, so
 // the start's laws run on Effect's real reader and writer, never on a socket of our own making.
@@ -54,7 +55,7 @@ export class MemorySocket implements Socket.WebSocketLike {
   removeEventListener(type: Kind, listener: Listener): void {
     this.listeners.set(
       type,
-      (this.listeners.get(type) ?? []).filter((l) => l.fn !== listener),
+      Arr.filter(this.listeners.get(type) ?? [], (l) => l.fn !== listener),
     );
   }
 
@@ -65,7 +66,7 @@ export class MemorySocket implements Socket.WebSocketLike {
 
   /** The listeners of `type` attached now, so a law can tell whose each one is. */
   attached(type: Kind): ReadonlyArray<Listener> {
-    return (this.listeners.get(type) ?? []).map((l) => l.fn);
+    return Arr.map(this.listeners.get(type) ?? [], (l) => l.fn);
   }
 
   send(data: string | Uint8Array<ArrayBuffer>): void {
@@ -131,7 +132,7 @@ export class MemorySocket implements Socket.WebSocketLike {
 
     this.listeners.set(
       type,
-      now.filter((l) => !l.once),
+      Arr.filter(now, (l) => !l.once),
     );
 
     for (const l of now) {
