@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-transport-s1-build2",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T00:41:25-08:00",
+  "ended": "2026-11-16T00:54:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round for slice 1 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md at c28109626, next/ only) after review1's send-back, on fabrikalfa/mock-transport-s1 from cb110d4. One merge of origin/main (5c94f12), the slice's one take of main: the conflicts in Answer.test.ts, ErrorCause.test.ts and internal/binary.ts keep main's namespace imports and WebCryptoError.make beside the slice's Routes, answerFrame(text, attached) and WebCrypto edge. preferNamespaceImport: namespace imports at Routes.ts, internal/binary.ts, internal/rejecting.test-support.ts, ErrorCause.test.ts and Answer.test.ts. Routes.ts loses its four @stability tags (0574). newSchemaClass: Answer.test.ts builds RouteError.make. C5's and C6's comments point at internal/binary.ts:88 (the fail line) and :87 (the WebCrypto read). The review's finding row is committed unchanged. Left on purpose, waiting on the plan amendment that adds effect/crypto/WebCrypto to allowedUnstableApis: unstableApiUsage at internal/binary.ts:87 and ErrorCause.test.ts:53, the only two errors effect-tsgo diagnostics reports for next/packages/libfabrika.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Node 26.13.0, TYPESAFE_API_KEY unset. vitest at 3 workers on transport/Answer.test.ts and transport/ErrorCause.test.ts after the merge: 21 of 21 green. effect-tsgo diagnostics --format json --project next/packages/libfabrika/tsconfig.json: 573 files, 2 errors (both unstableApiUsage on effect/crypto/WebCrypto, named in why), 0 warnings. pnpm format changed nothing in the slice's files. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 16 of 18 parts passed; lint:dead and lint:promise-types died with EPIPE while another agent's tsgo ran, and each passed rerun alone (lint:dead: none new; lint:promise-types: 0 findings). The list ratchet against 5c94f12 exits 0. pnpm typecheck not run, as the brief says: it stays red on the two waiting errors until the allowlist entry lands. No law changed beyond imports, one .make and two comments; C6's consume and admit are untouched (slice 2). No law here sends a signal or calls launchctl, and none is host-only.",
+  "step": "build"
+}
