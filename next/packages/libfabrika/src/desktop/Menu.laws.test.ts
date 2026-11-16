@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -585,15 +586,13 @@ it.effect.prop(
 
       for (const answer of answers) {
         const actual = yield* check.ask("generated test request").pipe(Effect.result);
-        expect(actual._tag).toBe(answer === "unavailable" ? "Failure" : "Success");
 
-        if (actual._tag === "Success") {
-          expect(actual.success).toEqual(
-            answer === "declined"
-              ? Answer.cases.declined.make({})
-              : answer === "unavailable"
-                ? null
-                : Answer.cases.checked.make({ check: answer }),
+        if (answer === "unavailable") {
+          expect(actual._tag, "an unavailable check fails").toBe("Failure");
+        } else {
+          expect(actual._tag).toBe("Success");
+          expect(Result.getOrNull(actual)).toEqual(
+            answer === "declined" ? Answer.cases.declined.make({}) : Answer.cases.checked.make({ check: answer }),
           );
         }
       }

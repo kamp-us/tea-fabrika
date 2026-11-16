@@ -14,6 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
@@ -28,8 +29,6 @@ import { check } from "./compiler.ts";
 /** A build's refusal as a law matches it: a reloaded module's BuildError is another class, so by its tag. */
 const Refused = Schema.TaggedStruct("BuildError", {});
 const RefusedFor = Schema.TaggedStruct("BuildError", { reason: Schema.String });
-/** What a result failed with, or null when it succeeded. */
-const failureIn = <A, E>(result: Result.Result<A, E>): E | null => (Result.isFailure(result) ? result.failure : null);
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 
@@ -233,7 +232,9 @@ describe("P16 assets and Compiler", () => {
           const result = await Effect.runPromise(
             Effect.result((await load()).build(options)).pipe(Effect.provide(NodeServices.layer)),
           );
-          expect(failureIn(result)).toMatchObject(RefusedFor.make({ reason: kind === "manifest" ? "table" : "read" }));
+          expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(
+            RefusedFor.make({ reason: kind === "manifest" ? "table" : "read" }),
+          );
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 4 }) },
@@ -503,7 +504,7 @@ describe("P16 assets and Compiler", () => {
             const result = await Effect.runPromise(
               Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
             );
-            expect(failureIn(result)).toMatchObject(RefusedFor.make({ reason: "compiler" }));
+            expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(RefusedFor.make({ reason: "compiler" }));
             expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
           },
         ),
@@ -568,9 +569,9 @@ describe("P16 cleanup and recording", () => {
 
           try {
             const failing = await import("./bundle.ts");
-            expect(failureIn(await Effect.runPromise(Effect.result(failing.bundle(entry, []))))).toMatchObject(
-              RefusedFor.make({ reason: "bundle" }),
-            );
+            expect(
+              Option.getOrNull(Result.getFailure(await Effect.runPromise(Effect.result(failing.bundle(entry, []))))),
+            ).toMatchObject(RefusedFor.make({ reason: "bundle" }));
           } finally {
             vi.doUnmock("rolldown");
             vi.resetModules();
@@ -648,7 +649,7 @@ describe("P16 cleanup and recording", () => {
                   await Effect.runPromise(Fiber.interrupt(fiber));
                 }
               } else {
-                expect(failureIn(await Effect.runPromise(Effect.result(task)))).toMatchObject(
+                expect(Option.getOrNull(Result.getFailure(await Effect.runPromise(Effect.result(task))))).toMatchObject(
                   RefusedFor.make({ reason: "publish" }),
                 );
               }
@@ -797,9 +798,9 @@ describe("P16 cleanup and recording", () => {
                 await Effect.runPromise(Fiber.interrupt(fiber));
               }
             } else {
-              expect(failureIn(await Effect.runPromise(Effect.result(bundle(entry, []))))).toMatchObject(
-                Refused.make({}),
-              );
+              expect(
+                Option.getOrNull(Result.getFailure(await Effect.runPromise(Effect.result(bundle(entry, []))))),
+              ).toMatchObject(Refused.make({}));
             }
 
             expect(opened).toBe(true);
@@ -863,7 +864,9 @@ describe("P16 cleanup and recording", () => {
               await Effect.runPromise(Fiber.interrupt(fiber));
             }
           } else {
-            expect(failureIn(await Effect.runPromise(Effect.result(task)))).toMatchObject(Refused.make({}));
+            expect(Option.getOrNull(Result.getFailure(await Effect.runPromise(Effect.result(task))))).toMatchObject(
+              Refused.make({}),
+            );
           }
 
           expect(fired, "plant must reach selected real build phase").toBe(true);
@@ -916,7 +919,7 @@ describe("P16 cleanup and recording", () => {
             Effect.result((await load()).build(f.options)).pipe(Effect.provide(NodeServices.layer)),
           );
           expect(fired).toBe(true);
-          expect(failureIn(result)).toMatchObject(Refused.make({}));
+          expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(Refused.make({}));
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
           vi.doUnmock("rolldown");
           vi.resetModules();

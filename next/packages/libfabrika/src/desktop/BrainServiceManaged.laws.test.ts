@@ -8,6 +8,7 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
@@ -79,11 +80,12 @@ const finish = Effect.fnUntraced(function* <A, E>(
 });
 
 /** The checked reason of a failed exit, when it failed with the service's own error; else undefined. */
-const reason = (exit: Exit.Exit<unknown, unknown>) => {
-  const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
-
-  return failure instanceof BrainServiceError ? failure.reason : undefined;
-};
+const reason = (exit: Exit.Exit<unknown, unknown>) =>
+  Exit.findErrorOption(exit).pipe(
+    Option.filter(Schema.is(BrainServiceError)),
+    Option.map((failure) => failure.reason),
+    Option.getOrUndefined,
+  );
 
 it.effect.prop(
   "L1 absent installs once, matches reuse, foreign jobs are untouched",

@@ -26,6 +26,7 @@ import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -42,8 +43,6 @@ import * as StartsTest from "../../settings/StartsTest.ts";
 /** A build's refusal as a law matches it: a reloaded module's BuildError is another class, so by its tag. */
 const Refused = Schema.TaggedStruct("BuildError", {});
 const RefusedFor = Schema.TaggedStruct("BuildError", { reason: Schema.String });
-/** What a result failed with, or null when it succeeded. */
-const failureIn = <A, E>(result: Result.Result<A, E>): E | null => (Result.isFailure(result) ? result.failure : null);
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];
@@ -429,7 +428,7 @@ describe("P16 p33 one-file build", () => {
               }),
             ).pipe(Effect.provide(NodeServices.layer)),
           );
-          expect(failureIn(result)).toMatchObject(RefusedFor.make({ reason: "table" }));
+          expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(RefusedFor.make({ reason: "table" }));
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
         }),
         runs,
@@ -475,7 +474,7 @@ describe("P16 p33 one-file build", () => {
               }),
             ).pipe(Effect.provide(NodeServices.layer)),
           );
-          expect(failureIn(result)).toMatchObject(RefusedFor.make({ reason: "table" }));
+          expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(RefusedFor.make({ reason: "table" }));
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 30 }) },
@@ -954,7 +953,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
 
             if (fails) {
-              expect(failureIn(result), `${chosen} fails typed`).toMatchObject(
+              expect(Option.getOrNull(Result.getFailure(result)), `${chosen} fails typed`).toMatchObject(
                 chosen === "bundle" ? Refused.make({}) : RefusedFor.make({ reason: chosen }),
               );
               expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
@@ -1036,7 +1035,9 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               if (chosen === "import" || chosen === "url") {
                 reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
                 expect(result._tag, `${label} fails`).toBe("Failure");
-                expect(failureIn(result), `${label} fails typed`).toMatchObject(Refused.make({}));
+                expect(Option.getOrNull(Result.getFailure(result)), `${label} fails typed`).toMatchObject(
+                  Refused.make({}),
+                );
                 expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
               } else {
                 expect(result._tag, `${label} builds`).toBe("Success");
@@ -1321,7 +1322,9 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
   // L5: a refused build changes nothing on disk, whatever was published before it.
   const refused = Effect.fnUntraced(function* (programs: ReturnType<typeof selections>, reason?: string) {
     const result = yield* Effect.result(build({ ...options, programs }));
-    expect(failureIn(result)).toMatchObject(reason === undefined ? Refused.make({}) : RefusedFor.make({ reason }));
+    expect(Option.getOrNull(Result.getFailure(result))).toMatchObject(
+      reason === undefined ? Refused.make({}) : RefusedFor.make({ reason }),
+    );
     expect(yield* onDisk(), "the last published brain stays").toBe(published);
     refusals++;
   });
