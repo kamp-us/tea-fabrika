@@ -9,7 +9,12 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Console, type Duration, Effect, Result, Schedule, Schema } from "effect";
+import * as Console from "effect/Console";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-tests3",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:00:04-08:00",
+  "ended": "2026-11-15T22:09:07-08:00",
+  "parent": "2026-11-15-t1075-e47-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round of the tests step of slice E47 of the Effect-checker sweep (ticket 1075), in our tooling and next/ exam paths: globalConsole and globalConsoleInEffect. Two changes. First, an owner ruling made this round: tooling imports Effect by subpath (effect/Console, effect/Effect and so on), not from the effect barrel, which costs about 250 ms per script start. It overrides the plan's call 2 (barrel form). effect 4.1.3's package.json maps ./* to ./dist/*.js, so each module is its own subpath. The 13 files the first tests round touched that import effect now import each name as a namespace from its module, with a type import kept as a type import (time-table.ts's Duration): field-check.ts, legs.ts, shard-rows.ts, shard-times.ts, time-table.ts, workflow-lint.ts, promise-types.ts, instance-one-file.integration.test.ts, worker-mail.integration.test.ts, exact-versions.ts, lint.ts, one-machine-per-file.test.ts, stylelint.ts and workspace-reach.ts. Fixture source inside template strings was left as it is. No try/catch fallout: fabrika/no-raw-try-catch fires on a subpath import as on the barrel, and the earlier Effect.try fixes stand. Second, the review's bug: lintWorkflow in .github/ci/workflow-lint.ts checked only parseDocument's errors and then called toJS outside any catch, so a text whose aliases expand past yaml's limit threw ReferenceError where main answered check.yaml: invalid YAML. It now parses with Result.try(() => parse(text)) and answers invalid YAML on any failure, as main's try did. A new property law holds it. Hits: 99 met, 92 fixed by hand edits in earlier rounds, 0 by quick fix, 7 left for an owner call and not touched this round (changes.mjs 1, required.mjs 2, scheduled.mjs 2, gitignore.mjs 1, program-package-layout.test.ts 1), 0 waiting on 1366. This round changed only import lines and the one parse, so the count is unchanged.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Law added: .github/ci/workflow-lint.test.ts, 'answers invalid YAML for a text whose aliases expand past the parser's limit', a property over generated valid wiring and an alias chain of width 2 to 4 and depth 7 to 12, which first checks that parseDocument finds no syntax error and that parse throws ReferenceError, so the bug's case is reached on every run. The brief asked for exit 1 as on main; that does not hold end to end. Main's script exits 2 on the same check.yaml, as does this head, because caches.ts and scheduled.ts parse check.yaml themselves with parse and throw the same error, which the edge reports as input could not be read. Checked by hand with an alias chain put on top of check.yaml and taken off again: main exit 2, b0cae406 exit 2, this head exit 2, clean exit 0. So the script's exit code already matched main; the regression was in lintWorkflow's answer, and the law is on that. Time of oxlint-plugins/exact-versions.test.ts, 56 script starts, run here back to back: barrel at b0cae406 22.0 s and 22.6 s, subpaths 12.1 s and 12.4 s, main without effect 8.5 s. Two files this slice did not touch still import the barrel and reach these scripts: .github/ci/field-schema.ts (imported by field-check.ts) and oxlint-plugins/parallel.ts; they are left to the ruling's own follow-up. Decision 0023's table says apps keep the barrel; the brief names the next/apps/fabrika/src tests, so they take subpaths here and the review can weigh it. Ran on the uncommitted tree on b0cae406, under nice -n 15 --maxWorkers=3, one file at a time: field-check 22, legs 21, shard-rows 7, shard-times 2, time-table 7, workflow-lint 3, exact-versions 56, plants 236, one-machine-per-file 13, stylelint 44, workspace-reach 7, next/apps/fabrika/src/exam/no-promises.integration.test.ts 15, all green. pnpm format exit 0; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 exit 0 (17 parts passed); one pnpm typecheck exit 0; the ratchet exits 0. Not run: worker-mail.integration.test.ts and instance-one-file.integration.test.ts, which start real instances; their change is the import lines only. No pull request was opened (owner ruling: one per sweep).",
+  "plants": [
+    {
+      "law": ".github/ci/workflow-lint.test.ts",
+      "plant": "lintWorkflow back to b0cae406's parseDocument(text).toJS() after checking only document.errors",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

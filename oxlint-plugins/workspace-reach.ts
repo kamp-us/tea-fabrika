@@ -10,7 +10,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Console, Effect } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */

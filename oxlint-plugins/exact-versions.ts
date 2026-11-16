@@ -9,7 +9,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Console, Effect } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the

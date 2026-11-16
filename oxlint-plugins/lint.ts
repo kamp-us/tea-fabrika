@@ -9,7 +9,8 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { Console, Effect } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { advises, stale, warnLines } from "./advice.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";

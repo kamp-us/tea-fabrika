@@ -4,7 +4,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Console, Effect, Option, Schema } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 

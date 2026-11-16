@@ -2,7 +2,8 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Console, Effect } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;

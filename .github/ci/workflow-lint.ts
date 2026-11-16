@@ -3,8 +3,10 @@
 // order their messages print, and is what `pnpm lint` calls.
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Console, Effect } from "effect";
-import { parseDocument } from "yaml";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";
 import { checkJob } from "./workflow-lint/check-job.ts";
@@ -51,14 +53,14 @@ const CHECK_RULES: readonly Rule[] = [
 ];
 
 export const lintWorkflow = (text: string): string[] => {
-  // `parse` throws the first of these errors; the document keeps them, so none is thrown here.
-  const document = parseDocument(text);
+  // `parse` throws on a syntax error and, when it builds the value, on too many aliases.
+  const source = Result.try(() => parse(text));
 
-  if (document.errors.length > 0) {
+  if (Result.isFailure(source)) {
     return ["check.yaml: invalid YAML"];
   }
 
-  const workflow = map(document.toJS());
+  const workflow = map(source.success);
   const errors: string[] = [];
   const require: Require = (holds, reason) => {
     if (!holds) {
