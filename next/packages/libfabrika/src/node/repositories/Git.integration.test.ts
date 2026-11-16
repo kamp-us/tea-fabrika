@@ -1,6 +1,6 @@
 // 0535, next/. The contract that holds memory git to real git: one generated session of git
-// commands runs on each, and every answer must match. It needs real git, so it runs at depth `full`
-// only, on the 3-hour schedule; the repository laws run on memory git on every pull request.
+// commands runs on each, and every answer must match. It starts real git in a temp folder, so it is
+// `.integration.` and runs on main's full run only (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Stream } from "effect";

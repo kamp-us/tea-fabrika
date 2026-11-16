@@ -1,5 +1,5 @@
-// T878, next/. The git fixture and reader RepositoriesGit.test.ts and
-// RepositoriesGit.identity.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
+// T878, next/. The git fixture and reader RepositoriesGit.integration.test.ts and
+// RepositoriesGit.identity.integration.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
 // file stays under about 60 s on a CI leg. Each runs on the git layers of GitLaws (0535).
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
