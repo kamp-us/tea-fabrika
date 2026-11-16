@@ -135,6 +135,8 @@ const fires = (paths: readonly string[]) => {
   const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
     cwd: root,
     encoding: "utf8",
+    // The whole tree's report passes Node's 1 MiB default on CI, which cut it mid-string (run 43799861377).
+    maxBuffer: 2 ** 28,
   });
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
