@@ -61,15 +61,14 @@ describe("box rm, today's tooling", () => {
               );
             }
 
+            const inRoot = rootKind === "alternate" ? kind.replace(/^objects\//, "") : kind;
             const source = join(
               root,
               kind === "loose"
                 ? `${rootKind === "alternate" ? "" : "objects/"}${f.git(f.main, "rev-parse", "HEAD").slice(0, 2)}`
                 : kind.startsWith("generated")
                   ? join("extra", ...path.parts, "saved")
-                  : rootKind === "alternate"
-                    ? kind.replace(/^objects\//, "")
-                    : kind,
+                  : inRoot,
             );
 
             if (!existsSync(source)) {

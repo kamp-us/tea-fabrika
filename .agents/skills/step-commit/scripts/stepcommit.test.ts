@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -320,14 +321,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                 ["src/foreign.ts", step === "tests" ? "build" : "tests"],
               ],
               (r) => {
-                const path =
-                  kind === "owned"
-                    ? "src/owned.ts"
-                    : kind === "foreign"
-                      ? "src/foreign.ts"
-                      : kind === "prefix"
-                        ? "src/owned.tsx"
-                        : `src/${name}-unknown.ts`;
+                const path = Match.value(kind).pipe(
+                  Match.when("owned", () => "src/owned.ts"),
+                  Match.when("foreign", () => "src/foreign.ts"),
+                  Match.when("prefix", () => "src/owned.tsx"),
+                  Match.orElse(() => `src/${name}-unknown.ts`),
+                );
                 r.changed(path);
                 const got = r.commit(step, [(dot ? "./" : "") + path]);
                 expect(got.code).not.toBeNull();
@@ -362,14 +361,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
               ["src/foreign.ts", step === "tests" ? "build" : "tests"],
             ],
             (r) => {
-              const path =
-                kind === "under"
-                  ? `docs/shots/${name}.png`
-                  : kind === "deeper"
-                    ? `docs/shots/${name}/one.png`
-                    : kind === "beside"
-                      ? `docs/shotsx/${name}.png`
-                      : "docs/shots/../src/foreign.ts";
+              const path = Match.value(kind).pipe(
+                Match.when("under", () => `docs/shots/${name}.png`),
+                Match.when("deeper", () => `docs/shots/${name}/one.png`),
+                Match.when("beside", () => `docs/shotsx/${name}.png`),
+                Match.orElse(() => "docs/shots/../src/foreign.ts"),
+              );
               r.changed(kind === "escape" ? "src/foreign.ts" : path);
               const got = r.commit(step, [path]);
               expect(got.code).not.toBeNull();

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -181,14 +182,13 @@ describe("T321 K19 redaction, today's tooling", () => {
           json: fc.boolean(),
         }),
         ({ value, shape, json }) => {
-          const secret =
-            shape === "percent"
-              ? `p%41${value}%2F`
-              : shape === "backslash"
-                ? `b\\n${value}\\u0041`
-                : shape === "control"
-                  ? `c\b${value}\f`
-                  : `e\u{1F600}${value}`;
+          const secret = Match.value(shape).pipe(
+            Match.when("percent", () => `p%41${value}%2F`),
+            Match.when("backslash", () => `b\\n${value}\\u0041`),
+            Match.when("control", () => `c\b${value}\f`),
+            Match.when("emoji", () => `e\u{1F600}${value}`),
+            Match.exhaustive,
+          );
           const line = json ? JSON.stringify({ text: secret }) : secret;
           const pem = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(value.repeat(10)).toString("base64")}\n`;
           run(`safe\n${line}\n${pem}`, `${JSON.stringify({ text: secret })}\n`, { TOKEN: secret }, (got) => {

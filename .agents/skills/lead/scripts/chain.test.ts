@@ -982,14 +982,8 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     fc.assert(
       fc.property(fc.constantFrom(...STEPS), fc.subarray([...STEPS]), fc.subarray([...STEPS]), (step, claude, exec) => {
         const agent = stepAgent(step, new Set(claude), new Set(exec));
-        const want =
-          step === "mutation"
-            ? MUTATION_AGENT
-            : claude.includes(step)
-              ? "claude"
-              : exec.includes(step)
-                ? "codex-exec"
-                : "codex";
+        const listed = claude.includes(step) ? "claude" : exec.includes(step) ? "codex-exec" : "codex";
+        const want = step === "mutation" ? MUTATION_AGENT : listed;
         expect(agent).toBe(want);
         // Of the chain's steps only the review reads without writing, as on ACP Codex.
         const reads = step === "review";

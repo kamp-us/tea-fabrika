@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -159,26 +160,18 @@ describe("loosening, today's tooling", () => {
   const call = (v: Input, shape: Form, suite: boolean, modifier = "", option = "") => {
     const base = suite ? (shape.base === "it" ? "describe" : "suite") : shape.base;
     const alias = `law_${v.extra}`;
-    const prefix =
-      shape.alias === "import"
-        ? `import {${base} as ${alias}} from 'vitest';\n`
-        : shape.alias === "const"
-          ? `const ${alias} = ${base};\n`
-          : shape.alias === "destructure"
-            ? `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`
-            : shape.alias === "extended"
-              ? `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`
-              : shape.alias === "namespace"
-                ? "import * as checks from 'vitest';\n"
-                : "";
+    const prefix = Match.value(shape.alias).pipe(
+      Match.when("import", () => `import {${base} as ${alias}} from 'vitest';\n`),
+      Match.when("const", () => `const ${alias} = ${base};\n`),
+      Match.when("destructure", () => `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`),
+      Match.when("extended", () => `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`),
+      Match.when("namespace", () => "import * as checks from 'vitest';\n"),
+      Match.orElse(() => ""),
+    );
     const target = shape.alias === "direct" ? base : shape.alias === "namespace" ? `checks.${base}` : alias;
-    const options = option
-      ? shape.options === "inline"
-        ? `{${option}: true}`
-        : shape.options === "spread"
-          ? `{...settings}`
-          : "settings"
-      : "{}";
+    const passed =
+      shape.options === "inline" ? `{${option}: true}` : shape.options === "spread" ? `{...settings}` : "settings";
+    const options = option ? passed : "{}";
     const shared = option && shape.options !== "inline" ? `const settings = {${option}: true};\n` : "";
     const body = suite ? `() => { test('${v.extra}', () => check(value)); }` : "() => check(value)";
     const args = shape.last ? `${body}, ${options}` : `${options}, ${body}`;
