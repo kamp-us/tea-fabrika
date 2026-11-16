@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import { runsFor } from "@kampus/vitest";
+import { Recorder, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
@@ -78,15 +78,29 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
   await fc.assert(
     fc.asyncProperty(invalid, async (parent) => {
       const argv = process.argv;
-      const touched = vi.fn(() => Effect.never);
-      cli.layer = Layer.merge(FileSystem.layerNoop({ makeDirectory: touched }), Path.layer);
       process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
 
       try {
-        vi.resetModules();
-        await import("../dev.ts");
-        instanceFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
-        expect(touched).not.toHaveBeenCalled();
+        // dev.ts provides its own layers, so the Recorder is built once here and its built context
+        // handed to the hoisted cli.layer: one store, which the law reads after dev.ts ran.
+        // Plant (run once): in dev.ts, call fs.makeDirectory before the parent check; the recorded
+        // list is not [].
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const files = yield* Layer.build(
+                Recorder.layer(FileSystem.FileSystem, FileSystem.makeNoop({ makeDirectory: () => Effect.never })),
+              );
+              cli.layer = Layer.merge(Layer.succeedContext(files), Path.layer);
+              vi.resetModules();
+              yield* Effect.promise(() => import("../dev.ts"));
+              instanceFailure(yield* Effect.exit(cli.work!), "parent_gone");
+              expect(
+                yield* Recorder.calls(FileSystem.FileSystem, "makeDirectory").pipe(Effect.provideContext(files)),
+              ).toEqual([]);
+            }),
+          ),
+        );
       } finally {
         process.argv = argv;
         cli.layer = undefined;
