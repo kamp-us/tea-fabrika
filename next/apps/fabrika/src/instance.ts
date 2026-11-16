@@ -57,10 +57,14 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
         Interaction.layerNonInteractive(),
         AuthProvidersLive,
       );
-      // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
-      return deploy({ stack: stack(built, checked, local), stage: "local", dev: true, scope }).pipe(
-        Effect.provide(localState()),
-        Effect.provide(engine),
+      // The state and engine live as long as the dev run, so they are built once in its scope.
+      return Layer.buildWithScope(Layer.provideMerge(localState(), engine), scope).pipe(
+        Effect.flatMap((services) =>
+          // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
+          deploy({ stack: stack(built, checked, local), stage: "local", dev: true, scope }).pipe(
+            Effect.provideContext(services),
+          ),
+        ),
       );
     },
   );

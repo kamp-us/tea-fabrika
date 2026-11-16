@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e80-build-appsrc",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:32:45-08:00",
+  "ended": "2026-11-16T01:38:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for judgment slice E80 of the Effect-check sweep (strictEffectProvide), app:src build group (next/apps/fabrika/src top files), in next/. Worked on fabrikalfa/effect-e80 at f5c7efb, with no merge of origin/main. The three product hits the tests step (2026-11-16-effect-e80-tests) listed for app:src are fixed by hand. None is an entry point, so no disable line was written. next/apps/fabrika/src/instance.ts:62 and :63: the dev run's Alchemy state and engine are built once with Layer.buildWithScope in the dev run's own scope and handed to deploy with Effect.provideContext. This is the same change the unmerged branch fabrikalfa/effect-e30 makes, applied by hand, and the file is byte for byte that branch's version, so the two branches cannot fold into two different fixes. next/apps/fabrika/src/runtime.ts:57, the Project's door: the Gateway layer is built with Layer.build in its own scope (Effect.scoped), and the door reads Gateway under the built services with Effect.provideContext. The Gateway layer, Effect's RateLimiter.layer and RateLimiterSql.layer add no finalizer, and the one acquireUseRelease in Gateway.ts is per call. So the scope closing once the door is built changes nothing, as before. This is the pattern the lib:runtime build used. A first try passed the Project's own scope to the door, by adding Scope to ProjectOptions.door's requirements in next/packages/libfabrika/src/cloudflare/runtime.ts, so the gateway would live as long as the Project. That was reverted, because the law next/apps/fabrika/src/runtime.decode.test.ts runs the door with only RecordedStart provided (lines 76 to 81) and failed with 'Service not found: effect/Scope'. Its mock of ./door.ts (lines 28 to 36) also holds the door to reading Gateway through Gateway.pipe, which is why the door uses Gateway.pipe(Effect.provideContext(services)) rather than Context.get. No library file and no signature changed, so no caller needed an edit. Hits: met 3, fixed by quick fix 0, hand edits 3, left 0, waiting on 1366 0. Recount of app:src after the fix: 216 hits, all in test files and test support, which the 0565 amendment keeps out of this check; 0 in product source. No test file, no lock line, no tsconfig override and no LOCKED row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 66,
+  "note": "Recount: pnpm exec effect-tsgo diagnostics --format text --project next/apps/fabrika/tsconfig.json with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true, filtered to next/apps/fabrika/src top files; nothing written to a tsconfig. Tests at f5c7efb plus this change, one file at a time with --maxWorkers=1, green: runtime.decode, error-cause, runtime-quotas.laws, and the integration laws runtime.laws, runtime-recovery.laws (13 of 13 when run alone), checklist-instance.laws, instance-one-file, instance-records, local-instance, settings-start and door (153 of 153). next/apps/fabrika/src/start-child.laws.integration.test.ts L11 timed out at 60 s: alone, under --changed, and again alone on f5c7efb's own runtime.ts and instance.ts, so this change does not cause it. In this box it does not pass even alone, where the previous build saw it pass alone. vitest --changed origin/main: 145 of 147 files passed, and the two failures were the L11 and L16 timeouts the previous build saw. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the exam ratchet and one pnpm typecheck exit 0. loosening.sh f5c7efb..HEAD: 0 hits.",
+  "plants": [],
+  "step": "build"
+}
