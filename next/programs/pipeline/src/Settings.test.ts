@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import type { Schema } from "effect";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, Predicate, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -75,13 +75,14 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isSuccess(decoded)).toBe(true);
 
         if (Exit.isSuccess(decoded)) {
+          const actual: Readonly<Record<string, unknown>> = decoded.value;
+
           for (const [key, setting] of Object.entries(Settings.all.settings)) {
             const from = setting.segments.reduce<unknown>(
-              (value, segment) =>
-                value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,
+              (value, segment) => (Predicate.hasProperty(value, segment) ? value[segment] : undefined),
               table,
             );
-            expect(Reflect.get(decoded.value, key)).toEqual(from ?? setting.default);
+            expect(actual[key]).toEqual(from ?? setting.default);
           }
 
           expect(merger(decoded.value).machine).toBeDefined();

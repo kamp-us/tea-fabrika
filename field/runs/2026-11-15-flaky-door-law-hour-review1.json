@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-flaky-door-law-hour-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1488",
+  "started": "2026-11-15T20:59:07-08:00",
+  "ended": "2026-11-15T21:07:19-08:00",
+  "parent": "2026-11-15-flaky-door-law-hour-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of the flaky-test fix (0036) for the door law Q9/Q12 in next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts, head 1328ca9050880c38c4d1b3ba91df8746febeb200, stacked on pull request 1366 (base 36db10a81): merge-ready, one finding row. The law fakes only Date (vitest 5.0.5, toFake Date, shouldAdvanceTime) at the top of SENT's hour, per property run, released by Effect.acquireRelease after the world closes. No assertion changed and no product file changed. The fake Date reaches the objects' runtimes: Effect 4.1.3's live clock anchors its wall time to Date.now() and re-anchors on more than 1 s of skew, and a reviewer plant that moved the fake clock across the hour went red the same way the real crossing does. shouldAdvanceTime ticks a fixed 20 ms per real interval, so the fake clock never runs faster than real time; a run (about 0.4 s here, the whole 120 s timeout at most) cannot reach the next hour. Q9/Q12 is the file's last test, so a leaked fake Date could reach no later test in this file, and vitest isolates files.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 1328ca905: nice -n 15 pnpm exec vitest run --maxWorkers=3 next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts -> Test Files 1 passed (1), Tests 13 passed (13), 73 s; Q9/Q12 alone 1203 ms at the fast depth. pnpm typecheck exit 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) exit 0. Reviewer's scratch harness (three untracked copies of the law beside the real file, deleted after, never committed): old law with the real Date.now offset to 30 s before an hour, then 3 ms before it at refusal 0 -> red at refusal 1, 'expected { program: { writes: 16 } } to deeply equal { program: { writes: 15 } }', every table's row count unchanged and bytes unchanged; new law under the same real-clock patch -> green; new law with the fake clock set 30 s before SENT's hour ends and moved to 3 ms before it at refusal 0 -> red with the same message, which proves the fake Date reaches the runtimes. A plant in Sink.ts to test the law's 'Plant:' comment was not run: the box refused an edit to a product file, so that comment stays unchecked here. loosening.sh 36db10a81..HEAD: one hit, 'unrecognized change: line 1832', the added clock block; no assertion is loosened, the law's inputs are narrowed to one hour, the decided fix. leakgrep --commits origin/fabrikalfa/p34c-s4..HEAD clean. git merge-tree with origin/main and with origin/fabrikalfa/p34c-s4: no conflict. Owed by 0036 and not in this diff: the tracker ticket and the flaky_test finding row.",
+  "step": "review"
+}

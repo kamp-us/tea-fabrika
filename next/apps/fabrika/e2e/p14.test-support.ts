@@ -9,7 +9,7 @@
 // fail the test (`test`), or wait to be interrupted (`hold`). Without them the fixture runs plainly.
 import { type ChildProcess as NodeChildProcess, execFileSync, spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { checklist } from "@kampus/checklist";
@@ -102,17 +102,41 @@ const note = (row: Readonly<Record<string, Schema.Json | undefined>>) =>
     }
   });
 
+/** Undoes, while this worker exits, what its exit would leave behind: a folder, a child process.
+ *  Vitest's fork worker calls `process.exit(1)` at the first message it sends once its parent is
+ *  gone, and its runner sends a batched task update up to 100 ms after a test starts. So when the
+ *  parent Vitest is stopped right after setup, the worker can exit in the middle of the scope's
+ *  releases, which then never finish (scheduled run 43798557082 left a `fw.` home). Node runs
+ *  `exit` listeners on that exit, synchronously, as the `tmp` package's graceful cleanup does. */
+const onExit = (undo: () => void) => {
+  process.on("exit", undo);
+  return () => process.off("exit", undo);
+};
+
 /** One owned resource: acquired, noted, then the planted fault if it names this one; released within
- *  10 s by the scope and noted again. The release is registered before the fault can fire. */
+ *  10 s by the scope and noted again. The release is registered before the fault can fire. `undo`,
+ *  if given, is the same release done synchronously, kept on the worker's exit until the scope's
+ *  release has run. */
 const owned = <A, E, R>(
   at: Resource,
   acquire: Effect.Effect<A, E, R>,
   release: (a: A) => Effect.Effect<unknown, unknown>,
   facts: (a: A) => Readonly<Record<string, Schema.Json | undefined>> = () => ({}),
+  undo?: (a: A) => void,
 ) =>
-  Effect.acquireRelease(acquire, (a) =>
-    release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),
+  Effect.acquireRelease(
+    Effect.flatMap(acquire, (a) =>
+      Effect.sync(() => ({ a, off: undo === undefined ? () => {} : onExit(() => undo(a)) })),
+    ),
+    ({ a, off }) =>
+      release(a).pipe(
+        Effect.timeout("10 seconds"),
+        Effect.ignore,
+        Effect.andThen(Effect.sync(off)),
+        Effect.andThen(note({ released: at })),
+      ),
   ).pipe(
+    Effect.map(({ a }) => a),
     Effect.tap((a) => note({ acquired: at, ...facts(a) })),
     Effect.tap(() =>
       fault?.at !== at
@@ -144,6 +168,7 @@ export const homeWithCredential = (credential: string) =>
       fs.makeTempDirectory({ directory: "/tmp", prefix: "fw." }),
       (dir) => fs.remove(dir, { recursive: true, force: true }),
       (dir) => ({ home: dir }),
+      (dir) => rmSync(dir, { recursive: true, force: true }),
     );
     const key = join(dir, "person");
     const child = yield* spawner.spawn(
@@ -220,6 +245,8 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
       }),
       stop,
       (c) => ({ pid: c.pid, port }),
+      // dev.ts ends its own detached group on SIGTERM; the exit cannot wait for that.
+      (c) => c.kill("SIGTERM"),
     );
     // Ready when the real root answers; a child that exits first fails with what it said.
     yield* Effect.gen(function* () {

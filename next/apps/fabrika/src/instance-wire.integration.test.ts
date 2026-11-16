@@ -486,6 +486,17 @@ const retryAfter = (call: Call) => {
   return delay!;
 };
 
+/** The time by which a new window has begun that no call so far spent from. `latest` is the last
+ *  call answered. A refusal names its own window's end. An accepted call names none, but the window
+ *  that holds it ends at most one window after its reply. */
+const freshAfter = (latest: Call) =>
+  latest.replied + (latest.reply.error?.data?.reason === "rate_limited" ? retryAfter(latest) : ratePolicy.window);
+
+/** Sleeps until `freshAfter(latest)`, plus a little. */
+const waitFresh = Effect.fnUntraced(function* (latest: Call) {
+  yield* Effect.sleep(Math.max(0, freshAfter(latest) - (yield* Clock.currentTimeMillis)) + 5);
+});
+
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
   expect(r.result).toMatchObject({
@@ -545,7 +556,9 @@ it.live.each(["flags", "env", "file"] as const)(
       const accepted = settled.allowed[0]!.reply;
       placing(accepted);
       expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
-      yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      retryAfter(settled.refused);
+      // Calls after the first refusal can land in the next window, so the wait is from the last one.
+      yield* waitFresh(settled.last);
       let previous = settled.last;
       const rounds: Array<string> = [];
       const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
@@ -575,10 +588,10 @@ it.live.each(["flags", "env", "file"] as const)(
             return { allowed, refused, second, again };
           }
 
+          // `again` is the round's last call. Accepted, it spent the next window's budget, so the
+          // next round waits that window out, never only the refusal's.
           previous = again;
-          const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
-          const until = last.replied + retryAfter(last);
-          yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
+          yield* waitFresh(again);
           second.close();
         }
       }).pipe(
@@ -600,7 +613,7 @@ it.live.each(["flags", "env", "file"] as const)(
       }
 
       yield* Effect.logInfo(`T843 ${source}: ${rounds.length} rounds`, { rounds });
-      yield* Effect.sleep(retryAfter(round.again) + 5);
+      yield* waitFresh(round.again);
       const recovered = yield* Effect.promise(() => send(round.second, pid, letter));
       expect(recovered.error).toBeUndefined();
       expect(recovered.result).toEqual(accepted.result);

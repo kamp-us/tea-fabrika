@@ -32,6 +32,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { BRAIN, brain, from } from "../processes/Process.test-support.ts";
 import { Activity, Owner, Recipient, recoverActivity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
@@ -169,8 +170,9 @@ type LedgerNeeds = Layer.Services<ReturnType<typeof ProcessStore.layer>>;
 type TransactionNeeds = Effect.Services<ReturnType<typeof appendAdmitted>>;
 /** A ledger line, as `appendAdmitted` takes one. */
 type WriteLine = Parameters<typeof appendAdmitted>[1]["line"];
-/** The error the stores still on the ledger's own fail with, named through the process store's calls. */
-type StoreError = Effect.Error<ReturnType<typeof callStore>>;
+/** The error the stores still on the ledger's own fail with, named through the process store's calls.
+ *  A save the account refuses fails with the account's own error, which no ledger throw makes. */
+type StoreError = Exclude<Effect.Error<ReturnType<typeof callStore>>, QuotasError>;
 
 /** What the module that owns the driver gives: fresh storage, and the ledger over it. */
 export type Harness = {
