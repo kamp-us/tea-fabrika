@@ -12,6 +12,7 @@ import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -106,7 +107,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               // What one turn saw, judged after the turn: a throw inside a turn is the turn's own
               // failure, which the walk would read as a refused append.
               const look = (turn: LedgerTurn, moment: string) =>
-                [...STREAMS, EMPTY].map((stream) => {
+                Arr.map([...STREAMS, EMPTY], (stream) => {
                   const last = [...turn.read(stream, 0)].at(-1);
                   state.bytes = 0;
                   state.on = true;
@@ -160,10 +161,10 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 judge(yield* tx.transact((turn) => look(turn, `after ${stream}/${id}`)));
               }
 
-              const least = Math.min(...sizes.map((s) => s.bytes));
-              const most = Math.max(...sizes.map((s) => s.bytes));
-              const big = sizes.some((s) => s.newest > 4_096);
-              const small = sizes.some((s) => s.newest < 4_096);
+              const least = Math.min(...Arr.map(sizes, (s) => s.bytes));
+              const most = Math.max(...Arr.map(sizes, (s) => s.bytes));
+              const big = Arr.some(sizes, (s) => s.newest > 4_096);
+              const small = Arr.some(sizes, (s) => s.newest < 4_096);
 
               if (big && small) {
                 reached.add("both_sizes");
@@ -171,7 +172,10 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               expect(
                 most - least,
-                `end returns the same bytes whatever the newest body: ${sizes.map((s) => `${s.newest} B -> ${s.bytes}`).join(", ")}`,
+                `end returns the same bytes whatever the newest body: ${Arr.join(
+                  Arr.map(sizes, (s) => `${s.newest} B -> ${s.bytes}`),
+                  ", ",
+                )}`,
               ).toBe(0);
             });
 

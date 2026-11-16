@@ -3,6 +3,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Layer, Result, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction } from "./LedgerTransaction.ts";
@@ -63,7 +64,7 @@ const size = (entry: Entry) =>
 
 const rows = (sql: Sql) =>
   // oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
-  sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
+  Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row));
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P34c ledger admission", () => {
@@ -222,7 +223,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             );
             const committed = rows(sql);
             expect(committed.length).toBe(before.length + width);
-            expect(committed.map((e) => e.rev)).toEqual(Array.from({ length: committed.length }, (_, j) => j + 1));
+            expect(Arr.map(committed, (e) => e.rev)).toEqual(Array.from({ length: committed.length }, (_, j) => j + 1));
             expect(rings.length).toBe(rang + 1);
 
             for (const e of committed) {

@@ -6,6 +6,7 @@
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
+import * as Arr from "effect/Array";
 import type { Sql, SqlValue } from "../Sql.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
@@ -51,9 +52,9 @@ export const nodeSql = (db: DatabaseSync): Sql => {
 
   return {
     exec: (query, ...params) =>
-      prepared(query)
-        .all(...params)
-        .map((row) => Rec.fromEntries(Rec.toEntries(row).map(([k, v]) => [k, value(v)]))),
+      Arr.map(prepared(query).all(...params), (row) =>
+        Rec.fromEntries(Arr.map(Rec.toEntries(row), ([k, v]) => [k, value(v)])),
+      ),
     transaction: (step) => {
       db.exec("BEGIN IMMEDIATE");
 

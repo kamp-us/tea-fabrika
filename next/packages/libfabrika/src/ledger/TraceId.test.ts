@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import * as Str from "effect/String";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -126,7 +127,8 @@ describe("T246, fromHere", () => {
         yield* SpanSink.use((sink) => sink.flush);
         const spans = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
 
-        const append = spans.filter(
+        const append = Arr.filter(
+          spans,
           (span) => span.name === "ledger.call" && span.attributes["rpc.method"] === "append",
         );
 

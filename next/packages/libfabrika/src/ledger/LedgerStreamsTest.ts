@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
 import * as Str from "effect/String";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -88,7 +89,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             const actual = yield* LedgerStreams.use((s) => Stream.runCollect(s.list(a.prefix))).pipe(
               Effect.provide(life),
             );
-            const expected = [...names].filter((name) => Str.startsWith(a.prefix)(name)).sort();
+
+            const expected = Arr.filter([...names], (name) => Str.startsWith(a.prefix)(name)).sort();
             expect([...actual]).toEqual(expected);
             expect(new Set(actual).size).toBe(actual.length);
             seen.add(a.prefix);

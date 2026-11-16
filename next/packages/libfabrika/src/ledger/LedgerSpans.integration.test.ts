@@ -19,9 +19,18 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
+import * as Option from "effect/Option";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -95,14 +104,14 @@ const capture = () => {
     },
   });
 
-  const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
+  const ended = (name: string) => Arr.filter(spans, (span) => span.name === name && span.status._tag === "Ended");
 
   const tags = (name: string): ReadonlyArray<Record<string, unknown>> =>
-    ended(name).map((span) => Rec.fromEntries(span.attributes));
+    Arr.map(ended(name), (span) => Rec.fromEntries(span.attributes));
   const failed = (name: string): ReadonlyArray<boolean> =>
-    ended(name).map((span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
+    Arr.map(ended(name), (span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
 
-  const all = () => spans.flatMap((span) => [...span.attributes.values()]);
+  const all = () => Arr.flatMap(spans, (span) => [...span.attributes.values()]);
 
   return { tracer, ended, tags, failed, all };
 };
@@ -199,7 +208,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       ]);
       yield* TestClock.adjust(Duration.millis(37));
       const read = yield* Stream.runCollect(ledger.read("notes:1", 3));
-      expect(read.map((entry) => entry.id)).toEqual(["w-9"]);
+      expect(Arr.map(read, (entry) => entry.id)).toEqual(["w-9"]);
       expect(tags("ledger.read")).toEqual([
         expect.objectContaining({
           [STREAM]: "notes:1",
@@ -245,7 +254,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             yield* ledger.append("a", "w-2", line({ seen: 50 }));
             yield* referee.append("a", "w-3", { ...line(), arrivedAt: 1 });
             yield* referee.append("a", "w-4", line({ parent: "not an input id" }));
-            expect(tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("reason")]])).toEqual([
+            expect(Arr.map(tags("ledger.append"), (t) => [t[ID], t[tag("answer")], t[tag("reason")]])).toEqual([
               ["w-1", "placed", undefined],
               ["w-1", "resent", undefined],
               ["w-1", "refused", "id_reused"],
@@ -274,8 +283,8 @@ describe("p95, every call is one span, names and numbers only", () => {
       // a holds revs 1, 3 and 5. Past rev 1 sit two of them; the log's head is five past it.
       yield* Stream.runCollect(ledger.read("a", 1));
       yield* ledger.wait("a", 1);
-      expect(tags("ledger.read").map((t) => [t[tag("lag")], t[tag("rows")]])).toEqual([[2, 2]]);
-      expect(tags("ledger.wait").map((t) => [t[tag("lag")], t[tag("head")]])).toEqual([[2, 5]]);
+      expect(Arr.map(tags("ledger.read"), (t) => [t[tag("lag")], t[tag("rows")]])).toEqual([[2, 2]]);
+      expect(Arr.map(tags("ledger.wait"), (t) => [t[tag("lag")], t[tag("head")]])).toEqual([[2, 5]]);
     }).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
   });
 
@@ -291,7 +300,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       yield* TestClock.adjust(Duration.millis(27));
       yield* Stream.runCollect(ledger.read("a", 0));
       yield* Stream.runCollect(ledger.read("a", 1));
-      expect(tags("ledger.read").map((t) => t[tag("visible_ms")])).toEqual([37, 27]);
+      expect(Arr.map(tags("ledger.read"), (t) => t[tag("visible_ms")])).toEqual([37, 27]);
     }).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
   });
 
@@ -306,13 +315,9 @@ describe("p95, every call is one span, names and numbers only", () => {
       }
 
       yield* Stream.runCollect(ledger.read("a", 100));
-      expect(tags("ledger.read").map((t) => t[tag("rows")])).toEqual([200]);
+      expect(Arr.map(tags("ledger.read"), (t) => t[tag("rows")])).toEqual([200]);
       yield* Stream.runCollect(ledger.read("a", 0));
-      expect(
-        tags("ledger.read")
-          .map((t) => t[tag("rows")])
-          .slice(1, 3),
-      ).toEqual([256, 44]);
+      expect(Arr.map(tags("ledger.read"), (t) => t[tag("rows")]).slice(1, 3)).toEqual([256, 44]);
     }).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
   });
 
@@ -343,14 +348,20 @@ describe("p95, every call is one span, names and numbers only", () => {
           yield* ledger.wait(stream, 0);
           expect(tags("ledger.ring")).toHaveLength(1);
 
-          const texts = all()
-            .filter((value) => typeof value === "string")
-            .map((value) => String(value));
+          const texts = Arr.map(
+            Arr.filter(all(), (value) => typeof value === "string"),
+            (value) => String(value),
+          );
 
           expect(texts.length).toBeGreaterThan(0);
-          expect(texts.filter((text) => Str.includes(BODY)(text) || Str.includes("sent-marker")(text))).toEqual([]);
-          expect(texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
-          expect(texts.filter((text) => text.length > MOST).map((text) => text.length)).toEqual([]);
+          expect(Arr.filter(texts, (text) => Str.includes(BODY)(text) || Str.includes("sent-marker")(text))).toEqual([]);
+          expect(Arr.filter(texts, (text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
+          expect(
+            Arr.map(
+              Arr.filter(texts, (text) => text.length > MOST),
+              (text) => text.length,
+            ),
+          ).toEqual([]);
         }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer)),
       );
     };
@@ -412,7 +423,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           rev: 1,
           pos: 1,
         });
-        expect((yield* Stream.runCollect(ledger.read(stream, 0))).map((e) => e.id)).toEqual([id]);
+        expect(Arr.map(yield* Stream.runCollect(ledger.read(stream, 0)), (e) => e.id)).toEqual([id]);
         const append = one("ledger.append");
         heldShort(append, STREAM, stream);
         heldShort(append, ID, id);
@@ -491,8 +502,8 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect(error.reason).toBe("storage");
             expect(failed("ledger.append")).toEqual([true]);
             const values = Rec.values(tags("ledger.append")[0] ?? {});
-            expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
-            expect(all().filter((value) => Str.includes("message-marker")(String(value)))).toEqual([]);
+            expect(Arr.some(values, (value) => value === full.code || value === full.errcode)).toBe(true);
+            expect(Arr.filter(all(), (value) => Str.includes("message-marker")(String(value)))).toEqual([]);
           }).pipe(Effect.provide(onSql(Effect.succeed(broken))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
@@ -661,8 +672,8 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(rang).toEqual([READER]);
           const rings = ended("ledger.ring");
           expect(rings).toHaveLength(2);
-          const died = rings.find((span) => span.attributes.get(tag("to")) === DIES);
-          const rung = rings.find((span) => span.attributes.get(tag("to")) === READER);
+          const died = Option.getOrUndefined(Arr.findFirst(rings, (span) => span.attributes.get(tag("to")) === DIES));
+          const rung = Option.getOrUndefined(Arr.findFirst(rings, (span) => span.attributes.get(tag("to")) === READER));
           expect(died?.status._tag === "Ended" && Exit.isFailure(died.status.exit)).toBe(true);
           expect(Rec.fromEntries(died?.attributes ?? [])).toEqual(
             expect.objectContaining({ [tag("ok")]: false, [ERROR]: "BellBroke" }),
@@ -671,7 +682,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(tags("ledger.append")).toEqual([
             expect.objectContaining({ [tag("answer")]: "placed", [tag("rings")]: 2 }),
           ]);
-          expect(all().filter((value) => Str.includes("message-marker")(String(value)))).toEqual([]);
+          expect(Arr.filter(all(), (value) => Str.includes("message-marker")(String(value)))).toEqual([]);
         }).pipe(Effect.provide(onReferee(fresh(), dying(location, rang))), Effect.withTracer(tracer));
       },
     );
@@ -722,9 +733,9 @@ describe("p95, every call is one span, names and numbers only", () => {
             const calls = tags("ledger.call");
             expect(calls).toHaveLength(3);
             expect(failed("ledger.call")).toEqual([false, true, true]);
-            expect(calls.map((t) => t[tag("reader")])).toEqual([READER, READER, READER]);
-            expect(calls.map((t) => t[tag("reason")])).toEqual([undefined, "unreachable", "bad_row"]);
-            expect(calls.map((t) => Rec.values(t))).toEqual([
+            expect(Arr.map(calls, (t) => t[tag("reader")])).toEqual([READER, READER, READER]);
+            expect(Arr.map(calls, (t) => t[tag("reason")])).toEqual([undefined, "unreachable", "bad_row"]);
+            expect(Arr.map(calls, (t) => Rec.values(t))).toEqual([
               expect.arrayContaining(["append"]),
               expect.arrayContaining(["read"]),
               expect.arrayContaining(["wait"]),

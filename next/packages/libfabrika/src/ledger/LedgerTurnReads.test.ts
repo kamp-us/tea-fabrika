@@ -6,8 +6,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Layer, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Rec from "effect/Record";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -77,17 +80,17 @@ const Log = fc.array(Append, { minLength: 0, maxLength: 40, size: "max" });
 
 /** What the turn answers through `get` and `head`, beside what `read(stream, 0)` holds. */
 const view = (turn: LedgerTurn) =>
-  [...STREAMS, ABSENT.stream].map((stream) => {
+  Arr.map([...STREAMS, ABSENT.stream], (stream) => {
     const all = [...turn.read(stream, 0)];
 
     return {
       stream,
       head: turn.head(stream),
       last: all.at(-1)?.rev ?? 0,
-      gets: [...IDS, ABSENT.id].map((id) => ({
+      gets: Arr.map([...IDS, ABSENT.id], (id) => ({
         id,
         got: turn.get(stream, id),
-        first: Option.fromUndefinedOr(all.find((entry) => entry.id === id)),
+        first: Arr.findFirst(all, (entry) => entry.id === id),
       })),
     };
   });
@@ -206,16 +209,15 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
           };
 
           for (const [read, sentQueries] of Rec.toEntries(queries)) {
-            const entries = sentQueries.filter(({ query }) => /\bentries\b/.test(query));
+            const entries = Arr.filter(sentQueries, ({ query }) => /\bentries\b/.test(query));
             expect(entries.length, `${read} asks SQLite for entries`).toBeGreaterThan(0);
 
             for (const { query, params } of entries) {
-              const details = db
-                .prepare(`EXPLAIN QUERY PLAN ${query}`)
-                .all(...params)
-                .map((row) => String(row["detail"]));
+              const details = Arr.map(db.prepare(`EXPLAIN QUERY PLAN ${query}`).all(...params), (row) =>
+                String(row["detail"]),
+              );
 
-              const named = details.filter((detail) => /\bentries\b/.test(detail));
+              const named = Arr.filter(details, (detail) => /\bentries\b/.test(detail));
               expect(named.length, `${read}: the plan of ${query} names entries`).toBeGreaterThan(0);
 
               for (const detail of named) {
