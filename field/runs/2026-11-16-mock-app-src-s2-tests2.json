@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-src-s2-tests2",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:47:16-08:00",
+  "ended": "2026-11-16T02:02:08-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round (0177) for slice 2 of the mock sweep in next/ (ticket 1067, decisions 0555 and 0054), judged against slice 2 of docs/plan/quests/mock-app-src-PLAN.md at eb7e56100, on branch fabrikalfa/mock-app-src-s2 from d9d8c5f68, with no pull request of its own. The review sent the slice back because the patched Node Workerd's error() classified a failed workerd start from the last 4096 characters of stderr, so a user-script error line followed by a long stack read as SystemError WorkerdStartFailed and was retried three times; unpatched Node and Alchemy's Bun path classify all of it. That was outside the patch's one proven gap (0054). The fix, remade with pnpm patch and pnpm patch-commit (the lockfile hash follows): makeNode now reads stdout and stderr with the module's own makeStreamPump over Stream.toReadableStream of the handle's streams, as the Bun path does; error() classifies the pump's whole stderr (done), exited() keeps the 4096-character tail (tail), and pipe's release forwards to a no-op so output stops as before. makeForward, the hand stderr tail and the Deferred import are gone. The serve scope still waits for the exit, and the signal is still read from Effect's message. New law in next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts: 'pinned: a user-script error line followed by more than 4096 characters fails the start as a user-script error, with no retry', which drives the installed Workerd through a ChildProcessSpawner stand-in whose workerd writes a service line and about 9,600 characters of stack and exits 1, and expects ConfigError WorkerdUserScript after exactly one spawn. Also: the startDev doc in next/packages/libfabrika/src/node/dev/dev.ts now says deploy's context also carries the caller's ChildProcessSpawner (the build's file, its own commit), and the review's two finding rows are committed unchanged under field/findings/.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Runs at the fixed patch, one file at a time with nice -n 19 and --maxWorkers=1, TYPESAFE_API_KEY unset: alchemy-lifecycle.test.ts 3 passed; instance-one-file.integration.test.ts 7 passed in 43.8 s, first run, no flake seen; dev.laws.integration.test.ts 5 passed; local-instance.integration.test.ts 3 passed. No workerd was left after the runs. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed 18 of 18 parts; after a later one-line test edit, its rerun lost lint:promise-types to EPIPE, and that part run again alone passed with 0 findings. The first pnpm typecheck was red on the new law's own type (the dynamic import's layer left an unknown requirement); typing the layer as Layer.Layer<unknown>, as the neighbor law does, fixed it, and the second pnpm typecheck passed. The list ratchet exited 0. The pinned law's red before the fix, against the tail-based patch: 'expected SystemError: The Workers runtime failed to start to match object { _tag: ConfigError, subtag: WorkerdUserScript }'.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "pinned: a user-script error line followed by more than 4096 characters fails the start as a user-script error, with no retry",
+      "plant": "the installed patch's tail-based error(), classifying from the last 4096 characters of stderr (the patch at d9d8c5f68, before this fix); the start failed as SystemError WorkerdStartFailed instead of ConfigError WorkerdUserScript",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

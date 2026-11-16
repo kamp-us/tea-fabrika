@@ -166,15 +166,14 @@ index 2991479e21238758c4536fca424d4e3edcedf9ad..874e8e0db4d8c6dd2e8789ad001f4a7d
    address?: string;
    socket?: string;
 diff --git a/dist/core/node/workerd/Workerd.mjs b/dist/core/node/workerd/Workerd.mjs
-index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9d989e12a 100644
+index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..b9a56f05e014c697e4fe9e593ac58c842e572247 100644
 --- a/dist/core/node/workerd/Workerd.mjs
 +++ b/dist/core/node/workerd/Workerd.mjs
-@@ -7,7 +7,11 @@ import * as Effect from "effect/Effect";
+@@ -7,7 +7,10 @@ import * as Effect from "effect/Effect";
  import * as Layer from "effect/Layer";
  import * as Predicate from "effect/Predicate";
  import * as Schedule from "effect/Schedule";
 -import * as NodeChildProcess from "node:child_process";
-+import * as Deferred from "effect/Deferred";
 +import * as Queue from "effect/Queue";
 +import * as Stream from "effect/Stream";
 +import * as ChildProcess from "effect/process/ChildProcess";
@@ -182,7 +181,7 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
  //#region src/core/workerd/Workerd.ts
  var Workerd_exports = /* @__PURE__ */ __exportAll({
  	PATH_ENV: () => PATH_ENV,
-@@ -94,6 +98,7 @@ const make = (spawn) => Workerd.of({
+@@ -94,6 +97,7 @@ const make = (spawn) => Workerd.of({
  		}), Effect.forkScoped);
  		const ports = {};
  		for (const message of control) if (message.event === "listen") ports[message.socket] = message.port;
@@ -190,7 +189,7 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
  		return ports;
  	}, Effect.retry({
  		while: (error) => error._tag === "SystemError",
-@@ -166,6 +171,7 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
+@@ -166,6 +170,7 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
  		process.stderr.write(chunk);
  	});
  	return {
@@ -198,7 +197,7 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
  		control: (count) => Effect.callback((resume, signal) => {
  			if (!child.stdio[3]) return resume(SystemError.make({
  				subtag: "WorkerdSpawn",
-@@ -204,141 +210,89 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
+@@ -204,141 +209,71 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
  		kill: () => child.kill("SIGKILL")
  	};
  })));
@@ -208,22 +207,6 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
 -		try: () => NodeChildProcess.spawn(command, args, {
 +/** Node's spawner fails a signalled exit with the signal named only in its cause's message. */
 +const signalOf = (error) => /signal: '(\w+)'/.exec(String(error?.cause?.message ?? ""))?.[1] ?? null;
-+/** One reader per child stream, started at spawn; chunks wait until `pipe` opens a sink, as in the Bun pump. */
-+const makeForward = (name) => {
-+	const decoder = new TextDecoder();
-+	const held = [];
-+	let target;
-+	return {
-+		push: (chunk) => target === void 0 ? held.push(chunk) : target(chunk),
-+		open: (sink) => {
-+			target = (chunk) => sink ? sink(decoder.decode(chunk, { stream: true }), name) : process[name].write(chunk);
-+			for (const chunk of held.splice(0)) target(chunk);
-+		},
-+		close: () => {
-+			target = () => {};
-+		}
-+	};
-+};
 +const makeNode = () => Effect.gen(function* () {
 +	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 +	return make((command, args, config, configuredAddresses, env) => Effect.gen(function* () {
@@ -265,11 +248,18 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
 -			child.kill("SIGKILL");
 -			child.off("spawn", onSpawn);
 -			child.off("error", onError);
--		});
++			cause
++		})));
++		// The Bun path's pump: `done` keeps the whole stderr for `error()`, `tail` the last 4096 characters for `exited()`.
++		const stdout = makeStreamPump(Stream.toReadableStream(handle.stdout), (chunk) => {
++			process.stdout.write(chunk);
+ 		});
 -	})), Effect.tap((child) => Effect.sync(() => {
 -		child.stderr.on("data", (chunk) => {
 -			stderrTail.push(chunk.toString());
--		});
++		const stderr = makeStreamPump(Stream.toReadableStream(handle.stderr), (chunk) => {
++			process.stderr.write(chunk);
+ 		});
 -	})), Effect.map((child) => ({
 -		configure: () => Effect.callback((resume) => {
 -			const onError = (cause, message = "Failed to write to the workerd process stdin.") => {
@@ -292,21 +282,10 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
 -		control: (count) => Effect.callback((resume) => {
 -			const pipe = child.stdio[3];
 -			if (!pipe) return resume(SystemError.make({
-+			cause
-+		})));
-+		const stderrTail = makeTail();
-+		const stdout = makeForward("stdout");
-+		const stderr = makeForward("stderr");
-+		const stderrDone = yield* Deferred.make();
++		const stderrDone = Effect.promise(() => stderr.done);
 +		const messages = yield* Queue.unbounded();
-+		const text = new TextDecoder();
 +		const control = new TextDecoder();
 +		let lines = "";
-+		yield* Stream.runForEach(handle.stdout, (chunk) => Effect.sync(() => stdout.push(chunk))).pipe(Effect.ignore, Effect.forkScoped);
-+		yield* Stream.runForEach(handle.stderr, (chunk) => Effect.sync(() => {
-+			stderrTail.push(text.decode(chunk, { stream: true }));
-+			stderr.push(chunk);
-+		})).pipe(Effect.ignore, Effect.ensuring(Deferred.succeed(stderrDone, void 0)), Effect.forkScoped);
 +		yield* Stream.runForEach(handle.getOutputFd(3), (chunk) => Effect.sync(() => {
 +			const parts = (lines + control.decode(chunk, { stream: true })).split("\n");
 +			lines = parts.pop() ?? "";
@@ -376,10 +355,10 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
 +				cause
 +			}))),
 +			control: (count) => Effect.forEach(Array.from({ length: count }), () => Queue.take(messages)),
-+			error: () => Deferred.await(stderrDone).pipe(Effect.andThen(exit), Effect.flatMap((ended) => Effect.fail(classifyWorkerdError(stderrTail.read() || "Node child process stderr is empty.", ended.exitCode, ended.signal, configuredAddresses)))),
++			error: () => stderrDone.pipe(Effect.flatMap((text) => exit.pipe(Effect.flatMap((ended) => Effect.fail(classifyWorkerdError(text || "Node child process stderr is empty.", ended.exitCode, ended.signal, configuredAddresses)))))),
 +			pipe: (sink) => Effect.acquireRelease(Effect.sync(() => {
-+				stdout.open(sink);
-+				stderr.open(sink);
++				stdout.forward(sink && ((chunk) => sink(chunk, "stdout")));
++				stderr.forward(sink && ((chunk) => sink(chunk, "stderr")));
  			}), () => Effect.sync(() => {
 -				child.stdout.off("data", onStdout);
 -				child.stderr.off("data", onStderr);
@@ -400,12 +379,12 @@ index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..4c665e7cdd330a76303556ad71327ef9
 -		}),
 -		kill: () => child.kill("SIGKILL")
 -	})));
-+				stdout.close();
-+				stderr.close();
++				stdout.forward(() => {});
++				stderr.forward(() => {});
 +			})),
-+			exited: () => exit.pipe(Effect.tap(() => Deferred.await(stderrDone).pipe(Effect.timeoutOption("500 millis"))), Effect.map((ended) => ({
++			exited: () => exit.pipe(Effect.tap(() => stderrDone.pipe(Effect.timeoutOption("500 millis"))), Effect.map((ended) => ({
 +				...ended,
-+				stderr: stderrTail.read()
++				stderr: stderr.tail()
 +			}))),
 +			// The spawner's scope sends SIGKILL and waits for the exit when the serve scope closes.
 +			kill: () => {}

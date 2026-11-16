@@ -108,6 +108,53 @@ describe("P12 Alchemy lifecycle patch", () => {
     );
   });
 
+  // The bug: the patch's first Node `error()` classified a failed start from the last 4096
+  // characters of stderr only. A user-script error line followed by a long stack then lost its
+  // service line, read as a system fault, and was retried three times. Unpatched Node and Alchemy's
+  // Bun path classify the whole startup stderr.
+  // Its plant: classify from the 4096-character tail in `error()` again. The start then fails as
+  // `SystemError` `WorkerdStartFailed` after four spawns.
+  it("pinned: a user-script error line followed by more than 4096 characters fails the start as a user-script error, with no retry", async () => {
+    const { Workerd, WorkerdLive } = await load("workerd/Workerd");
+    const stack = Array.from({ length: 200 }, (_, i) => `    at frame${i} (file:///bundle/worker.js:${i}:1)`).join(
+      "\n",
+    );
+    const stderr = `service core:user:brain: Uncaught SyntaxError: Unexpected token\n${stack}\n`;
+    expect(stderr.length).toBeGreaterThan(4096);
+    let spawns = 0;
+    const spawner = ChildProcessSpawner.make(() =>
+      Effect.sync(() => {
+        spawns++;
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(28000 + spawns),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: Stream.make(bytes(stderr)),
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.never,
+          unref: Effect.succeed(Effect.void),
+        });
+      }),
+    );
+    const live: Layer.Layer<unknown> = WorkerdLive.pipe(
+      Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
+    );
+    const failed = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const workerd = yield* Workerd;
+          return yield* workerd.serve({ sockets: [{ name: "http", address: "127.0.0.1:0" }] }, {}, {});
+        }),
+      ).pipe(Effect.provide(live), Effect.flip),
+    );
+    expect(failed).toMatchObject({ _tag: "ConfigError", subtag: "WorkerdUserScript" });
+    expect(spawns).toBe(1);
+  });
+
   it("reports spawn PIDs, replacement delays and the brake; scope closure cancels recovery", async () => {
     await fc.assert(
       fc.asyncProperty(fc.string({ minLength: 1 }), async (name) => {
