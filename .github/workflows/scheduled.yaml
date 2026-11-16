@@ -20,8 +20,9 @@ name: scheduled
 #
 # 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
 # `max-parallel` on each matrix, which workflow-lint.ts adds up. The legs are check.yaml's full
-# matrix, so their measured split (vitest.shards.ts) holds here too; workflow-lint.ts keeps the two
-# the same.
+# matrix, and workflow-lint.ts keeps the two the same. Their split is not check.yaml's: at full
+# depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
+# vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
 on:
   # Every 3 hours, at minute 17: GitHub delays runs queued on the hour, when most schedules start
   # (its docs, "Events that trigger workflows", schedule). The interval is a setting (0534, 0069):
@@ -31,10 +32,14 @@ on:
   # By hand, on main, or on a branch to try a change to this file. Only main's run reports.
   workflow_dispatch:
 
-# One run at a time, and a running one is never cut short: a newer one waits its turn, and GitHub
-# keeps one waiting at most.
+# One run at a time, and a running one is never cut short: a newer one waits its turn. `queue: max`
+# lets up to 100 wait, first in first out. GitHub's default keeps one waiting and cancels it when a
+# newer run queues, so a hand-started branch run could cancel main's waiting scheduled run: two of
+# the first three scheduled runs waited 10 and 13 minutes behind a hand-started one (GitHub's docs,
+# "Control the concurrency of workflows and jobs").
 concurrency:
   group: scheduled
+  queue: max
   cancel-in-progress: false
 
 # `actions: write` lets each test job's last step, `stop the run`, cancel its own run, as in

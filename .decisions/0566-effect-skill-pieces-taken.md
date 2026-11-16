@@ -336,7 +336,9 @@ export const layerConfig = (config: Config.Wrap<ClientOptions>) =>
     a class named after the service;
   - record types: an `interface` beside the schema, or the schema's own type;
   - `Data.TaggedEnum` for a union that never leaves a module;
-  - `optionalKey` on an error's `cause`, which is why 13 of N8's 21 lines wait;
+  - `optionalKey` on an error's `cause`, which is why 13 of N8's 21 lines wait; settled by
+    [0568](0568-error-cause-follows-effect.md): required when every caller has one, else
+    `Schema.optional`, never `optionalKey`;
   - `Effect.fn`: which functions get it.
 - **What this cannot tell us.**
   - Whether agents write better Effect code with these rules. Nothing was measured.

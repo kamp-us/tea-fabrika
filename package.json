@@ -36,6 +36,7 @@
     "@demlik/structure-sweep": "catalog:",
     "@effect/tsgo": "catalog:",
     "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
     "@tea-fabrika/agents": "workspace:*",
     "@tea-fabrika/tracker": "workspace:*",
     "@types/node": "catalog:",
