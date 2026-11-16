@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e0-review2",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1417",
+  "started": "2026-11-15T19:28:38-08:00",
+  "ended": "2026-11-15T19:33:30-08:00",
+  "parent": "2026-11-15-effect-e0-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice E0 of the Effect-check sweep at dd597afa9, in next/ and our tooling: merge-ready, one finding row. Both blocking classes of the first review are fixed. L2: the script-reads.mjs plant (Math.random() there, globalRandom off for that file in oxlint-plugins/tsconfig.json and .github/ci/tsconfig.json) keeps tsc silent and now turns effect-checks.test.ts red with two rows; a new file reached only through a two-step re-export chain from .agents/skills/lead/scripts/records.ts, turned off the same way, is red too. Compared with tsc --listFilesOnly for all 13 projects, every checked file in scope is walked by its own project; the rest are other packages reached by package name, which the checker does not diagnose. L3: all four first-review forms, plus a directive across a line break in a template literal, are refused by oxlint-plugins/lint.ts; a reasoned line comment is taken. A word split by interpolation and a different letter case do not silence a hit in tsc, so they are no escape. pnpm lint exits 0 and no-bare-disable fires 0 times.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Finding, not blocking: L2's importsOf reads no type-position import(\"./x.ts\") and no /// <reference path>, and tsc reaches a file through either. Planted with a new .agents file, globalRandom off for it: tsc silent, law green. No file today is reached only that way. Plants ran in a second detached worktree of dd597afa9, now removed. loosening.sh aa51d9f4f..HEAD: four unrecognized-change hits in the fixed files, none a loosened law. Not run: plants.test.ts, which spawns lint processes; pnpm typecheck, since the fix changed only tests and docs.",
+  "step": "review"
+}
