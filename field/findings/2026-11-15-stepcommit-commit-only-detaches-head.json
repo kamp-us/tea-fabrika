@@ -7,7 +7,7 @@
   "rule": "bug",
   "location": {
     "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
-    "line": null
+    "line": 164
   },
   "says": "stepcommit.sh --commit-only, run on a checked-out branch, left HEAD detached with the new commit on it and the branch ref still at its base, so git push -u origin <branch> pushed the base.",
   "proof": "Slice E98 tests step: git status -sb printed 'HEAD (no branch)' after the commit; git ls-remote showed the branch at its base while HEAD was one commit ahead; fixed by checking the branch out and fast-forwarding it to the commit.",

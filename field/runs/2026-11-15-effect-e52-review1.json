@@ -15,23 +15,23 @@
   "plants": [
     {
       "law": "the merged form is the chain: build order, release order, which service wins on a clash, and what the effect sees (probe on installed effect 4.1.3, scratchpad, outside the repo)",
-      "plant": "three layers A needs B needs C, A and C both giving X; chain against A.pipe(provideMerge(B), provideMerge(C))",
-      "result": "equal: build C, B, A; release A, B, C; X from A in both"
+      "plant": "three layers A needs B needs C, A and C both giving X; chain against A.pipe(provideMerge(B), provideMerge(C)); seen: equal: build C, B, A; release A, B, C; X from A in both",
+      "result": "green"
     },
     {
       "law": "the same probe, order kept",
-      "plant": "the order reversed, C.pipe(provideMerge(B), provideMerge(A))",
-      "result": "red: Service not found: B"
+      "plant": "the order reversed, C.pipe(provideMerge(B), provideMerge(A)); seen: red: Service not found: B",
+      "result": "red"
     },
     {
       "law": "sharing: a layer both A and B use is built once (probe)",
-      "plant": "chain against one provideMerge with a shared inner layer",
-      "result": "equal: one build in both"
+      "plant": "chain against one provideMerge with a shared inner layer; seen: equal: one build in both",
+      "result": "green"
     },
     {
       "law": "dev-recording law (next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts:53), planted by reading",
-      "plant": "NodeServices.layer.pipe(Layer.provideMerge(platform)): NodeServices' real FileSystem and Path would shadow the recording platform",
-      "result": "red by reading: the law asserts the recorded mkdir and join calls, which only the platform layer records"
+      "plant": "NodeServices.layer.pipe(Layer.provideMerge(platform)): NodeServices' real FileSystem and Path would shadow the recording platform; seen: red by reading: the law asserts the recorded mkdir and join calls, which only the platform layer records",
+      "result": "red"
     }
   ],
   "tokens": null,
