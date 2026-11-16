@@ -1,6 +1,19 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // `Effect.runPromise` of an `Effect.exit` is `Effect.runPromiseExit`; the package is at zero.
+        // The globs read from this folder. A new folder of a package that reaches zero joins here.
+        "overrides": [
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": { "diagnosticSeverity": { "runOfExitToRunExit": "error" } }
+          }
+        ]
+      }
+    ],
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
     "erasableSyntaxOnly": true

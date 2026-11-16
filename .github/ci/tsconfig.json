@@ -1,5 +1,21 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // `Effect.runPromise` of an `Effect.exit` is `Effect.runPromiseExit`; the package is at zero.
+        // The globs read from this folder. A new folder of a package that reaches zero joins here.
+        "overrides": [
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": { "diagnosticSeverity": { "runOfExitToRunExit": "error" } }
+          }
+        ]
+      }
+    ],
+    "allowJs": true,
+    "checkJs": true
+  },
   "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
 }
