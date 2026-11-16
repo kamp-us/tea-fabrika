@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
@@ -32,8 +33,18 @@ const encodedError = fc
   .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
-const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
-  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+const causeKey = (
+  form: Form,
+  json: fc.JsonValue,
+  error: Schema.Json,
+): { readonly cause?: fc.JsonValue | Schema.Json | undefined } =>
+  Match.value(form).pipe(
+    Match.when("absent", () => ({})),
+    Match.when("undefined", () => ({ cause: undefined })),
+    Match.when("json", () => ({ cause: json })),
+    Match.when("error", () => ({ cause: error })),
+    Match.exhaustive,
+  );
 
 /**
  * One encoded `SendersError`: made with its reason drawn from its own literals and no cause, encoded

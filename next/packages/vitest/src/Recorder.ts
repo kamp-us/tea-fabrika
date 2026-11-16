@@ -24,6 +24,9 @@ import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
+/** What a watched method answers: an Effect or a Stream. */
+type Answer = Effect.Effect<unknown, unknown, unknown> | Stream.Stream<unknown, unknown, unknown>;
+
 /** A member the Recorder watches: an Effect, or a function that answers an Effect or a Stream. */
 type Watched =
   | Effect.Effect<unknown, unknown, unknown>
@@ -46,7 +49,7 @@ export type Method<S> = { [K in keyof S]-?: NonNullable<S[K]> extends Watched ? 
  * @category models
  */
 export type Args<S, M extends Method<S>> = M extends unknown
-  ? NonNullable<S[M]> extends (...args: infer A) => unknown
+  ? NonNullable<S[M]> extends (...args: infer A) => Answer
     ? Readonly<A>
     : readonly []
   : never;
@@ -156,7 +159,7 @@ const watch = <S extends object>(
     get: (target, prop) => {
       const member = Predicate.hasProperty(target, prop) ? target[prop] : undefined;
 
-      if (typeof prop === "symbol") {
+      if (Predicate.isSymbol(prop)) {
         return member;
       }
 
