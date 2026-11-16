@@ -1,8 +1,8 @@
 // Laws in this folder set a variable of this process for code that reads `process.env` itself:
 // Alchemy (`ALCHEMY_HOME`, `DO_NOT_TRACK`), the local instance and what it starts (`FABRIKA_HOME`),
 // and a Worker module Alchemy loads (`T502_PORT`). Effect's Config reads a variable and cannot write
-// one, so this file is the one place those laws write it, each write under one reasoned line. What a
-// law changes is read first through Config, so it can be put back as it was.
+// one, so this file is the one place those laws write it. What a law changes is read first through
+// Config, so it can be put back as it was.
 import { Config, ConfigProvider, Effect, Option } from "effect";
 
 /** One variable as it is now: its text, or `undefined` when unset. An empty one stays empty. */
@@ -16,10 +16,8 @@ const current = (key: string) =>
 /** Sets one variable, or unsets it when `value` is `undefined`. */
 const write = (key: string, value: string | undefined): void => {
   if (value === undefined) {
-    // @effect-diagnostics-next-line processEnv:off -- puts an unset variable back as unset, and Config cannot write a variable
     delete process.env[key];
   } else {
-    // @effect-diagnostics-next-line processEnv:off -- the code under test reads this variable from process.env itself, and Config cannot write a variable
     process.env[key] = value;
   }
 };
@@ -63,6 +61,5 @@ export const keptEnv = (keys: ReadonlyArray<string>) => scopedEnv({}, keys);
  * Call it before Alchemy is imported.
  */
 export const noTracking = (): void => {
-  // @effect-diagnostics-next-line processEnv:off -- Alchemy reads DO_NOT_TRACK from process.env itself, and Config cannot write a variable
   process.env.DO_NOT_TRACK = "1";
 };
