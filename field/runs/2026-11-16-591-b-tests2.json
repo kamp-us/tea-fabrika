@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-b-tests2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T01:21:07-08:00",
+  "ended": "2026-11-16T01:37:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice B of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), a second tests round to bring slice B up to the reviewed slice A before B's review. fabrikalfa/exam-to-lint-b at 03a5235 took the sweep branch fabrikalfa/exam-to-lint at 5c18d78 (slices A and F) with git merge --no-edit, merge commit 625fccdaf. Git merged every file on its own with no conflict: .oxlintrc.json (B's two package-deps lines and F's one-page-runtime block both kept; A's exam block now names settings-generated.test.ts and no longer build.test.ts), oxlint-plugins/index.ts (B's three rules and F's one-page-runtime all registered), oxlint-plugins/plants.test.ts (the elsewhere list keeps B's package-deps and F's one-page-runtime), oxlint-plugins/README.md (B's three-pieces paragraph and F's one-page-runtime section both kept), package.json (B's lint:node-kinds and lint:manifests; A and F did not touch it), oxlint-plugins/plant.ts (only B changed it), .github/ci/changes.mjs (A's readers edit; B's moved files sit under the exam/ prefix it already lists), vitest.shards.json and vitest.shards.full.json (B's three removed rows and A's removed build.test.ts row and renamed settings-generated row). Two counts were wrong after the clean merge, because each side removed rows the other's prose did not know of: L5's title said 267 next rows and the nextSamples comment said 156 files. Recounted from the merged file: nextSamples 154, integrationSamples 106, e2eSamples.files 8, so 268 rows, which L5's toEqual over the measured table confirms. Both were fixed in vitest.shards.test.ts, prose only; the comment now names exam/node-kinds.test.ts beside build.test.ts as files whose samples left. M5 on the real tree at the merged head: lint:node-kinds 0 findings, lint:manifests 0 findings, lint:promise-types 0 findings, fabrika/package-deps 0 fires in node oxlint-plugins/lint.ts (0 blocking overall). Slice A's and F's files brought no new fire.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Laws at 625fccdaf, one worker (nice -n 19 pnpm exec vitest run --maxWorkers=1): 44 files, 486 tests, all green in 303.6 s. The files: node-kinds.test.ts, next-manifests.test.ts, promise-types.test.ts and all 38 oxlint-plugins/*.test.ts that import plant.ts (package-deps.test.ts, one-page-runtime.test.ts and settings-imports.test.ts among them), next/apps/fabrika/src/exam/deps.integration.test.ts, next/apps/fabrika/src/settings-generated.test.ts and vitest.shards.test.ts (34/34, again 34/34 after the count fix). Two stray 'context canceled' lines on stderr came with no failing or skipped test. pnpm format exited 0 and changed nothing beyond the count fix. pnpm lint ran by parts, since another agent's vitest ran beside this one; a compound shell line running all parts was refused by the worktree check as too complex to verify, so each part ran as its own command: oxlint 0 blocking (1187 advice), format check, lint:versions, lint:reach, lint:kind, lint:layers, lint:boundaries, lint:browser, lint:dead, lint:compiler, lint:twin, lint:promise-types, lint:node-kinds, lint:manifests, tokens --check, stylelint and skillscheck all exit 0. The list ratchet against main's merge base b510ed2e8 exit 0. One pnpm typecheck, exit 0. Not run: the three lint parts under .github/ci (workflow-lint.ts, field-check.ts --local, shard-rows.ts) and .github/ci/changes.test.ts, because their paths hold a word the box's command check refuses, and the coordinator ruled that no name filter or pattern may stand in; the fold or CI runs them. No product line changed: no build step is needed.",
+  "step": "tests"
+}
