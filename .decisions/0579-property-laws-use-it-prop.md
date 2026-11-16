@@ -113,6 +113,10 @@ Effect-in-fast-check runners go.**
 - Not decided here: the order the folders move in, how the sweep is split into pull requests, and
   where in the package setup `fc.configureGlobal` lives.
 
+## Amendments
+
+- 2026-11-15: [0580](0580-law-options-carry-plant-and-label.md) moves the plant out of a comment into a `plant` option of the law's declaration, and the label out of the title into an option with a required reason; a title prefix becomes an error, and a CI check holds each plant against the ticket's run row. The rules above on what a plant is and that it is run once and not kept hold.
+
 ## Records
 
 - No glossary row: this coins no word.
