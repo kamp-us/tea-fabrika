@@ -4,8 +4,9 @@ import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintScheduled } from "./scheduled.ts";
 
-// Today's CI, serving both versions. Covers scheduled.ts's laws on scheduled.yaml, the schedule
-// that runs all of next/ and every tooling test on main (0534). Each generated workflow is the real
+// Today's CI, serving both versions. Covers scheduled.ts's laws on scheduled.yaml, the full run of
+// all of next/ and every tooling test on main (0534), which a push to main or the hourly catch-up
+// starts through its gate, at most once an hour (0581). Each generated workflow is the real
 // one with what does not change its meaning varied, and each plant is applied to it alone, so an
 // unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
 // dropped, and that turned this law red.
@@ -24,6 +25,7 @@ type Job = Record<string, unknown> & {
 
 type Workflow = Record<string, unknown> & {
   on: Record<string, unknown>;
+  env?: Record<string, unknown>;
   concurrency: Record<string, unknown>;
   permissions: unknown;
   jobs: Record<string, Job>;
@@ -58,25 +60,47 @@ const step = (w: Workflow, job: string, name: string): Step => {
   return found[0]!;
 };
 
-// What may change without changing what the schedule runs: the cron line (a setting, 0069), the
-// concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`.
+// What may change without changing what the full run does: the catch-up's minute (0581 fixes the
+// cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
+// concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`,
+// a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
+// missing.
+const spaced = (value: unknown, gap: string) =>
+  typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
+
 const scheduled = fc
   .tuple(
-    fc.stringMatching(/^[0-9*/ ,-]{1,20}$/),
+    fc.integer({ min: 1, max: 59 }),
+    fc.integer({ min: 60, max: 1440 }),
     fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/),
     fc.integer({ min: 1, max: 9 }),
     fc.constantFrom("", " ", "  "),
   )
-  .map(([cron, group, most, gap]) => {
+  .map(([minute, minutes, group, most, gap]) => {
     const w = real();
-    w.on["schedule"] = [{ cron }];
+    const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
+
+    for (const cron of crons) {
+      if (typeof cron.cron === "string") {
+        cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
+      }
+    }
+
+    if (w.env !== undefined && "GAP_MINUTES" in w.env) {
+      w.env["GAP_MINUTES"] = minutes;
+    }
+
     w.concurrency["group"] = group;
     w.jobs["tests"]!.strategy!["max-parallel"] = most;
 
     for (const job of Object.values(w.jobs)) {
+      if ("if" in job) {
+        job["if"] = spaced(job["if"], gap);
+      }
+
       for (const s of job.steps) {
-        if (typeof s["if"] === "string") {
-          s["if"] = s["if"].replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`);
+        if ("if" in s) {
+          s["if"] = spaced(s["if"], gap);
         }
       }
     }
@@ -108,20 +132,94 @@ const stop = {
   run: 'gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"',
 };
 
+/** The gate job, which the real workflow must have for its plants to apply. */
+const gate = (w: Workflow): Job => {
+  const job = w.jobs["gate"];
+
+  if (job === undefined) {
+    throw new Error("scheduled.yaml has no gate job");
+  }
+
+  return job;
+};
+
 const plants: [string, (w: Workflow) => void][] = [
-  // SC1: no merge line event runs the whole suite (0534's binding constraint).
-  ["SC1: a push to main starts the schedule", (w) => (w.on["push"] = { branches: ["main"] })],
-  ["SC1: a pull request starts the schedule", (w) => (w.on["pull_request"] = {})],
-  ["SC1: the merge queue starts the schedule", (w) => (w.on["merge_group"] = { types: ["checks_requested"] })],
+  // SC1: a push to main, the hourly catch-up and a hand start, nothing else (0581); no merge line
+  // event runs the whole suite. The plants of SC1, SC5, SC6 and SC14 to SC16 were each run once on
+  // scheduled.ts with its rule dropped, over a draft of the new scheduled.yaml that was then
+  // restored, and each turned its law red.
+  ["SC1: a pull request starts the full run", (w) => (w.on["pull_request"] = {})],
+  ["SC1: the merge queue starts the full run", (w) => (w.on["merge_group"] = { types: ["checks_requested"] })],
   ["SC1: no schedule", (w) => Reflect.deleteProperty(w.on, "schedule")],
-  ["SC1: two cron lines", (w) => (w.on["schedule"] = [{ cron: "0 * * * *" }, { cron: "30 * * * *" }])],
+  ["SC1: two cron lines", (w) => (w.on["schedule"] = [{ cron: "7 * * * *" }, { cron: "37 * * * *" }])],
+  ["SC1: the old 3-hour cron", (w) => (w.on["schedule"] = [{ cron: "17 */3 * * *" }])],
+  ["SC1: the catch-up at minute 0, the busiest", (w) => (w.on["schedule"] = [{ cron: "0 * * * *" }])],
+  ["SC1: a push to main no longer starts it", (w) => Reflect.deleteProperty(w.on, "push")],
+  ["SC1: a push to any branch starts it", (w) => (w.on["push"] = {})],
+  ["SC1: a push to main skips some paths", (w) => (w.on["push"] = { branches: ["main"], "paths-ignore": ["docs/**"] })],
+  ["SC1: no hand start", (w) => Reflect.deleteProperty(w.on, "workflow_dispatch")],
+  // SC16: the gap, a setting of an hour at least (0581's binding constraint).
+  ["SC16: a gap of half an hour", (w) => (w.env = { GAP_MINUTES: 30 })],
+  ["SC16: a gap a minute short of an hour", (w) => (w.env = { GAP_MINUTES: 59 })],
+  ["SC16: a gap in words", (w) => (w.env = { GAP_MINUTES: "1h" })],
+  ["SC16: a gap as text", (w) => (w.env = { GAP_MINUTES: "60" })],
+  [
+    "SC16: the gap moved to the gate's step",
+    (w) => {
+      Reflect.deleteProperty(w, "env");
+      const decide = gate(w).steps.find((s) => s["id"] === "decide")!;
+      decide.env = { ...decide.env, GAP_MINUTES: 60 };
+    },
+  ],
+  ["SC16: a second workflow env value", (w) => (w.env = { ...w.env, FABRIKA_TEST_DEPTH: "full" })],
+  // SC14: the gate, first, with its one output.
+  ["SC14: the gate waits on the tests", (w) => (gate(w).needs = ["tests"])],
+  ["SC14: the gate runs only on a push", (w) => (gate(w)["if"] = "github.event_name == 'push'")],
+  [
+    "SC14: the gate's output is read from another step",
+    (w) => (gate(w)["outputs"] = { start: `\${{ steps.other.outputs.start }}` }),
+  ],
+  [
+    "SC14: the gate gives a second output",
+    (w) => (gate(w)["outputs"] = { start: `\${{ steps.decide.outputs.start }}`, why: "x" }),
+  ],
+  [
+    "SC14: the gate's step has no token",
+    (w) =>
+      Reflect.deleteProperty(
+        gate(w).steps.find((s) => s["id"] === "decide")!,
+        "env",
+      ),
+  ],
+  [
+    "SC14: the gate's step takes a secret",
+    (w) => (gate(w).steps.find((s) => s["id"] === "decide")!.env = { GITHUB_TOKEN: `\${{ secrets.BOT }}` }),
+  ],
+  [
+    "SC14: the gate runs another script",
+    (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["run"] = "node .github/ci/scheduled.mjs"),
+  ],
+  ["SC14: the gate's step has another id", (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["id"] = "read")],
+  [
+    "SC14: the gate checks out the whole repository",
+    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => typeof s["uses"] === "string")!.with!, "sparse-checkout"),
+  ],
+  // SC15: the tests start only on the gate's `true`.
+  ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
+  ["SC15: the tests run when the gate passed", (w) => (w.jobs["tests"]!["if"] = "needs.gate.result == 'success'")],
+  [
+    "SC15: the tests run unless the gate said false",
+    (w) => (w.jobs["tests"]!["if"] = "needs.gate.outputs.start != 'false'"),
+  ],
+  ["SC15: the tests wait on nothing", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "needs")],
   // SC2: one run at a time, never cut short.
   ["SC2: a newer run cancels the running one", (w) => (w.concurrency["cancel-in-progress"] = true)],
   ["SC2: one group per commit, so runs overlap", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
   // SC12: a newer run never cancels a waiting one.
   ["SC12: no queue, so a newer run cancels the waiting one", (w) => Reflect.deleteProperty(w.concurrency, "queue")],
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
-  // SC3: the token.
+  // SC3: the token, the gate's included.
+  ["SC3: the gate's own token writes actions", (w) => (gate(w).permissions = { actions: "write" })],
   [
     "SC3: the workflow's token writes issues",
     (w) => (w.permissions = { actions: "read", contents: "read", issues: "write" }),
@@ -182,11 +280,26 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   // SC5: the report.
   ["SC5: the report skips after a red leg", (w) => (w.jobs["report"]!["if"] = "github.ref == 'refs/heads/main'")],
+  // A skipped run would judge itself and close the open issue.
+  ["SC5: the report runs on a run whose gate said false", (w) => (w.jobs["report"]!["if"] = "always()")],
+  [
+    "SC5: the report skips a run whose gate failed",
+    (w) => (w.jobs["report"]!["if"] = "always() && needs.gate.outputs.start == 'true'"),
+  ],
+  ["SC5: the report does not wait on the gate", (w) => (w.jobs["report"]!.needs = ["tests"])],
+  [
+    "SC5: the gate's checkout gets the token",
+    (w) => {
+      const checkout = gate(w).steps.find((s) => typeof s["uses"] === "string")!;
+      checkout.env = { GITHUB_TOKEN: `\${{ github.token }}` };
+    },
+  ],
   [
     "SC5: the report runs on main alone, so a branch's run with a timed-out leg ends cancelled",
     (w) => (w.jobs["report"]!["if"] = `\${{ always() && github.ref == 'refs/heads/main' }}`),
   ],
   ["SC5: the report waits on nothing", (w) => (w.jobs["report"]!.needs = [])],
+  ["SC5: the report waits on the tests alone", (w) => (w.jobs["report"]!.needs = ["tests"])],
   ["SC5: the report's failure is hidden", (w) => (step(w, "report", "report")["continue-on-error"] = true)],
   ["SC5: the report runs another script", (w) => (step(w, "report", "report")["run"] = "node .github/ci/required.mjs")],
   ["SC5: the report is not told the needs", (w) => Reflect.deleteProperty(step(w, "report", "report").env!, "NEEDS")],
@@ -249,6 +362,13 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   // SC6: one matrix for every test leg, at most half the runners.
   ["SC6: one more leg at once than the cap holds", (w) => (w.jobs["tests"]!.strategy!["max-parallel"] = 10)],
+  [
+    "SC6: the tests no longer wait on the gate, so they run beside it: 11 machines",
+    (w) => {
+      Reflect.deleteProperty(w.jobs["tests"]!, "needs");
+      w.jobs["tests"]!.strategy!["max-parallel"] = 10;
+    },
+  ],
   ["SC6: the test job has no max-parallel", (w) => Reflect.deleteProperty(w.jobs["tests"]!.strategy!, "max-parallel")],
   // GitHub's own fail fast stops a job's other legs and leaves the run's conclusion `failure`.
   ["SC6: a red leg holds the others' runners", (w) => (w.jobs["tests"]!.strategy!["fail-fast"] = false)],
@@ -509,7 +629,7 @@ it("SC3, SC5 and SC6 scenario: on the real scheduled.yaml, what ends a red run a
   const mainOnly = real();
   mainOnly.jobs["report"]!["if"] = `\${{ always() && github.ref == 'refs/heads/main' }}`;
   expect(lint(mainOnly)).toEqual([
-    "scheduled.yaml: SC5: the report needs every other job, and runs after any result, on every branch",
+    "scheduled.yaml: SC5: the report needs every other job, and runs after any result, on every branch, unless the gate said false",
   ]);
 
   const slow = real();
@@ -584,15 +704,56 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
   expect(lint(apart)).toEqual([LIMIT_TEXT, STEPS("next"), JOB]);
 });
 
+// Each plant is named by its own law: a plant's name starts with the law it breaks, and that law's
+// error is among the errors, so a plant another law happens to catch still proves its own law.
 it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
+  const law = plant.split(":")[0]!;
   fc.assert(
     fc.property(scheduled, (clean) => {
       const broken = structuredClone(clean);
       mutate(broken);
-      expect(lint(broken), plant).not.toEqual([]);
+      const errors = lint(broken);
+      expect(errors, plant).not.toEqual([]);
+      expect(
+        errors.some((error) => error.startsWith(`scheduled.yaml: ${law}:`)),
+        `${plant}: ${JSON.stringify(errors)}`,
+      ).toBe(true);
     }),
     { ...options, numRuns: 20 },
   );
+});
+
+it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any whole gap of an hour or more, pass; minute 0 and a gap under an hour do not", () => {
+  // Plants, each run once on scheduled.ts and restored: SC1's hourly check dropped (red: the 3-hour
+  // and minute-0 crons pass); SC16's floor dropped (red: a 59-minute gap passes).
+  const reached = { minuteZero: 0, notHourly: 0, short: 0, clean: 0 };
+  fc.assert(
+    fc.property(
+      scheduled,
+      fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 59 })),
+      fc.constantFrom("*", "*/3", "*/2", "9-17"),
+      fc.oneof(fc.integer({ min: 1, max: 59 }), fc.integer({ min: 60, max: 1440 })),
+      (clean, minute, hours, gap) => {
+        const w = structuredClone(clean);
+        w.on["schedule"] = [{ cron: `${minute} ${hours} * * *` }];
+        w.env = { GAP_MINUTES: gap };
+        const errors = lint(w);
+        const hourly = minute >= 1 && hours === "*";
+        reached.minuteZero += minute === 0 ? 1 : 0;
+        reached.notHourly += hours === "*" ? 0 : 1;
+        reached.short += gap < 60 ? 1 : 0;
+        reached.clean += hourly && gap >= 60 ? 1 : 0;
+        expect(errors.some((e) => e.startsWith("scheduled.yaml: SC1:"))).toBe(!hourly);
+        expect(errors.some((e) => e.startsWith("scheduled.yaml: SC16:"))).toBe(gap < 60);
+        expect(errors.length === 0).toBe(hourly && gap >= 60);
+      },
+    ),
+    options,
+  );
+  expect(
+    Object.values(reached).every((count) => count > 0),
+    JSON.stringify(reached),
+  ).toBe(true);
 });
 
 it("property: the schedule's legs follow check.yaml's full matrix, so a new leg there fails here until both agree", () => {
