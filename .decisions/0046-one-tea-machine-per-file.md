@@ -197,6 +197,9 @@ machine (`app/runner.ts:271-272`).
 
 ## Amendments
 
+- 2026-11-15: [0578](0578-tea-cell-answers-a-step.md) says a cell answers a `Step`, not the
+  `[model, cmds]` tuple that this file's examples show. The examples change with the sweep.
+
 - 2026-11-15: [0567](0567-a-tagged-value-is-matched.md) supersedes the amendment just below, the
   one on how an `update` handler picks the next state. The rest of this file holds as written.
 
