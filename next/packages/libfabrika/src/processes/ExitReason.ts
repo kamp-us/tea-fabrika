@@ -45,6 +45,8 @@ export const sameReason: {
   (self: ExitReason, that: ExitReason): boolean;
 } = Function.dual(2, Schema.toEquivalence(ExitReason));
 
+const decode = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });
+
 /**
  * Decodes untrusted input to one exit reason, as a `Result`. A string, an unknown tag or an extra
  * field is refused.
@@ -52,4 +54,4 @@ export const sameReason: {
  * @stability unstable
  * @category decoding
  */
-export const decodeExitReason = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });
+export const decodeExitReason = (input: unknown): ReturnType<typeof decode> => decode(input);

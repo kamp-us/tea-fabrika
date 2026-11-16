@@ -119,7 +119,7 @@ export const letterLine: {
  * @stability unstable
  * @category decoding
  */
-export const letterBody = decodeJson;
+export const letterBody = (message: unknown): ReturnType<typeof decodeJson> => decodeJson(message);
 
 /** A `send` entry as its History; any other case is none, and kept in the log. */
 const history = Effect.fnUntraced(function* (entry: Entry) {

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e87-build-r2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:39:11-08:00",
+  "ended": "2026-11-16T01:52:17-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build fix round after the review's first send-back (2026-11-16-effect-e87-review) of judgment slice E87 of the Effect-check sweep (missingPipeableSignature in libfabrika's runtime, cloudflare, processes, settings and ledger folders), in next/. Fixed the two hits the review sent back, by hand with the Edit tool: decodeExitReason (processes/ExitReason.ts:57) and letterBody (processes/Mailbox.ts:122). Each was a Schema decoder exported as is, typed (input: unknown, options?: ParseOptions), and the check fires on that optional second argument. The fix narrows each export to a one-argument function that calls the same decoder, (input: unknown): ReturnType<typeof decode> => decode(input), so the result type (Result for the exit reason, Option for the letter body), the error shape and the onExcessProperty: 'error' option stay the same; ExitReason.ts keeps the decoder in a private const decode. Narrowing is the fix here, not Function.dual: the input is untrusted unknown, so no predicate on the first argument can tell a direct call from a piped one, and a dual could read the options object as the input. No caller changes: every caller passes one argument (ProcessManager.ts:387, cloudflare/runtime.ts:1569, ProgramMailLedger.ts:180), and none passes the decoder as a callback. Left 1: nodeExecution (runtime/Execution.ts:252), untouched, since it waits on an owner or lead call (the review row says why). No lock line, no tsconfig change, no disable or @effect-diagnostics comment, no list entry.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Recount at this change, with only this check at error through --lspconfig '{\"diagnosticSeverity\":{\"missingPipeableSignature\":\"error\"}}' on next/packages/libfabrika/tsconfig.json: 1 hit in the five folders, Execution.ts:252 nodeExecution (75 in libfabrika in all, the rest in folders other slices own). Tests ran on Node 26.13.0 at 76b9d2c plus this change, TYPESAFE_API_KEY unset, nice -n 15 and --maxWorkers=3, narrow paths: processes ExitReason.test, ExitReason.types.test, Mailbox.test, MailboxHistory.test (22 tests); ProcessManager.integration, ProcessLifecycle.integration, ProcessMonitors.integration (68); cloudflare mail.test, leave.laws.test, supervision.laws.integration, apps/fabrika runtime.laws.integration, runtime.decode.test (46); node ProgramMail.integration, ProgramMailReads.integration, ProgramMailRuntime.integration, processes/internal/programMail.test (42); all green, none refused by the 0178 guard. pnpm --filter @kampus/libfabrika typecheck green; the full pnpm typecheck was not run (the review ran one at 363983f, and this change touches two libfabrika files). pnpm format changed nothing else. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 16 of 18 parts passed; lint:dead and lint:promise-types died with EPIPE while another agent's vitest ran in the box, and each passed when run again alone (lint:dead needed two solo runs, the first also EPIPE). A second pnpm lint, run with this row written so field-check reads it, passed 17 of 18 parts; lint:promise-types died with EPIPE again, on the same code that passed alone. ratchet.ts exits 0. Not run: any .visual. test, the full --changed run.",
+  "step": "build"
+}
