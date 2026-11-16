@@ -213,6 +213,34 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
           );
         });
         const bytes = (text: string) => new TextEncoder().encode(text).length;
+        const get = options.storage?.get;
+        const readActivity =
+          get === undefined
+            ? read(() => {
+                const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+                return row === undefined
+                  ? undefined
+                  : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
+              })
+            : get("activity").pipe(
+                Effect.flatMap((raw) =>
+                  raw === undefined
+                    ? Effect.succeed(undefined)
+                    : Effect.try({
+                        try: () => Schema.decodeUnknownSync(Activity)(raw),
+                        catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+                      }),
+                ),
+              );
+        // One marker write: its text against the old one, and the key it is kept under the first time.
+        const chargeActivity = (key: string, text: string, old: string | undefined, at: number) =>
+          options.accounting?.change(
+            "activity",
+            1,
+            bytes(text) - (old === undefined ? 0 : bytes(old)) + (old === undefined ? bytes(key) : 0),
+            at,
+            recovering(sql),
+          );
         return {
           select: Effect.fn("process.select")(function* (process: string) {
             const selected = ProcessStore.pipe(
@@ -221,58 +249,22 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             );
             return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
           }),
-          readActivity: Effect.gen(function* () {
-            const get = options.storage?.get;
-            const kept =
-              get === undefined
-                ? Effect.succeed(undefined)
-                : get("activity").pipe(
-                    Effect.flatMap((raw) =>
-                      raw === undefined
-                        ? Effect.succeed(undefined)
-                        : Effect.try({
-                            try: () => Schema.decodeUnknownSync(Activity)(raw),
-                            catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-                          }),
-                    ),
-                  );
-
-            if (options.accounting === undefined && get !== undefined) {
-              return yield* kept;
-            }
-
-            const marker = yield* read(() => {
-              const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
-              return row === undefined
-                ? undefined
-                : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
-            });
-            // With accounting the marker is a SQL row charged with its write. A marker an older build
-            // kept in the object's storage is read only until the first accounted write replaces it.
-            return marker ?? (yield* kept);
-          }),
+          readActivity,
           activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
-            if (options.storage !== undefined && options.accounting === undefined) {
-              yield* options.storage.put("activity", value);
-            } else {
-              yield* stored((at) =>
+            const text = encodeActivity(value);
+            const storage = options.storage;
+
+            // Node keeps the marker as a SQL row, charged in the transaction that writes it.
+            if (storage === undefined) {
+              return yield* stored((at) =>
                 sql.transaction(() => {
-                  const text = encodeActivity(value);
                   const [old] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
 
                   if (old?.activity === text) {
                     return;
                   }
 
-                  options.accounting?.change(
-                    "activity",
-                    1,
-                    bytes(text) -
-                      (old === undefined ? 0 : bytes(String(old.activity))) +
-                      (old === undefined ? bytes(options.process) : 0),
-                    at,
-                    recovering(sql),
-                  );
+                  chargeActivity(options.process, text, old === undefined ? undefined : String(old.activity), at);
                   sql.exec(
                     "INSERT INTO process_activity (process,activity) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET activity=excluded.activity",
                     options.process,
@@ -282,9 +274,19 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               );
             }
 
-            if (options.storage !== undefined) {
-              yield* options.storage.sync();
+            // The object keeps the marker in its own key-value storage, where the wake rule reads it.
+            // With an account, the put is charged first, so a charge that does not fit writes nothing.
+            if (options.accounting !== undefined) {
+              const old = yield* readActivity;
+              const oldText = old === undefined ? undefined : encodeActivity(old);
+
+              if (oldText !== text) {
+                yield* stored((at) => sql.transaction(() => chargeActivity("activity", text, oldText, at)));
+              }
             }
+
+            yield* storage.put("activity", value);
+            yield* storage.sync();
           }),
           load: read(() => {
             const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);

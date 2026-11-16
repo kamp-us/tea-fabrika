@@ -2393,7 +2393,7 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap((at) => (at === undefined ? Effect.void : attributed(runner.due(at)))),
       ),
     activity: store.activity,
-    // The marker is the accounted SQL row, read through the store (0147).
+    // The marker the store keeps in this object's own storage, where the wake rule reads it.
     recover: () => store.readActivity.pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
   };
 });
