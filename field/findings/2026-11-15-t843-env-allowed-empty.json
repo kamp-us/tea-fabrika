@@ -13,6 +13,6 @@
   "proof": "Failed with `expected 0 to be greater than 0` at line 565:34, the check inside the round loop, in run 43784614754 job 133033394390 (leg next (3), case env, 01:23:58Z) and in run 43782621366 job 133026397180 (leg next (3), case flags). It passed in run 43783711030. Each failing branch changed only an unrelated runtime.ts plant. Over the 51 latest scheduled runs, 40 legs ran the scenario: 2 of 120 cases failed, and 0 of 45 on main. Of the 208 rounds those legs logged, 2 had the second socket's call accepted. In both, the next round started about 6 ms later and got 3 of 4 allowed calls, because that call had already spent one call of the new window's budget. With one more batch call landing after the boundary, the count reaches 0.",
   "cost": "A full run goes red on about 5% of its next (3) legs with no bug, and the red leg hides real failures behind a known flake.",
   "head": "f7d973e4a088d6ae2c34ec9c84263cea7e5b5024",
-  "ticket": "kamp-us/tea-fabrika#1066",
+  "ticket": "kamp-us/tea-fabrika#883",
   "pr": null
 }
