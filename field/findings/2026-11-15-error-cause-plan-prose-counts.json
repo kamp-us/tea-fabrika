@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-error-cause-plan-prose-counts",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/quests/error-cause-PLAN.md",
+    "line": 270
+  },
+  "says": "The error-cause plan's prose says 12 `optionalKey(Schema.Defect())` cause lines where its own tables count 13 (12 product lines and 1 test-support line), so the false-alarm sentence and the opening sketch's \"and 11 more like it\" are one short.",
+  "proof": "Line 104's table row reads `Schema.optionalKey(Schema.Defect())` | 12 | 1 | 10 become `optional`, 3 become required, which is 13 lines. Line 270 lists the rule's 16 fires as 12 `optionalKey(Defect())`, the audit line, ProgramDown's `optionalKey(Unknown)` and the test's `Schema.Unknown`, which adds to 15, not 16. Line 16 says Files.ts:29 \"and 11 more like it\", which is 12, not 13. The tests step's rule run on main 1b9fa513f (field/runs/2026-11-15-t1062-tests1.json) found 16 lines, 13 of them `optionalKey(Defect())`, the 13th at next/apps/fabrika/e2e/node/P19Launchd.test-support.ts:46.",
+  "cost": "Slice 4 compares the rule's real fire count with this plan's numbers before it turns the rule on; a reader who adds up line 270 gets 15 and may think the rule over-fires by one.",
+  "head": "d9aae8498fe511b178f8bcdf4a2e6b99da77ecd7",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1381"
+}

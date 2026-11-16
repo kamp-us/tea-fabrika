@@ -23,7 +23,7 @@ import type { TomlDocument } from "./Toml.ts";
 export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
   reason: Schema.Literals(["version", "syntax", "unknown", "scope", "invalid", "read"]),
   message: Schema.String,
-  cause: Schema.optionalKey(Schema.Defect()),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /**

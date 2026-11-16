@@ -11,6 +11,7 @@ import type * as Result from "effect/Result";
 import { Model, StartProgram } from "./Model.ts";
 import * as Rebac from "./Rebac.ts";
 import type { Tuples } from "./Relation.ts";
+import { RelationsError } from "./Relations.ts";
 import type { Sender } from "./Senders.ts";
 
 type Passed<R> = R extends Result.Result<infer A, unknown> ? A : never;
@@ -71,6 +72,19 @@ const forged = (sender: typeof Sender.Type, tuples: Tuples) => {
   return { literal, minted, checked };
 };
 
+/**
+ * T1062 slice 1, L3 (docs/plan/quests/error-cause-PLAN.md, decision 0568): all three sites that make
+ * a `RelationsError` pass a cause (`RelationsLedger.ts:46`, `:64`, `RelationsMemory.ts:39`), so its
+ * cause is required and a fourth site cannot leave it out. Never called.
+ * Plant: make `Relations.ts:27` optional again; the `@ts-expect-error` goes unused and the typecheck fails.
+ */
+const uncaused = (cause: unknown) => {
+  // @ts-expect-error every caller of RelationsError has a cause, so the field is required (0568).
+  const bare = RelationsError.make({ reason: "storage" });
+  const kept = RelationsError.make({ reason: "bad_row", cause });
+  return { bare, kept };
+};
+
 it("type: L5 a step that yields StartProgram needs it, provide removes it, and another right's proof does not", () => {
   expectTypeOf<Effect.Services<Shapes["needs"]>>().toEqualTypeOf<StartProgram>();
   expectTypeOf<Effect.Success<Shapes["needs"]>>().toEqualTypeOf<StartProof>();
@@ -92,4 +106,10 @@ it("type: L7 no code outside the module makes a proof: no literal, no mint, only
   expectTypeOf<ReturnType<typeof forged>["checked"]>().toEqualTypeOf<Result.Result<StartProof, Rebac.Denied>>();
   expectTypeOf<Refused<ReturnType<typeof StartProgram.within>>>().toEqualTypeOf<Rebac.Denied>();
   expectTypeOf<"mint" extends keyof typeof Rebac ? true : false>().toEqualTypeOf<false>();
+});
+
+it("type: T1062 L3 a RelationsError is never made without its cause, and its cause is any value", () => {
+  expectTypeOf<RelationsError["cause"]>().toEqualTypeOf<unknown>();
+  expectTypeOf<ReturnType<typeof uncaused>["kept"]>().toEqualTypeOf<RelationsError>();
+  expectTypeOf(uncaused).toBeFunction();
 });
