@@ -779,14 +779,12 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(records).pipe(
       Effect.as(0),
-      Effect.catchTag("Unknown", (e) =>
-        Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
-      ),
-      Effect.catchTag("NoNumbers", (e) =>
-        Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
-      ),
-      // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
+      Effect.catchTags({
+        Unknown: (e) => Console.error(`records: unknown, never 0 records: ${e.reason}`).pipe(Effect.as(1)),
+        NoNumbers: (e) => Console.error(`records: ${e.folder} has no numbers; use list`).pipe(Effect.as(2)),
+        // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
       Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),

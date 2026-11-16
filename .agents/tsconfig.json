@@ -24,14 +24,15 @@
           }
         },
         // These folders: schemaNumber (E4), preferTypedSchemaDecoder (E5), instanceOfSchema
-        // (E10).
+        // (E10), multipleCatchTag (E21).
         {
           "include": ["**/*.ts"],
           "options": {
             "diagnosticSeverity": {
               "schemaNumber": "error",
               "preferTypedSchemaDecoder": "error",
-              "instanceOfSchema": "error"
+              "instanceOfSchema": "error",
+              "multipleCatchTag": "error"
             }
           }
         },

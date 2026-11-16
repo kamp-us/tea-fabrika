@@ -433,8 +433,10 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(sizecap).pipe(
       Effect.as(0),
-      Effect.catchTag("Failed", (failed) => Console.error(`sizecap: ${failed.message}`).pipe(Effect.as(2))),
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
+      Effect.catchTags({
+        Failed: (failed) => Console.error(`sizecap: ${failed.message}`).pipe(Effect.as(2)),
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
       Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
