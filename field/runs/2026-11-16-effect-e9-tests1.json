@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e9-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E9 (catchToOrElseSucceed), in next/ and our tooling. Recounted 23 hits on main at 15bc733: .agents 15, libfabrika node 4 and transport 2, app e2e 1, app exam 1. Locked all five folders at error in their own tsconfigs (.agents whole package, libfabrika and the app by overrides). Fixed the 2 exam-path hits by hand with Effect.orElseSucceed (no tool run). 21 product hits in .agents and libfabrika are left for the build. None sits in a file of pull request 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Counts at error after the lock: .agents 15, libfabrika 6, app 0 after the fixes (2 before). Quick fixes by tool: 0. Hand edits: 2.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "Effect.catch(() => Effect.succeed(1)) appended to src/exam/twin.ts: count went 0 to 1, then removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "the app override globs dropped with the plant in place: count 0, then the globs put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

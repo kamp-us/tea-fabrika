@@ -133,7 +133,7 @@ const status = Effect.fn("P19Host.status")(function* (target: string) {
 const listening = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
     Effect.provide(FetchHttpClient.layer),
   );
 
