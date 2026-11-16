@@ -1,12 +1,14 @@
 // `next/`, exam item 13, C4: React's store hook has no allowed file; tea's value is kept.
+// These laws were the exam's (next/apps/fabrika/src/exam/one-store-hook.integration.test.ts) until 0591
+// moved them here. Plant: drop the rule's `void` call branch, and each `void` line stops firing.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { plant } from "../../../../../oxlint-plugins/plant.ts";
+import { plant } from "./plant.ts";
 
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+const ROOT = join(import.meta.dirname, "..");
 const CODE = "fabrika(one-store-hook)";
 const HOOK = "next/packages/tuval/src/window/use-model.ts";
 const FIRES = "next/programs/counter/src/view.tsx";
@@ -120,35 +122,35 @@ describe("one-store-hook", async () => {
   });
 
   // Plants: restore the retired path allowance, or delete an import branch or member visitor.
-  it.each([HOOK, FIRES])("rejects React imports, aliases, the shim and members in %s", (file) => {
+  it.each([HOOK, FIRES])("scenario: rejects React imports, aliases, the shim and members in %s", (file) => {
     expect(all(CODE, file)).toEqual([2, 3, 4, 6]);
   });
 
   // Plant: forbid tea's hook or report calls whose returned value is kept.
-  it("passes tea's selector when the view draws its value", () => {
+  it("scenario: passes tea's selector when the view draws its value", () => {
     expect(all(CODE, PASSES)).toEqual([]);
   });
 
   // Plants: drop useRuntime from the hook set, or remove bare, void or member-call handling.
-  it("rejects dropped useRuntime values in bare, void and plain member calls", () => {
+  it("scenario: rejects dropped useRuntime values in bare, void and plain member calls", () => {
     expect(all(CODE, RUNTIME)).toEqual([4, 5, 6, 7]);
   });
 
   // Plant: replace the old hook set with only useRuntime.
-  it("still rejects bare and void useModel calls", () => {
+  it("scenario: still rejects bare and void useModel calls", () => {
     expect(all(CODE, MODEL)).toEqual([3, 4]);
   });
 
-  it("rejects dropped useMachine and useSyncExternalStore values without an import finding", () => {
+  it("scenario: rejects dropped useMachine and useSyncExternalStore values without an import finding", () => {
     expect(all(CODE, OTHER_HOOKS)).toEqual([4, 5, 6, 7]);
   });
 
-  it("passes other React imports, same-named imports elsewhere, helpers and non-call statements", () => {
+  it("scenario: passes other React imports, same-named imports elsewhere, helpers and non-call statements", () => {
     expect(all(CODE, OTHER_CALLS)).toEqual([]);
   });
 
   // plant indexes named findings only; oxlint's plugin crashes have no rule code.
-  it("does not crash on non-call statements or calls of returned functions", () => {
+  it("scenario: does not crash on non-call statements or calls of returned functions", () => {
     const at = realpathSync(mkdtempSync(join(tmpdir(), "exam-")));
 
     try {
@@ -192,21 +194,21 @@ describe("one-store-hook", async () => {
     }
   });
 
-  it.each([COMPUTED, PRIVATE])("leaves non-plain member access in %s alone", (file) => {
+  it.each([COMPUTED, PRIVATE])("scenario: leaves non-plain member access in %s alone", (file) => {
     expect(all(CODE, file)).toEqual([]);
   });
 
-  it("distinguishes unary uses of a hook value from void dropping it", () => {
+  it("scenario: distinguishes unary uses of a hook value from void dropping it", () => {
     expect(all(CODE, UNARY)).toEqual([]);
   });
 
   // Plant: remove the test override from the real config copied by plant.
-  it.each([TEST, TSX_TEST])("leaves %s out of the rule", (file) => {
+  it.each([TEST, TSX_TEST])("scenario: leaves %s out of the rule", (file) => {
     expect(all(CODE, file)).toEqual([]);
   });
 
   // Plant: enable the rule globally instead of only under next/.
-  it("adds no restriction outside next/", () => {
+  it("scenario: adds no restriction outside next/", () => {
     expect(all(CODE, OUTSIDE)).toEqual([]);
   });
 });
