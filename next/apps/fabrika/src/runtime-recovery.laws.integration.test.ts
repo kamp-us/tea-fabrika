@@ -42,20 +42,25 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
+
 vi.mock("./table.ts", () => table);
+
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 // P16: the runtime reads its built program table from the build's generated module
 // (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
 vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
+
 type ProcessCalls = (typeof ProcessService)["Service"];
 
 // What the Project class hands off: each call runs one service method on the object's runtime.
 const projectObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = projectRuntime(ctx, env);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
+
   return {
     runtime,
     settingsStart: (...args: Parameters<typeof runtime.settingsStart>) =>
@@ -110,6 +115,7 @@ type ProjectObject = ReturnType<typeof projectObject>;
 const processObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = processRuntime(ctx, env, programs);
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
+
   return {
     runtime,
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
@@ -130,25 +136,36 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 type ProcessObject = ReturnType<typeof processObject>;
 
 const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+
 const counterCode = built("counter");
+
 const checklistCode = built("checklist");
+
 const tezgahCode = built("tezgah");
+
 const approvalCode = built("approvals");
+
 const poisonCode = built("poison");
+
 const requesterCode = built("requester");
+
 const responderCode = built("responder");
 
 /** A call on a Durable Object stub rejected. */
 class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     size = Buffer.alloc(4);
+
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -156,6 +173,7 @@ const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -168,8 +186,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -179,6 +199,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -241,6 +262,7 @@ const RequestModel = Schema.TaggedUnion({
   answered: { ref: Schema.String, value: Schema.Int },
   failed: { ref: Schema.String, reason: Schema.String },
 });
+
 /** @internal */
 type RequestModel = typeof RequestModel.Type;
 
@@ -280,11 +302,13 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
         }
 
         const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
             ? { to: m.to ?? config.peer, m: body }
             : { to: m.to ?? config.peer, m: body, source: m.claim };
+
         return [RequestModel.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
@@ -302,6 +326,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           : [s, []],
     },
   });
+
   return Program.make({
     name: `p41/requester-${config.self.replaceAll(":", "-")}`,
     machine,
@@ -323,6 +348,7 @@ const ResponseModel = Schema.TaggedStruct("ready", {
   queued: Schema.Int,
   refused: Schema.Int,
 });
+
 /** @internal */
 type ResponseModel = typeof ResponseModel.Type;
 
@@ -335,6 +361,7 @@ const Request = Schema.Struct({
 });
 
 const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
+
 /** @internal */
 const ResponseMsg = Schema.Union([Request, Approve]);
 
@@ -386,6 +413,7 @@ type AlarmHooks = { readonly set: (at: number) => void; readonly clear: () => vo
 const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
   const sql = nodeSql(db),
     values = new Map<string, unknown>();
+
   return {
     values,
     sql: {
@@ -453,9 +481,11 @@ const OLD_PROJECT_CALLS = new Set(["read", "wait", "append", "inbox", "own", "pu
 
 const gate = () => {
   let resolve = () => {};
+
   const promise = new Promise<void>((done) => {
     resolve = done;
   });
+
   return { promise, resolve };
 };
 
@@ -487,10 +517,13 @@ const world = (
   table.programs["p34/poison-fixture"] = poisonCode;
   table.programs[requestProgram.name] = requesterCode;
   table.programs[mailResponder.name] = responderCode;
+
   const key = identity(),
     db = new DatabaseSync(":memory:");
+
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
@@ -520,6 +553,7 @@ const world = (
     },
     exports: loopbacks,
   } as unknown as DurableObjectState;
+
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
     attempts: Descriptor[] = [],
@@ -527,11 +561,15 @@ const world = (
     received: Incoming[] = [],
     entered = gate(),
     interrupted = gate();
+
   let project: ProjectObject;
   let settingsRefused = false;
   let beforeCommit = async () => {};
+
   let afterMail = async () => {};
+
   let beforeProject = (_method: string) => {};
+
   let signs = 0,
     commits = 0,
     newCalls = 0,
@@ -539,6 +577,7 @@ const world = (
     lostDone = false,
     stepFault: "none" | "rpc" | "decode" = "none",
     closed = false;
+
   const schedule = (entry: Entry) => {
     clearTimeout(entry.timer);
 
@@ -560,8 +599,10 @@ const world = (
         tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
       );
     };
+
     fire(0);
   };
+
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
     beforeProject(method);
     const work = () => Reflect.apply(Reflect.get(project, method), project, args);
@@ -595,6 +636,7 @@ const world = (
     await work();
     throw new Error("transport lost the Project's answer");
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
@@ -623,6 +665,7 @@ const world = (
               if (method === "sign") {
                 return (...args: Parameters<ProjectObject["sign"]>) => {
                   signs++;
+
                   return project.sign(...args);
                 };
               }
@@ -631,6 +674,7 @@ const world = (
                 return async (...args: Parameters<ProjectObject["mail"]>) => {
                   const reply = await project.mail(...args);
                   await afterMail();
+
                   return reply;
                 };
               }
@@ -639,6 +683,7 @@ const world = (
                 return async (...args: Parameters<ProjectObject["commit"]>) => {
                   commits++;
                   await beforeCommit();
+
                   return project.commit(...args);
                 };
               }
@@ -651,9 +696,11 @@ const world = (
     PROCESS: {
       getByName: (name: string) => {
         const [, storageKey] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(JSON.parse(name));
+
         const made = (): Entry => {
           const processDb = new DatabaseSync(":memory:");
           let entry: Entry | undefined;
+
           const handles = storage(processDb, {
             set: (at) => {
               if (entry === undefined) {
@@ -672,8 +719,10 @@ const world = (
               clearTimeout(entry.timer);
             },
           });
+
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
+
           const created: Entry = {
             db: processDb,
             ctx: processCtx,
@@ -682,11 +731,15 @@ const world = (
             alarm: null,
             object: processObject(processCtx, env),
           };
+
           entry = created;
           processes.set(storageKey, created);
+
           return created;
         };
+
         const current: Entry = processes.get(storageKey) ?? made();
+
         // Every Process RPC the real class hands off; reopen swaps the object behind the same stub.
         return new Proxy(
           {},
@@ -707,6 +760,7 @@ const world = (
 
                   if (attempts.length === 1 && fault === "interrupted") {
                     await interrupted.promise;
+
                     return;
                   }
 
@@ -717,6 +771,7 @@ const world = (
                       () => "failed" as const,
                     ),
                   );
+
                   return delivery;
                 };
               }
@@ -724,6 +779,7 @@ const world = (
               if (method === "msg") {
                 return (incoming: Incoming) => {
                   received.push(incoming);
+
                   return current.object.msg(incoming);
                 };
               }
@@ -749,15 +805,19 @@ const world = (
           if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
             const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
+
             const Box = programBox(
               program,
               requester ? requesterCode.hash : responder ? responderCode.hash : poisonCode.hash,
             );
+
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => {
                 inits++;
+
                 return box.init(saved);
               },
               step: (model: unknown, msg: unknown) => box.step(model, msg),
@@ -785,12 +845,14 @@ const world = (
 
           if (id.startsWith(`${checklistCode.hash}/`)) {
             const Box = programBox(checklist, checklistCode.hash);
+
             return Reflect.construct(Box, []);
           }
 
           const approval = id.startsWith(`${approvalCode.hash}/`),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
+
           return {
             describe: async () => ({
               name: program.name,
@@ -810,6 +872,7 @@ const world = (
             }),
             init: (saved: unknown) => {
               inits++;
+
               return Effect.runPromise(execution.init(saved));
             },
             step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
@@ -834,7 +897,9 @@ const world = (
       }),
     },
   } as unknown as Env;
+
   project = projectObject(ctx, env);
+
   const close = async () => {
     closed = true;
     interrupted.resolve();
@@ -848,12 +913,16 @@ const world = (
     await project.runtime.dispose();
     db.close();
   };
+
   closers.push(close);
+
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
     const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
+
     return row === undefined ? undefined : JSON.parse(String(row.value)).name;
   };
+
   /** The storage owner of a process ID, however the runtime keys it. */
   const processFor = (pid: string): Entry => {
     const direct = processes.get(pid);
@@ -863,6 +932,7 @@ const world = (
     }
 
     const name = nameFor(pid);
+
     const found = [...processes.entries()].find(
       ([storageKey, entry]) =>
         Reflect.get(Object(entry.values.get("descriptor")), "id") === pid ||
@@ -875,6 +945,7 @@ const world = (
 
     return found[1];
   };
+
   return {
     localUsage: (pid: string) =>
       QuotasSql.accounting(nodeSql(processFor(pid).db), {
@@ -902,6 +973,7 @@ const world = (
     /** How each start the Project delivered ended at its object, once the first one has ended. */
     delivered: async () => {
       await entered.promise;
+
       return Promise.all(deliveries);
     },
     /** How many times a program's init ran: each is one process's first turn after a load. */
@@ -1005,12 +1077,14 @@ const world = (
       await project.runtime.dispose();
       table.programs["fabrika/counter"] = built("changed counter");
       project = projectObject(ctx, env);
+
       return project.info();
     },
     admit: async () => {
       const client = await project.clientConnect(),
         nonce = await project.challenge(client),
         tab = "recovery-test";
+
       expect(
         await project.initialize(
           client,
@@ -1029,6 +1103,7 @@ const world = (
           { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
         ),
       ).toMatchObject({ _tag: "online" });
+
       return client;
     },
     /**
@@ -1042,9 +1117,12 @@ const world = (
         // A session is named as a process is (fetch takes it from ProcessIdGenerator).
         session = "process_01m6v5270hf3c8x2q7w9z4k5mp",
         tab = "door-test";
+
       const client = await project.clientConnect(),
         nonce = await project.challenge(client);
+
       let attached: unknown = Attached.cases.new.make({ client, nonce });
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
       const socket = {
         deserializeAttachment: () => attached,
@@ -1056,6 +1134,7 @@ const world = (
         },
         close: () => {},
       } as unknown as WebSocket;
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
       const doorCtx = {
         id: { name: "gateway-test" },
@@ -1066,21 +1145,25 @@ const world = (
         setWebSocketAutoResponse: () => {},
         exports: loopbacks,
       } as unknown as DurableObjectState;
+
       const runtime = connectionRuntime(doorCtx, env);
       await project.register(client, "gateway-test", session);
       let id = 0;
+
       const call = async (method: string, params: unknown) => {
         id++;
         await runtime.runPromise(
           ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
         );
         const answer = frames.map((frame) => JSON.parse(frame)).find((frame) => frame.id === id);
+
         return answer === undefined
           ? undefined
           : "result" in answer
             ? { _tag: "ok", result: answer.result }
             : { _tag: "refused", reason: answer.error.data.reason };
       };
+
       expect(
         await call("initialize", {
           versions: [1],
@@ -1095,6 +1178,7 @@ const world = (
           signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
         }),
       ).toMatchObject({ _tag: "ok" });
+
       return {
         db: doorDb,
         call,
@@ -1131,6 +1215,7 @@ const world = (
           saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
+
         expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
           _tag: "applied",
         });
@@ -1146,10 +1231,12 @@ StartsTest.law(
   ([refusedStart, choices]) =>
     Effect.gen(function* () {
       const costs = { calls: 0, reads: 0, appends: 0 };
+
       const w = yield* Effect.acquireRelease(
         Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
         (owned) => Effect.promise(() => owned.close()),
       );
+
       // A first start pays the gate at configure: the Project's build sends it, and configureProcess
       // builds the process's services, gate first, before it runs the first turn. So the refusal is
       // planted before the Project's first build, and the walk below starts from how that configure ended.
@@ -1189,6 +1276,7 @@ StartsTest.law(
             ? ["step", "step", "open", "alarm", "successor", "reopen"]
             : ["step", "step", "open", "alarm", "reopen"]
           : ["refuse", "step", "open"];
+
         const move = moves[choice % moves.length];
         const owner = w.process(pid);
 
@@ -1237,6 +1325,7 @@ StartsTest.law(
               seen: 0,
             }),
           );
+
           expect(answer).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           count++;
           expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
@@ -1270,10 +1359,12 @@ describe("P12 Project configure recovery", () => {
       // A2/A4: the build never waits on its bootstrap's delivery, so it answers whatever the delivery does.
       const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
       const w = world(fault);
+
       const first = w.project.info().then(
         (value) => ({ value }),
         (error: unknown) => ({ error }),
       );
+
       await w.entered;
       const result = await first;
       expect("value" in result).toBe(true);
@@ -1292,6 +1383,7 @@ describe("P12 Project configure recovery", () => {
               logged.some((spy) =>
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
+
                   return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
                 }),
               ),
@@ -1353,6 +1445,7 @@ describe("P12 Process RPC refusal answers", () => {
     it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
       const w = world();
       await w.project.info();
+
       const { process: pid } = await w.start(),
         client = await w.admit();
 
@@ -1372,6 +1465,7 @@ describe("P12 Process RPC refusal answers", () => {
           (answer) => ({ answer }),
           (error: unknown) => ({ error }),
         );
+
       // A policy refusal completes the input. An infrastructure error must not replace it.
       expect.soft(result).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
       expect(w.calls()).toEqual({ signs: 1, commits: reason === "not_granted" ? 1 : 0 });
@@ -1418,8 +1512,11 @@ const RecoveryFlow = Schema.Struct({
     }),
   ),
 });
+
 type RecoveryFlow = typeof RecoveryFlow.Type;
+
 const FLOW_WAIT = 15_000;
+
 /** The crash that trips P34's decided Worker policy, 5 restarts in 5,000 ms: it goes down, not restarted. */
 const BRAKE = 6;
 
@@ -1453,24 +1550,31 @@ const runFlow = async (flow: RecoveryFlow) => {
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
+
   const route = (method: string, params: unknown) =>
     w.project.route(client, method, params).then(
       (answer) => ({ answer }),
       (error: unknown) => ({ error: String(error) }),
     );
+
   const send = (pid: string, letter: string, type: "throw" | "inc") =>
     route("process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 });
+
   const restarts = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
+
   const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
+
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("down") }))(body));
+
   const deadRows = async (pids: ReadonlyArray<string>) =>
     (await Promise.all(pids.map((pid) => w.project.read(`${pid}/dead`, 0, "audit")))).flat();
+
   const limit = flow.limit ?? 3;
   const k = Math.min(flow.throws, limit);
   const letter = `p${flow.letter}`;
@@ -1606,6 +1710,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   }
 
   expect(await live()).toBe(current);
+
   return { w, current, restarts, live, route };
 };
 
@@ -1639,6 +1744,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
       Effect.promise(async () => {
         const lost = flow.lost ?? { at: 1, side: "after" as const };
         const throws = BRAKE + (flow.throws % 2);
+
         const { w, current, restarts, live, route } = await runFlow({
           ...flow,
           throws,
@@ -1646,6 +1752,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
           fault: "none",
           lost,
         });
+
         // A trusted restart with a generated request ID, asked twice: one replacement.
         const before = (await restarts()).length;
         const request = { id: `r${flow.restart}`, build: poisonCode.hash };
@@ -1664,6 +1771,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         });
         expect(w.newCalls()).toBeGreaterThan(0);
         expect(w.lostDone()).toBe(lost.at <= w.newCalls());
+
         // A restart whose request ID is the first start's: the Project refuses the reused ID, and
         // that checked refusal crosses the Project RPC and stays a ProcessError.
         const reused = await w
@@ -1673,6 +1781,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
             () => ({ answer: "ok" }),
             (error: unknown) => ({ error }),
           );
+
         expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
       }),
     flowOptions,
@@ -1689,7 +1798,9 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
     traceId: TRACE,
     build: "brain-test",
   };
+
   const same = (a: ExitReason, b: ExitReason) => JSON.stringify(a) === JSON.stringify(b);
+
   const Cell = fcExitReason.chain((reason) =>
     fc.record({
       move: fc.nat(),
@@ -1699,6 +1810,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
       bad: fcBadReason(reason),
     }),
   );
+
   type Move = "start" | "throw" | "exit" | "bad" | "retry" | "reopen";
 
   it("L1 / L3 / L4: a Project call decodes each reason before it writes, a runner crash arrives whole, and a retry is answered from the ledger", async () => {
@@ -1711,6 +1823,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
         // The fold's own record: each name's process chain and each ended process's reason.
         const names: Array<{ name: string; process: string; live: boolean }> = [];
         const exits = new Map<string, ExitReason>();
+
         const exited = async (name: string) =>
           (await w.project.read(`processes/${name}`, 0, "audit"))
             .filter((row) => row._tag === "exited")
@@ -1719,12 +1832,14 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 
         for (const cell of tape) {
           const live = names.filter((n) => n.live);
+
           const options: ReadonlyArray<Move> = [
             ...(names.length < 2 ? (["start"] as const) : []),
             ...(live.length > 0 ? (["throw", "exit", "bad"] as const) : []),
             ...(exits.size > 0 ? (["retry"] as const) : []),
             "reopen",
           ];
+
           const move = options[cell.move % options.length]!;
 
           switch (move) {
@@ -1733,6 +1848,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               names.push({ name, process: await w.startPoison(name), live: true });
               break;
             }
+
             case "throw": {
               // The real runner crashes on a fresh letter and reports it over Project RPC.
               const target = live[cell.pick % live.length]!;
@@ -1746,12 +1862,15 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
                 })
                 .catch(() => undefined);
               exits.set(target.process, { _tag: "crashed", phase: "step", error: "TypeError" });
+
               const next = await until("successor", w.project.info, (rows) =>
                 rows.some((row) => row.name === target.name && row.process !== target.process),
               );
+
               target.process = next.find((row) => row.name === target.name)!.process;
               break;
             }
+
             case "exit": {
               const target = live[cell.pick % live.length]!;
               const reply = await w.project.processExit(target.process, copied(cell.reason), FROM);
@@ -1760,12 +1879,15 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               target.live = false;
               break;
             }
+
             case "bad": {
               const target = live[cell.pick % live.length]!;
               const before = await exited(target.name);
+
               const reply = await w.project
                 .processExit(target.process, cell.bad as ExitReason, FROM)
                 .catch((error: unknown) => ({ _tag: Object(error)._tag }));
+
               expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
                 _tag: "ProcessError",
               });
@@ -1773,6 +1895,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               expect(await w.project.processIsLive(target.process)).toBe(true);
               break;
             }
+
             case "retry": {
               const [process, reason] = [...exits.entries()][cell.pick % exits.size]!;
               const sent = cell.move % 2 === 0 ? copied(reason) : cell.other;
@@ -1782,6 +1905,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               );
               break;
             }
+
             case "reopen":
               await w.reopenAll();
               break;
@@ -1809,6 +1933,7 @@ const mailModel = (w: ReturnType<typeof world>, pid: string) => {
   }
 
   const row = db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
+
   return row === undefined ? null : JSON.parse(String(row.checkpoint)).saved.model;
 };
 
@@ -1917,22 +2042,27 @@ describe("P34c live object accounting", () => {
             }),
             () => Effect.sync(() => vi.useRealTimers()),
           );
+
           const w = yield* Effect.acquireRelease(
             Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
+
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+
           // The window's socket on the real Connection service: the live caller that counts a refusal (0143).
           const door = yield* Effect.acquireRelease(
             Effect.promise(() => w.door()),
             (door) => Effect.promise(() => door.close()),
           );
+
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (pid: string, id: string) =>
             Effect.promise(() =>
               door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
+
           expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
@@ -1940,6 +2070,7 @@ describe("P34c live object accounting", () => {
           const local = yield* w.localUsage(pid);
           expect(local.program.writes).toBeGreaterThan(0);
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
+
           const counts = (db: DatabaseSync) =>
             Object.fromEntries(
               db
@@ -1954,15 +2085,18 @@ describe("P34c live object accounting", () => {
           // Both stores' row counts, read straight around each refused send. The checks between sends
           // (the traced open below, a reopen) write their own span rows, so no count spans them.
           const both = () => ({ project: counts(w.db), process: counts(w.process(pid).db) });
+
           // The first refusal may open this hour's refusal count in `sums`; no other table may grow.
           const withoutSums = ({ project, process }: ReturnType<typeof both>) => ({
             project: { ...project, sums: null },
             process: { ...process, sums: null },
           });
+
           // The door object's refusal counts (0143). The pinned clock keeps every one in SENT's hour, and
           // a quota refusal is counted under `other`, so a count anywhere else is a wrong count.
           const refusals = () => {
             const rows = door.db.prepare("SELECT hour, refused, count FROM sums").all();
+
             return {
               total: rows.reduce((sum, row) => sum + Number(row.count), 0),
               elsewhere: rows.filter((row) => row.hour !== Date.parse(SENT) || row.refused !== "other").length,
@@ -1973,6 +2107,7 @@ describe("P34c live object accounting", () => {
           // counted in `sums`, so neither an unsent span nor a measurements row may land for it.
           const doorRows = () => {
             const rows = counts(door.db);
+
             return { unsent: rows["unsent"] ?? 0, measurements: rows["measurements"] ?? 0 };
           };
 
@@ -2048,21 +2183,26 @@ describe("P34c live object accounting", () => {
             }),
             () => Effect.sync(() => vi.useRealTimers()),
           );
+
           const w = yield* Effect.acquireRelease(
             Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
+
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+
           const door = yield* Effect.acquireRelease(
             Effect.promise(() => w.door()),
             (door) => Effect.promise(() => door.close()),
           );
+
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (id: string) =>
             Effect.promise(() =>
               door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
+
           expect(yield* send("paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
@@ -2074,11 +2214,13 @@ describe("P34c live object accounting", () => {
           // window has passed, and its program pays for that write. This law moves the clock less
           // than that window, so any write it sees is the refusal's or the hour's.
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+
           const { policy } = Schema.decodeUnknownSync(
             Schema.fromJsonString(
               Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
             ),
           )(journal?.value);
+
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(
             policy.backoff.resetAfterMs,
           );
@@ -2089,6 +2231,7 @@ describe("P34c live object accounting", () => {
               .prepare("SELECT count FROM sums WHERE hour=?")
               .all(at)
               .reduce((sum, row) => sum + Number(row.count), 0);
+
           let turned: number | null = null;
 
           for (const [n, c] of tape.entries()) {

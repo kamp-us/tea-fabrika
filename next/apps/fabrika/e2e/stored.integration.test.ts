@@ -17,6 +17,7 @@ const SEED = 119120;
 /** A real WAL database, as the brain's span queue keeps one. The queue is the product's file, so
  *  `TestDatabase.open` sets nothing in it, and each law sets the queue's own pragmas itself. */
 const spanQueue = (file: string) => TestDatabase.open(file).pipe(Effect.orDie);
+
 const NAMES = ["brain.last.json", "brain.pending.jsonl", "records/brain.json"] as const;
 
 /** Some of the brain's files, and which of them a write renames into place under each listing. */

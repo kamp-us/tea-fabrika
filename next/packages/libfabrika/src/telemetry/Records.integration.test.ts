@@ -45,11 +45,14 @@ type Row = SpanRow;
  *  scope closes each one, last opened first, then removes the folder (0061). */
 const folder = Effect.gen(function* () {
   const scope = yield* Effect.scope;
+
   const dir = yield* Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-records-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+
   return { dir, dbs: new Map<string, DatabaseSync>(), connect };
 });
 

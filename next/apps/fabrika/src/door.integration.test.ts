@@ -300,6 +300,7 @@ beforeEach(async () => {
 });
 
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
+
 // A world opens its files with plain calls, so each is acquired into this one scope, which the
 // file's last hook closes before it removes the folder.
 const files = Scope.makeUnsafe();
