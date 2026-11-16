@@ -11,11 +11,11 @@
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "pass",
-  "why": "Tests step for slice E12 (preferSucceedSomeOrNone), in next/ and our tooling. Recount on origin/main with only this check at error across the 13 tsconfigs: 10 hits (libfabrika 8 in processes, runtime and telemetry; next/programs/pipeline 2). Locked processes, runtime and telemetry in libfabrika's tsconfig and all of src in next/programs/pipeline's. Fixed the 9 hits in exam paths (test suites and integration tests) by hand edits, each Effect.succeed(Option.none()) to Effect.succeedNone and Effect.succeed(Option.some(x)) to Effect.succeedSome(x); removed one Option import the edit left unused. One hit is left for the build: next/packages/libfabrika/src/telemetry/Records.ts line 185. No hit sits in a file of pull request 1366. No script edited a file.",
+  "why": "Tests step for slice E12 (preferSucceedSomeOrNone), in next/ and our tooling. Recount on origin/main with only this check at error across the 13 tsconfigs: 10 hits (libfabrika 8 in processes, runtime and telemetry; next/programs/pipeline 2). Locked processes, runtime and telemetry in libfabrika's tsconfig and all of src in next/programs/pipeline's. Fixed the 9 hits in exam paths (test suites and integration tests) by hand edits, each Effect.succeed(Option.none()) to Effect.succeedNone and Effect.succeed(Option.some(x)) to Effect.succeedSome(x); removed one Option import the edit left unused. The tenth hit, in the product file next/packages/libfabrika/src/telemetry/Records.ts line 185, was fixed by hand in a follow-up commit under the one-pull-request shape (E12 left 0). No hit sits in a file of pull request 1366. No script edited a file.",
   "tokens": null,
   "tools": null,
   "minutes": 15,
-  "note": "Typecheck per package: libfabrika 1 effect(preferSucceedSomeOrNone) error (Records.ts:185), pipeline program 0. Tests: ProcessMonitors.integration.test.ts and ProcessManager.integration.test.ts, 37 passed, at the parent commit plus this work.",
+  "note": "Per-check report for preferSucceedSomeOrNone: hits met 10, fixed by quick fix 0, hand edits 10 (Edit tool), left 0, waiting on 1366 0. Files: libfabrika processes/{ChildrenMemberTest,ChildrenTest,MonitorsTest,ProgramMailTest}.ts, runtime/MonitorTest.ts, telemetry/Records.ts; next/programs/pipeline src/node/{queue,runner}.laws.integration.test.ts. Typecheck per package: libfabrika 0 hits, pipeline program 0. Tests: ProcessMonitors.integration.test.ts and ProcessManager.integration.test.ts, 37 passed. Pull request 1438 was opened before the shape changed and is left as it is.",
   "plants": [
     {
       "law": "L1",
