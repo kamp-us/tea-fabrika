@@ -166,4 +166,5 @@ cannot see (owner, 2026-11-15).**
   - The folder order of the cleanup.
   - Today's app.
 - Not part of this decision, and not decided: `type X = unknown`, `Reflect.apply`, and the two
-  `Match` rules from the same rule set.
+  `Match` rules from the same rule set. The two `Match` rules have since been taken, by
+  [0567](0567-a-tagged-value-is-matched.md).

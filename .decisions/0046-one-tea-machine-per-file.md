@@ -1,7 +1,7 @@
 ---
 id: 0046
 title: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
-status: accepted
+status: amended-in-part by [0567](0567-a-tagged-value-is-matched.md)
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
@@ -196,6 +196,9 @@ machine (`app/runner.ts:271-272`).
   not touch.
 
 ## Amendments
+
+- 2026-11-15: [0567](0567-a-tagged-value-is-matched.md) supersedes the amendment just below, the
+  one on how an `update` handler picks the next state. The rest of this file holds as written.
 
 - 2026-11-10: **an `update` handler picks the next state with a plain conditional on the state's
   `_tag`,** the form `next/packages/libfabrika/src/app/brain-life.ts` has today. It does not use
