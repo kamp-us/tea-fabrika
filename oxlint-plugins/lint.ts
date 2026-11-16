@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { Array as Arr, pipe } from "effect";
 import { advises, stale, warnLines } from "./advice.ts";
+import { audit } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 import { load, scriptReads } from "./script-reads.mjs";
@@ -213,6 +214,15 @@ for (const { _tag, line } of stuck) {
   );
 }
 
+// The anti-slop plugin, taken as it ships (0563). Only a whole run says whether vendor/anti-slop/ is
+// still the pinned commit's code, and only it sees every folder, so only it runs the zero lock: a
+// folder with no hit of a taken rule goes on that rule's list (anti-slop.ts).
+const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout);
+
+for (const line of vendored) {
+  console.error(line);
+}
+
 // Only a whole run prunes. A run on a folder or a file leaves each ledger as it is.
 for (const { file, path, entries, kept } of settled) {
   const pruned = entries.length - kept.length;
@@ -231,6 +241,10 @@ console.log(
   )}`,
 );
 
-process.exit(
-  blocks.length === 0 && stuck.length === 0 && Arr.every(ledgers, ({ refused }) => refused.length === 0) ? 0 : 1,
-);
+const clean =
+  blocks.length === 0 &&
+  stuck.length === 0 &&
+  vendored.length === 0 &&
+  Arr.every(ledgers, ({ refused }) => refused.length === 0);
+
+process.exit(clean ? 0 : 1);

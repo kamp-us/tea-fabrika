@@ -119,3 +119,4 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 ## Amendments
 
 - 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) overrides "`service-id` stays for now". The checker's `deterministicKeys` is an error and `service-id` is deleted.
+- 2026-11-15: `padding-line-between-statements` stays. The check this file asks for found that anti-slop's `require-readable-spacing` misses class-member lines (a method after a field, a method after a method), so it does not flag every line ours does. Upstream issue https://github.com/dmmulroy/anti-slop/issues/78, filed 2026-11-15.

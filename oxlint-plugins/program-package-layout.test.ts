@@ -153,6 +153,8 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
   try {
     copyFileSync(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
     symlinkSync(join(ROOT, "oxlint-plugins"), join(scratch, "oxlint-plugins"));
+    // The config loads the vendored anti-slop plugins from here (0563).
+    symlinkSync(join(ROOT, "vendor"), join(scratch, "vendor"));
     const linted = write(scratch, plants).flat();
     const result = spawnSync(
       join(ROOT, "node_modules/.bin/oxlint"),
