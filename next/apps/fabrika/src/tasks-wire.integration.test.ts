@@ -270,7 +270,7 @@ it.live(
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
       expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
-      const taken = Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.Literal("assigned"), task: Task }))(
+      const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
       expect(taken.task.state._tag).toBe("assigned");

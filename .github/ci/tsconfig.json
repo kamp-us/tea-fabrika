@@ -1,5 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    // A struct with a `_tag` is written Schema.TaggedStruct. On for the folders at zero; the globs read from this folder.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          {
+            "include": ["*.ts", "workflow-lint/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaStructWithTag": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
 }

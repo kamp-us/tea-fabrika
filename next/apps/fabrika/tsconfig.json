@@ -6,7 +6,20 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // A struct with a `_tag` is written Schema.TaggedStruct. On for the folders at zero, their tests too.
+    // The globs read from this folder.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          {
+            "include": ["e2e/**/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaStructWithTag": "error" } }
+          }
+        ]
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.

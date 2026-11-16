@@ -444,7 +444,7 @@ it.live(
           yield* RevokeTest.until(
             hold("p90.status"),
             (answer) =>
-              Schema.is(Schema.Struct({ _tag: Schema.Literal("ok"), result: RevokeHold.Model }))(answer) &&
+              Schema.is(Schema.TaggedStruct("ok", { result: RevokeHold.Model }))(answer) &&
               answer.result._tag === "held",
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });

@@ -3,7 +3,20 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // A struct with a `_tag` is written Schema.TaggedStruct. On for the folders at zero, their tests too.
+    // The globs read from this folder.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          {
+            "include": ["src/client/**/*.ts", "src/node/**/*.ts", "src/processes/**/*.ts"],
+            "options": { "diagnosticSeverity": { "schemaStructWithTag": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

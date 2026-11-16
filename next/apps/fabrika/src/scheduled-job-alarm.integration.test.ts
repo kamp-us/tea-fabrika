@@ -41,8 +41,7 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
     return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
   });
 
-const Beat = Schema.Struct({
-  _tag: Schema.Literal("beat"),
+const Beat = Schema.TaggedStruct("beat", {
   body: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
 });
 

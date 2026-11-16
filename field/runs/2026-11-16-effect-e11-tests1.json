@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e11-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E11 (schemaStructWithTag), in next/ and our tooling. Recount on main: 19 hits in 13 tsconfigs, all in exam paths. Locked .github/ci (whole package), libfabrika src/client, src/node, src/processes, and next/apps/fabrika e2e. Fixed 17 hits by hand with the editor (Schema.Struct({ _tag: Schema.Literal(x), ... }) to Schema.TaggedStruct(x, { ... })). The 2 hits in runtime-recovery.laws.integration.test.ts are in pull request 1366's diff and wait for the after-1366 slice.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "No checkerfix run (rule: no script edits files). Recount after: 2 hits, both in 1366's file, shown at message level since that folder is not locked. pnpm lint passed except lint:dead, which aborted with SIGABRT in this box (not run to a result). Tests: .github/ci/field-check.test.ts and WindowMachine.laws.test.ts, 73 passed.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one Schema.Struct with a _tag appended to .github/ci/field-schema.ts, next/apps/fabrika/e2e/chaos-revoke.integration.test.ts and src/processes/ProcessStreams.integration.test.ts: each effect-tsgo run showed schemaStructWithTag at error; removed",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "src/processes/** dropped from the libfabrika entry: the planted hit fell from error to message; glob put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
