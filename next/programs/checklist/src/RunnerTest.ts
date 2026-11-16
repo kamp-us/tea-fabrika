@@ -6,7 +6,7 @@
 // Ticket 839, slice 1 (0137): L9 sends `check` with and without a note, L16 resends a letter by its
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import type { Incoming, ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -21,9 +21,10 @@ const MOST = 256;
 
 type Runner = ProgramRunner["Service"];
 
-/** A writer as the door stamps it on a letter, made by the part that supplies it: the suite only
- *  carries it, and knows a person's from an agent's by which one it was given. */
-export type Writer = unknown;
+/** A writer as the door stamps it on a letter, the type the runner's `Incoming` decodes, made by the
+ *  part that supplies it: the suite only carries it, and knows a person's from an agent's by which
+ *  one it was given. */
+export type Writer = Incoming["envelope"]["by"];
 
 /** A letter as the process's inbox saved it: its id, its input, its writer's checked key and clock. */
 export type Saved = { readonly id: string; readonly m: unknown; readonly by: string; readonly sentAt: string };
