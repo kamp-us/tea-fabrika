@@ -1,7 +1,7 @@
 ---
 id: 0554
 title: In next/ and our tooling, no code calls Reflect.get, Reflect.set or Reflect.has, so a field is read through its type or a decode, never past it
-status: accepted
+status: amended-in-part by [0576](0576-schema-sync-error-result-in-plain-code.md)
 date: 2026-11-15
 tags: [lint, oxlint, reflect, types, schema, predicate, laws, next, tooling]
 ---
@@ -186,3 +186,7 @@ reads or writes past the types (owner, 2026-11-15).**
     through `Reflect.apply(Reflect.get(...))`.
 - [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
   `anti-slop/no-reflect-get` when the plugin is installed. The ban itself does not change.
+
+## Amendments
+
+- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) makes `schemaSync` an error, so `decodeUnknownSync` in the first row of the replacement table is no longer a replacement. Use `decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit` or `decodeUnknownEffect`.

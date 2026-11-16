@@ -1,7 +1,7 @@
 ---
 id: 0565
 title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
-status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md)
+status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md), [0576](0576-schema-sync-error-result-in-plain-code.md)
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
@@ -304,7 +304,7 @@ too.
   - **RULED on 2026-11-15 by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): clash 2, `apiStabilityLeak` (235), the same root.** It flags an export whose type shows a less
     stable type. With every export unstable, and Effect's `Path` and `FileSystem` unstable too, it
     fires on almost any export.
-  - **`schemaSync` (632) against a ledger step that is a plain function**
+  - **RULED on 2026-11-15 by [0576](0576-schema-sync-error-result-in-plain-code.md): clash 3, `schemaSync` (632, 620 on main at `61d551ff3`) against a ledger step that is a plain function**
     ([0050](0050-a-ledger-step-is-a-plain-function.md)). The check flags every synchronous decode
     or encode, also outside Effect code, and asks for the Effect form. A step may not be an Effect.
 
@@ -334,3 +334,4 @@ too.
 - 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) names which of our rules give way to a check of the Effect checker or another trusted rule, and which stay. `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules; `fabrika/no-promises` stays, since theirs is narrower. It leaves `deterministicKeys` and `service-id` as an unruled clash.
 - 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) rules clashes 1 and 2. `unstableApiUsage`: `@stability` is dropped until the first release and the check is an error, with `allowedUnstableApis` naming each unstable Effect part we use. `apiStabilityLeak`: recounted after the tags go; an error if zero, off if hits remain from Effect's unstable types, which we use on purpose.
 - 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) rules clash 4. `deterministicKeys` is an error and sets the service ID form, `service-id` is deleted, and the sweep tries `keyPatterns` with our dot form first, then renames the 35 IDs to the checker's form.
+- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) rules clash 3. `schemaSync` is an error; a plain function (a ledger step, [0050](0050-a-ledger-step-is-a-plain-function.md)) uses the Result form and handles the failure, Effect code the Effect form. The count is 620 on main at `61d551ff3`, where this file said 632. Each hit must handle the failure it ignores today.
