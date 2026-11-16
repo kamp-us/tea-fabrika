@@ -3,7 +3,43 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // Effect.void, never Effect.succeed(undefined). On for the folders at zero; src/runtime waits
+        // for the after-1366 slice (ProcessStore.ts holds the one hit).
+        "overrides": [
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": { "diagnosticSeverity": { "effectSucceedWithVoid": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
