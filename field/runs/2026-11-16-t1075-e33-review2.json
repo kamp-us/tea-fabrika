@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1075-e33-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:53:20-08:00",
+  "ended": "2026-11-16T01:03:30-08:00",
+  "parent": "2026-11-16-t1075-e33-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of record of judgment slice E33 of the Effect-checker sweep (preferEffectString in oxlint-plugins/ and .github/ci/, ticket 1075) at 6d4eb2bb, in our tooling: merge-ready, all three faults from review1 fixed, one finding row. (1) The 17 try/catch blocks in the 14 files are Result.try (sync) or Effect.tryPromise with Effect.result (oxlint-plugins/stylelint.ts), each with the same output and exit code: workflow-lint.ts, field-check.ts and stylelint.ts still set exitCode 2 only on a failure and 0 or 1 from the errors otherwise; workspace-reach.ts's fail returns never, so its process.exit(2) is unchanged; program-package-layout.test.ts rethrows every error that is not Parsing failed, as before; its two try blocks at 120 and 152 have only finally and stay, as the rule leaves them. stylelint.ts is the same shape origin/fabrikalfa/effect-e31 took. The hand edits hold: compact's '$1$2' gives the quoted string or the operator, as the old function did, since an unmatched group substitutes empty text (ECMAScript GetSubstitution); Effect's localeCompare is number.sign of the native one, all a sort reads; the two lastIndexOf rewrites keep native slice(0, -1) and the +1 fold. (2) Every import the slice added is by subpath (effect/Function, effect/String, effect/Option, effect/Result, effect/Effect); no String as Str barrel import is left; the six existing barrel lines kept only their own names. The fold claim holds: this branch's base has no plugin block in oxlint-plugins/tsconfig.json or .github/ci/tsconfig.json, while origin/main 5c94f12f4 and origin/fabrikalfa/effect-e47's head b7697bf66 (after its merge of main) both carry barrelImportPackages with preferBarrelImport at error, so the fold drops that block and keeps preferSchemaTaggedError at error (pull request 1516's 0573 law). (3) The five left native calls are right as written and are recorded in the tests row with their reasons and no line; wiring.test-support.ts's guard keeps undefined. The 124 left hits are effect-jsdocs.ts 82 (excluded by path), changes.mjs 29 and scheduled.mjs 7 (Q4 exact-path exclude), gitignore.mjs:15 (a fifth no-install script, the lead's call) and those five; that is the whole list, none a skipped fix.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Read-only on the branch apart from this row. Recount at 6d4eb2bb through --lspconfig: preferEffectString 124, matching the tests row line by line. All 135 checks at error over both tooling tsconfigs, 0ecbaec9 against 6d4eb2bb: preferEffectString 229 to 124, and three new hits of other checks, given as a finding row: asyncFunction 0 to 1 at oxlint-plugins/stylelint.ts:35, missedPipeableOpportunity 0 to 1 at stylelint.ts:127, preferEffectArray +1 each in program-package-layout.ts and workflow-lint/caches.ts. Ran at 6d4eb2bb: tsc (Effect-patched) over oxlint-plugins/tsconfig.json and .github/ci/tsconfig.json, both clean; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 17 parts passed; one file at a time under nice -n 19 --maxWorkers=1, all green: field-check 22, program 10, shard-times 2, workflow-lint 2, workflow-lint/caches 18, ci-speed 15, scheduled 101, check-job 26, next-job 168, exact-versions 56, program-package-layout 17, stylelint 44, workspace-reach 7. Failure paths run in a scratch git repo with no config, old and new heads side by side: stylelint.ts prints 'did not finish' and exits 2 on both, workspace-reach.ts prints 'could not read' and exits 2 on both. Test files keep their expect, it and property counts; loosening.sh over the fix round finds no removed expect. Not run: a whole-repo pnpm typecheck, left to the fold's proof run.",
+  "step": "review"
+}
