@@ -163,6 +163,13 @@ and stays. In both cases, list the line in the run row: its file:line, and the e
 with its reason. The judgment sweep's final lock PR adds every line that was taken out, together
 with the locks.
 
+**Recount Effect checks with `effect-tsgo tsc`, never `diagnostics --project` (2026-11-16, third
+sighting).** `effect-tsgo diagnostics --project` skips files that a tsconfig reaches only by
+import, so its "0" can be wrong: E37's row said 0, and 117 hits remained in 15 `.agents/` files.
+Every recount, and every review's recount, uses `effect-tsgo tsc` with a scratch tsconfig outside
+the repo. That tsconfig extends the project's own and sets only the slice's check at error. A lock
+commit recounts this way over every folder it locks, before it adds a line.
+
 **A folder a slice brings to zero (merge session ruling, 2026-11-16).** A judgment slice adds no
 lock line, so when it brings a whole folder to zero, `oxlint-plugins/lint.ts` asks to add that
 folder to the rule's block, and that one lint part stays red on the slice branch. That is
