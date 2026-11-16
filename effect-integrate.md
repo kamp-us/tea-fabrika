@@ -23,5 +23,6 @@ reports.
    by which tool, left (file:line, why), waiting on PR 1366 (file:line), the lock per package,
    which rule of ours gives way (0573) or why both stay, and the tests that ran at which head.
    It names the earlier slice PRs it replaces (E15's 1437 and E17's 1445). Leakgrep the body first.
-8. Watch its PR check (GitHub MCP `pull_request_read` `get_check_runs`); if CI is red on something
+8. There is no review agent for this PR (owner ruling): its checks are its review. So the
+   recount and the per-check list in the body must be complete. Watch its PR check (GitHub MCP `pull_request_read` `get_check_runs`); if CI is red on something
    in your diff, fix it and push. RESULT gives the PR link and the check state.
