@@ -1,7 +1,7 @@
 import { createRequire } from "node:module"; // edge: Electron exports its executable through Node's require resolution
 // P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { BrainControl } from "@kampus/libfabrika/desktop/BrainControl";
+import { BrainControl, Status } from "@kampus/libfabrika/desktop/BrainControl";
 import {
   BrainProbe,
   BrainProbeError,
@@ -128,6 +128,10 @@ const Config = Schema.Struct({
 
 type Config = typeof Config.Type;
 
+const isLoaded = Status.isAnyOf(["loaded"]);
+
+const isAbsent = Status.isAnyOf(["absent"]);
+
 const status = Effect.fn("P19Host.status")(function* (target: string) {
   const out = yield* command("launchctl", ["print", target]);
 
@@ -160,7 +164,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
   const acquireGroups = Effect.gen(function* () {
     const loaded = yield* status(config.target);
 
-    if (loaded._tag === "loaded" && loaded.pid !== null) {
+    if (isLoaded(loaded) && loaded.pid !== null) {
       const rows = yield* processes();
 
       for (const group of ProcessGroups.descendants(rows, loaded.pid)) {
@@ -174,7 +178,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
   const cleanup = Effect.gen(function* () {
     // An exact service target, then only groups observed as that service's descendants.
     yield* command("launchctl", ["bootout", config.target]);
-    yield* wait(status(config.target).pipe(Effect.map((value) => value._tag === "absent")), config.stopTimeout);
+    yield* wait(status(config.target).pipe(Effect.map(isAbsent)), config.stopTimeout);
 
     for (const group of groups) {
       if (yield* alive(-group)) {
@@ -366,7 +370,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
       const current = yield* native.inspect;
 
       return ready.build === spec.build &&
-        current._tag === "loaded" &&
+        isLoaded(current) &&
         ready.pid === current.pid &&
         (yield* listening(spec.url))
         ? Readiness.cases.ready.make({})
@@ -556,7 +560,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const acknowledgedGroups = Effect.gen(function* () {
     const current = yield* status(config.target);
 
-    if (current._tag !== "loaded" || current.pid === null) {
+    if (!isLoaded(current) || current.pid === null) {
       return yield* HostError.make({ reason: "no-process-to-observe" });
     }
 
@@ -589,7 +593,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     starts.push((yield* Clock.currentTimeMillis) - at);
     yield* acknowledgedGroups;
     const first = yield* status(config.target);
-    yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
+    yield* checked(isLoaded(first) && first.pid !== null, "no-running-brain");
     yield* client.kill({ killSignal: "SIGKILL" });
     yield* checked(
       JSON.stringify(yield* status(config.target)) === JSON.stringify(first) && (yield* listening(url)),
@@ -615,9 +619,9 @@ export const check = Effect.fn("P19Host.check")(function* () {
             );
 
           return (
-            next._tag === "loaded" &&
+            isLoaded(next) &&
             next.pid !== null &&
-            first._tag === "loaded" &&
+            isLoaded(first) &&
             next.pid !== first.pid &&
             ready.pid === next.pid &&
             (yield* listening(url))
@@ -633,9 +637,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* launch("--stop");
     stops.push((yield* Clock.currentTimeMillis) - stopAt);
     yield* checked(
-      (yield* status(config.target))._tag === "absent" &&
-        !(yield* listening(url)) &&
-        !(yield* fs.exists(`${home}/brain.plist`)),
+      isAbsent(yield* status(config.target)) && !(yield* listening(url)) && !(yield* fs.exists(`${home}/brain.plist`)),
       "stop-left-a-resource",
     );
   }
@@ -653,7 +655,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const normalReady = yield* fs.readFileString(`${home}/fixture-ready.json`);
   yield* fs.writeFileString(`${home}/exit-normally`, "exit");
   yield* wait(
-    status(config.target).pipe(Effect.map((value) => value._tag === "loaded" && value.pid === null)),
+    status(config.target).pipe(Effect.map((value) => isLoaded(value) && value.pid === null)),
     config.stopTimeout,
   );
   const throttle = Number(settings.values["desktop.brain-throttle"]) * 1000;
@@ -661,7 +663,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* Effect.gen(function* () {
     yield* checked((yield* fs.readFileString(`${home}/fixture-ready.json`)) === normalReady, "normal-exit-restarted");
     const current = yield* status(config.target);
-    yield* checked(current._tag === "loaded" && current.pid === null, "normal-exit-restarted");
+    yield* checked(isLoaded(current) && current.pid === null, "normal-exit-restarted");
 
     return (yield* Clock.currentTimeMillis) >= until;
   }).pipe(Effect.repeat({ schedule: Schedule.spaced(`${config.poll} millis`), until: (done) => done }));

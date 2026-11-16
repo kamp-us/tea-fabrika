@@ -23,18 +23,20 @@ import { NodeServices } from "@effect/platform-node";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
-import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
+import { WindowModel, windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+const Reach = WindowModel.fields.tiles.value.fields.reach;
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -297,7 +299,7 @@ const open: RunnerTest.Open = Effect.gen(function* () {
         const live = (await calls(instance).info()).some((row) => row.name === name);
 
         const exited = (await calls(instance).facts(`processes/${name}`))
-          .filter((row) => row._tag === "exited")
+          .filter((row): boolean => Predicate.isTagged(row, "exited"))
           .map((row) => row.reason);
 
         return { live, exited };
@@ -373,7 +375,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             const tiles = () =>
               run
                 .getState()
-                .tiles.map((t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" }))
+                .tiles.map((t) => ({ id: t.id, name: t.name, open: Reach.isAnyOf(["open"])(t.reach) }))
                 .sort((a, b) => (a.id < b.id ? -1 : 1));
 
             /** The window shows exactly workspace 1's tiles in tezgah's view, each one open. */
@@ -445,11 +447,11 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             const ended = await until(
               "the closed tile's process ends",
               () => calls(instance).facts(`processes/${three[1]!.name}`),
-              (rows) => rows.some((row) => row._tag === "exited"),
+              (rows) => rows.some((row) => Predicate.isTagged(row, "exited")),
             );
 
             expect(
-              ended.filter((row) => row._tag === "exited").map((row) => row.reason),
+              ended.filter((row): boolean => Predicate.isTagged(row, "exited")).map((row) => row.reason),
               "L12: the closed tile's process ends with shutdown",
             ).toMatchObject([{ _tag: "shutdown" }]);
           });

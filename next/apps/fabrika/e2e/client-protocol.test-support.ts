@@ -13,7 +13,7 @@ import { NodeServices } from "@effect/platform-node";
 import { checklistWindow } from "@kampus/checklist/window";
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
-import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
+import { WindowModel, windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { Ledger, type LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
@@ -28,6 +28,10 @@ import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { type Dev, grant, type Home, PERSON, reader, type Waiting } from "./p14.test-support.ts";
+
+const Link = WindowModel.fields.link;
+
+const Reach = WindowModel.fields.tiles.value.fields.reach;
 
 /** The registered name of the checklist's process: the headless tile shows it, and its streams are
  *  read by it. */
@@ -166,7 +170,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
 
     const count = () => {
       const link = run.getState().link;
-      const dial = "dial" in link && link._tag !== "retrying" ? link.dial : null;
+      const dial = "dial" in link && !Link.isAnyOf(["retrying"])(link) ? link.dial : null;
 
       if (dial !== null && dial !== last) {
         last = dial;
@@ -192,13 +196,13 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       name: "headless",
       waiting: until(
         "headless: the waiting code",
-        Effect.map(state, (s) => s.link._tag === "waiting_grant"),
+        Effect.map(state, (s) => Link.isAnyOf(["waiting_grant"])(s.link)),
         showing,
       ).pipe(
         Effect.andThen(state),
         Effect.map((s) => {
           const link = s.link;
-          const code = link._tag === "waiting_grant" ? link.code : "";
+          const code = Link.isAnyOf(["waiting_grant"])(link) ? link.code : "";
 
           return { line: "", url: dev.url, fingerprint: key.fingerprint, code };
         }),
@@ -206,10 +210,14 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       ),
       online: until(
         "headless: online with its tile open",
-        Effect.map(state, (s) => s.link._tag === "online" && s.tiles[0]?.reach._tag === "open"),
+        Effect.map(
+          state,
+          (s) =>
+            Link.isAnyOf(["online"])(s.link) && s.tiles[0] !== undefined && Reach.isAnyOf(["open"])(s.tiles[0].reach),
+        ),
         showing,
       ).pipe(Effect.orDie),
-      live: Effect.map(state, (s) => s.link._tag === "online"),
+      live: Effect.map(state, (s) => Link.isAnyOf(["online"])(s.link)),
       add: (name) =>
         run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name }, via: "button" }).pipe(Effect.orDie),
       shown: Effect.map(state, (s) => {
@@ -227,7 +235,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         const tag: string = reach?._tag ?? "missing";
         const reason = Reflect.get(Object(Reflect.get(Object(reach), "reason")), "_tag");
 
-        return s.link._tag !== "online"
+        return !Link.isAnyOf(["online"])(s.link)
           ? "Connecting"
           : tag === "ended"
             ? `Ended (${String(reason)})`

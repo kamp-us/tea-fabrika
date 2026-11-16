@@ -461,7 +461,7 @@ const servedCounter = Effect.gen(function* () {
 
 describe("P14 slice 1: the typed counter view in a real tab", () => {
   it("S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages", async () => {
-    const { stepper } = await import("@kampus/libfabrika");
+    const { Step, stepper } = await import("@kampus/libfabrika");
     const { counter } = await import("@kampus/counter");
     const program = Result.getOrThrow(stepper(counter));
     const inputs = Object.keys(counter.inputs);
@@ -498,7 +498,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             await fc.assert(
               fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
                 let step = program.init(null);
-                assert(step._tag === "stepped");
+                assert(Step.isAnyOf(["stepped"])(step));
                 await render(step.view);
                 const start = (await pressed()).length;
                 expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
@@ -508,7 +508,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
 
                 for (const [n, pick] of picks.entries()) {
                   const model = step.model;
-                  const available = inputs.filter((type) => program.step(model, { type })._tag === "stepped");
+                  const available = inputs.filter((type) => Step.isAnyOf(["stepped"])(program.step(model, { type })));
                   const type = available[pick % available.length]!;
                   pressedTypes.add(type);
                   await button(type).click();
@@ -520,7 +520,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                     String((step.view as { count: number }).count),
                   );
                   step = program.step(model, { type });
-                  assert(step._tag === "stepped");
+                  assert(Step.isAnyOf(["stepped"])(step));
                   await render(step.view);
                   expect(await count.textContent(), "the shown count is the program's").toBe(
                     String((step.view as { count: number }).count),

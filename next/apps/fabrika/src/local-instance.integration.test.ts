@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import type { BrainEvent } from "@kampus/libfabrika/brain-event";
+import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
@@ -229,7 +229,7 @@ it.live.prop(
           }
 
           expect(kill).not.toHaveBeenCalled();
-          const starts = events.filter((event) => event._tag === "started");
+          const starts = events.filter(BrainEvent.isAnyOf(["started"]));
           expect(starts).toHaveLength(2);
           expect(starts[1]).toMatchObject({ after: starts[0]!.start, build: builds[1] });
           expect(starts[1]!.start).not.toBe(starts[0]!.start);

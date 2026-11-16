@@ -13,7 +13,7 @@ import { Id } from "@kampus/libfabrika";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
-import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { RecordManager, Written } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
@@ -798,7 +798,7 @@ describe("P12 real object adapters", () => {
         for (;;) {
           const answer = await instance.record("project-a", `spans/${part}`).write(chain, part, [row]);
 
-          if (answer._tag === "written") {
+          if (Written.isAnyOf(["written"])(answer)) {
             break;
           }
 
@@ -968,7 +968,7 @@ describe("P12 real object adapters", () => {
         const reply = Schema.decodeUnknownSync(SigningReply)(await capability.sign("write-1", parent, "noted"));
         expect(reply._tag).toBe("ok");
 
-        if (reply._tag !== "ok") {
+        if (!SigningReply.isAnyOf(["ok"])(reply)) {
           throw new Error(`sign refused: ${reply._tag}`);
         }
 

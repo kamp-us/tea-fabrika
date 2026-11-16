@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Predicate, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -678,13 +678,14 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
           "restart or brake",
           () => facts(instance, "processes/responder:1"),
           (rows) =>
-            rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+            rows.some((r) => Predicate.isTagged(r, "down")) ||
+            rows.some((r) => r.after === responder && Predicate.isTagged(r, "restarted")),
         );
 
-        down = rows.find((r) => r._tag === "down");
+        down = rows.find((r): boolean => Predicate.isTagged(r, "down"));
 
         if (down === undefined) {
-          responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
+          responder = rows.find((r): boolean => r.after === responder && Predicate.isTagged(r, "restarted")).process;
         }
       }
 
@@ -708,8 +709,10 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
       });
       expect(await instance.process(responder).savedAlarm()).toBe(down.until);
       const lifecycle = await facts(instance, "processes/responder:1");
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev)).toEqual([]);
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
+      expect(
+        lifecycle.filter((r) => r.rev > down.rev && r.rev < healthy[0].rev && Predicate.isTagged(r, "restarted")),
+      ).toEqual([]);
+      expect(lifecycle.filter((r) => r.rev > down.rev && Predicate.isTagged(r, "restarted"))).toEqual([]);
     },
     true,
     true,
@@ -1090,13 +1093,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           "the crash is not accepted",
         ).toBeUndefined();
         await until("the reader's crash", lifecycle, (rows) =>
-          rows.some((r) => r._tag === "exited" && r.process === reader),
+          rows.some((r) => r.process === reader && Predicate.isTagged(r, "exited")),
         );
         expect(await send(1), "the first letter is saved").toBe("queued");
         expect(await send(2), "the second letter is saved").toBe("queued");
         expect(await send(3), "L14: the repo file's cap of 2 unread answers the third letter full").toBe("full");
         expect(
-          (await lifecycle()).filter((r) => r._tag === "restarted"),
+          (await lifecycle()).filter((r): boolean => Predicate.isTagged(r, "restarted")),
           "the reader had not started again, so the full answer is the cap's and no read had happened",
         ).toEqual([]);
         expect(await letters(), "L14: the full letter was not saved").toEqual([1, 2]);
@@ -1104,7 +1107,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         await until(
           "the reader's successor",
           lifecycle,
-          (rows) => rows.some((r) => r._tag === "restarted" && r.after === reader),
+          (rows) => rows.some((r) => r.after === reader && Predicate.isTagged(r, "restarted")),
           BACKOFF * 3,
         );
         const end = await last("reader:1/inbox");

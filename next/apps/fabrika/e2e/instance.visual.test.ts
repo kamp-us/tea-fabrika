@@ -4,7 +4,7 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -342,7 +342,9 @@ describe("P12 real browser protocol", () => {
     }
 
     const processes = await rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 });
-    const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
+    const started = processes.result.entries.find(
+      (r: any): boolean => r.body.name === "counter:1" && Predicate.isTagged(r, "started"),
+    );
     // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
     expect(started.body.program).toBe("fabrika/counter");
     const pid = started.body.process;

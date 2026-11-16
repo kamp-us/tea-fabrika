@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Match, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -432,7 +432,7 @@ describe("P12, door laws retained after the library move", () => {
             const { client, result } = yield* hello(door, w.other, tab);
             expect(result).toMatchObject({ _tag: "refused", reason: "not_granted" });
             const knocked = yield* door.knock(client, { label });
-            assert(knocked._tag === "ok");
+            assert(Answer.isAnyOf(["ok"])(knocked));
             const { code } = yield* Schema.decodeUnknownEffect(Schema.Struct({ code: Schema.String }))(knocked.result);
 
             // Plants: ignore either the supplied fingerprint or the supplied code.
@@ -506,7 +506,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 _tag: "refused",
                 body: {
                   method: "unknown.method",
-                  reason: refused._tag === "refused" ? refused.reason : "",
+                  reason: Answer.isAnyOf(["refused"])(refused) ? refused.reason : "",
                   door: expect.stringMatching(/^process_/),
                   n: 2,
                 },
@@ -568,9 +568,10 @@ describe("P17a, revoke stops writes at the final door", () => {
               ? Schema.is(NotGranted)(result.failure)
                 ? "not_granted"
                 : result.failure
-              : result.success.result._tag === "refused"
-                ? result.success.result.reason
-                : result.success.result._tag;
+              : Match.valueTags(result.success.result, {
+                  refused: ({ reason }) => reason,
+                  online: ({ _tag }) => _tag,
+                });
 
             // Plant: the hello checks membership only before the pause.
             expect({
@@ -691,8 +692,8 @@ describe("P17a, revoke stops writes at the final door", () => {
                 const result = yield* Fiber.join(pending);
 
                 const refused = Result.isFailure(result)
-                  ? result.failure._tag === "NotGranted"
-                  : result.success._tag === "refused" && result.success.reason === "not_granted";
+                  ? Schema.is(NotGranted)(result.failure)
+                  : Answer.isAnyOf(["refused"])(result.success) && result.success.reason === "not_granted";
 
                 expect(refused).toBe(revokeFirst);
                 expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
@@ -723,11 +724,10 @@ describe("P17a, revoke stops writes at the final door", () => {
               w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
                 const placing = yield* d.a.accept(incoming);
 
-                if (placing._tag !== "placed") {
-                  return Sent.cases.refused.make({ reason: placing.reason });
-                }
-
-                return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
+                return Match.valueTags(placing, {
+                  placed: ({ rev, pos }) => Sent.cases.accepted.make({ rev, pos }),
+                  refused: ({ reason }) => Sent.cases.refused.make({ reason }),
+                });
               });
               const marker = `settled-retry-${token}`;
               const first = yield* send(d.a, d.old, w, target, marker, text);
@@ -781,7 +781,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? Schema.is(NotGranted)(result.failure)
                     ? { reason: "not_granted" }
                     : result.failure
-                  : result.success._tag === "refused"
+                  : Answer.isAnyOf(["refused"])(result.success)
                     ? { reason: result.success.reason }
                     : result.success;
 
@@ -872,11 +872,10 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                   expect(placing._tag).toBe("placed");
 
-                  if (placing._tag !== "placed") {
-                    return yield* Effect.die(new Error("legacy inbox seed was refused"));
-                  }
-
-                  return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
+                  return yield* Match.valueTags(placing, {
+                    placed: ({ rev, pos }) => Effect.succeed(Sent.cases.accepted.make({ rev, pos })),
+                    refused: () => Effect.die(new Error("legacy inbox seed was refused")),
+                  });
                 }),
               ).pipe(Effect.provide(w.layers().env));
 
@@ -1229,9 +1228,11 @@ describe("P17a, revoke stops writes at the final door", () => {
               },
             ]) {
               const result = yield* Effect.result(d.a.accept(changed));
-              expect(Result.isFailure(result) || (Result.isSuccess(result) && result.success._tag === "refused")).toBe(
-                true,
-              );
+              expect(
+                Result.isFailure(result) ||
+                  (Result.isSuccess(result) &&
+                    Match.valueTags(result.success, { placed: () => false, refused: () => true })),
+              ).toBe(true);
             }
 
             expect(yield* rows(w, `${processes[target]}/inbox`)).toEqual([]);

@@ -32,6 +32,7 @@ import {
   Layer,
   Logger,
   Option,
+  Predicate,
   Redacted,
   Result as R,
   Schema,
@@ -217,7 +218,7 @@ const phase = (s: Saved) => s.task.state._tag;
 const assignment = (s: Saved) => {
   const state = s.task.state;
 
-  if (state._tag === "absent" || state._tag === "requested") {
+  if (State.isAnyOf(["absent", "requested"])(state)) {
     return expect.fail("a saved assignment is required");
   }
 
@@ -225,7 +226,7 @@ const assignment = (s: Saved) => {
 };
 
 const accepted = (answer: typeof Answer.Type) => {
-  if (answer._tag !== "ok") {
+  if (!Answer.isAnyOf(["ok"])(answer)) {
     return expect.fail(`task call refused: ${JSON.stringify(answer)}`);
   }
 
@@ -491,7 +492,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       ping: () => 30_000,
       read: () => saved,
       save: (a) => {
-        if (a._tag === "online") {
+        if (Attached.isAnyOf(["online"])(a)) {
           saved = a;
           attachments.push(a);
         }
@@ -500,7 +501,8 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
         frames.push(f);
       },
       close: () => {},
-      wait: () => (answer._tag === "refused" ? Effect.fail(answer) : Effect.die("hands ledger.wait must be refused")),
+      wait: () =>
+        Answer.isAnyOf(["refused"])(answer) ? Effect.fail(answer) : Effect.die("hands ledger.wait must be refused"),
       call: () => Effect.succeed(answer),
     });
 
@@ -957,7 +959,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           expect(w.wakes.length, "W1: a start wakes nobody").toBe(woken);
         }
 
-        if (p === "finished" && s.task.state._tag === "finished") {
+        if (p === "finished" && State.isAnyOf(["finished"])(s.task.state)) {
           const failing = w.wakeFault.fail;
           const before = w.wakes.length;
 
@@ -1023,7 +1025,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
                   execution: assignment(s).execution,
                   ...said(cell),
                   ...(method === "tasks.finish"
-                    ? { result: s.task.state._tag === "finished" ? s.task.state.result : cell.result }
+                    ? { result: State.isAnyOf(["finished"])(s.task.state) ? s.task.state.result : cell.result }
                     : {}),
                 };
 
@@ -1196,7 +1198,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         if (table === "entries") {
           outputs.ledger = rows;
 
-          for (const row of rows.filter((row) => row._tag === "initialized")) {
+          for (const row of rows.filter((row): boolean => Predicate.isTagged(row, "initialized"))) {
             const { url } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
               row.body,
             );

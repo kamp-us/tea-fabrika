@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -99,7 +99,7 @@ export const tezgahPid = (r: Reader) =>
     const started = entries.flatMap((e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
-      return decoded._tag === "Some" ? [decoded.value.body.process] : [];
+      return Option.isSome(decoded) ? [decoded.value.body.process] : [];
     });
 
     const pid = started.at(-1);
@@ -332,7 +332,7 @@ export const processId = (r: Reader, name: string) =>
     const started = entries.flatMap((e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
-      return decoded._tag === "Some" ? [decoded.value.body.process] : [];
+      return Option.isSome(decoded) ? [decoded.value.body.process] : [];
     });
 
     const pid = started.at(-1);

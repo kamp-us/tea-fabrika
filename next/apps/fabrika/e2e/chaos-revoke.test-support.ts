@@ -21,13 +21,18 @@ export const controller = Machine.make({
   cmds: [],
   init: (saved) => [saved ?? Model.cases.idle.make({}), []],
   update: {
-    arm: (model, msg) => [model._tag === "idle" ? Model.cases.armed.make({ process: msg.process }) : model, []],
+    arm: (model, msg) => [
+      Model.isAnyOf(["idle"])(model) ? Model.cases.armed.make({ process: msg.process }) : model,
+      [],
+    ],
     arrive: (model, msg) => [
-      model._tag === "armed" && model.process === msg.process ? Model.cases.held.make({ process: msg.process }) : model,
+      Model.isAnyOf(["armed"])(model) && model.process === msg.process
+        ? Model.cases.held.make({ process: msg.process })
+        : model,
       [],
     ],
     release: (model) => [
-      model._tag === "armed" || model._tag === "held" ? Model.cases.released.make({ process: model.process }) : model,
+      Model.isAnyOf(["armed", "held"])(model) ? Model.cases.released.make({ process: model.process }) : model,
       [],
     ],
   },

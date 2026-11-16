@@ -5,7 +5,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -316,13 +316,13 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
 
         if (move === "admit") {
           count++;
-          accepted.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
+          accepted.push({ letter, m, answer: Result.isSuccess(result) ? result.success : null });
         } else {
           expect(result).toMatchObject({
             _tag: "Success",
             success: { _tag: "ok", result: { _tag: "refused", reason: "changed_elsewhere", now: count } },
           });
-          refused.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
+          refused.push({ letter, m, answer: Result.isSuccess(result) ? result.success : null });
         }
       }
     }

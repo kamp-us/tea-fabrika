@@ -19,7 +19,7 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Effect, FileSystem, Match, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -149,10 +149,18 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
           expect(outputs(grouped(order.map((n) => ds[n]!)))).toEqual(base);
 
           const before = ds[at]!;
-          const after = change._tag === "doc" ? { ...before, doc: change.doc } : { ...before, default: change.default };
+          const after = Match.valueTags(change, {
+            doc: ({ doc }) => ({ ...before, doc }),
+            default: (change) => ({ ...before, default: change.default }),
+          });
           // A doc that differs only in spacing may read the same in Markdown, so the change is in its words.
           const words = (text: string) => text.replace(/\s+/g, " ").trim();
-          fc.pre(change._tag === "doc" ? words(change.doc) !== words(before.doc) : change.default !== before.default);
+          fc.pre(
+            Match.valueTags(change, {
+              doc: ({ doc }) => words(doc) !== words(before.doc),
+              default: (change) => change.default !== before.default,
+            }),
+          );
           const changed = outputs(grouped(ds.map((d, n) => (n === at ? after : d))));
           expect(changed.reference).not.toBe(base.reference);
           expect(changed.person !== base.person).toBe(before.scope.includes("person"));

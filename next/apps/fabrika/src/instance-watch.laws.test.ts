@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { watchBundleDirectory } from "@alchemy.run/cloudflare/Workers/Sources/shared";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, FileSystem, Layer, Queue, Stream } from "effect";
+import { Deferred, Effect, FileSystem, Layer, Match, Queue, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -39,9 +39,19 @@ describe("T421 the dev instance's watch on the build folder", () => {
           yield* watchBundleDirectory({ main: "/build/brain.mjs", read }).pipe(
             Stream.runForEach((event) =>
               Effect.gen(function* () {
-                seen.push(event._tag === "Success" ? `Success ${event.output.hash}` : event._tag);
+                seen.push(
+                  Match.value(event).pipe(
+                    Match.tag("Success", ({ output }) => `Success ${output.hash}`),
+                    Match.orElse(({ _tag }) => _tag),
+                  ),
+                );
 
-                if (event._tag === "Success" && event.output.hash === sha("export default 2")) {
+                if (
+                  Match.value(event).pipe(
+                    Match.tag("Success", ({ output }) => output.hash === sha("export default 2")),
+                    Match.orElse(() => false),
+                  )
+                ) {
                   yield* Deferred.succeed(changed, undefined);
                 }
               }),

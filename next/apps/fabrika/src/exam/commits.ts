@@ -18,7 +18,7 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Match, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -649,19 +649,16 @@ const quote = (path: string) =>
   JSON.stringify(path).replaceAll("`", "\\u0060").replaceAll("<", "\\u003c").replaceAll("|", "\\u007c");
 
 /** One answer as a line, its paths shown by `show`. */
-export const plain = (a: Answer, show: (path: string) => string = quote) => {
-  if (a._tag === "done") {
-    return "done";
-  }
+export const plain = (a: Answer, show: (path: string) => string = quote) =>
+  Answer.match(a, {
+    done: () => "done",
+    ask: (a) => `ask owner exam_read ${a.paths.map(show).join(" ")}`,
+    stuck: (a) => {
+      const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
 
-  if (a._tag === "ask") {
-    return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
-  }
-
-  const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
-
-  return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
-};
+      return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
+    },
+  });
 
 /**
  * Prints each answer three ways and returns the exit code, 1 on any `stuck`: one JSON line on stdout,
@@ -677,7 +674,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
 
   if (Option.isSome(summary)) {
     for (const a of answers) {
-      const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
+      const level = Answer.match(a, { stuck: () => "error", ask: () => "warning", done: () => "notice" });
       yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
     }
 
@@ -689,7 +686,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
       .pipe(Effect.mapError(() => Failed.make({ message: "could not write the step summary" })));
   }
 
-  return answers.some((a) => a._tag === "stuck") ? 1 : 0;
+  return answers.some(Answer.isAnyOf(["stuck"])) ? 1 : 0;
 });
 
 const changedPaths = Effect.fnUntraced(function* (from: string, sha: string) {
@@ -1085,7 +1082,14 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Effect.scoped(main).pipe(
       Effect.tapError((e) =>
-        Console.error(`commits: the run failed: ${annotate(e._tag === "Failed" ? e.message : String(e))}`),
+        Console.error(
+          `commits: the run failed: ${annotate(
+            Match.value(e).pipe(
+              Match.tag("Failed", (failed) => failed.message),
+              Match.orElse(String),
+            ),
+          )}`,
+        ),
       ),
       Effect.provide(NodeServices.layer),
     ),

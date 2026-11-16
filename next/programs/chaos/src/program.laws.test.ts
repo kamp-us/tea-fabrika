@@ -280,7 +280,7 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
               expect(chaos.wake(next)).toBeNull();
 
               if (
-                current.phase._tag === "stopped" &&
+                Fabrika.ChaosMachine.Model.fields.phase.isAnyOf(["stopped"])(current.phase) &&
                 (msg.type === "fire_ok" || msg.type === "fire_err") &&
                 msg.cmd.id === current.phase.start.id &&
                 current.phase.asked.some((asked) => asked.ordinal === msg.cmd.ordinal) &&
@@ -410,14 +410,14 @@ it("the public stepper refuses a second active start without saving it", () => {
       const initial = pure.init(null);
       expect(initial._tag).toBe("stepped");
 
-      if (initial._tag !== "stepped") {
+      if (!Fabrika.Step.isAnyOf(["stepped"])(initial)) {
         throw new Error("initial state was refused");
       }
 
       const first = pure.step(initial.model, { type: "start", ...start });
       expect(first._tag).toBe("stepped");
 
-      if (first._tag !== "stepped") {
+      if (!Fabrika.Step.isAnyOf(["stepped"])(first)) {
         throw new Error("valid start was refused");
       }
 

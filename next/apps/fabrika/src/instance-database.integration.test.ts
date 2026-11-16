@@ -2,7 +2,7 @@
 // process holds, as A13's trigger write must wait for the live instance's short writes.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
@@ -45,7 +45,7 @@ const held = Effect.fnUntraced(function* (journal: "wal" | "delete") {
   ]);
 
   const line = yield* holder.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runHead);
-  expect(line._tag === "Some" ? line.value : undefined).toBe("held");
+  expect(Option.getOrUndefined(line)).toBe("held");
 
   return { file, done: holder.exitCode };
 });

@@ -12,7 +12,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, type Layer, Path, Predicate, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -248,7 +248,7 @@ const outcome = (answer: unknown) => {
     (p) => p.name === "counter:1",
   );
 
-  const failed = objects(answer).find((o) => o._tag === "failed");
+  const failed = objects(answer).find((o): boolean => Predicate.isTagged(o, "failed"));
 
   return row?.outcome ?? (failed === undefined ? { _tag: "same" } : { _tag: "failed", reason: failed.reason });
 };
@@ -260,7 +260,8 @@ const session = (url: string, key: string) =>
     const { fingerprint } = yield* driver(p, url, "tab-a");
     yield* grant(p, url, fingerprint, key);
     const processes = yield* rpc(p, "ledger.read", { stream: "processes/counter:1", after: 0 });
-    const pid: string = processes.result.entries.find((r: { _tag: string }) => r._tag === "started").body.process;
+    const pid: string = processes.result.entries.find((r: unknown): boolean => Predicate.isTagged(r, "started")).body
+      .process;
     let letters = 0;
 
     return {
@@ -389,9 +390,11 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 5 });
         const stream = yield* s.read(s.pid);
-        const swapped = stream.filter((e) => e._tag === "code.swapped");
+        const swapped = stream.filter((e): boolean => Predicate.isTagged(e, "code.swapped"));
         expect(swapped).toHaveLength(1);
-        expect(stream.filter((e) => e._tag === "stepped").at(-1)?.body.build).toBe(swapped[0].body.hash);
+        expect(stream.filter((e): boolean => Predicate.isTagged(e, "stepped")).at(-1)?.body.build).toBe(
+          swapped[0].body.hash,
+        );
 
         // A save the counter's state cannot be read by: a new field, the same `v`, no upgrade.
         yield* copy.write(
@@ -410,7 +413,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         // A syntax error: nothing reaches the process; the brain records where.
         yield* copy.write(`${source}\nexport const broken = ;\n`);
         expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
-        const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
+        const failed = (yield* s.read("gateway/code"))
+          .filter((e): boolean => Predicate.isTagged(e, "code.failed"))
+          .at(-1);
         expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
         expect(typeof failed?.body.line).toBe("number");
         yield* s.press("inc");
@@ -480,7 +485,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 }
               }
 
-              const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed");
+              const failed = (yield* s.read("gateway/code")).filter((e): boolean =>
+                Predicate.isTagged(e, "code.failed"),
+              );
               expect(failed.map((e) => e.body.path)).toEqual([copy.relative]);
             }),
           ),
@@ -615,7 +622,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               // which may be a file the program imports, so the path lies in the program's folder.
               const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
 
-              for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
+              for (const fact of facts.filter(
+                (e): boolean => e.body.path !== undefined && Predicate.isTagged(e, "code.failed"),
+              )) {
                 const named = String(fact.body.path);
 
                 const relative =

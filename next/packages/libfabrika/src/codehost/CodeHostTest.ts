@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -328,43 +329,56 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
             } else if (
               !merging &&
               previous?.asked === head &&
-              previous.answer._tag === "updated" &&
-              previous.answer.head === found.head
+              Match.value(previous.answer).pipe(
+                Match.tag("updated", (updated) => updated.head === found.head),
+                Match.orElse(() => false),
+              )
             ) {
               expect(answer).toEqual(previous.answer);
             } else if (head !== found.head) {
               expect(answer).toEqual(Updated.cases.moved.make({ head: found.head }));
-              expect(answer._tag === "moved" && answer.head).not.toBe(head);
+              expect(
+                Match.value(answer).pipe(
+                  Match.tag("moved", (moved) => moved.head),
+                  Match.orElse(() => false),
+                ),
+              ).not.toBe(head);
             } else if (found.conflict !== null) {
               expect(answer).toEqual(Updated.cases.conflict.make({ main: m.main, paths: found.conflict }));
             } else if (merging) {
               expect(answer._tag).toBe("merged");
 
-              if (answer._tag === "merged") {
-                m.merges.set(id, { asked: head, answer });
-                m.changes.set(id, { ...found, state: "merged" });
-                m.main = answer.commit;
-                expect(sync(r.host.merge(id, head))).toEqual(answer);
-              }
+              Match.value(answer).pipe(
+                Match.tag("merged", (answer) => {
+                  m.merges.set(id, { asked: head, answer });
+                  m.changes.set(id, { ...found, state: "merged" });
+                  m.main = answer.commit;
+                  expect(sync(r.host.merge(id, head))).toEqual(answer);
+                }),
+                Match.orElse(() => undefined),
+              );
             } else if (found.base === m.main) {
               expect(answer).toEqual(Updated.cases.current.make({ head, tree: found.tree, main: m.main }));
             } else {
               expect(answer._tag).toBe("updated");
 
-              if (answer._tag === "updated") {
-                expect(answer.head).not.toBe(head);
-                expect(answer.main).toBe(m.main);
-                m.updates.set(id, { asked: head, answer });
-                m.changes.set(id, { ...found, head: answer.head, tree: answer.tree, base: m.main });
-                expect(sync(r.host.update(id, head))).toEqual(answer);
+              Match.value(answer).pipe(
+                Match.tag("updated", (answer) => {
+                  expect(answer.head).not.toBe(head);
+                  expect(answer.main).toBe(m.main);
+                  m.updates.set(id, { asked: head, answer });
+                  m.changes.set(id, { ...found, head: answer.head, tree: answer.tree, base: m.main });
+                  expect(sync(r.host.update(id, head))).toEqual(answer);
 
-                if (cell.pick % 3 !== 0) {
-                  const pushed = { ...found, head: commit(hex(8)), tree: answer.tree, base: m.main };
-                  m.changes.set(id, pushed);
-                  sync(r.control.put(pushed));
-                  expect(sync(r.host.update(id, head))).toEqual(Updated.cases.moved.make({ head: pushed.head }));
-                }
-              }
+                  if (cell.pick % 3 !== 0) {
+                    const pushed = { ...found, head: commit(hex(8)), tree: answer.tree, base: m.main };
+                    m.changes.set(id, pushed);
+                    sync(r.control.put(pushed));
+                    expect(sync(r.host.update(id, head))).toEqual(Updated.cases.moved.make({ head: pushed.head }));
+                  }
+                }),
+                Match.orElse(() => undefined),
+              );
             }
           }
 

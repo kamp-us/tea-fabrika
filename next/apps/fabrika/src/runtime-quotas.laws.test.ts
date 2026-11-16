@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { ByteSize, Clock, Effect, Exit, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
@@ -544,7 +544,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           const fired = yield* Effect.exit(process(store, (p) => p.alarm()));
 
           // workerd runs a failed alarm handler again; so does this stand-in.
-          if (fired._tag === "Failure" && store.alarm === null) {
+          if (Exit.isFailure(fired) && store.alarm === null) {
             store.alarm = now + 100;
           }
         }
@@ -553,7 +553,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       const quiet = [...stores.values()].every((store) => store.alarm === null);
       const reached = yield* Effect.exit(done);
 
-      if (quiet && reached._tag === "Success" && reached.value) {
+      if (quiet && Exit.isSuccess(reached) && reached.value) {
         return;
       }
 

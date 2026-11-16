@@ -10,6 +10,8 @@ import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Schema } from "effect";
 import * as RevokeHold from "../e2e/chaos-revoke.test-support.ts";
 
+type Msg = typeof RevokeHold.Msg.Type;
+
 RunnerTest.suite(ChaosTest.open, checklist);
 
 TargetsTest.suite(ChaosTest.open, checklist);
@@ -28,28 +30,26 @@ it.prop(
     let held = 0;
 
     for (const pick of choices) {
-      const msg: typeof RevokeHold.Msg.Type =
-        model._tag === "idle"
-          ? { type: "arm", process: `process-${pick}` }
-          : model._tag === "armed"
-            ? pick % 7 === 0
-              ? { type: "release" }
-              : {
-                  type: "arrive",
-                  process: pick % 3 === 0 ? "unrelated" : model.process,
-                }
-            : model._tag === "held"
-              ? pick % 2 === 0
-                ? { type: "release" }
-                : { type: "arrive", process: model.process }
-              : { type: "arm", process: `later-${pick}` };
+      const msg = RevokeHold.Model.match(model, {
+        idle: (): Msg => ({ type: "arm", process: `process-${pick}` }),
+        armed: (model): Msg =>
+          pick % 7 === 0
+            ? { type: "release" }
+            : {
+                type: "arrive",
+                process: pick % 3 === 0 ? "unrelated" : model.process,
+              },
+        held: (model): Msg => (pick % 2 === 0 ? { type: "release" } : { type: "arrive", process: model.process }),
+        released: (): Msg => ({ type: "arm", process: `later-${pick}` }),
+      });
 
       const previous = model;
       [model] = applyCell(RevokeHold.controller, model, msg);
       msgs.push(msg);
-      const enters = previous._tag === "armed" && msg.type === "arrive" && previous.process === msg.process;
+      const enters =
+        RevokeHold.Model.isAnyOf(["armed"])(previous) && msg.type === "arrive" && previous.process === msg.process;
 
-      if (previous._tag !== "held" && model._tag === "held") {
+      if (!RevokeHold.Model.isAnyOf(["held"])(previous) && RevokeHold.Model.isAnyOf(["held"])(model)) {
         held++;
       }
 
@@ -57,11 +57,11 @@ it.prop(
 
       if (enters) {
         expect(model).toEqual(RevokeHold.Model.cases.held.make({ process: msg.process }));
-      } else if (previous._tag === "idle" && msg.type === "arm") {
+      } else if (RevokeHold.Model.isAnyOf(["idle"])(previous) && msg.type === "arm") {
         expect(model).toEqual(RevokeHold.Model.cases.armed.make({ process: msg.process }));
-      } else if (msg.type === "release" && (previous._tag === "armed" || previous._tag === "held")) {
+      } else if (msg.type === "release" && RevokeHold.Model.isAnyOf(["armed", "held"])(previous)) {
         expect(model).toEqual(RevokeHold.Model.cases.released.make({ process: previous.process }));
-      } else if (previous._tag !== "idle") {
+      } else if (!RevokeHold.Model.isAnyOf(["idle"])(previous)) {
         expect(model).toEqual(previous);
       }
     }

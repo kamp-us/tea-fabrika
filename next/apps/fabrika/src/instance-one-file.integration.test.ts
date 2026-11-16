@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -856,11 +856,14 @@ describe("P16 copied-file real instance, serial", () => {
 
                           // P40, L4 and L7: the brain's process facts name the qualified code
                           // under the registered name, before and after the restart.
-                          expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
+                          expect(
+                            rows.findLast((r: any): boolean => Predicate.isTagged(r, "started")).body,
+                          ).toMatchObject({
                             name: "counter:1",
                             program: "fabrika/counter",
                           });
-                          const current = rows.findLast((r: any) => r._tag === "started").body.process;
+                          const current = rows.findLast((r: any): boolean => Predicate.isTagged(r, "started")).body
+                            .process;
 
                           if (again) {
                             expect(current).toBe(pid);

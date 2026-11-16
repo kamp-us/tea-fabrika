@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Gateway, Id, type ProgramRunner } from "@kampus/libfabrika";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
+import { Appended } from "@kampus/libfabrika/ledger/Log";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
@@ -187,7 +188,7 @@ it.effect.prop(
         const m = incoming(i + 1, body, i);
         const saved = yield* w.append(m);
 
-        if (saved._tag !== "placed") {
+        if (!Appended.isAnyOf(["placed"])(saved)) {
           return yield* Effect.die("exam seed did not append");
         }
 
@@ -225,7 +226,7 @@ it.effect.prop(
       const m = incoming(1, body),
         placed = yield* w.append(m);
 
-      if (placed._tag !== "placed") {
+      if (!Appended.isAnyOf(["placed"])(placed)) {
         return yield* Effect.die("seed append refused");
       }
 
@@ -354,7 +355,7 @@ it.effect.prop(
       const input = incoming(1, body),
         placed = yield* w.append(input);
 
-      if (placed._tag !== "placed") {
+      if (!Appended.isAnyOf(["placed"])(placed)) {
         return yield* Effect.die("seed append refused");
       }
 

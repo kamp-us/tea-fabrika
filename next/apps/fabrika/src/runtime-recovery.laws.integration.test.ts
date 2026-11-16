@@ -275,7 +275,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     init: (loaded) => [loaded ?? idle, []],
     update: {
       start: (s, m) => {
-        if (s._tag === "waiting") {
+        if (RequestModel.isAnyOf(["waiting"])(s)) {
           return [s, []];
         }
 
@@ -288,12 +288,12 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
         return [RequestModel.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
-        s._tag === "waiting" && s.ref === m.ref
+        RequestModel.isAnyOf(["waiting"])(s) && s.ref === m.ref
           ? [RequestModel.cases.answered.make({ ref: m.ref, value: m.value }), []]
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
+        RequestModel.isAnyOf(["waiting"])(s) &&
         m.cmd.m !== null &&
         typeof m.cmd.m === "object" &&
         "ref" in m.cmd.m &&
@@ -307,7 +307,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
-    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    refuse: (s, m) => (m.type === "start" && RequestModel.isAnyOf(["waiting"])(s) ? { reason: "busy" } : null),
     inputs: { start: "Start a request", answer: "An answer from a responder" },
     outputs: {},
     writes: {},

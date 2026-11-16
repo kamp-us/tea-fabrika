@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -305,7 +305,7 @@ const facts = async (instance: Instance, stream: string) =>
   }));
 
 const restarts = async (instance: Instance, name: string) =>
-  (await facts(instance, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
+  (await facts(instance, `processes/${name}`)).filter((fact): boolean => Predicate.isTagged(fact, "restarted"));
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
   ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
@@ -444,7 +444,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       expect(read.error, `reading processes/${name}`).toBeUndefined();
 
       const found = (read.result.entries as Array<any>).find(
-        (entry) => entry._tag === "restarted" && entry.body.after === after,
+        (entry): boolean => entry.body.after === after && Predicate.isTagged(entry, "restarted"),
       );
 
       if (found !== undefined) {

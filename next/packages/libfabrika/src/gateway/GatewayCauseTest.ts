@@ -67,11 +67,9 @@ const chain = (error: unknown): ReadonlyArray<unknown> => {
 
 /** Whether `link` is the door's own error for a saved row that does not decode. */
 const isBadRow = (link: unknown): boolean =>
-  Predicate.hasProperty(link, "_tag") &&
-  link._tag === "GatewayError" &&
+  Predicate.isTagged(link, "GatewayError") &&
   Predicate.hasProperty(link, "reason") &&
-  Predicate.hasProperty(link.reason, "_tag") &&
-  link.reason._tag === "BadRow";
+  Predicate.isTagged(link.reason, "BadRow");
 
 /** One WebCrypto call rejects with `failure` while `work` runs: an own property shadows the method. */
 const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unknown, work: Effect.Effect<A, E>) =>

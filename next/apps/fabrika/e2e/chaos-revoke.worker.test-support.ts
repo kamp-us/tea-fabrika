@@ -63,7 +63,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
                 const [previous, next] = yield* move({ type: "arrive", process: pid });
 
                 // Gateway.route calls policy only after online has checked this real connection.
-                if (previous._tag === "armed" && next._tag === "held") {
+                if (Hold.Model.isAnyOf(["armed"])(previous) && Hold.Model.isAnyOf(["held"])(next)) {
                   yield* Deferred.await(release);
                 }
 

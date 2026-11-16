@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Effect, Exit, Schema, type Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -248,7 +248,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   if (times === 3 && attempt === 2) {
                     expect(result._tag).toBe("Success");
 
-                    if (result._tag === "Success") {
+                    if (Exit.isSuccess(result)) {
                       expect(result.value).toEqual(Sent.cases.refused.make({ reason: "dead" }));
                     }
                   } else {

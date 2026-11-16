@@ -62,12 +62,14 @@ const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: 
 
 // Only what the wake rule reads from the saved supervision: its name and whether its journal is
 // `stepping`, with the attempt it names, or `idle`. Any other case matches the empty struct last.
+const Idle = Schema.TaggedStruct("idle", {});
+
 const Saved = Schema.fromJsonString(
   Schema.Struct({
     name: Schema.String,
     journal: Schema.Union([
       Schema.TaggedStruct("stepping", { attempt: Schema.Struct({ process: Schema.String, letter: Schema.String }) }),
-      Schema.TaggedStruct("idle", {}),
+      Idle,
       Schema.Struct({}),
     ]),
   }),
@@ -147,7 +149,7 @@ export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: s
   const letter =
     "attempt" in journal && journal.attempt.process === pid
       ? journal.attempt.letter
-      : "_tag" in journal && journal._tag === "idle" && marker?._tag === "stepping" && marker.process === pid
+      : Schema.is(Idle)(journal) && marker?._tag === "stepping" && marker.process === pid
         ? marker.letter
         : undefined;
 

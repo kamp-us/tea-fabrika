@@ -28,7 +28,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
-import { Task } from "@kampus/libfabrika/tasks/Task";
+import { State, Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
@@ -321,7 +321,7 @@ const flow = Effect.fnUntraced(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 
-        for (let i = 0; i < 120 && task.state._tag !== "finished"; i++) {
+        for (let i = 0; i < 120 && !State.isAnyOf(["finished"])(task.state); i++) {
           yield* Effect.sleep("500 millis");
           task = Schema.decodeUnknownSync(Task)(
             yield* call("task read failed", () => method(project, "readHandsTask")()),
@@ -394,7 +394,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
       Effect.gen(function* () {
         const seen = yield* flow();
         expect(seen.task.state._tag, `E2: the task ends finished: ${JSON.stringify(seen.task.state)}`).toBe("finished");
-        const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
+        const result = State.isAnyOf(["finished"])(seen.task.state) ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
         expect(result?._tag === "exited" && result.version.startsWith("git version "), "E2: its version line").toBe(
@@ -407,8 +407,8 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
           seen.task.events.map((e) => e.event),
           "E2: the task was taken, started and finished once",
         ).toEqual(["requested", "taken", "started", "finished"]);
-        expect(seen.task.state._tag === "finished" && seen.task.state.request.id).toBe(TASK);
-        expect(seen.task.state._tag === "finished" && seen.task.state.request.process).toBe(PROCESS);
+        expect(State.isAnyOf(["finished"])(seen.task.state) && seen.task.state.request.id).toBe(TASK);
+        expect(State.isAnyOf(["finished"])(seen.task.state) && seen.task.state.request.process).toBe(PROCESS);
       }),
     600_000,
   );

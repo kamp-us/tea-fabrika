@@ -639,7 +639,7 @@ const writtenBy = Effect.fnUntraced(function* (
         for (const { value } of marker.rows) {
           const activity = yield* Schema.decodeUnknownEffect(Activity)(deserialize(value));
 
-          if (activity._tag === "stepping" && activity.process === saved.id) {
+          if (Activity.isAnyOf(["stepping"])(activity) && activity.process === saved.id) {
             named.push({ record: "activity", build: activity.build });
           }
         }

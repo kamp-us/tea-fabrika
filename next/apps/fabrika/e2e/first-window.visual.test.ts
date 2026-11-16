@@ -19,7 +19,7 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Match, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -78,7 +78,10 @@ type Msg = typeof checklistMachine.msg.Type;
 
 /** What a tab must show for `model`: each item's box, checked when the item is. */
 const foldRows = (model: Model): ReadonlyArray<Row> =>
-  model.items.map((i) => ({ name: i.name, checked: i.state._tag === "checked" }));
+  model.items.map((i) => ({
+    name: i.name,
+    checked: Match.valueTags(i.state, { checked: () => true, new: () => false, open: () => false, late: () => false }),
+  }));
 
 /** Polls until `check` holds, or fails with the last value it read after 30 s. */
 const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: string) =>
@@ -206,7 +209,7 @@ const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
     const pids = (yield* r.read(`processes/${NAME}`)).flatMap((e) => {
       const started = Schema.decodeUnknownOption(Started)(e);
 
-      return started._tag === "Some" ? [started.value.body.process] : [];
+      return Option.isSome(started) ? [started.value.body.process] : [];
     });
 
     expect(pids.length, `the brain started ${NAME}`).toBeGreaterThan(0);
@@ -473,7 +476,7 @@ describe("L15: use in two tabs (W2)", () => {
                     expect(attempt.params, "resends keep the whole body and letter id").toEqual(first.params);
                   }
 
-                  if (group.result!._tag === "accepted") {
+                  if (Sent.isAnyOf(["accepted"])(group.result!)) {
                     accepted.push(first.params.letter);
                   } else {
                     refused.push(first.params.letter);

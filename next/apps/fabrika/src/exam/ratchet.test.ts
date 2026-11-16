@@ -2,7 +2,7 @@
 // is judged on generated rows here; ratchet.integration.test.ts runs the script on a planted git
 // repository, as CI runs it, so it runs on the schedule (0536).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Match } from "effect";
 import * as fc from "fast-check";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
@@ -181,7 +181,7 @@ describe("a renamed file keeps its rows (L5)", () => {
           });
           // Without the renames the same head is every renamed row added: the map is what admits them.
           const unmapped = Effect.runSync(judge(list, text(rows), text(head)));
-          expect(unmapped._tag === "stuck" ? unmapped.rows.length : 0).toBe(renamed.length);
+          expect(Match.valueTags(unmapped, { stuck: ({ rows }) => rows.length, done: () => 0 })).toBe(renamed.length);
         },
       ),
       runs,

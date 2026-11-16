@@ -24,7 +24,7 @@ import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger"
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
-import { lineFor } from "@kampus/libfabrika/ledger/Log";
+import { Appended, lineFor } from "@kampus/libfabrika/ledger/Log";
 import { type From as ProcessFrom, Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import {
   ProcessEvent,
@@ -43,14 +43,29 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
-import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { RecordManager, Written } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
+import { Answer, Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Match,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -453,7 +468,7 @@ const world = Effect.fnUntraced(function* (
           build: "test-build",
         });
 
-        if (placing._tag === "refused") {
+        if (Appended.isAnyOf(["refused"])(placing)) {
           return yield* new LedgerError({ reason: "refused" });
         }
       }
@@ -487,7 +502,7 @@ const world = Effect.fnUntraced(function* (
         const checked = Schema.decodeUnknownSync(Schema.toType(Input))(message);
 
         // The approval's answer is deliberately public metadata; the text of a comment is content.
-        return checked._tag === "approve"
+        return Input.isAnyOf(["approve"])(checked)
           ? Schema.encodeSync(Schema.toCodecJson(Input))(checked)
           : { type: checked._tag };
       }),
@@ -714,9 +729,9 @@ describe("P13 selected input recording", () => {
                   const answer = yield* d.route(client, "process.send", request(prior.id, comment(prior.body)));
                   expect(answer._tag).toBe("ok");
                   expect(selections, "a recorded binding never reruns today's selector").toBe(before);
-                  expect(rawRows(w.db, "gateway/inputs").filter((row) => row._tag === "received")).toHaveLength(
-                    history.length,
-                  );
+                  expect(
+                    rawRows(w.db, "gateway/inputs").filter((row) => Predicate.isTagged(row, "received")),
+                  ).toHaveLength(history.length);
                   continue;
                 }
 
@@ -737,7 +752,7 @@ describe("P13 selected input recording", () => {
                     failure: { _tag: "AuditError", reason: { _tag: expect.any(String) } },
                   });
 
-                  if (result._tag === "Failure") {
+                  if (Result.isFailure(result)) {
                     printable.push(String(result.failure), JSON.stringify(result.failure));
                   }
 
@@ -751,7 +766,7 @@ describe("P13 selected input recording", () => {
                   history.push({ id, body, before: delivered });
                 }
 
-                const rows = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+                const rows = rawRows(w.db, "gateway/inputs").filter((r): boolean => Predicate.isTagged(r, "received"));
                 expect(rows).toHaveLength(history.length);
 
                 for (const row of rows) {
@@ -1072,9 +1087,9 @@ describe("T843 sender budget, next/", () => {
           );
 
           const replies = yield* Effect.all(reverse ? [b, a] : [a, b], { concurrency: "unbounded" });
-          expect(replies.filter((answer) => answer._tag === "ok")).toHaveLength(1);
+          expect(replies.filter(Answer.isAnyOf(["ok"]))).toHaveLength(1);
           expect(
-            replies.filter((answer) => answer._tag === "refused" && answer.reason === "rate_limited"),
+            replies.filter((answer) => Answer.isAnyOf(["refused"])(answer) && answer.reason === "rate_limited"),
           ).toHaveLength(1);
         }).pipe(w.provide);
       }),
@@ -1233,7 +1248,7 @@ describe("T843 sender budget, next/", () => {
         const state = c.read();
         expect(state._tag).toBe("online");
 
-        if (state._tag !== "online") {
+        if (!Attached.isAnyOf(["online"])(state)) {
           return;
         }
 
@@ -1472,7 +1487,8 @@ describe("T843 sender budget, next/", () => {
           for (let n = 0; n <= count; n++) {
             const now = c.read();
             expect(now._tag).toBe("online");
-            const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
+            const moves =
+              Attached.isAnyOf(["online"])(now) && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
             const move = moves[choices[n % choices.length]! % moves.length]!;
             const method = move === "read" ? "ledger.wait" : move === "unknown" ? "missing.method" : "process.send";
 
@@ -2898,7 +2914,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           }
 
           const saved = w.db.prepare("SELECT value FROM gateway_state WHERE name=?").get(`client/${connection.client}`);
-          const attached = saved !== undefined && JSON.parse(String(saved.value))._tag === "waiting";
+          const attached = saved !== undefined && Predicate.isTagged(JSON.parse(String(saved.value)), "waiting");
           yield* d.disconnect(connection.client);
           connections = connections.filter((c) => c !== connection);
           rows = yield* watch();
@@ -2997,7 +3013,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
 
         rows = yield* watch();
 
-        if (reply._tag === "refused") {
+        if (Answer.isAnyOf(["refused"])(reply)) {
           // Only a pruned connection is refused: a fresh tab is the newest pending connection.
           expect(repeat).toBeDefined();
           expect(reply).toEqual({ _tag: "refused", reason: "not_waiting" });
@@ -3559,10 +3575,10 @@ describe("P10 inputs, retries and signer", () => {
               });
               expect(lose).toBe(false);
               expect(w.deliveries).toEqual([]);
-              const before = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+              const before = rawRows(w.db, "gateway/inputs").filter((r): boolean => Predicate.isTagged(r, "received"));
               expect(before).toHaveLength(1);
               yield* d.route(client, "process.send", request(value));
-              const after = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+              const after = rawRows(w.db, "gateway/inputs").filter((r): boolean => Predicate.isTagged(r, "received"));
               expect(after).toEqual(before);
               expect(w.deliveries[0]!.envelope.id).toBe(before[0]?.id);
               expect(w.deliveries[0]!.trace.traceId).toBe(before[0]?.traceId);
@@ -3682,12 +3698,13 @@ describe("P10 inputs, retries and signer", () => {
     type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
 
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
-      const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
+      const missing =
+        Broken.isAnyOf(["missing"])(edit) || (Broken.isAnyOf(["junk"])(edit) && edit.reason === "missing");
 
       const fields = Object.entries(state.schema.fields).filter(
         ([key, field]) =>
           Object.hasOwn(state.m, key) &&
-          (!missing || Schema.decodeResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
+          (!missing || Result.isFailure(Schema.decodeResult(Schema.Struct({ [key]: field }))({}))),
       );
 
       assert(fields.length > 0, "the current message must have a field that can be broken");
@@ -3699,23 +3716,22 @@ describe("P10 inputs, retries and signer", () => {
           const replacement = missing
             ? Arbitrary.Constant(undefined)
             : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
-                Arbitrary.filter((value) => Schema.decodeUnknownResult(field)(value)._tag === "Failure"),
+                Arbitrary.filter((value) => Result.isFailure(Schema.decodeUnknownResult(field)(value))),
               );
 
-          const junk =
-            edit._tag === "junk"
-              ? Arbitrary.all({
-                  key: Arbitrary.schema(Schema.String).pipe(
-                    Arbitrary.filter(
-                      (key) =>
-                        !Object.hasOwn(state.schema.fields, key) &&
-                        !Object.hasOwn(state.m, key) &&
-                        !Schema.is(SpoofedWrite.fields.key)(key),
-                    ),
+          const junk = Broken.isAnyOf(["junk"])(edit)
+            ? Arbitrary.all({
+                key: Arbitrary.schema(Schema.String).pipe(
+                  Arbitrary.filter(
+                    (key) =>
+                      !Object.hasOwn(state.schema.fields, key) &&
+                      !Object.hasOwn(state.m, key) &&
+                      !Schema.is(SpoofedWrite.fields.key)(key),
                   ),
-                  value: Arbitrary.schema(Schema.Json),
-                })
-              : Arbitrary.Constant(null);
+                ),
+                value: Arbitrary.schema(Schema.Json),
+              })
+            : Arbitrary.Constant(null);
 
           return Arbitrary.all({ value: replacement, junk }).pipe(
             Arbitrary.map(({ value, junk }) => {
@@ -4389,8 +4405,12 @@ describe("P10 passkey roots and recovery", () => {
               const second = yield* enrolled(d, w, "recovered-b", w.sheet);
               expect((yield* d.grant({ text: first.text, armored: first.armored }))._tag).toBe("applied");
               const result = yield* d.grant({ text: second.text, armored: second.armored });
-              assert(result._tag !== "applied");
-              expect(result.reason).toBe("used");
+              const reason = Match.valueTags(result, {
+                applied: () => assert.fail("a used enrollment was applied a second time"),
+                ignored: ({ reason }) => reason,
+                refused: ({ reason }) => reason,
+              });
+              expect(reason).toBe("used");
               expect(yield* d.grant({ text: first.text, armored: first.armored })).toMatchObject({
                 _tag: "applied",
               });
@@ -4885,7 +4905,7 @@ describe("P10 span reader and recording", () => {
 
               yield* r.write(chain, 0, rows);
               const answer = yield* d.route(client, "spans.read", { chain, after: 0 });
-              assert(answer._tag === "ok");
+              assert(Answer.isAnyOf(["ok"])(answer));
               const page = yield* Schema.decodeUnknownEffect(SpanPage)(answer.result);
               expect(page.spans).toHaveLength(256);
               expect(poisoned).toBe(0);
@@ -4963,7 +4983,7 @@ describe("P10 span reader and recording", () => {
           let part = 0;
           let result = yield* records.write(chain, part, [{ span, content: null }]);
 
-          while (result._tag === "rolled") {
+          while (Written.isAnyOf(["rolled"])(result)) {
             result = yield* records.write(chain, ++part, [{ span, content: null }]);
           }
         }
@@ -4971,13 +4991,13 @@ describe("P10 span reader and recording", () => {
         const baseline = yield* Stream.runCollect(records.read(chain));
         expect(w.partCount()).toBeGreaterThan(1);
         const first = yield* d.route(client, "spans.read", { chain, after: 0 });
-        assert(first._tag === "ok");
+        assert(Answer.isAnyOf(["ok"])(first));
         const firstPage = yield* Schema.decodeUnknownEffect(SpanPage)(first.result);
         expect(firstPage.spans).toHaveLength(256);
         expect(firstPage.next).toBe(256);
         expect(firstPage.spans.map((s) => s.spanId)).toEqual(baseline.slice(0, 256).map((s) => s.spanId));
         const second = yield* d.route(client, "spans.read", { chain, after: 256 });
-        assert(second._tag === "ok");
+        assert(Answer.isAnyOf(["ok"])(second));
         const secondPage = yield* Schema.decodeUnknownEffect(SpanPage)(second.result);
         expect(secondPage.spans.slice(0, baseline.length - 256).map((s) => s.spanId)).toEqual(
           baseline.slice(256).map((s) => s.spanId),

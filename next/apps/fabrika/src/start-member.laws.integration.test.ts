@@ -7,7 +7,7 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Exit, Predicate, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -185,7 +185,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               );
 
               const line = (await rows(instance, "processes/child:1")).find(
-                (row) => row._tag === "started" && row.body.process === child,
+                (row): boolean => row.body.process === child && Predicate.isTagged(row, "started"),
               );
 
               expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual({
@@ -202,7 +202,9 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const again: Instance = yield* Scope.provide(second)(home.boot);
           yield* Effect.promise(async () => {
             const relations = await rows(again, "permissions/relations");
-            const brain = (await rows(again, "processes/starter:1")).find((row) => row._tag === "started")?.by;
+            const brain = (await rows(again, "processes/starter:1")).find((row): boolean =>
+              Predicate.isTagged(row, "started"),
+            )?.by;
             expect(brain, "the brain signed the starter's started line").toBeDefined();
             expect(
               relations.map((row) => ({ by: row.by, _tag: row._tag, body: row.body })),

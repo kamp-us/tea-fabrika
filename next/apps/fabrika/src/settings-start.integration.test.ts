@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Effect, Exit, FileSystem, Layer, Match, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -166,21 +166,31 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                 });
 
               for (const a of actions) {
-                if (a._tag === "change") {
-                  file = a.port;
-                  yield* h.write(a.port);
-                } else if (a._tag === "start") {
-                  yield* begin(undefined);
-                } else if (a._tag === "new-process") {
-                  yield* begin(a.env);
-                } else if (processes.length > 0) {
-                  const p = processes[a.which % processes.length]!;
-                  const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
-                  expect(replayed.values["instance.port"]).toBe(p.port);
-                  // The process's own value never moves, though files changed since it began.
-                  expect(p.held.values["instance.port"]).toBe(p.port);
-                  expect(p.held.hash).toBe(replayed.hash);
-                }
+                yield* Match.valueTags(a, {
+                  change: (a) =>
+                    Effect.suspend(() => {
+                      file = a.port;
+
+                      return h.write(a.port);
+                    }),
+                  start: () => begin(undefined),
+                  "new-process": (a) => begin(a.env),
+                  replay: (a) =>
+                    Effect.sync(() => {
+                      // Before any start there is no process to replay, and the index reads nothing.
+                      const p = processes[a.which % processes.length];
+
+                      if (p === undefined) {
+                        return;
+                      }
+
+                      const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
+                      expect(replayed.values["instance.port"]).toBe(p.port);
+                      // The process's own value never moves, though files changed since it began.
+                      expect(p.held.values["instance.port"]).toBe(p.port);
+                      expect(p.held.hash).toBe(replayed.hash);
+                    }),
+                });
               }
 
               // One hash per value, whatever source and process gave it.

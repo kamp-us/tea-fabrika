@@ -6,6 +6,7 @@ import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
+import { Appended } from "@kampus/libfabrika/ledger/Log";
 import { Child, type StartGrant } from "@kampus/libfabrika/processes/Children";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -19,7 +20,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Predicate, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -488,7 +489,7 @@ StartsTest.law(
 
       const checkSaved = Effect.fnUntraced(function* () {
         const rows = w.db.prepare("SELECT * FROM entries").all();
-        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+        expect(rows.some((row) => Predicate.isTagged(row, "instance_started"))).toBe(true);
 
         for (const row of rows) {
           const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
@@ -694,7 +695,7 @@ describe("P12 Project authority", () => {
       await Effect.runPromise(Deferred.await(release));
       const result = await w.run(w.p.inbox(pid, input));
 
-      return result._tag === "placed"
+      return Appended.isAnyOf(["placed"])(result)
         ? { _tag: "accepted", rev: result.rev, pos: result.pos }
         : { _tag: "refused", reason: result.reason };
     });

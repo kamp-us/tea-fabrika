@@ -4,6 +4,7 @@
 import { expect, it } from "@effect/vitest";
 import { ProgramDown, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Appended } from "@kampus/libfabrika/ledger/Log";
 import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
 import {
   Body,
@@ -287,7 +288,7 @@ it.effect.prop(
         const m = fresh(1, badInput(c, kind)),
           placed = yield* w.append(m);
 
-        if (placed._tag !== "placed") {
+        if (!Appended.isAnyOf(["placed"])(placed)) {
           return yield* Effect.die("seed append refused");
         }
 

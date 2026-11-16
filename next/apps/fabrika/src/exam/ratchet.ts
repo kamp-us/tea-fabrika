@@ -177,7 +177,7 @@ const baseFrom = Effect.fnUntraced(function* (flag: string | undefined) {
 const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
 
 const annotation = (answer: Answer, sha: string) => {
-  if (answer._tag === "done") {
+  if (Answer.isAnyOf(["done"])(answer)) {
     return [];
   }
 
@@ -239,7 +239,7 @@ const main = Effect.gen(function* () {
 
   for (const list of LISTS) {
     const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file), renames);
-    grew = grew || answer._tag === "stuck";
+    grew = grew || Answer.isAnyOf(["stuck"])(answer);
     yield* Console.log(JSON.stringify(answer));
 
     for (const line of annotation(answer, sha)) {

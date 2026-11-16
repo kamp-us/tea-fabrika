@@ -5,7 +5,7 @@ import { Option } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
-  type Answer,
+  Answer,
   annotate,
   chain,
   check,
@@ -516,7 +516,7 @@ describe("check (p83 to p86)", () => {
     fc.assert(
       fc.property(route, sha, drops, ({ commits }, head, drop) => {
         const mixed = commits.map((c, i) => (drop[i] === true ? { ...c, signed: null } : c));
-        const reasons = answers(pr(mixed, { head })).flatMap((a) => (a._tag === "stuck" ? [a.reason] : []));
+        const reasons = answers(pr(mixed, { head })).flatMap((a) => (Answer.isAnyOf(["stuck"])(a) ? [a.reason] : []));
         expect(reasons).not.toContain("broken_chain");
         expect(reasons).toEqual(mixed.flatMap((c) => (c.signed === null ? ["unsigned_commit"] : [])));
       }),
@@ -949,7 +949,7 @@ const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).cha
   }),
 );
 
-const refusals = (cs: Commit[], main = EXAM) => check(pr(cs), main).answers.filter((a) => a._tag === "stuck");
+const refusals = (cs: Commit[], main = EXAM) => check(pr(cs), main).answers.filter(Answer.isAnyOf(["stuck"]));
 
 describe("0053 parent exam lists", () => {
   // Plant: use main's matcher, or union main and parent.
@@ -981,7 +981,7 @@ describe("0053 parent exam lists", () => {
             main,
           );
 
-          expect(result.answers.filter((a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
+          expect(result.answers.filter(Answer.isAnyOf(["ask"]))).toEqual(matched.length ? [ask(matched)] : []);
         }
       }),
       runs,

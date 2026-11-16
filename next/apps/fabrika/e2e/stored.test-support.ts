@@ -1,7 +1,7 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Match, Path, type PlatformError, Schema } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -52,7 +52,12 @@ const scan = (
         path = yield* Path.Path;
 
       // Only the running pass passes over a file renamed or deleted between its listing and its read.
-      const gone = (error: PlatformError.PlatformError) => pass === "running" && error.reason._tag === "NotFound";
+      const gone = (error: PlatformError.PlatformError) =>
+        pass === "running" &&
+        Match.value(error.reason).pipe(
+          Match.tag("NotFound", () => true),
+          Match.orElse(() => false),
+        );
       const keys = [path.join(dir, "person"), path.join(dir, "person.pub")];
       const read: Array<{ readonly file: string; readonly label: string; readonly bytes: string }> = [];
 

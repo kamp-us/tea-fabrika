@@ -20,7 +20,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Option, Predicate, Result, Schema, Stream, Tracer } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -485,7 +485,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
 
                 // A successful control still records the required safe metadata.
                 if (move === "send") {
-                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
+                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && Predicate.isTagged(r, "received"));
                   expect(rows.length).toBeGreaterThan(0);
                   expect(JSON.parse(String(rows.at(-1)!.body))).toMatchObject({ input: { type: "comment" } });
                 }
@@ -508,9 +508,10 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
   expect(Object.fromEntries(span.attributes)).toEqual(attributes);
   expect(span.status._tag).toBe("Ended");
 
-  if (span.status._tag === "Ended") {
-    expect(Exit.isSuccess(span.status.exit)).toBe(ok);
-  }
+  Match.valueTags(span.status, {
+    Started: () => undefined,
+    Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(ok),
+  });
 };
 
 const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnType<typeof key>, tab: string) {
@@ -634,9 +635,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   expect(Option.getOrThrow(span.parent).spanId).toBe(parent.spanId);
                   expect(span.status._tag).toBe("Ended");
 
-                  if (span.status._tag === "Ended") {
-                    expect(Exit.isSuccess(span.status.exit)).toBe(!fail);
-                  }
+                  Match.valueTags(span.status, {
+                    Started: () => undefined,
+                    Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(!fail),
+                  });
                 }
 
                 if (!fail) {
@@ -734,9 +736,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
 
-                if (write.status._tag === "Ended") {
-                  expect(Exit.isSuccess(write.status.exit)).toBe(!fail);
-                }
+                Match.valueTags(write.status, {
+                  Started: () => undefined,
+                  Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(!fail),
+                });
               }).pipe(Effect.provide(w.layer));
             }),
           ),

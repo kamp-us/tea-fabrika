@@ -1,6 +1,6 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Duration, Effect, Exit, Layer, Match, Option, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
@@ -167,9 +167,10 @@ export const suite = (rig: Rig): void => {
               const error = yield* Effect.flip(consume(store.sql, sender, policy));
               expect(error.reason._tag).toBe("RateLimitExceeded");
 
-              if (error.reason._tag === "RateLimitExceeded") {
-                expect(Duration.toMillis(error.reason.retryAfter)).toBe(row.until - at);
-              }
+              Match.valueTags(error.reason, {
+                RateLimitExceeded: (reason) => expect(Duration.toMillis(reason.retryAfter)).toBe(row.until - at),
+                RateLimitStoreError: () => undefined,
+              });
             }
 
             row.at = at;
@@ -218,8 +219,11 @@ export const suite = (rig: Rig): void => {
           expect(result.reason).toHaveProperty("cause");
           expect(sql.exec("SELECT sender,until,value FROM gateway_limits")).toEqual(before);
 
-          if (failure === "write" && result.reason._tag === "RateLimitStoreError") {
-            expect(result.reason.cause).toBe(cause);
+          if (failure === "write") {
+            Match.valueTags(result.reason, {
+              RateLimitExceeded: () => undefined,
+              RateLimitStoreError: (reason) => expect(reason.cause).toBe(cause),
+            });
           }
         }),
       { arbitrary: { seed: 119120, runs: 50 } },

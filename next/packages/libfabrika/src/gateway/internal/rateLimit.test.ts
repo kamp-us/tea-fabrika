@@ -28,13 +28,12 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
   const messages: Array<Msg> = [];
 
   for (const pick of picks) {
-    const p = state._tag !== "fresh" ? state.policy : initial;
+    const p = Rate.Model.isAnyOf(["fresh"])(state) ? initial : state.policy;
 
     // Read the state before choosing a repeat, a backward clock, expiry, skipped windows or a policy change.
-    const times =
-      state._tag !== "fresh"
-        ? [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3]
-        : [18];
+    const times = Rate.Model.isAnyOf(["fresh"])(state)
+      ? [18]
+      : [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3];
 
     const msg: Msg = {
       type: "take",
@@ -92,14 +91,14 @@ it.prop(
           );
           expect(next._tag).not.toBe("fresh");
 
-          if (next._tag === "fresh") {
+          if (Rate.Model.isAnyOf(["fresh"])(next)) {
             return "a take left the machine fresh";
           }
 
           expect(next.until).toBe(end);
           expect(next._tag).toBe(admitted.length === msg.policy.limit ? "full" : "open");
 
-          if (next._tag === "open") {
+          if (Rate.Model.isAnyOf(["open"])(next)) {
             expect(next.used).toBe(admitted.length);
           }
         }

@@ -64,14 +64,14 @@ it.prop(
     const tasks = items.map((item) => taskFor({ ...item, matching: true }));
 
     const subjects = tasks.flatMap((j) =>
-      j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
+      State.isAnyOf(["absent"])(j.state) ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );
 
     for (const subject of [{ key, process }, ...subjects]) {
       for (const values of [tasks, [...tasks, ...tasks]]) {
         const wanted = values.filter(
           (j) =>
-            j.state._tag !== "absent" &&
+            !State.isAnyOf(["absent"])(j.state) &&
             OPEN.includes(j.state._tag) &&
             j.state.request.target === subject.key &&
             j.state.request.process === subject.process,
@@ -93,18 +93,18 @@ it.prop(
     const task = taskFor(item);
     const state = task.state;
 
-    if (state._tag === "absent") {
+    if (State.isAnyOf(["absent"])(state)) {
       return;
     }
 
     const identity = { process: state.request.process, key: state.request.target };
     expect(TaskAccess.owns(task, identity)).toBe(
-      state._tag === "requested" || state.assignment.executor.key === identity.key,
+      State.isAnyOf(["requested"])(state) || state.assignment.executor.key === identity.key,
     );
     expect(TaskAccess.owns(task, { ...identity, key: `${identity.key}x` })).toBe(false);
     expect(TaskAccess.owns(task, { ...identity, process: `${identity.process}x` })).toBe(false);
 
-    if (state._tag !== "requested") {
+    if (!State.isAnyOf(["requested"])(state)) {
       expect(TaskAccess.owns(task, { ...identity, execution: state.assignment.execution })).toBe(
         state.assignment.executor.key === identity.key,
       );

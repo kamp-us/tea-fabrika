@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
+import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { Effect } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
@@ -175,7 +176,7 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
 
   for (;;) {
     const pending = await Effect.runPromise(outbox.pending.pipe(Effect.provide(NodeServices.layer)));
-    const stopped = pending.find((event) => event._tag === "braked");
+    const stopped = pending.find(BrainEvent.isAnyOf(["braked"]));
 
     if (stopped !== undefined) {
       throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
@@ -315,7 +316,7 @@ describe("P12 local brain life", () => {
       const until = performance.now() + 10_000;
       let pending = await read();
 
-      while (!pending.some((event) => event._tag === "braked") && performance.now() < until) {
+      while (!pending.some(BrainEvent.isAnyOf(["braked"])) && performance.now() < until) {
         await pause();
         pending = await read();
       }

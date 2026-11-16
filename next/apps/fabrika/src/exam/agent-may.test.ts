@@ -399,7 +399,7 @@ it.effect.prop(
             const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
             const change = Schema.decodeSync(Schema.fromJsonString(Change))(text);
 
-            return change._tag === "added"
+            return Change.isAnyOf(["added"])(change)
               ? yield* w.door.grant({ text, armored: yield* Effect.orDie(w.root.sign(text)) })
               : yield* w.door.grant(input);
           }),

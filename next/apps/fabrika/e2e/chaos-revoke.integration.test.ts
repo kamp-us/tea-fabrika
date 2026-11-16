@@ -5,7 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Clock, Effect, Exit, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -15,7 +15,7 @@ import { programs } from "../src/table.ts";
 import { Outcome } from "@demlik/tea";
 import { expect, it } from "@effect/vitest";
 import { chaos } from "@kampus/chaos";
-import { Chaos, type Handler } from "@kampus/libfabrika";
+import { Chaos, ChaosMachine, type Handler } from "@kampus/libfabrika";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Ledger, type LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
@@ -493,7 +493,7 @@ it.live(
             hold("p90.status"),
             (answer) =>
               Schema.is(Schema.TaggedStruct("ok", { result: RevokeHold.Model }))(answer) &&
-              answer.result._tag === "held",
+              RevokeHold.Model.isAnyOf(["held"])(answer.result),
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });
         // Nothing has been written yet. The real request has already passed online membership.
@@ -518,7 +518,7 @@ it.live(
           schedule = draw.schedule;
           most++;
 
-          if (draw.fault._tag === "revoke_key") {
+          if (Chaos.Fault.isAnyOf(["revoke_key"])(draw.fault)) {
             break;
           }
         }
@@ -530,7 +530,7 @@ it.live(
           Effect.gen(function* () {
             const request = yield* Schema.decodeUnknownEffect(Schema.toType(Chaos.Fire))(raw);
 
-            if (request.fault._tag !== "revoke_key") {
+            if (!Chaos.Fault.isAnyOf(["revoke_key"])(request.fault)) {
               return Outcome.ok(Chaos.Fired.cases.refused.make({ reason: "off" }));
             }
 
@@ -540,7 +540,7 @@ it.live(
             const saved = Schema.decodeSync(chaos.state.schema)(model.model);
             expect(saved.phase._tag).toBe("checking");
 
-            if (saved.phase._tag !== "checking") {
+            if (!ChaosMachine.Model.fields.phase.isAnyOf(["checking"])(saved.phase)) {
               return yield* Effect.die(new Error("the revoke was not saved before firing"));
             }
 
@@ -606,7 +606,7 @@ it.live(
         expect(yield* hold("p90.release")).toMatchObject({ result: { _tag: "released", process: pid } });
         const queued = yield* Fiber.join(delayed);
 
-        if (queued._tag === "Success") {
+        if (Exit.isSuccess(queued)) {
           expect(queued.value.result).not.toMatchObject({ _tag: "accepted" });
           expect(queued.value.error).toBeDefined();
         }
@@ -615,7 +615,7 @@ it.live(
           .call("process.send", input("old-ignored-close", "also-must-not-land"))
           .pipe(Effect.exit);
 
-        if (late._tag === "Success") {
+        if (Exit.isSuccess(late)) {
           expect(late.value.result).not.toMatchObject({ _tag: "accepted" });
           expect(late.value.error).toBeDefined();
         }

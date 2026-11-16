@@ -25,7 +25,7 @@ import { Referee } from "@kampus/libfabrika/ledger/Referee";
 import * as RefereeSql from "@kampus/libfabrika/ledger/RefereeSql";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Command, type Result } from "@kampus/libfabrika/tasks/Task";
+import { Command, type Result, State } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import * as TasksLedger from "@kampus/libfabrika/tasks/TasksLedger";
 import { fcTypeId } from "@kampus/libfabrika/tasks/TasksTest";
@@ -58,7 +58,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
+import { Effect, Exit, Layer, Match, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
@@ -336,11 +336,11 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
-          if (answer._tag === "parked") {
+          if (Answer.isAnyOf(["parked"])(answer)) {
             return Waited.cases.parked.make({});
           }
 
-          if (answer._tag === "ok") {
+          if (Answer.isAnyOf(["ok"])(answer)) {
             const { rev } = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result);
 
             return Waited.cases.ready.make({ rev });
@@ -353,26 +353,27 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
           ? Effect.flatMap(connected, (id) =>
               Effect.map(b.d.initialize(id, params, { url: ORIGIN, tab, name }), (checked) => ({ id, checked })),
             ).pipe(
-              Effect.map(({ id, checked }) => {
-                if (checked._tag === "refused") {
-                  return checked;
-                }
+              Effect.map(({ id, checked }) =>
+                Match.valueTags(checked, {
+                  refused: (refused) => refused,
+                  online: (checked) => {
+                    attached = Attached.cases.online.make({
+                      client: id,
+                      identity: checked.identity,
+                      version: checked.version,
+                      waits: [],
+                      watching: false,
+                      busy: false,
+                      has: checked.hello.has,
+                      ...(checked.hello.build === undefined ? {} : { build: checked.hello.build }),
+                    });
 
-                attached = Attached.cases.online.make({
-                  client: id,
-                  identity: checked.identity,
-                  version: checked.version,
-                  waits: [],
-                  watching: false,
-                  busy: false,
-                  has: checked.hello.has,
-                  ...(checked.hello.build === undefined ? {} : { build: checked.hello.build }),
-                });
-
-                return Answer.cases.ok.make({
-                  result: { identity: checked.identity, version: checked.version, ping: checked.ping },
-                });
-              }),
+                    return Answer.cases.ok.make({
+                      result: { identity: checked.identity, version: checked.version, ping: checked.ping },
+                    });
+                  },
+                }),
+              ),
               Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
             )
           : Effect.flatMap(connected, (id) => b.d.route(id, method, params, READER)).pipe(
@@ -501,9 +502,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
       const busy = new Set(
         tasks.flatMap((task) =>
-          task.state._tag === "absent" || task.state._tag === "finished" || task.state._tag === "collected"
-            ? []
-            : [task.state.request.process],
+          State.isAnyOf(["absent", "finished", "collected"])(task.state) ? [] : [task.state.request.process],
         ),
       );
 
@@ -560,7 +559,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     const finished = () =>
       Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
-        Effect.map((tasks) => tasks.every((task) => task.state._tag === "finished")),
+        Effect.map((tasks) => tasks.every((task) => State.isAnyOf(["finished"])(task.state))),
       );
 
     for (let i = 0; i < 300 && !(yield* finished()); i++) {
@@ -572,7 +571,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     for (const id of focus === "E1" ? requested : []) {
       const task = yield* b.tasks((j) => j.read(id)).pipe(Effect.orDie);
       expect(task.state._tag, `E1: ${id} ends finished`).toBe("finished");
-      const result: Result | null = task.state._tag === "finished" ? task.state.result : null;
+      const result: Result | null = State.isAnyOf(["finished"])(task.state) ? task.state.result : null;
       expect(result, `E1: ${id} ends with the result its journal held`).toEqual(results.get(id));
       expect(runs.get(id) ?? 0, `E1: ${id}'s command ran at most once`).toBeLessThanOrEqual(1);
       done.add(result?._tag === "unknown" ? "ended:unknown" : "ended:result");

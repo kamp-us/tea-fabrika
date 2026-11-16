@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -277,15 +278,18 @@ describe("chain after the merge (p86 and p89)", () => {
         const bad = structuredClone(rows);
         const link: Record<string, unknown> = bad[at]!.attested[0]!;
 
-        if (mutation._tag === "cause") {
-          if (!mutation.keepParent) {
-            delete link.parent;
-          }
+        Match.valueTags(mutation, {
+          cause: ({ cause, keepParent }) => {
+            if (!keepParent) {
+              delete link.parent;
+            }
 
-          link.cause = mutation.cause;
-        } else {
-          delete link[mutation.field];
-        }
+            link.cause = cause;
+          },
+          drop: ({ field }) => {
+            delete link[field];
+          },
+        });
 
         log(r, bad);
         const out = r.run(["chain", "--squash", squash]);

@@ -3,7 +3,15 @@
 // into done; retry interrupted fire; leak a marker into each saved answer/view/report/reason.
 import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
+import {
+  Chaos,
+  ChaosMachine,
+  type Handler,
+  type Incoming,
+  Nemesis,
+  type ProgramRunner,
+  type Update,
+} from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
@@ -95,6 +103,8 @@ const now = () => Effect.succeed(Outcome.ok(100));
 const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.ok));
 
 const phase = (raw: unknown) => Schema.decodeUnknownSync(chaos.state.schema)(raw);
+
+const Phase = ChaosMachine.Model.fields.phase;
 
 const target = (process: string) =>
   Chaos.Target.make({
@@ -334,7 +344,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   const savedPhase = observed.model.phase;
                   expect(["active", "checking"]).toContain(savedPhase._tag);
 
-                  if (savedPhase._tag !== "active" && savedPhase._tag !== "checking") {
+                  if (!Phase.isAnyOf(["active", "checking"])(savedPhase)) {
                     return yield* Effect.die(new Error("fire began before the experiment was saved"));
                   }
 
@@ -462,7 +472,7 @@ export const suite = (open: Open, checklist: unknown) =>
                     const model = phase((yield* world.snapshot(NAME)).model);
                     expect(model.phase._tag).toBe("active");
 
-                    if (model.phase._tag !== "active") {
+                    if (!Phase.isAnyOf(["active"])(model.phase)) {
                       return yield* Effect.die(new Error("an unanswered fault blocked the remaining schedule"));
                     }
 
@@ -498,7 +508,7 @@ export const suite = (open: Open, checklist: unknown) =>
             );
             expect(chaos.wake(final)).toBeNull();
 
-            if (final.phase._tag === "idle" || final.phase._tag === "starting" || final.phase._tag === "stopped") {
+            if (Phase.isAnyOf(["idle", "starting", "stopped"])(final.phase)) {
               return yield* Effect.die(new Error("the experiment lost its history"));
             }
 
@@ -618,7 +628,7 @@ export const suite = (open: Open, checklist: unknown) =>
               while (true) {
                 const model = phase((yield* world.snapshot(NAME)).model);
 
-                if (model.phase._tag !== "active" || model.phase.experiment.ordinal > through) {
+                if (!Phase.isAnyOf(["active"])(model.phase) || model.phase.experiment.ordinal > through) {
                   return;
                 }
 
@@ -699,12 +709,8 @@ export const suite = (open: Open, checklist: unknown) =>
                   expect(after, "an old fire and its old check cannot settle the current experiment").toEqual(current);
                 } else {
                   if (
-                    current.phase._tag === "idle" ||
-                    current.phase._tag === "starting" ||
-                    current.phase._tag === "stopped" ||
-                    after.phase._tag === "idle" ||
-                    after.phase._tag === "starting" ||
-                    after.phase._tag === "stopped"
+                    Phase.isAnyOf(["idle", "starting", "stopped"])(current.phase) ||
+                    Phase.isAnyOf(["idle", "starting", "stopped"])(after.phase)
                   ) {
                     return yield* Effect.die(new Error("the delayed answer lost the experiment"));
                   }

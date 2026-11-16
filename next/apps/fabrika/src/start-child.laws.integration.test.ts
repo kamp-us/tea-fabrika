@@ -12,7 +12,20 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import {
+  Clock,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Match,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+} from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -586,14 +599,18 @@ const storageCall = Effect.fnUntraced(function* (
     prepared = Result.isFailure(failed) && fixture.hit();
   } else if (path !== "fresh") {
     const started = yield* Effect.promise(() => runtime.runPromise(start));
-    prepared = started._tag === "ok" && started.value._tag === "started";
+    const fresh = Match.valueTags(started, {
+      ok: ({ value }) => (Started.isAnyOf(["started"])(value) ? value : null),
+      ChildrenError: () => null,
+    });
+    prepared = fresh !== null;
 
-    if (started._tag !== "ok" || started.value._tag !== "started") {
+    if (fresh === null) {
       return yield* Effect.die("child was not started");
     }
 
-    pid = started.value.process;
-    rev = started.value.rev;
+    pid = fresh.process;
+    rev = fresh.rev;
 
     if (path === "migration") {
       // A table from before the pending column held delivered starts only: each start was
@@ -1010,7 +1027,9 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         ).toBe("Some");
         expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
-        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        const lines = (await facts(`processes/${ask.name}`)).filter((fact): boolean =>
+          Predicate.isTagged(fact, "started"),
+        );
         expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
           { requester: { process: starter } },
         ]);
@@ -1157,7 +1176,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const [restarted] = await until(
         "one restarted fact after the child's throw",
-        async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
+        async () => (await facts("processes/child:1")).filter((fact): boolean => Predicate.isTagged(fact, "restarted")),
         (rows) => rows.length >= 1,
       );
 
@@ -1191,15 +1210,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program keeps its nonzero count",
       ).toEqual(peerView.result.view);
       expect(
-        (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
+        (await facts("processes/starter:1")).filter((fact): boolean => Predicate.isTagged(fact, "restarted")),
         "L10: the starter's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/counter:1")).filter((fact) => fact._tag === "restarted"),
+        (await facts("processes/counter:1")).filter((fact): boolean => Predicate.isTagged(fact, "restarted")),
         "L10: another program's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        (await facts("processes/child:boot")).filter((fact): boolean => Predicate.isTagged(fact, "restarted")),
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });
@@ -1230,7 +1249,7 @@ describe("Desk S1: start and stop refusals decode by name", () => {
     fc.assert(
       fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
         const decoded = Schema.decodeOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
-        expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
+        expect(Option.getOrNull(decoded), `L4: ${reason} decodes by name`).toBe(reason);
         expect(
           Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),
           `L4: ${JSON.stringify(other)} is no refusal`,

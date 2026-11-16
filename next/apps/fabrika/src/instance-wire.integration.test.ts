@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Match, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -705,7 +705,11 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
     );
 
     return reply === null ? { _tag: "cut" } : { _tag: "accepted", placing: placing(reply) };
-  }).pipe(Effect.tap((settled) => (settled._tag === "accepted" ? Deferred.succeed(answered, undefined) : Effect.void)));
+  }).pipe(
+    Effect.tap((settled) =>
+      Match.valueTags(settled, { accepted: () => Deferred.succeed(answered, undefined), cut: () => Effect.void }),
+    ),
+  );
 
 /** Waits, with `ledger.wait` after the last rev seen, for a `restarted {after}` row. None in WAIT fails
  *  the test with the tags it saw, so a missing restart is a failure, never a hang. */
@@ -1198,9 +1202,7 @@ describe("P12 real dev.ts wire", () => {
           const now = placing(reply);
           const was = before[n]!;
 
-          if (was._tag === "accepted") {
-            expect(now).toEqual(was.placing);
-          }
+          Match.valueTags(was, { accepted: ({ placing }) => expect(now).toEqual(placing), cut: () => undefined });
         }
 
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
@@ -1223,19 +1225,22 @@ describe("P12 real dev.ts wire", () => {
           (row) => (row.body as { after?: string }).after === pid,
         );
 
-        if (moment._tag === "between") {
-          // The kill missed every step: every resend and the view were accepted on the first try.
-          expect(refused).toEqual([]);
-          expect(restarted).toEqual([]);
-          expect(live).toBe(pid);
-        } else {
-          // The kill cut a step: one call was refused, one restart followed, and its one retry was accepted.
-          expect(refused.map((r) => r.call)).toHaveLength(1);
-          expect(refused[0]!.retry.error).toBeUndefined();
-          expect(restarted).toHaveLength(1);
-          expect(live).toBe((restarted[0]!.body as { process: string }).process);
-          expect(live).not.toBe(pid);
-        }
+        Match.valueTags(moment, {
+          between: () => {
+            // The kill missed every step: every resend and the view were accepted on the first try.
+            expect(refused).toEqual([]);
+            expect(restarted).toEqual([]);
+            expect(live).toBe(pid);
+          },
+          inside: () => {
+            // The kill cut a step: one call was refused, one restart followed, and its one retry was accepted.
+            expect(refused.map((r) => r.call)).toHaveLength(1);
+            expect(refused[0]!.retry.error).toBeUndefined();
+            expect(restarted).toHaveLength(1);
+            expect(live).toBe((restarted[0]!.body as { process: string }).process);
+            expect(live).not.toBe(pid);
+          },
+        });
 
         const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
         expect(starts).toHaveLength(2);

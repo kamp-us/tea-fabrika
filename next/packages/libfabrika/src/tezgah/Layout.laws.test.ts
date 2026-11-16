@@ -20,6 +20,7 @@
 // The second property breaks a walked, tidy workspace in one named way and asks `check` to see it,
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
@@ -255,7 +256,7 @@ describe("Desk S2a L5: the layout stays tidy", () => {
         const w = Schema.decodeUnknownOption(Workspace)(bad);
 
         // A schema that refuses the broken shape outright is stricter still.
-        if (w._tag === "Some") {
+        if (Option.isSome(w)) {
           expect(Layout.check(w.value).length, `L5: check sees ${kind} in ${JSON.stringify(bad)}`).toBeGreaterThan(0);
         }
       }),

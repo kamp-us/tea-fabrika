@@ -3,7 +3,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Clock, Effect, FileSystem, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Match, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -65,6 +65,8 @@ const View = Schema.Struct({
     Schema.TaggedStruct("running", { due: Schema.Finite, period: Schema.Int }),
   ]),
 });
+
+const idle = (view: typeof View.Type.view) => Match.valueTags(view, { idle: () => true, running: () => false });
 
 it("scenario: L5 real local alarms write three beats and save the idle model's next wake", async () => {
   await Effect.runPromise(
@@ -204,14 +206,15 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
 
             return { before, alarm, after };
           }),
-          ({ before, after }) => before.view._tag === "idle" && after.view._tag === "idle" && before.rev === after.rev,
+          ({ before, after }) => idle(before.view) && idle(after.view) && before.rev === after.rev,
         );
 
         expect(stable.before.view._tag).toBe("idle");
 
-        if (stable.before.view._tag === "idle") {
-          expect(stable.alarm).toBe(stable.before.view.next);
-        }
+        Match.valueTags(stable.before.view, {
+          idle: ({ next }) => expect(stable.alarm).toBe(next),
+          running: () => undefined,
+        });
       }).pipe(Effect.provide(localState()));
     }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
   );

@@ -6,8 +6,8 @@ import { NodeServices } from "@effect/platform-node";
 import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
-import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Effect, FileSystem, Path, Queue, Schema } from "effect";
+import { State, Task, Result } from "@kampus/libfabrika/tasks/Task";
+import { Effect, FileSystem, Match, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -306,7 +306,7 @@ it.live(
 
       expect(taken.task.state._tag).toBe("assigned");
 
-      if (taken.task.state._tag !== "assigned") {
+      if (!State.isAnyOf(["assigned"])(taken.task.state)) {
         return yield* Effect.die("take did not assign");
       }
 
@@ -368,12 +368,13 @@ it.live(
       ] as const) {
         const answer = yield* resumed.call(method, params).pipe(Effect.result);
 
-        if (answer._tag === "Success") {
-          no(answer.success);
-        } else {
-          expect(answer.failure).toBeInstanceOf(Closed);
-          expect(answer.failure).toMatchObject({ code: 4003 });
-        }
+        Match.valueTags(answer, {
+          Success: ({ success }) => no(success),
+          Failure: ({ failure }) => {
+            expect(failure).toBeInstanceOf(Closed);
+            expect(failure).toMatchObject({ code: 4003 });
+          },
+        });
       }
 
       yield* socket(url, hands, "revoked", false);
