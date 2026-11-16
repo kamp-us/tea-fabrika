@@ -3,8 +3,8 @@
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
-import * as Str from "effect/String";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";

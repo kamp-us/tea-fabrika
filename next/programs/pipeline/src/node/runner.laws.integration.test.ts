@@ -52,6 +52,7 @@ import {
   Stream,
   FileSystem,
   Path,
+  Option,
 } from "effect";
 import type { Redacted } from "effect";
 import { TestClock } from "effect/testing";

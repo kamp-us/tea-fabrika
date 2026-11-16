@@ -18,9 +18,9 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
-import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -305,17 +305,17 @@ describe("p92, every entry has every field: at the referee", () => {
 
       const rowBytes = (line: Line): number =>
         Arr.reduce(
-        [
-          "notes:1",
-          "w-1",
-          line.by,
-          line.for,
-          line.sentAt,
-          line.parent ?? "",
-          line.traceId,
-          line.build,
-          line._tag,
-          JSON.stringify(line.body),
+          [
+            "notes:1",
+            "w-1",
+            line.by,
+            line.for,
+            line.sentAt,
+            line.parent ?? "",
+            line.traceId,
+            line.build,
+            line._tag,
+            JSON.stringify(line.body),
           ],
           0,
           (n, text) => n + encoder.encode(text).length,

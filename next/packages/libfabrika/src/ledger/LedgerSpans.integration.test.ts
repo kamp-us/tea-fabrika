@@ -19,19 +19,19 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
 import * as Str from "effect/String";
-import * as Option from "effect/Option";
-import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -354,7 +354,9 @@ describe("p95, every call is one span, names and numbers only", () => {
           );
 
           expect(texts.length).toBeGreaterThan(0);
-          expect(Arr.filter(texts, (text) => Str.includes(BODY)(text) || Str.includes("sent-marker")(text))).toEqual([]);
+          expect(Arr.filter(texts, (text) => Str.includes(BODY)(text) || Str.includes("sent-marker")(text))).toEqual(
+            [],
+          );
           expect(Arr.filter(texts, (text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
           expect(
             Arr.map(
