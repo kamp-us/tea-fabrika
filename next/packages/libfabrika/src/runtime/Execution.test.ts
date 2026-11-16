@@ -148,7 +148,7 @@ describe("P13 split execution", () => {
           Effect.gen(function* () {
             for (const n of tape) {
               const mode = ["rpc", "decode", "checked", "ok"][n % 4]!;
-              const node = nodeExecution(declared);
+              const node = nodeExecution(declared, "node");
               const failure = yield* Effect.flip(node.step({ count: "invalid" }, { type: "inc" }));
               const rpc = async () => (mode === "checked" ? executionFailure(failure) : null);
               const remote = workerExecution({
@@ -217,7 +217,7 @@ describe("P12 Effect execution adapter", () => {
           Effect.runPromise(
             Effect.gen(function* () {
               const pure = yield* Effect.fromResult(stepper(declared));
-              const node: Execution = nodeExecution(declared);
+              const node: Execution = nodeExecution(declared, "node");
               // Independent pure implementation stays in P11. RPC introduces a genuine async boundary.
               const remote: Execution = workerExecution({
                 init: async (saved: unknown) => pure.init(saved),
@@ -226,7 +226,7 @@ describe("P12 Effect execution adapter", () => {
                 update: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.update(model, msg)),
                 audit: async (msg: unknown) => ({
                   _tag: "ok",
-                  value: await Effect.runPromise(nodeExecution(declared).audit(msg)),
+                  value: await Effect.runPromise(nodeExecution(declared, "node").audit(msg)),
                 }),
                 fold: async (model: unknown, msg: unknown) => pure.fold(model, msg),
                 upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),
@@ -255,7 +255,7 @@ describe("P12 Effect execution adapter", () => {
         (answer, reject, bad) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const node: Execution = nodeExecution(declared);
+              const node: Execution = nodeExecution(declared, "node");
               expect(Exit.isFailure(yield* Effect.exit(node.init({ count: bad })))).toBe(true);
               const rpc = reject ? rejectedRpc : async () => answer;
               const remote: Execution = workerExecution({

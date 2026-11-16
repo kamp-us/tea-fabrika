@@ -76,7 +76,7 @@ describe("P13 safe audit", () => {
     ([samples]) =>
       Effect.gen(function* () {
         const versions = new Map<string, number>();
-        const execution = nodeExecution(declared(metadata));
+        const execution = nodeExecution(declared(metadata), "node");
 
         for (const [n, sample] of samples.entries()) {
           const base = versions.get(sample.note) ?? 0;
@@ -94,7 +94,7 @@ describe("P13 safe audit", () => {
 
         // A program without an audit declaration records only the message type.
         const { audit: _audit, ...minimal } = declared(metadata);
-        expect(yield* nodeExecution(minimal).audit(samples[0]!)).toEqual({ type: "save" });
+        expect(yield* nodeExecution(minimal, "node").audit(samples[0]!)).toEqual({ type: "save" });
       }),
     { arbitrary: { seed: 119120, runs: 100 } },
   );
@@ -128,7 +128,7 @@ describe("P13 safe audit", () => {
                       : mode === "json"
                         ? declared(() => ({ hidden: 1n }), Schema.Unknown)
                         : declared(metadata);
-                const node = nodeExecution(program);
+                const node = nodeExecution(program, "node");
 
                 if (mode !== "rpc" && mode !== "reply") {
                   const direct = yield* Effect.exit(node.audit(mode === "decode" ? { ...input, base: body } : input));
@@ -185,7 +185,7 @@ describe("P13 safe audit", () => {
                 }
 
                 // Repair on the same input is the positive control for every failure edge.
-                expect(yield* nodeExecution(declared(metadata)).audit(input)).toEqual(metadata(input));
+                expect(yield* nodeExecution(declared(metadata), "node").audit(input)).toEqual(metadata(input));
                 versions.set(note, base + 1);
               }
 

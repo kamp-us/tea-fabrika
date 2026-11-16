@@ -788,7 +788,7 @@ const world = (
 
           const approval = id.startsWith(`${approvalCode.hash}/`),
             program = approval ? approvals : counter,
-            execution = nodeExecution(program);
+            execution = nodeExecution(program, "node");
           return {
             describe: async () => ({
               name: program.name,

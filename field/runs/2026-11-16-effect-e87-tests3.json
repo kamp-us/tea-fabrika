@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e87-tests3",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T02:07:42-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests round for the last hit of judgment slice E87 of the Effect-check sweep (missingPipeableSignature), in next/, at cc2a218. The merge session ruled that nodeExecution (next/packages/libfabrika/src/runtime/Execution.ts:252, today (declared: unknown, build = \"node\")) gets build required and becomes Function.dual(2), with every one-argument caller passing \"node\". This round changes only the callers in exam paths: 34 one-argument calls now pass \"node\" as the second argument, by hand with the Edit tool, in seven test files: libfabrika runtime/ErrorCause.test.ts (22), runtime/Audit.test.ts (4), runtime/Execution.test.ts (4), node/IsolateUsage.integration.test.ts (2), and apps/fabrika src/runtime-quotas.laws.test.ts, src/door.integration.test.ts and src/runtime-recovery.laws.integration.test.ts (1 each). Execution.test.ts:308 already passed \"build-b\". The default is \"node\", so each call means what it meant, and no law's assertion changed. No product file changed. The product callers left for the build already pass two arguments: runtime/Entry.ts:151 nodeExecution(programs[name], build) and cloudflare/box.ts:26 nodeExecution(declared, build); index.ts:68 re-exports the name. No caller passes nodeExecution as a callback. Recount with only this check at error through --lspconfig on the libfabrika and apps/fabrika tsconfigs: 0 hits in exam paths in this slice's five libfabrika folders (runtime, cloudflare, processes, settings, ledger), 1 product hit there (Execution.ts:252, the build's). Across both projects the check still finds 80 hits in exam paths and 48 more product hits, all in folders other missingPipeableSignature slices own (for example transport/Sshsig.test-support.ts, tasks/TasksTest.ts, apps/fabrika e2e and exam).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at cc2a218 plus this change on Node 26.13.0, TYPESAFE_API_KEY unset, nice -n 15. Green: ErrorCause.test, Audit.test, Execution.test, runtime-quotas.laws.test (20 tests); door.integration and IsolateUsage.integration. Red, not from this change: runtime-recovery.laws.integration.test.ts 'T753 L16 real first/later process steps, recovery and successors keep the shared instance gate' times out at 60 s, alone with --maxWorkers=1 too, and times out the same way with this file's one changed line put back to the branch head's one-argument call; its 12 other tests pass. pnpm --filter @kampus/libfabrika typecheck and pnpm --filter @kampus/fabrika typecheck both green. A check run once and undone: with Execution.ts's build made a required string, both typechecks stay green, so every caller fits the build's signature; with runtime-quotas.laws.test.ts:417 put back to one argument as well, the app typecheck fails with TS2554 Expected 2 arguments, but got 1. Both edits restored, and git status shows only the seven test files and this row. pnpm format only rewrapped two long lines. No lock line, no tsconfig change, no disable comment. The full pnpm typecheck was not run.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika typecheck over the exam-path callers of nodeExecution",
+      "plant": "Execution.ts build made a required string, and runtime-quotas.laws.test.ts:417 back to nodeExecution(counter)",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

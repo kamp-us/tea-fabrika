@@ -121,7 +121,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
     fc.record({ call: fc.constantFrom("init", "step", "fold"), bad: notInt }),
     ({ call, bad }) =>
       Effect.gen(function* () {
-        const run = nodeExecution(program({}));
+        const run = nodeExecution(program({}), "node");
         const saved = { count: bad };
         const work =
           call === "init"
@@ -152,7 +152,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
           ...(model === undefined ? {} : { model: { count: model } }),
           ...(view === undefined ? {} : { view: { count: view } }),
         };
-        const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, { type: "inc" }));
+        const error = yield* Effect.flip(nodeExecution(program(faults), "node").step({ count }, { type: "inc" }));
         expect(error.reason, "the reason stays the one the check returned").toBe("step");
         expect(holdsSchemaError(error.cause), "the cause holds the failed results").toBe(true);
       }),
@@ -169,7 +169,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
     ({ count, field, bad }) =>
       Effect.gen(function* () {
         const refusal = { ...Refusal, [field]: bad };
-        const error = yield* Effect.flip(nodeExecution(program({ refusal })).step({ count }, { type: "inc" }));
+        const error = yield* Effect.flip(nodeExecution(program({ refusal }), "node").step({ count }, { type: "inc" }));
         expect(error.reason).toBe("step");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
       }),
@@ -189,7 +189,7 @@ describe("T695, saved state keeps what failed", () => {
     ({ field, bad }) =>
       Effect.gen(function* () {
         const saved = { ...row(2, { count: 1 }), [field]: field === "build" && bad === -1 ? "" : bad };
-        const error = yield* Effect.flip(nodeExecution(program({})).upgrade(saved));
+        const error = yield* Effect.flip(nodeExecution(program({}), "node").upgrade(saved));
         expect(error.reason).toBe("saved_state");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
       }),
@@ -201,7 +201,7 @@ describe("T695, saved state keeps what failed", () => {
     fc.record({ ahead: fc.integer({ min: 1, max: 1_000 }), count: fc.integer() }),
     ({ ahead, count }) =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(nodeExecution(program({})).upgrade(row(2 + ahead, { count })));
+        const error = yield* Effect.flip(nodeExecution(program({}), "node").upgrade(row(2 + ahead, { count })));
         expect(error.reason).toBe("saved_state");
         expect(error.cause).toBeUndefined();
       }),
@@ -213,7 +213,7 @@ describe("T695, saved state keeps what failed", () => {
     fc.record({ failure: failures, count: fc.integer() }),
     ({ failure, count }) =>
       Effect.gen(function* () {
-        const run = nodeExecution(program({ upgrade: { throws: failure } }));
+        const run = nodeExecution(program({ upgrade: { throws: failure } }), "node");
         const error = yield* Effect.flip(run.upgrade(row(1, { count })));
         expect(error.reason).toBe("saved_state");
         expect(error.cause).toBe(failure);
@@ -226,7 +226,7 @@ describe("T695, saved state keeps what failed", () => {
     fc.record({ bad: notInt }),
     ({ bad }) =>
       Effect.gen(function* () {
-        const run = nodeExecution(program({ upgrade: { gives: { count: bad } } }));
+        const run = nodeExecution(program({ upgrade: { gives: { count: bad } } }), "node");
         const error = yield* Effect.flip(run.upgrade(row(1, { count: 1 })));
         expect(error.reason).toBe("saved_state");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
@@ -250,7 +250,7 @@ describe("T695, a declaration that does not load keeps why", () => {
         expect(Result.isFailure(expected)).toBe(true);
         const error = yield* Effect.flip<unknown, ProgramDown, never>(
           call === "execution"
-            ? nodeExecution(declared).init(null)
+            ? nodeExecution(declared, "node").init(null)
             : Effect.provide(
                 ProgramLoader.use((loader) => loader.load("broken")),
                 ProgramLoader.layer({ broken: declared }, {}),
@@ -281,15 +281,17 @@ const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };
 
 /** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
 const causedAt = {
-  saved_model: (bad: unknown) => nodeExecution(program({})).init({ count: bad }),
-  step_model: (bad: unknown) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),
-  step_view: (bad: unknown) => nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  saved_model: (bad: unknown) => nodeExecution(program({}), "node").init({ count: bad }),
+  step_model: (bad: unknown) =>
+    nodeExecution(program({ model: { count: bad } }), "node").step({ count: 1 }, { type: "inc" }),
+  step_view: (bad: unknown) =>
+    nodeExecution(program({ view: { count: bad } }), "node").step({ count: 1 }, { type: "inc" }),
   refusal: (bad: unknown) =>
-    nodeExecution(program({ refusal: { ...Refusal, reason: bad } })).step({ count: 1 }, { type: "inc" }),
-  saved_row: (bad: unknown) => nodeExecution(program({})).upgrade({ ...row1, after: bad }),
-  upgrade_throws: (bad: unknown) => nodeExecution(program({ upgrade: { throws: bad } })).upgrade(row1),
-  upgrade_gives: (bad: unknown) => nodeExecution(program({ upgrade: { gives: { count: bad } } })).upgrade(row1),
-  load: (bad: unknown) => nodeExecution({ name: bad, v: "1" }).init(null),
+    nodeExecution(program({ refusal: { ...Refusal, reason: bad } }), "node").step({ count: 1 }, { type: "inc" }),
+  saved_row: (bad: unknown) => nodeExecution(program({}), "node").upgrade({ ...row1, after: bad }),
+  upgrade_throws: (bad: unknown) => nodeExecution(program({ upgrade: { throws: bad } }), "node").upgrade(row1),
+  upgrade_gives: (bad: unknown) => nodeExecution(program({ upgrade: { gives: { count: bad } } }), "node").upgrade(row1),
+  load: (bad: unknown) => nodeExecution({ name: bad, v: "1" }, "node").init(null),
 } as const;
 
 // C7, Program.ts:379 and Runner.ts:742. A ProgramDown's class is the code-defined summary that
@@ -333,17 +335,17 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
 
     switch (call) {
       case "init":
-        return nodeExecution(seenProgram({})).init(saved);
+        return nodeExecution(seenProgram({}), "node").init(saved);
       case "step":
-        return nodeExecution(seenProgram({})).step(saved, inc);
+        return nodeExecution(seenProgram({}), "node").step(saved, inc);
       case "fold":
-        return nodeExecution(seenProgram({})).fold(saved, inc);
+        return nodeExecution(seenProgram({}), "node").fold(saved, inc);
       case "upgrade_row":
-        return nodeExecution(seenProgram({})).upgrade({ v: 1, build: seen, model: null, after: 0 });
+        return nodeExecution(seenProgram({}), "node").upgrade({ v: 1, build: seen, model: null, after: 0 });
       case "upgrade_gives":
-        return nodeExecution(seenProgram({ upgrade: { gives: saved } })).upgrade({ ...row1, model: saved });
+        return nodeExecution(seenProgram({ upgrade: { gives: saved } }), "node").upgrade({ ...row1, model: saved });
       case "encode":
-        return nodeExecution(seenProgram({ model: saved })).step({ count: 0, seen: {} }, inc);
+        return nodeExecution(seenProgram({ model: saved }), "node").step({ count: 0, seen: {} }, inc);
     }
   };
 

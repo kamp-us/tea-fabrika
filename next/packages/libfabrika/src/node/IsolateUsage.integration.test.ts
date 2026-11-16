@@ -179,7 +179,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     const program = fixture(() => {
       executions++;
     });
-    const execution = nodeExecution(program);
+    const execution = nodeExecution(program, "node");
     // Only Worker Loader transport is doubled; the runner uses the real loader and RPC decoder.
     const rpc = {
       describe: () =>
@@ -510,7 +510,10 @@ it.effect(
             const values = new Map<string, unknown>([["descriptor", saved]]);
             const bound = new Map<object, IsolateUsageTest.Props>();
             const seen: Array<{ key: string; tails: ReadonlyArray<object> | undefined }> = [];
-            const execution = nodeExecution(fixture(() => {}));
+            const execution = nodeExecution(
+              fixture(() => {}),
+              "node",
+            );
             const loopbacks = {
               IsolateTail: ({ props }: { props: IsolateUsageTest.Props }) => {
                 const tail = { fetch: () => Promise.resolve(new Response()) };

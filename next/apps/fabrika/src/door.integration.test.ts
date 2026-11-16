@@ -617,7 +617,7 @@ describe("P13 selected input recording", () => {
 
                 return { type: "comment", ticket: m.ticket };
               });
-              const execution = nodeExecution(program);
+              const execution = nodeExecution(program, "node");
               const audit = (_target: string, input: unknown) => {
                 const checked = Schema.decodeUnknownSync(Input.cases.comment)(input);
                 return execution.audit({

@@ -414,7 +414,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           }
 
           // The app's own bootstrap, `fabrika/counter`, and the founder's tezgah, which no law here drives.
-          const execution = nodeExecution(counter);
+          const execution = nodeExecution(counter, "node");
           return {
             describe: async () => ({
               name: counter.name,
