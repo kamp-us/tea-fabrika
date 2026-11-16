@@ -17,7 +17,7 @@ export const layer = (dir: string): Layer.Layer<Git, never, ChildProcessSpawner.
           const ran = yield* run("git", ["-C", dir, ...args], dir);
 
           if (ran.code !== 0) {
-            return yield* new GitError({ command: args[0] ?? "", reason: `exited ${ran.code}: ${lastLine(ran)}` });
+            return yield* GitError.make({ command: args[0] ?? "", reason: `exited ${ran.code}: ${lastLine(ran)}` });
           }
 
           return ran.out;
@@ -25,7 +25,7 @@ export const layer = (dir: string): Layer.Layer<Git, never, ChildProcessSpawner.
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         (effect, args) =>
           Effect.catchTag(effect, "PlatformError", (e) =>
-            Effect.fail(new GitError({ command: args[0] ?? "", reason: e.message })),
+            Effect.fail(GitError.make({ command: args[0] ?? "", reason: e.message })),
           ),
       );
 
