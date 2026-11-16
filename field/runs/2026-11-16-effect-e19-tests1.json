@@ -28,5 +28,29 @@
       "result": "red"
     }
   ],
-  "step": "tests"
+  "step": "tests",
+  "report": {
+    "check": "unnecessaryFailYieldableError",
+    "met": 9,
+    "fixedByQuickFix": 0,
+    "handEdits": 3,
+    "left": 2,
+    "waitingOn1366": 4,
+    "handEditFiles": [
+      "next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts",
+      "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts",
+      "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts"
+    ],
+    "leftFiles": [
+      ".agents/skills/lead/scripts/chain.ts:1278",
+      "next/packages/tuval/src/browser/key.ts:155"
+    ],
+    "waitingFiles": [
+      "next/packages/libfabrika/src/runtime/Runner.ts:2773",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:561",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:609",
+      "next/packages/libfabrika/src/telemetry/Sink.ts:620"
+    ],
+    "pr": "1455 opened before the shape change; left as it is"
+  }
 }
