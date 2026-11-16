@@ -582,8 +582,8 @@ describe("P16 cleanup and recording", () => {
             fc.asyncProperty(values, async (value) => {
               const f = fixture("View", value);
               previous(f, value);
-              const entered = Effect.runSync(Deferred.make<void>()),
-                release = Effect.runSync(Deferred.make<void>());
+              const entered = Deferred.makeUnsafe<void>(),
+                release = Deferred.makeUnsafe<void>();
               let fired = false;
               const builder = await load();
               const task = Effect.gen(function* () {
@@ -673,7 +673,7 @@ describe("P16 cleanup and recording", () => {
             async (value, delays) => {
               const f = fixture("View", value),
                 good = `last-good-${value}`,
-                entered = Effect.runSync(Deferred.make<void>()),
+                entered = Deferred.makeUnsafe<void>(),
                 pending: Fiber.Fiber<unknown, unknown>[] = [];
               previous(f, good);
               let fired = false,
@@ -756,7 +756,7 @@ describe("P16 cleanup and recording", () => {
             const native = await vi.importActual<Roll>("rolldown");
             let closed = false,
               opened = false;
-            const entered = Effect.runSync(Deferred.make<void>());
+            const entered = Deferred.makeUnsafe<void>();
             vi.doMock("rolldown", () => ({
               ...native,
               rolldown: async (options: RolldownOptions) => {
@@ -817,7 +817,7 @@ describe("P16 cleanup and recording", () => {
           previous(f, value);
           const native = await vi.importActual<Roll>("rolldown"),
             closed: boolean[] = [];
-          const entered = Effect.runSync(Deferred.make<void>());
+          const entered = Deferred.makeUnsafe<void>();
           let fired = false;
           vi.doMock("rolldown", () => ({
             ...native,

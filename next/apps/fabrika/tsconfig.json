@@ -11,14 +11,15 @@
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
           // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
-          // (E8).
+          // (E8), preferUnsafeConstructor (E16).
           {
             "include": ["**/*.ts", "**/*.tsx"],
             "options": {
               "diagnosticSeverity": {
                 "schemaNumber": "error",
                 "preferTypedSchemaDecoder": "error",
-                "unnecessaryArrowBlock": "error"
+                "unnecessaryArrowBlock": "error",
+                "preferUnsafeConstructor": "error"
               }
             }
           },

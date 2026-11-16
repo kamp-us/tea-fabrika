@@ -71,7 +71,7 @@ describe("P16 real browser from a copied one-file build", () => {
             oldHome = process.env.FABRIKA_HOME;
           process.env.FABRIKA_HOME = home;
           delete process.env.TYPESAFE_API_KEY;
-          const scope = Effect.runSync(Scope.make());
+          const scope = Scope.makeUnsafe();
           let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 
           try {
