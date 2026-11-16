@@ -767,7 +767,7 @@ describe("P16 cleanup and recording", () => {
                   generate: () => {
                     Effect.runSync(Deferred.succeed(entered, undefined));
                     return interrupt
-                      ? new Promise<RolldownOutput>(() => {})
+                      ? Effect.runPromise(Effect.never)
                       : Promise.reject(Error("planted generate failure"));
                   },
                   close: async () => {
@@ -834,7 +834,7 @@ describe("P16 cleanup and recording", () => {
                   fired = true;
                   Effect.runSync(Deferred.succeed(entered, undefined));
                   return interrupt
-                    ? new Promise<RolldownOutput>(() => {})
+                    ? Effect.runPromise(Effect.never)
                     : Promise.reject(new Error("planted private failure"));
                 },
                 close: async () => {

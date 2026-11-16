@@ -216,7 +216,13 @@ describe("P12 public Worker fetch", () => {
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
-        const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
+        const w = world(port, name, (reply) =>
+          Effect.runPromise(
+            Effect.callback<unknown>((resume) => {
+              held.push(() => resume(Effect.succeed(reply)));
+            }),
+          ),
+        );
         const answered: Array<number> = [];
         const first = order.map(() =>
           Effect.runPromise(fetch(w.request("/"), w.env, w.config)).then((response) => {
@@ -233,7 +239,7 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await new Promise((settle) => setTimeout(settle, 0));
+          await Effect.runPromise(Effect.yieldNow);
           expect(answered).toHaveLength(done + 1);
         }
 

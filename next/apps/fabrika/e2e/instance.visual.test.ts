@@ -28,7 +28,7 @@ const children: Array<ChildProcess> = [],
   ports: Array<Effect.Effect<void>> = [],
   browsers: Array<Browser> = [];
 
-const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+const pause = () => Effect.runPromise(Effect.sleep("25 millis"));
 
 afterEach(async () => {
   for (const b of browsers.splice(0)) {
@@ -38,7 +38,11 @@ afterEach(async () => {
   for (const c of children.splice(0)) {
     if (c.exitCode === null && c.signalCode === null) {
       c.kill("SIGTERM");
-      await new Promise<void>((done) => c.once("exit", () => done()));
+      await Effect.runPromise(
+        Effect.callback<void>((resume) => {
+          c.once("exit", () => resume(Effect.void));
+        }),
+      );
     }
   }
 
@@ -140,12 +144,14 @@ const driver = async (page: Page, url: string, tab: string) => {
         return concat(n, body);
       };
       const b64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
+      // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       const db = await new Promise<IDBDatabase>((done, fail) => {
         const open = indexedDB.open("p12-client", 1);
         open.onupgradeneeded = () => open.result.createObjectStore("keys");
         open.onsuccess = () => done(open.result);
         open.onerror = () => fail(open.error);
       });
+      // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       let pair = await new Promise<CryptoKeyPair | undefined>((done, fail) => {
         const get = db.transaction("keys").objectStore("keys").get("window");
         get.onsuccess = () => done(get.result);
@@ -154,6 +160,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 
       if (!pair) {
         pair = await crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]);
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         await new Promise<void>((done, fail) => {
           const tx = db.transaction("keys", "readwrite");
           tx.objectStore("keys").put(pair, "window");
@@ -196,6 +203,7 @@ const driver = async (page: Page, url: string, tab: string) => {
       let socket: WebSocket;
       const pending = new Map<number, (frame: any) => void>();
       const call = (method: string, params: unknown) =>
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         new Promise<any>((done) => {
           const id = ++serial;
           pending.set(id, done);
@@ -215,6 +223,7 @@ const driver = async (page: Page, url: string, tab: string) => {
           signed: await proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
         });
       const connect = () =>
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
           connections++;

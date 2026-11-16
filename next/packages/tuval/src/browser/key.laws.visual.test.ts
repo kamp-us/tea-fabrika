@@ -150,6 +150,7 @@ const stored = (page: Page) =>
       };
 
       for (const info of await indexedDB.databases()) {
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         const db = await new Promise<IDBDatabase>((ok, no) => {
           const open = indexedDB.open(info.name!);
           open.onsuccess = () => ok(open.result);
@@ -157,6 +158,7 @@ const stored = (page: Page) =>
         });
 
         for (const name of db.objectStoreNames) {
+          // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
           const all = await new Promise<Array<unknown>>((ok, no) => {
             const req = db.transaction(name, "readonly").objectStore(name).getAll();
             req.onsuccess = () => ok(req.result);

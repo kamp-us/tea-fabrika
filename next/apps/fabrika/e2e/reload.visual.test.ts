@@ -117,6 +117,7 @@ const driver = (p: Page, url: string, tab: string) =>
         let socket: WebSocket;
         const pending = new Map<number, (frame: unknown) => void>();
         const call = (method: string, params: unknown) =>
+          // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
           new Promise<any>((done) => {
             const id = ++serial;
             pending.set(id, done);
@@ -135,6 +136,7 @@ const driver = (p: Page, url: string, tab: string) =>
             sentAt: "2026-11-11T04:00:00.000Z",
             signed: await proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
           });
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         const first = await new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
           socket.onerror = () => fail(new Error("WebSocket failed"));

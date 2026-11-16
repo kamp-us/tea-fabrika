@@ -254,7 +254,7 @@ it.effect.prop(
       const waiting = {
         fetch: (_: Request, init?: RequestInit) => {
           Deferred.doneUnsafe(reached, Effect.succeed(init?.signal ?? undefined));
-          return new Promise<Response>(() => {});
+          return Effect.runPromise(Effect.never);
         },
       };
       const pending = yield* Effect.forkChild(
