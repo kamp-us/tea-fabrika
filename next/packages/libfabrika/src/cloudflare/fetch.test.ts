@@ -239,7 +239,9 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await Effect.runPromise(Effect.yieldNow);
+          // One timer turn, as the old `setTimeout(0)` was (Node runs a 0 ms timer at 1 ms), so a stray
+          // second answer has time to land. `Effect.sleep(0)` would be only `Effect.yieldNow`.
+          await Effect.runPromise(Effect.sleep("1 millis"));
           expect(answered).toHaveLength(done + 1);
         }
 

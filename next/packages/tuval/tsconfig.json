@@ -4,7 +4,19 @@
     // The window is React in a browser tab; its machines and their laws also run on Node.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // E54: a `new Promise` is an Effect here. At zero in the whole package, tests too.
+        "overrides": [
+          {
+            "include": ["src/**/*.ts", "src/**/*.tsx"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
