@@ -1,0 +1,29 @@
+# Merge session's calls on the Effect judgment digest (via the laptop lead, 2026-11-16), for the judgment integrator and slice continuations
+
+- Q1 to Q3 are settled by the 0565 amendment:
+  - Every real entry point gets a reasoned `strictEffectProvide:off` line: E30's 14, E58's `oxlint-plugins/parallel.ts:163`, E50's 15.
+  - Browser `page.evaluate` bodies take 0565's one-line exception.
+  - The lines and the lock land together in the one sweep PR, with E49's lib:runtime lock.
+  - extendsNativeError gets six reasoned lines.
+  - asyncFunction inside fast-check goes with 0579's `it.effect.prop` move (not this sweep).
+  - anyUnknownInErrorContext: the suite becomes generic over its error type.
+  - schemaSync waits on the product contracts.
+- Q4 (A): list the four `.github/ci` `.mjs` files by exact path in each lock's `exclude`, never a glob (they run before install; 0175).
+- Q5 follows 0560's order:
+  - no-effect-promise vs asyncFunction: `it.effect` with `Effect.tryPromise`.
+  - `fc.asyncProperty` gets no exception.
+  - no-raw-try-catch: `Result.try` or `Effect.try`; E31's 7 disable lines go back as code fixes.
+  - `effect-jsdocs.ts` is excluded by path (the Effect team's own copied code).
+  - E33 and E36: a reasoned line only where the code is right; otherwise fix the code.
+- Q6: E53's `CodeHost.ts:62` takes the pipe form.
+- Q7:
+  - Fix each of E30's other library hits; a Worker or Durable Object entry gets a reasoned line.
+  - E55: service-id and deterministicKeys swap together in one PR (0573, 0575).
+  - E49: move the process.env reads into the Effect programs; `dev.ts:74`'s DO_NOT_TRACK write gets a reasoned line.
+- Q8: split E42 by folder. `@effect/platform-node` goes into `next/programs/counter` as a `catalog:` devDependency, as `next/programs/pipeline` already has it.
+- E61 is fine, but use `"!effect/*"`, not `"!effect/**"`, so `effect/unstable/**` stays closed. Add a plant per banned module, in barrel and subpath form.
+- E35: keep the `drive.ts:1485` disable (a later ticket renames the state file's `why` key to `reason`).
+- 0592's override, PR 1494 and PR 1498 all edit the same `no-restricted-properties` option list: whichever lands later carries the others' entries.
+- E47: tooling uses subpath imports, not the barrel (the barrel costs about 250 ms per script start).
+- Field rows: E38 needs its missing run row; E56's `ended` time needs fixing.
+- E43 (owner, missingPipeableSignature): everywhere. All 135 remaining hits get `Function.dual`, as E43 did for 16 exports: lead scripts, test helpers, Layer constructors, comparators, app/program/window helpers. No class left out; the lock covers every folder the check reaches. Data-first callers unchanged. A function with an optional argument (like `Layout.rects`) decides by a predicate on the first argument, as E43 did. Split into folder slices if too big. Folds into the judgment integrator.
