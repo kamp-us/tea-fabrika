@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0215, 0209, 0214, 0562, 0563; body 8c7d6661405e
+Approved by the lead agent, builds 0215, 0209, 0214, 0562, 0563; body 05d0ea07f3e0
 Plancheck-Version: 3
 
 # Plan: the 97 `unknown` parameters in product code get a type, one Schema per wire value (ticket 1053)
@@ -327,6 +327,26 @@ each view notice carries its pid and its update unchanged, and the window laws t
 
 No host-only law: nothing here needs launchd, the real Electron app or the owner's Mac. Nothing new
 is a real-resource test.
+
+
+## Amendment, 2026-11-15: the waiting notice
+
+The tests step found a third value on `publish` that the plan missed. In
+`next/packages/libfabrika/src/cloudflare/connection.ts`, the `gateway.knock` branch (about line 161)
+calls `p.publish(client, { method: "gateway.waiting", params: waiting })`. Once `publish` takes
+`Published`, that call fails the typecheck, and its decode would refuse a knock as `bad_row`.
+
+- **The lead's call, as plumbing (no wire change):** the Connection object sends the waiting notice
+  on the knocking socket itself, beside the knock's answer. `publish` carries view updates only, as
+  the plan says. The JSON a client gets is the same as today:
+  `{"jsonrpc":"2.0","method":"gateway.waiting","params":{code,until}}`.
+- **Law L10, test:** a knock the door lets wait sends the knocking socket that notice exactly once,
+  beside the answer, and `publish` is handed only view updates. Plant: drop the notice. Where:
+  `next/packages/libfabrika/src/cloudflare/connection.test.ts`. The tests step wrote it and saw it
+  red.
+- **Files:** `cloudflare/connection.ts` gains the notice's send (about 6 more product lines, build).
+  `next/apps/fabrika/src/instance-wire.integration.test.ts` (about line 733) reads the same wire and
+  must stay green in CI's full run.
 
 ## Files
 
