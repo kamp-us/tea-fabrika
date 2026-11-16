@@ -61,10 +61,10 @@ are kept apart from the ledger.**
    [0531](0531-a-start-carries-its-member-down.md).
 6. **The room's process,** in four parts:
    - **(a) One process per room.** ejabberd runs each chat room as its own Erlang process
-     ([mod_muc_room](https://github.com/processone/ejabberd/blob/master/src/mod_muc_room.erl)), and a
-     large chat service runs each of its servers, called a guild, as its own Elixir process (its
-     engineering post "How ... Scaled Elixir to 5,000,000 Concurrent Users", the name left out
-     because the leak grep refuses it).
+     ([mod_muc_room](https://github.com/processone/ejabberd/blob/master/src/mod_muc_room.erl)), and
+     Discord runs each of its servers, called a guild, as its own Elixir process
+     ([How Discord Scaled Elixir to 5,000,000 Concurrent Users](https://discord.com/blog/how-discord-scaled-elixir-to-5-000-000-concurrent-users)).
+     Discord is cited as an architecture example only.
    - **(b) The room process writes every room event,** and who spoke is a field in the event, as
      Matrix's `sender` ([events](https://spec.matrix.org/v1.16/client-server-api/)) and IRC's nick
      prefix ([modern IRC](https://modern.ircdocs.horse/)) are.
@@ -93,3 +93,5 @@ are kept apart from the ledger.**
 
 - 2026-11-15: the doubts on calls 1 to 6 in the note's table are settled by the rulings and sources
   above. The note stays on its own pull request's branch, which this decision does not edit.
+- 2026-11-15: the source in call 6(a) is restored. The owner ruled that the product may be named,
+  so Discord and its engineering post are cited again.
