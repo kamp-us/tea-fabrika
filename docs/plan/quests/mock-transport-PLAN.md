@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0043, 0573; body ab6f0f75f2ca
+Approved by the lead agent, builds 0555, 0579, 0043, 0573, 0574; body 801b351273ba
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/transport`, in next/ (ticket 1067)
@@ -208,7 +208,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <A exten
 
 ```ts
 // next/packages/libfabrika/src/transport/internal/binary.ts, the one changed line. A sketch.
-import { WebCrypto } from "effect/crypto";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 
 export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoMethod>(method: M, ...args: CryptoArgs[M]) {
   const api: CryptoApi = (yield* WebCrypto.WebCrypto).subtle;
@@ -299,8 +299,9 @@ makes the loosening read harder. Each is only changed where it reads a mock.
   numbers are only this plan's. H1 to H3 are d2 and the p26 laws in `Hello.test.ts`, the same way.
   Each keeps every value the old law compared, and most get stronger: one equality on the whole
   record holds the count, the args and the order where the old law held only a count.
-- C5 keeps its title. C6 is new, since without the spy C5 alone no longer proves the edge reads
-  the reference.
+- C5 keeps its title. C6 is new: it proves the edge reads the provided reference on `checkHello`'s
+  own path, a signed hello, where C5 drives the edge alone. Under the plant that reads the global
+  again, both C5 and C6 go red (amendment 2026-11-16, C6's row), so neither stands only by luck.
 - H4 and H5 are new: `AdmissionError` is new, and 0043's "with its cause kept" needs a law.
 - L1's lines are planted in `oxlint-plugins/builtin-plants.ts`, and `plants.test.ts` runs them in
   every folder the block lists, as it does `REFLECT`'s. The Where cell names the folder's first
@@ -486,8 +487,9 @@ Both slices land on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in
 request (amendment 2026-11-15, merge session ruling 1); neither opens a pull request of its own.
 Each still runs its own tests, build and review steps, one fresh agent each, in its own box.
 
-1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 39 product lines, about 120 test lines
-   changed. Tests $5, build $4, review $3. 39 lines.
+1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 40 product lines (the files table's 22, 15, 2 and 1), about 120 test lines
+   changed. Tests $5, build $4, review $3. 40 lines. Amendment (2026-11-16, lead at re-sign): was
+   39, which missed `tsconfig.base.json`'s one line.
 2. Slice 2, after 1366: `Admissions`, `checkHello`, the gateway's provide and the folder's lock: 67
    product lines (25 of them the lint config the tests step writes), about 150 test lines changed. Tests $6, build $5, review
    $3, and one likely send-back on the gateway's error readers, $4. 67 lines.
