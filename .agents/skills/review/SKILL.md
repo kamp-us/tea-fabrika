@@ -133,7 +133,11 @@ These hold in every review and recheck, so the brief does not repeat them.
   review rows, with real start and end times from `TZ=America/Los_Angeles date`. It is the one file
   you may commit: plain `git commit` of that path alone, then push it with
   `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`. With no `Run row:` field, commit
-  nothing.
+  nothing. When the diff adds or changes an `.integration.` law, a merge-ready row says where those
+  laws ran green, as `"green": {"_tag": "ci", "run": <the full run's id>}` or
+  `"green": {"_tag": "box", "command": "<the command>", "head": "<the full commit it ran at>"}`
+  ([0178](../../../.decisions/0178-host-only-laws-run-first.md)); the field check refuses it
+  without. With no green run to cite, the answer is not done: say so, and send it back to build.
 - **Report** in the shape of step 4, for a reader who saw none of the work: the answer first, plain
   short sentences, a path and line for each thing you cite.
 

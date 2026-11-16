@@ -85,6 +85,42 @@ const checkLines = (file: string, base: string, head: string): Report => {
   return report(findings, added.length);
 };
 
+/** A law that needs a real resource: vitest.config.ts's `*.integration.test.{ts,tsx}` (0536, 0584). */
+export const isIntegrationLaw = (path: string) => /\.integration\.test\.tsx?$/.test(path);
+
+/** A review row that lets the lead merge: its outcome `done`, or `pass`, as a step row writes done. */
+const mergeReady = (row: Record<string, unknown>) =>
+  (row["step"] === "review" || row["role"] === "review") && (row["outcome"] === "done" || row["outcome"] === "pass");
+
+/** The most law paths a refusal names before it counts the rest. */
+const NAMED = 3;
+
+/**
+ * Decision 0178 at review time: a merge-ready review of a diff that adds or changes an
+ * `.integration.` law cites where those laws ran green, as `land.ts arm` refuses a head whose full
+ * run is red. The run is read from the row, never from GitHub: this check needs no network.
+ */
+const greenFinding = (file: string, row: Record<string, unknown>, changed: ReadonlyArray<string>) => {
+  const laws = changed.filter(isIntegrationLaw);
+
+  if (logOf(file) !== "runs" || !mergeReady(row) || "green" in row || laws.length === 0) {
+    return [];
+  }
+
+  const more = laws.length > NAMED ? ` and ${laws.length - NAMED} more` : "";
+  return [
+    Finding.cases.error.make({
+      file,
+      line: 1,
+      field: "green",
+      reason:
+        `a merge-ready review of a diff that adds or changes an .integration. law (${laws.slice(0, NAMED).join(", ")}${more}) ` +
+        'cites the green run where it ran (0178): add "green": {"_tag": "ci", "run": <the full run\'s id>}, ' +
+        'or "green": {"_tag": "box", "command": "<the command that ran it>", "head": "<the full commit it ran at>"}',
+    }),
+  ];
+};
+
 /** The key that holds a row's own id, which must be its file name: none on a rating. */
 const idKey = (log: Log | null, row: Record<string, unknown>) =>
   log === "runs" ? "run" : log === "notes" || row["_tag"] === "finding" ? "id" : null;
@@ -94,7 +130,7 @@ const idKey = (log: Log | null, row: Record<string, unknown>) =>
  * the same rules as an added line, and its id is its file name. A row file is never edited or
  * deleted: a correction is a new row.
  */
-const checkRowFile = (file: string, base: string, head: string): Report => {
+const checkRowFile = (file: string, base: string, head: string, changed: ReadonlyArray<string>): Report => {
   const error = (field: string, reason: string) => Finding.cases.error.make({ file, line: 1, field, reason });
   const name = rowName.exec(file)?.[1];
   const findings: Finding[] = [];
@@ -119,6 +155,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   findings.push(...checkRow(file, 1, value));
   const row: Record<string, unknown> = typeof value === "object" && value !== null ? { ...value } : {};
+  findings.push(...greenFinding(file, row, changed));
   const key = idKey(logOf(file), row);
 
   if (name !== undefined && key !== null && row[key] !== name) {
@@ -136,8 +173,12 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   return report(findings, 1);
 };
 
-export const checkFile = (file: string, base: string, head: string): Report =>
-  inFolder(file) ? checkRowFile(file, base, head) : checkLines(file, base, head);
+/**
+ * One field file's added rows. `changed` is every path the change adds or edits, row files or not:
+ * a merge-ready review row is read against it (`greenFinding`).
+ */
+export const checkFile = (file: string, base: string, head: string, changed: ReadonlyArray<string> = []): Report =>
+  inFolder(file) ? checkRowFile(file, base, head, changed) : checkLines(file, base, head);
 
 /** The paths the field job reads: a direct `.jsonl` file, or anything in a log's folder. */
 export const isFieldPath = (path: string) => /^field\/[^/]+\.jsonl$/.test(path) || inFolder(path);
@@ -145,16 +186,12 @@ export const isFieldPath = (path: string) => /^field\/[^/]+\.jsonl$/.test(path) 
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const git: Runner = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
-/**
- * A missing tree or unreadable blob is an error, never an empty successful delta.
- * A PR's rows start at the merge base, as changes.mjs reads its paths; a push uses its two trees.
- */
-export const readFieldFiles = (base: string, head: string, event: string, run: Runner = git) => {
-  if (!validSha(base) || !validSha(head)) {
-    throw new Error("field: valid base and head SHAs are required");
-  }
+type Read = (args: string[]) => string;
 
-  const read = (args: string[]) => {
+/** A reader of git that throws on a failed read, never giving an empty successful answer. */
+const readerOf =
+  (run: Runner): Read =>
+  (args) => {
     const result = run(args);
 
     if (result.status !== 0) {
@@ -163,12 +200,38 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
 
     return result.stdout;
   };
+
+/** Where a change starts: a PR's merge base, as changes.mjs reads its paths; a push's own base. */
+const startOf = (base: string, head: string, event: string, read: Read) => {
+  if (!validSha(base) || !validSha(head)) {
+    throw new Error("field: valid base and head SHAs are required");
+  }
+
   const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
 
   if (!validSha(from)) {
     throw new Error("field: the merge base could not be read");
   }
 
+  return from;
+};
+
+const names = (text: string) => text.split("\0").filter((name) => name !== "");
+
+/** The paths a change adds or edits, from where it starts: what a review row is read against. */
+export const readChanged = (base: string, head: string, event: string, run: Runner = git): string[] => {
+  const read = readerOf(run);
+  const from = startOf(base, head, event, read);
+  return names(read(["diff", "--no-renames", "--name-only", "--diff-filter=AM", "-z", from, head, "--"]));
+};
+
+/**
+ * A missing tree or unreadable blob is an error, never an empty successful delta.
+ * A PR's rows start at the merge base, as changes.mjs reads its paths; a push uses its two trees.
+ */
+export const readFieldFiles = (base: string, head: string, event: string, run: Runner = git) => {
+  const read = readerOf(run);
+  const from = startOf(base, head, event, read);
   const paths = readPaths(from, head, "push", run);
 
   if (paths === null) {
@@ -185,8 +248,6 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
   }));
 };
 
-const names = (text: string) => text.split("\0").filter((name) => name !== "");
-
 /**
  * The writer's copy of the field job: the rows this checkout adds to `main`, as they stand on disk,
  * committed, staged or not yet added. A pull request of plan files and rows alone starts no CI run
@@ -195,15 +256,7 @@ const names = (text: string) => text.split("\0").filter((name) => name !== "");
  * file's side empty. Unreadable history is an error, never an empty list.
  */
 export const readLocalFieldFiles = (main: string, run: Runner = git) => {
-  const read = (args: string[]) => {
-    const result = run(args);
-
-    if (result.status !== 0) {
-      throw new Error("field: Git could not read the requested history");
-    }
-
-    return result.stdout;
-  };
+  const read = readerOf(run);
   const root = read(["rev-parse", "--show-toplevel"]).trim();
   const from = read(["merge-base", main, "HEAD"]).trim();
 
@@ -228,14 +281,32 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
     }));
 };
 
+/**
+ * The writer's copy of readChanged: the paths this checkout adds or edits against its merge base
+ * with `main`, as they stand on disk, committed, staged or not yet added.
+ */
+export const readLocalChanged = (main: string, run: Runner = git): string[] => {
+  const read = readerOf(run);
+  const from = read(["merge-base", main, "HEAD"]).trim();
+
+  if (!validSha(from)) {
+    throw new Error("field: the merge base could not be read");
+  }
+
+  const edited = names(read(["diff", "--no-renames", "--name-only", "--diff-filter=AM", "-z", from, "--"]));
+  const added = names(read(["ls-files", "--others", "--exclude-standard", "--full-name", "-z", "--", ":/"]));
+  return [...new Set([...edited, ...added])].toSorted();
+};
+
 const main = (local: boolean) => {
   const base = process.env["BASE"] ?? "";
   const head = process.env["HEAD"] ?? "";
   const event = process.env["EVENT"] ?? "";
   let total = 0;
+  const changed = local ? readLocalChanged("origin/main") : readChanged(base, head, event);
 
   for (const input of local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event)) {
-    const report = checkFile(input.file, input.base, input.head);
+    const report = checkFile(input.file, input.base, input.head, changed);
     total += report.added;
 
     for (const message of report.annotations) {

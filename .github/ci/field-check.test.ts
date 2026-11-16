@@ -48,6 +48,15 @@ const OldNote = Schema.Struct({ ...noteCore, lanes: Schema.Array(Schema.Unknown)
 
 const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
 
+// Where a merge-ready review saw its `.integration.` laws run green (0178).
+const Green = Schema.TaggedUnion({
+  ci: { run: Schema.Int.check(Schema.isGreaterThan(0)) },
+  box: {
+    command: Schema.String.check(Schema.isPattern(/\S/)),
+    head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
+  },
+});
+
 const Run = Schema.Struct({
   date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
   role: Schema.String,
@@ -72,6 +81,7 @@ const Run = Schema.Struct({
   outputTokens: Schema.optionalKey(Count),
   driver_caused: Schema.optionalKey(Schema.Boolean),
   plants: Schema.optionalKey(Schema.Array(Plant)),
+  green: Schema.optionalKey(Green),
 });
 
 const noteFields = [
@@ -116,6 +126,7 @@ const runFields = [
   "outputTokens",
   "driver_caused",
   "plants",
+  "green",
 ];
 
 // Decision 0090: a new row is its own file, named by its date and a slug, and that name is its id.

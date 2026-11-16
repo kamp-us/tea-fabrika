@@ -48,6 +48,18 @@ const Note = Schema.Struct({
 /** One plant a step ran once (0093): the law, the break, and `red` if the law caught it, else `green`. */
 const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
 
+const Words = Schema.String.check(Schema.isPattern(/\S/));
+
+/**
+ * Where a merge-ready review saw its diff's `.integration.` laws run green (0178): a CI full run
+ * (scheduled.yaml, the run `land.ts arm` reads), by its id, or a cloud box run, by the command and
+ * the full commit it ran at. field-check.ts asks for it; the row's shape is checked here.
+ */
+const Green = Schema.TaggedUnion({
+  ci: { run: Schema.Int.check(Schema.isGreaterThan(0)) },
+  box: { command: Words, head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)) },
+});
+
 const Run = Schema.Struct({
   date: Day,
   role: Schema.String,
@@ -72,10 +84,10 @@ const Run = Schema.Struct({
   outputTokens: Schema.optionalKey(Count),
   driver_caused: Schema.optionalKey(Schema.Boolean),
   plants: Schema.optionalKey(Schema.Array(Plant)),
+  green: Schema.optionalKey(Green),
 });
 
 // A finding and its rating (decision 0035). The fields table is field/README.md, "A finding".
-const Words = Schema.String.check(Schema.isPattern(/\S/));
 
 const Found = Schema.Struct({
   _tag: Schema.Literal("finding"),
