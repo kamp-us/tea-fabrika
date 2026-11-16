@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream, Function, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -151,11 +151,29 @@ const raw = (tag: string, fields: object = {}): unknown =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
-export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =>
-  Start.cases.first.make({ id, name, code });
+// A start's parts are options, each with its default: with every argument optional, no pipeable form
+// could tell a piped call from a direct one.
+export const first = ({
+  id = "start:counter:1",
+  name = "counter:1",
+  code = CODE,
+}: {
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly code?: { program: string; hash: string } | undefined;
+} = {}) => Start.cases.first.make({ id, name, code });
 
-export const again = (after: string, id = `restart:${after}`, code = CODE) =>
+type Restart = { readonly id?: string | undefined; readonly code?: { program: string; hash: string } | undefined };
+
+const againBody = (after: string, { id = `restart:${after}`, code = CODE }: Restart = {}) =>
   Start.cases.again.make({ id, name: "counter:1", after, reason: "crashed", code });
+
+// The restart's id and code are options, so a piped call (an option or nothing) never reads as a
+// direct one (the process it restarts after).
+export const again: {
+  (options?: Restart): (after: string) => ReturnType<typeof againBody>;
+  (after: string, options?: Restart): ReturnType<typeof againBody>;
+} = Function.dual((args) => typeof args[0] === "string", againBody);
 
 // The temp folder is made on the first `storage()` call, never on import, so a plain test that
 // imports this file for its builders and never calls `storage()` touches no disk (0584).
@@ -241,10 +259,19 @@ export const storage = () => {
 export type Storage = ReturnType<typeof storage>;
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
-export const data = (sql: Sql, bell = quiet) =>
+const dataBody = (sql: Sql, bell = quiet) =>
   Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(bell),
   );
+
+export const data: {
+  (bell?: Layer.Layer<Doorbell>): (sql: Sql) => ReturnType<typeof dataBody>;
+  (sql: Sql, bell?: Layer.Layer<Doorbell>): ReturnType<typeof dataBody>;
+} = Function.dual(
+  // A direct call starts with the database; a piped one with the doorbell layer, or nothing.
+  (args) => args.length > 0 && !Layer.isLayer(args[0]),
+  dataBody,
+);
 
 export const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
@@ -262,15 +289,42 @@ export const ids = (...values: ReadonlyArray<string>) => {
   };
 };
 
-export const manager = (store: Storage, caller: Caller = brain(), next = ids(A, B, W, X).next, bell = quiet) =>
+const managerBody = (store: Storage, caller: Caller = brain(), next = ids(A, B, W, X).next, bell = quiet) =>
   ProcessManager.layer({ ...caller, by: BRAIN }, next).pipe(
     Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql, bell)))),
   );
+
+export const manager: {
+  (
+    caller?: Caller,
+    next?: Effect.Effect<string>,
+    bell?: Layer.Layer<Doorbell>,
+  ): (store: Storage) => ReturnType<typeof managerBody>;
+  (
+    store: Storage,
+    caller?: Caller,
+    next?: Effect.Effect<string>,
+    bell?: Layer.Layer<Doorbell>,
+  ): ReturnType<typeof managerBody>;
+} = Function.dual(
+  // A direct call starts with the storage, which holds its database; a piped one with the caller, or nothing.
+  (args) => Predicate.hasProperty(args[0], "sql"),
+  managerBody,
+);
 
 export const read = (stream: string) => Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0)));
 
 /** A registered name's lifecycle events, on the stream only the brain may write. */
 export const events = (name: string) => read(`processes/${name}`);
 
-export const receive = (process: string, after = 0) =>
+const receiveBody = (process: string, after = 0) =>
   ProcessManager.use((processes) => Stream.runCollect(processes.receive(process, after)));
+
+export const receive: {
+  (after?: number): (process: string) => ReturnType<typeof receiveBody>;
+  (process: string, after?: number): ReturnType<typeof receiveBody>;
+} = Function.dual(
+  // A direct call starts with the process id; a piped one with the position, or nothing.
+  (args) => typeof args[0] === "string",
+  receiveBody,
+);

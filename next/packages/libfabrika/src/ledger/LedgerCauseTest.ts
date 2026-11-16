@@ -5,7 +5,7 @@
 // Audit sites: `Ledger.ts:86` (a rejected stub call), `Ledger.ts:91` (an answer that does not
 // decode), both now in `LedgerRemote.ts` (0095), `internal/ledgerStore.ts:192` (a throw in the atomic step, and its pass-through branch).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream, Function } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -118,11 +118,7 @@ const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
 export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
 
-/**
- * The ledger's laws on a fresh `Sql` each. `corrupt` is the runner's plant on a stored row: it sets
- * the first entry's required integer `seen` to `text`, since only a test file writes ledger tables.
- */
-export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: string) => void) => {
+const suiteBody = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: string) => void) => {
   describe("T695, LedgerRemote.layer keeps what failed", () => {
     // C1, LedgerRemote.ts (was Ledger.ts:86). Plant: `catch: () => new LedgerError({ reason: "unreachable" })`.
     law(
@@ -252,3 +248,12 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
     );
   });
 };
+
+/**
+ * The ledger's laws on a fresh `Sql` each. `corrupt` is the runner's plant on a stored row: it sets
+ * the first entry's required integer `seen` to `text`, since only a test file writes ledger tables.
+ */
+export const suite: {
+  (fresh: () => Sql, corrupt: (sql: Sql, text: string) => void): (law: Law) => ReturnType<typeof suiteBody>;
+  (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: string) => void): ReturnType<typeof suiteBody>;
+} = Function.dual(3, suiteBody);

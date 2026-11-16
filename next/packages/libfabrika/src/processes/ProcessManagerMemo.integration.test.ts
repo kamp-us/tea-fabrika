@@ -151,7 +151,7 @@ const run = ({ step, name, process }: Aimed) =>
 
     switch (step.call) {
       case "first":
-        return yield* answer(processes.start(first(`start:${name}`, name), from()));
+        return yield* answer(processes.start(first({ id: `start:${name}`, name }), from()));
       case "again": {
         const request = Start.cases.again.make({
           id: `restart:${process}`,
@@ -279,7 +279,7 @@ describe("T753 L16 quest: a long-lived ProcessManager answers as a fresh one", (
               // refused, because another writer holds that letter's id, and the turn rolls back.
               const rolled = yield* Effect.gen(function* () {
                 const processes = yield* ProcessManager;
-                const { process } = yield* processes.start(first(`start:${WATCHED}`, WATCHED), from());
+                const { process } = yield* processes.start(first({ id: `start:${WATCHED}`, name: WATCHED }), from());
                 state.placed.set(process, WATCHED);
                 yield* processes.monitor("ref-b", process, from());
                 const to = brain().recipient;

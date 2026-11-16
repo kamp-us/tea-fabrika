@@ -93,7 +93,10 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 
   for (const i of [0, 1]) {
     const started = yield* ProcessManager.use((p) =>
-      p.start(first(`start:${i}`, h.names[i]!, { program: h.programs[i]!, hash: "build-a" }), from()),
+      p.start(
+        first({ id: `start:${i}`, name: h.names[i]!, code: { program: h.programs[i]!, hash: "build-a" } }),
+        from(),
+      ),
     ).pipe(Effect.provide(layer()));
     current[i] = started.process;
   }

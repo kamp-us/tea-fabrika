@@ -121,9 +121,15 @@ describe("p97, process calls", () => {
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const placed = yield* processes.start(first(), from());
-        yield* processes.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from());
+        yield* processes.start(
+          first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
+          from(),
+        );
         yield* Effect.flip(
-          processes.start(first("start:counter:1", "counter:1", { program: "counter", hash: "changed" }), from()),
+          processes.start(
+            first({ id: "start:counter:1", name: "counter:1", code: { program: "counter", hash: "changed" } }),
+            from(),
+          ),
         );
         yield* processes.info;
         expect(yield* processes.isLive(A)).toBe(true);
@@ -210,7 +216,7 @@ describe("p97, process calls", () => {
             const processes = yield* ProcessManager;
             yield* processes.start(first(), from());
             yield* processes.start(
-              first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }),
+              first({ id: "watcher:start", name: "watcher:1", code: { program: "watcher", hash: "build-a" } }),
               from(),
             );
           }).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));

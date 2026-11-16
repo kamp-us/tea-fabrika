@@ -19,7 +19,7 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Result, Schema } from "effect";
+import { Effect, Function, Layer, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -190,7 +190,7 @@ export type Harness = {
   readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
 };
 
-export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, LedgerError }: Harness) => {
+const suiteBody = (law: Law, { fresh, ledger, transactions, lineFor, append, LedgerError }: Harness) => {
   const ledgerOn = (sql: Sql) => ledger(sql, PROCESS);
 
   const processStore = (sql: Sql, storage?: Parameters<typeof ProcessStore.layer>[1]["storage"]) =>
@@ -698,3 +698,9 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
     );
   });
 };
+
+/** The runtime stores' laws, each on a fresh database from the harness. */
+export const suite: {
+  (harness: Harness): (law: Law) => void;
+  (law: Law, harness: Harness): void;
+} = Function.dual(2, suiteBody);
