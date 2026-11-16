@@ -1,12 +1,12 @@
 ---
 id: 0569
-title: In next/ and our tooling, a tea Msg is keyed on _tag, not type, through a local patch of tea that carries tea's own core change, ahead of tea's release
+title: In next/ and our tooling, a tea Msg, Cmd and Sub and the state table are keyed on _tag, not type, through a local patch of tea that carries tea's own core change, ahead of tea's release
 status: accepted
 date: 2026-11-15
 tags: [tea, msg, tag, union, patch, upstream, schema, next, tooling]
 ---
 
-# 0569: In next/ and our tooling, a tea Msg is keyed on _tag, not type, through a local patch of tea that carries tea's own core change, ahead of tea's release
+# 0569: In next/ and our tooling, a tea Msg, Cmd and Sub and the state table are keyed on _tag, not type, through a local patch of tea that carries tea's own core change, ahead of tea's release
 
 ```ts
 // Before: a Msg says its case with `type`, unlike every other union we have (0214).
@@ -55,16 +55,25 @@ const next = Msg.match(msg, { tick: () => model, land: ({ pr }) => landed(model,
 - **Our Msgs follow:** each Msg union is a `Schema.TaggedUnion`, made with its maker and read with
   its own matcher ([0562](0562-nothing-teaches-the-wrong-shape.md),
   [0567](0567-a-tagged-value-is-matched.md)).
-- **Scope: Msgs only.** Cmds, Subs, a state table's `state.type` and semantic events keep `type`
-  until the owner rules on them.
+- **Scope** (widened the same day, see Amendments): a Msg, a Cmd value and the `cmd` a settled
+  Msg carries, a Sub value, and `Transitions`' lookup of a state's `type`. Semantic events
+  (`E extends { type: string }`) keep `type`.
 - It is one of the fixes of the sev0 the owner called on 2026-11-15.
 
 ## Consequences
 
-- This amends 0214 in part: its line "tea's Msgs and Cmds keep `type`" now holds for Cmds only.
+- This amends 0214 in part: its line "tea's Msgs and Cmds keep `type`" no longer holds for either.
 - Saved letters in the ledger carry their Msg with `type`. The plan of this work says how an old
   row is read without rewriting it, and a law holds that an old letter still folds.
 - The change reaches every machine in `next/`, so its slices are ordered against open work by the
   lead.
-- **Not decided here:** whether Cmds, Subs, `state.type` and semantic events move to `_tag` too.
+- **Not decided here:** whether semantic events move to `_tag` too.
 - The plan: `docs/plan/quests/tea-msg-tag-PLAN.md`, in its own pull request.
+
+## Amendments
+
+- 2026-11-15, later the same day (owner): the change covers Cmds, Subs and the state table too,
+  not only Msgs. The patch moves a Msg, a Cmd value and the `cmd` a settled Msg carries, a Sub
+  value, and `Transitions`' lookup of a state's `type` to `_tag`. Semantic events stay on `type`,
+  not ruled. Machines that compare a state's `_tag` by hand may move to `Transitions` later; that is
+  not part of the patch.
