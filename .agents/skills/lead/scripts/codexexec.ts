@@ -158,12 +158,10 @@ const probe = (config: CodexExecConfig, folder: string) =>
       );
 
     if (!holdsPin(said, config.pin)) {
-      return yield* Effect.fail(
-        Agent.failed(
-          "start",
-          `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
-            `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
-        ),
+      return yield* Agent.failed(
+        "start",
+        `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
+          `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
       );
     }
   });
@@ -184,7 +182,7 @@ export const codexExecAdapter = (
       start: (turn) =>
         Effect.gen(function* () {
           if (turn.system._tag === "replace") {
-            return yield* Effect.fail(Agent.failed("start", "codex-exec takes only an append system prompt"));
+            return yield* Agent.failed("start", "codex-exec takes only an append system prompt");
           }
 
           yield* probe(config, turn.folder).pipe(
@@ -263,9 +261,7 @@ export const codexExecAdapter = (
             const text = yield* fs.readFileString(last).pipe(Effect.orElseSucceed(() => ""));
 
             if (text.trim() === "") {
-              return yield* Effect.fail(
-                Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`),
-              );
+              return yield* Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`);
             }
 
             return [lastWord(text), said.ended ?? ENDED];

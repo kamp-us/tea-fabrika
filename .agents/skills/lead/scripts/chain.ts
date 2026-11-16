@@ -205,11 +205,14 @@ export class SlotRefused extends Schema.TaggedError<SlotRefused, { readonly bran
 }) {}
 
 /** A named schedule ran out; the quest reports it as stuck. */
-export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { readonly brand: unique symbol }>()("RetriesExhausted", {
-  schedule: Schema.String,
-  times: Schema.Finite,
-  reason: Schema.String,
-}) {}
+export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { readonly brand: unique symbol }>()(
+  "RetriesExhausted",
+  {
+    schedule: Schema.String,
+    times: Schema.Finite,
+    reason: Schema.String,
+  },
+) {}
 
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {

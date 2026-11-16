@@ -6,10 +6,10 @@ import { type Detail, type PullRequest, PullRequests, PullRequestsError } from "
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
   draft: { branch: Schema.String, title: Schema.String },
-  edit: { number: Schema.Number, title: Schema.String, body: Schema.String },
-  ready: { number: Schema.Number },
-  enqueue: { number: Schema.Number, oid: Schema.String },
-  arm: { number: Schema.Number, oid: Schema.String },
+  edit: { number: Schema.Finite, title: Schema.String, body: Schema.String },
+  ready: { number: Schema.Finite },
+  enqueue: { number: Schema.Finite, oid: Schema.String },
+  arm: { number: Schema.Finite, oid: Schema.String },
 });
 export type Call = typeof Call.Type;
 

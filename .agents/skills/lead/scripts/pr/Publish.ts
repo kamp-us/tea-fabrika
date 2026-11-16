@@ -19,7 +19,9 @@ export const DRAFT_BODY =
   "0134). It is marked ready when its steps have passed.";
 
 /** A branch no commit step pushes to: main, or none (a detached head). */
-export class NoBranch extends Schema.TaggedError<NoBranch>()("NoBranch", { reason: Schema.String }) {}
+export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {
+  reason: Schema.String,
+}) {}
 
 /** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. */
 export type Published = { readonly pr: number; readonly opened: boolean; readonly draft: boolean };

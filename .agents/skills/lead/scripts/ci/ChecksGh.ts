@@ -29,7 +29,7 @@ const Runs = Schema.fromJsonString(
   Schema.Struct({
     check_runs: Schema.Array(
       Schema.Struct({
-        id: Schema.Number,
+        id: Schema.Finite,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
         app: Schema.optional(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
@@ -40,7 +40,7 @@ const Runs = Schema.fromJsonString(
 
 /** The latest check run GitHub Actions made in a check-runs body, as `Job`; none when it lists none. */
 export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Runs)(body), ({ check_runs }) => {
+  Effect.map(Schema.decodeEffect(Runs)(body), ({ check_runs }) => {
     const ours = check_runs.filter((run) => run.app?.slug === "github-actions");
     const latest = ours.reduce<(typeof ours)[number] | undefined>(
       (max, run) => (max === undefined || run.id > max.id ? run : max),
