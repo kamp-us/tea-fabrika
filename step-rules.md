@@ -36,20 +36,12 @@ auto-merge, approve, close, or mark ready. End the body with:
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
-**Fixes.** Prefer the Effect checker's own quick fix, through its language server:
-
-```bash
-git fetch -q origin fabrikalfa/twin-tools && git show FETCH_HEAD:checkerfix.mjs > "$SCRATCH/checkerfix.mjs"
-# from the package folder whose tsconfig turns the check on for these files:
-node "$SCRATCH/checkerfix.mjs" <check> . <file>...
-```
-
-(`$SCRATCH` is your scratchpad folder, never inside the repo. The tool never enters the repo.)
-The check must already be at `error` for those files in that tsconfig, so write the lock first.
-The fix can drop a comment inside a block it rewrites: after each run, read `git diff` for every
-removed comment line (an `oxlint-disable-next-line` above all) and put each back where it belongs.
-Then `pnpm format`. A hit the tool leaves may be fixed with an editor-style edit (the Edit tool),
-one hit at a time, making exactly the change the check's message names; count these as hand edits.
+**Fixes.** Every fix is an editor-style edit with the Edit tool, one hit at a time, making exactly
+the change the check's message names. No script edits a file, not even one that applies the
+checker's own fix at the checker's positions (owner ruling; the `checkerfix.mjs` client on this
+branch is ON HOLD and must not be run). You may read the checker's message, or ask its language
+server what its quick fix would be, to see the right change; you then make it yourself with Edit.
+Count every fix as a hand edit. `pnpm format` afterwards is fine (it is the formatter, not a fix).
 Never a find-and-replace script over the tree. If the right fix is not clear, or it would change
 behavior a law should hold, do not fix that hit: list it in RESULT and in the PR.
 
