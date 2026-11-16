@@ -10,7 +10,7 @@
   "role": "step",
   "model": "claude-opus-5-5",
   "effort": null,
-  "outcome": "blocked",
+  "outcome": "parked",
   "why": "Tests step for judgment slice E30 of the Effect-check sweep (strictEffectProvide), in next/. Counted 775 hits in the row's 18 folders on origin/main at f7169af, matching the plan: 765 in exam paths, 10 in product files, 0 in PR 1366's files. Fixed none. The check proved wrong for two whole classes of exam files, so, as 0565's note and the brief say, each class was stopped and counted for the owner instead of bulk-fixed or bulk-ignored. Class 1, 757 hits in 129 test files (*.test.ts, *.test-support.ts, *Test.ts suites): each law builds a fresh layer from its own test state (a store, a broken driver, a tracer) and provides it to one test's Effect, so each test is its own entry point; it.layer would share one layer across tests and break their isolation, and Layer.build plus provideContext only hides the same thing from the checker. Class 2, 8 hits in 8 exam scripts and one fixture, each an Effect.provide(NodeServices.layer) handed straight to NodeRuntime.runMain: a real entry point, which the checker cannot see (its rule doc says to disable it there, and no disable is allowed). The 10 product hits are left for the build: 4 in library files (client/Headless.ts:33, node/build/bundle.ts:92, node/dev/watch.ts:166, node/repositories/OpenRepository.ts:151) and 6 in the app's entry files (build.ts:15, dev.ts:110 and 181, hands.ts:109, settings-generate.ts:29, src/entry/browser.tsx:26), the last 6 being the same entry-point class as class 2.",
   "tokens": null,
   "tools": null,
