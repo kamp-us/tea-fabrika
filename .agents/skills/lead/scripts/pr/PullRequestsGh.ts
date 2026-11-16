@@ -200,8 +200,8 @@ export const layer = (
           out.split("\n").filter((row) => row !== ""),
           (row) =>
             Schema.decodeUnknownEffect(PatchRow)(row).pipe(
-              Effect.mapError(
-                () => new PullRequestsError({ reason: "gh api pulls/files answered a shape we do not read" }),
+              Effect.mapError(() =>
+                PullRequestsError.make({ reason: "gh api pulls/files answered a shape we do not read" }),
               ),
             ),
           { concurrency: "unbounded" },

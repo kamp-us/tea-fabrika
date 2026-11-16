@@ -111,7 +111,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
 
   if (unnamed !== null) {
-    return yield* new NotQueued({ reason: `pr ${found.number}: ${unnamed}` });
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
   }
 
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
