@@ -102,23 +102,23 @@ const unary = [
   "export const Type = () => { typeof useRuntime(run); return null; };",
 ].join("\n");
 
-describe("one-store-hook", async () => {
-  const all = await plant({
-    [HOOK]: forbidden,
-    [FIRES]: forbidden,
-    [PASSES]: passes,
-    [RUNTIME]: runtime,
-    [MODEL]: model,
-    [OTHER_HOOKS]: otherHooks,
-    [OTHER_CALLS]: otherCalls,
-    [COMPUTED]: computed,
-    [PRIVATE]: privateCalls,
-    [UNARY]: unary,
-    [TEST]: `${forbidden}\n${runtime}`,
-    [TSX_TEST]: `${forbidden}\n${runtime}`,
-    [OUTSIDE]: `${forbidden}\n${runtime}`,
-  });
+const all = await plant({
+  [HOOK]: forbidden,
+  [FIRES]: forbidden,
+  [PASSES]: passes,
+  [RUNTIME]: runtime,
+  [MODEL]: model,
+  [OTHER_HOOKS]: otherHooks,
+  [OTHER_CALLS]: otherCalls,
+  [COMPUTED]: computed,
+  [PRIVATE]: privateCalls,
+  [UNARY]: unary,
+  [TEST]: `${forbidden}\n${runtime}`,
+  [TSX_TEST]: `${forbidden}\n${runtime}`,
+  [OUTSIDE]: `${forbidden}\n${runtime}`,
+});
 
+describe("one-store-hook", () => {
   // Plants: restore the retired path allowance, or delete an import branch or member visitor.
   it.each([HOOK, FIRES])("rejects React imports, aliases, the shim and members in %s", (file) => {
     expect(all(CODE, file)).toEqual([2, 3, 4, 6]);

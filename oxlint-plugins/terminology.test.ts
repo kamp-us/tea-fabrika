@@ -48,50 +48,51 @@ const named = (name: string): string =>
 
 const declared = file("export const room = 1;"); // 2
 
-describe("eslint/id-denylist: the old library words as names in next/", async () => {
-  const files = {
-    ...Object.fromEntries(OLD.map((name) => [`${APP}/old-${name}.ts`, named(name)])),
-    [`${APP}/new.ts`]: file(
-      "export const module = 1;",
-      "export const modules = [module];",
-      "export const layer = 2;",
-      "export const layers = [layer];",
-      "export const otherModule = (given: string) => given;",
-      "export const layersByName = new Map<string, number>();",
-      "export const layerRank = 0;",
-      "export const ranked = true;",
-    ),
-    [`${APP}/arithmetic.ts`]: file(
-      "export const half = (value: number) => Math.floor(value / 2);",
-      "export const down = [1.5].map(Math.floor);",
-    ),
-    [`${APP}/words.ts`]: file(
-      "// A conversation room keeps its word, and so does a floor that means a minimum.",
-      "/** Leaves room for one more line, above the floor of ten. */",
-      'export const text = "room, rooms, floor, floors";',
-      "export const template = `a room on a floor`;",
-    ),
-    // Outside next/ the override does not apply: today's version, repo scripts, lead tooling. Never
-    // `oxlint-plugins/`: `plant` links that folder in, so a file planted there lands in the repo.
-    "packages/fabrika/src/plant.ts": declared,
-    "apps/fabrika/src/plant.ts": declared,
-    "scripts/plant.ts": declared,
-    ".agents/skills/lead/scripts/plant.ts": declared,
-    // A test in next/ is held as product code is.
-    [`${APP}/plant.test.ts`]: declared,
-    [`${SRC}/ledger/Plant.test.ts`]: declared,
-    [`${APP}/plant.test.tsx`]: declared,
-    // A conversation room is 0091's other meaning: one explained suppression, on its one line.
-    [`${APP}/conversation.ts`]: file(
-      "// oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module",
-      'export const room = { id: "lobby" };', // 3
-      "export const floor = 2;", // 4: the neighbor the suppression does not reach
-    ),
-    // The renamed rule, configured as `fabrika/modules`, on the plan's plant of 0043.
-    [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
-  };
-  const linted = await plant(files);
+const files = {
+  ...Object.fromEntries(OLD.map((name) => [`${APP}/old-${name}.ts`, named(name)])),
+  [`${APP}/new.ts`]: file(
+    "export const module = 1;",
+    "export const modules = [module];",
+    "export const layer = 2;",
+    "export const layers = [layer];",
+    "export const otherModule = (given: string) => given;",
+    "export const layersByName = new Map<string, number>();",
+    "export const layerRank = 0;",
+    "export const ranked = true;",
+  ),
+  [`${APP}/arithmetic.ts`]: file(
+    "export const half = (value: number) => Math.floor(value / 2);",
+    "export const down = [1.5].map(Math.floor);",
+  ),
+  [`${APP}/words.ts`]: file(
+    "// A conversation room keeps its word, and so does a floor that means a minimum.",
+    "/** Leaves room for one more line, above the floor of ten. */",
+    'export const text = "room, rooms, floor, floors";',
+    "export const template = `a room on a floor`;",
+  ),
+  // Outside next/ the override does not apply: today's version, repo scripts, lead tooling. Never
+  // `oxlint-plugins/`: `plant` links that folder in, so a file planted there lands in the repo.
+  "packages/fabrika/src/plant.ts": declared,
+  "apps/fabrika/src/plant.ts": declared,
+  "scripts/plant.ts": declared,
+  ".agents/skills/lead/scripts/plant.ts": declared,
+  // A test in next/ is held as product code is.
+  [`${APP}/plant.test.ts`]: declared,
+  [`${SRC}/ledger/Plant.test.ts`]: declared,
+  [`${APP}/plant.test.tsx`]: declared,
+  // A conversation room is 0091's other meaning: one explained suppression, on its one line.
+  [`${APP}/conversation.ts`]: file(
+    "// oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module",
+    'export const room = { id: "lobby" };', // 3
+    "export const floor = 2;", // 4: the neighbor the suppression does not reach
+  ),
+  // The renamed rule, configured as `fabrika/modules`, on the plan's plant of 0043.
+  [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
+};
 
+const linted = await plant(files);
+
+describe("eslint/id-denylist: the old library words as names in next/", () => {
   // Plant: drop the `next/**` override from `.oxlintrc.json`, or drop a name from its list.
   it("scenario: each listed name is reported where it is declared and as an object key, the config's closed list", () => {
     for (const name of OLD) {

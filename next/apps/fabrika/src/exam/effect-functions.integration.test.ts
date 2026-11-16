@@ -27,21 +27,21 @@ const source = [
   'const callback = Effect.forEach([], () => append().pipe(Effect.withSpan("item")), {concurrency: 1});',
 ].join("\n");
 
-describe("effect-functions", async () => {
-  const all = await plant({
-    [FILE]: source,
-    "next/packages/libfabrika/src/data/tracing.test.ts": source,
-    "packages/fabrika/src/tracing.ts": source,
-    "next/packages/libfabrika/src/data/alias.ts": [
-      'import {Effect as E} from "effect";',
-      'const append = () => E.void.pipe(E.withSpan("ledger.append"));',
-    ].join("\n"),
-    "next/packages/libfabrika/src/data/namespace.ts": [
-      'import * as E from "effect/Effect";',
-      'const append = () => E.void.pipe(E.withSpan("ledger.append"));',
-    ].join("\n"),
-  });
+const all = await plant({
+  [FILE]: source,
+  "next/packages/libfabrika/src/data/tracing.test.ts": source,
+  "packages/fabrika/src/tracing.ts": source,
+  "next/packages/libfabrika/src/data/alias.ts": [
+    'import {Effect as E} from "effect";',
+    'const append = () => E.void.pipe(E.withSpan("ledger.append"));',
+  ].join("\n"),
+  "next/packages/libfabrika/src/data/namespace.ts": [
+    'import * as E from "effect/Effect";',
+    'const append = () => E.void.pipe(E.withSpan("ledger.append"));',
+  ].join("\n"),
+});
 
+describe("effect-functions", () => {
   it("rejects function spans, including append, recovery, curried and direct wrappers", () => {
     expect(all(CODE, FILE)).toEqual([3, 4, 5, 6, 7, 8, 9]);
   });

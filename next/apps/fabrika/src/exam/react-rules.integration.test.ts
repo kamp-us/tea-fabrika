@@ -31,13 +31,13 @@ const passes = [
   ");",
 ].join("\n");
 
-describe("React's rules in next/", async () => {
-  const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    "next/packages/tuval/src/window/fires.test.tsx": fires,
-  });
+const all = await plant({
+  [FIRES]: fires,
+  [PASSES]: passes,
+  "next/packages/tuval/src/window/fires.test.tsx": fires,
+});
 
+describe("React's rules in next/", () => {
   it("fires on a ref read in render, a change after render, and an unnamed memo", () => {
     expect(all("react(refs)", FIRES)).toEqual([3]);
     expect(all("react(immutability)", FIRES)).toEqual([8]);

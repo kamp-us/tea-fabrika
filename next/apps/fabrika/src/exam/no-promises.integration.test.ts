@@ -246,7 +246,15 @@ const edges = [
   "});", // 14
 ].join("\n");
 
-describe("no-promises", async () => {
+const all = await plant({
+  [FIRES]: fires,
+  [PASSES]: passes,
+  [EDGE]: edges,
+  "next/packages/libfabrika/src/app/fires.test.ts": "export const t = async () => await 1;",
+  "packages/today/src/old.ts": "export const t = async () => 1;",
+});
+
+describe("no-promises", () => {
   it("refuses an unmarked mapped Workers RPC call in every resolved Effect bridge spelling", () => {
     fc.assert(
       fc.property(
@@ -443,13 +451,6 @@ describe("no-promises", async () => {
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
-  });
-  const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    [EDGE]: edges,
-    "next/packages/libfabrika/src/app/fires.test.ts": "export const t = async () => await 1;",
-    "packages/today/src/old.ts": "export const t = async () => 1;",
   });
 
   it("fires on every Promise shape", () => {

@@ -35,14 +35,14 @@ const clean = [
   'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
 ].join("\n");
 
-describe("the clock in a view", async () => {
-  const all = await plant({
-    [VIEW]: view,
-    [CLEAN]: clean,
-    [PLAIN]: "export const now = () => Date.now();",
-    "next/packages/tuval/src/window/view.test.tsx": view,
-  });
+const all = await plant({
+  [VIEW]: view,
+  [CLEAN]: clean,
+  [PLAIN]: "export const now = () => Date.now();",
+  "next/packages/tuval/src/window/view.test.tsx": view,
+});
 
+describe("the clock in a view", () => {
   // It also fires on line 11, a helper made in render that only a handler calls: the false alarm
   // experiment 194 saw at the slice's `main.tsx:146`. Under no-clock-in-view that line is refused anyway.
   it("react/purity fires in render and lets an inline handler pass, as React's rule does", () => {
