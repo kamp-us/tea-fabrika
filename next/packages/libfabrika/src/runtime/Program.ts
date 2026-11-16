@@ -5,7 +5,7 @@
  *
  * @stability unstable
  */
-import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
+import { applyCell, msgKeysOf, type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
@@ -633,7 +633,7 @@ const accepts = (schema: unknown, value: unknown): boolean =>
   isDeclared(schema) && Result.isSuccess(Schema.decodeUnknownResult(schema)(value));
 
 /** An error a Cmd settles with carries a string `_tag`. */
-const isTagged = (u: unknown): boolean =>
+const isTagged = (u: unknown): u is Tagged =>
   Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "_tag") && Predicate.isString(u._tag);
 
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */

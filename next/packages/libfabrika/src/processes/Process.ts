@@ -760,7 +760,7 @@ export class ProcessTable {
    * brain, with a watch of that recipient, ref and target, live or canceled. A signal reaches only
    * its own recipient, and only while its watch is live. Anything else is plain mail.
    */
-  deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
+  deliver(entry: Entry, m: Schema.Json, process: string): "mail" | "signal" | "drop" {
     if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
       return "mail";
     }

@@ -1,4 +1,5 @@
 // Program mail's pure rules, next/ (P41 slice 1, T1041): a delivery's ID, the host's grant and the inbox cap.
+import type { Schema } from "effect";
 import type { Rev } from "../../Rev.ts";
 import type { Grants } from "../ProgramMail.ts";
 
@@ -18,7 +19,7 @@ export const granted = (grants: Grants, source: string, to: string): boolean =>
   Object.hasOwn(grants, source) && (grants[source] ?? []).includes(to);
 
 /** The business `ref` a message carries, if it has one. @internal */
-export const businessRef = (m: unknown): string | null =>
+export const businessRef = (m: Schema.Json): string | null =>
   typeof m === "object" && m !== null && "ref" in m && typeof m.ref === "string" ? m.ref : null;
 
 /**

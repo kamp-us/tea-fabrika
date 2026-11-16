@@ -59,7 +59,7 @@ type Send = { readonly id: string; readonly type: string; readonly items: Readon
 type Chunk = typeof Chunk.Type;
 
 const encoder = new TextEncoder();
-const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).length;
+const bytes = (value: Schema.Json | Chunk): number => encoder.encode(JSON.stringify(value)).length;
 
 /**
  * Cuts a send's items into chunks whose encoded JSON is at most `size` bytes each, in order.

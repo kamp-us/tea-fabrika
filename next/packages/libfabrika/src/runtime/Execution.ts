@@ -183,7 +183,7 @@ const attempt = <A>(reason: ProgramDown["reason"], f: () => A) =>
 const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> => Schema.isSchema(schema);
 
 /** A Cmd answer as its schema encodes it, as JSON; a schema that is not a codec answers nothing. */
-const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
+const encodeAnswer = (schema: AnyCmdDef["schema"]["ok"] | Schema.Top, value: unknown): Schema.Json => {
   if (!isCodec(schema)) {
     throw new ProgramDown({ reason: "step" });
   }

@@ -80,13 +80,13 @@ type Calls<S> = {
  * @stability unstable
  * @category error handling
  */
-export const rejected = (error: unknown): unknown => {
-  if (!(error instanceof LedgerError) || error.reason !== "unreachable" || error.message === undefined) {
-    return error;
+export const rejected = (cause: unknown): unknown => {
+  if (!(cause instanceof LedgerError) || cause.reason !== "unreachable" || cause.message === undefined) {
+    return cause;
   }
 
-  const at = error.message.indexOf(": ");
-  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+  const at = cause.message.indexOf(": ");
+  return at < 0 ? cause : Object.assign(new Error(cause.message.slice(at + 2)), { name: cause.message.slice(0, at) });
 };
 
 /**
