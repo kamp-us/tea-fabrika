@@ -1033,6 +1033,14 @@ export class ProgramRunner extends Context.Service<
             ),
           );
 
+          // A restart that finished inside this call put in a life nothing has loaded yet, and the
+          // call that crashed will not load it. Wake it now, as a restart through the alarm is:
+          // its due loads the new life, which runs its init, owes its first sends and sets its wake.
+          if (working && !recovering(supervision) && live === null) {
+            yield* setAlarm(yield* Clock.currentTimeMillis);
+            return;
+          }
+
           if (working || recovering(supervision)) {
             yield* setAlarm();
           }
