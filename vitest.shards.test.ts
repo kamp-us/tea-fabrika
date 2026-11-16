@@ -137,7 +137,7 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/runtime.decode.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/settings-generated.test.ts": [4.8, 4.0, 5.3],
+  "next/apps/fabrika/src/settings-generated.integration.test.ts": [4.8, 4.0, 5.3],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/settings.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -258,16 +258,17 @@ const nextSamples = {
   "next/packages/libfabrika/src/node/launchd/LaunchdStatus.laws.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/launchd/ProcessGroups.laws.test.ts": [0.1, 0.0, 0.1],
+  // The repository files below took their `.integration.` names after these runs (ticket 1073, 0584).
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/Git.test.ts": [0.0, 0.0, 0.0],
+  "next/packages/libfabrika/src/node/repositories/Git.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts": [16.2, 13.0, 18.4],
+  "next/packages/libfabrika/src/node/repositories/OpenRepository.composed.integration.test.ts": [16.2, 13.0, 18.4],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.identity.test.ts": [43.6, 25.6, 31.9],
+  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.identity.integration.test.ts": [43.6, 25.6, 31.9],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts": [34.6, 16.4, 28.0],
+  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.integration.test.ts": [34.6, 16.4, 28.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/node/repositories/Sources.test.ts": [20.4, 23.2, 27.9],
+  "next/packages/libfabrika/src/node/repositories/Sources.integration.test.ts": [20.4, 23.2, 27.9],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/settings/Command.test.ts": [0.8, 0.6, 0.9],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -451,8 +452,9 @@ const integrationSamples = {
   "next/apps/fabrika/src/door.integration.test.ts": [177.7, 117.3, 174.9],
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/apps/fabrika/src/exam/bytes.integration.test.ts": [6.0, 6.4, 7.0],
+  // Plain since ticket 1073: it reads repo files and runs Rolldown in memory (0584).
   // A job 132292933270, B job 132315559508, C job 132330501025.
-  "next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts": [13.9, 10.6, 15.9],
+  "next/apps/fabrika/src/exam/client-manager-contract.test.ts": [13.9, 10.6, 15.9],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/clock.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933192, B job 132315559467, C job 132330500983.
@@ -592,8 +594,9 @@ const integrationSamples = {
   "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts": [41.0, 44.8, 77.0],
   // A job 132292933221, B job 132315559486, C job 132330501014.
   "next/packages/libfabrika/src/node/build/css.integration.test.ts": [11.9, 13.3, 9.8],
+  // Plain since ticket 1073: it gives FileSystem generated failures, a stand-in (0584).
   // A job 132292933192, B job 132315559534, C job 132330500983.
-  "next/packages/libfabrika/src/node/build/error-cause.integration.test.ts": [0.4, 0.3, 0.3],
+  "next/packages/libfabrika/src/node/build/error-cause.test.ts": [0.4, 0.3, 0.3],
   // A job 132292933169, B job 132315559467, C job 132330501025.
   "next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts": [8.8, 10.4, 9.3],
   // A job 132292933221, B job 132315559497, C job 132330501014.
@@ -1086,7 +1089,7 @@ describe("measured", () => {
 
 describe("full, the rows at full depth", () => {
   const WATCH = "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts";
-  const GIT = "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts";
+  const GIT = "next/packages/libfabrika/src/node/repositories/RepositoriesGit.integration.test.ts";
 
   it("names only files that are in the repo, so a renamed file cannot quietly keep a row", () => {
     const keys = Object.keys(full);
