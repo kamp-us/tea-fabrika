@@ -429,6 +429,10 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-wall-clock",
       "one-machine-per-file", // scoped plant and blocking check below
       "isolate-boundary", // scoped platform-name plant below
+      // E1 (0574): no-stability-tag.test.ts plants a tag at in-scope and waiting paths with the real lint config.
+      "no-stability-tag",
+      // E2 (0577): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
+      "prefer-namespace-import",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
       // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
@@ -752,6 +756,8 @@ describe("lint.ts, the first step of pnpm lint", () => {
 });
 
 const SECRET = "export const a = process.env.GITHUB_TOKEN;";
+// The Effect checker reads its directive anywhere in the text, a string too, so the planted ones are built.
+const CHECKER = ["@effect", "diagnostics"].join("-");
 
 describe("an ignore comment names its rules and says why", () => {
   const run = (name: string, text: string) => {
@@ -782,6 +788,23 @@ describe("an ignore comment names its rules and says why", () => {
     ["eslint, the next line", `// eslint-disable-next-line\n${SECRET}\n`],
     ["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
     ["JSX", `export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`],
+    // L3 of docs/plan/quests/effect-sweep-PLAN.md: the Effect checker's own ignore comment.
+    ["the checker's, no reason", `// ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    ["the checker's, the whole file", `// ${CHECKER} preferEffectArray:off -- why\n${SECRET}\n`],
+    ["the checker's, skip-file", `// ${CHECKER} skip-file\n${SECRET}\n`],
+    ["the checker's, no level", `// ${CHECKER}-next-line preferEffectArray -- why\n${SECRET}\n`],
+    ["the checker's, no check", `// ${CHECKER}-next-line -- why\n${SECRET}\n`],
+    ["the checker's, an empty reason", `// ${CHECKER}-next-line preferEffectArray:off -- \n${SECRET}\n`],
+    ["the checker's, in a block", `/* ${CHECKER}-next-line preferEffectArray:off */\n${SECRET}\n`],
+    ["the checker's, after other words", `// see // ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    // Four forms @effect/tsgo 0.63.0 obeys, found at review: each silenced a planted hit.
+    ["the checker's, after plain words", `// see the ${CHECKER}-next-line floatingEffect:off\n${SECRET}\n`],
+    ["the checker's, in a doc block", `/**\n * ${CHECKER}-next-line floatingEffect:off -- why\n */\n${SECRET}\n`],
+    ["the checker's, in a string", `export const s = "// ${CHECKER} floatingEffect:off";\n${SECRET}\n`],
+    [
+      "the checker's, a check in the reason",
+      `// ${CHECKER}-next-line preferEffectArray:off -- and floatingEffect:off\n${SECRET}\n`,
+    ],
   ])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
     const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
     expect(out.stdout).toContain("fabrika(no-bare-disable)");
@@ -798,6 +821,18 @@ describe("an ignore comment names its rules and says why", () => {
     ["from here on", `/* oxlint-disable fabrika/no-secret-env -- why\n more why */\n${SECRET}\n`],
     ["two rules", `// oxlint-disable-next-line fabrika/no-secret-env, no-debugger -- why\n${SECRET}\ndebugger;\n`],
     ["words that only mention it", `// the oxlint-disable comment\nexport const b = 1;\n`],
+    [
+      "the checker's, one check",
+      `// ${CHECKER}-next-line preferEffectArray:off -- the platform hands back a plain array\nexport const b = [1];\n`,
+    ],
+    [
+      "the checker's, two checks",
+      `// ${CHECKER}-next-line preferEffectArray:off globalDate:off -- why\nexport const b = [Date.now()];\n`,
+    ],
+    [
+      "a reason with a colon in it",
+      `// ${CHECKER}-next-line globalDate:off -- the time: a fixture\nexport const b = [Date.now()];\n`,
+    ],
   ])("takes %s", (_name, text) => {
     const out = run("named.ts", text);
     expect(out.stdout).not.toContain("no-bare-disable");

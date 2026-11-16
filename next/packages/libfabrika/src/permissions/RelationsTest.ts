@@ -11,7 +11,11 @@
 // The two layers are compared through the check, the only way to read `Tuples`: a test right per
 // relation makes every tuple visible.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Layer, Result, type Scope } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";

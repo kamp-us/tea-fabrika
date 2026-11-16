@@ -1,7 +1,5 @@
 /**
  * Fabrika's one permission model, declared once (0526), and its rights.
- *
- * @stability unstable
  */
 import * as Rebac from "./Rebac.ts";
 
@@ -10,7 +8,6 @@ import * as Rebac from "./Rebac.ts";
  * any program on it and watch any process on it: 0170's first rule. A smarter rule changes this
  * value, never the check.
  *
- * @stability unstable
  * @category models
  */
 export const Model = Rebac.make("fabrika")
@@ -27,7 +24,6 @@ export const Model = Rebac.make("fabrika")
  * The right to start a program on a fabrika, checked against the member whose input caused the
  * start (0170).
  *
- * @stability unstable
  * @category rights
  */
 export class StartProgram extends Rebac.Permission<StartProgram>()(
@@ -43,7 +39,6 @@ export class StartProgram extends Rebac.Permission<StartProgram>()(
  * The right to watch a process on a fabrika, as OTP's monitor, checked against the member behind
  * the program that asks (0170, 0531).
  *
- * @stability unstable
  * @category rights
  */
 export class WatchProcess extends Rebac.Permission<WatchProcess>()(

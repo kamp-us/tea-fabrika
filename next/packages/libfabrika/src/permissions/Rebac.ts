@@ -13,10 +13,12 @@
  * rows. After phoenix's capabilities (0107), with five changes: names come from the model, rewrites
  * are per permission, the store fails typed, `Denied` carries who, what and which object, and a
  * proof carries the object it checked.
- *
- * @stability unstable
  */
-import { Context, Effect, Option, Result, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -25,7 +27,6 @@ import type { Sender } from "./Senders.ts";
 /**
  * A ref to one object of type `T`: `type:id`, such as `fabrika:demo`.
  *
- * @stability unstable
  * @category models
  */
 export type Ref<T extends string> = `${T}:${string}`;
@@ -35,7 +36,6 @@ const RewriteTypeId: unique symbol = Symbol.for("@kampus/libfabrika/permissions/
 /**
  * How a permission is held: made only by `Rewrites`, so it names only declared names.
  *
- * @stability unstable
  * @category models
  */
 export interface Rewrite {
@@ -45,7 +45,6 @@ export interface Rewrite {
 /**
  * The rewrites a permission is declared with, over the names of its own object type.
  *
- * @stability unstable
  * @category models
  */
 export interface Rewrites<Names extends string> {
@@ -62,7 +61,6 @@ interface Names {
 /**
  * The declared object types of a model, each with its names.
  *
- * @stability unstable
  * @category models
  */
 export type Types = { readonly [type: string]: Names };
@@ -71,7 +69,6 @@ export type Types = { readonly [type: string]: Names };
  * One permission model, declared once: its object types, their relations and how permissions
  * combine them.
  *
- * @stability unstable
  * @category models
  */
 export interface Model<T extends Types> {
@@ -128,7 +125,6 @@ const build = <T extends Types>(name: string, declared: ReadonlyMap<string, Decl
 /**
  * Starts a model with no object types.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = (name: string): Model<Record<never, never>> => build(name, new Map());
@@ -136,7 +132,6 @@ export const make = (name: string): Model<Record<never, never>> => build(name, n
 /**
  * Error for a check that did not pass: who was checked, for what permission, on which object.
  *
- * @stability unstable
  * @category errors
  */
 export class Denied extends Schema.TaggedError<Denied>()("Denied", {
@@ -150,7 +145,6 @@ export class Denied extends Schema.TaggedError<Denied>()("Denied", {
 /**
  * A right: the context key of its proof, and its check.
  *
- * @stability unstable
  * @category models
  */
 export type PermissionClass<Self, Id extends string, On extends string> = Context.ServiceClass<
@@ -169,7 +163,6 @@ export type PermissionClass<Self, Id extends string, On extends string> = Contex
  * Builds a right on one permission of one object type: `class X extends Permission<X>()(id, {
  * model, on, permission }) {}`. The id is the proof's context key, so two rights never share one.
  *
- * @stability unstable
  * @category constructors
  */
 export const Permission =
@@ -186,7 +179,7 @@ export const Permission =
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
       return holds(tuples)
         ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
-        : Result.fail(new Denied({ subject, permission, object }));
+        : Result.fail(Denied.make({ subject, permission, object }));
     };
     return Object.assign(key, { within });
   };
@@ -195,7 +188,6 @@ export const Permission =
  * Puts a proof into an Effect's context, under its own right's key, as phoenix's `Grant.provide`
  * does: a proof of another right leaves the requirement where it was.
  *
- * @stability unstable
  * @category combinators
  */
 export const provide =
@@ -210,7 +202,6 @@ export const provide =
  * Checks a proof again on newer tuples: its own subject, permission and object, never another's. A
  * value no check made never holds.
  *
- * @stability unstable
  * @category combinators
  */
 export const recheck = (proof: Proof<unknown>, tuples: Tuples): boolean =>

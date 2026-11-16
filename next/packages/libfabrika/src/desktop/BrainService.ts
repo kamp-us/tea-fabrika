@@ -1,7 +1,5 @@
 /**
  * Public lifecycle for a home-owned brain.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -10,7 +8,6 @@ import * as Schema from "effect/Schema";
 /**
  * A lower operation failed; its cause is protected by the driver.
  *
- * @stability unstable
  * @category errors
  */
 export class Operation extends Schema.TaggedError<Operation>()("Operation", {
@@ -21,7 +18,6 @@ export class Operation extends Schema.TaggedError<Operation>()("Operation", {
 /**
  * A bounded lifecycle attempt expired.
  *
- * @stability unstable
  * @category errors
  */
 export class Timeout extends Schema.TaggedError<Timeout>()("Timeout", {
@@ -32,7 +28,6 @@ export class Timeout extends Schema.TaggedError<Timeout>()("Timeout", {
 /**
  * Another job, file or listener owns the requested resource.
  *
- * @stability unstable
  * @category errors
  */
 export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", { cause: Schema.Defect() }) {}
@@ -40,7 +35,6 @@ export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", { cause
 /**
  * Lifecycle failure with a checked reason.
  *
- * @stability unstable
  * @category errors
  */
 export class BrainServiceError extends Schema.TaggedError<BrainServiceError>()("BrainServiceError", {
@@ -50,7 +44,6 @@ export class BrainServiceError extends Schema.TaggedError<BrainServiceError>()("
 /**
  * Starts or reuses a brain, or awaits its confirmed shutdown.
  *
- * @stability unstable
  * @category services
  */
 export class BrainService extends Context.Service<

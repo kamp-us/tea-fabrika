@@ -1,15 +1,12 @@
 /**
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
- *
- * @stability unstable
  */
 import { Result, Schema } from "effect";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
  *
- * @stability unstable
  * @category models
  */
 export type Patch =
@@ -87,7 +84,6 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
 /**
  * Returns the patches that turn `before` into `after`, in the order to apply them. None when equal.
  *
- * @stability unstable
  * @category combinators
  */
 export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
@@ -116,7 +112,6 @@ const invalid = () => Result.fail("bad_patch" as const);
  * and `remove`, a path is malformed or names a missing place, or a path holds `__proto__`,
  * `constructor` or `prototype`.
  *
- * @stability unstable
  * @category combinators
  */
 export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {
