@@ -15,10 +15,19 @@ vi.spyOn(process.stderr, "write").mockImplementation((chunk) => out.logs.push(St
 
 // After: the one writer on this path that went around Effect, tea's default error sink, is given
 // a sink by the start, which logs through Effect. The law reads Effect's Logger, as it already
-// does, and Effect's Console service, which it provides.
+// does, and (amended 2026-11-15) Effect's own TestConsole, with app-e2e's warnLines.
 return yield* run(handsMachine, { interpret, subscribe, onError: report }); // HandsStart.ts
-yield* walk(f, out, secrets, done).pipe(Effect.provide(logger), Effect.provideService(Console.Console, console));
+yield* walk(f, out, secrets, done).pipe(Effect.provide(logger), Effect.provide(TestConsole.layer));
 ```
+
+**Amendment (2026-11-15, merge session rulings).** Coverage is never lost (ruling 4): tea's own
+writes are covered by the tea patch (the pipeline plan's new `patches/@demlik__tea@0.27.0.patch`,
+whose warning hook this start sets), and writes that go through Effect's `Console` by `TestConsole`
+with app-e2e's `warnLines` patch. So this plan drops its own `Console` stand-in for `TestConsole`.
+The lock refuses all five methods, `fn` included, with node's M1 as its law (ruling 2), and the
+slice lands on the sweep's one fold branch (ruling 1). The two `process.stdout` and
+`process.stderr` spies wait on the owner's answer to the cloudflare plan's open question 1, as the
+same two spies do there.
 
 ## Doubts, read these first
 
@@ -38,6 +47,22 @@ yield* walk(f, out, secrets, done).pipe(Effect.provide(logger), Effect.provideSe
   own code is held by Effect's checks `globalConsole` and `globalConsoleInEffect` once they are
   locked for these folders ([0565](../../../.decisions/0565-effects-own-checks-block.md)); they are
   not locked here yet, which "What this cannot tell us" repeats.
+
+  **Amendment (2026-11-15, merge session ruling 4): nothing is lost, and this doubt's acceptance is
+  withdrawn.** Each channel the net caught has a reader after this slice:
+  - tea's own `console.warn` sites, all seven (tea 0.27.0's `dist/`: `defaultOnError`, the run
+    listener's guard, two `onToolError` guards, three in `fromTransport`), go through the warning
+    hook of the pipeline plan's tea patch. `HandsStart.ts` sets that hook to log through Effect, as
+    `report` does, so S2's Logger reads them. This slice waits for that patch.
+  - Writes through Effect's `Console`: `TestConsole` reads `log` and `error`, app-e2e's patch adds
+    `warnLines`, and `info` and `debug` get readers of the same shape in the same patch (see the
+    cloudflare plan's M6, whichever slice comes first adds them). S2 reads all five methods the
+    old net read.
+  - Our own code: the cloudflare plan's M12 turns `eslint/no-console` on for libfabrika's product
+    files, which reaches `client/` and `node/client/`.
+  - `process.stdout` and `process.stderr`: the owner's answer to the cloudflare plan's open
+    question 1 decides how a raw write is held. Until it lands, this slice keeps those two spies,
+    and the folder's lock waits with them (see "The lock").
 
 ## What changes, in one paragraph
 
@@ -70,8 +95,10 @@ Recorder plan's row (3 spies: `console` 1, `process.stdout` and `process.stderr`
 **Who writes outside Effect on the S2 path, read on main.** `rg` for `console.` and
 `process.(stdout|stderr)` over `libfabrika/src/client/`, `src/node/client/` and `src/transport/`
 outside tests finds one hit, `JournalSqlite.child.test-support.ts:37`, a child process's own
-`ready` line that S2 never starts. The installed tea is 0.25.0
-(`next/packages/libfabrika/node_modules/@demlik/tea/package.json`). Its default sink
+`ready` line that S2 never starts. The installed tea was 0.25.0 when this was read
+(`next/packages/libfabrika/node_modules/@demlik/tea/package.json`); main moved `next/` to 0.27.0
+(pull request 1391), whose `dist/` has the same `defaultOnError` and the same seven
+`console.warn` sites (read 2026-11-15 from the published 0.27.0 package). Its default sink
 (`dist/chunk-4HXVP2GW.js`, `defaultOnError`) calls `console.warn(error)` for a
 `RuntimeDiscardNotice` and rethrows anything else in a `setTimeout`. Its other `console.warn` calls
 are a listener that throws, an agent's `onToolError` hook, and `fromTransport`; S2's start uses
@@ -84,10 +111,11 @@ the law did not replace still lands in the `Console` the law provides.
 - **Effect's way to watch console output** is the `Console` service with a test implementation:
   `effect/testing`'s `TestConsole` (installed 4.1.3, `src/testing/TestConsole.ts`) provides
   `Console.Console` and keeps one `{ method, parameters }` entry per call. Its readers are only
-  `logLines` and `errorLines`; `warn`, `info` and `debug` are kept but cannot be read. So the law
-  provides its own small `Console` that pushes every method's arguments, built the way `TestConsole`
-  builds its own (`Layer.effect(Console.Console)`), rather than lose `warn`, which is exactly tea's
-  method. The Recorder cannot stand in here: `Console`'s members are plain functions that return
+  `logLines` and `errorLines`; `warn`, `info` and `debug` are kept but cannot be read. So the first
+  version had the law provide its own small `Console`. **Amended 2026-11-15 (ruling 4):** that
+  stand-in goes. App-e2e's patch gives `TestConsole` a `warnLines` reader, and `infoLines` and
+  `debugLines` join it in the same patch, so `TestConsole` reads every method the spies read. The
+  Recorder cannot stand in here: `Console`'s members are plain functions that return
   `void`, and the Recorder watches only effectful members (recorder-PLAN, "The shape").
 - **Effect's way to see a log line** is a `Logger` the test provides, which S2 already does
   (`Logger.layer([Logger.map(Logger.formatStructured, ...)])`).
@@ -141,25 +169,39 @@ yield* Effect.raceFirst(printLines(runtime), runtime.done().pipe(Effect.andThen(
 ```
 
 ```ts
-// HandsSecrets.laws.test.ts, S2: the spies go, an in-memory Console comes in (a sketch)
-const push = (...args: ReadonlyArray<unknown>): void => void out.logs.push(args);
-// Every member of Effect's Console interface pushes its args, as TestConsole.make writes its own;
-// the tests step lists the members from the installed effect/src/Console.ts.
-const console: Console.Console = { log: push, info: push, warn: push, error: push, debug: push, trace: push /* , ... */ };
-
+// HandsSecrets.laws.test.ts, S2: the console spies go, Effect's TestConsole comes in. A sketch,
+// amended 2026-11-15: no Console stand-in of the law's own.
 yield* walk(f, out, secrets, done).pipe(
   Effect.withTracer(tracer),
   Effect.provide(logger),
-  Effect.provideService(Console.Console, console),
+  Effect.provide(TestConsole.layer),
   Effect.provideService(References.MinimumLogLevel, "All"),
   Effect.provide(TestClock.layer()),
 );
+// ...and S2's scan reads every method the spies read:
+const printed = [
+  ...(yield* TestConsole.logLines),
+  ...(yield* TestConsole.errorLines),
+  ...(yield* TestConsole.warnLines), // app-e2e's patch
+  ...(yield* TestConsole.infoLines), // the same patch, added by the first slice that needs it
+  ...(yield* TestConsole.debugLines),
+];
 ```
 
-The test `Console` is a test layer of Effect's own service, written once in the law file. If a
-second law in `next/` needs every method readable, it moves to `@kampus/vitest` beside the Recorder
-([0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md)); one user does not
-make it shared. 80%.
+```ts
+// HandsStart.ts, beside `report` (amended 2026-11-15): tea's own warnings go through Effect too.
+// `setWarn` is the hook the pipeline plan's tea 0.27.0 patch adds; its name follows that patch.
+yield* Effect.acquireRelease(
+  Effect.sync(() => setWarn((message, cause) => Effect.runSyncWith(context)(Effect.logWarning(message, cause)))),
+  (restore) => Effect.sync(restore),
+);
+```
+
+- The first version wrote its own `Console` in the law file, since `TestConsole` could not read
+  `warn` (amended 2026-11-15: marked wrong, the readers are patched in).
+- The hook is set for the start's scope and put back when it closes, so two starts in one process
+  restore in order. The tests step checks the patch's hook keeps a stack, or sets it once per
+  process, and says which.
 
 ## One value traced: a discard notice
 
@@ -176,10 +218,10 @@ make it shared. 80%.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| S2 (rewritten). The private half is in no frame, span, log line, `Console` call, error, journal row or state, over the same generated flows, with the spies gone and the in-memory `Console` read beside the Logger; every output the old law scanned is still scanned, and the `done` coverage list is unchanged | test | fc.record: the file's `Flow`, as today, 100 runs | the three plants the file names (the hello carries `d`; a span attribute holds the JWK; an error message holds the JWK text) stay red, and one more: `HandsStart.ts` writes the key's JWK with `Console.log`, which only the new `Console` read catches | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts |
+| S2 (rewritten). The private half is in no frame, span, log line, `Console` call, tea warning, error, journal row or state, over the same generated flows, with the console spies gone and `TestConsole`'s five readers read beside the Logger (amended 2026-11-15); every output the old law scanned is still scanned, and the `done` coverage list is unchanged | test | fc.record: the file's `Flow`, as today, 100 runs | the three plants the file names (the hello carries `d`; a span attribute holds the JWK; an error message holds the JWK text) stay red, and more: `HandsStart.ts` writes the key's JWK with `Console.log`, then with `Console.warn`, then with `Console.debug`, each caught only by its own reader; and (amended 2026-11-15) a tea run listener that throws with the JWK in its message, caught only through the tea hook | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts |
 | H1. A tea failure with no caller on a hands start becomes one Effect log line, at error (warning for a discard notice), annotated with its `phase`, and nothing reaches `Console` | test | scenario: one tea failure per phase this start can reach, at most three, which no generator draws (see the doubt) | drop `onError` from `run`: no log line, and tea's rethrow fails the run as an unhandled error | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
 | H2. After that failure, the run's `done()` fails with it (`SubFailed` for a Sub), which is what `hands.ts` races | test | scenario: the same trigger as H1 | the `socket` Sub ends its stream quietly on any failure (`Stream.catchCause(() => Stream.empty)`): `done()` keeps waiting, H2 red at its timeout | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
-| N1. A `vi.spyOn`, `vi.mock`, `vi.doMock` or `vi.stubEnv` in a test under `next/packages/libfabrika/src/node/client/` fails lint with 0555's message, and `vi.hoisted` there does not | lint | lint | delete the folder from the rule's `files` block: N1's planted line passes | oxlint-plugins/builtin-plants.ts, `.oxlintrc.json` |
+| N1. Node's M1 for this folder (amendment 2026-11-15, ruling 2): a `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` or `vi.stubEnv` in a test under `next/packages/libfabrika/src/node/client/` fails lint with node's message, and `vi.hoisted` there does not | lint | lint | delete the folder from the rule's `files` block: N1's planted lines pass; delete `fn` from the block: the planted `vi.fn()` passes | oxlint-plugins/builtin-plants.ts, `.oxlintrc.json` |
 
 - **S2 stays as strict as it is.** Every output it compared is still compared; one more (the
   `Console` calls) is added. The reviewer runs the loosening check on it.
@@ -198,9 +240,13 @@ On main there is no rule that refuses `vi.spyOn`: `.oxlintrc.json` has the `vite
 no `vitest/no-restricted-vi-methods` entry (`rg -n "no-restricted-vi" .oxlintrc.json` finds none),
 and no open pull request adds it (searched 2026-11-16). 0555 names that rule and its messages.
 
+- **Amendment (2026-11-15, merge session ruling 2):** the block refuses all five methods, `fn`
+  included, with node's five messages, not 0555's four; its law is node's M1. The folder has no
+  `vi.fn` today, so `fn` blocks at zero. The lock goes on the day the folder is at zero, which waits
+  for the two `process` spies (see the doubts); the slice's other parts land before it.
 - **If main still has no such entry when this slice's tests step starts,** this slice adds it: one
   `overrides` block in `.oxlintrc.json` for `next/packages/libfabrika/src/node/client/**`, at
-  `error`, with 0555's four messages, and a `VI_METHODS` plant in
+  `error`, with node's five messages, and node's `VI_METHODS` plant in
   `oxlint-plugins/builtin-plants.ts` that `plants.test.ts` runs in every folder the block lists
   (law N1), the way the Reflect ban's `REFLECT` plant does. Each later folder slice adds its folder
   to that block's `files`.
@@ -217,9 +263,14 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/client/HandsStart.ts | build | 14 | the `report` sink and `onError: report`; the doc block says where tea's failures with no caller go |
+| next/packages/libfabrika/src/client/HandsStart.ts | build | 18 | the `report` sink and `onError: report`; (amended 2026-11-15) the tea warning hook set for the start's scope; the doc block says where tea's failures and warnings go |
+| patches/effect@4.1.3.patch | tests | 12 | amended 2026-11-15, only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines`, with `pnpm patch` |
+| patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
+| patches/ | tests | none | the folder of the two patches above; no other file in it changes |
+| scripts/effect-testconsole.test.ts | tests | tests | with the readers above: their law, beside app-e2e's L3 |
+| patches/@demlik__tea@0.27.0.patch | tests | 0 | read only here (amended 2026-11-15): the pipeline plan's tea patch, whose hook `HandsStart.ts` sets; this slice waits for it |
 | next/apps/fabrika/hands.ts | build | 3 | the line printer races `runtime.done()` |
-| next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts | tests | tests | S2: the three spies and the `vi` import go; the in-memory `Console` is provided and read; the new plant noted in the header |
+| next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts | tests | tests | S2: the `console` spy goes, `TestConsole` is provided and its five readers read (amended 2026-11-15); the two `process` spies and the `vi` import go once the owner answers the cloudflare plan's open question 1; the new plants noted in the header |
 | next/packages/libfabrika/src/client/HandsStart.laws.test.ts | tests | tests | H1 and H2, added beside its laws |
 | oxlint-plugins/builtin-plants.ts | tests | tests | N1: the `VI_METHODS` plant, or one more folder for it |
 | oxlint-plugins/plants.test.ts | tests | tests | N1 runs the plant in the folder; changed only if the plant needs a new runner line |
@@ -238,7 +289,11 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
   answer is `onError`.
 - **The sink logs through Effect's Logger, not `Console`,** 85%. It is a failure report with a
   level and a phase, which is what a logger is for, and S2 already reads the Logger.
-- **The law's `Console` is its own, not `TestConsole`,** 85%. `TestConsole` cannot read `warn`.
+- **The law reads `TestConsole`, with app-e2e's `warnLines` and the `info` and `debug` readers
+  patched in** (amendment 2026-11-15, ruling 4, no longer a call; the first call, a `Console` of
+  the law's own, is marked wrong).
+- **tea's warnings reach S2 through the tea patch's hook, set by the start** (amendment
+  2026-11-15, ruling 4).
 - **The hands process still ends on a tea failure,** 85%. Today's behavior, OTP's rule, and the
   root map's "do what Erlang/OTP does". Only the way it ends changes: through Effect, with
   finalizers run and a failing exit code, instead of an uncaught throw.
@@ -261,11 +316,19 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 
 ## Size
 
-One pull request: the sink, the race, the law's rewrite, two new laws and the lock. Confidence in
+One slice: the sink, the race, the law's rewrite, two new laws and the lock. Confidence in
 the line counts: 80%; the doubt is H1's trigger, which may need a few lines of test support.
 
-1. The mock sweep in `node/client`: about 17 product lines, about 120 test lines added and about 20
-   removed, and about 12 lines of lint config. 29 lines.
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** The slice opens
+no pull request of its own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`,
+in its one pull request (0589, amended 2026-11-15), after its own steps, one fresh agent each:
+tests (S2, H1, H2, N1 and their plants, each run once), build (`HandsStart.ts` and `hands.ts`) and
+review (the slice's diff, with the loosening check on S2). It waits for the pipeline plan's tea
+patch and app-e2e's `warnLines`; its lock and the two `process` spies wait for the owner's answer.
+
+1. The mock sweep in `node/client`: about 21 product lines, about 130 test lines added and about 20
+   removed, about 12 lines of lint config, and the two `TestConsole` readers if no earlier slice
+   added them. 33 lines.
 
 Priced as the Recorder plan priced its steps, from the rows in `field/runs/` for 2026-11-10 to
 2026-11-15 at list price: a tests step about $6, a build about $4 (it is small), a review about $3,
@@ -289,8 +352,12 @@ Estimate: 4 steps, $17
   longer sees it. Effect's `globalConsole` checks would refuse it once locked for `client/` and
   `node/client/`; that is the Effect sweep's slice
   ([1412](https://github.com/kamp-us/tea-fabrika/pull/1412)), not this one.
-- **A package that writes to `console` itself,** tea's other warnings included. None is reached by
-  S2's start today; a future tea could add one, and S2 would not see it.
+- **A package other than tea that writes to `console` itself.** None is on S2's path today (read
+  above). tea's warnings no longer belong here: the tea patch's hook covers them (amended
+  2026-11-15). A future tea site that skips the hook would not be seen; the bump that drops the
+  patch reads tea's `dist/` again.
+- **When the owner answers the `process.stdout` and `process.stderr` question,** and so when this
+  folder's lock goes on.
 - **`hands.ts`'s race,** read by the review only; the integration law runs on the schedule.
 
 ## Open questions

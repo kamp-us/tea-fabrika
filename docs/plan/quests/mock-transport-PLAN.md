@@ -293,7 +293,7 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | H4. A failing admission fails `checkHello` with that very `AdmissionError`, and consume is never run | test | Effect Arbitrary: Schema.String | catch the admission error and answer `refused`: H4 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H5. The gateway's admission error reaches `door.initialize`'s caller as `AdmissionError`, its cause the gateway's own error | test | scenario: a store that fails inside admission | map the error to a new `AdmissionError` with no cause: H5 red | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts |
 | K2. The key file's hello is admitted by the door, as today | test | fc.record: the law's own nonce and tab, 60 runs | as today | next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts |
-| L1. In the transport folder, `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv` are refused, and so is every `toHaveBeenCalled*` matcher, with `.not` too | lint | lint | delete the transport folder from the block's `files`: L1's planted lines are not refused | next/packages/libfabrika/src/transport/Hello.test.ts |
+| L1. In the transport folder, `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv` are refused, and so is every `toHaveBeenCalled*` matcher, with `.not` too. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run in the transport folder, its lines node's shared `VI_METHODS` set, with this plan's matcher and renamed-import lines added to it | lint | lint | delete the transport folder from the block's `files`: L1's planted lines are not refused | next/packages/libfabrika/src/transport/Hello.test.ts |
 
 - A1 to A5 are today's p23 and d2 laws in `Answer.test.ts`, kept under their own titles; the A
   numbers are only this plan's. H1 to H3 are d2 and the p26 laws in `Hello.test.ts`, the same way.
@@ -328,10 +328,10 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts | tests | tests | slice 2: K2 provides `Layer.mock(Admissions, ...)` |
 | next/packages/libfabrika/src/node/ErrorCause.test.ts | tests | tests | slice 2: runs `GatewayCauseTest`'s suite, H5 included; no change expected |
 | .oxlintrc.json | tests | 25 | slice 2: the lock block for the transport folder, below; an exam path, so the tests step writes it with L1's plants |
-| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: the `MOCKS` plant lines of L1 |
-| oxlint-plugins/plants.test.ts | tests | tests | slice 2: runs `MOCKS` in every folder of the lock block |
+| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: L1's lines, in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant) |
+| oxlint-plugins/plants.test.ts | tests | tests | slice 2: node's M1 scenario runs `VI_METHODS` in every folder of the lock block |
 | .glossary/TERMS.md | build | docs | slice 1: a `Routes` row; slice 2: an `Admissions` row |
-| docs/plan/quests/recorder-PLAN.md | build | docs | slice 2: the transport row reads "done", with both pull requests |
+| docs/plan/quests/recorder-PLAN.md | build | docs | slice 2: the transport row reads "done", with both slices and the sweep's one pull request (amended 2026-11-15) |
 
 - Each new file is a front file of the `transport` module, beside `ClientKey.ts`, the same shape,
   and in libfabrika: a client written from scratch needs the door's hello and frame logic.
@@ -419,6 +419,10 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the Recorder
 plan priced them: a tests step about $6, a build about $5, a review about $3, a fix round about $4.
 Confidence in the line counts: 70%; the doubt is slice 2's gateway change, which 1366 may move.
+
+Both slices land on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull
+request (amendment 2026-11-15, merge session ruling 1); neither opens a pull request of its own.
+Each still runs its own tests, build and review steps, one fresh agent each, in its own box.
 
 1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 39 product lines, about 120 test lines
    changed. Tests $5, build $4, review $3. 39 lines.

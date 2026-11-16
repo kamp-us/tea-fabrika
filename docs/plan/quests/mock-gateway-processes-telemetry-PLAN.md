@@ -18,11 +18,23 @@ and random bytes go through `effect/crypto`'s services). It is the row "`libfabr
 vi.spyOn(crypto.subtle, "digest").mockRejectedValue(failure);
 const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
 
-// After: the product asks for Effect's Digest service, and the law provides one.
-const hash = yield* (yield* Digest.Digest).digestHex(Digest.sha256, bytes);
-const dies = Recorder.layer(Digest.Digest, { digestHex: () => Effect.die(failure) });
-expect(yield* Recorder.calls(Digest.Digest, "digestHex")).toEqual([[Digest.sha256, body]]);
+// After (amendment 2026-11-15, merge session ruling 3): the product reads crypto through Effect's
+// WebCrypto reference, so a failed digest stays a typed error, and the law hands in a stand-in.
+const crypto = yield* WebCrypto.WebCrypto;
+const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
+const rejecting = Rejecting.digest(failure); // keeps each body it was asked to hash, then rejects
+yield* Effect.flip(archive.put("spans/1", body)).pipe(Effect.provide(WebCrypto.layer(rejecting.crypto)));
+expect(rejecting.asked).toEqual([body]);
 ```
+
+**Amendment (2026-11-15, merge session rulings).** The first version of this plan moved the hashes
+to Effect's `Digest` service and caught its defect with `Effect.catchDefect`. The merge session
+ruled that a failed digest stays a typed error, through Effect's `WebCrypto` reference, as the
+cloudflare and transport plans do; this plan drops `catchDefect`. Its M3 follows the lib-top
+ruling: `Id.Generator.layer` keeps its own random source, so the law builds the generator with
+`makeGenerator` through lib-top's `generatorWith`. Each slice lands on the sweep's one fold branch,
+and the lock is node's M1. The sections below are amended in place; what they said before is kept
+where it explains a law.
 
 ## Doubts, read these first
 
@@ -32,27 +44,37 @@ expect(yield* Recorder.calls(Digest.Digest, "digestHex")).toEqual([[Digest.sha25
   "Every operation has a `never` error channel" (`crypto/SecureRandom.ts:11`). A rejected WebCrypto
   hash is a defect: `Effect.promise` inside `crypto/internal/digest.ts`. The approved
   [no Promises note](../../../docs/direction/no-promises.md) and the glossary row `crypto (reason)`
-  say a crypto failure is a typed error with its own reason. This plan keeps the typed error by
-  catching that one defect at the one call (`Effect.catchDefect`), so law C1 keeps its meaning. That
-  is the open question below; the plan is written on its lean.
+  say a crypto failure is a typed error with its own reason. The first version kept the typed error
+  by catching that one defect at the one call (`Effect.catchDefect`).
+
+  **Amendment (2026-11-15, merge session ruling 3):** settled, and not by `catchDefect`. A failed
+  digest stays a typed error, through Effect's `WebCrypto` reference
+  (`node_modules/effect/src/crypto/WebCrypto.ts`, a `Context.Reference` whose default is
+  `globalThis.crypto`): the hash is an `Effect.tryPromise` over the reference's `subtle.digest`,
+  whose `catch` makes the typed error, as `cloudflare/runtime.ts`'s `checkedPut` and
+  `transport/internal/binary.ts` do in their plans. No defect is made, so none is caught. Law C1
+  keeps its meaning with nothing translated.
 - **The pattern doc is wrong on this point (certain).** `effect-crypto-through-services.md:30-31`
   says "a failure is a typed `CryptoError`, not a rejected Promise". That holds for `Mac` and
   `Signature`, not for `Digest` or `SecureRandom`. The build fixes the line with the write-pattern
-  skill, since this quest changes the doc anyway.
-- **Nothing here can build before pull request 1366 merges (certain).** Every product change needs
-  a file in 1366's diff: `gateway/Gateway.ts` holds the two hashes, and `cloudflare/runtime.ts` is
-  the edge that must provide `Digest.layerWebCrypto` to the archive. See "Waits".
+  skill, since this quest changes the doc anyway. **Amendment (2026-11-15):** the doc also gains
+  the ruled rule: a hash whose failure must stay typed reads `crypto.subtle` through the `WebCrypto`
+  reference, not `Digest`; its "never touches `crypto.subtle`" line is narrowed to say so.
+- **Nothing here can build before pull request 1366 merges (certain).** `gateway/Gateway.ts` holds
+  the two hashes, and it is in 1366's diff. See "Waits". (Amendment 2026-11-15: `cloudflare/runtime.ts`
+  no longer needs to change, since a `Context.Reference` needs no provide.)
 
 ## What changes, in one paragraph
 
 Five `vi.spyOn` calls in these folders go, all on WebCrypto; there is no `vi.fn` and no
-`toHaveBeenCalled*`. Telemetry's archive and the gateway hash through Effect's `Digest` service, the
-edges provide `Digest.layerWebCrypto`, and the four laws that patched `crypto.subtle.digest` provide
-a `Digest` layer of their own instead: one that dies, read back through the `Recorder`, and one that
-pauses a chosen hash. The one law in `processes` that patched `crypto.getRandomValues` provides a
-`SecureRandom` layer once `Id.Generator` draws from that service, which is the top-level folder's
-slice. Then lint refuses `vi` mocks in these three folders: `vitest/no-restricted-vi-methods`, the
-rule 0555 names, in a block of its own like the Reflect ban's.
+`toHaveBeenCalled*`. **Amended 2026-11-15:** telemetry's archive and the gateway read `crypto`
+through Effect's `WebCrypto` reference, and the four laws that patched `crypto.subtle.digest` hand
+in a stand-in crypto with `WebCrypto.layer` instead: one whose digest rejects and keeps the bodies
+it was asked, and one that pauses a chosen hash. No edge changes: a reference needs no provide.
+The one law in `processes` that patched `crypto.getRandomValues` builds its generator with
+lib-top's `generatorWith` once `Id.Generator` draws from `SecureRandom`, which is the top-level
+folder's slice. Then lint refuses `vi` mocks in these three folders: `vitest/no-restricted-vi-methods`,
+the rule 0555 names, with all five methods and node's M1 as its law.
 
 ## The count, on main
 
@@ -62,15 +84,18 @@ over `next/packages/libfabrika/src/{gateway,node/gateway,processes,telemetry}`: 
 
 | Site | What it patches | What the law uses it for | What replaces it |
 |---|---|---|---|
-| `gateway/GatewayRevocation.integration.test.ts:631`, law "a route paused after its online check cannot record authenticated input after revoke" | `crypto.subtle.digest` | a gate: the hash of the request that holds `marker` waits on a `Deferred`, so the law can revoke in the gap | a pausing `Digest` layer, `paused(marker)` below |
+| `gateway/GatewayRevocation.integration.test.ts:631`, law "a route paused after its online check cannot record authenticated input after revoke" | `crypto.subtle.digest` | a gate: the hash of the request that holds `marker` waits on a `Deferred`, so the law can revoke in the gap | a pausing stand-in crypto handed in with `WebCrypto.layer`, `paused(marker)` below (amended 2026-11-15; was a `Digest` layer) |
 | `gateway/GatewayRevocation.integration.test.ts:706`, law "a settled retry paused after online rechecks revoke before answering its cached placing" | `crypto.subtle.digest` | the same gate, on a retry | the same |
 | `gateway/GatewayRevocation.integration.test.ts:1011`, law "a caused event paused after receipt checking cannot cross a revoke on another Gateway" | `crypto.subtle.digest` | the same gate, on an event's receipt | the same |
-| `telemetry/ErrorCause.test.ts:35`, law "C1: a digest that rejects is `storage` with the rejected value as its cause, on any archive" | `crypto.subtle.digest` | a failure: the digest rejects with a generated value | a `Recorder.layer(Digest.Digest, ...)` whose members die with `failure`, and the law reads the one call |
-| `processes/ProcessIdGenerator.test.ts:136`, laws "next dies on IdError `<clock, entropy, exhausted>` and keeps process.next around id.next" | `crypto.getRandomValues` | a failure (`entropy` throws) or the top random value (`255` bytes, for `clock` and `exhausted`) | a `SecureRandom` layer from `SecureRandom.make`, after `Id.Generator` reads that service |
+| `telemetry/ErrorCause.test.ts:35`, law "C1: a digest that rejects is `storage` with the rejected value as its cause, on any archive" | `crypto.subtle.digest` | a failure: the digest rejects with a generated value | (amended 2026-11-15) a stand-in crypto handed in with `WebCrypto.layer`, whose `subtle.digest` keeps each body it is asked and rejects with `failure`; the law reads that list |
+| `processes/ProcessIdGenerator.test.ts:136`, laws "next dies on IdError `<clock, entropy, exhausted>` and keeps process.next around id.next" | `crypto.getRandomValues` | a failure (`entropy` throws) or the top random value (`255` bytes, for `clock` and `exhausted`) | (amended 2026-11-15) `Id.Generator` built by lib-top's `generatorWith(fill)` over `makeGenerator`, under `ProcessIdGenerator.layer`, after `Id.Generator` reads `SecureRandom` |
 
-None of the five watches a call: four are a gate or a failure. So the Recorder appears only where a
-law gains a check it did not have (C1 reads that the archive hashed exactly the body it was given),
-and the rest are plain test layers, as 0555 says ("the service's own test layer").
+None of the five watches a call: four are a gate or a failure. **Amended 2026-11-15:** no Recorder
+appears here. The first version used one for C1, over Effect's `Digest`; `WebCrypto` is a reference
+to a platform object, not an Effect service, so its stand-in keeps what it was asked as its own
+state, as the cloudflare plan's socket fake keeps its sent frames (0554, 0557, and the Recorder
+pattern doc's "Where it applies"). C1 keeps the check that version added: the archive hashed
+exactly the body it was given, once.
 
 ## How others do it
 
@@ -80,109 +105,127 @@ and the rest are plain test layers, as 0555 says ("the service's own test layer"
 - **The pattern doc,** our current shape: domain code yields the service, the program's edge
   provides `layerWebCrypto` (`settings/Snapshot.ts:25-27`, `apps/fabrika/cli.ts:16`). Providing the
   layer inside the module, as `runtime/Built.ts` does, is listed there as "Not yet".
-- **A branch not taken:** keep `crypto.subtle` but read it from the `WebCrypto` reference, and let a
-  law provide `WebCrypto.layer(fake)`. It keeps the typed error with no defect to catch and touches
-  no edge, since a reference needs no provide. It goes against the pattern doc's rule "never touches
-  `crypto.subtle`", and a law would then build a fake platform object, which is the swap 0555 moves
-  away from. Not taken.
+- **The branch taken (amendment 2026-11-15, merge session ruling 3; first written as "not
+  taken"):** keep `crypto.subtle` but read it from the `WebCrypto` reference, and let a law provide
+  `WebCrypto.layer(fake)`. It keeps the typed error with no defect to catch and touches no edge,
+  since a reference needs no provide. The first version turned it down for the pattern doc's rule
+  "never touches `crypto.subtle`" and for the fake platform object a law builds. The ruling settles
+  both: the doc's rule is narrowed (see the doubts), and a stand-in for a platform object is what
+  0554 and 0557 put in a test helper, as transport's `Rejecting.crypto` is. The `Digest` branch is
+  marked wrong.
 
 ## The shape
 
 ### Telemetry's archive
 
 ```ts
-// next/packages/libfabrika/src/telemetry/Archive.ts. A sketch, not compiled.
-import { Digest } from "effect/crypto";
+// next/packages/libfabrika/src/telemetry/Archive.ts. A sketch, not compiled. Amended 2026-11-15:
+// the WebCrypto reference in place of Digest, and no catchDefect.
+import { WebCrypto } from "effect/crypto";
 
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
-  const digest = yield* Digest.Digest;
-  return yield* digest.digestHex(Digest.sha256, new Uint8Array(body)).pipe(
-    // A WebCrypto failure is a defect in Effect's Digest; the sink keeps it typed (the open question).
-    Effect.catchDefect((cause) => Effect.fail(new SinkError({ reason: "storage", held: 0, cause }))),
-  );
+  const crypto = yield* WebCrypto.WebCrypto;
+  const digest = yield* Effect.tryPromise({
+    // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
+    try: () => crypto.subtle.digest("SHA-256", new Uint8Array(body)),
+    // A rejected digest is a typed failure here, never a defect (ruling 3).
+    catch: (cause) => new SinkError({ reason: "storage", held: 0, cause }),
+  });
+  return hex(digest);
 });
-// sha256: (body: Uint8Array) => Effect<string, SinkError, Digest.Digest>
+// sha256: (body: Uint8Array) => Effect<string, SinkError>; a Context.Reference adds no requirement
 
 export class Archive extends Context.Service<Archive, { /* put, as on main */ }>()("...") {
-  // Each layer reads Digest once when built, so `put` keeps an environment of `never`.
-  static readonly memory: Layer.Layer<Archive, never, Digest.Digest>;
-  static readonly bucket: (calls: BucketCalls) => Layer.Layer<Archive, never, Digest.Digest>;
+  // Unchanged: `memory` and `bucket` keep main's types, since the reference needs no provide.
 }
 ```
 
-`digestHex` answers lowercase hex (`Digest.ts:143`), the same as main's `hex`, so the hash R2 is
-sent does not change. The `fabrika/no-promises` edge line at `Archive.ts:42` goes with the
-`tryPromise`.
+The hash R2 is sent does not change: `hex` and the `fabrika/no-promises` edge line at `Archive.ts:42`
+stay as on main; only where `crypto` comes from changes (amended 2026-11-15; the first version
+dropped both for `digestHex`).
 
 ### The gateway
 
 ```ts
-// next/packages/libfabrika/src/gateway/Gateway.ts, main's lines 2044-2066. A sketch.
-// `make` yields Digest.Digest once; fingerprint and hash take it.
-const sha = (digest: Digest.Digest["Service"], bytes: Uint8Array) =>
-  digest.digest(Digest.sha256, bytes).pipe(
-    Effect.catchDefect((cause) => Effect.fail(new LedgerError({ reason: "crypto", cause }))),
-  );
-// Gateway.layer(options): Layer<Gateway, never, Digest.Digest | ...main's own>
+// next/packages/libfabrika/src/gateway/Gateway.ts, main's lines 2044-2066. A sketch. Amended
+// 2026-11-15: fingerprint and hash read the WebCrypto reference; the catchDefect goes.
+const sha = Effect.fnUntraced(function* (bytes: Uint8Array) {
+  const crypto = yield* WebCrypto.WebCrypto;
+  return yield* Effect.tryPromise({
+    // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
+    try: () => crypto.subtle.digest("SHA-256", bytes),
+    catch: (cause) => new LedgerError({ reason: "crypto", cause }),
+  });
+});
+// Gateway.layer(options): Layer<Gateway, never, ...main's own>, unchanged
 ```
 
-The two `fabrika/no-promises` edge lines at main's `Gateway.ts:2053` and `:2062` go. The two
+The two `fabrika/no-promises` edge lines at main's `Gateway.ts:2053` and `:2062` stay, as edges of
+the reference's Promise (amended 2026-11-15; the first version removed them). The two
 `crypto.getRandomValues` calls in `Gateway.ts` (main's `:719` and `:2042`) and all of
 `GatewayNonce.ts` have no spy and stay; see "Not in this quest".
 
 ### The pausing layer the three gateway laws share
 
 ```ts
-// next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts. A sketch.
-/** Digest on WebCrypto, except the first hash of bytes that hold `marker` waits for `release`. */
-const paused = (marker: string, entered: Deferred.Deferred<void>, release: Deferred.Deferred<void>) =>
-  Layer.effect(
-    Digest.Digest,
-    Effect.gen(function* () {
-      const real = yield* Digest.Digest;
-      const once = yield* Ref.make(false);
-      const gate = (data: Uint8Array) =>
-        Effect.gen(function* () {
-          const hit = new TextDecoder().decode(data).includes(marker);
-          if (hit && !(yield* Ref.getAndSet(once, true))) {
-            yield* Deferred.succeed(entered, undefined);
-            yield* Deferred.await(release);
-          }
-        });
-      return {
-        digest: (algorithm, data) => Effect.andThen(gate(data), real.digest(algorithm, data)),
-        digestHex: (algorithm, data) => Effect.andThen(gate(data), real.digestHex(algorithm, data)),
-      };
+// next/packages/libfabrika/src/crypto.test-support.ts, new: gateway and telemetry both read it,
+// so it sits at the top of src/, beside Id.test-support.ts, not inside one module. A sketch. Amended
+// 2026-11-15: a stand-in crypto for the WebCrypto reference, in place of a Digest layer.
+/** The real crypto, except the first digest of bytes that hold `marker` waits for `release`. */
+export const paused = (marker: string, entered: () => void, release: Promise<void>): Crypto => {
+  let once = false;
+  return Stub.make<Crypto>(unexpected, {
+    getRandomValues: (array) => globalThis.crypto.getRandomValues(array),
+    subtle: Stub.make<SubtleCrypto>(unexpected, {
+      digest: async (algorithm, data) => {
+        if (!once && new TextDecoder().decode(data).includes(marker)) {
+          once = true;
+          entered();
+          await release;
+        }
+        return globalThis.crypto.subtle.digest(algorithm, data);
+      },
     }),
-  ).pipe(Layer.provide(Digest.layerWebCrypto));
+  });
+};
+
+/** A crypto whose digest keeps each body it is asked to hash, then rejects with `failure`. */
+export const rejecting = (failure: unknown) => {
+  const asked: Array<Uint8Array> = [];
+  const crypto = Stub.make<Crypto>(unexpected, {
+    subtle: Stub.make<SubtleCrypto>(unexpected, {
+      digest: (_algorithm, data) => (asked.push(new Uint8Array(data)), Promise.reject(failure)),
+    }),
+  });
+  return { asked, crypto };
+};
 ```
 
-`world()` and `setup()` take the `Digest` layer the doors are built with, `Digest.layerWebCrypto` by
-default, so a law that pauses builds its doors on `paused(...)`. Each law's `Deferred.await(entered)`
-gets an `Effect.timeout`, so a hash that no longer goes through `Digest` fails the law at once and
-does not hang it. The `try/finally` with `spy.mockRestore()` goes, and with it the module-level
-patch that could leak into the next law (0061).
+`world()` and `setup()` take the crypto the doors are built with, `globalThis.crypto` by default,
+and provide it with `WebCrypto.layer(...)`, so a law that pauses builds its doors on `paused(...)`.
+Each law's wait for `entered` gets an `Effect.timeout`, so a hash that no longer goes through the
+reference fails the law at once and does not hang it. The `try/finally` with `spy.mockRestore()`
+goes, and with it the module-level patch that could leak into the next law (0061). The helper's
+two Promise lines are marked `fabrika/no-promises` edges, as transport's `Rejecting.crypto` is, and
+it uses `Stub.make` (reflect slice 8), never a double cast. If gateway, cloudflare and transport
+end up with three like it, the review names one shared helper as a finding.
 
 ### The process id law, after `Id.Generator` reads `SecureRandom`
 
 ```ts
-// next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts. A sketch.
-const random = (exitReason: "clock" | "entropy" | "exhausted", marker: string) =>
-  Layer.succeed(
-    SecureRandom.SecureRandom,
-    SecureRandom.make((size) => {
-      if (exitReason === "entropy") {
-        throw new Error(marker);
-      }
-      return new Uint8Array(size).fill(255);
-    }),
-  );
-// ...pipe(Effect.provide(ProcessIdGenerator.layer), Effect.provide(random(exitReason, marker)))
+// next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts. A sketch. Amended 2026-11-15:
+// Id.Generator.layer keeps its own random source (the lib-top ruling), so a SecureRandom provided
+// from outside would never reach it. The law builds the generator from makeGenerator instead.
+import { bytes, generatorWith, throws } from "../Id.test-support.ts";
+
+const generator = (exitReason: "clock" | "entropy" | "exhausted", marker: string) =>
+  generatorWith(exitReason === "entropy" ? throws(new Error(marker)) : bytes(255));
+// ...pipe(Effect.provide(ProcessIdGenerator.layer), Effect.provide(generator(exitReason, marker)))
 ```
 
-`SecureRandom.make` turns a plain byte source into the whole service (`SecureRandom.ts:222`), so the
-law states only the bytes. The shape of `Id.Generator`'s change, and whether its `entropy` reason
-stays a typed `IdError` (the same open question), is the top-level folder's plan to say.
+`generatorWith(fill)` is lib-top's helper: `Layer.effect(Id.Generator, Id.makeGenerator)` over
+`SecureRandom.make(fill)` ([`mock-lib-top-PLAN.md`](./mock-lib-top-PLAN.md), "The shape"), so the
+law states only the bytes. The `entropy` reason stays a typed `IdError`, as lib-top's plan keeps it.
 
 ### The lock
 
@@ -200,11 +243,12 @@ stays a typed `IdError` (the same open question), is the top-level folder's plan
     "vitest/no-restricted-vi-methods": [
       "error",
       {
+        // Amendment 2026-11-15, ruling 2: the five methods with node's five messages.
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
         "mock": "Give the code a service and provide a test layer (0555).",
         "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and provide or record it in the law's layer (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555).",
-        "fn": "Watch the service's calls with Recorder.layer from @kampus/vitest (0579)."
+        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
       }
     ]
   }
@@ -212,25 +256,25 @@ stays a typed `IdError` (the same open question), is the top-level folder's plan
 ```
 
 No such block is on main at `e613fa45b`. If another folder's slice adds it first, this quest adds
-its folders to that block and its plant to that law. The rule is in oxlint 1.90.0, the installed
+its folders to that block and its plant lines to node's `VI_METHODS` set (amendment 2026-11-15,
+ruling 2: one lock shape, node's M1 as every block's law). The rule is in oxlint 1.90.0, the installed
 version (`node_modules/oxlint/configuration_schema.json`, `vitest/no-restricted-vi-methods`). `fn` is
 in the list because 0579 makes the Recorder the replacement for `vi.fn`; these folders have none.
 
 ## One value traced: C1 on the bucket archive
 
-1. The law draws `failure` (say `new TypeError("x")`) and `body` (say `[1, 2]`), and provides
-   `Archive.bucket(calls)` over a `Recorder.layer(Digest.Digest, ...)` whose members die with `failure`.
-2. `archive.put("spans/1", body)` runs `sha256(body)`, which yields the `Digest` the layer captured
-   at build, and calls `digestHex(Digest.sha256, [1, 2])`.
-3. The Recorder writes `{ method: "digestHex", args: [Digest.sha256, [1, 2]] }` and runs the law's
-   member, which dies with `failure`. A member the law leaves out dies with `UnimplementedError`
-   (`Layer.mock`), which would turn the law red for the wrong reason, so the tests step gives both
-   `digest` and `digestHex`, each dying with `failure`, and the law reads that exactly one call of
-   the two was made, with exactly `body`. That holds whichever member the build calls.
-4. `catchDefect` turns the defect into `SinkError { reason: "storage", cause: failure }`; `put` stops
-   before any bucket call.
-5. The law sees `error.reason === "storage"` and `error.cause === failure`, as on main, and one
-   recorded hash of exactly `body`.
+Amended 2026-11-15, on the `WebCrypto` reference:
+
+1. The law draws `failure` (say `new TypeError("x")`) and `body` (say `[1, 2]`), builds
+   `const r = rejecting(failure)`, and provides `Archive.bucket(calls)` with
+   `WebCrypto.layer(r.crypto)`.
+2. `archive.put("spans/1", body)` runs `sha256(body)`, which reads `WebCrypto.WebCrypto`, the law's
+   stand-in, and calls `crypto.subtle.digest("SHA-256", [1, 2])`.
+3. The stand-in pushes `[1, 2]` onto `r.asked` and rejects with `failure`.
+4. `tryPromise`'s `catch` makes `SinkError { reason: "storage", cause: failure }`: a typed failure,
+   with no defect made or caught. `put` stops before any bucket call.
+5. The law sees `error.reason === "storage"` and `error.cause === failure`, as on main, and
+   `r.asked` is exactly `[body]`: one hash, of exactly the body.
 
 ## Laws
 
@@ -239,11 +283,11 @@ ErrorCause's hand runner and seed move to `it.effect.prop` only in 0579's own sw
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| M1. The three revocation laws, unchanged in what they check: a revoke inside the paused request hash is honored, through a `Digest` layer that pauses, and the pause is reached within a timeout | test | fc.asyncProperty: target, `revokeFirst`, token and text, as on main; seed 119120, 3 runs fast and 25 runs full | skip the grant recheck after the request hash in `Gateway.ts`: M1 red on `revokeFirst`. And hash with `crypto.subtle` again: M1 red at the pause's timeout | next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts |
-| M2. C1: a digest that dies is `storage` with the defect as its cause, on either archive and on `sha256` alone, and the archive hashed exactly the body it was given, once | test | fc.asyncProperty: `failure`, `body` and `onBucket`, as on main; seed 119120, 100 runs | main's plant (`fail` built with no cause): M2 red. And hash `body.slice(1)`: M2 red on the recorded call | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts |
-| M3. `next dies on IdError <reason> and keeps process.next around id.next`, the same three cases with main's `Time`, `Count` and `marker` Schemas, through a `SecureRandom` layer | test | Effect Arbitrary: Time | make `Id.Generator` draw from `globalThis.crypto` again: the `entropy` case does not die, M3 red | next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts |
-| M4. The lock: `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused in every folder of the block, with `vi` imported from `vitest` and from `@effect/vitest`, and `vi.useFakeTimers` passes | lint | lint | delete one folder from the block: that folder's planted lines are not refused, M4 red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
-| M5. The product code these laws reach calls no `crypto.subtle.digest`: `Archive.ts` and `Gateway.ts`'s hashes need `Digest.Digest` in their type | type | type | provide nothing for `Digest` in one test that builds `Archive.memory`: it no longer compiles, red in a typecheck | next/packages/libfabrika/src/telemetry/Archive.ts, next/packages/libfabrika/src/gateway/Gateway.ts |
+| M1. The three revocation laws, unchanged in what they check: a revoke inside the paused request hash is honored, through a stand-in crypto that pauses, handed in with `WebCrypto.layer` (amended 2026-11-15), and the pause is reached within a timeout | test | fc.asyncProperty: target, `revokeFirst`, token and text, as on main; seed 119120, 3 runs fast and 25 runs full | skip the grant recheck after the request hash in `Gateway.ts`: M1 red on `revokeFirst`. And hash with `globalThis.crypto.subtle` again, past the reference: M1 red at the pause's timeout | next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts |
+| M2. C1: a digest that rejects is `storage` with the rejected value as its cause, on either archive and on `sha256` alone, with no defect, and the archive hashed exactly the body it was given, once (amended 2026-11-15: a rejection through the reference, as on main, not a defect) | test | fc.asyncProperty: `failure`, `body` and `onBucket`, as on main; seed 119120, 100 runs | main's plant (`fail` built with no cause): M2 red. Hash `body.slice(1)`: M2 red on `asked`. And `Effect.promise` in place of `tryPromise`, so the rejection dies: M2 red on its no-defect check | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts |
+| M3. `next dies on IdError <reason> and keeps process.next around id.next`, the same three cases with main's `Time`, `Count` and `marker` Schemas, through an `Id.Generator` built by lib-top's `generatorWith` (amended 2026-11-15) | test | Effect Arbitrary: Time | make `makeGenerator` draw from `globalThis.crypto` again: the `entropy` case does not die, M3 red; and provide `Id.Generator.layer` in place of `generatorWith(...)`: the `entropy` and `exhausted` cases do not happen, M3 red | next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts |
+| M4. The lock, node's M1 (amendment 2026-11-15, ruling 2): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused in every folder of the block, with `vi` imported from `vitest` and from `@effect/vitest`, and `vi.useFakeTimers` passes; these lines join node's `VI_METHODS` set | lint | lint | delete one folder from the block: that folder's planted lines are not refused, M4 red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M5. The product hashes these laws reach read `crypto` through `WebCrypto.WebCrypto`, never `globalThis.crypto`: with a stand-in handed in, `Archive.ts`'s and `Gateway.ts`'s hashes reach it (amended 2026-11-15; first a type law on `Digest`) | test | scenario: M1's and M2's own runs | read `globalThis.crypto.subtle` in `Archive.ts`: `asked` is empty and the real digest answers, M2 red; the same in `Gateway.ts`: M1 red at the pause's timeout | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts, next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts |
 
 - M4 also plants `import { vi as v } from "vitest"; v.spyOn(...)`, the form 0555 says the rule may
   miss. The law asserts what oxlint 1.90.0 does with it, and the run row records which. If it is not
@@ -252,8 +296,11 @@ ErrorCause's hand runner and seed move to `it.effect.prop` only in 0579's own sw
   already is on main, and no stand-in replaces that here. It runs in this box (step rules allow an
   `.integration.` law the files reach). No law needs the owner's Mac, so none is host-only.
 - No law reads a secret, so no `[secrets]` flow.
-- The 37 files that build an `Archive` or a `Gateway` layer each provide `Digest.layerWebCrypto`;
-  that is a type change with no law of its own (M5 holds it).
+- **Amended 2026-11-15:** the 37 files that build an `Archive` or a `Gateway` layer change nothing.
+  The first version had each provide `Digest.layerWebCrypto`; a `Context.Reference` needs no
+  provide, so every caller keeps `globalThis.crypto`, as today.
+- No law is loosened: M2 goes back to main's own claim (a rejection, typed), which the first
+  version had turned into a defect.
 
 ## Files
 
@@ -261,71 +308,45 @@ Slice 1, after 1366: telemetry and the gateway.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/telemetry/Archive.ts | build | 15 | `sha256` yields `Digest.Digest` and keeps `SinkError` by `catchDefect`; `memory` and `bucket` read `Digest` at build |
-| next/packages/libfabrika/src/gateway/Gateway.ts | build | 12 | `fingerprint` and `hash` through `Digest`, `LedgerError` `crypto` kept by `catchDefect`; `make` yields `Digest` once |
-| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 3 | provide `Digest.layerWebCrypto` where `archiveLayer` and the Gateway are built |
-| next/apps/fabrika/src/runtime.ts | build | 2 | provide `Digest.layerWebCrypto` to `Gateway.layer` |
-| next/packages/libfabrika/src/node/dev/dev-recording.ts | build | 2 | provide `Digest.layerWebCrypto` to `Archive.bucket` |
+Amended 2026-11-15: the `Digest` provides in 34 files (31 tests and 3 edges) are gone, since the
+`WebCrypto` reference needs no provide.
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/packages/libfabrika/src/telemetry/Archive.ts | build | 2 | `sha256` reads `WebCrypto.WebCrypto` in place of `globalThis.crypto`; its `tryPromise` keeps `SinkError` `storage` (amended 2026-11-15) |
+| next/packages/libfabrika/src/gateway/Gateway.ts | build | 4 | `fingerprint` and `hash` read `WebCrypto.WebCrypto`; `LedgerError` `crypto` stays the `tryPromise`'s typed failure (amended 2026-11-15) |
 | .oxlintrc.json | tests | 15 | the new block, with `gateway/**` and `telemetry/**` |
-| .patterns/effect-crypto-through-services.md | build | docs | with the write-pattern skill: the failure line corrected, the rule "a crypto failure keeps its typed reason by `catchDefect` at the one call", `Archive.ts` and the gateway's hashes out of "Not yet", the lock under "Holds it" |
-| next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | M1: `paused(...)`, `world`/`setup` take the `Digest` layer, the three spies go |
-| next/packages/libfabrika/src/telemetry/ErrorCause.test.ts | tests | tests | M2: `digestRejects` becomes a Recorder layer; the `vi` import goes |
-| oxlint-plugins/builtin-plants.ts | tests | tests | M4: a `VI` plant beside `REFLECT` |
-| oxlint-plugins/plants.test.ts | tests | tests | M4: "VI's lines are refused exactly, in every folder of every ban block", as REFLECT's scenario |
-| next/apps/fabrika/e2e/chaos-revoke.worker.test-support.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/door-recovery.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/door-spans.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/door.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/exam/agent-may.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/exam/runner-contract-replay.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/hands-client.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/apps/fabrika/src/instance-records.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/access/Authorization.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/desktop/BrainServiceTest.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/gateway/Gateway.types.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/gateway/TasksTest.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/ledger/TraceId.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/Chaos.test-support.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/ErrorCause.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/processes/ProcessSpans.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/runtime/EffectFunctions.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/runtime/Runner.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/telemetry/Sink.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
-| next/packages/libfabrika/src/telemetry/internal/sums.test.ts | tests | tests | adds `Digest.layerWebCrypto` where it builds an `Archive` or `Gateway` layer; nothing else |
+| .patterns/effect-crypto-through-services.md | build | docs | with the write-pattern skill: the failure line corrected, the rule "a hash whose failure stays typed reads `crypto.subtle` through the `WebCrypto` reference" (amended 2026-11-15; was `catchDefect`), `Archive.ts` and the gateway's hashes out of "Not yet", the lock under "Holds it" |
+| next/packages/libfabrika/src/crypto.test-support.ts | tests | tests | new (amended 2026-11-15): `paused` and `rejecting`, stand-in crypto objects on `Stub.make` |
+| next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | M1: `paused(...)` through `WebCrypto.layer`, `world`/`setup` take the crypto, the three spies go |
+| next/packages/libfabrika/src/telemetry/ErrorCause.test.ts | tests | tests | M2: `digestRejects` becomes `rejecting(failure)` through `WebCrypto.layer`; the `vi` import goes |
+| oxlint-plugins/builtin-plants.ts | tests | tests | M4: its lines join node's `VI_METHODS` set (amended 2026-11-15; was a `VI` plant of its own) |
+| oxlint-plugins/plants.test.ts | tests | tests | M4: node's M1 scenario, `VI_METHODS` refused exactly in every folder of every block that sets the rule |
 
 Slice 2, after the top-level folder's `Id.Generator` change: processes.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts | tests | tests | M3: the `random(...)` layer; the spy and its `try/finally` go |
+| next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts | tests | tests | M3: `generator(...)` over lib-top's `generatorWith` (amended 2026-11-15); the spy and its `try/finally` go |
+| next/packages/libfabrika/src/Id.test-support.ts | tests | tests | read only, not changed: lib-top's `generatorWith`, `bytes` and `throws` |
 | .oxlintrc.json | tests | 1 | `processes/**` joins the block |
 
 - `Archive.ts`, `ErrorCause.test.ts`, `ProcessIdGenerator.test.ts` and `GatewayRevocation.integration.test.ts`
-  are not in 1366's diff. `Gateway.ts`, `cloudflare/runtime.ts` and `runtime/Runner.integration.test.ts`
-  are, and so are these in the three folders: `processes/ProcessManager.ts`, `ProgramMail.ts`,
+  are not in 1366's diff, nor is `crypto.test-support.ts`. `Gateway.ts` is, and so are `cloudflare/runtime.ts`
+  and `runtime/Runner.integration.test.ts`, which this quest no longer changes (amended 2026-11-15), and so are these in the three folders: `processes/ProcessManager.ts`, `ProgramMail.ts`,
   `ProgramMailLedger.ts`, `Quotas.ts`, `QuotasSql.ts`, `QuotasTest.ts`, `internal/programMail.test.ts`,
   `internal/quota.ts`, `internal/quota.test.ts`, `telemetry/QuotaRefusalTest.ts` and `telemetry/Sink.ts`.
   This quest changes none of those last eleven. Read with `pull_request_read get_files`, 57 files,
   one page, on 2026-11-15.
-- Every file stays where it is; no new file. `Digest` and `SecureRandom` are Effect's, so the
-  libfabrika test in `next/AGENTS.md` does not move anything.
+- Every file stays where it is. The one new file (amended 2026-11-15) is test support at the top
+  of libfabrika's `src/`, read by two of its modules. `WebCrypto` and `SecureRandom` are Effect's,
+  so the libfabrika test in `next/AGENTS.md` does not move anything.
 
 ## Waits
 
 - **Slice 1 waits for pull request 1366** (P34c slice 4, a draft with red real-instance laws). It
-  needs `Gateway.ts` and `cloudflare/runtime.ts`, and `Runner.integration.test.ts` takes the
-  `Digest` provide. The plan's line numbers for `Gateway.ts` are main's at `e613fa45b` and move
+  needs `Gateway.ts` (amended 2026-11-15: no longer `cloudflare/runtime.ts` or a provide in
+  `Runner.integration.test.ts`). The plan's line numbers for `Gateway.ts` are main's at `e613fa45b` and move
   with 1366; the tests step re-reads them.
 - **Slice 2 waits for the top-level folder's slice** (`libfabrika/src`: `Id`, `Id.cause`, `check`,
   9 `crypto.getRandomValues` spies on the same `entropy()` in `Id.ts:131`). `Id.ts` and its laws are
@@ -335,9 +356,17 @@ Slice 2, after the top-level folder's `Id.Generator` change: processes.
 
 ## Calls taken
 
-- **Plain test layers, not the Recorder, where a law does not read calls,** 85%. Four of the five
-  spies are a gate or a failure; 0555 names "the service's own test layer" for a stand-in, and 0579
-  makes the Recorder the way to watch. C1 gains a read of the call, so it uses the Recorder.
+- **Stand-ins through Effect's own references, not the Recorder, where a law does not read calls,**
+  85%. Four of the five spies are a gate or a failure; 0555 names "the service's own test layer" for
+  a stand-in, and 0579 makes the Recorder the way to watch. **Amended 2026-11-15:** C1's read of the
+  hashed body is the stand-in crypto's own list, since `WebCrypto` is a platform object, not an
+  Effect service the Recorder can wrap.
+- **A failed digest stays typed through the `WebCrypto` reference, with no `catchDefect`**
+  (amendment 2026-11-15, merge session ruling 3, no longer a call; the `Digest` lean is marked
+  wrong).
+- **The process id law builds its generator with `generatorWith`** (amendment 2026-11-15, the
+  lib-top ruling: `Id.Generator.layer` keeps its own random source, so a `SecureRandom` provided
+  from outside would not reach it).
 - **`Id.Generator`'s move is the top-level slice's, and this quest's slice 2 follows it,** 80%. The
   product file and nine of the ten laws on its entropy are there; splitting it would put one change
   in two plans.
@@ -362,29 +391,47 @@ Slice 2, after the top-level folder's `Id.Generator` change: processes.
   `next/packages/libfabrika/src/telemetry/ErrorCause.test.ts`,
   `next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts` and
   `oxlint-plugins/plants.test.ts`. Each plant runs once and goes in the step's report.
-- The build: the same narrow paths. The lead runs the changed-files test run and the one type check,
-  the only check that reads M5 and the 31 provides.
+- The build: the same narrow paths. The lead runs the changed-files test run and the one type
+  check (amended 2026-11-15: no provides are left for it to read).
 - The review runs the loosening check on the five rewritten laws.
+
+## Steps
+
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** Neither slice
+opens a pull request of its own. Each lands on the mock sweep's one fold branch,
+`fabrikalfa/mock-fold`, and in its one pull request (0589, amended 2026-11-15), after its own
+steps, one fresh agent each, in its own box:
+
+1. **Tests:** the slice's laws, the stand-in crypto support and the lock lines, each plant run once.
+2. **Build:** slice 1 writes the two hashes' reads of the reference and the pattern doc. Slice 2 has
+   no product file: its build changes nothing, says so, and runs the slice's checks green at the
+   tests step's head (ruling 5).
+3. **Review:** the one review of the slice's diff, with the loosening check.
 
 ## Size
 
-Two pull requests, each landing whole. Confidence in the line counts: 75%; the doubt is how many of
-the 37 layer sites need more than one line to reach the provide.
+Two slices, each landing whole on `fabrikalfa/mock-fold`, the sweep's one fold branch (amended
+2026-11-15; first "two pull requests"). Confidence in the line counts: 80%; the doubt is how much
+the pausing stand-in needs to type against `Crypto` through `Stub.make`.
 
-1. Slice 1, telemetry and the gateway, after 1366: about 49 product lines, about 40 lines of
-   config and docs, about 150 test lines across 35 test files. 49 lines.
+1. Slice 1, telemetry and the gateway, after 1366: about 6 product lines (amended 2026-11-15; was
+   49 with the provides), about 40 lines of config and docs, about 120 test lines across 3 test
+   files. 6 lines.
 2. Slice 2, processes, after the top-level slice: 1 config line and about 20 test lines. 1 lines.
 
 Priced as the recorder plan priced its steps, from `field/runs/` for 2026-11-10 to 2026-11-15 at
 list price: a tests step about $6, a build about $5, a review about $3, a fix round about $4.
-Slice 1: tests $7 (35 files), build $5, review $3, one likely fix round $4. Slice 2: tests $3, build
-$1 (one line), review $2.
+Slice 1: tests $6 (3 files and the stand-ins), build $3 (two small reads and the doc), review $3,
+one likely fix round $4. Slice 2: tests $3, a build that only runs checks $1, review $2.
 
-Estimate: 7 steps, $25
+Estimate: 7 steps, $22
 
 ## Records
 
 - No new decision and no glossary row: this coins no word. The pattern doc changes in slice 1.
+- The merge session's rulings of 2026-11-15 are amendments here: the typed digest through
+  `WebCrypto`, M3 on `generatorWith`, one pull request for the sweep, and node's M1 for the lock.
+  Its one open question was answered (see "Answered questions").
 - 0555's "Consequences" counted 14 `crypto.subtle` and 11 `crypto.getRandomValues` spies in all of
   `next/`; this quest removes 4 and 1 of them.
 
@@ -394,12 +441,22 @@ Estimate: 7 steps, $25
 - Whether `vitest/no-restricted-vi-methods` sees a renamed `vi` import; M4's plant finds out.
 - What 1366 does to `Gateway.ts`'s hashes before it lands. If it adds a hash, slice 1 moves that
   one too.
-- Whether catching a defect at a crypto call hides a real bug in a test layer. The catch is one call
-  wide, and every other defect still dies.
+- Whether the stand-in crypto types against `Crypto` and `SubtleCrypto` through `Stub.make` with no
+  cast (amended 2026-11-15; this replaces the first version's doubt about catching a defect, which
+  no longer happens). Transport's `Rejecting.crypto` meets the same question first.
 
 ## Open questions
 
-1. **A WebCrypto failure through Effect's `Digest` (and `SecureRandom`) is a defect: does our code
+None.
+
+## Answered questions
+
+**Amendment (2026-11-15, merge session ruling 3):** the one open question was answered: a failed
+digest stays a typed error, through Effect's `WebCrypto` reference, with no `catchDefect`. The
+lean's goal held (typed) and its means did not (`catchDefect` over `Digest`). The question is kept
+as it was asked. The `SecureRandom` half is lib-top's, whose plan keeps `IdError` `entropy` typed.
+
+1. **(Answered 2026-11-15: typed, through the `WebCrypto` reference.) A WebCrypto failure through Effect's `Digest` (and `SecureRandom`) is a defect: does our code
    keep it a typed error, or follow Effect?** Effect 4.1.3 gives these services a `never` error
    channel, so the known way is a defect. The approved no Promises note and the glossary row
    `crypto (reason)` say a crypto failure is typed with its own reason. Lean: keep it typed, by

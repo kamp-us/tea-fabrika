@@ -1,7 +1,7 @@
 
 Plancheck-Version: 3
 
-# Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in four pull requests
+# Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in four slices on the sweep's one pull request
 
 ```ts
 // next/apps/fabrika/src/door.integration.test.ts:3083, today: a vi.fn hidden in a hand wrap of the real service
@@ -30,15 +30,30 @@ the other sweeps of 0555 and stay as they are here.
 
 ## Doubts, read these first
 
-- **Open question 1 decides five laws (lean 60%).** Effect's own `Digest` service answers
-  `Effect<Uint8Array>`: a failed SHA digest is a defect, not a typed error. Five laws today plant a
-  thrown or rejected `crypto.subtle.digest` and expect a typed `crypto` refusal. On Effect's
-  `Digest` those laws must plant a defect instead, which is a changed law the owner says yes to.
-  Slice 3 waits on the answer; slices 1 and 2 do not.
-- **Open question 2 decides one `vi.fn` (lean 70%).** `inputs.name` in the gateway's settings is
-  a plain function of our own API. Two approved rows disagree on what replaces a `vi.fn` on such a
-  callback: the recorder plan's `transport/` row says "becomes a service", the oxlint-plugins plan
-  says "a plain list the test owns". It is in slice 3.
+**Amendment (2026-11-15, merge session rulings).** Both open questions were answered, and the
+first two doubts below are kept as they were written, each marked with its answer. Each slice lands
+on the sweep's one fold branch, not as a pull request of its own (ruling 1). The lock refuses all
+five methods with node's M1 as its law (ruling 2), which raises a new question for the merge
+session (open question 3).
+
+- **Open question 1 decides five laws (lean 60%).** (Answered 2026-11-15: a failed digest stays a
+  typed `crypto` refusal, through Effect's `WebCrypto` reference, as the cloudflare and transport
+  plans do. The defect lean is marked wrong, and the five laws keep what they check.) Effect's own
+  `Digest` service answers `Effect<Uint8Array>`: a failed SHA digest is a defect, not a typed
+  error. Five laws today plant a thrown or rejected `crypto.subtle.digest` and expect a typed
+  `crypto` refusal. On Effect's `Digest` those laws must plant a defect instead, which is a changed
+  law the owner says yes to. Slice 3 waits on the answer; slices 1 and 2 do not.
+- **Open question 2 decides one `vi.fn` (lean 70%).** (Answered 2026-11-15: a watched callback goes
+  through a service (0555), as the transport row says. The plain-list lean is marked wrong.)
+  `inputs.name` in the gateway's settings is a plain function of our own API. Two approved rows
+  disagree on what replaces a `vi.fn` on such a callback: the recorder plan's `transport/` row says
+  "becomes a service", the oxlint-plugins plan says "a plain list the test owns". It is in slice 3.
+- **The lock's reach while files still hold `vi.mock`, `vi.doMock` or `vi.stubEnv` (open question
+  3, waiting on the merge session).** Ruling 2 puts all five methods in every block. Of the files
+  this plan locks, every one but `exam/alchemy-lifecycle.test.ts` keeps a `vi.mock`, `vi.doMock`
+  or `vi.stubEnv` for 0555's other sweeps (counted on main at `0683861`). A five-method block can
+  name only files at zero for all five, so the `fn` and `spyOn` hold this plan had on the files it lists
+  would shrink to one. That reads as a loosening of A6 and A8, so it is not applied.
 - **The Alchemy patch (70%).** Slice 2 patches `@alchemy.run/cloudflare-runtime`'s Node `Workerd`
   to spawn through Effect's `ChildProcessSpawner`, as the recorder plan's row says. That keeps
   workerd's fourth file descriptor, the control pipe the laws write `listen` events to. Effect's
@@ -95,12 +110,12 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
 | `exam/alchemy-lifecycle…:33` | workerd's spawn, made into a fake child the law can crash | a `ChildProcessSpawner` stand-in that answers fake handles | the Alchemy patch, slice 2 |
 | `door…:1871,1877,1888,5121` | WebCrypto `importKey`, `sign` and `verify` of the gateway's nonce, failed once, or held | `Recorder.layer(Mac.Mac, …, { fails })`, and a held `verify` in the impl | `GatewayNonce.ts` takes Effect's `Mac` and `SecureRandom`, slice 3 |
 | `door…:1800` d3 | `getRandomValues` sets the waiting code's random `Uint32` | `SecureRandom.make(() => bytes of random)` as the law's layer | `Gateway.ts` takes `SecureRandom`, slice 3 |
-| `door…:1027,1899,1916`, `runtime…:869` | `crypto.subtle.digest` is not called on a rate refusal, or fails once | `Recorder.layer(Digest.Digest, …)`, or our own service, by open question 1 | `Gateway.ts` and `cloudflare/runtime.ts`, slice 3 |
-| `door…:1030,1041` T843 `named` | `inputs.name` is not called on a rate refusal | by open question 2 | maybe, slice 3 |
+| `door…:1027,1899,1916`, `runtime…:869` | `crypto.subtle.digest` is not called on a rate refusal, or fails once | (amended 2026-11-15, open question 1's answer) a stand-in crypto handed in with `WebCrypto.layer`, whose `subtle.digest` keeps each body it is asked and rejects or answers as the law says; its list stays `[]` on a rate refusal | `Gateway.ts` and `cloudflare/runtime.ts` read `WebCrypto.WebCrypto`, slice 3 |
+| `door…:1030,1041` T843 `named` | `inputs.name` is not called on a rate refusal | (amended 2026-11-15, open question 2's answer) the gateway asks an `InputNames` service for an input's name, and the law records it with `Recorder.layer(InputNames, …)`; `Recorder.calls(InputNames)` is `[]` | `Gateway.ts` asks `InputNames`, and the program's `inputs.name` becomes that service's layer, slice 3 |
 | `door…:1032,1043` T843 `next` | no process id is drawn on a rate refusal | `Recorder.layer(ProcessIdGenerator, …)` in the law's world; `controls.next` already reads that service | none |
 | `runtime…:876,893` | an R2 `put` never runs when the checksum digest fails | a typed R2 stand-in whose `put` pushes onto a list the law owns: a platform object, not a service (0554, 0557) | none for this one, but it shares a law with the digest |
 | `runtime…:310` | the startup build gets the law's parent span | the product gives the startup build a parent span | `cloudflare/runtime.ts`, slice 3 |
-| `runtime-recovery…:1181` | the configure delivery is logged by Effect's logger | `TestConsole`, through a `Console` the project runtime is given | `cloudflare/runtime.ts`, slice 3 |
+| `runtime-recovery…:1181` | the configure delivery is logged by Effect's logger (spies on `log`, `error` and `warn`) | `TestConsole`, through a `Console` the project runtime is given, read with `logLines`, `errorLines` and (amended 2026-11-15, ruling 4) app-e2e's `warnLines` | `cloudflare/runtime.ts`, slice 3 |
 | `local-instance…:84,91,158,223` | `fetch` to the dev server, and `process.kill` never sent | the `FetchHttpClient.Fetch` stand-in, and the signal service of the `libfabrika/src/node/dev` slice | that slice's `process.kill` move, slice 4 |
 
 ## How others do it
@@ -249,9 +264,32 @@ const gatewayNonce = Effect.fn("gateway.nonce")(function* (store, ttl: number, c
   const check = /* … */ mac.verify(key, tag, data).pipe(Effect.mapError(fail));
   // fail = (cause: CryptoError.CryptoError) => new GatewayError({ reason: new Crypto({ cause }) })
 });
-// Gateway.layer's requirements gain Mac | SecureRandom | Digest; the app's runtime.ts provides
-// Mac.layerWebCrypto, SecureRandom.layerWebCrypto and Digest.layerWebCrypto.
+// Gateway.layer's requirements gain Mac | SecureRandom | InputNames; the app's runtime.ts provides
+// Mac.layerWebCrypto and SecureRandom.layerWebCrypto. Amended 2026-11-15: no Digest. The digests in
+// Gateway.ts and cloudflare/runtime.ts read the WebCrypto reference, which needs no provide, and
+// keep the typed `crypto` refusal (open question 1's answer).
 ```
+
+```ts
+// Gateway.ts's digests, slice 3, a sketch (amended 2026-11-15): the cloudflare plan's checkedPut shape
+const crypto = yield* WebCrypto.WebCrypto;
+// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
+const digest = yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
+
+// next/packages/libfabrika/src/gateway/InputNames.ts, the contract only (0095). A sketch; the
+// name is the build's to confirm, and a glossary row follows if it stays.
+export class InputNames extends Context.Service<
+  InputNames,
+  { readonly name: (input: unknown) => Effect.Effect<string> }
+>()("@kampus/libfabrika/gateway/InputNames") {}
+// The program's `inputs.name` mapping is handed in as `Layer.succeed(InputNames, { name })`, so a
+// caller that names inputs today keeps its function and wraps it once.
+```
+
+- **Why a service for `inputs.name`** (amendment 2026-11-15, open question 2's answer): 0555 says
+  "a call the law wants to watch goes through a service", and the transport row reads that as the
+  rule for every callback of ours. The cost the first lean named stays: each gateway caller
+  provides one more layer. The slice 3 tests step lists the callers before it starts.
 
 ```ts
 // door.integration.test.ts, the crypto edges: a CryptoError value the law makes, failed once
@@ -312,6 +350,17 @@ that slice's service as it lands and adds no service of its own.
 }
 ```
 
+**Amendment (2026-11-15, merge session ruling 2): one lock shape everywhere.** The sweep's blocks
+refuse all five methods, `fn`, `mock`, `doMock`, `spyOn` and `stubEnv`, with node's five messages,
+and node's M1 ([`mock-node-PLAN.md`](./mock-node-PLAN.md), "Laws") is every block's law: the
+shared `VI_METHODS` plant set, run in each path of every block that sets the rule. So a file of
+this folder joins that five-method block the day it is at zero for all five, and the folder's glob
+joins when the folder is. The two-method override above is the first sketch. Read as written, the
+ruling leaves no lock on the files that still hold the other sweeps' calls, and on this plan's
+files that is all but one (see the doubts). Whether those files keep the two-method override
+meanwhile is open question 3, for the merge session; until it rules, the override above stays as
+it was planned, and nothing it holds is dropped.
+
 - Probed in this session on the installed oxlint 1.90.0, in the scratchpad: the rule refuses
   `vi.fn()` and `vi.spyOn(...)`. It does not see `v.fn()` after `const v = vi`. The oxlint-plugins
   plan found that it does see `v.fn()` after `import { vi as v }`.
@@ -351,25 +400,27 @@ plant is what the review runs once to see it red.
 | A3. Each grant mode sends exactly its GET and POST, and prints `Granted <key> to <for>` once on `applied` and nothing else | test | fc.constantFrom: the modes, as today, 3 runs (12 at full depth) | print the line on `refused` too, or print a second line: `logLines` differs | next/apps/fabrika/src/grant-readers.laws.test.ts |
 | A4. p27: a granted, revoked or added grant with a wrong `to` never calls `ClientManager.write` and founds nothing | test | Effect Arbitrary: Grant.fields.to | in `next/packages/libfabrika/src/gateway/Gateway.ts`, write the client before the ledger check (the plant is made on a scratch copy; that file is in PR 1366 and is not changed) | next/apps/fabrika/src/door.integration.test.ts |
 | A5. p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
-| A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
-| A7. The planted lines are refused: `vi.fn()`, `vi.spyOn(console, "log")`, and `v.fn()` after `import { vi as v }`; a plain list is not | test | scenario: one plant entry in the `vitest` group | drop `fn` from the rule's options: the first line passes | oxlint-plugins/builtin-plants.ts |
+| A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2) | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
+| A7. Node's M1 (amendment 2026-11-15, ruling 2): the `VI_METHODS` lines are refused in every path of every block that sets the rule, `vi.fn()`, `vi.spyOn(console, "log")`, `vi.mock`, `vi.doMock` and `vi.stubEnv` among them, and `v.fn()` after `import { vi as v }` joins the set; a plain list is not refused | test | scenario: node's `VI_METHODS` set | drop `fn` from the rule's options: the `vi.fn()` line passes | oxlint-plugins/builtin-plants.ts |
 | A8. The locked files are at zero: `pnpm lint` passes with the lock an error, and no disable line names it | lint | lint | put back `const touched = vi.fn(() => Effect.never)`: `pnpm lint` exits 1 | next/apps/fabrika/src/file-services.laws.integration.test.ts |
 | B1. Alchemy's lifecycle reports spawn ids, replacement delays and the brake, and a closed scope cancels recovery, with workerd spawned through the law's `ChildProcessSpawner` | test | fc.string: the worker name, as today, 3 runs | in the patch, spawn with `node:child_process` again: the law's spawner sees no child and the start event is missing | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
 | B2. The installed lifecycle patch matches its locked hash | test | format: the one registration line and its sha256 | edit the patch without `pnpm patch-commit`: the hash differs | next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts |
 | B3. A port is reused only after every child spawned on it has closed | test | pinned: the two instances on one held port, as today | resolve the wait before the handles' exits: the second instance's bind fails with address in use | next/apps/fabrika/src/instance-one-file.integration.test.ts |
-| C1. T843: a rate refusal draws no process id, names no input, hashes nothing and delivers nothing | test | Effect Arbitrary: small | in `Gateway.ts`, draw a process id before the rate check: `Recorder.calls(ProcessIdGenerator)` is not `[]` | next/apps/fabrika/src/door.integration.test.ts |
+| C1. T843: a rate refusal draws no process id, names no input, hashes nothing and delivers nothing | test | Effect Arbitrary: small | in `Gateway.ts`, draw a process id before the rate check: `Recorder.calls(ProcessIdGenerator)` is not `[]`; (amended 2026-11-15) name the input before the rate check: `Recorder.calls(InputNames)` is not `[]`; hash before it: the stand-in crypto's list is not `[]` | next/apps/fabrika/src/door.integration.test.ts |
 | C2. d3: any random `Uint32` gives a six-digit waiting code with its leading zeros | test | fc.integer: 0 to 0xffffffff, with 4294967295 pinned, as today, 3 runs (30 at full depth) | keep seven digits: the code differs | next/apps/fabrika/src/door.integration.test.ts |
 | C3. A crypto failure at each of the nonce's and the digest's edges is refused with `crypto`, keeps the failure as its cause, and delivers nothing | test | fc.anything: the thrown value, kept inside the `CryptoError`, 3 runs (15 at full depth) | map a `CryptoError` to `Storage` at any edge: that edge's row is red | next/apps/fabrika/src/door.integration.test.ts |
 | C4. Two `initialize` calls that race on a held `verify` spend the nonce once | test | scenario: one held `Mac.verify` and two forked calls, as today | spend before the verify: both succeed | next/apps/fabrika/src/door.integration.test.ts |
 | C5. The fingerprint and archive checksum refuse every digest failure with `crypto`, and no R2 `put` runs | test | fc.oneof: the failure values, as today, 3 runs (20 at full depth) | run `put` before the digest: `puts` is not `[]` | next/apps/fabrika/src/runtime.laws.integration.test.ts |
 | C6. The bootstrap entry keeps the caller's span trace | test | Effect Arbitrary: Trace | build the startup layer with no parent span: `traceId` differs | next/apps/fabrika/src/runtime.laws.integration.test.ts |
-| C7. A failed, interrupted or healthy configure restores the descriptor and logs the delivery | test | pinned: the three faults, as today | drop the delivery's log line: `logLines` lacks it | next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts |
+| C7. A failed, interrupted or healthy configure restores the descriptor and logs the delivery, read from every channel the spies read: `logLines`, `errorLines` and `warnLines` (amended 2026-11-15, ruling 4) | test | pinned: the three faults, as today | drop the delivery's log line: `logLines` lacks it; log it at warning: red only if `warnLines` is not read | next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts |
 | D1. The local instance fetches its dev server and never signals a process it did not start | test | pinned: the instance's start and stop, as today | signal the parent on stop: the signal service's record is not `[]` | next/apps/fabrika/src/local-instance.integration.test.ts |
 
 - C3's generator changes. Today it draws "a rejection or a throw, of any value". On `Mac` the
   throw-or-reject split happens inside Effect's layer, so the law draws the value a `CryptoError`
-  carries. It checks the refusal keeps that very error as its cause. Its digest rows wait on open
-  question 1.
+  carries. It checks the refusal keeps that very error as its cause. Its digest rows waited on open
+  question 1; with its answer (amended 2026-11-15) they keep today's generator, a rejection or a
+  throw of any value from the stand-in crypto's `digest`, and today's check, a `crypto` refusal
+  with that value as its cause. C5 is the same. No digest law changes what it checks.
 - Real resources: B3 and D1 run a real workerd or a real child, and are `*.integration.test.ts`
   files already, run on the schedule (0536). A stand-in cannot replace the real child there, since
   what they check is a real port and a real process. They are not new, so 0581's "why no stand-in"
@@ -382,12 +433,16 @@ plant is what the review runs once to see it red.
 
 ## Steps
 
-Each slice is one pull request through the steps, one fresh agent each:
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** No slice opens
+a pull request of its own (the first version said "Each slice is one pull request"). Each slice
+lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its one pull request
+(0589, amended 2026-11-15), after its own steps, one fresh agent each, in its own box:
 
 1. **Tests:** rewrites the slice's laws, writes the lock rows and plants, runs each plant once.
 2. **Build:** slices 1 and 2 have no product file for the build: slice 1 changes none, and slice
-   2's patch and lockfile are exam paths, so the tests step writes them. There the build runs the
-   checks and reports green or sends back. Slices 3 and 4 write the product change.
+   2's patch and lockfile are exam paths, so the tests step writes them. There the build changes
+   nothing, says so, and runs the checks green, or sends back. Slices 3 and 4 write the product
+   change.
 3. **Review:** the one review of the slice's whole diff against this plan, 0555 and 0579, with the
    loosening check on every rewritten law.
 
@@ -409,11 +464,12 @@ Each slice is one pull request through the steps, one fresh agent each:
 | patches/ | tests | none | the folder of the patch above; no other file in it changes |
 | pnpm-lock.yaml | tests | 1 | slice 2: the patch's new hash, written by `pnpm patch-commit` |
 | next/packages/libfabrika/src/gateway/GatewayNonce.ts | build | 30 | slice 3: `Mac` and `SecureRandom` |
-| next/packages/libfabrika/src/gateway/Gateway.ts | build | 20 | slice 3, after PR 1366: `SecureRandom` and the digest, by open question 1 |
-| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 25 | slice 3, after PR 1366: the digest, the startup span and the `Console` option |
-| next/apps/fabrika/src/runtime.ts | build | 5 | slice 3: provides the three `effect/crypto` layers |
+| next/packages/libfabrika/src/gateway/Gateway.ts | build | 24 | slice 3, after PR 1366: `SecureRandom`, the digests through the `WebCrypto` reference, and (amended 2026-11-15) the input's name through `InputNames` |
+| next/packages/libfabrika/src/gateway/InputNames.ts | build | 10 | slice 3, new (amended 2026-11-15): the contract only |
+| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 25 | slice 3, after PR 1366: the digest through the `WebCrypto` reference, the startup span and the `Console` option |
+| next/apps/fabrika/src/runtime.ts | build | 5 | slice 3: provides `Mac.layerWebCrypto`, `SecureRandom.layerWebCrypto` and the program's `InputNames` (amended 2026-11-15; was the three `effect/crypto` layers) |
 | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts | tests | tests | slice 3: its C5 row on the shared WebCrypto callback moves to `Mac`'s error |
-| next/apps/fabrika/src/hands-client.test.ts | tests | tests | slice 3: provides the three `effect/crypto` layers to `Gateway.layer` |
+| next/apps/fabrika/src/hands-client.test.ts | tests | tests | slice 3: provides the `Mac` and `SecureRandom` layers and an `InputNames` layer to `Gateway.layer` (amended 2026-11-15) |
 | next/apps/fabrika/src/door-spans.test.ts | tests | tests | slice 3: the same |
 | next/apps/fabrika/src/door-recovery.integration.test.ts | tests | tests | slice 3: the same |
 | next/apps/fabrika/src/runtime.laws.integration.test.ts | tests | tests | slice 3: C5, C6 |
@@ -421,10 +477,10 @@ Each slice is one pull request through the steps, one fresh agent each:
 | next/apps/fabrika/src/local-instance.integration.test.ts | tests | tests | slice 4, after PR 1366 and the `node/dev` slice: D1 |
 
 - Every test layer named stays beside its service (0538). The app's other test files that build
-  `Gateway.layer` gain the three `effect/crypto` layers in slice 3, each a one-line
-  `Layer.provide`. Libfabrika's own gateway tests get the same line in the slice that makes the
+  `Gateway.layer` gain the `Mac` and `SecureRandom` layers and an `InputNames` layer in slice 3
+  (amended 2026-11-15), each a one-line `Layer.provide`. Libfabrika's own gateway tests get the same line in the slice that makes the
   move. The tests step lists every file the new requirement reaches before it starts.
-- `next/AGENTS.md`'s libfabrika test: the `Mac`, `SecureRandom` and `Digest` moves are in
+- `next/AGENTS.md`'s libfabrika test: the `Mac`, `SecureRandom`, `WebCrypto` and `InputNames` moves are in
   libfabrika, where the code they change lives, since any client of libfabrika needs them. The
   app's `runtime.ts` only provides the layers.
 - The `libfabrika/src/gateway` mock slice counts 4 more `crypto.subtle` spies on the same
@@ -433,9 +489,13 @@ Each slice is one pull request through the steps, one fresh agent each:
 
 ## Calls taken
 
-- **Four pull requests, ordered by what can land now,** 85%: slice 1 (no product change), slice 2
-  (the patch), slice 3 (after PR 1366, and open question 1), slice 4 (after PR 1366 and the
-  `node/dev` slice). Each lands whole and locks the files it took to zero.
+- **Four slices, ordered by what can land now,** 85%: slice 1 (no product change), slice 2
+  (the patch), slice 3 (after PR 1366), slice 4 (after PR 1366 and the `node/dev` slice). Each
+  lands whole on the sweep's one fold branch and locks the files it took to zero (amended
+  2026-11-15, ruling 1: first written as four pull requests).
+- **A failed digest stays a typed `crypto` refusal through the `WebCrypto` reference**, and **a
+  watched callback goes through a service** (amendment 2026-11-15, merge session rulings, no longer
+  calls; both first leans are marked wrong).
 - **No new Recorder form for the wrap,** 80%: `Layer.unwrap` over `Recorder.layer`, Effect's own
   way. See "How others do it".
 - **A built context for code that provides its own layers,** 85%: `dev.ts` and `grant.ts` run under
@@ -443,7 +503,7 @@ Each slice is one pull request through the steps, one fresh agent each:
   `Layer.build` once in the law's scope and `Layer.succeedContext` share one store. That is the
   Recorder doc's "each build starts with no calls", used on purpose.
 - **Effect's `crypto` services for `Mac` and `SecureRandom`,** 85%: the makers' own, already
-  imported by the app. Only the digest's error model is a question (open question 1).
+  imported by the app. The digest's error model was open question 1, now answered.
 - **A typed list for `fetch` and for R2's `put`,** 85%: `fetch` is a function reference, not an
   Effect service, and R2 is a platform object (0554, 0557). The Recorder watches Effect services
   only (its pattern doc, "Where it applies").
@@ -467,14 +527,17 @@ Each slice is one pull request through the steps, one fresh agent each:
 Confidence in the line counts: 70%. The doubts are the Alchemy patch and slice 3's span and
 `Console` options.
 
+All four slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its one pull
+request (amendment 2026-11-15, ruling 1).
+
 1. Slice 1, the four sites with no product change, the lock for two files, its plants and the
    pattern doc: about 0 product lines, about 110 test lines changed, about 20 config lines, about
    30 lines of docs. 0 lines.
 2. Slice 2, the Alchemy patch and the two spawn laws, and the lock for two more files: about 41
    product lines (the patch and its lockfile hash), about 60 test lines. 41 lines.
-3. Slice 3, after PR 1366 and open question 1: the gateway's and the runtime's crypto, the startup
-   span and the `Console` option, with their laws: about 80 product lines, about 150 test lines.
-   80 lines.
+3. Slice 3, after PR 1366: the gateway's and the runtime's crypto, `InputNames` (amended
+   2026-11-15), the startup span and the `Console` option, with their laws: about 94 product
+   lines, about 160 test lines. 94 lines.
 4. Slice 4, after PR 1366 and the `node/dev` slice: `local-instance`'s two spies, and the lock
    becomes the folder's glob: about 0 product lines, about 30 test lines, 5 config lines. 0 lines.
 
@@ -491,7 +554,10 @@ Estimate: 14 steps, $62
 - `oxlint-plugins/README.md`: the override's paragraph, in slice 1.
 - `.glossary/TERMS.md`: no row. This coins no word.
 - No decision file, unless the owner answers open question 1 or 2 with a rule that reaches past
-  this folder. Then it is recorded with `/adr` the turn it is decided.
+  this folder. Then it is recorded with `/adr` the turn it is decided. (Amendment 2026-11-15: both
+  were answered by the merge session's rulings, recorded here as amendments; whether they need
+  their own decision file is the merge session's call.)
+- `.glossary/TERMS.md`: an `InputNames` row in slice 3, if the build keeps the name.
 - `field/`: one run row per step, the same day. The tracker ticket is 1067.
 
 ## What this cannot tell us
@@ -510,7 +576,23 @@ Estimate: 14 steps, $62
 
 ## Open questions
 
-1. **A SHA digest that fails: a defect, as Effect's `Digest` types it, or a typed `crypto`
+3. **For the merge session (amendment 2026-11-15): where do this folder's files keep their lock
+   while they still hold `vi.mock`, `vi.doMock` or `vi.stubEnv`?** Ruling 2 gives every block all
+   five methods. Read as written, a file with another sweep's call is in no block, so the `fn` and
+   `spyOn` hold this plan had on the files it lists shrinks to `exam/alchemy-lifecycle.test.ts`. That
+   loosens A6 and A8, so it is not applied. Lean, 80%: keep the two-method override for those files,
+   with node's M1 plants for what it names and the other three recorded as taken there; each file
+   moves to the five-method block the day the other sweeps take it to zero. The same question
+   stands in the cloudflare and node-dev plans. The other way: no lock in this folder until 0555's
+   other sweeps finish, and new `vi.fn` or `vi.spyOn` lines can land until then.
+
+## Answered questions
+
+**Amendment (2026-11-15, merge session rulings):** questions 1 and 2 were answered. Both leans
+were wrong. They are kept as they were asked.
+
+1. **(Answered 2026-11-15: a typed `crypto` refusal, through Effect's `WebCrypto` reference; the
+   lean was wrong.) A SHA digest that fails: a defect, as Effect's `Digest` types it, or a typed `crypto`
    refusal, as five laws hold today?** Lean 60%: Effect's `Digest`. A digest only fails on a broken
    runtime, and the makers type it as one that cannot fail. The cost: the five laws that plant a
    digest failure (`door.integration.test.ts` fingerprint and input hash rows,
@@ -519,7 +601,7 @@ Estimate: 14 steps, $62
    They stop checking for the `crypto` reason. The other answer: our own small `Hashes` service in
    libfabrika, typed `Effect<Uint8Array, CryptoError>` on WebCrypto, which keeps every law as it
    is. Either way slice 3 starts after the answer.
-2. **A callback of our own API that a law watches, here the gateway's `inputs.name`: a service, as
+2. **(Answered 2026-11-15: a service, 0555; the lean was wrong.) A callback of our own API that a law watches, here the gateway's `inputs.name`: a service, as
    the recorder plan's `transport/` row says, or a plain list the law owns, as the oxlint-plugins
    plan does for oxlint's `report`?** Lean 70%: a plain list. `inputs.name` is a pure mapping the
    program hands over with its Schema. A service would make every gateway caller provide a layer

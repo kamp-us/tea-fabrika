@@ -239,10 +239,26 @@ Each choice, decided in one line:
   for M4. Each plant is run once and recorded in the run row.
 - The review reads the whole diff against this plan and runs the loosening check on M3.
 
+## Steps
+
+**Amendment (2026-11-15, merge session rulings 1 and 5).** The slice opens no pull request of its
+own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request
+(0589, amended 2026-11-15), after its own steps, one fresh agent each, in its own box:
+
+1. **Tests:** M1 to M4, `VI_METHODS` and the lock block; each plant run once and recorded in the
+   run row.
+2. **Build:** no product file changes, so the build changes nothing, says so in its run row, and
+   runs the checks under "Validation" green at the tests step's head, or sends back.
+3. **Review:** the one review of the slice's diff, with the loosening check on M3.
+
+M1 here is the sweep's one lock law: every other mock plan's lock runs this plan's `VI_METHODS` set
+in its own paths (ruling 2).
+
 ## Size
 
-One pull request. Confidence in the counts: 85%; the doubt is how many members must go by name in
-`rest`. Counted on main at `f7169af` with `rg -c` in `next/packages/libfabrika/src/node`:
+One slice, on the fold branch named under "Steps". Confidence in the counts: 85%; the doubt is how
+many members must go by name in `rest`. Counted on main at `f7169af` with `rg -c` in
+`next/packages/libfabrika/src/node`:
 
 | Where | `vi.fn` | `toHaveBeenCalled*` | `vi.spyOn` | `vi.mock` | `vi.doMock` | `vi.stubEnv` |
 |---|---|---|---|---|---|---|
@@ -256,10 +272,11 @@ One pull request. Confidence in the counts: 85%; the doubt is how many members m
    test lines changed, about 25 lines of configuration, about 60 lint test lines. 25 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
-plan priced them: a tests step about $6, a review about $3, a fix round about $4. No build step is
-expected. One likely fix round, for the `own` typing doubt.
+plan priced them: a tests step about $6, a review about $3, a fix round about $4. No build step was
+expected; (amendment 2026-11-15, ruling 5) the build that only runs checks is about $2, as the
+oxlint-plugins plan prices one. One likely fix round, for the `own` typing doubt.
 
-Estimate: 3 steps, $13
+Estimate: 4 steps, $15
 
 ## Records
 

@@ -39,6 +39,17 @@ expect(sent.map((text) => JSON.parse(text))).toContainEqual(/* ... */);
   for libfabrika's non-test files at zero, and the `console` spy goes in slice 1. The
   `process.stdout` and `process.stderr` half was not ruled on and stays open question 1; until it is
   answered, slice 1 still holds back those two spies.
+
+  **Amendment (2026-11-15, merge session rulings):** that half still waits on the owner. Nothing
+  else in this plan waits on it.
+- **The lock's reach while the folder still holds `vi.mock` (open question 2, waiting on the merge
+  session).** The merge session's ruling 2 of 2026-11-15 gives every block all five methods, `mock`
+  included. On main at `0683861`, `rg -c 'vi\.mock\('` finds `vi.mock` lines in 11 of the folder's
+  files; slice 2 removes only `vi.mock("effect")`, and the rest wait on Alchemy and on the object
+  exports. A block that refuses `mock` can list only the files at zero for all five, so the
+  folder-wide hold of `fn`, `spyOn`, `doMock` and `stubEnv` that this plan had would shrink to the
+  few files with no `vi.mock` (`fetch.test.ts` and those with no `vi` call). That reads as a loosening of M11, so it is not
+  applied: see open question 2.
 - **The t863 span law reads its spans from the span sink's records (70%).** Today it wraps
   `ProjectClient.make` to catch the current span at each `route`. The lean reads the ended
   `runtime.rpc` spans that the connection's own recording writes, as `t864Delivered` in the same
@@ -68,6 +79,14 @@ own. A Process object reads its span sink and its runner through two References.
 through Effect's `WebCrypto` reference. With those, the last 10 spies go, along with the
 `vi.mock("effect")` that existed only so `Effect.result` could be spied on. Slice 2 then turns on
 `vitest/no-restricted-vi-methods` and `vitest/no-restricted-matchers` for the folder.
+
+**Amendment (2026-11-15, merge session rulings):** the three `Effect.result` spies go a different
+way than first planned. They watched an inner call through the `effect` barrel, and they go blind
+the day the folder imports `effect/Effect` as a namespace, as the Effect fold just found in
+`transport/Connection.ts`. So the watched call goes through a typed service, and the law records it
+with a `Recorder` (0555, 0579); see "The watched calls, through services". Every slice also lands
+on the sweep's one fold branch (see "Size"), and the lock refuses all five methods (see "The lock"
+and open question 2).
 
 ## How others do it
 
@@ -105,8 +124,8 @@ Counted on `origin/main` at `f7169af` with
 | `connection.test.ts:702` | `spyOn` 1 | `ProjectClient.make`, wrapped to catch the current span at each `route` | the ended `runtime.rpc` spans the connection records, read in order (doubt 2) | 1 |
 | `entry-flows.laws.test.ts:175` | `spyOn` 1 | `Tracer.NativeSpan.prototype.attribute`, every span attribute set | the span rows and Record calls the flow writes, which the law already keeps at `:311-312` | 1 |
 | `entry-flows.laws.test.ts:183, 187, 192` | `spyOn` 3 | `process.stdout.write`, `process.stderr.write`, and `console`'s five methods | `TestConsole.layer` on each runtime the law builds, read with `TestConsole.logLines` and `errorLines`; open question 1 | 1 |
-| `readers.laws.test.ts:424` | `spyOn` 1 | `Effect.result`, to catch the exit of the ready decode inside `cloudflare/connection.ts`'s `wait` | the law runs `ready`, the decode now exported from `connection.ts`, and reads its own exit; the wire law keeps its `bad_row` reply | 2 |
-| `readers.laws.test.ts:476, 524` | `spyOn` 2 | `Effect.result`, to catch the exit of `dispatch` inside `control.ts` | the law runs `dispatch`, now exported, and reads its own exit; the HTTP laws keep their response checks | 2 |
+| `readers.laws.test.ts:424` | `spyOn` 1 | `Effect.result`, to catch the exit of the ready decode inside `cloudflare/connection.ts`'s `wait` | (amendment 2026-11-15) `wait` asks the `Waits` service for the decode; the law records it with `Recorder.layer(Waits, live)`, reads the one call, and runs the recorded raw value through the live member for its typed exit; the wire law keeps its `bad_row` reply | 2 |
+| `readers.laws.test.ts:476, 524` | `spyOn` 2 | `Effect.result`, to catch the exit of `dispatch` inside `control.ts` | (amendment 2026-11-15) `control.ts` asks the `Dispatcher` service for `dispatch`; the law records it with `Recorder.layer(Dispatcher, live)`, reads the one call, and runs the recorded input through the live member for its typed exit; the HTTP laws keep their response checks | 2 |
 | `alarm.laws.test.ts:118, 326` | `spyOn` 2 | `SpanSink.layer`, swapped for a sink that writes nothing | `processLayer` provided with the `SinkLayer` reference | 2 |
 | `alarm.laws.test.ts:132, 340` | `spyOn` 2 | `ProgramRunner.withLoader`, swapped for a runner that hands the law the `Alarm` service | `processLayer` provided with the `RunnerLayer` reference | 2 |
 | `ObjectService.test.ts:281` | `spyOn` 1 | `SpanSink.layer` | the `SinkLayer` reference | 2 |
@@ -162,24 +181,60 @@ const route = async (): Promise<unknown> => answer;
 
 Slice 2's product changes, all sketches:
 
-```ts
-// next/packages/libfabrika/src/cloudflare/control.ts: exported, so a law reads its typed failure
-export const dispatch = Effect.fnUntraced(function* (
-  env: Env,
-  programs: Readonly<Record<string, ProgramSource>>,
-  input: typeof Request.Type,
-) {
-  // the body as reflect slice 10 leaves it, the typed table
-});
+**The watched calls, through services (amendment 2026-11-15).** The first sketch exported
+`dispatch` and `ready` and had each law run them on its own. That kept the typed exit but dropped
+what the spy also held: that the request path asked exactly once, with exactly the value the law
+sent. The merge session ruled the call goes through a typed service with a `Recorder` in the law
+(0555). The service names are a sketch; the build may rename them, and a glossary row follows if
+they stay.
 
-// next/packages/libfabrika/src/cloudflare/connection.ts: the ready decode, named and exported
-export const ready = (raw: unknown): Effect.Effect<typeof Waited.cases.ready.Type, LedgerError> =>
-  Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(raw).pipe(
-    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-    Effect.map((value) => Waited.cases.ready.make(value)),
-  );
-// `wait` ends with `return yield* ready(answer.result);`
+```ts
+// next/packages/libfabrika/src/cloudflare/Dispatcher.ts, the contract only (0095). A sketch.
+export class Dispatcher extends Context.Service<
+  Dispatcher,
+  {
+    /** Runs one control request against the bindings: the typed table reflect slice 10 leaves. */
+    readonly dispatch: (
+      env: Env,
+      programs: Readonly<Record<string, ProgramSource>>,
+      input: typeof Request.Type,
+    ) => Effect.Effect<unknown, LedgerError>;
+  }
+>()("@kampus/libfabrika/cloudflare/Dispatcher") {
+  // The live member is today's `dispatch` body; `Context.Reference` would hide the seam, so it
+  // is a service the Worker provides once, beside the others in `runtime.ts`.
+  static readonly layer: Layer.Layer<Dispatcher>;
+}
+// control.ts:162 becomes `yield* Effect.result((yield* Dispatcher).dispatch(env, programs, input.success))`
+
+// next/packages/libfabrika/src/cloudflare/Waits.ts, the contract only. A sketch.
+export class Waits extends Context.Service<
+  Waits,
+  {
+    /** Decodes a ready RPC answer: `LedgerError` `bad_row` for a malformed one, never a defect. */
+    readonly ready: (raw: unknown) => Effect.Effect<typeof Waited.cases.ready.Type, LedgerError>;
+  }
+>()("@kampus/libfabrika/cloudflare/Waits") {
+  static readonly layer: Layer.Layer<Waits>;
+}
+// `wait` ends with `return yield* (yield* Waits).ready(answer.result);`
 ```
+
+```ts
+// readers.laws.test.ts, the ready law, slice 2. A sketch: no spy, no `vi.mock("effect")`.
+const waits = Recorder.layer(Waits, live); // `live` is Waits.layer's own member, read once
+// ...send the ledger.wait frame inside Effect.provide(waits), as today...
+const calls = yield* Recorder.calls(Waits, "ready");
+expect(calls).toEqual([[raw]]); // asked once, with exactly the law's raw value
+typed(yield* Effect.exit(live.ready(raw))); // the typed failure the spy read, from the member itself
+```
+
+- The Recorder records the call; it does not record the exit (`Recorder.ts`, `Call<S>` is
+  `{ method, args }`). So each law reads the call from the Recorder and the exit from the live
+  member run on the recorded args. Together that is what `Effect.result`'s spy gave: one attempt,
+  and its exit typed.
+- The two References below stay for the span sink and the runner: those are layer makers a law
+  swaps whole, not calls a law watches.
 
 ```ts
 // next/packages/libfabrika/src/cloudflare/runtime.ts: the two parts a law hands in
@@ -227,25 +282,30 @@ const error = yield* Effect.flip(checkedPut(bucket, key, body, "00")).pipe(
 - The References and the exports are placed by
   [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md): if the layer check
   or `fabrika/modules` wants the two References in a front file of their own, the build puts them
-  in `cloudflare/ProcessParts.ts` and says so. An unused export fails lint (0006). If a law's import
-  does not count as a use, `dispatch` and `ready` stay exported only because their own files call
-  them, and they do.
+  in `cloudflare/ProcessParts.ts` and says so. An unused export fails lint (0006). `Dispatcher` and
+  `Waits` are front files of the `cloudflare` module, each used by its product caller
+  (`control.ts`, `connection.ts`) and provided by `runtime.ts`, so neither is an export only a law
+  reads (amendment 2026-11-15; the first sketch exported `dispatch` and `ready` instead).
 - **Is this a setting?** No, for each choice. The References, the exports and the fakes are how
   code and laws are put together. Nothing here is a value a person running fabrika picks (0069).
 
 The lock, in slice 2:
 
 ```jsonc
-// .oxlintrc.json, a new override block, a sketch
+// .oxlintrc.json, a new override block, a sketch. Amendment 2026-11-15: with `mock` refused, a
+// file of the folder is listed once it is at zero for all five; the glob replaces the list when
+// the folder's last `vi.mock` goes (open question 2 says where the other files' lock is meanwhile).
 {
-  "files": ["next/packages/libfabrika/src/cloudflare/**"],
+  "files": ["next/packages/libfabrika/src/cloudflare/fetch.test.ts" /* , each file at zero */],
   "rules": {
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "fn": "Watch a service's calls with Recorder.layer, or make a platform fake with Stub.make (0579, 0554).",
-        "spyOn": "Put the call behind a service and record it in the law's layer (0555).",
+        // Amendment 2026-11-15, ruling 2: all five methods, with node's five messages.
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+        "mock": "Give the code a service and provide a test layer (0555).",
         "doMock": "Give the code a service and provide a test layer (0555).",
+        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
         "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
       }
     ],
@@ -263,13 +323,21 @@ The lock, in slice 2:
 }
 ```
 
-- `mock` is not in the list, since 13 calls stay in the folder for the Alchemy and objects slices.
-  It joins the list when its last call goes. `stubGlobal` is the same.
-- If another folder's sweep lands this rule first, slice 2 adds `cloudflare/**` to that block's
-  `files`, and that block's messages hold.
-- `VI_BAN`, a `Plant` in `oxlint-plugins/builtin-plants.ts`, gives each form the rule must refuse
-  and each it must take. `plants.test.ts` runs it in every folder the block lists, the way it runs
-  `REFLECT` (`plants.test.ts:532`). It adds no `LOCKED` row to the Effect checks' own test.
+- **Amendment (2026-11-15, merge session ruling 2): one lock shape everywhere.** `mock` is now in
+  the list, so the block refuses all five methods, as every block of the sweep does, and its law is
+  node's M1 ([`mock-node-PLAN.md`](./mock-node-PLAN.md), "Laws"). The first sketch left `mock` out
+  because 12 calls stay in the folder for the Alchemy and objects slices. With `mock` in, the
+  block's `files` can name only the files at zero for all five; which files the other ten keep
+  their lock under until their `vi.mock` goes is open question 2, waiting on the merge session.
+  `stubGlobal` stays out of the list until its last call goes.
+- If another folder's sweep lands this rule first, slice 2 adds its paths to that block's `files`,
+  and that block's messages hold.
+- **The plants are node's `VI_METHODS`** (amendment 2026-11-15, ruling 2), the one set every block's
+  M1 runs, in place of a `VI_BAN` of this plan's own. This plan's lines that set lacks join it:
+  `vi["fn"]()` and a renamed import `import { vi as v }` then `v.fn()`. `plants.test.ts` runs the
+  set in every folder of every block that sets the rule, the way it runs `REFLECT`
+  (`plants.test.ts:532`). The matcher lines below stay this plan's own, since only this block and
+  transport's set `no-restricted-matchers`. It adds no `LOCKED` row to the Effect checks' own test.
 
 ## One value traced: a socket frame in the ready law
 
@@ -281,9 +349,12 @@ The lock, in slice 2:
 5. `transport/Connection.ts:141` takes that typed failure as `Answer.refused` with reason
    `bad_row`, and the connection sends it.
 6. The fake socket's `send` pushes the frame into `sent`. The law finds the `bad_row` reply there.
-7. In slice 2, the same law also runs `ready(raw)` on its own and checks its exit is a failure,
-   with no defect, whose error is `LedgerError` `bad_row`. That is the check `Effect.result`'s spy
-   gave before, read from the function itself.
+7. In slice 2 (amendment 2026-11-15), `wait` asks `Waits.ready(raw)`, and the law's
+   `Recorder.layer(Waits, live)` records `{ method: "ready", args: [raw] }` before the live member
+   runs. The law reads `Recorder.calls(Waits, "ready")` and finds exactly `[[raw]]`: one attempt,
+   with the law's value. It then runs `live.ready(raw)` and checks its exit is a failure, with no
+   defect, whose error is `LedgerError` `bad_row`. Together that is what `Effect.result`'s spy gave
+   before.
 
 ## Laws
 
@@ -292,8 +363,8 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| M1. The ready RPC decode fails in the typed channel, the reply on the socket says `bad_row`, and in slice 2 `ready(raw)` on its own fails `LedgerError` `bad_row` with no defect. 6 runs fast, 20 runs full | test | fc.jsonValue: malformed `{ rev }` values, 6 runs fast and 20 runs full | in `connection.ts`, `Effect.orDie` in place of the `mapError` to `LedgerError`: M1 red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
-| M2. Control bucket bytes and the put and head keys fail as a typed parse error, the response is 500 `bad_row`, and in slice 2 `dispatch` on its own fails `LedgerError` `bad_row` with no defect. 5 runs fast, 20 runs full | test | fc.jsonValue: malformed bytes and keys, 5 runs fast and 20 runs full | in `control.ts`, decode the bucket bytes with `Schema.decodeUnknownSync`, so a bad value dies: M2 red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
+| M1. The law "Connection ready RPC decoding fails in the typed channel before the wait refusal is sent" (`readers.laws.test.ts:417`): the reply on the socket says `bad_row`, and in slice 2 (amendment 2026-11-15) `Recorder.calls(Waits, "ready")` is exactly `[[raw]]` and the live `ready(raw)` fails `LedgerError` `bad_row` with no defect. 6 runs fast, 20 runs full | test | fc.jsonValue: malformed `{ rev }` values, 6 runs fast and 20 runs full | (a) in `Waits.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`: M1 red on the typed exit; (b) `wait` decodes the answer inline, past `Waits`: `Recorder.calls` is `[]`, M1 red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
+| M2. The laws "control bucket bytes fail as a typed parse error before its HTTP error response" (`readers.laws.test.ts:470`) and "control checks outside `<field>` as text instead of coercing it or throwing" (`:517`, one per field: head key, put key, put checksum): the response is 500 `bad_row`, and in slice 2 (amendment 2026-11-15) `Recorder.calls(Dispatcher, "dispatch")` holds exactly one call, whose input is the law's request, and the live `dispatch` on that input fails `LedgerError` `bad_row` with no defect. 5 runs fast, 20 runs full | test | fc.jsonValue: malformed bytes and keys, 5 runs fast and 20 runs full | (a) in the live `dispatch`, decode the bucket bytes with `Schema.decodeUnknownSync`, so a bad value dies: the `:470` law red; (b) coerce the field with `String(raw)` before the check: the `:517` law red, `dispatch` succeeds; (c) `control.ts` calls the dispatch body inline, past `Dispatcher`: `Recorder.calls` is `[]`, both red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
 | M3. `processDescriptor` checks the saved value before returning it. 5 runs fast, 20 runs full | test | fc.jsonValue: malformed descriptors, 5 runs fast and 20 runs full | return `storage.get`'s value without its decode: M3 red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
 | M4. Every other law of `readers.laws.test.ts` that builds the world keeps its checks on the `Stub.make` world, and any platform call the world does not give fails the law | test | scenario: the world's laws, each on its own generator, unchanged | make the fake socket's `send` drop its frame: M1 red; call `ctx.storage.list()` in `connectionRuntime`: `unexpected` throws, red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
 | M5. t863 L1: only reserved answers tag the ended RPC span as refused, and there is one ended `runtime.rpc` span per routed call | test | Effect Arbitrary: AnswerWalk | tag `REFUSED` on a `rate_limited` answer too: M5 red; route one call outside its span: the span count is short, red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
@@ -302,20 +373,30 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | M8. A1 and A2: supported alarm operations keep the logical wake and set or clear the platform alarm; a failing alarm dies, one that is done ran its saved wake once | test | fc.gen: the alarm moves, and fc.array: Delivery, default runs | make `processLogic` name `ProgramRunner.withLoader` again, past `RunnerLayer`: the law gets no `Alarm`, red at its timeout | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts |
 | M9. Law 3 on the Process shell and the request slot keep their checks with the two References handed in | test | fc.record: the bad settings and requests, default runs | make `recordingLayer` name `SpanSink.layer` again, past `SinkLayer`: the fake SQL refuses the sink's tables, red | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts |
 | M10. C1: a bucket put whose digest rejects fails `crypto` with the rejected value as its cause | test | fc.record: failure, body and key, default runs | make `checkedPut` call `globalThis.crypto.subtle.digest` again: the real digest answers, C1 red | next/packages/libfabrika/src/cloudflare/error-cause.test.ts |
-| M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each `VI_BAN` line is refused or taken exactly, in each folder of the block | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s VI_BAN scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| M11. No file in the folder calls `vi.fn`, `vi.spyOn`, `vi.doMock` or `vi.stubEnv`, or uses a `toHaveBeenCalled*` matcher; each file at zero for all five also refuses `vi.mock`; this is node's M1 (amendment 2026-11-15, ruling 2): each `VI_METHODS` line is refused or taken exactly, in each path of every block that sets the rule. Where the files that still hold `vi.mock` keep their lock is open question 2 | lint | lint | delete `fn` from the block in `.oxlintrc.json`: `plants.test.ts`'s `VI_METHODS` scenario red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | M12. No product file in `next/packages/libfabrika/src` calls `console`, held by oxlint's built-in `eslint/no-console` at error, not a rule of ours (amendment 2026-11-16, merge session ruling); its plant lines are refused in a libfabrika product path and taken in a test path | lint | lint | drop the libfabrika glob from the `no-console` block: the planted `console.log(secret)` in a product path is taken, the plant scenario red | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 
 - M12 is new (amendment 2026-11-16). It is what lets the `console` spy go in slice 1 without M6
   losing a raw `console` write: a raw call cannot land at all. `no-console` is oxlint's own rule
   (installed oxlint 1.90.0), not a plugin rule of ours, by the merge session's ruling.
 - M1, M2, M5 and M6 lose a spy and keep what it checked. M1 and M2 still check the typed failure,
-  now on the function's own exit. M5 still checks each ended span. M6 still reads every output the
-  flow can write, given open question 1.
-- `VI_BAN`'s lines: `vi.fn()`, `vi.spyOn(console, "log")`, `vi.doMock("./a.ts")`,
-  `vi.stubEnv("A", "b")`, `expect(f).toHaveBeenCalled()`, `expect(f).not.toHaveBeenCalledWith(1)`,
-  `vi["fn"]()` and a renamed import `import { vi as v }` then `v.fn()` are refused. `vi.mock(...)`
-  and `expect(x).toBe(1)` are taken. 0555 marks the renamed import as untested, so its line records
-  what oxlint does. If oxlint misses it, the line is a documented miss, as `REFLECT` keeps one.
+  now on the live member's own exit, and (amendment 2026-11-15) still check the one attempt with
+  its value, now on the Recorder's record. M5 still checks each ended span. M6 still reads every
+  output the flow can write, given open question 1.
+- **M6 reads every `Console` method the spies read** (amendment 2026-11-15, ruling 4: coverage is
+  never lost). The `console` spy watched five methods. `TestConsole` reads back `log` and `error`
+  on main; app-e2e's patch adds `warnLines`
+  ([`mock-app-e2e-PLAN.md`](./mock-app-e2e-PLAN.md), law L3), and `info` and `debug` need readers
+  of the same shape. The first of the sweep's slices to drop a five-method `console` spy adds
+  `infoLines` and `debugLines` to that same `patches/effect@4.1.3.patch`, with a law beside L3 in
+  `scripts/effect-testconsole.test.ts`; a later one reads them. M6 then reads all five. Its plant
+  adds `yield* Console.info(secret)` on the flow: red only through `infoLines`.
+- The matcher lines and the forms node's set lacks: `expect(f).toHaveBeenCalled()`,
+  `expect(f).not.toHaveBeenCalledWith(1)`, `vi["fn"]()` and a renamed import `import { vi as v }`
+  then `v.fn()` are refused, and `expect(x).toBe(1)` is taken. The first sketch planted
+  `vi.mock(...)` as taken; with ruling 2 it is refused in every listed path. 0555 marks the renamed
+  import as untested, so its line records what oxlint does. If oxlint misses it, the line is a
+  documented miss, as `REFLECT` keeps one.
 - No law needs the real machine, so none is host-only. The one `.integration.` law the files reach,
   `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts`, reads
   `ProjectAuditTest.ts`. Each step runs it once after the change.
@@ -333,9 +414,15 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8) |
 | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9) |
 | next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10) |
-| next/packages/libfabrika/src/cloudflare/control.ts | build | 1 | slice 2: `dispatch` exported |
-| next/packages/libfabrika/src/cloudflare/connection.ts | build | 8 | slice 2, after 1366: `ready` named and exported; `wait` calls it |
-| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 24 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto` |
+| next/packages/libfabrika/src/cloudflare/control.ts | build | 4 | slice 2 (amendment 2026-11-15): `dispatch`'s body moves to `Dispatcher.layer`; `parserControl` yields `Dispatcher` |
+| next/packages/libfabrika/src/cloudflare/connection.ts | build | 4 | slice 2, after 1366 (amendment 2026-11-15): the ready decode moves to `Waits.layer`; `wait` yields `Waits` |
+| next/packages/libfabrika/src/cloudflare/fetch.test.ts | tests | tests | read only, not changed: slice 2 names it in the lock block, as the folder's one file at zero for all five (amendment 2026-11-15) |
+| next/packages/libfabrika/src/cloudflare/Dispatcher.ts | build | 18 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
+| next/packages/libfabrika/src/cloudflare/Waits.ts | build | 14 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
+| patches/effect@4.1.3.patch | tests | 12 | slice 1 (amendment 2026-11-15), only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines`, with `pnpm patch` |
+| patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
+| scripts/effect-testconsole.test.ts | tests | tests | slice 1, with the readers above: their law, beside app-e2e's L3 |
+| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 26 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto`; (amendment 2026-11-15) provides `Dispatcher.layer` and `Waits.layer` |
 | .oxlintrc.json | tests | 38 | slice 2: the lock block above, 30 lines; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: `VI_BAN` (M11); slice 1 (amendment 2026-11-16): the `no-console` plant lines (M12) |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 2: the VI_BAN scenario, beside REFLECT's (M11); slice 1 (amendment 2026-11-16): the `no-console` scenario (M12) |
@@ -364,20 +451,24 @@ folder. It waits for the quotas slice (1366) and reflect slice 8, and it edits `
 3. **Pull request 1366 lands.**
 4. **Reflect slice 10 lands.** It rewrites `control.ts`'s dispatch as a typed table, and moves the
    guards in `alarm.laws.test.ts` and `ObjectService.test.ts` onto `Stub.make`.
-5. **Mock slice 2 lands** last. It exports the `dispatch` that slice 10 leaves, takes its spies
+5. **Mock slice 2 lands** last. It moves the `dispatch` that slice 10 leaves into `Dispatcher`
+   (amendment 2026-11-15; first written as "exports"), takes its spies
    out of the tests slice 10 left, and turns the lock on. Going after slice 10 means `control.ts`
    is edited once by each and no guard is rewritten twice (80%).
 
 If reflect slice 10 is not ready when 1366 lands, mock slice 2 may go first. Slice 10 then rebases
-over a one-line export and the removed spies. The lead picks the order on the day.
+over the moved `dispatch` and the removed spies. The lead picks the order on the day.
 
 ## Calls taken
 
 - **The 8 `vi.fn` become `Stub.make` fakes, not Recorder layers,** 85%. They are platform objects,
   and 0554 and 0557 put such fakes in the test package. What a fake was handed (sent frames) is its
   state, which the pattern doc keeps in a fake.
-- **The `Effect.result` spies go by running the inner Effect on its own,** 80%. 0555 says a spy on
-  Effect goes by testing what the code does. The wire and HTTP laws keep their end-to-end checks.
+- **The `Effect.result` spies go through two typed services, `Dispatcher` and `Waits`, recorded
+  with a `Recorder`** (amendment 2026-11-15, merge session ruling, no longer a call; the first lean,
+  running the exported Effect on its own, is marked wrong: it dropped the one-attempt check). Each
+  law reads the call from the Recorder and the exit from the live member. The names are a sketch,
+  80%. The wire and HTTP laws keep their end-to-end checks.
 - **`crypto.subtle` moves behind Effect's `WebCrypto` reference,** 85%. It is Effect's own, it is
   what `Digest` uses, and `Digest` would turn a rejected hash into a defect, which C1 says it is not.
 - **Two References for the span sink and the runner,** 75%. See the doubts.
@@ -402,28 +493,52 @@ over a one-line export and the removed spies. The lead picks the order on the da
 - The build, slice 2: the same narrow paths.
 - The lead runs the changed-files run and the one type check.
 
+## Steps
+
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** Neither slice
+opens a pull request of its own. Each lands on the mock sweep's one fold branch,
+`fabrikalfa/mock-fold`, and in its one pull request (0589, amended 2026-11-15). Each slice still
+runs its own steps, one fresh agent each, in its own box, before it is folded:
+
+1. **Tests:** the slice's laws and plants, each plant run once and recorded in the run row.
+2. **Build:** slice 1 has no product file, so its build changes nothing, says so, and runs the
+   slice's checks green at the tests step's head (or sends back). Slice 2 writes the services, the
+   References and the `WebCrypto` reads.
+3. **Review:** the one review of the slice's diff, with the loosening check.
+
 ## Size
 
 Confidence in the line counts: 70%. The doubt is the world rewrite in `readers.laws.test.ts`, the
 longest test file here.
 
+Both slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its one pull request
+(amendment 2026-11-15, ruling 1).
+
 1. Slice 1, the test-only fakes and the spans: no product code, about 120 test lines changed, and
-   (amendment 2026-11-16) about 8 lines of `no-console` config, with its plants. 8 lines.
-2. Slice 2, after 1366 and reflect slice 10: the exports, the two References, the `WebCrypto` reads
-   and the lock, about 63 product and config lines, about 150 test lines. 63 lines.
+   (amendment 2026-11-16) about 8 lines of `no-console` config, with its plants, and (amendment
+   2026-11-15) the two `TestConsole` readers if no earlier slice added them, about 12 lines. 20 lines.
+2. Slice 2, after 1366 and reflect slice 10: the two services (amendment 2026-11-15), the two
+   References, the `WebCrypto` reads and the lock, about 90 product and config lines, about 160
+   test lines. 90 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
-plan priced them. Slice 1 has a tests step with no build (about $6) and a review ($3). Slice 2 has
-tests ($7), a build ($5), a review ($3) and one likely fix round ($4), for the References doubt.
+plan priced them. Slice 1 has a tests step (about $6), a build that only runs checks ($2,
+amendment 2026-11-15, ruling 5) and a review ($3). Slice 2 has tests ($7), a build ($6, two
+services more than first sized), a review ($3) and one likely fix round ($4), for the References
+doubt.
 
-Estimate: 6 steps, $28
+Estimate: 7 steps, $31
 
 ## Records
 
 - No decision file. This plan builds 0554, 0555, 0557 and 0579. The merge session's ruling of
   2026-11-16 answered the `console` half of its one question; the `process.stdout` and
   `process.stderr` half is still asked.
-- No glossary row: no new word. `Stub` is reflect slice 8's.
+- No glossary row: no new word. `Stub` is reflect slice 8's. `Dispatcher` and `Waits` are code
+  names; if the build keeps them, slice 2 adds one row each (amendment 2026-11-15).
+- The merge session's rulings of 2026-11-15 are amendments here: one pull request for the sweep,
+  one lock shape, the `Effect.result` spies through services, and coverage never lost (M6's five
+  readers). Its open question 2 is for the merge session.
 - `field/`: one run row per step, the same day.
 - The tracker ticket is 1067, the Recorder's, whose plan lists this folder as a later slice.
 
@@ -433,7 +548,7 @@ Estimate: 6 steps, $28
 - **Whether `Stub.make` takes a getter in `own`.** Reflect slice 8's sketch types `own` as
   `Partial<A>`. Its laws (on `fabrikalfa/reflect-s8`) were read only for their names.
 - **Whether oxlint's `no-restricted-matchers` refuses `not.toHaveBeenCalled`** under the plain
-  `toHaveBeenCalled` key. The `VI_BAN` lines settle it.
+  `toHaveBeenCalled` key. The matcher lines in `VI_METHODS` settle it (amended 2026-11-15; first `VI_BAN`).
 - **Whether every `runtime.rpc` span of t863's walk reaches the span store.** See the doubts.
 - **What pull request 1366 and reflect slice 10 will leave in these files.** Counts are from main
   at `f7169af`. The lead takes them again before slice 2's tests step.
@@ -455,7 +570,19 @@ Estimate: 6 steps, $28
    built-in `no-console` rule, not a rule of ours (M12, slice 1). What stays open is only the
    `process.stdout` and `process.stderr` half: does a `no-restricted-properties` entry for them go
    on for libfabrika's non-test files, or do their two spies go with M6 no longer seeing a raw
-   write? The lean for that half is unchanged: the entry, 80%.
+   write? The lean for that half is unchanged: the entry, 80%. (Amendment 2026-11-15: still
+   waiting on the owner.)
+
+2. **For the merge session (amendment 2026-11-15): where do the files that still hold `vi.mock`
+   keep their lock until their last call goes?** Ruling 2 puts all five methods in every block.
+   Read as written, a file with a `vi.mock` that waits on Alchemy or the object exports cannot be
+   in any block, so `fn`, `spyOn`, `doMock` and `stubEnv` are no longer refused there, which this
+   plan held folder-wide. That loosens M11, so this amendment does not apply it. Lean, 80%: keep
+   one interim block for those files, the four methods it had, with M1's plants for what it names
+   and `vi.mock` recorded as taken there; each file moves to the five-method block the day its
+   `vi.mock` goes, and the interim block goes with the last one. The same question stands in the
+   app-src and node-dev plans. The other way: the folder waits for its `vi.mock` sweep before any
+   lock, and new `vi.fn` or `vi.spyOn` lines can land until then.
 
 ## Findings
 

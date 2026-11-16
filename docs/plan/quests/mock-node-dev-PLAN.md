@@ -33,19 +33,33 @@ expect(yield* Recorder.calls(Signals)).toEqual([{ method: "send", args: [pid, na
   because `dev-client.test-support.ts:10` builds the `FetchHttpClient.Fetch` reference as "call
   whatever `globalThis.fetch` is now". The fix is in that test file: each law provides its own
   `Fetch` function. No product line changes for `fetch`.
-- **The watch law's `console.warn` spy needs an owner answer (open question 1).** Rolldown, an
-  outside package, writes its warnings straight to the global `console` (its `defaultPrintLog` in
-  `rolldown@1.2.13`, `dist/shared/create-bundler-option-*.mjs`). No Effect service sits in between,
-  so the only way to keep that law's leak check without a spy is a product change to how
+**Amendment (2026-11-15, merge session rulings).** Both open questions were answered; the two
+doubts below are kept as written, each marked. Coverage is never lost (ruling 4). The lock refuses
+all five methods with node's M1 as its law (ruling 2), which raises open question 3 for the merge
+session. The slice lands on the sweep's one fold branch (ruling 1).
+
+- **The watch law's `console.warn` spy needs an owner answer (open question 1).** (Answered
+  2026-11-15: `watch.ts` takes app-e2e's answer for `bundle.ts`, routing Rolldown's warnings
+  through Effect's `Console`. The `logLevel: "warn"` and debug-log lean is marked wrong.) Rolldown,
+  an outside package, writes its warnings straight to the global `console` (its `defaultPrintLog`
+  in `rolldown@1.2.13`, `dist/shared/create-bundler-option-*.mjs`). No Effect service sits in
+  between, so the only way to keep that law's leak check without a spy is a product change to how
   `watch.ts` hands Rolldown's logs on. That is a choice about product behavior. The lean is
   below; the slice holds that one hit, and the folder's lock, until the owner answers.
-- **The secrets law watches less after the change (open question 2, 75%).** Its five `console`
-  spies catch a write to the global `console` from any code on the path, an outside package's
-  included. Effect's `TestConsole` catches only what goes through Effect's `Console`. This plan
-  closes the gap for our own code with a lint rule (`eslint/no-console`, at zero in libfabrika's
-  product files today), but an outside package that calls `console.log` itself is no longer seen.
-  0555 bans the spy, so this follows from it, but it narrows what a law checks, so the owner hears
-  of it.
+- **The secrets law watches less after the change (open question 2, 75%).** (Answered 2026-11-15:
+  not acceptable; the lean goes. Nothing the spies saw goes unseen, see "`console`: Effect's own
+  `Console`".) Its five `console` spies catch a write to the global `console` from any code on the
+  path, an outside package's included. Effect's `TestConsole` catches only what goes through
+  Effect's `Console`. This plan closes the gap for our own code with a lint rule
+  (`eslint/no-console`, at zero in libfabrika's product files today), but an outside package that
+  calls `console.log` itself is no longer seen. 0555 bans the spy, so this follows from it, but it
+  narrows what a law checks, so the owner hears of it.
+- **The lock's reach while the folder still holds `vi.mock` and `vi.stubEnv` (open question 3,
+  waiting on the merge session).** On main at `0683861` five of the folder's test files still call
+  `vi.mock` or `vi.stubEnv` (8 calls), which wait for 0555's `Config` slice and 0042's Alchemy
+  work. A five-method block can name only files at zero for all five, so the folder-wide hold of
+  `fn`, `spyOn` and `stubGlobal` this plan had would skip those five files. That reads as a
+  loosening of M1, so it is not applied.
 - **The order with the Reflect ban's slice 9 (80%).** Both touch `dev.ts`,
   `dev-control.laws.integration.test.ts`, `dev-secrets.laws.integration.test.ts` and
   `watch.laws.integration.test.ts`. This slice goes first: it waits on nothing, and slice 9 waits on
@@ -182,15 +196,49 @@ a law owns, not services, the case the Recorder pattern leaves to the law
 - **The secrets law** (`dev-secrets.laws.integration.test.ts:228`) provides `TestConsole.layer`
   and adds `logLines` and `errorLines` to the outputs it scans. Effect's loggers write through the
   `Console` reference, and the law already replaces the logger with its own (`:233`).
+  **Amendment (2026-11-15, ruling 4):** it reads all five methods its spies read: `logLines`,
+  `errorLines`, app-e2e's `warnLines`, and `infoLines` and `debugLines`, which the first slice of
+  the sweep that drops a five-method `console` spy adds to the same patch (see the cloudflare
+  plan's M6).
+- **Outside packages on the secrets law's path (amendment 2026-11-15, ruling 4; open question 2's
+  lean is withdrawn).** No write the spies saw goes unseen. tea's own warnings go through the
+  pipeline plan's tea patch hook, which the secrets law sets to collect them, as that plan's L8
+  does. Rolldown's go through `watch.ts`'s `onLog` into Effect's `Console`, below. The tests step
+  reads, before it writes the law, every other outside package the path runs for a direct
+  `console` or `process.stdout`/`process.stderr` write (`rg` over each package's installed
+  `dist/`), and names each in its run row. A package found writing directly gets the same answer
+  as tea: a local `pnpm patch` with a hook, and the upstream issue the same day (0054). If one is
+  found, the slice stops and the lead adds it to this plan before the law is written.
 - **`eslint/no-console` at error** in `next/packages/libfabrika/src/**`, test files and test
   support left out. `rg -n '\bconsole\.'` finds 0 hits there on main, so it blocks from the start
   (0523's "block where clean"). It holds what the spy held for our own code: nothing of ours writes
   to the global `console`, so `TestConsole` sees every write of ours.
 
-### The watch law's warnings (waits on open question 1)
+### The watch law's warnings (open question 1, answered 2026-11-15)
 
-The lean, a sketch. `watch.ts:126` today passes `logLevel: "silent"`, so Rolldown drops every
-warning. After:
+**Amendment (2026-11-15, merge session ruling 4): `watch.ts` takes app-e2e's answer for
+`bundle.ts`.** Its Rolldown options get the same `onLog` that `bundle.ts` gets in the app-e2e
+plan ([`mock-app-e2e-PLAN.md`](./mock-app-e2e-PLAN.md), "The shape"): each warning is printed once
+through Effect's `Console.warn`, in Rolldown's format, with every file name relative to the root
+and no form of an absolute path; a `MODULE_LEVEL_DIRECTIVE` log prints nothing; `debug` is dropped.
+`watch.ts` imports that handler from `node/build/bundle.ts` if the app-e2e build exports it there,
+or both read it from one internal file the build names; it is never written twice (80%). The watch
+law provides `TestConsole.layer` and reads `warnLines` for the leak, in place of the spy. This
+slice lands after the app-e2e slice, whose patch adds `warnLines`.
+
+```ts
+// next/packages/libfabrika/src/node/dev/watch.ts:121, after. A sketch, not compiled.
+const out = yield* Console.Console;
+watch({
+  // ...as today
+  logLevel: "warn", // as bundle.ts runs Rolldown, so the handler is called
+  onLog: printWarning(out, root), // app-e2e's handler: Console.warn, relative names, no debug
+});
+```
+
+The first lean, kept below and marked wrong, sent only each warning's code and plugin to Effect's
+log at debug. `watch.ts:126` today passes `logLevel: "silent"`, so Rolldown drops every warning.
+The first lean's sketch:
 
 ```ts
 // next/packages/libfabrika/src/node/dev/watch.ts:121, after. A sketch, not compiled.
@@ -207,12 +255,11 @@ watch({
 });
 ```
 
-The law then reads Effect's log through a `Logger` layer, as the secrets law does, and its existing
+Under the first lean the law read Effect's log through a `Logger` layer. Under the ruled shape
+(amended 2026-11-15) it reads `TestConsole.warnLines`. Either way its existing
 `vi.mock("rolldown")` wrapper (the one exception 0555 keeps: the law of the one file that wraps an
-outside package) also wraps the `onLog` it is handed, so it sees whether the default handler was
-ever called. If the owner picks keeping `silent`, the law checks through that wrapper that every
-`watch` call gets `logLevel: "silent"` and no handler that prints, which no longer catches a
-Rolldown that prints despite `silent`.
+outside package) also wraps the `onLog` it is handed, so it sees whether Rolldown's default handler
+was ever called, which would print past `Console`.
 
 ## One value traced: a replace whose old process has already gone
 
@@ -259,13 +306,15 @@ another law can see, which the `mockRestore` lines guarded by hand. Those `try/f
 
 | Law | Kind | Generator | What it holds | Plant |
 |---|---|---|---|---|
-| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555) | a `VI_SPY` plant in `oxlint-plugins/builtin-plants.ts`; `plants.test.ts` runs its lines in every folder of the block. Plant: drop the folder from the block, and its line is not refused |
+| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3 | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused |
 | M2 | lint | lint | `eslint/no-console` refuses `console.*` in libfabrika's product files and takes it in a test file | a `NO_CONSOLE` plant, run in a product path and a test path. Plant: widen the block to test files, and the test line is refused |
 | L6a | test | Effect Arbitrary: SignalCase | `signal` succeeds on `missing`, dies on `refused`, and sends exactly one `send(pid, name)` | let `missing` escape `signal`, or swallow `refused` too (the L6 plant of today) |
 | L6b | test | Effect Arbitrary: Thrown | `make` over a call that throws answers `missing` only for `{ code: "ESRCH" }` and keeps the thrown value as `cause` | classify by `message` in place of `code`, or answer `missing` for any error |
 | L6c | test, `SignalsNode.integration.test.ts` | vector: one real ESRCH from Node, a child this law spawned and waited for | `SignalsNode.layer`'s `send` to a child this law spawned and waited for fails as `missing`: the shape `{ code: "ESRCH" }` that L6b assumes comes from a real Node, as a `vector:` | drop the `catch` in `make`, and the ESRCH dies as a defect |
 | The rewritten laws | test | scenario: each law's own generators, unchanged | each keeps its title and its claim, watched through `Fetch`, `Recorder.calls(Signals)` or `TestConsole` | each keeps its named plant (`dev.laws:529` L7, `:627` L8, `:778` L13, `dev-control:575`, `dev-secrets:497`). The two unnamed ones: dev-errors' offline law, "dial in offline mode", red on the count; its RSS law, "signal when the sample fails", red on `Recorder.calls(Signals)` |
 | The secrets law, new plant | test | scenario: the law's generated flows, unchanged | a `Console.log` of the bearer on the path is caught | add `yield* Console.log(bearer)` in the control call, and `logLines` holds it |
+| The secrets law, more plants (amendment 2026-11-15, ruling 4) | test | scenario: the law's generated flows, unchanged | a bearer written through `Console.warn`, `Console.info` or `Console.debug`, or in a tea warning, is caught | add each write on the path in turn: red only through `warnLines`, `infoLines`, `debugLines` and the tea hook's list, one plant each |
+| The watch law (amendment 2026-11-15, ruling 4) | test | scenario: the law's own generators, unchanged | a Rolldown warning on the watch path reaches `TestConsole.warnLines` once, relative to the root, with no absolute path, and the default handler is never called | print the absolute importer: red; call Rolldown's default handler: red through the wrapper |
 
 ```ts
 // The two new laws' input Schemas, in their test files. A sketch.
@@ -303,7 +352,11 @@ const Thrown = Schema.Union([
 | next/packages/libfabrika/src/node/dev/SignalsNode.ts | build | 8 | new: `layer`, the one `process.kill` |
 | next/packages/libfabrika/src/node/dev/local-dev.ts | build | 10 | `signal` asks for `Signals`; `SignalError` and `isMissing` go |
 | next/packages/libfabrika/src/node/dev/dev.ts | build | 3 | the doc block of `startDev` names `Signals` |
-| next/packages/libfabrika/src/node/dev/watch.ts | build | 12 | after open question 1: `logLevel` and `onLog` |
+| next/packages/libfabrika/src/node/dev/watch.ts | build | 6 | (amended 2026-11-15) `logLevel: "warn"` and app-e2e's `onLog` handler through `Console` |
+| patches/effect@4.1.3.patch | tests | 12 | amended 2026-11-15, only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines`, with `pnpm patch` |
+| patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
+| patches/ | tests | none | the folder of the patch above; no other file in it changes |
+| scripts/effect-testconsole.test.ts | tests | tests | with the readers above: their law, beside app-e2e's L3 |
 | next/packages/libfabrika/package.json | tests | tests | the `./node/signals` export; a package file is an exam path, so the tests step writes this line |
 | next/apps/fabrika/src/instance.ts | build | 2 | provides `SignalsNode.layer` to `start(...)` |
 | .glossary/TERMS.md | build | docs | a `Signals` row: an OS signal to a pid, not a `next/` process |
@@ -316,8 +369,8 @@ const Thrown = Schema.Union([
 | next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts | tests | tests | 1 `fetch`, 1 `process.kill` |
 | next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts | tests | tests | 3 `fetch`, 3 `process.kill`, 1 matcher |
 | next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | 1 `fetch`, the `console` spies, a new plant |
-| next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | after open question 1: the `console.warn` spy |
-| oxlint-plugins/builtin-plants.ts | tests | tests | `VI_SPY` and `NO_CONSOLE` |
+| next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | (amended 2026-11-15) the `console.warn` spy goes for `TestConsole.warnLines` |
+| oxlint-plugins/builtin-plants.ts | tests | tests | M1's lines in node's `VI_METHODS` set (amended 2026-11-15; first a `VI_SPY` plant), and `NO_CONSOLE` |
 | oxlint-plugins/plants.test.ts | tests | tests | M1 and M2's scenarios, as `REFLECT`'s at `:532` |
 | .oxlintrc.json | tests | tests | the two blocks |
 
@@ -351,6 +404,10 @@ const Thrown = Schema.Union([
 - **With other folders of the mock sweep:** the first to land adds the `no-restricted-vi-methods`
   block to `.oxlintrc.json`; each later one adds its folder to the block's `files`, a one-line
   clash. `vi.mock` and `vi.stubEnv` join the block's list when the folder's last ones go.
+  **Amendment (2026-11-15):** the block has all five methods from the start (ruling 2), so a file
+  of this folder joins it at zero for all five; open question 3 asks where the rest wait. This
+  slice lands after the app-e2e slice, which adds `warnLines` and the `onLog` handler `watch.ts`
+  reuses, and after the pipeline plan's tea patch, whose hook the secrets law sets.
 - **0579's `fc.assert` sweep** is not here: the rewritten laws keep their runner and move with that
   sweep.
 
@@ -377,8 +434,16 @@ before the first review.
 
 ## Size
 
-1. This slice, one pull request: about 75 product lines (63 before open question 1's 12), about
-   250 test lines changed, 2 lint blocks and 2 plants. 75 lines.
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** The slice opens
+no pull request of its own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`,
+in its one pull request (0589, amended 2026-11-15), after its own steps, one fresh agent each:
+tests (the rewritten laws, L6a to L6c, M1, M2 and their plants, each run once), build (`Signals`,
+`local-dev.ts`, `watch.ts`, the provide in `instance.ts`), and review (the slice's diff, with the
+loosening check). L6c runs before the review.
+
+1. This slice, on the fold branch: about 69 product lines (63, and `watch.ts`'s 6 now that open
+   question 1 is answered), about 270 test lines changed, 2 lint blocks and 2 plants, and the two
+   `TestConsole` readers if no earlier slice added them. 69 lines.
 
 Confidence in the line counts: 75%. The doubt is how many laws that run `startDev` need a
 `SignalsTest.layer()` added and how much of each `try/finally` goes with its spy.
@@ -393,26 +458,44 @@ Estimate: 4 steps, $20
 
 - A glossary row for `Signals`, in the build.
 - No decision file: this builds 0555 and 0579. The two open questions, once answered, go in as an
-  amendment to this plan, and a ruling on question 2 as a line in 0555's Amendments.
+  amendment to this plan, and a ruling on question 2 as a line in 0555's Amendments. (Amendment
+  2026-11-15: both were answered by the merge session's rulings and are amendments here; the line
+  in 0555's Amendments is the merge session's to write, since it made the ruling.)
 
 ## What this cannot tell us
 
 - Whether any block here compiles. None was compiled or run; `Effect.runForkWith` and
   `Signals.use` are as read in effect 4.1.3's source, not tried.
 - Whether an outside package on the secrets law's path writes to `console` today. Nobody has
-  looked; the spy would have caught it, and `TestConsole` will not.
+  looked yet; the tests step looks first (amended 2026-11-15), and a hit stops the slice for a patch.
 - Which code Rolldown gives the watch law's duplicate-key warning. The tests step reads it from a
   real run.
 - Whether oxlint's rule sees `vi` renamed on import.
 
 ## Open questions
 
-1. **How should `watch.ts` hand on Rolldown's warnings, now that a law may not spy on `console`?**
-   Lean (70%): Rolldown gets `logLevel: "warn"` and an `onLog` that sends each warning's code and
+3. **For the merge session (amendment 2026-11-15): where do the folder's five files with `vi.mock`
+   or `vi.stubEnv` keep their lock until those calls go?** Ruling 2 gives every block all five
+   methods. Read as written, those five files are in no block, so `fn`, `spyOn` and `stubGlobal`
+   are no longer refused there, which this plan held folder-wide. That loosens M1, so it is not
+   applied. Lean, 80%: keep an interim block for those files with the three methods this plan had,
+   run under node's M1 plants for what it names; each file moves to the five-method block the day
+   its last `vi.mock` or `vi.stubEnv` goes. The same question stands in the cloudflare and app-src
+   plans. The other way: no lock in this folder until 0555's `Config` and Alchemy slices finish.
+
+## Answered questions
+
+**Amendment (2026-11-15, merge session rulings):** questions 1 and 2 were answered, and both leans
+were wrong. They are kept as they were asked.
+
+1. **(Answered 2026-11-15: `watch.ts` routes Rolldown's warnings through Effect's `Console`, as
+   app-e2e's `bundle.ts` does; the lean was wrong.) How should `watch.ts` hand on Rolldown's
+   warnings, now that a law may not spy on `console`?** Lean (70%): Rolldown gets `logLevel: "warn"` and an `onLog` that sends each warning's code and
    plugin, never its text, to Effect's log at debug, and never prints; the law reads the log and
    checks that the default handler is never called. The other way: keep `logLevel: "silent"`, and
    the law only checks the option, which no longer catches a Rolldown that prints anyway.
-2. **The secrets law will no longer see an outside package that writes to the global `console`.
-   Is that narrowing acceptable?** Lean (75%): yes. 0555 bans the spy, `eslint/no-console` holds
+2. **(Answered 2026-11-15: no; coverage is never lost, and the lean goes.) The secrets law will no
+   longer see an outside package that writes to the global `console`. Is that narrowing
+   acceptable?** Lean (75%): yes. 0555 bans the spy, `eslint/no-console` holds
    our own code, and the other way, running the flow in a child process and reading its output,
    costs a process per generated case.

@@ -245,7 +245,7 @@ the same line as Rolldown printed it before.
 | L1. `bundle` prints each Rolldown warning once through `Console.warn`, in Rolldown's format, with every file name relative to `cwd` and no form of an absolute path; a `MODULE_LEVEL_DIRECTIVE` log prints nothing; nothing goes to `log` or `error`. 20 runs fast, 100 full, through `runsFor` | test | Effect Arbitrary: WarningCase | print `log.message` before the relative replacement: L1 red; print through the global `console.warn`: L1 red, no line seen | next/packages/libfabrika/src/node/build/bundle-warnings.integration.test.ts |
 | L2. L17, rewritten: the real build's warnings keep unresolved imports visible, name their importer relative to root, and print no absolute path, read from `TestConsole.warnLines` | test | fc.record: L17's own, unchanged (folder from fc.stringMatching, missing from fc.stringMatching), 3 runs fast and 10 full, as today | as L1's first plant: L2 red; and drop `Effect.provide(TestConsole.layer)`: L2 red, `warnLines` has no service | next/apps/fabrika/e2e/reload.visual.test.ts |
 | L3. `TestConsole.warnLines` gives the parameters of every `Console.warn` call in order, and nothing from `log`, `error` or `info`; `logLines` and `errorLines` answer as before | test | fc.record: a list of calls, each a method from fc.constantFrom over warn, log, error and info, and parameters from fc.array of fc.string, 100 runs | filter `warnLines` on `"error"`: L3 red | scripts/effect-testconsole.test.ts |
-| L4. In every folder the block lists, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, through a renamed import and a computed key too, and `vi.hoisted` passes | lint | lint | delete the block's one `files` entry: L4 red for that folder | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| L4. In every folder the block lists, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, through a renamed import and a computed key too, and `vi.hoisted` passes. Amendment 2026-11-15 (merge session ruling 2): this is node's M1, and its plant lines are node's shared `VI_METHODS` set, with this plan's renamed-import, computed-key and `vi.hoisted` lines added to it, in place of a `MOCKS` plant of its own | lint | lint | delete the block's one `files` entry: L4 red for that folder | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | L5. The folder has no `vi.` call and no disable line for the rule | lint | lint | put the old spy back: `pnpm lint` red | .oxlintrc.json |
 
 - **L1's input** is a Schema, so `it.effect.prop` draws it (0579). A sketch:
@@ -263,7 +263,7 @@ the same line as Rolldown printed it before.
 - **L3 sits beside `scripts/effect-arbitrary.test.ts`,** the law of the patch already in that file,
   and follows that file's shape (plain `vitest`, `fast-check`, `Effect.runSync`), since the root has
   no `@effect/vitest` and `scripts/` is outside 0579's folders.
-- **L4 has REFLECT's shape:** a `MOCKS` plant in `builtin-plants.ts`, and a scenario in
+- **L4 has REFLECT's shape:** node's `VI_METHODS` plant in `builtin-plants.ts` (amended 2026-11-15; first a `MOCKS` plant), and a scenario in
   `plants.test.ts` that writes its lines into a file under every glob of the block and runs the real
   config, as "REFLECT's lines are refused exactly" does at `plants.test.ts:532`. The existing
   `vitest(hoisted-apis-on-top)` plant writes `vi.mock` under a tooling path, which the block does not
@@ -282,7 +282,7 @@ change and the docs.
 | next/packages/libfabrika/src/node/build/bundle-warnings.integration.test.ts | tests | tests | new: L1 |
 | next/apps/fabrika/e2e/reload.visual.test.ts | tests | tests | L2: the spy goes, `TestConsole` reads the lines; the `vi` import goes |
 | scripts/effect-testconsole.test.ts | tests | tests | new: L3 |
-| oxlint-plugins/builtin-plants.ts | tests | tests | L4: the `MOCKS` plant |
+| oxlint-plugins/builtin-plants.ts | tests | tests | L4: its lines in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant) |
 | oxlint-plugins/plants.test.ts | tests | tests | L4: the scenario over the block's folders |
 | .oxlintrc.json | tests | configuration | L4, L5: the new block, with `next/apps/fabrika/e2e/**` |
 | next/packages/libfabrika/src/node/build/bundle.ts | build | 18 | `onLog` prints through `Console`, in Rolldown's format |
@@ -301,6 +301,11 @@ change and the docs.
 | docs/plan/quests/mock-app-e2e-PLAN.md | lead | docs | this plan |
 
 ## Steps
+
+**Amendment (2026-11-15, merge session ruling 1).** The slice opens no pull request of its own. It
+lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request (0589,
+amended 2026-11-15), after these steps, one fresh agent each, in its own box. The "same pull
+request" in step 2 is that one.
 
 1. **Tests:** L1 to L5, the patch with `pnpm patch`, its row in `pnpm-workspace.yaml`, and the
    README section. L3, L4 and L5 are green at once. L1 and L2 are red until the build, since
@@ -339,8 +344,10 @@ change and the docs.
 
 ## Size
 
-One pull request, about 40 product lines. Confidence in the count: 80%; the doubt is the patch's
-`dist/` and `.d.ts` hunks, which may be longer than the `src/` one.
+One slice, about 40 product lines, on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in
+its one pull request (amendment 2026-11-15, merge session ruling 1; first "one pull request").
+Confidence in the count: 80%; the doubt is the patch's `dist/` and `.d.ts` hunks, which may be
+longer than the `src/` one.
 
 1. The mock sweep in `next/apps/fabrika/e2e`: the patch, `bundle.ts`, five laws, the lock. 40 lines.
 

@@ -47,6 +47,12 @@ expect((yield* h.host.calls("merge")).map(([change]) => change)).toEqual([1, 2, 
   [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)). See "Tea's warnings reach
   the S2 check" under "The shape". The doubt left is only the `Console.warn` one, which
   `TestConsole` keeps but does not read back.
+
+  **Amendment (2026-11-15, merge session rulings):** that doubt is closed too. App-e2e's patch adds
+  `TestConsole.warnLines`, and `infoLines` and `debugLines` join it in the same patch (the first
+  slice of the sweep that drops a five-method `console` spy adds them; see the cloudflare plan's
+  M6), so S2 reads all five methods the spy read. The tea patch is a new file for tea 0.27.0, the
+  version `next/` is on since pull request 1391; the 0.25.0 patch belongs to today's version only.
 - **Whether `CodeHostTest.layer` can hand its stateful fake to `Recorder.layer` as it is (85%).**
   `Recorder.layer` takes the implementation as a value, while today's fake makes its state inside
   `Layer.effectContext(Effect.sync(...))`. The lean wraps the whole build in `Layer.unwrap`, the same
@@ -71,6 +77,13 @@ call.
 `patches/@demlik__tea@0.25.0.patch`, so tea's direct `console.warn` lines go through a warning hook
 a host sets, and S2 sets it to collect them beside `TestConsole`'s lines. The upstream issue on
 `kamp-us/demlik` is filed the same day the patch is made.
+
+**Amendment (2026-11-15, merge session rulings):** the patch is a new
+`patches/@demlik__tea@0.27.0.patch`, not an extension of the 0.25.0 one: main's
+`pnpm-workspace.yaml` puts `next/` on tea 0.27.0 (pull request 1391) and keeps 0.25.0 on today's
+version's own catalog, whose patch row stays as it is. S2 reads all five `console` methods the spy
+read through `TestConsole`. The slice lands on the sweep's one fold branch, and its steps are
+listed in full, a build that changes nothing included (see "Steps").
 
 ## Counted on main
 
@@ -208,7 +221,14 @@ yield* Effect.gen(function* () {
   const h = yield* driver.open(Redacted.make(value.text));
   const inspect = Effect.gen(function* () {
     const s = yield* h.snapshot;
-    const printed = [...(yield* TestConsole.logLines), ...(yield* TestConsole.errorLines)];
+    // Amended 2026-11-15: every method the spy read, warn, info and debug through the patched readers.
+    const printed = [
+      ...(yield* TestConsole.logLines),
+      ...(yield* TestConsole.errorLines),
+      ...(yield* TestConsole.warnLines),
+      ...(yield* TestConsole.infoLines),
+      ...(yield* TestConsole.debugLines),
+    ];
     driver.unleaked(
       [/* the same records as today */, ...capture.text(), ...logs, ...printed.map(line)],
       [value.text, value.token],
@@ -244,11 +264,37 @@ What was read first (0054), in the installed `@demlik/tea` 0.25.0 `dist/`, with 
   by the sink's doc) and `.patterns/`. The tests step reads them before it writes the patch, and the
   pull request names what it read and why the sink alone does not cover these sites, as 0054 binds.
 
+**Amendment (2026-11-15): read now, as 0054 binds.** `kamp-us/demlik` was read at `e328d1e`
+(2026-11-16), its `.decisions/` (36 records) and `.patterns/`, and the published `@demlik/tea`
+0.27.0 package's `dist/`:
+
+- tea 0.27.0 has the same seven `console.warn` sites: `defaultOnError`'s warning for a
+  `RuntimeDiscardNotice` (`dist/chunk-BXLD374W.js:17`), a run listener that threw
+  (`chunk-LNJSAPQV.js:1046`), two `onToolError` guards (`:1170`, `:1192`), and `fromTransport`'s
+  three (`chunk-BSGN3CEF.js:338`, `:353`, `:367`).
+- demlik's
+  [0031](https://github.com/kamp-us/demlik/blob/main/.decisions/0031-a-fenced-run-must-pass-on-error.md)
+  says "`defaultOnError` does not change. It warns on a `RuntimeDiscardNotice` and rethrows
+  everything else", and that the default sink "must not grow a case". So routing the other six
+  warnings into `OnError` would hit the default sink's rethrow branch and end a host that passed
+  no sink: the `OnError` route is ruled out, and the host-set hook stays the shape. A host that
+  passes `onError` already receives the discard notice there (0030, 0033).
+- demlik's
+  [0020](https://github.com/kamp-us/demlik/blob/main/.decisions/0020-tea-owns-no-dependency-injection.md)
+  says tea owns no dependency injection. A module-level hook a host sets is a plain function, not a
+  container, but it is global state, so the upstream issue proposes it as a question, and the
+  maintainers may prefer a `warn` option on `run` and on `fromTransport`. The local patch takes the
+  hook because one setter covers all seven sites, including `fromTransport`, which runs outside any
+  run's options. 80%.
+- `.patterns/tea/tea-invariants.md` keeps `console.log` out of reducers ("debugging is
+  `observe`"); it says nothing on tea's own warnings. No pattern names a host warning sink.
+
 The patch, a sketch, not compiled: each site calls one `warn` that a host can set, with
 `console.warn` as its default, so a program that sets nothing sees no change.
 
 ```ts
-// patches/@demlik__tea@0.25.0.patch, a sketch in tea's own words, added to the demlik#897 change.
+// patches/@demlik__tea@0.27.0.patch (amended 2026-11-15; first written against 0.25.0), a new
+// file, a sketch in tea's own words.
 // A host may set where tea's warnings go; unset, they go to console.warn as today.
 export type Warn = (message: string, cause: unknown) => void;
 let warn: Warn = (message, cause) => console.warn(message, cause);
@@ -273,10 +319,15 @@ yield* Effect.acquireRelease(
 
 - If tea's decisions say a warning belongs on the `OnError` sink, the tests step routes the seven
   sites there instead and S2 reads the sink; the law (L8) is the same either way. Call: 70% that the
-  hook above is the shape that lands, which is why the read comes first.
-- One patch file per package version: pnpm keeps one `patchedDependencies` row for
-  `@demlik/tea@0.25.0`, so this change extends that file, and its comment in `pnpm-workspace.yaml`
-  names both upstream issues. The bump that takes tea's release with the hook deletes the patch.
+  hook above is the shape that lands, which is why the read comes first. **Amended 2026-11-15:**
+  the read is done (above): demlik's 0031 rules the `OnError` route out, so the hook is the shape,
+  80%.
+- One patch file per package version: pnpm keeps one `patchedDependencies` row per version.
+  **Amended 2026-11-15:** this adds a new row for `@demlik/tea@0.27.0` in `pnpm-workspace.yaml`,
+  beside today's version's 0.25.0 row, which is not touched; the new row's comment names the new
+  upstream issue. The bump that takes tea's release with the hook deletes the patch. If demlik#897's
+  change is not in 0.27.0, that is not this patch's: `next/` does not read the machine's schemas
+  through it (the tests step checks with `rg` and says so).
 - The upstream issue carries the diff in a folded `<details>` block (0060), and reports one gap:
   tea writes warnings no host can route.
 
@@ -331,10 +382,10 @@ yield* Effect.acquireRelease(
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| L1. Every folder the mock ban block lists refuses `vi.spyOn`, `vi.mock`, `vi.doMock`, `vi.stubEnv` and `vi.fn`, also after `import { vi as v }` and as `vi["spyOn"]`, and the record of what it misses (`V.vi.spyOn` after a namespace import, `const { spyOn } = vi`) stays exactly as the rule does today | lint | scenario: the repo's own config read by `--print-config`, and one planted file per listed glob, as the Reflect ban's L1 | delete `next/programs/pipeline/**` from the block: its planted file is not refused, L1 red | oxlint-plugins/plants.test.ts, oxlint-plugins/builtin-plants.ts |
+| L1. Node's M1 (amendment 2026-11-15, ruling 2): every folder the mock ban block lists refuses `vi.spyOn`, `vi.mock`, `vi.doMock`, `vi.stubEnv` and `vi.fn`, also after `import { vi as v }` and as `vi["spyOn"]`, and the record of what it misses (`V.vi.spyOn` after a namespace import, `const { spyOn } = vi`) stays exactly as the rule does today; these lines are node's shared `VI_METHODS` set | lint | scenario: the repo's own config read by `--print-config`, and one planted file per listed glob, as the Reflect ban's L1 | delete `next/programs/pipeline/**` from the block: its planted file is not refused, L1 red | oxlint-plugins/plants.test.ts, oxlint-plugins/builtin-plants.ts |
 | L2. No `vi.*` mock, spy, stub or fn in `next/programs/pipeline` | lint | lint | put back `vi.spyOn(console, "log")` in `QueueRunnerTest.ts`: `vitest/no-restricted-vi-methods` red | next/programs/pipeline/src/QueueRunnerTest.ts |
 | L3. S2 keeps its bound: a secret in a scripted fault reaches no letter, saved row, model, view, span, logger line or console line, with the same run count and seed | test | Effect Arbitrary: tapes | make a pipeline handler write the fault's cause with `Console.error`: S2 red. Default runs | next/programs/pipeline/src/QueueRunnerTest.ts |
-| L4. S2's console check reads what the console got: a planted `Console.log` of the secret inside the run turns it red, as the spy did | test | Effect Arbitrary: tapes | drop `TestConsole.layer` from the provide, so the planted line goes to the global console unseen: L4 red | next/programs/pipeline/src/QueueRunnerTest.ts |
+| L4. S2's console check reads what the console got: a planted `Console.log` of the secret inside the run turns it red, as the spy did; and (amendment 2026-11-15, ruling 4) so does a planted `Console.warn`, `Console.info` or `Console.debug`, each read by its own patched reader | test | Effect Arbitrary: tapes | drop `TestConsole.layer` from the provide, so the planted line goes to the global console unseen: L4 red; drop `warnLines`, `infoLines` or `debugLines` from `printed`: that method's plant is red | next/programs/pipeline/src/QueueRunnerTest.ts |
 | L5. The runner suites keep their merge counts: R2 one merge, R3 one merge before the retry and two after, Q1 merges 1, 2, 3 in order, QR2 no merge of change 2, QR3 at least three updates of change 2 | test | scenario: the suites' own scripted walks, unchanged | hand `Recorder.layer` a host whose `merge` is put back to the raw fake after the wrap, so merges go unrecorded: R2, R3 and Q1 red | next/programs/pipeline/src/RunnerTest.ts, next/programs/pipeline/src/QueueRunnerTest.ts |
 | L6. The code host contract C1 and the handler fault law still hold on the watched fake | test | fc.commands: C1's own commands, seed 119120, 100 runs | make the fake's `failure` skip its fault queue: the handler fault law red. Default runs | next/packages/libfabrika/src/codehost/CodeHost.test.ts, next/programs/pipeline/src/handlers.test.ts |
 | L7. `h.host.calls` takes only a method of `CodeHost` and answers its own args | type | type | widen `calls`' parameter to `string`: a `@ts-expect-error` on `calls("mrege")` goes unused, red in a typecheck | next/programs/pipeline/src/RunnerTest.ts |
@@ -369,13 +420,19 @@ yield* Effect.acquireRelease(
 | next/packages/libfabrika/src/ci/CiTest.ts | tests | tests | unchanged: `starts` is the fake's state and stays |
 | next/programs/pipeline/tsconfig.json | tests | tests | unchanged; the project the narrow type count reads |
 | field/runs/2026-11-15-mock-pipeline-tests1.json | tests | docs | the tests step's run row |
-| patches/@demlik__tea@0.25.0.patch | tests | 30 | amendment 2026-11-16: tea's seven `console.warn` sites go through a `warn` a host sets, in `dist/` and the `.d.ts`, made with `pnpm patch`; an exam path, so the tests step writes it |
-| patches/ | tests | none | amendment 2026-11-16: the folder of the tea patch above; no other file in it changes |
-| pnpm-workspace.yaml | tests | 1 | amendment 2026-11-16: the new upstream issue's link beside the tea patch row |
+| patches/@demlik__tea@0.27.0.patch | tests | 30 | new (amendment 2026-11-15; first written as an extension of the 0.25.0 patch on 2026-11-16): tea 0.27.0's seven `console.warn` sites go through a `warn` a host sets, in `dist/` and the `.d.ts`, made with `pnpm patch`; an exam path, so the tests step writes it |
+| patches/@demlik__tea@0.25.0.patch | tests | 0 | not touched (amendment 2026-11-15): today's version's patch |
+| patches/effect@4.1.3.patch | tests | 12 | amendment 2026-11-15, only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines` |
+| patches/effect | tests | tests | the Effect patch's name as pnpm writes it; the one file above |
+| scripts/effect-testconsole.test.ts | tests | tests | with the readers above: their law, beside app-e2e's L3 |
+| patches/ | tests | none | amendment 2026-11-16: the folder of the patches above; no other file in it changes |
+| pnpm-workspace.yaml | tests | 2 | amendment 2026-11-15: a new `patchedDependencies` row for `@demlik/tea@0.27.0`, with the new upstream issue's link beside it |
 | pnpm-lock.yaml | tests | lockfile | amendment 2026-11-16: the patch hash, written by `pnpm patch-commit` |
 
 - No product file changes, so the build step has nothing to make green unless the review sends
-  work back; the tests step reports `build_needed: no` when lint is green. The tea patch is an exam
+  work back; the tests step reports `build_needed: no` when lint is green. (Amendment 2026-11-15,
+  ruling 5: the build step still runs, changes nothing, says so, and runs the checks green; see
+  "Steps".) The tea patch is an exam
   path, so the tests step writes it, as the app-e2e plan does for its Effect patch
   (amendment 2026-11-16).
 - The tea patch's `pnpm-workspace.yaml` and `pnpm-lock.yaml` lines meet the app-e2e plan's Effect
@@ -421,21 +478,38 @@ yield* Effect.acquireRelease(
   next/programs/pipeline/tsconfig.json`, and the same for libfabrika, which read L7 and the new
   `World` types. The lead runs the one full type check.
 
+## Steps
+
+**Amendment (2026-11-15, merge session rulings 1 and 5).** The slice opens no pull request of its
+own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request
+(0589, amended 2026-11-15), after its own steps, one fresh agent each, in its own box:
+
+1. **Tests:** L1 to L8, the tea 0.27.0 patch with `pnpm patch` and its `pnpm-workspace.yaml` row,
+   the `TestConsole` readers if no earlier slice added them, and the two integration files; each
+   plant run once and recorded in the run row. The upstream issue on `kamp-us/demlik` is filed the
+   same day by the lead, since a step reaches only this repo.
+2. **Build:** no product file changes, so the build changes nothing, says so in its run row, and
+   runs the slice's checks green at the tests step's head (`pnpm lint` and the narrow paths under
+   "Validation"), or sends back.
+3. **Review:** the one review of the slice's diff, with the loosening check on L3 and L5.
+
 ## Size
 
-One pull request: the swap and the lock land together, since the lock is red until the spy goes.
-Confidence in the line counts: 80%; the doubt is how many lines the `World` type change moves in the
-two integration files.
+One slice: the swap and the lock land together, since the lock is red until the spy goes. It lands
+on the fold branch named under "Steps". Confidence in the line counts: 80%; the doubt is how many
+lines the `World` type change moves in the two integration files.
 
-1. The pipeline folder's mock sweep and its lock: 0 product lines, about 60 test lines changed in
-   five test files, about 40 lines of lint config and plants, and (amendment 2026-11-16) about 30
-   lines of tea patch. 30 lines.
+1. The pipeline folder's mock sweep and its lock: 0 product lines, about 70 test lines changed in
+   five test files, about 40 lines of lint config and plants, (amendment 2026-11-16) about 30 lines
+   of tea patch, and (amendment 2026-11-15) the two `TestConsole` readers if no earlier slice
+   added them. 30 lines.
 
 Priced from `field/runs/` rows of 2026-11-15 at list price, as the Recorder plan priced them: a tests
-step about $6, a review about $3, a fix round about $4. No build step is expected. Amendment
-(2026-11-16): the tea patch, its read and its upstream issue add about $3 to the tests step.
+step about $6, a review about $3, a fix round about $4. Amendment (2026-11-16): the tea patch, its
+read and its upstream issue add about $3 to the tests step. Amendment (2026-11-15, ruling 5): a
+build that only runs checks, about $2, as the oxlint-plugins plan prices one.
 
-Estimate: 3 steps, $16
+Estimate: 4 steps, $18
 
 ## Records
 
@@ -453,6 +527,8 @@ Estimate: 3 steps, $16
   use. Since the 2026-11-16 amendment this no longer matters for coverage: L8 watches them either
   way.
 - **What tea's own decisions say about warnings.** Not read here; the tests step reads them first.
+  (Amended 2026-11-15: read at demlik `e328d1e`; see "Tea's warnings reach the S2 check". What is
+  still unknown is whether demlik's maintainers take the hook or a `run` option upstream.)
 - **The lock's reach beyond what L1 plants.** A `vi` reached through a namespace import or a
   destructure is not refused by the rule today (scratch run, 2026-11-15). No file in the folder does
   either; a later slice that meets one names it.

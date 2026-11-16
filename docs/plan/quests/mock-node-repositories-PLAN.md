@@ -206,7 +206,9 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 - **If another mock slice lands its block first,** this slice adds its folder to that block's
   `files` and does not add a second one. Which slice turns the rule on for the folders already at
   zero is the sweep's order, not this plan's.
-- **The plants** go in `oxlint-plugins/builtin-plants.ts` as one `Plant` beside `REFLECT`, run by
+- **The plants** (amendment 2026-11-15, ruling 2: one lock shape, so these are node's shared
+  `VI_METHODS` set, with this plan's lines added to it, and node's M1 is the law) go in
+  `oxlint-plugins/builtin-plants.ts` as one `Plant` beside `REFLECT`, run by
   `oxlint-plugins/plants.test.ts` under a `*.test.ts` name inside this folder, the way the REFLECT
   plant runs in every folder a block lists.
 
@@ -226,7 +228,7 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L3 (rewritten). For a generated `wrong: Schema.Boolean`, `prepare` hashes the values twice over the same bytes, and it fails with `InvalidDocument` over a `SnapshotError` exactly when the second hash answers wrong | test, `it.effect.prop`, default runs, the package seed | Effect Arbitrary: Schema.Boolean | (a) `Load.ts` skips `Snapshot.read` and returns `make`'s snapshot: red on both cases; (b) `Load.ts` catches `read`'s failure and returns `make`'s snapshot: red when `wrong`; (c) `Snapshot.read` drops its hash compare (`Snapshot.ts:156`): red when `wrong` | next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts |
-| V1. In this folder, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, with 0555's messages; `vi.hoisted` passes, since 0555 does not decide it | lint | lint | delete one entry from the block: that line is not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| V1. In this folder, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, with 0555's messages; `vi.hoisted` passes, since 0555 does not decide it. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run in this folder, its lines node's shared `VI_METHODS` set, to which `vi.hoisted` is added as a line that passes | lint | lint | delete one entry from the block: that line is not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | V2. The alias `import { vi as v } from "vitest"; v.spyOn(o, "m")` in this folder: the tests step plants it and records what oxlint does. If it is refused, it is a planted line of V1. If it is not, it goes in the plant as a line that passes, with a comment naming the gap, and a finding row says so; no hand-written rule is added (0573: a trusted rule first) | lint | lint | as V1 | oxlint-plugins/builtin-plants.ts |
 
 No law here needs a real resource: `Digest.layerWebCrypto` is in-process, and the `reader` stub and
@@ -250,15 +252,23 @@ The other laws in `OpenRepository.test.ts` keep their bodies. The first L3 law a
 | field/runs/2026-11-16-mock-node-repositories-review1.json | review | docs | the review's run row |
 
 No product file changes. So there is no build step: the rewritten law is green on main's product
-code, and its plants show it is live.
+code, and its plants show it is live. (Amendment 2026-11-15, merge session ruling 5: the build
+step still runs, changes nothing, says so, and runs the checks green; see "Steps".)
 
 ## Steps
+
+**Amendment (2026-11-15, merge session rulings 1 and 5).** The slice opens no pull request of its
+own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request
+(0589, amended 2026-11-15), after these steps, one fresh agent each, in its own box. Step 2 was
+"none"; it now runs.
 
 1. **Tests:** writes L3, V1 and V2, runs each plant once and puts it back, and records the results
    in its run row. Runs `nice -n 15 pnpm exec vitest run --maxWorkers=3` on
    `next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts` and
    `oxlint-plugins/plants.test.ts`, then `pnpm lint`.
-2. **Build:** none, since no product file changes.
+2. **Build:** no product file changes, so the build changes nothing, says so in its run row, and
+   runs the tests step's paths and `pnpm lint` green at the tests step's head, or sends back
+   (amended 2026-11-15; first "none").
 3. **Review:** the one review of the whole diff against this plan, 0555 and 0579, and the lead's
    read of the doubt above.
 
@@ -283,7 +293,8 @@ code, and its plants show it is live.
 
 ## Size
 
-One pull request, landing whole. 0 product lines. Confidence 80%: the doubt is whether
+One slice, landing whole on the sweep's one fold branch, `fabrikalfa/mock-fold` (amended
+2026-11-15; first "one pull request"). 0 product lines. Confidence 80%: the doubt is whether
 `Layer.unwrap` and the Recorder type `digestHex` as sketched, which the first run tells.
 
 1. The law and the lock: about 50 test lines changed in `OpenRepository.test.ts`, about 20 lines
@@ -291,9 +302,10 @@ One pull request, landing whole. 0 product lines. Confidence 80%: the doubt is w
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
 plan priced them: a tests step about $6 and a review about $3. This tests step is small, so $5;
-one likely send-back on the `values: {}` doubt, $4.
+one likely send-back on the `values: {}` doubt, $4. (Amendment 2026-11-15, ruling 5: a build that
+only runs checks, about $2, as the oxlint-plugins plan prices one.)
 
-Estimate: 3 steps, $12
+Estimate: 4 steps, $14
 
 ## Records
 

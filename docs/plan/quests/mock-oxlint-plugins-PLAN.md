@@ -128,7 +128,7 @@ nothing, so `reports.length` is 5.
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | M1, the `format` law: the rule reports each of the five question-word keys once, in order, with the one message and no autofix, and does not report an identifier key | test | format: the one exact message, over the five fixed words; the generated laws above it in the file stay as they are | in `oxlint-plugins/no-question-word-key.ts`, add `fix: () => null` to the report object, or skip the report for `"how"`: `reports` differs from the expected list and M1 is red | `oxlint-plugins/no-question-word-key.test.ts` |
-| M2, the lock refuses `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv`, and `v.fn` after `import { vi as v }`, in a test file under `oxlint-plugins/`, and takes a plain list | test, of a lint rule | scenario: the real oxlint over the planted file through the repo's own config, as every built-in plant runs | delete the new override: the six refused lines stop firing and M2 is red. Before the override exists M2 is red the same way | `oxlint-plugins/builtin-plants.ts` |
+| M2, the lock refuses `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv`, and `v.fn` after `import { vi as v }`, in a test file under `oxlint-plugins/`, and takes a plain list. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run under `oxlint-plugins/`, and its plant lines are node's shared `VI_METHODS` set, with this plan's `v.fn` and plain-list lines added to it | test, of a lint rule | scenario: the real oxlint over the planted file through the repo's own config, as every built-in plant runs | delete the new override: the six refused lines stop firing and M2 is red. Before the override exists M2 is red the same way | `oxlint-plugins/builtin-plants.ts` |
 | M3, the lock is on only where the folder is at zero: it fires on a planted `vi.fn()` under `oxlint-plugins/` and not on the same line under `next/` or `packages/` | test, of a lint config | scenario: the "rules that apply by path" block's `plantIn` | (a) move the rule to the root `rules`: the `next/` and `packages/` rows turn red. (b) drop `oxlint-plugins/**` from `files`: its row turns red | `oxlint-plugins/plants.test.ts` |
 | M4, the folder is at zero: `pnpm lint` passes with the lock an error, and no `oxlint-disable` line names it | lint | lint | put back `const report = vi.fn();`: `pnpm lint` exits 1 and names `no-question-word-key.test.ts` | `oxlint-plugins/no-question-word-key.test.ts` |
 
@@ -165,6 +165,10 @@ nothing, so `reports.length` is 5.
 
 ## Steps
 
+**Amendment (2026-11-15, merge session ruling 1).** The slice opens no pull request of its own. It
+lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request (0589,
+amended 2026-11-15), after these steps, one fresh agent each, in its own box.
+
 1. **Tests:** writes M1 to M4: the rewritten law, the override, the plant, the path rows and the
    README line. Every changed file is an exam path or the lint config, so it owns them all.
 2. **Build:** no product code to write. It runs the checks (`pnpm lint`, the two test paths) at the
@@ -196,7 +200,8 @@ nothing, so `reports.length` is 5.
 
 Confidence in the line counts: 90%; the doubt is how many path rows M3 needs.
 
-1. The rewrite, the lock, its plants and its README line, one pull request: 0 product lines, about
+1. The rewrite, the lock, its plants and its README line, one slice on the fold branch (amended
+   2026-11-15; first "one pull request"): 0 product lines, about
    30 test lines, about 15 config lines and 3 lines of docs. 45 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder

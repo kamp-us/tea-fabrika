@@ -287,15 +287,18 @@ assertions, and only where its bytes come from changes.
 | T3. A bad clock is `clock` even when the random source throws (`Id.test.ts:773`) | test | Effect Arbitrary: Count | move the clock check after the draw: the `failing` pass answers `entropy`, red | next/packages/libfabrika/src/Id.test.ts |
 | T4. Shared fibers give exactly the ids the model predicts, over generated schedules and the pinned four-fiber case | test | fc.record: prefix, entropy byte, 2 to 6 batches of 2 to 8 fibers with 2000 to 2070 yields, and pinned: the four-fiber case | the T518 review 5 P1 shape: in `allocate`, take `fresh` whenever it is given, without `now > at`, so four fibers that drew for one millisecond each reseed it: duplicates, red. A second plant: an `Effect.yieldNow()` between reading and writing `at`, red. 40 runs, as today | next/packages/libfabrika/src/Id.test.ts |
 | T5. `Generator.layer` needs nothing, and `makeGenerator` needs `SecureRandom` | type | type | drop the `Layer.provide(SecureRandom.layerWebCrypto)` from `Generator.layer`: red | next/packages/libfabrika/src/Id.types.test.ts |
-| L1. The top files of libfabrika's `src/` refuse `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` | lint | lint | delete the `spyOn` entry from the block in `.oxlintrc.json`: the `vi.spyOn` plant line is not refused | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| L1. The top files of libfabrika's `src/` refuse `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv`; this is node's M1 (amendment 2026-11-15, merge session ruling 2), run in this folder | lint | lint | delete the `fn` entry from the block in `.oxlintrc.json`: the planted `vi.fn()` line is not refused, L1 red; delete the `spyOn` entry: the `vi.spyOn` plant line is not refused, L1 red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 
 - **T4's plant must turn it red,** or the doubt at the top holds and the law comes back here.
-- **L1's plant set** is written as `REFLECT` is in `oxlint-plugins/builtin-plants.ts`: a `VI_METHODS`
-  plant with one refused line per method, one line that passes (`vi.fn()`, which 0555 does not
-  ban), and a renamed import (`import { vi as v } ...; v.spyOn(...)`), whose answer the tests step
-  records, since 0555 says the lint pull request plants it to find out. `plants.test.ts` runs the
-  lines in every folder the block lists, as its `REFLECT` scenario does, so each later slice's glob
-  is checked by the same test.
+- **L1's plant set** is node's `VI_METHODS` ([`mock-node-PLAN.md`](./mock-node-PLAN.md), M1),
+  written as `REFLECT` is in `oxlint-plugins/builtin-plants.ts`: one refused line per method, and
+  lines that pass (`vi.waitFor`, a comment, a string, another object's `fn`). **Amendment
+  (2026-11-15, merge session ruling 2):** `vi.fn()` is a line that must be refused. The first
+  sketch planted it as a line that passes, since 0555 names four methods; the ruling puts `fn` in
+  every block (0557, 0579). The renamed import (`import { vi as v } ...; v.spyOn(...)`) joins the
+  set, and the tests step records its answer, since 0555 says the lint pull request plants it to
+  find out. `plants.test.ts` runs the lines in every folder of every block that sets the rule, as
+  its `REFLECT` scenario does, so each later slice's glob is checked by the same test.
 
 ## The lock
 
@@ -312,15 +315,20 @@ block, and a later slice adds its glob to the block's `files`:
     "vitest/no-restricted-vi-methods": [
       "error",
       {
+        // Amendment 2026-11-15, ruling 2: all five methods, `fn` included, with node's messages.
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
         "mock": "Give the code a service and provide a test layer (0555).",
         "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it in the law's layer (0555).",
+        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
         "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
       }
     ]
   }
 }
 ```
+
+The top files have no `vi.fn` on main (`rg -c 'vi\.fn\(' next/packages/libfabrika/src/*.ts` finds
+none), so `fn` blocks at zero from the start (amendment 2026-11-15).
 
 The glob's `*` does not cross a `/`, so the subfolders, which still hold spies, stay out until
 their slices; `pnpm lint` on main with this block is the proof (it fails if the glob reaches a
@@ -381,7 +389,14 @@ No file of pull request 1366's diff is in this table (its 57 files were read wit
 
 Confidence in the line counts: 80%; the doubt is the model law, which may need more lines.
 
-1. This slice, one pull request: about 25 product lines in `Id.ts`, 18 lines of lint config, about
+**Amendment (2026-11-15, merge session ruling 1): one pull request for the sweep.** This slice
+opens no pull request of its own. It lands on the mock sweep's one fold branch,
+`fabrikalfa/mock-fold`, and in its one pull request (0589, amended 2026-11-15), after its own
+tests, build and review steps, each one fresh agent in its own box: the tests step writes the laws
+and plants and runs each plant once, the build writes `Id.ts` and the pattern doc, and the review
+reads the slice's diff with the loosening check.
+
+1. This slice, on the fold branch: about 25 product lines in `Id.ts`, 18 lines of lint config, about
    120 test lines changed in the two test files (the spies and their `try`/`finally` go, the model
    comes in), about 60 lines of plants and scenario, and about 10 lines of the pattern doc. 43 lines.
 
