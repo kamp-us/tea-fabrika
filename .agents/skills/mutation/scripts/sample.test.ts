@@ -409,6 +409,7 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
         { cwd: dir, encoding: "utf8" },
       );
       expect(ran.status, ran.stderr).toBe(0);
+      // SAFETY: sample.ts writes its report with the Sample schema, which Report here copies field for field.
       const got = JSON.parse(readFileSync(report, "utf8")) as Report;
       expect(got.files.map((f) => f.file)).toEqual(["src/hook.cjs", "src/lib.mjs", "src/types.cts"]);
       expect(got.files.every((f) => f.total > 0 && f.selected > 0)).toBe(true);
@@ -441,6 +442,7 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
         { cwd: dir, encoding: "utf8" },
       );
       expect(ran.status, ran.stderr).toBe(0);
+      // SAFETY: sample.ts writes its report with the Sample schema, which Report here copies field for field.
       const got = JSON.parse(readFileSync(report, "utf8")) as Report;
       expect(got.files.map((f) => f.file)).toEqual([at("lead", "chain"), at("lead", "flow/machine"), "src/a.ts"]);
     } finally {
@@ -575,6 +577,8 @@ describe("T568 the sample reads the quest's own lines from its base, today's too
           { cwd: dir, encoding: "utf8" },
         );
         expect(ran.status, ran.stderr).toBe(0);
+        // SAFETY: sample.ts prints each range as a JSON string, joined by
+        // commas, so the bracketed text is an array of strings.
         return new Set((JSON.parse(`[${ran.stdout.trim()}]`) as string[]).map((r) => r.split(":")[0]));
       };
       // The quest's base after the catch-up is the main it merged, so only the quest's file is left.

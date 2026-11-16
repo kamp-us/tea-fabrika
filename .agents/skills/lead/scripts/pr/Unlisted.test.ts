@@ -136,6 +136,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
         const key = (b: Branch) => JSON.stringify([b.name, b.location, b.tip]);
         const found = [...r.unlisted.map((u) => u.branch), ...r.landed.map((l) => l.branch)];
         expect(found.map(key).toSorted()).toEqual(due.map(key).toSorted());
+        // SAFETY: `includes` only compares: a tip that is not in `w.empty` is not found.
         expect(r.unlisted.every((u) => !w.empty.includes(u.branch.tip as "t1"))).toBe(true);
       }),
   );

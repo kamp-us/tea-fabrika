@@ -1136,6 +1136,8 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
     (generated) =>
       Effect.gen(function* () {
         // Marked, so a secret is never a word the start writes anyway.
+        // SAFETY: the entries keep every key of `generated` and give each a
+        // string, and every field of `generated` is a string.
         const s = Object.fromEntries(
           Object.entries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`]),
         ) as typeof generated;
@@ -1300,6 +1302,8 @@ const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
   };
   return {
     ...window,
+    // SAFETY: each Msg type keeps its own key, and `step` takes any WindowMsg and
+    // answers the machine's own step, as every cell of `window.update` does.
     update: Object.fromEntries(Object.keys(window.update).map((type) => [type, step])) as typeof window.update,
   };
 };
@@ -1336,6 +1340,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
 
         for (const w of [...waits, ...monitors]) {
+          // SAFETY: a write's `call` is a tagged Call (WindowMachine.ts), an object whose `_tag` is a string.
           const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
           const params =
             call._tag === "wait"

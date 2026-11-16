@@ -339,6 +339,7 @@ describe("plan estimate, today's tooling", () => {
   it("a missing, doubled, fenced, misplaced or malformed Estimate line fails with one message", () => {
     fc.assert(
       fc.property(
+        // SAFETY: `Object.keys` of the literal `estimateFaults` lists exactly its own keys, the EstimateFault type.
         fc.constantFrom(...(Object.keys(estimateFaults) as EstimateFault[])),
         fc.integer({ min: 1, max: 40 }),
         fc.integer({ min: 1, max: 90 }),

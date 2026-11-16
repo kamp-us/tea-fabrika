@@ -310,6 +310,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     fc.assert(
       fc.property(
         word,
+        // SAFETY: "tests", "build" and "lead" are each a member of Owner, so these only widen a literal.
         fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner),
         fc.boolean(),
         (name, step, dot) => {
@@ -354,6 +355,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // (docs/shots/ also owning docs/shotsx/), or a '..' part escaping the row.
   it("K4 a row ending in / owns every file under it, and nothing beside it", () => {
     fc.assert(
+      // SAFETY: "tests", "build" and "lead" are each a member of Owner, so these only widen a literal.
       fc.property(word, fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner), (name, step) => {
         each(["under", "deeper", "beside", "escape"], (kind) =>
           withRepo(
@@ -756,6 +758,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       step: Owner;
       only: boolean;
     };
+    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
     const cases: Case[] = [
       ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),

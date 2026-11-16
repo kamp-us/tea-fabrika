@@ -293,6 +293,7 @@ describe("plancheck, today's tooling", () => {
   // and a word also matches with its leading dots removed. Plant: split on a named list of marks, as
   // f9f57901 does, or strip a dotfile's leading `.`.
   it("every exam path anywhere in the plan is listed, in any context and any wrapping", () => {
+    // SAFETY: exam-paths.json is the repo's list of exam rows, each an object with a `glob` string.
     const globs = (
       JSON.parse(readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8")) as { glob: string }[]
     ).map((row) => row.glob);
@@ -382,7 +383,9 @@ describe("plancheck, today's tooling", () => {
           dots: fc.nat({ max: 2 }),
           trail: trailRun,
           after: marks,
+          // SAFETY: `Object.keys` of the literal `forms` lists exactly its own keys, the Form type.
           form: fc.constantFrom(...(Object.keys(forms) as Form[])),
+          // SAFETY: `Object.keys` of the literal `place` lists exactly its own keys, the Place type.
           location: fc.constantFrom(...(Object.keys(place) as Place[])),
           lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
         }),
@@ -472,6 +475,7 @@ describe("plancheck, today's tooling", () => {
   // repository does not trigger the exception.
   it("every exam path in a path cell counts unless a possessive names another package", () => {
     // Extensionless exam paths come from the exam list itself: every glob with no "." and no "/".
+    // SAFETY: exam-paths.json is the repo's list of exam rows, each an object with a `glob` string.
     const globs = (
       JSON.parse(readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8")) as {
         glob: string;
@@ -516,6 +520,7 @@ describe("plancheck, today's tooling", () => {
       linkDot: (w: string) => `[\`${w}\`](./${w})`,
     };
     type Wrap = keyof typeof wraps;
+    // SAFETY: `Object.keys` of the literal `wraps` lists exactly its own keys, the Wrap type.
     const wrap = fc.constantFrom(...(Object.keys(wraps) as Wrap[]));
     // Any letter case, as a plan writer might type it.
     const anyCase = (base: fc.Arbitrary<string>) =>

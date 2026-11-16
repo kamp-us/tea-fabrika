@@ -145,12 +145,14 @@ const run = (setup: Setup, inputs: Inputs) => {
       text: ran.stdout + ran.stderr,
       invocation: invoked(f.dir),
       configLeft: existsSync(join(f.dir, "vitest.mutation.config.ts")),
+      // SAFETY: the fixture's sample stub appends one `JSON.stringify(args)` line per call, its argv strings.
       samples: existsSync(sample)
         ? readFileSync(sample, "utf8")
             .trim()
             .split("\n")
             .map((s) => JSON.parse(s) as string[])
         : [],
+      // SAFETY: the fixture's limit stub appends one `JSON.stringify(args)` line per call, its argv strings.
       limits: existsSync(limits)
         ? readFileSync(limits, "utf8")
             .trim()
@@ -168,6 +170,7 @@ const alive = (pid: number) => {
     process.kill(pid, 0);
     return true;
   } catch (e) {
+    // SAFETY: `process.kill` throws a Node system error, an ErrnoException whose `code` names the cause.
     if ((e as NodeJS.ErrnoException).code === "ESRCH") {
       return false;
     }
@@ -296,6 +299,8 @@ console.log(JSON.stringify(resolved.test));
           ]);
           // Evaluate the emitted config with only its two imports replaced by local bindings.
           const source = call.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
+          // SAFETY: with `defineConfig` the identity, the emitted config returns the
+          // object it builds; each field read below is checked by an expect.
           const config = new Function("base", "defineConfig", "process", source)(
             { test: { include: ["all/**/*.test.ts"], exclude: ["keep-me"] } },
             (x: unknown) => x,
@@ -346,6 +351,8 @@ console.log(JSON.stringify(resolved.test));
           expect(got.limits).toEqual([[".agents/skills/mutation/scripts/limit.ts", baseline]]);
           expect(got.invocation!.limit).toBe(String(ms));
           const source = got.invocation!.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
+          // SAFETY: with `defineConfig` the identity, the emitted config returns the
+          // object it builds; each field read below is checked by an expect.
           const config = new Function("base", "defineConfig", "process", source)({ test: {} }, (x: unknown) => x, {
             env: { RELATED: "math.test.ts", TEST_LIMIT: got.invocation!.limit },
           }) as { test: { testTimeout: number; hookTimeout: number } };
@@ -656,6 +663,7 @@ console.log(JSON.stringify(resolved.test));
         child.once("error", reject);
       });
       let status: number | null | "deadline";
+      // SAFETY: the fixture's import hook appends one `JSON.stringify(process.pid)` line per Node process, a number.
       const children = () =>
         existsSync(pidFile)
           ? readFileSync(pidFile, "utf8")
@@ -705,6 +713,8 @@ console.log(JSON.stringify(resolved.test));
       expect(status, log).toBe(0);
       const report = JSON.parse(readFileSync(join(dir, "mut-300/report.json"), "utf8"));
       const mutants = Object.values(report.files).flatMap(
+        // SAFETY: Stryker's JSON report keeps each file under `files` with its `mutants` list,
+        // and the law reads only `status`, `killedBy` and `coveredBy` off each.
         (f) => (f as { mutants: { status: string; killedBy?: string[]; coveredBy?: string[] }[] }).mutants,
       );
       expect(

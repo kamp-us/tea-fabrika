@@ -195,6 +195,7 @@ const live = (v: View): ReadonlyArray<string> => v.workspaces.flatMap((w) => ord
 const begin = (p: Stepper): World => {
   const s = p.init(null);
   expect(s._tag).toBe("stepped");
+  // SAFETY: the expect above throws unless `s._tag` is "stepped", so `s` is the stepped case here.
   const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
   return {
     model: stepped.model,
@@ -215,11 +216,14 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
     w.model = s.model;
     // L11's program half: every view decodes as a client reads it, `child` and all.
     w.view = Schema.decodeUnknownSync(View)(s.view);
+    // SAFETY: a stepped answer's cmds are the tea Cmds tezgah's update
+    // handed out, JSON objects each with a string `type`.
     const cmds = s.cmds as ReadonlyArray<Cmd>;
     w.stops.push(...cmds.filter((c) => c.type === "stop_child"));
     return { before, after: w.view, result: { _tag: "stepped" }, cmds };
   }
 
+  // SAFETY: an empty array holds no Cmd, so it is a list of any type.
   return { before, after: w.view, result: { _tag: s._tag, reason: s.reason }, cmds: [] as ReadonlyArray<Cmd> };
 };
 
@@ -910,6 +914,7 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
 /** tezgah's focus commands, from its one commands table, and the click's move. */
 const focusCommands = async () => {
   const { commands } = await loadCommands();
+  // SAFETY: every `does` in tezgah's commands table is a string literal, so widening it to string loses nothing.
   return [...commands.map((c) => c.does as string).filter((d) => d.startsWith("tezgah.focus_")), CLICK];
 };
 
@@ -987,6 +992,8 @@ describe("Desk S3: focus moves at the program", () => {
           // The focus move keeps its own type: TypeScript folds `Event | (Event & {to, cursor, far})`
           // into `Event`, so `"to" in e` could not narrow a union of the three.
           const focus = c.kind === "focus" || c.kind === "focus_far" ? focusMove(p, w, does, c) : null;
+          // SAFETY: the branches below take `focus`, `focus_far` and `split_cursor`, and every other
+          // FocusPick kind (split_right, split_down, answer, attach, close) is a Kind.
           const e =
             focus ??
             (c.kind === "focus" || c.kind === "focus_far"
