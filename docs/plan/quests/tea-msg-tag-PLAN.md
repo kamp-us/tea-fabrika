@@ -113,8 +113,8 @@ alone unless he names it.
   Sourced System* (Leanpub, 2017), the chapter on upcasting; Axon Framework's reference guide, "Event
   Upcasting"; Marten's docs, "Events Versioning". None fetched. tea's own `schemaMigrate(schema,
   upcast)` does this for state. We take neither it nor a rewrite: `next/` holds no real data, and the
-  owner ruled that old dev and test homes are wiped when the patch lands, with no conversion code (the
-  saved-shape migration decision).
+  owner ruled that old dev and test homes are wiped when the patch lands, with no conversion code: the
+  wipe [0572](../../../.decisions/0572-pre-release-shape-change-wipes-data.md) sets.
 - **Changing a key in every reader at once** is a **flag day** (the Jargon File's term). The usual
   way around one is **parallel change**, or expand and contract (Danilo Sato on martinfowler.com,
   2014, not fetched): accept both keys for a while. Here that is tea reading `_tag ?? type`, or our
@@ -313,7 +313,7 @@ type holds the key, since 0562 forbids a named wrapper that lets a hand-written 
 
 ### Old saved data: wiped when the patch lands, never converted
 
-The owner ruled (the saved-shape migration decision) that our code holds no conversion for saved tea
+The owner ruled in [0572](../../../.decisions/0572-pre-release-shape-change-wipes-data.md) that our code holds no conversion for saved tea
 values. `next/` holds no real data, so a home written before slice 2 is wiped as a step of the
 landing, and nothing in our code reads the old shape. After the merge, a row keyed `type` that is
 somehow still read makes the restart fail loudly: by my read of `Program.ts:839-854`, the fold fails
