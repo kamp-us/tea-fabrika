@@ -9,7 +9,13 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Formatter, Result, Schedule, Schema } from "effect";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -275,23 +281,17 @@ if (
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
 
   const io: Io = {
+    // Any answer but a 2xx, a network failure or no answer within 5 s is the same Unread.
     job: (id) =>
-      Effect.gen(function* () {
-        const answer = yield* Effect.tryPromise({
-          try: (signal) =>
-            fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
+      HttpClient.get(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
             headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-            }),
-          catch: (cause) => new Unread({ cause }),
-          });
-
-          if (!answer.ok) {
-          return yield* new Unread({ cause: new Error(`GitHub answered ${answer.status}`) });
-          }
-
-        return yield* Effect.tryPromise({ try: () => answer.json(), catch: (cause) => Unread.make({ cause }) });
-      }),
+      }).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((answer) => answer.json),
+        Effect.timeout("5 seconds"),
+        Effect.mapError((cause) => Unread.make({ cause })),
+        Effect.provide(FetchHttpClient.layer),
+      ),
     read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => Unread.make({ cause }) }),
   };
 

@@ -21,10 +21,11 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 
@@ -61,8 +62,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
-
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
           }
@@ -87,20 +87,20 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
               ),
             ).pipe(
               Effect.provide(
-                fetchClient.pipe(
+                FetchHttpClient.layer.pipe(
                   Layer.provideMerge(ProcessIdGenerator.layer),
                   Layer.provideMerge(SecureRandom.layerWebCrypto),
                   Layer.provideMerge(rssLayer(() => 0)),
                   Layer.provideMerge(NodeServices.layer),
                 ),
               ),
+              Effect.provideService(FetchHttpClient.Fetch, fetch),
             ),
           );
 
           failure(exit, reason);
           expect(fetch.mock.calls.length === 0).toBe(mode === "offline");
         } finally {
-          fetch.mockRestore();
           vi.unstubAllEnvs();
           rmSync(home, { recursive: true, force: true });
         }
@@ -136,7 +136,7 @@ it("instance reports start_timeout when deployment never opens the control liste
             }),
           ).pipe(
             Effect.provide(
-              fetchClient.pipe(
+              FetchHttpClient.layer.pipe(
                 Layer.provideMerge(ProcessIdGenerator.layer),
                 Layer.provideMerge(SecureRandom.layerWebCrypto),
                 Layer.provideMerge(rssLayer(() => 0)),
@@ -179,8 +179,7 @@ for (const mode of ["exit", "spawn"] as const) {
             return span;
           },
         });
-
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+        const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
 
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
@@ -228,7 +227,7 @@ for (const mode of ["exit", "spawn"] as const) {
               }),
             ).pipe(
               Effect.provide(
-                fetchClient.pipe(
+                FetchHttpClient.layer.pipe(
                   Layer.provideMerge(ProcessIdGenerator.layer),
                   Layer.provideMerge(SecureRandom.layerWebCrypto),
                   Layer.provideMerge(spawner),
@@ -236,6 +235,7 @@ for (const mode of ["exit", "spawn"] as const) {
                   Layer.provideMerge(TestClock.layer()),
                 ),
               ),
+              Effect.provideService(FetchHttpClient.Fetch, fetch),
               Effect.withTracer(tracer),
             ),
           );
@@ -245,7 +245,6 @@ for (const mode of ["exit", "spawn"] as const) {
           expect(samples).toHaveLength(1);
           failure(samples[0]!, "sample");
         } finally {
-          fetch.mockRestore();
           kill.mockRestore();
           vi.unstubAllEnvs();
           rmSync(home, { recursive: true, force: true });

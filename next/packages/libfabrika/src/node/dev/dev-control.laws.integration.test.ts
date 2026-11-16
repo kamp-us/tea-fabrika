@@ -21,11 +21,12 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
 import * as Layer from "effect/Layer";
 import { String as Str, pipe } from "effect";
-import { vi } from "vitest";
+import { vi, type Mock } from "vitest";
+import { FetchHttpClient } from "effect/http";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -193,7 +194,7 @@ type Seen = {
   readonly woken: Woken | null;
 };
 
-const run = Effect.fnUntraced(function* (walk: Walk) {
+const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalThis.fetch>) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t708-" });
   const clock = yield* Clock.Clock;
@@ -307,9 +308,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     },
   });
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+  fetch.mockImplementation(async (url, options) => {
         const body = JSON.parse(bodyText(options)) as Call["body"];
         // The address as `fetch` parses it, given as a string or as the client's URL object.
         sent.push({ url: new URL(String(url)).href, body });
@@ -336,10 +335,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         return Response.json(
           answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
         );
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid) => {
@@ -600,18 +596,21 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
-// Each run gets its own clock, file system, process ids and secrets.
-const walked = (walk: Walk) =>
-  run(walk).pipe(
+// Each run gets its own clock, file system, process ids, secrets and platform stand-in.
+const walked = (walk: Walk) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  return run(walk, fetch).pipe(
     Effect.provide(
-      fetchClient.pipe(
+      FetchHttpClient.layer.pipe(
         Layer.provideMerge(ProcessIdGenerator.layer),
         Layer.provideMerge(SecureRandom.layerWebCrypto),
         Layer.provideMerge(NodeServices.layer),
         Layer.provideMerge(TestClock.layer()),
       ),
     ),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
   );
+};
 
 describe("T708 dev control laws", () => {
   // Plant (the memory restart plan's L8, crash path): dial `address` in place of `reachable`: a call

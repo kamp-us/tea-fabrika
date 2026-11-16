@@ -23,6 +23,7 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
+import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -38,7 +39,7 @@ import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -186,8 +187,7 @@ const flow = async (sample: Flow) => {
 
     return Effect.runPromise(store.write(rows));
   };
-
-  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
     const call = Schema.decodeSync(
       Schema.fromJsonString(
         Schema.Struct({
@@ -446,7 +446,7 @@ const flow = async (sample: Flow) => {
         }),
       ).pipe(
         Effect.provide(
-          fetchClient.pipe(
+          FetchHttpClient.layer.pipe(
             Layer.provideMerge(ProcessIdGenerator.layer),
             Layer.provideMerge(random),
             Layer.provideMerge(rssLayer(() => 0)),
@@ -454,6 +454,7 @@ const flow = async (sample: Flow) => {
             Layer.provideMerge(logger),
           ),
         ),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
       ),
     );
     outputs.outbox.push(
@@ -521,8 +522,6 @@ const flow = async (sample: Flow) => {
 
     return { outputs, words, answer };
   } finally {
-    fetch.mockRestore();
-
     for (const spy of consoleSpies) {
       spy.mockRestore();
     }

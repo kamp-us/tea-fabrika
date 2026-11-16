@@ -24,13 +24,14 @@ import * as Arr from "effect/Array";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import { String as Str, pipe } from "effect";
+import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, it, type Mock, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import type { Install } from "../../runtime/Code.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -88,7 +89,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
               ),
             ).pipe(
               Effect.provide(
-                fetchClient.pipe(
+                FetchHttpClient.layer.pipe(
                   Layer.provideMerge(ProcessIdGenerator.layer),
                   Layer.provideMerge(SecureRandom.layerWebCrypto),
                   Layer.provideMerge(rssLayer(() => 0)),
@@ -141,8 +142,7 @@ it("every observed exit is durable once across restart or brake, with its reason
       const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
-
-      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as { method: string };
 
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
@@ -300,8 +300,9 @@ it("every observed exit is durable once across restart or brake, with its reason
               expect(kill.mock.calls).toEqual(Arr.map(memoryPids, (pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
+            Effect.provideService(FetchHttpClient.Fetch, fetch),
             Effect.provide(
-              fetchClient.pipe(
+              FetchHttpClient.layer.pipe(
                 Layer.provideMerge(ProcessIdGenerator.layer),
                 Layer.provideMerge(SecureRandom.layerWebCrypto),
                 Layer.provideMerge(
@@ -347,13 +348,14 @@ it("every observed exit is durable once across restart or brake, with its reason
             ),
           ).pipe(
             Effect.provide(
-              fetchClient.pipe(
+              FetchHttpClient.layer.pipe(
                 Layer.provideMerge(ProcessIdGenerator.layer),
                 Layer.provideMerge(SecureRandom.layerWebCrypto),
                 Layer.provideMerge(rssLayer(() => 0)),
                 Layer.provideMerge(NodeServices.layer),
               ),
             ),
+            Effect.provideService(FetchHttpClient.Fetch, fetch),
           ),
           { signal },
         );
@@ -394,7 +396,6 @@ it("every observed exit is durable once across restart or brake, with its reason
         );
         expect(failed.length).toBeGreaterThan(0);
       } finally {
-        fetch.mockRestore();
         kill.mockRestore();
         vi.unstubAllEnvs();
         rmSync(home, { recursive: true, force: true });
@@ -458,12 +459,15 @@ const until = Effect.fnUntraced(function* <A>(label: string, look: Effect.Effect
   return yield* Effect.die(new Error(`${label}: not seen; last ${Formatter.format(yield* look)}`));
 });
 
-const replaceWorld = Effect.fnUntraced(function* (c: {
+const replaceWorld = Effect.fnUntraced(function* (
+  fetch: Mock<typeof globalThis.fetch>,
+  c: {
   readonly limit: number;
   readonly kib: number;
   readonly grace: number;
   readonly honors: boolean;
-}) {
+  },
+) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "mr-" });
   const clock = yield* Clock.Clock;
@@ -471,10 +475,8 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   const requests: Array<Request> = [];
   const world: { startup: boolean; ended: string | null; asked: number } = { startup: true, ended: null, asked: 0 };
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = Schema.decodeSync(Body)(bodyText(options));
+  fetch.mockImplementation(async (url, options) => {
+    const body = Schema.decodeSync(Body)(bodyText(options));
         const port = Number(new URL(String(url)).port);
         requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 
@@ -495,10 +497,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
         }
 
         return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
@@ -588,18 +587,22 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   return { dev, life, home, signals, requests, world, first, rows, replaced, term, listen, observe: report };
 });
 
-const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
-  work.pipe(
+// Each run gets its own platform stand-in, which the work answers through.
+const replaced = <A, E, R>(work: (fetch: Mock<typeof globalThis.fetch>) => Effect.Effect<A, E, R>) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  return work(fetch).pipe(
     Effect.scoped,
     Effect.provide(
-      fetchClient.pipe(
+      FetchHttpClient.layer.pipe(
         Layer.provideMerge(ProcessIdGenerator.layer),
         Layer.provideMerge(SecureRandom.layerWebCrypto),
         Layer.provideMerge(NodeServices.layer),
         Layer.provideMerge(TestClock.layer()),
       ),
     ),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
   );
+};
 
 // L7. Plant: main's dev.ts, with no `replacing`: SIGTERM goes out every second, no SIGKILL comes, and
 // L7 fails on the signals.
@@ -615,10 +618,10 @@ effectIt.effect.prop(
     honors: Schema.Boolean,
   },
   ({ limit, over, grace, seconds, honors }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         const kib = Math.ceil(limit / 1024) + over;
-        const w = yield* replaceWorld({ limit, kib, grace, honors });
+        const w = yield* replaceWorld(fetch, { limit, kib, grace, honors });
         const sent = yield* w.term();
 
         if (honors) {
@@ -716,11 +719,11 @@ effectIt.effect.prop(
     broken: Schema.Boolean,
   },
   ({ grace, delay, calls, stop, broken }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const limit = 500_000_000;
-        const w = yield* replaceWorld({ limit, kib: 600_000, grace, honors: false });
+        const w = yield* replaceWorld(fetch, { limit, kib: 600_000, grace, honors: false });
         const sent = yield* w.term();
         const heard = grace + delay;
         const bound = grace + 30_000;
@@ -860,7 +863,7 @@ effectIt.effect.prop(
   "L13 a start that reports a pid of zero, below zero or not whole is refused, so the first start fails as bad_pid and a later one is never sampled or signaled",
   { pid: NoPid, first: Schema.Boolean },
   ({ pid, first }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         if (first) {
           const fs = yield* FileSystem.FileSystem;
@@ -870,14 +873,7 @@ effectIt.effect.prop(
             Effect.sync(() => vi.spyOn(process, "kill").mockReturnValue(true)),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ value: null })),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
-
+          fetch.mockImplementation(async () => Response.json({ value: null }));
           const exit = yield* startDev({ name: REPLACE, port: 18787, build: "test", home, ...BRAIN }, (local) =>
             Effect.gen(function* () {
               Context.get(local, RuntimeLifecycle)({ type: "start", worker: REPLACE, pid });
@@ -897,7 +893,7 @@ effectIt.effect.prop(
         }
 
         // The first process crashes before any sample, and its replacement reports no process's pid.
-        const w = yield* replaceWorld({ limit: 500_000_000, kib: 600_000, grace: 5000, honors: false });
+        const w = yield* replaceWorld(fetch, { limit: 500_000_000, kib: 600_000, grace: 5000, honors: false });
         const exit: Ended = { exitCode: 1, signal: null, stderr: "" };
         w.observe({ type: "exit", worker: REPLACE, exit });
         w.observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
