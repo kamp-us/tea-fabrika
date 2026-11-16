@@ -2,6 +2,7 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
+import { Order, Schema } from "effect";
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -202,15 +203,17 @@ const LOCKED = [
 ] as const;
 
 /** Keys sorted all the way down, so a reorder is not a change. */
-const canon = (v: unknown): string =>
+const canon = (v: Schema.Json): string =>
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
     : v !== null && typeof v === "object"
-      ? `{${Object.keys(v)
-          .toSorted()
-          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
+      ? `{${Object.entries(v)
+          .toSorted(([a], [b]) => Order.String(a, b))
+          .map(([k, x]) => `${JSON.stringify(k)}:${canon(x)}`)
           .join(",")}}`
       : JSON.stringify(v);
+
+const isJsonObject = Schema.is(Schema.JsonObject);
 
 const lockedPart = (text: string): string | null => {
   try {
@@ -220,7 +223,9 @@ const lockedPart = (text: string): string | null => {
       return null;
     }
 
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
+    // An array holds none of the locked fields, so each reads as absent.
+    const fields: Schema.JsonObject = isJsonObject(json) ? json : {};
+    return canon(LOCKED.map((k) => fields[k] ?? null));
   } catch {
     return null;
   }

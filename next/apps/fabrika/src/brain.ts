@@ -288,9 +288,12 @@ const deployment = Schema.decodeUnknownSync(
   Schema.Struct({ ALCHEMY_STACK_NAME: Schema.NonEmptyString, ALCHEMY_STAGE: Schema.NonEmptyString }),
 )(env);
 
+/** What Alchemy's bridge takes as the Worker's entrypoint, in its own type. */
+type Entrypoint = Parameters<typeof makeDurableObjectBridge>[1]["entrypoint"];
+
 const meta = {
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
-  entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
+  entrypoint: Objects as unknown as Entrypoint,
   // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   stack: { name: deployment.ALCHEMY_STACK_NAME, stage: deployment.ALCHEMY_STAGE },
 };

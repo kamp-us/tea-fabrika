@@ -187,7 +187,7 @@ export type EventPolicy = typeof EventPolicy.Type;
 /** A program that may monitor gets a `DOWN` when a watched process ends, so it declares the port
  *  that message arrives on: the load refuses one that does not, before any `DOWN` can be dropped. */
 const downDeclared = Schema.makeFilter(
-  (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, unknown>> }) =>
+  (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, Input>> }) =>
     !(program.machine.cmds ?? []).some((cmd) => cmd.cmdType === "monitor") ||
     Object.hasOwn(program.inputs, "DOWN") ||
     "a program whose cmds hold monitor must declare a DOWN input",

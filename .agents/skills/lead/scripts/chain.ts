@@ -236,6 +236,7 @@ export type Line = {
 const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
 const FaultS = Schema.Literals(FAULTS);
 const isFault = Schema.is(FaultS);
+const isJsonObject = Schema.is(Schema.JsonObject);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
@@ -248,11 +249,11 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
     const d = parsed.success;
 
-    if (d === null || typeof d !== "object" || !("outcome" in d)) {
+    if (!isJsonObject(d) || !("outcome" in d)) {
       continue;
     }
 
-    const o = d as Record<string, unknown>;
+    const o = d;
     const outcome = str(o.outcome);
     const reason = str(o.reason);
     return {

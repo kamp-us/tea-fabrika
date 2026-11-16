@@ -31,9 +31,25 @@ export interface Section {
   readonly end: number;
 }
 
+/**
+ * One value TOML text holds: a string, a number, a boolean, a date or time, an array or a table.
+ *
+ * @internal
+ */
+export type Content = string | number | boolean | Date | ReadonlyArray<Content> | Table;
+
+/**
+ * A TOML table, by its keys as the text spells them.
+ *
+ * @internal
+ */
+export interface Table {
+  readonly [key: string]: Content;
+}
+
 /** @internal */
 export interface Index {
-  readonly value: Readonly<Record<string, unknown>>;
+  readonly value: Table;
   readonly assignments: ReadonlyArray<Assignment>;
   readonly inlines: ReadonlyArray<Inline>;
   readonly sections: readonly [Section, ...Array<Section>];

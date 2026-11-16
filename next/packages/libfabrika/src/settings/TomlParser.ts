@@ -16,7 +16,7 @@ const key = (node: AST.TOMLKey): Array<string> => getStaticTOMLValue(node);
 const syntax = (text: string): AST.TOMLProgram => parseTOML(`${text} `);
 
 // Own properties matter here: TOML keys may spell __proto__, constructor or toString.
-const put = (table: object, path: Edit.Path, value: unknown): void => {
+const put = (table: object, path: Edit.Path, value: Edit.Content): void => {
   let parent = table;
 
   for (const [i, segment] of path.entries()) {
@@ -37,7 +37,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
   }
 };
 
-const content = (node: AST.TOMLContentNode): unknown => {
+const content = (node: AST.TOMLContentNode): Edit.Content => {
   if (node.type === "TOMLValue") {
     return node.value;
   }
@@ -46,7 +46,7 @@ const content = (node: AST.TOMLContentNode): unknown => {
     return node.elements.map(content);
   }
 
-  const value = {};
+  const value: Edit.Table = {};
 
   for (const assignment of node.body) {
     put(value, key(assignment.key), content(assignment.value));
@@ -74,7 +74,7 @@ const sectionStart = (text: string, node: AST.TOMLTable): number => {
 const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const nodes = program.body[0].body;
   const tables = nodes.filter((node) => node.type === "TOMLTable");
-  const value: Record<string, unknown> = {};
+  const value: Edit.Table = {};
   const assignments: Array<Edit.Assignment> = [];
   const inlines: Array<Edit.Inline> = [];
   const sections: [Edit.Section, ...Array<Edit.Section>] = [

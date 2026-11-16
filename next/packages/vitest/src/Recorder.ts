@@ -123,11 +123,10 @@ type Single<S> = [Overloaded<S>] extends [never]
   : { readonly "an overloaded method, which the Recorder cannot type": Overloaded<S> };
 
 /**
- * The keys `impl` gives, read from its keys alone. Its values are not read: an inline `impl` widens a
- * unique symbol member to `symbol`, so the type of the whole `impl` would not fit the service, and
- * TypeScript would then read every key as given.
+ * The keys `impl` gives, each with the service's own type for that member, so `K` is read from the
+ * keys `impl` has.
  */
-type Gives<K extends PropertyKey> = { readonly [M in K]?: unknown };
+type Gives<S, K extends keyof S> = { readonly [M in K]?: S[M] };
 
 declare const RecordedId: unique symbol;
 
@@ -214,7 +213,7 @@ const watch = <S extends object>(
  */
 export const layer = <I, S extends object, K extends keyof S = keyof S>(
   service: Context.Key<I, S>,
-  impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
+  impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<S, K>,
   options?: { readonly fails?: Fails<S, Method<S> & K> },
 ): Layer.Layer<I | Recorded<I>> =>
   Layer.unwrap(
