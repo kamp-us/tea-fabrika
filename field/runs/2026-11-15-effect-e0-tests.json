@@ -59,7 +59,7 @@
     },
     {
       "law": "L4",
-      "plant": "a // @effect-diagnostics-next-line floatingEffect:off -- reason line over the planted floating Effect in next/programs/inbox/src/program.ts: tsc passes, so the reason tail is no part of the directive",
+      "plant": "a // @effect-diagnostics-next-line floatingEffect:off -- reason line over the planted floating Effect in next/programs/inbox/src/program.ts: tsc passes, so the reason tail is no part of the directive. Wrong as said, corrected at the E0 review: the checker obeys a <check>:<level> written inside the reason, so the tail is no part of the directive only while it holds none",
       "result": "green"
     },
     {

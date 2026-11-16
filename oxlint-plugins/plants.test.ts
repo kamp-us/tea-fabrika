@@ -639,7 +639,7 @@ describe("lint.ts, the first step of pnpm lint", () => {
 });
 
 const SECRET = "export const a = process.env.GITHUB_TOKEN;";
-// The Effect checker reads its directive even inside a string, so the planted ones are built.
+// The Effect checker reads its directive anywhere in the text, a string too, so the planted ones are built.
 const CHECKER = ["@effect", "diagnostics"].join("-");
 
 describe("an ignore comment names its rules and says why", () => {
@@ -680,6 +680,14 @@ describe("an ignore comment names its rules and says why", () => {
     ["the checker's, an empty reason", `// ${CHECKER}-next-line preferEffectArray:off -- \n${SECRET}\n`],
     ["the checker's, in a block", `/* ${CHECKER}-next-line preferEffectArray:off */\n${SECRET}\n`],
     ["the checker's, after other words", `// see // ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
+    // Four forms @effect/tsgo 0.63.0 obeys, found at review: each silenced a planted hit.
+    ["the checker's, after plain words", `// see the ${CHECKER}-next-line floatingEffect:off\n${SECRET}\n`],
+    ["the checker's, in a doc block", `/**\n * ${CHECKER}-next-line floatingEffect:off -- why\n */\n${SECRET}\n`],
+    ["the checker's, in a string", `export const s = "// ${CHECKER} floatingEffect:off";\n${SECRET}\n`],
+    [
+      "the checker's, a check in the reason",
+      `// ${CHECKER}-next-line preferEffectArray:off -- and floatingEffect:off\n${SECRET}\n`,
+    ],
   ])("refuses %s, and that comment cannot silence the refusal", (name, text) => {
     const out = run(`bare-${name.replaceAll(/\W/g, "-")}.tsx`, text);
     expect(out.stdout).toContain("fabrika(no-bare-disable)");
@@ -704,7 +712,10 @@ describe("an ignore comment names its rules and says why", () => {
       "the checker's, two checks",
       `// ${CHECKER}-next-line preferEffectArray:off globalDate:off -- why\nexport const b = [Date.now()];\n`,
     ],
-    ["words that only mention the checker's", `// the ${CHECKER}-next-line comment\nexport const b = 1;\n`],
+    [
+      "a reason with a colon in it",
+      `// ${CHECKER}-next-line globalDate:off -- the time: a fixture\nexport const b = [Date.now()];\n`,
+    ],
   ])("takes %s", (_name, text) => {
     const out = run("named.ts", text);
     expect(out.stdout).not.toContain("no-bare-disable");
