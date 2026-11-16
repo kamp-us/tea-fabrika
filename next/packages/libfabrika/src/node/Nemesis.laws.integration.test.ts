@@ -3,7 +3,15 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -188,7 +196,7 @@ const service = Effect.fnUntraced(function* (
 ) {
   const ledger = yield* reader(sql);
   const failure = options.failure;
-  const lower = failure === undefined ? undefined : new LedgerError({ reason: failure.reason, cause: failure.cause });
+  const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
   const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
   const controlled: Ledger["Service"] = {
     ...ledger,

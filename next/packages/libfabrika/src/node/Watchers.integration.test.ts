@@ -2,7 +2,11 @@
 // temporary folder; each open is a new connection to the same files, closed with its scope.
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";

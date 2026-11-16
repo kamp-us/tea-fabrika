@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as SessionSenderTest from "../../access/SessionSenderTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 

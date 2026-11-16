@@ -6,7 +6,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, Scope, ScopedRef, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
+import * as Stream from "effect/Stream";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";

@@ -2,8 +2,12 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";

@@ -4,8 +4,6 @@
  * sync, since no law cuts the power and a clean close still keeps every commit. `open` opens a file
  * something else owns, such as a running instance's store, and changes nothing in it. Both close the
  * connection when the scope closes, and a reopen is Effect's own `ScopedRef.set`.
- *
- * @stability unstable
  */
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle, and the stores under test take node:sqlite's
 import * as Duration from "effect/Duration";
@@ -16,7 +14,6 @@ import type * as Scope from "effect/Scope";
 /**
  * Error for a file another party owns that would not open: it may be missing, locked or not SQLite.
  *
- * @stability unstable
  * @category errors
  */
 export class TestDatabaseError extends Schema.TaggedError<TestDatabaseError>()("TestDatabaseError", {
@@ -49,7 +46,6 @@ const close = (db: DatabaseSync): Effect.Effect<void> =>
  * - A reopen through `ScopedRef.set` holds two connections for a moment, so the old one must be idle
  *   (no open transaction) when the law reopens.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = (file: string): Effect.Effect<DatabaseSync, never, Scope.Scope> =>
@@ -66,7 +62,6 @@ export const make = (file: string): Effect.Effect<DatabaseSync, never, Scope.Sco
  * How a test reaches a file another party owns: `readOnly` refuses every write, and `wait` is how
  * long SQLite waits on a lock another process holds before it gives up (none when left out).
  *
- * @stability unstable
  * @category models
  */
 export interface Options {
@@ -87,7 +82,6 @@ export interface Options {
  * - Such a file may be missing or locked, so a failed open fails with `TestDatabaseError`, which
  *   names the file.
  *
- * @stability unstable
  * @category constructors
  */
 export const open = (
@@ -101,7 +95,7 @@ export const open = (
           readOnly: options.readOnly ?? false,
           timeout: options.wait === undefined ? 0 : Duration.toMillis(options.wait),
         }),
-      catch: (cause) => new TestDatabaseError({ file, cause }),
+      catch: (cause) => TestDatabaseError.make({ file, cause }),
     }),
     close,
   );

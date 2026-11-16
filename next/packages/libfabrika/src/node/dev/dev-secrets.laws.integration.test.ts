@@ -10,8 +10,15 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -375,11 +382,11 @@ const flow = async (sample: Flow) => {
                     .message(socket, move === "malformed" ? `${rawFrame}!` : rawFrame)
                     .pipe(Effect.provide(logger)),
                 ),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             });
             yield* Effect.tryPromise({
               try: () => Reflect.get(instance.project(config.name), "info")(),
-              catch: (cause) => new CallError({ cause }),
+              catch: (cause) => CallError.make({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);
           }

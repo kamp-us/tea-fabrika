@@ -2,7 +2,10 @@
 // fresh temporary folder; each open is a new connection to the same file, closed with its scope.
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Path, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as CodeStoreTest from "../runtime/CodeStoreTest.ts";
 import type { Sql } from "../Sql.ts";

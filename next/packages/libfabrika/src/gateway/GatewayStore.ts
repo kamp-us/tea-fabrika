@@ -1,8 +1,6 @@
 /**
  * The gateway's tables in the project's Sql. Only checked connection state and input metadata
  * belong here. Input bodies stay out.
- *
- * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
 import { type Sql } from "../Sql.ts";
@@ -19,7 +17,6 @@ import { BadRow, GatewayError, Storage } from "./GatewayError.ts";
  * when the name is absent and throws a `GatewayError` with reason `BadRow` when the saved text does
  * not decode, so call it inside `atomic`.
  *
- * @stability unstable
  * @category constructors
  */
 export const gatewayStore = (sql: Sql) => {

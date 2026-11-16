@@ -30,6 +30,7 @@ import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noStabilityTag } from "./no-stability-tag.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
@@ -40,6 +41,7 @@ import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
+import { preferNamespaceImport } from "./prefer-namespace-import.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
 import { runsFromDepth } from "./runs-from-depth.ts";
@@ -81,6 +83,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-stability-tag": noStabilityTag,
     "no-stage-word": noStageWord,
     "no-static-layer": noStaticLayer,
     "no-throw-in-effect-gen": noThrowInEffectGen,
@@ -92,6 +95,7 @@ const plugin: Plugin = {
     "outside-input-constructor": outsideInputConstructor,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
+    "prefer-namespace-import": preferNamespaceImport,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
     "runs-from-depth": runsFromDepth,
     "service-id": serviceId,

@@ -6,20 +6,15 @@
  * read through its own subpath, `@kampus/vitest/TestDatabase`, and never from here: that keeps
  * Node's native module out of every law that imports `runsFor`, and lets lint tell a law over real
  * IO from one in memory.
- *
- * @stability unstable
  */
 /**
  * How deep a test run goes, `runsFor({ fast, full })`, the only reader of `FABRIKA_TEST_DEPTH`.
- *
- * @stability unstable
  */
 export * from "./Depth.ts";
 /**
  * The one typed way a law watches a service's calls (decision 0579): `Recorder.layer` provides a
  * service and records each run of its methods, and `Recorder.calls` reads them back.
  *
- * @stability unstable
  * @category testing
  */
 export * as Recorder from "./Recorder.ts";
@@ -27,7 +22,6 @@ export * as Recorder from "./Recorder.ts";
  * The one stand-in for a platform object (decision 0554): `Stub.make(rest, own)` answers `own`'s
  * members as given and every other method with `rest(name)`.
  *
- * @stability unstable
  * @category testing
  */
 export * as Stub from "./Stub.ts";

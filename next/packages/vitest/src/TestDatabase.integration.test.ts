@@ -13,7 +13,12 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Exit, FileSystem, Path, Schema, ScopedRef } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as ScopedRef from "effect/ScopedRef";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

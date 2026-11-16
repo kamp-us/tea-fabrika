@@ -8,7 +8,9 @@ import type { DatabaseSync } from "node:sqlite";
 import { expectTypeOf, it } from "@effect/vitest";
 import type * as Vitest from "@kampus/vitest";
 import type * as TestDatabase from "@kampus/vitest/TestDatabase";
-import type { Duration, Effect, Scope } from "effect";
+import type * as Duration from "effect/Duration";
+import type * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 
 it("type: make gives DatabaseSync with no error, open gives TestDatabaseError, and the package hands out no Sql", () => {
   expectTypeOf<Parameters<typeof TestDatabase.make>>().toEqualTypeOf<[file: string]>();

@@ -2,7 +2,9 @@
 // the driver, so it acquires the store's folder and handle in a scope, and the scope gives both back (0061).
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ChildrenMemberTest from "../processes/ChildrenMemberTest.ts";
 

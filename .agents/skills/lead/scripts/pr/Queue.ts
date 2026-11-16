@@ -65,7 +65,7 @@ const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: W
     ),
     Effect.filterOrFail(
       (found) => Option.isSome(found) && found.value.status === "completed",
-      () => new Pending(),
+      () => Pending.make(),
     ),
     Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
     Effect.catchTag("Pending", () => Effect.sync(() => last)),
@@ -104,14 +104,14 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const refused = refusal(found);
 
   if (refused !== null) {
-    return yield* new NotQueued({ reason: `pr ${found.number}: ${refused}` });
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });
   }
 
   yield* Leaks.gate(a.dir, found);
   const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
 
   if (unnamed !== null) {
-    return yield* new NotQueued({ reason: `pr ${found.number}: ${unnamed}` });
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
   }
 
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
@@ -120,7 +120,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
   if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
-    return yield* new NotQueued({
+    return yield* NotQueued.make({
       reason: `pr ${found.number}: ${REQUIRED} is ${stands} at ${found.oid}, not a success; not added to the queue`,
     });
   }

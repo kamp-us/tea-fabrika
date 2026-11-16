@@ -20,7 +20,8 @@
 //   else is `{reason: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";

@@ -623,7 +623,7 @@ const git = Effect.fnUntraced(
     return { out: collected(out), err: err.trim(), code: Number(code) };
   },
   Effect.scoped,
-  (effect) => Effect.mapError(effect, (e) => new Unknown({ reason: `git could not run: ${e.message}` })),
+  (effect) => Effect.mapError(effect, (e) => Unknown.make({ reason: `git could not run: ${e.message}` })),
 );
 
 /** Splits `git cat-file --batch` output into each object's text, in the order asked. */
@@ -663,13 +663,13 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   const fetched = yield* git(repo, ["fetch", "-q", "origin", "main"]);
 
   if (fetched.code !== 0) {
-    return yield* new Unknown({ reason: `cannot fetch origin main: ${fetched.err}` });
+    return yield* Unknown.make({ reason: `cannot fetch origin main: ${fetched.err}` });
   }
 
   const listed = yield* git(repo, ["ls-tree", "-r", "-z", "--name-only", BASE, "--", ...roots]);
 
   if (listed.code !== 0) {
-    return yield* new Unknown({ reason: `cannot read ${roots.join(", ")} at ${BASE}: ${listed.err}` });
+    return yield* Unknown.make({ reason: `cannot read ${roots.join(", ")} at ${BASE}: ${listed.err}` });
   }
 
   const paths = keep(new TextDecoder().decode(listed.out).split("\0"));
@@ -677,7 +677,7 @@ const filesAt = Effect.fn("records.filesAt")(function* (
   const texts = batchTexts(read.out);
 
   if (read.code !== 0 || texts.length !== paths.length || texts.includes(undefined)) {
-    return yield* new Unknown({ reason: `cannot read the records of ${roots.join(", ")} at ${BASE}: ${read.err}` });
+    return yield* Unknown.make({ reason: `cannot read the records of ${roots.join(", ")} at ${BASE}: ${read.err}` });
   }
 
   return paths.map((path, i) => ({ path, text: texts[i] ?? "" }));
@@ -733,7 +733,7 @@ const next = Command.make(
     );
 
     if (number === undefined) {
-      return yield* new NoNumbers({ folder });
+      return yield* NoNumbers.make({ folder });
     }
 
     yield* Console.log(number);

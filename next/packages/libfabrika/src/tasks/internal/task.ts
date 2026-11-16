@@ -2,7 +2,8 @@
 // events through it, steps the call it was given, and appends that call only when the answer is
 // `accepted`. A repeat answers `repeated`; a refusal names its reason. Neither changes the state.
 import { Machine } from "@demlik/tea/effect";
-import { Equal, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Schema from "effect/Schema";
 import { Collection, Executor, Request, Result, State } from "../Task.ts";
 
 const Execution = Schema.NonEmptyString;

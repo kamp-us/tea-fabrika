@@ -2,9 +2,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as RateLimiter from "effect/persistence/RateLimiter";
-import { TestClock } from "effect/testing";
+import * as Predicate from "effect/Predicate";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import type { Envelope } from "../access/SessionManager.ts";

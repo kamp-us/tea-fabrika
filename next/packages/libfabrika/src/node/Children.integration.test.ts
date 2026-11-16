@@ -5,7 +5,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Path, ScopedRef } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ScopedRef from "effect/ScopedRef";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ChildrenTest from "../processes/ChildrenTest.ts";
 import type { Sql } from "../Sql.ts";

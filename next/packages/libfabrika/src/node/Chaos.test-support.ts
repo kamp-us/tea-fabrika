@@ -2,7 +2,16 @@
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";

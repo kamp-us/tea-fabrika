@@ -2513,6 +2513,59 @@
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
     },
     {
+      // E1 of the Effect-check sweep (0574): no doc block carries `@stability` until libfabrika's
+      // first release, and `pnpm format` deletes the line (`oxlint-plugins/no-stability-tag.ts`).
+      "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
+      "rules": { "fabrika/no-stability-tag": "error" }
+    },
+    {
+      // The 16 tagged files of pull request 1366 wait for it to land: E60 deletes them and this
+      // block with them (the plan's "What waits").
+      "files": [
+        "next/packages/libfabrika/src/cloudflare/runtime.ts",
+        "next/packages/libfabrika/src/gateway/Gateway.ts",
+        "next/packages/libfabrika/src/ledger/LedgerTransactionSql.ts",
+        "next/packages/libfabrika/src/ledger/Log.ts",
+        "next/packages/libfabrika/src/ledger/Referee.ts",
+        "next/packages/libfabrika/src/ledger/RefereeSql.ts",
+        "next/packages/libfabrika/src/processes/ProcessManager.ts",
+        "next/packages/libfabrika/src/processes/ProgramMail.ts",
+        "next/packages/libfabrika/src/processes/ProgramMailLedger.ts",
+        "next/packages/libfabrika/src/runtime/ProcessStore.ts",
+        "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
+        "next/packages/libfabrika/src/runtime/RepliesSql.ts",
+        "next/packages/libfabrika/src/runtime/Runner.ts",
+        "next/packages/libfabrika/src/settings/Declarations.ts",
+        "next/packages/libfabrika/src/settings/JsonSchema.ts",
+        "next/packages/libfabrika/src/telemetry/Sink.ts"
+      ],
+      "rules": { "fabrika/no-stability-tag": "off" }
+    },
+    {
+      // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
+      // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
+      // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
+      // import slice adds its folders to both.
+      "files": [
+        "next/packages/libfabrika/src/*.ts",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**"
+      ],
+      "rules": { "fabrika/prefer-namespace-import": "error" }
+    },
+    {
       // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
       // its file a module block (`oxlint-plugins/jsdocs.ts`). It blocks in every folder at zero, so a
       // new folder blocks from its first file (0523, ticket 948). `since` stays `absent` until

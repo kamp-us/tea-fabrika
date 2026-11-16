@@ -4,7 +4,10 @@
 import type { DatabaseSync } from "node:sqlite"; // edge: the lifecycle laws watch the driver's own handle
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 
