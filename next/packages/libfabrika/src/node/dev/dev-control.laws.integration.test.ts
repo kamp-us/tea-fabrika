@@ -8,6 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -144,7 +145,7 @@ const legal = (world: World): ReadonlyArray<readonly [Kind, number]> => {
 
 const choose = (world: World, move: Move): Kind => {
   const moves = legal(world);
-  const total = moves.reduce((sum, [, weight]) => sum + weight, 0);
+  const total = Arr.reduce(moves, 0, (sum, [, weight]) => sum + weight);
   let left = move.pick % total;
 
   for (const [kind, weight] of moves) {
@@ -332,8 +333,11 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
-          const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+          const plugin = Option.getOrUndefined(
+            Arr.findFirst(
+              [...local.mapUnsafe.values()],
+              (value) => typeof value === "object" && value !== null && "sockets" in value,
+            ),
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
           listen = (port) => plugin.start({ "fabrika-control": port });
           observe({ type: "start", worker: NAME, pid: walk.pid });
@@ -341,7 +345,8 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         }),
       );
       // The startup flush delivered the first started row; its brain call keeps what it said.
-      const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
+      const startup = Option.getOrThrow(Arr.findFirst(sent, (call) => call.body.method === "brain")).body
+        .args[0] as Row;
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
       mode = "walk";
@@ -552,12 +557,11 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   ).pipe(Effect.provide(rssLayer(() => 0)));
 
   for (const [index, call] of calls.entries()) {
-    calls[index] = { ...call, sent: sent.filter((c) => c.body.target === "process" && c.body.name === call.name) };
+    calls[index] = { ...call, sent: Arr.filter(sent, (c) => c.body.target === "process" && c.body.name === call.name) };
   }
 
-  const spans = sent
-    .filter((call) => call.body.target === "record" && call.body.method === "write")
-    .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+  const writes = Arr.filter(sent, (call) => call.body.target === "record" && call.body.method === "write");
+  const spans = Arr.flatMap(writes, (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
@@ -623,7 +627,9 @@ describe("T708 dev control laws", () => {
     ({ walk }) =>
       Effect.gen(function* () {
         const { startup, rows, facts, restartReads } = yield* walked(walk);
-        expect([startup, ...rows].map((row) => [row._tag, row.at])).toEqual(facts.map((fact) => [fact._tag, fact.at]));
+        expect(Arr.map([startup, ...rows], (row) => [row._tag, row.at])).toEqual(
+          Arr.map(facts, (fact) => [fact._tag, fact.at]),
+        );
 
         // The restart deadline and the restarting row read the clock separately.
         for (const count of restartReads) {
@@ -640,8 +646,8 @@ describe("T708 dev control laws", () => {
       Effect.gen(function* () {
         const { startup, rows, facts, spans, world, kills } = yield* walked(walk);
         const all = [startup, ...rows];
-        expect(all.map((row) => row._tag)).toEqual(facts.map((fact) => fact._tag));
-        expect(new Set(all.map((row) => row.id)).size).toBe(all.length);
+        expect(Arr.map(all, (row) => row._tag)).toEqual(Arr.map(facts, (fact) => fact._tag));
+        expect(new Set(Arr.map(all, (row) => row.id)).size).toBe(all.length);
         let start: string | null = null;
 
         for (const [index, row] of all.entries()) {
@@ -680,10 +686,10 @@ describe("T708 dev control laws", () => {
         }
 
         // The listener completes a waiting replacement; a brake fails it with ControlError.
-        const restarts = spans.filter(({ span }) => span.name === "brain.restart");
-        expect(restarts.filter(({ span }) => span.ok)).toHaveLength(world.completed);
+        const restarts = Arr.filter(spans, ({ span }) => span.name === "brain.restart");
+        expect(Arr.filter(restarts, ({ span }) => span.ok)).toHaveLength(world.completed);
         expect(
-          restarts.filter(({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
+          Arr.filter(restarts, ({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
         ).toHaveLength(world.failed);
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },

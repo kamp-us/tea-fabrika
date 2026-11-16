@@ -10,7 +10,9 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { SecureRandom } from "effect/crypto";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -66,25 +68,25 @@ const strings = (value: unknown): Array<string> => {
     return [value];
   }
 
-  if (Array.isArray(value)) {
-    return value.flatMap(strings);
+  if (Arr.isArray(value)) {
+    return Arr.flatMap(value, strings);
   }
 
   return value !== null && typeof value === "object"
-    ? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
+    ? Arr.flatMap(Object.entries(value), ([key, child]) => [key, ...strings(child)])
     : [];
 };
 
 const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
-  const forbidden = words.flatMap(forms);
+  const forbidden = Arr.flatMap(words, forms);
   const leaks: Array<Destination> = [];
 
   for (const destination of destinations) {
     // JSON covers saved strings; inspect also sees Error messages and non-enumerable values.
     const json = JSON.stringify(outputs[destination]);
-    const text = json + inspect(outputs[destination], { depth: null }) + strings(JSON.parse(json)).join("\n");
+    const text = json + inspect(outputs[destination], { depth: null }) + Arr.join(strings(JSON.parse(json)), "\n");
 
-    if (forbidden.some((word) => text.includes(word))) {
+    if (Arr.some(forbidden, (word) => text.includes(word))) {
       leaks.push(destination);
     }
   }
@@ -93,7 +95,7 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
 };
 
 const measurements = (db: DatabaseSync) =>
-  ["measurements", "summary", "aggregated", "sizes", "archived"].map((table) => ({
+  Arr.map(["measurements", "summary", "aggregated", "sizes", "archived"], (table) => ({
     table,
     rows: db.prepare(`SELECT * FROM ${table}`).all(),
   }));
@@ -225,7 +227,7 @@ const flow = async (sample: Flow) => {
 
     return Response.json({ value: [] });
   });
-  const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
+  const consoleSpies = Arr.map(["log", "info", "warn", "error", "debug"] as const, (name) =>
     vi.spyOn(console, name).mockImplementation((...args) => {
       outputs.logs.push({ name, args });
     }),
@@ -311,8 +313,11 @@ const flow = async (sample: Flow) => {
           const instance = yield* startDev({ ...config, home, memory: 500_000_000, grace: 5000 }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
-              const plugin = [...local.mapUnsafe.values()].find(
-                (value) => typeof value === "object" && value !== null && "sockets" in value,
+              const plugin = Option.getOrUndefined(
+                Arr.findFirst(
+                  [...local.mapUnsafe.values()],
+                  (value) => typeof value === "object" && value !== null && "sockets" in value,
+                ),
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;
@@ -336,7 +341,7 @@ const flow = async (sample: Flow) => {
               for (;;) {
                 const rows = yield* outbox.pending;
 
-                if (rows.some(ready)) {
+                if (Arr.some(rows, ready)) {
                   return;
                 }
 

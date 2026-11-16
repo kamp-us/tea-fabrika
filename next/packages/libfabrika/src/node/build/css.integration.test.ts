@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, type FileSystem, type Path, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -113,7 +115,7 @@ type CssGraph = typeof cssGraphs extends fc.Arbitrary<infer A> ? A : never;
 
 const graphFixture = (graph: CssGraph, mixed: boolean) => {
   const f = fixture(graph.id),
-    order = mixed ? graph.order : graph.order.filter((n) => n < 2),
+    order = mixed ? graph.order : Arr.filter(graph.order, (n) => n < 2),
     statement = "@layer a, b;",
     body = (n: number) => {
       const rule = (layer: string) => `.same.source${n}${layer} { --winner: source${n}-${graph.id}; }`;
@@ -132,7 +134,7 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
   }
 
   const render = (expanded: boolean, sources = order, late = false) => {
-    const parts = sources.flatMap((n, i) => [
+    const parts = Arr.flatMap(sources, (n, i) => [
       ...(i === 0 && graph.before && !late ? [statement] : []),
       ...(i === 1 && graph.between && !late ? [statement] : []),
       expanded
@@ -144,7 +146,7 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
       parts.push(statement);
     }
 
-    return parts.join("\n");
+    return Arr.join(parts, "\n");
   };
   const file = join(f.home, "root.css");
   writeFileSync(file, render(false));
@@ -259,8 +261,10 @@ describe("P16 CSS tokens", () => {
           expect(await failure(read(file).pipe(Effect.withTracer(tracer)))).toMatchObject({
             message: reason,
           });
-          expect(spans.map((span) => span.name)).toContain("build.css");
-          expect(spans.find((span) => span.name === "build.css")?.status._tag).toBe("Ended");
+          expect(Arr.map(spans, (span) => span.name)).toContain("build.css");
+          expect(Option.getOrUndefined(Arr.findFirst(spans, (span) => span.name === "build.css"))?.status._tag).toBe(
+            "Ended",
+          );
         },
       ),
       runs,
@@ -296,10 +300,11 @@ describe("P16 CSS tokens", () => {
           }
 
           const remoteAfterLocal =
-            kind === "mixed" && f.order.some((n, i) => n >= 2 && f.order.slice(0, i).some((previous) => previous < 2));
+            kind === "mixed" &&
+            Arr.some(f.order, (n, i) => n >= 2 && Arr.some(f.order.slice(0, i), (previous) => previous < 2));
 
           if (remoteAfterLocal) {
-            const hoisted = [...f.order.filter((n) => n >= 2), ...f.order.filter((n) => n < 2)];
+            const hoisted = [...Arr.filter(f.order, (n) => n >= 2), ...Arr.filter(f.order, (n) => n < 2)];
             expect(() => verify(f.expanded(f.render(true, hoisted)))).toThrow("source rule order");
           }
 

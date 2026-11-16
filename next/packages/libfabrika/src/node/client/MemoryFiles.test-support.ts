@@ -6,6 +6,7 @@
 import type { Layer, Scope } from "effect";
 import { Effect, FileSystem, Option, PlatformError } from "effect";
 import { ByteSize } from "effect";
+import * as Arr from "effect/Array";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 type DirectoryNode = { readonly type: "Directory"; mode: number; mtime: Date };
@@ -32,7 +33,7 @@ const fail = (tag: PlatformError.SystemErrorTag, method: string, path: string) =
 
 /** A path as the disk keys it: no doubled or trailing slash, and `.` segments dropped. */
 export const normal = (path: string): string => {
-  const parts = path.split("/").filter((p) => p !== "" && p !== ".");
+  const parts = Arr.filter(path.split("/"), (p) => p !== "" && p !== ".");
   const kept: Array<string> = [];
 
   for (const part of parts) {
@@ -43,7 +44,7 @@ export const normal = (path: string): string => {
     }
   }
 
-  return `${path.startsWith("/") ? "/" : ""}${kept.join("/")}`;
+  return `${path.startsWith("/") ? "/" : ""}${Arr.join(kept, "/")}`;
 };
 
 const parent = (path: string): string => {
@@ -58,9 +59,7 @@ export const disk = (folders: ReadonlyArray<string> = []): Disk => {
   for (const folder of folders) {
     let at = "";
 
-    for (const part of normal(folder)
-      .split("/")
-      .filter((p) => p !== "")) {
+    for (const part of Arr.filter(normal(folder).split("/"), (p) => p !== "")) {
       at = `${at}/${part}`;
 
       if (!entries.has(at)) {
@@ -223,7 +222,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
         return options?.force === true ? Effect.void : fail("NotFound", "remove", path);
       }
 
-      const below = [...d.entries.keys()].filter((k) => k.startsWith(`${path}/`));
+      const below = Arr.filter([...d.entries.keys()], (k) => k.startsWith(`${path}/`));
 
       if (known.type === "Directory" && below.length > 0 && options?.recursive !== true) {
         return fail("Busy", "remove", path);
@@ -373,9 +372,13 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
 
         const prefix = path === "/" ? "/" : `${path}/`;
         return Effect.succeed(
-          [...d.entries.keys()]
-            .filter((k) => k.startsWith(prefix) && k !== path && !k.slice(prefix.length).includes("/"))
-            .map((k) => k.slice(prefix.length)),
+          Arr.map(
+            Arr.filter(
+              [...d.entries.keys()],
+              (k) => k.startsWith(prefix) && k !== path && !k.slice(prefix.length).includes("/"),
+            ),
+            (k) => k.slice(prefix.length),
+          ),
         );
       }),
     makeTempFile: (options) =>

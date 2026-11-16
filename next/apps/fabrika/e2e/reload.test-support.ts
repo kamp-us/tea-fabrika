@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's
 import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -63,7 +63,7 @@ export const fixtureBuild = Effect.fnUntraced(function* (
 ) {
   const counter = { name: PROGRAM, package: copy.file, export: "program" };
   const watch = { root: copy.home, entry: `${APP}/src/brain.ts`, programs: [counter] };
-  const programs = [...selected.filter((p) => p.name !== PROGRAM), counter];
+  const programs = [...Arr.filter(selected, (p) => p.name !== PROGRAM), counter];
   const built = yield* build({ ...watch, programs, out, files: [], ledger: [], chaos: false });
   return { ...built, watch };
 });
@@ -238,10 +238,7 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
             (db) => Effect.sync(() => db.close()),
           );
           const tables = new Set(
-            db
-              .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-              .all()
-              .map((row) => row.name),
+            Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) => row.name),
           );
 
           for (const table of wanted) {

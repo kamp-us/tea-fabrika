@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
@@ -77,7 +78,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${args.join(" ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${Arr.join(args, " ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
         return out;
       });

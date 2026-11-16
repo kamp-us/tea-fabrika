@@ -17,6 +17,7 @@
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
 import { Context, Effect, Exit, Layer } from "effect";
+import * as Arr from "effect/Array";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
@@ -90,8 +91,8 @@ const agree = (m: Model, r: Real, task: string, label: string) =>
     ]);
   });
 
-const written = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => m.saved.has(task));
-const unwritten = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => !m.saved.has(task));
+const written = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => m.saved.has(task));
+const unwritten = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => !m.saved.has(task));
 const pick = <A>(from: ReadonlyArray<A>, n: number): A | undefined => from[n % Math.max(from.length, 1)];
 
 /** A write of a new task, or with `over` of a task already written. */

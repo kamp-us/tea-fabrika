@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Array as Arr, Effect, Exit, Option, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -65,7 +65,7 @@ describe("P16 real browser from a copied one-file build", () => {
             minLength: 1,
             maxLength: 6,
           })
-          .map((v) => v.join("")),
+          .map((v) => Arr.join(v, "")),
         async (text) => {
           const home = mkdtempSync("/tmp/fh."),
             oldHome = process.env.FABRIKA_HOME;
@@ -117,7 +117,7 @@ describe("P16 real browser from a copied one-file build", () => {
                   // The app's brain starts every name on its boot list (runtime.ts), so the build holds the
                   // app's whole table. Only `fabrika/counter` comes from this fixture's package, which
                   // re-exports the real counter and keeps its name.
-                  programs: programs.map((p) =>
+                  programs: Arr.map(programs, (p) =>
                     p.name === "fabrika/counter" ? { ...p, package: "@p16/browser", export: "program" } : p,
                   ),
                   chaos: false,
@@ -157,13 +157,16 @@ describe("P16 real browser from a copied one-file build", () => {
                 Effect.provide(NodeServices.layer),
               ),
             );
-            const entry = Object.entries(built.assets).find(
-              ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
+            const entry = Option.getOrUndefined(
+              Arr.findFirst(
+                Object.entries(built.assets),
+                ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
+              ),
             );
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
-            const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
+            const scripts = Arr.filter(Object.entries(built.assets), ([, a]) => a.type.startsWith("text/javascript"));
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
             await page.goto(instance.url);
@@ -250,7 +253,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
  *  exits at once on SIGTERM or SIGINT and its worker dies with it, so no scope would close. Raced
  *  against the fixture, this closes the scope first, as `NodeRuntime.runMain` does for a main. */
 const stopped = Effect.callback<never, Stopped>((resume) => {
-  const stops = STOPS.map((reason) => {
+  const stops = Arr.map(STOPS, (reason) => {
     const stop = () => resume(Effect.fail(new Stopped({ reason })));
     process.once(reason, stop);
     return () => process.off(reason, stop);
@@ -436,7 +439,8 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             const count = page.getByRole("status");
             const button = (input: string) =>
               page.getByRole("button", {
-                name: Object.entries(counter.inputs).find(([name]) => name === input)![1].description,
+                name: Option.getOrThrow(Arr.findFirst(Object.entries(counter.inputs), ([name]) => name === input))[1]
+                  .description,
               });
             const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
             const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
@@ -456,13 +460,13 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
 
                 for (const [n, pick] of picks.entries()) {
                   const model = step.model;
-                  const available = inputs.filter((type) => program.step(model, { type })._tag === "stepped");
+                  const available = Arr.filter(inputs, (type) => program.step(model, { type })._tag === "stepped");
                   const type = available[pick % available.length]!;
                   pressedTypes.add(type);
                   await button(type).click();
                   const sent = (await pressed()).slice(start);
                   expect(sent, "each press emits one Msg, the program's own").toEqual([...sent.slice(0, n), { type }]);
-                  expect(sent.every((m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
+                  expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
                   // The view never steps the program: until the next view arrives, the count stays.
                   expect(await count.textContent(), "a press alone changes nothing shown").toBe(
                     String((step.view as { count: number }).count),

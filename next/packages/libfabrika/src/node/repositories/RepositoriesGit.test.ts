@@ -4,7 +4,9 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
+import * as Option from "effect/Option";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
@@ -201,7 +203,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   expect(Exit.isFailure(exit)).toBe(true);
 
                   if (Exit.isFailure(exit)) {
-                    const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                    const fail = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
                     expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
                   }
                 }
@@ -539,7 +541,9 @@ it.effect.prop(
               if (Exit.isSuccess(result)) {
                 expect(result.value.snapshot.text).toBeNull();
               } else {
-                const reason = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                const reason = Option.getOrUndefined(
+                  Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
+                );
                 expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
               }
 

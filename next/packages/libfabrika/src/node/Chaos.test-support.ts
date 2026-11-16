@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -275,17 +276,17 @@ export const open = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files("manager");
-        return sql
-          .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
-          .map((row) => Schema.decodeUnknownSync(Row)(row));
+        return Arr.map(sql.exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`), (row) =>
+          Schema.decodeUnknownSync(Row)(row),
+        );
       }),
     );
   const dead = Effect.scoped(
     Effect.gen(function* () {
       const sql = yield* files("manager");
-      return sql
-        .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
-        .map((row) => Schema.decodeUnknownSync(Row)(row));
+      return Arr.map(sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev"), (row) =>
+        Schema.decodeUnknownSync(Row)(row),
+      );
     }),
   );
 

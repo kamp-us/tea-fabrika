@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
+import * as Arr from "effect/Array";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as ProcessesProgramMailTest from "../processes/ProgramMailTest.ts";
 import type * as RuntimeProgramMailTest from "../runtime/ProgramMailTest.ts";
@@ -70,7 +71,7 @@ const databases = Effect.gen(function* () {
       held.set(part, connect(part));
     }
   });
-  const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+  const open = () => Arr.filter([...held.values()], ({ db }) => db.isOpen).length;
   return { sql, reopen, open };
 });
 
@@ -117,12 +118,10 @@ export const runtime = Effect.gen(function* () {
       }, undefined),
     saved: guard(
       () =>
-        table()
-          .exec("SELECT name, at FROM alarms ORDER BY at, name")
-          .map((row) => ({
-            name: String(row.name),
-            at: Number(row.at),
-          })),
+        Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+          name: String(row.name),
+          at: Number(row.at),
+        })),
       [],
     ),
     take: (alarm) =>

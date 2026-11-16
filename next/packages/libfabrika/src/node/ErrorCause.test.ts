@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -125,10 +126,12 @@ const forms = (core: string, text: string) => [core, text, JSON.stringify(text).
 
 /** Every row of every table in `sql`, as JSON text. */
 const dump = (sql: Sql): string =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table'")
-    .map((table) => JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)))
-    .join("\n");
+  Arr.join(
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (table) =>
+      JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)),
+    ),
+    "\n",
+  );
 
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
 const flows = fc.constantFrom<Flow>("ledger_rejects", "ledger_decode", "archive_rejects", "store_throws");

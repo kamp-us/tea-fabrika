@@ -5,6 +5,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path } from "effect";
+import * as Arr from "effect/Array";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ChildrenTest from "../processes/ChildrenTest.ts";
 import type { Sql } from "../Sql.ts";
@@ -45,7 +46,7 @@ const store = Effect.gen(function* () {
     current.db.close();
     current = connect();
   });
-  const open = () => handles.filter((db) => db.isOpen).length;
+  const open = () => Arr.filter(handles, (db) => db.isOpen).length;
   return { sql, reopen, probe: { open } } satisfies ChildrenTest.Store;
 });
 

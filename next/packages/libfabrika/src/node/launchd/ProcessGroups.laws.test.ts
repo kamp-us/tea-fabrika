@@ -2,6 +2,7 @@
 // Plants: drop `row.group > 1`; drop the leader check; let a root of 1 through.
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as ProcessGroups from "./ProcessGroups.test-support.ts";
 
@@ -11,7 +12,7 @@ const rows = fc.array(fc.record({ pid: id, parent: id, group: id }), { maxLength
 it("property: no table and no root yields a group of 1 or below", () => {
   fc.assert(
     fc.property(rows, id, (table, root) => {
-      expect(ProcessGroups.descendants(table, root).filter((group) => group <= 1)).toEqual([]);
+      expect(Arr.filter(ProcessGroups.descendants(table, root), (group) => group <= 1)).toEqual([]);
     }),
   );
 });
@@ -22,7 +23,7 @@ it("property: every group returned is led by the root or by a process beneath it
       // Walks up from a pid to the root, the other way from the code under test.
       const beneath = (pid: number, seen: ReadonlyArray<number> = []): boolean =>
         pid === root ||
-        (!seen.includes(pid) && table.some((row) => row.pid === pid && beneath(row.parent, [...seen, pid])));
+        (!seen.includes(pid) && Arr.some(table, (row) => row.pid === pid && beneath(row.parent, [...seen, pid])));
 
       for (const group of ProcessGroups.descendants(table, root)) {
         expect(beneath(group)).toBe(true);

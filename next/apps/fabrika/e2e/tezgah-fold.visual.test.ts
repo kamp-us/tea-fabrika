@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Array as Arr, Effect, Option } from "effect";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
 // plan (docs/plan/quests/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab
@@ -116,7 +116,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
               return yield* foldSettle(big, r, pid, (view) => (done(view) ? [] : [`not yet ${label}`]), label);
             });
 
-          const has = (view: View, id: string) => shown(view).some((t) => t.id === id);
+          const has = (view: View, id: string) => Arr.some(shown(view), (t) => t.id === id);
           let minted = 7_000;
 
           /** Splits `from` by a letter; the new tile's id. */
@@ -139,13 +139,16 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           const clickTile = (on: Page, view: View, id: string) =>
             promised(() =>
               on
-                .getByRole("region", { name: regionName(view.tiles.find((t) => t.id === id)!), exact: true })
+                .getByRole("region", {
+                  name: regionName(Option.getOrThrow(Arr.findFirst(view.tiles, (t) => t.id === id))),
+                  exact: true,
+                })
                 .locator("header")
                 .first()
                 .click(),
             );
 
-          const named = (view: View, id: string) => view.tiles.find((t) => t.id === id)!;
+          const named = (view: View, id: string) => Option.getOrThrow(Arr.findFirst(view.tiles, (t) => t.id === id));
           const stripped = (view: View, d: FoldDrawn) => (d.main === null ? [] : stripsHere(view, d.main));
 
           // One tile, as the window's own attach made it.
@@ -168,19 +171,19 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           yield* close(e);
           const grid = yield* at(big, null, () => [], "the 2x2 with a narrow pair");
           expect(
-            shown(grid.view).map((t) => t.id),
+            Arr.map(shown(grid.view), (t) => t.id),
             "the layout is the 2x2 with d and f after b",
           ).toEqual([t1, c, a, bb, d, f]);
 
           // Focus on t1, by a click in the larger tab: d and f are no longer the focused tile.
           yield* clickTile(big, grid.view, t1);
           const folded = yield* both(t1, "t1 focused over the folded pair");
-          const wideStrips = stripped(folded.wide.view, folded.wide.d).map((t) => t.id);
-          const narrowStrips = stripped(folded.narrow.view, folded.narrow.d).map((t) => t.id);
+          const wideStrips = Arr.map(stripped(folded.wide.view, folded.wide.d), (t) => t.id);
+          const narrowStrips = Arr.map(stripped(folded.narrow.view, folded.narrow.d), (t) => t.id);
           expect(wideStrips, "L33: at 1440x900 only f is under 220x120, so only f is a strip").toEqual([f]);
           expect(narrowStrips, "L33: at 1024x700 d and f are under 220x120, so both are strips").toEqual([d, f]);
           expect(
-            folded.wide.d.regions.map((x) => x.name),
+            Arr.map(folded.wide.d.regions, (x) => x.name),
             "L33: the larger tab draws d open while the smaller folds it: the fold is each tab's own",
           ).toContain(regionName(named(folded.wide.view, d)));
           yield* shoot(big, "fold-grid", "grid-2x2");
@@ -204,7 +207,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           yield* Effect.sleep(QUIET);
           const still = yield* both(bb, "L33: Tab onto a strip moves no desk focus");
           expect(
-            stripped(still.narrow.view, still.narrow.d).map((t) => t.id),
+            Arr.map(stripped(still.narrow.view, still.narrow.d), (t) => t.id),
             "L33: Tab onto d's strip leaves it a strip",
           ).toEqual([d, f]);
           expect((yield* focusRing(small)).name, "L33: DOM focus stays on the strip").toBe(dStrip);
@@ -214,11 +217,11 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           yield* keys(small, "Enter");
           const opened = yield* both(d, "L33: Enter on d's strip focuses d");
           expect(
-            opened.narrow.d.regions.map((x) => x.name),
+            Arr.map(opened.narrow.d.regions, (x) => x.name),
             "L33: d is drawn open in the smaller tab",
           ).toContain(regionName(named(opened.narrow.view, d)));
           expect(
-            stripped(opened.narrow.view, opened.narrow.d).map((t) => t.id),
+            Arr.map(stripped(opened.narrow.view, opened.narrow.d), (t) => t.id),
             "L33: with d focused only f is a strip at 1024x700",
           ).toEqual([f]);
           yield* domSettles(
@@ -240,10 +243,12 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           );
           const clicked = yield* both(f, "L33: a click on f's strip focuses f");
           expect(
-            stripped(clicked.narrow.view, clicked.narrow.d).map((t) => t.id),
+            Arr.map(stripped(clicked.narrow.view, clicked.narrow.d), (t) => t.id),
             "L33: at 1024x700 b and d fold while f holds the floor",
           ).toEqual([bb, d]);
-          const fBox = clicked.narrow.d.regions.find((x) => x.name === regionName(named(clicked.narrow.view, f)))?.box;
+          const fBox = Option.getOrUndefined(
+            Arr.findFirst(clicked.narrow.d.regions, (x) => x.name === regionName(named(clicked.narrow.view, f))),
+          )?.box;
           expect(
             fBox?.width ?? 0,
             "L33: f, opened from a 1/16 share, is drawn at least 220 wide",
@@ -254,7 +259,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           );
           expect(fTitle, "L33: f's title bar is drawn whole, its name and id never cut").toEqual({ found: 1, cut: [] });
           expect(
-            stripped(clicked.wide.view, clicked.wide.d).map((t) => t.id),
+            Arr.map(stripped(clicked.wide.view, clicked.wide.d), (t) => t.id),
             "L33: at 1440x900 nothing folds with f focused",
           ).toEqual([]);
           yield* domSettles(
@@ -276,14 +281,18 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             "a 420x700 tab folds the lower row whole",
           );
           expect(
-            stripped(banded.view, banded.d).map((t) => t.id),
+            Arr.map(stripped(banded.view, banded.d), (t) => t.id),
             "c and the whole lower row fold at 420x700",
           ).toEqual([c, a, bb, d, f]);
-          const band = [a, bb, d, f].map(
-            (id) => banded.d.strips.find((x) => x.name === stripName(named(banded.view, id)))?.box,
+          const band = Arr.map(
+            [a, bb, d, f],
+            (id) =>
+              Option.getOrUndefined(Arr.findFirst(banded.d.strips, (x) => x.name === stripName(named(banded.view, id))))
+                ?.box,
           );
           expect(
-            band.every(
+            Arr.every(
+              band,
               (x) => x !== undefined && x !== null && Math.abs(x.height - 20) <= 1 && Math.abs(x.y - band[0]!.y) <= 1,
             ),
             `the lower row is one 20px band, its strips side by side: ${JSON.stringify(band)}`,
@@ -319,13 +328,13 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
 
           const side = yield* at(big, null, () => [], "t1 beside a narrow j");
           expect(
-            shown(side.view).map((t) => t.id),
+            Arr.map(shown(side.view), (t) => t.id),
             "the layout is t1 beside j",
           ).toEqual([t1, j]);
           yield* clickTile(big, side.view, t1);
           const sided = yield* both(t1, "t1 focused beside j");
           expect(
-            stripped(sided.narrow.view, sided.narrow.d).map((t) => t.id),
+            Arr.map(stripped(sided.narrow.view, sided.narrow.d), (t) => t.id),
             "L33: j is a strip beside t1",
           ).toEqual([j]);
           yield* shoot(big, "fold-strip", "side-by-side");
@@ -344,13 +353,13 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
 
           const stack = yield* at(big, null, () => [], "t1 over a low n");
           expect(
-            shown(stack.view).map((t) => t.id),
+            Arr.map(shown(stack.view), (t) => t.id),
             "the layout is t1 over n",
           ).toEqual([t1, n]);
           yield* clickTile(big, stack.view, t1);
           const stacked = yield* both(t1, "t1 focused over n");
           expect(
-            stripped(stacked.wide.view, stacked.wide.d).map((t) => t.id),
+            Arr.map(stripped(stacked.wide.view, stacked.wide.d), (t) => t.id),
             "L33: n is a strip under t1",
           ).toEqual([n]);
           yield* shoot(big, "fold-strip", "stacked");

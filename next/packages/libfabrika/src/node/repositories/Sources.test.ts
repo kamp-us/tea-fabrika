@@ -3,6 +3,8 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
@@ -108,7 +110,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
           from,
           result: absent
             ? { reason: "MissingPath" }
-            : { tag: "disk", values: reads.map(([, text]) => ({ tag: "disk", text })) },
+            : { tag: "disk", values: Arr.map(reads, ([, text]) => ({ tag: "disk", text })) },
         });
       }
 
@@ -134,7 +136,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
   ]);
   const links = [
     { name: "file-link", target: "entry.txt" },
-    ...directorySuffixes.map((suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
+    ...Arr.map(directorySuffixes, (suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
   ];
 
   for (const folder of [path.join(root, "repo/traversal"), path.join(root, "disk traversal")]) {
@@ -214,10 +216,12 @@ it.effect.prop(
           [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
           ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
           ["inside space/entry.txt", { mode: "100644", type: "blob", id: "e".repeat(40) }],
-          ...["local", "outside", "absolute", "cycle"].map(
+          ...Arr.map(
+            ["local", "outside", "absolute", "cycle"],
             (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
           ),
-          ...["local-file", "outside-file", "absolute-local", "absolute-outside"].map(
+          ...Arr.map(
+            ["local-file", "outside-file", "absolute-local", "absolute-outside"],
             (name) => [`inside space/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
           ),
         ]);
@@ -297,7 +301,7 @@ it.effect.prop(
             checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
             expect(JSON.stringify(source.value)).not.toContain(root);
           } else {
-            const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
+            const fail = Option.getOrUndefined(Arr.findFirst(source.cause.reasons, (reason) => reason._tag === "Fail"));
             expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
           }
 
@@ -329,7 +333,7 @@ it.effect.prop(
             (personResolve, base) => bases.check(personResolve, base === 1, index),
             { concurrency: 1 },
           );
-          expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+          expect(Arr.map(baseReads, (read) => read.actual)).toEqual(Arr.map(baseReads, (read) => read.expected));
           checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
           yield* traversal.check(resolve, cell.traversal);
         }
@@ -471,7 +475,9 @@ it.each(GitLaws.gits)(
 
                       expect(JSON.stringify(resolved.value)).not.toContain(root);
                     } else {
-                      const reason = resolved.cause.reasons.find((r) => r._tag === "Fail");
+                      const reason = Option.getOrUndefined(
+                        Arr.findFirst(resolved.cause.reasons, (r) => r._tag === "Fail"),
+                      );
                       expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");
                     }
 
@@ -504,7 +510,9 @@ it.each(GitLaws.gits)(
                       (personSelection, base) => bases.check(personSelection.resolve, base === 1, index),
                       { concurrency: 1 },
                     );
-                    expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+                    expect(Arr.map(baseReads, (read) => read.actual)).toEqual(
+                      Arr.map(baseReads, (read) => read.expected),
+                    );
                     checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                     expect(selected.snapshot.commit).toBe(pinned);
                     yield* traversal.check(selected.resolve, cell.traversal);

@@ -6,6 +6,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -83,7 +84,7 @@ const databases = Effect.gen(function* () {
       (stream) =>
         Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0))).pipe(
           Effect.map((read) =>
-            [...read].map((e): MonitorTest.Row => ({
+            Arr.map([...read], (e): MonitorTest.Row => ({
               rev: e.rev,
               stream,
               id: e.id,

@@ -4,6 +4,7 @@
 // (docs/plan/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
 import { applyCell } from "@demlik/tea";
 import { Predicate, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";
@@ -227,7 +228,7 @@ const choose = (s: State, c: Choice, index: number): Msg => {
     return message(kinds[c.pick % kinds.length]!, c, index, s);
   }
 
-  const total = moves.reduce((sum, [, weight]) => sum + weight, 0);
+  const total = Arr.reduce(moves, 0, (sum, [, weight]) => sum + weight);
   let left = c.pick % total;
 
   for (const [kind, weight] of moves) {
@@ -355,9 +356,9 @@ const main = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
 
 // Every number and string a state holds, whatever its field names.
 const leaves = (value: unknown): ReadonlyArray<unknown> =>
-  Predicate.isObject(value) ? Object.values(value).flatMap(leaves) : [value];
+  Predicate.isObject(value) ? Arr.flatMap(Object.values(value), leaves) : [value];
 
-const pids = (s: State) => leaves(s).filter((v) => Predicate.isNumber(v) && v >= PIDS.min && v <= PIDS.max);
+const pids = (s: State) => Arr.filter(leaves(s), (v) => Predicate.isNumber(v) && v >= PIDS.min && v <= PIDS.max);
 
 type Step = {
   readonly index: number;
@@ -535,7 +536,7 @@ describe("T708 dev life laws", () => {
                   applyCell(devLife, next, { ...sample, replacement: `${sample.replacement}-${n + 1}` }),
                 );
           seen.repeats += repeats.length;
-          expect(repeats).toEqual(repeats.map(() => [next, []]));
+          expect(repeats).toEqual(Arr.map(repeats, () => [next, []]));
 
           if (msg.type === "started" && (next._tag === "spawned" || next._tag === "online")) {
             armed = false;

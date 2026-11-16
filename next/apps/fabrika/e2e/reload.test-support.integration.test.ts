@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: real SQLite files, as the b
 import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem } from "effect";
+import { Array as Arr, Effect, FileSystem, Order } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
@@ -109,10 +109,10 @@ describe("spanOutputs", () => {
               yield* deliver(home, RECORDS[1], rebuild(late));
 
               const outputs = yield* spanOutputs(home);
-              const order = outputs.map((output) => (output as { readonly spanId: string }).spanId);
+              const order = Arr.map(outputs, (output) => (output as { readonly spanId: string }).spanId);
 
               expect(order[0], "the queue is read first").toBe(waiting);
-              expect(order.slice(1).toSorted()).toEqual([early, late].toSorted());
+              expect(Arr.sort(order.slice(1), Order.String)).toEqual(Arr.sort([early, late], Order.String));
             }),
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
@@ -166,7 +166,7 @@ describe("spanOutputs", () => {
 
                 expect(listings, "the flush landed during the read").toBeGreaterThanOrEqual(at);
                 expect(
-                  rebuildSpans(outputs).filter((span) => span.spanId === spanId),
+                  Arr.filter(rebuildSpans(outputs), (span) => span.spanId === spanId),
                   "the flushed span is found once",
                 ).toHaveLength(1);
               }),

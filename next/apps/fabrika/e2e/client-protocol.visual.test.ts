@@ -6,7 +6,7 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
+import { Array as Arr, Effect, Option, Order, Schema } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -165,10 +165,13 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
               walk.restartedAt ?? Number.POSITIVE_INFINITY,
             );
             expect(
-              walk.watched.map((w) => w.process).toSorted(),
+              Arr.sort(
+                Arr.map(walk.watched, (w) => w.process),
+                Order.String,
+              ),
               `${name}: processes holds one watch per pid, each for the tab`,
-            ).toEqual([walk.first, walk.second].toSorted());
-            const last = walk.watched.find((w) => w.process === walk.second);
+            ).toEqual(Arr.sort([walk.first, walk.second], Order.String));
+            const last = Option.getOrUndefined(Arr.findFirst(walk.watched, (w) => w.process === walk.second));
             expect(
               walk.unwatched,
               `${name}: the close ends the successor's watch, and only the client's leaving ends it`,

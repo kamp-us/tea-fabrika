@@ -6,7 +6,9 @@ import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, PlatformError, Sink, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { SecureRandom } from "effect/crypto";
+import * as Option from "effect/Option";
 import { ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -31,8 +33,11 @@ const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 const deploy = (port: number) => (local: Context.Context<never>) =>
   Effect.gen(function* () {
-    const plugin = [...local.mapUnsafe.values()].find(
-      (value) => typeof value === "object" && value !== null && "sockets" in value,
+    const plugin = Option.getOrUndefined(
+      Arr.findFirst(
+        [...local.mapUnsafe.values()],
+        (value) => typeof value === "object" && value !== null && "sockets" in value,
+      ),
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
     Context.get(local, RuntimeLifecycle)({ type: "start", worker: "errors", pid: 27001 });
     yield* plugin.start({ "fabrika-control": port });

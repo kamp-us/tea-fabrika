@@ -25,6 +25,8 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -44,7 +46,7 @@ const text = fc
     minLength: 1,
     maxLength: 12,
   })
-  .map((xs) => xs.join(""));
+  .map((xs) => Arr.join(xs, ""));
 
 const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1, max: 3 }) });
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
@@ -108,14 +110,14 @@ process.stdout.write(JSON.stringify({model,records,updates}));
               ),
             )(output);
             let count = 0;
-            const types = tape.map((n) => {
+            const types = Arr.map(tape, (n) => {
               const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
               count += type === "inc" ? 1 : -1;
               return type;
             });
             expect(actual.model).toEqual({ count });
             expect(actual.updates).toBe(tape.length);
-            expect(actual.records.map((r) => r.value)).toEqual(types.map((type) => ({ type })));
+            expect(Arr.map(actual.records, (r) => r.value)).toEqual(Arr.map(types, (type) => ({ type })));
           }),
         ).pipe(Effect.provide(NodeServices.layer)),
       ),
@@ -343,8 +345,8 @@ describe("P16 p33 one-file build", () => {
             built = await build({ ...f.options, chaos });
           const bytes = readFileSync(built.brain, "utf8");
           embedded(bytes, [
-            ...Object.values(built.programs).map((p) => p.source),
-            ...Object.values(built.assets).map((a) => a.body),
+            ...Arr.map(Object.values(built.programs), (p) => p.source),
+            ...Arr.map(Object.values(built.assets), (a) => a.body),
           ]);
           const inner = actual.slice(0, -1);
           expect(inner.length).toBeGreaterThanOrEqual(count + 3);
@@ -381,7 +383,7 @@ describe("P16 p33 one-file build", () => {
           expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
         }
 
-        expect(readdirSync(join(a.home, "dist")).filter((p) => /\.(?:m?js|css)$/.test(p))).toEqual(["brain.mjs"]);
+        expect(Arr.filter(readdirSync(join(a.home, "dist")), (p) => /\.(?:m?js|css)$/.test(p))).toEqual(["brain.mjs"]);
         // Plants: a checkout path or a build time inside the bytes. Each clock was faked above.
         const bytes = readFileSync(second.brain, "utf8");
 
@@ -440,7 +442,7 @@ describe("P16 p33 one-file build", () => {
       const separated = (seps: ReadonlyArray<string>) =>
         fc.oneof(
           fc.tuple(fc.constantFrom("1", "-", " ", ".", "/"), word).map(([a, b]) => a + b),
-          fc.tuple(word, fc.constantFrom(...seps), word).map((p) => p.join("")),
+          fc.tuple(word, fc.constantFrom(...seps), word).map((p) => Arr.join(p, "")),
         );
       const bad = fc.oneof(
         fc.tuple(fc.constant("export" as const), separated([" ", ".", "/", ":", '"', "\n"])),
@@ -552,7 +554,12 @@ const parsedRules = (css: string): unknown => {
 
 /** The rules of every `<style>` in the page, in document order, as one list. */
 const pageRules = (page: string): unknown =>
-  parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
+  parsedRules(
+    Arr.join(
+      Arr.map([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)], (m) => m[1] ?? ""),
+      "\n",
+    ),
+  );
 
 const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
 // A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
@@ -583,7 +590,7 @@ const observeCalls = async () => {
           const out = await handle.generate(o);
           calls.push({
             input: options.input,
-            files: out.output.map((item) => ({
+            files: Arr.map(out.output, (item) => ({
               fileName: item.fileName,
               type: item.type,
               text:
@@ -654,7 +661,7 @@ const tabHome = (value: string) => {
       entry,
       `import {Effect} from "effect"; import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(tab.label)})];`,
     );
-    return tab.styles.map((style, n) => {
+    return Arr.map(tab.styles, (style, n) => {
       const file = join(dir, `s${n}.css`);
 
       if (style.split === true) {
@@ -689,14 +696,12 @@ const tabHome = (value: string) => {
 
 /** The temporary folders a build makes beside `out`; none may outlive the build. */
 const leftovers = (home: string) =>
-  readdirSync(home).filter((n) => n.startsWith(".fabrika-build-") || n.endsWith(".old"));
+  Arr.filter(readdirSync(home), (n) => n.startsWith(".fabrika-build-") || n.endsWith(".old"));
 
 const outFiles = (out: string) => (existsSync(out) ? snapshot(out) : []);
 
 const snapshot = (dir: string) =>
-  readdirSync(dir)
-    .sort()
-    .map((name) => [name, readFileSync(join(dir, name)).toString("base64")]);
+  Arr.map(readdirSync(dir).sort(), (name) => [name, readFileSync(join(dir, name)).toString("base64")]);
 
 /** S1.1's check of one successful build against the walk's state. */
 const checkCarried = (
@@ -715,10 +720,10 @@ const checkCarried = (
   }
 
   embedded(brain.toString("utf8"), [
-    ...Object.values(built.programs).map((p) => p.source),
-    ...Object.values(built.assets).map((a) => a.body),
+    ...Arr.map(Object.values(built.programs), (p) => p.source),
+    ...Arr.map(Object.values(built.assets), (a) => a.body),
   ]);
-  const tabCalls = calls.filter((c) => c.input === state.entry);
+  const tabCalls = Arr.filter(calls, (c) => c.input === state.entry);
 
   if (state.tab === null) {
     expect(Object.keys(built.assets), "without a tab there is no page").not.toContain(PAGE);
@@ -734,27 +739,27 @@ const checkCarried = (
     // The page comes out of the tab's own call: that one call emitted exactly the carried script and page.
     expect(tabCalls, "one Rolldown call built the tab").toHaveLength(1);
     const [tab] = tabCalls;
-    const chunks = tab!.files.filter((x) => x.type === "chunk"),
-      pages = tab!.files.filter((x) => x.type === "asset" && x.fileName === "index.html");
+    const chunks = Arr.filter(tab!.files, (x) => x.type === "chunk"),
+      pages = Arr.filter(tab!.files, (x) => x.type === "asset" && x.fileName === "index.html");
     expect(
-      chunks.map((c) => c.text),
+      Arr.map(chunks, (c) => c.text),
       "the carried script is the tab call's one chunk",
     ).toEqual([script!.body]);
     expect(
-      pages.map((p) => p.text),
+      Arr.map(pages, (p) => p.text),
       "the carried page is the tab call's own asset",
     ).toEqual([page!.body]);
     expect(tab!.files, "the tab's call emitted nothing the brain does not carry").toHaveLength(2);
     expect(
-      calls.filter((c) => c !== tab && c.files.some((x) => x.text === page!.body)),
+      Arr.filter(calls, (c) => c !== tab && Arr.some(c.files, (x) => x.text === page!.body)),
       "no other call emitted the page",
     ).toEqual([]);
     // Its stylesheets in the given order, each element closed only by itself, and one script: /window.js.
     // The rules are the walk's own: a listed file's local `@import` is inlined, so the page asks for no file.
-    const given = state.tab.styles.map((style, n) => styleText(style, n));
+    const given = Arr.map(state.tab.styles, (style, n) => styleText(style, n));
     expect(state.styles, "the walk listed one file per stylesheet").toHaveLength(given.length);
     expect(pageRules(page!.body), "the page holds every stylesheet's rules, in order").toEqual(
-      parsedRules(given.join("\n")),
+      parsedRules(Arr.join(given, "\n")),
     );
     expect(page!.body, "no stylesheet in the page imports another file").not.toMatch(/@import\b/i);
     const markup = page!.body.replace(STYLE, "");
@@ -763,17 +768,17 @@ const checkCarried = (
     expect(count(markup, /<script\b/gi), "the page's one script").toBe(1);
     expect(page!.body).toMatch(/<script\b(?=[^>]*\btype="module")(?=[^>]*\bsrc="\/window\.js")[^>]*>/);
     // Byte accounting: the measured tab call holds the page, and the published window bytes hold it too.
-    const tabBytes = tab!.files.reduce((total, x) => total + utf8(x.text), 0);
-    const bundles = spans.filter((s) => s.name === "build.bundle");
+    const tabBytes = Arr.reduce(tab!.files, 0, (total, x) => total + utf8(x.text));
+    const bundles = Arr.filter(spans, (s) => s.name === "build.bundle");
     expect(
-      bundles.some((s) => s.attributes.get("output.bytes") === tabBytes && s.attributes.get("output.files") === 2),
+      Arr.some(bundles, (s) => s.attributes.get("output.bytes") === tabBytes && s.attributes.get("output.files") === 2),
       "the tab's measured call counts its script and its page",
     ).toBe(true);
   }
 
-  const emit = spans.find((s) => s.name === "build.emit");
+  const emit = Option.getOrUndefined(Arr.findFirst(spans, (s) => s.name === "build.emit"));
   expect(emit?.attributes.get("window.bytes"), "the published window bytes are every carried file's").toBe(
-    Object.values(built.assets).reduce((total, a) => total + utf8(a.body), 0),
+    Arr.reduce(Object.values(built.assets), 0, (total, a) => total + utf8(a.body)),
   );
 };
 
@@ -842,7 +847,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                         : chosen === "trap" || chosen === "split"
                           ? {
                               ...tab!,
-                              styles: tab!.styles.map((s, n) =>
+                              styles: Arr.map(tab!.styles, (s, n) =>
                                 n !== move % tab!.styles.length
                                   ? s
                                   : chosen === "trap"
@@ -853,11 +858,11 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                           : tab;
             const styles = tab === null ? [] : f.write(tab);
 
-            if (tab?.styles.some((s) => s.trap) === true) {
+            if (Arr.some(tab?.styles ?? [], (s) => s.trap)) {
               reached.add("trapped");
             }
 
-            if (tab?.styles.some((s) => s.split === true) === true) {
+            if (Arr.some(tab?.styles ?? [], (s) => s.split === true)) {
               reached.add("imported");
             }
 
@@ -890,7 +895,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
       expect(reached.has("add"), "the walks built a tab").toBe(true);
       expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
       expect(reached.has("imported"), "the walks built a stylesheet behind a local @import").toBe(true);
-      expect([...reached].filter((m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
+      expect(Arr.filter([...reached], (m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
     },
   );
 
@@ -958,7 +963,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             } else {
               expect(result._tag, `${chosen} builds`).toBe("Success");
               good = outFiles(f.options.out);
-              expect(good.map(([name]) => name)).toEqual(["brain.mjs"]);
+              expect(Arr.map(good, ([name]) => name)).toEqual(["brain.mjs"]);
             }
 
             expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
@@ -967,7 +972,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
         walks,
       );
       expect(
-        ["compiler", "bundle", "read"].some((fault) => reached.has(`${fault}-after-good`)),
+        Arr.some(["compiler", "bundle", "read"], (fault) => reached.has(`${fault}-after-good`)),
         "a tab fault was reached after a good build",
       ).toBe(true);
     },
@@ -1107,7 +1112,12 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             const { spans, tracer } = tracing();
             const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
             const seen = JSON.stringify(
-              spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
+              Arr.map(spans, (s) => ({
+                name: s.name,
+                attributes: [...s.attributes],
+                events: s.events,
+                status: s.status,
+              })),
               (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
             );
 
@@ -1153,7 +1163,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             } as unknown as Parameters<typeof fetch>[1];
 
             for (const route of ["/", ...Object.keys(built.assets)]) {
-              for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
+              for (const url of [route, Arr.join(Arr.map(route.split("/"), encodeURIComponent), "/")]) {
                 const response = await Effect.runPromise(
                   fetch(
                     new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
@@ -1269,7 +1279,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
     return id;
   });
   const selections = (picks: ReadonlyArray<Pick>, exported = (_: Pick) => "program") =>
-    picks.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: exported(p) }));
+    Arr.map(picks, (p) => ({ name: p.name, package: `@p40/${p.module}`, export: exported(p) }));
   const onDisk = Effect.fnUntraced(function* () {
     // The digest of the brain's bytes stands for the bytes: any changed byte changes it.
     return (yield* fs.exists(brain)) ? sha(yield* fs.readFile(brain)) : undefined;
@@ -1279,7 +1289,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
     const built = yield* build({ ...options, programs: selections(selected) });
     builds++;
     // L1: the table holds exactly the selected qualified names, each one pack and one program.
-    expect(Object.keys(built.programs).sort()).toEqual(selected.map((p) => p.name).sort());
+    expect(Object.keys(built.programs).sort()).toEqual(Arr.map(selected, (p) => p.name).sort());
 
     for (const p of selected) {
       expect(p.name.split("/")).toHaveLength(2);
@@ -1336,7 +1346,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
     if (kind === 1) {
       const broken = nameBreaks[Math.floor(n / selected.length / 3) % nameBreaks.length]!(target.name);
-      return yield* refused(selections(selected.map((p) => (p === target ? { ...p, name: broken } : p))), "table");
+      return yield* refused(selections(Arr.map(selected, (p) => (p === target ? { ...p, name: broken } : p))), "table");
     }
 
     // A selection whose module lacks the export it names.
@@ -1378,7 +1388,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
   ];
 
   for (const n of tape) {
-    const possible = steps.filter((s) => s.possible());
+    const possible = Arr.filter(steps, (s) => s.possible());
     yield* possible[n % possible.length]!.run(Math.floor(n / possible.length));
   }
 
@@ -1392,7 +1402,10 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
   const target = selected[last % selected.length]!;
 
   for (const broken of nameBreaks) {
-    yield* refused(selections(selected.map((p) => (p === target ? { ...p, name: broken(target.name) } : p))), "table");
+    yield* refused(
+      selections(Arr.map(selected, (p) => (p === target ? { ...p, name: broken(target.name) } : p))),
+      "table",
+    );
   }
 
   expect(builds).toBeGreaterThan(0);

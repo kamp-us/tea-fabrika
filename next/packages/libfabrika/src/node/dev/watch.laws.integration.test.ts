@@ -16,6 +16,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Order from "effect/Order";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -23,6 +25,8 @@ import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
 
 const SEED = 119120;
+/** Sorts `[program, from]` pairs so two lists compare as sets. */
+const byPair = Order.Tuple([Order.String, Order.String]);
 const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
 /** Every real Rolldown watcher and result the laws saw, and which were closed. */
@@ -170,7 +174,11 @@ const fixture = Effect.gen(function* () {
   return {
     home,
     reaches,
-    programs: ["one", "two"].map((short) => ({ name: `p15/${short}`, package: `@p15/${short}`, export: "program" })),
+    programs: Arr.map(["one", "two"], (short) => ({
+      name: `p15/${short}`,
+      package: `@p15/${short}`,
+      export: "program",
+    })),
   };
 });
 
@@ -223,7 +231,7 @@ describe("P15 slice 1: the watcher", () => {
     // One save of each move runs before the random tail: three seeded runs at the fast depth drew no
     // compiler move, so the reach check below failed while every rebuild was fine
     // (field/findings/2026-11-15-watch-l17-misses-compiler-move.json).
-    const each = moves.map((move): [Save] => [{ program: 0, sentinel: "AAAAAAAAAAAA", move, repeats: 1 }]);
+    const each = Arr.map(moves, (move): [Save] => [{ program: 0, sentinel: "AAAAAAAAAAAA", move, repeats: 1 }]);
     await fc.assert(
       fc.asyncProperty(Save, (save) =>
         Effect.runPromise(
@@ -300,7 +308,7 @@ describe("P15 slice 1: the watcher", () => {
               // reports the write above after the watcher starts. The plan lets a repeated event
               // rebuild and absorbs it as `same`, so the first span is the answer's, and the count
               // of rebuilds that changed anything is checked below, once every repeat has ended.
-              const rebuilds = () => spans.filter((span) => span.name === "watch.rebuild");
+              const rebuilds = () => Arr.filter(spans, (span) => span.name === "watch.rebuild");
               const span = rebuilds()[0];
               assert(span !== undefined, "the answered rebuild recorded its span");
               expect(span.status._tag).toBe("Ended");
@@ -347,7 +355,7 @@ describe("P15 slice 1: the watcher", () => {
               }
 
               yield* Effect.sleep("20 millis").pipe(
-                Effect.repeat({ until: () => rebuilds().every((rebuild) => rebuild.status._tag === "Ended") }),
+                Effect.repeat({ until: () => Arr.every(rebuilds(), (rebuild) => rebuild.status._tag === "Ended") }),
                 Effect.timeoutOrElse({
                   duration: "10 seconds",
                   orElse: () => Effect.die(new Error("a repeated rebuild never ended")),
@@ -355,7 +363,7 @@ describe("P15 slice 1: the watcher", () => {
               );
               expect(rebuilds().length, "the repeated notifications reached the watcher").toBeGreaterThan(1);
               expect(
-                rebuilds().filter((rebuild) => rebuild.attributes.get("outcome") !== "same"),
+                Arr.filter(rebuilds(), (rebuild) => rebuild.attributes.get("outcome") !== "same"),
                 "one save records exactly one rebuild that changed or failed; every repeat records `same`",
               ).toEqual([span]);
 
@@ -442,8 +450,8 @@ describe("P15 slice 1: the watcher", () => {
                 );
                 expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
                 const acquired = opened.results.slice(results);
-                expect(acquired.some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
-                expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
+                expect(Arr.some(acquired, (result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
+                expect(Arr.every(opened.results.slice(firstResult), (result) => result.closed)).toBe(true);
                 // A late graph notification can retry unchanged bytes. L2 permits `same`, never a second failure fact.
                 const late = yield* drain(answers, 300);
 
@@ -458,16 +466,16 @@ describe("P15 slice 1: the watcher", () => {
                 // same-hash answer absorbs repeated events", and a save that "changes nothing in the
                 // bundle's bytes (macOS late event ...)" gives "Same hash: no fact, no swap, no view
                 // notice". So per save: exactly one rebuild that changed or failed, plus any `same`.
-                const saved = () => spans.slice(before).filter((span) => span.name === "watch.rebuild");
+                const saved = () => Arr.filter(spans.slice(before), (span) => span.name === "watch.rebuild");
                 yield* Effect.sleep("20 millis").pipe(
-                  Effect.repeat({ until: () => saved().every((rebuild) => rebuild.status._tag === "Ended") }),
+                  Effect.repeat({ until: () => Arr.every(saved(), (rebuild) => rebuild.status._tag === "Ended") }),
                   Effect.timeoutOrElse({
                     duration: "10 seconds",
                     orElse: () => Effect.die(new Error("a rebuild for the save never ended")),
                   }),
                 );
                 const rebuilds = saved();
-                const changed = rebuilds.filter((rebuild) => rebuild.attributes.get("outcome") !== "same");
+                const changed = Arr.filter(rebuilds, (rebuild) => rebuild.attributes.get("outcome") !== "same");
                 expect(changed, "one save records exactly one rebuild that changed or failed").toHaveLength(1);
                 const span = changed[0]!;
                 expect(span.status._tag).toBe("Ended");
@@ -528,10 +536,18 @@ describe("P15 slice 1: the watcher", () => {
               yield* Effect.forkScoped(Stream.runDrain(stream));
               // The start: every program installs once, from the boot.
               const first = yield* drain(b.installs, 3000);
-              expect(first.map((i) => [i.program, i.from]).toSorted()).toEqual(
-                programs.map((p) => [p.name, "boot"]).toSorted(),
+              expect(
+                Arr.sort(
+                  Arr.map(first, (i): readonly [string, string] => [i.program, i.from]),
+                  byPair,
+                ),
+              ).toEqual(
+                Arr.sort(
+                  Arr.map(programs, (p): readonly [string, string] => [p.name, "boot"]),
+                  byPair,
+                ),
               );
-              const hashes = new Map(first.map((i) => [i.program, i.hash]));
+              const hashes = new Map(Arr.map(first, (i) => [i.program, i.hash]));
               const values = new Map<string, number>();
               const edits = g(fc.integer, { min: 1, max: 4 });
 
@@ -544,10 +560,13 @@ describe("P15 slice 1: the watcher", () => {
                 const name = file.endsWith("shared.ts") ? "shared" : file.endsWith("unused.ts") ? "unused" : "own";
                 yield* fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`);
                 const got = yield* drain(b.installs, 3000);
-                const changed = got.filter((i) => i.hash !== hashes.get(i.program)).map((i) => i.program);
+                const changed = Arr.map(
+                  Arr.filter(got, (i) => i.hash !== hashes.get(i.program)),
+                  (i) => i.program,
+                );
                 expect(new Set(changed), `a save to ${file}`).toEqual(new Set(reaches[file]));
-                expect(got.every((i) => i.from === "watch")).toBe(true);
-                expect(new Set(got.map((i) => i.program)), "only the programs that reach it install").toEqual(
+                expect(Arr.every(got, (i) => i.from === "watch")).toBe(true);
+                expect(new Set(Arr.map(got, (i) => i.program)), "only the programs that reach it install").toEqual(
                   new Set(reaches[file]),
                 );
 
@@ -620,7 +639,7 @@ describe("P15 slice 1: the watcher", () => {
                       "the real watcher must reach the syntax failure before interruption",
                     ).toBe(true);
                     expect(
-                      opened.results.some((r) => r.code === "ERROR"),
+                      Arr.some(opened.results, (r) => r.code === "ERROR"),
                       "the run acquired an ERROR result",
                     ).toBe(true);
                     seen.add("error");
@@ -638,11 +657,11 @@ describe("P15 slice 1: the watcher", () => {
             // The scope is closed: everything Rolldown opened for the run is closed.
             expect(opened.watchers.length, "the run opened a watcher per program").toBeGreaterThan(0);
             expect(
-              opened.watchers.filter((w) => !w.closed),
+              Arr.filter(opened.watchers, (w) => !w.closed),
               "watchers left open",
             ).toEqual([]);
             expect(
-              opened.results.filter((r) => !r.closed),
+              Arr.filter(opened.results, (r) => !r.closed),
               "results left open",
             ).toEqual([]);
           }).pipe(Effect.provide(NodeServices.layer)),

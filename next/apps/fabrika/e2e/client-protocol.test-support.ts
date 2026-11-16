@@ -21,7 +21,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import { Array as Arr, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -117,12 +117,12 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     yield* backend.add("milk");
     yield* until(
       `${backend.name}: milk in the view`,
-      Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
+      Effect.map(backend.shown, (rows) => Arr.some(rows, (r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
-    const sent = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
+    const sent = Arr.filter(inbox, (e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
     return { first, kept, sent: sent.length };
   });
 
@@ -173,7 +173,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
     const showing = Effect.map(state, (s) => ({
       link: s.link._tag,
       handshake: s.handshake._tag,
-      rows: rows.map((r) => r.record._tag),
+      rows: Arr.map(rows, (r) => r.record._tag),
     }));
     const backend: Backend = {
       name: "headless",
@@ -202,7 +202,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         const pid = s.tiles[0]?.last;
         const view = pid ? s.client.views[pid]?.view : undefined;
         const data = Option.getOrUndefined(Schema.decodeUnknownOption(checklistWindow.data)(view));
-        return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
+        return Arr.map(data?.items ?? [], (i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
       last: showing,
@@ -334,10 +334,10 @@ const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, ar
 
 /** The pid of the name's newest life fact, started or restarted. */
 const newest = (facts: ReadonlyArray<Fact>) =>
-  facts
-    .filter((f) => f._tag === "started" || f._tag === "restarted")
-    .map((f) => String(field(f.body, "process")))
-    .at(-1);
+  Arr.map(
+    Arr.filter(facts, (f) => f._tag === "started" || f._tag === "restarted"),
+    (f) => String(field(f.body, "process")),
+  ).at(-1);
 
 /**
  * E1's walk: grant the client and wait for its open tile, end the tile's process as crashed through
@@ -393,19 +393,23 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     yield* backend.add("milk");
     yield* until(
       `${backend.name}: milk in the successor's view`,
-      Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
+      Effect.map(backend.shown, (rows) => Arr.some(rows, (r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
-    const restarted = (yield* s.facts(`processes/${PROCESS}`)).find(
-      (f) => f._tag === "restarted" && field(f.body, "process") === second,
+    const restarted = Option.getOrUndefined(
+      Arr.findFirst(
+        yield* s.facts(`processes/${PROCESS}`),
+        (f) => f._tag === "restarted" && field(f.body, "process") === second,
+      ),
     );
-    const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => field(field(f.body, "m"), "name") === "milk");
-    const watches = (yield* s.facts("processes")).filter(
+    const sent = Arr.filter(yield* s.facts(`${PROCESS}/inbox`), (f) => field(field(f.body, "m"), "name") === "milk");
+    const watches = Arr.filter(
+      yield* s.facts("processes"),
       (f) => f._tag === "monitored" && field(field(f.body, "to"), "client") === tab,
     );
     yield* backend.close;
     const ends = (stream: ReadonlyArray<Fact>) =>
-      stream.filter((f) => f._tag === "demonitored" && field(field(f.body, "to"), "client") === tab);
+      Arr.filter(stream, (f) => f._tag === "demonitored" && field(field(f.body, "to"), "client") === tab);
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
       Effect.map(s.facts("processes"), (all) => ends(all).length > 0),
@@ -418,9 +422,12 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       endedBody,
       shownPid,
       restartedAt: restarted?.rev ?? null,
-      sent: sent.map((f) => f.rev),
-      watched: watches.map((f) => ({ ref: String(field(f.body, "ref")), process: String(field(f.body, "process")) })),
-      unwatched: ends(yield* s.facts("processes")).map((f) => ({
+      sent: Arr.map(sent, (f) => f.rev),
+      watched: Arr.map(watches, (f) => ({
+        ref: String(field(f.body, "ref")),
+        process: String(field(f.body, "process")),
+      })),
+      unwatched: Arr.map(ends(yield* s.facts("processes")), (f) => ({
         ref: String(field(f.body, "ref")),
         reason: String(field(f.body, "reason")),
       })),

@@ -12,7 +12,18 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import {
+  Array as Arr,
+  Effect,
+  FileSystem,
+  type Layer,
+  Option,
+  Path,
+  Schedule,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -215,17 +226,20 @@ const scoped = <A, E>(
 const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
   typeof value !== "object" || value === null
     ? []
-    : Array.isArray(value)
-      ? value.flatMap(objects)
-      : [value as Record<string, unknown>, ...Object.values(value).flatMap(objects)];
+    : Arr.isArray(value)
+      ? Arr.flatMap(value, objects)
+      : [value as Record<string, unknown>, ...Arr.flatMap(Object.values(value), objects)];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
-  const loaded = objects(answer).find((o) => Array.isArray(o.processes));
-  const row = (loaded?.processes as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>)?.find(
-    (p) => p.name === "counter:1",
+  const loaded = Option.getOrUndefined(Arr.findFirst(objects(answer), (o) => Arr.isArray(o.processes)));
+  const row = Option.getOrUndefined(
+    Arr.findFirst(
+      (loaded?.processes ?? []) as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>,
+      (p) => p.name === "counter:1",
+    ),
   );
-  const failed = objects(answer).find((o) => o._tag === "failed");
+  const failed = Option.getOrUndefined(Arr.findFirst(objects(answer), (o) => o._tag === "failed"));
   return row?.outcome ?? (failed === undefined ? { _tag: "same" } : { _tag: "failed", reason: failed.reason });
 };
 
@@ -299,7 +313,10 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 ledger: [],
                 chaos: false,
               });
-              const printed = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+              const printed = Arr.join(
+                Arr.map(warnings.mock.calls, (args) => Arr.join(Arr.map(args, String), " ")),
+                "\n",
+              );
 
               for (const specifier of specifiers) {
                 expect(printed.includes(specifier), "the unresolved import warning is still printed").toBe(true);
@@ -321,7 +338,10 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               // The real brain reaches dependencies whose diagnostic frames differ from simple imports.
               const copy = yield* fixture;
               yield* fixtureBuild(copy, path.join(home, "instance-build"));
-              const actual = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+              const actual = Arr.join(
+                Arr.map(warnings.mock.calls, (args) => Arr.join(Arr.map(args, String), " ")),
+                "\n",
+              );
 
               for (const forbidden of [ROOT, yield* fs.realPath(ROOT), home, copy.home]) {
                 for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
@@ -362,9 +382,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 5 });
         const stream = yield* s.read(s.pid);
-        const swapped = stream.filter((e) => e._tag === "code.swapped");
+        const swapped = Arr.filter(stream, (e) => e._tag === "code.swapped");
         expect(swapped).toHaveLength(1);
-        expect(stream.filter((e) => e._tag === "stepped").at(-1)?.body.build).toBe(swapped[0].body.hash);
+        expect(Arr.filter(stream, (e) => e._tag === "stepped").at(-1)?.body.build).toBe(swapped[0].body.hash);
 
         // A save the counter's state cannot be read by: a new field, the same `v`, no upgrade.
         yield* copy.write(
@@ -383,7 +403,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         // A syntax error: nothing reaches the process; the brain records where.
         yield* copy.write(`${source}\nexport const broken = ;\n`);
         expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
-        const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
+        const failed = Arr.filter(yield* s.read("gateway/code"), (e) => e._tag === "code.failed").at(-1);
         expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
         expect(typeof failed?.body.line).toBe("number");
         yield* s.press("inc");
@@ -431,9 +451,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               );
               yield* changed();
               const outputs = [
-                ...answers.map((a) => JSON.stringify(a)),
-                ...(yield* s.read("gateway/code")).map((e) => JSON.stringify(e)),
-                ...(yield* s.read(s.pid)).map((e) => JSON.stringify(e)),
+                ...Arr.map(answers, (a) => JSON.stringify(a)),
+                ...Arr.map(yield* s.read("gateway/code"), (e) => JSON.stringify(e)),
+                ...Arr.map(yield* s.read(s.pid), (e) => JSON.stringify(e)),
               ];
               const forbidden = [sentinel, run.home, copy.home, ROOT];
 
@@ -448,8 +468,8 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 }
               }
 
-              const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed");
-              expect(failed.map((e) => e.body.path)).toEqual([copy.relative]);
+              const failed = Arr.filter(yield* s.read("gateway/code"), (e) => e._tag === "code.failed");
+              expect(Arr.map(failed, (e) => e.body.path)).toEqual([copy.relative]);
             }),
           ),
       ),
@@ -481,7 +501,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
               Effect.timeout("60 seconds"),
             );
-            const recorded = new Set(initialSpans.map((span) => span.spanId));
+            const recorded = new Set(Arr.map(initialSpans, (span) => span.spanId));
             let k = 1;
             let count = 0;
             const steps = g(fc.integer, { min: 4, max: 8 });
@@ -535,13 +555,13 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const facts = [...(yield* s.read("gateway/code")), ...(yield* s.read(s.pid))];
               const spans = yield* spanOutputs(run.home);
               expect(spans.length, "the real span sink wrote output").toBeGreaterThan(0);
-              const rebuilt = rebuildSpans(spans).filter((span) => !recorded.has(span.spanId));
+              const rebuilt = Arr.filter(rebuildSpans(spans), (span) => !recorded.has(span.spanId));
               expect(
                 rebuilt.length,
                 "dev saves the watcher's completed rebuild, not only control-call spans",
               ).toBeGreaterThan(0);
               const expectedOutcome = ["fit", "shape"].includes(move) ? "loaded" : "failed";
-              expect(rebuilt.some((span) => span.attributes.outcome === expectedOutcome)).toBe(true);
+              expect(Arr.some(rebuilt, (span) => span.attributes.outcome === expectedOutcome)).toBe(true);
 
               for (const span of rebuilt) {
                 expect(span.attributes.program).toBe(PROGRAM);
@@ -578,7 +598,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               // which may be a file the program imports, so the path lies in the program's folder.
               const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
 
-              for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
+              for (const fact of Arr.filter(facts, (e) => e._tag === "code.failed" && e.body.path !== undefined)) {
                 const named = String(fact.body.path);
                 const relative =
                   !named.startsWith("/") &&

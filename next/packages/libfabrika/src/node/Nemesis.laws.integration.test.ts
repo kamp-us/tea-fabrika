@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -172,7 +173,7 @@ it.effect.prop(
 
         for (const entries of [batchedRows, singleRows]) {
           expect(entries).toHaveLength(2 * count + 2);
-          expect(entries.map(({ id, stream, rev, pos }) => ({ id, stream, rev, pos }))).toEqual(rows);
+          expect(Arr.map(entries, ({ id, stream, rev, pos }) => ({ id, stream, rev, pos }))).toEqual(rows);
         }
 
         expect(batchedHeads).toEqual(singleHeads);
@@ -254,9 +255,10 @@ NemesisTest.suite({
         const rows = yield* RecordManager.use((manager) =>
           Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
         ).pipe(Effect.provide(records));
-        const health = sql
-          .exec("SELECT * FROM measurements")
-          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+        const health = Arr.filter(
+          sql.exec("SELECT * FROM measurements"),
+          (row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]),
+        );
         return { rows, health };
       }).pipe(Effect.orDie),
     };

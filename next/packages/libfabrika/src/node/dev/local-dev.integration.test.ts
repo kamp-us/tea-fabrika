@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -238,7 +239,10 @@ describe("P12 durable brain outbox", () => {
               ["close", folder],
             ];
             const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-              rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+              Arr.join(
+                Arr.map(rows, (row) => JSON.stringify(row)),
+                "\n",
+              ) + (rows.length ? "\n" : "");
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);
@@ -255,7 +259,7 @@ describe("P12 durable brain outbox", () => {
                   expect(calls).toEqual(expected);
                 }
 
-                const latest = rows.filter((row) => row._tag === "started").at(-1);
+                const latest = Arr.filter(rows, (row) => row._tag === "started").at(-1);
                 const sent: Array<typeof BrainEvent.Type> = [];
                 yield* outbox.flush((row) =>
                   Effect.sync(() => {
