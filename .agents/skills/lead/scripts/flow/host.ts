@@ -311,7 +311,7 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
       .pipe(Effect.mapError(() => new StepFailed({ reason: `${facts} cannot be written` }))),
     () => fs.remove(facts, { force: true }).pipe(Effect.ignore),
   );
-}, Effect.provide(Digest.layerWebCrypto));
+});
 
 const short = (sha: string) => sha.slice(0, 8);
 
@@ -480,7 +480,7 @@ const QuestFile = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
 
-type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
+type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Digest.Digest;
 
 /** The host runner for the flow runner, by step name: `Step.act("host", args)`. */
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {

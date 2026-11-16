@@ -103,10 +103,10 @@ import { join } from "node:path";
 import { defineMachine, type DepKeyedSub, type Sub } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import { layer as nodeServices, type NodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
 import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import {
   type Agents,
   Answer,
@@ -125,7 +125,9 @@ import {
 } from "./agents.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as Publish from "./pr/Publish.ts";
+import type { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import type { Pushes } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import {
   boxTree,
@@ -1404,11 +1406,9 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 
         const { ask } = cmd;
         const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
-        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
         return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
           Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
-          Effect.provide(Layer.provide(services, nodeServices)),
         );
       }),
     record: (e: typeof Entry.Type) =>
@@ -1598,7 +1598,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
 };
 
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
-type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
+type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>, never, NodeServices>;
 
 /** One turn of the agent in the box (a plan reads the main checkout), on the prompt given. */
 const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
@@ -1687,7 +1687,9 @@ export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: 
 export const dockerLock = (env: Pick<Env, "BOXES">) => join(env.BOXES, "state", "docker.lock");
 
 /** How mutbox.ts ran: its exit code and what it printed. */
-export type MutboxRun = (args: ReadonlyArray<string>) => Effect.Effect<{ readonly code: number; readonly out: string }>;
+export type MutboxRun = (
+  args: ReadonlyArray<string>,
+) => Effect.Effect<{ readonly code: number; readonly out: string }, never, ChildProcessSpawner.ChildProcessSpawner>;
 
 /** The real run: mutbox.ts as a child process, its own log on our stderr. One that cannot start answers 127. */
 const runMutbox: MutboxRun = (args) =>
@@ -1704,7 +1706,6 @@ const runMutbox: MutboxRun = (args) =>
   }).pipe(
     Effect.scoped,
     Effect.catch(() => Effect.succeed({ code: 127, out: "" })),
-    Effect.provide(nodeServices),
   );
 
 /** A step that ended stuck before any agent started: the same shape an agent's own stuck answer has. */
@@ -1750,7 +1751,7 @@ export const mutationDraft =
       const whole = `${prompt}${mutboxTail(report, answer.outcome === "skip")}\n${text}`;
       yield* fs.writeFileString(ask.prompt, whole).pipe(Effect.ignore);
       return yield* turn(env, agents, ask, whole);
-    }).pipe(Effect.provide(nodeServices));
+    });
 
 /**
  * The Draft, as a Sub that answers once. The prompt file is the brief with drive's tail; the
@@ -2243,7 +2244,7 @@ export const driveStep = (
   agents: Agents,
   p: Prepared,
   onPhase: (phase: DrivePhase) => void = () => {},
-): Effect.Effect<DriveLine> => {
+): Effect.Effect<DriveLine, never, NodeServices | PullRequests | Pushes> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
@@ -2420,7 +2421,15 @@ const main = () => {
       }),
     ),
   );
-  NodeRuntime.runMain(program);
+  NodeRuntime.runMain(
+    program.pipe(
+      Effect.provide(
+        Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN)).pipe(
+          Layer.provideMerge(nodeServices),
+        ),
+      ),
+    ),
+  );
 };
 
 if (import.meta.main) {

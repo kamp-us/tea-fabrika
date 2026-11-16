@@ -17,20 +17,8 @@ const setExit = (code: number) =>
     process.exitCode = code;
   });
 
-const rm = Effect.fn("box.rm")(function* (name: string) {
-  const main = process.env.MAIN;
-  const boxes = process.env.BOXES;
-
-  if (main === undefined || boxes === undefined) {
-    yield* Console.log(`kept box ${name}: inspection or removal failed`);
-    return yield* setExit(1);
-  }
-
-  const services = Layer.mergeAll(
-    BoxGitProcess.layer(main, process.env),
-    RunsProcess.layer(`${import.meta.dirname}/keepruns.sh`, process.env),
-  ).pipe(Layer.provide(NodeServices.layer));
-  const removal = yield* Remove.remove(name, { boxes, main }).pipe(Effect.provide(services));
+const rm = Effect.fn("box.rm")(function* (name: string, places: { readonly boxes: string; readonly main: string }) {
+  const removal = yield* Remove.remove(name, places);
 
   if (removal.runs !== "") {
     yield* Console.log(removal.runs);
@@ -42,11 +30,22 @@ const rm = Effect.fn("box.rm")(function* (name: string) {
 
 // A box name is read as the exact argument, never through a flag parser: a name such as "", "-h"
 // or "--x" must reach the name check, which answers it with exit 2.
+/** What `rm` calls: git from MAIN and the script that keeps a box's runs, on Node. */
+const services = (main: string) =>
+  Layer.mergeAll(
+    BoxGitProcess.layer(main, process.env),
+    RunsProcess.layer(`${import.meta.dirname}/keepruns.sh`, process.env),
+  ).pipe(Layer.provideMerge(NodeServices.layer));
+
 const [command, ...rest] = process.argv.slice(2);
+const name = rest[0] ?? "";
+const { MAIN: main, BOXES: boxes } = process.env;
 
 const program =
-  command === "rm" && rest.length === 1
-    ? rm(rest[0] ?? "")
-    : Effect.andThen(Console.error("usage: box.sh rm <name>"), setExit(2));
+  command !== "rm" || rest.length !== 1
+    ? Effect.andThen(Console.error("usage: box.sh rm <name>"), setExit(2))
+    : main === undefined || boxes === undefined
+      ? Effect.andThen(Console.log(`kept box ${name}: inspection or removal failed`), setExit(1))
+      : rm(name, { boxes, main }).pipe(Effect.provide(services(main)));
 
-NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true });
+NodeRuntime.runMain(program, { disableErrorReporting: true });

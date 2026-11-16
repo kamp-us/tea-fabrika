@@ -117,6 +117,7 @@ import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -1418,7 +1419,7 @@ const handlers = (s: Setup) => {
         const took = Math.round((Date.now() - pushed) / 1000);
         note(`typecheck: ${Typecheck.summary(verdict)} (${took} s after the push)`);
         return verdict;
-      }).pipe(Effect.provide(Layer.provideMerge(ChecksGh.layer(env.GH_REPO), NodeServices.layer))),
+      }),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("pr", null);
@@ -1447,7 +1448,6 @@ const handlers = (s: Setup) => {
         // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
         note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
-        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
         const readied = yield* Publish.ready({
           dir: env.MAIN,
           branch: s.branch,
@@ -1456,7 +1456,6 @@ const handlers = (s: Setup) => {
         }).pipe(
           Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
           Effect.catch((e) => Effect.succeed({ pr: null, detail: `${s.branch} not marked ready: ${e.reason}` })),
-          Effect.provide(Layer.provide(services, NodeServices.layer)),
         );
 
         if (readied.pr === null) {
@@ -1558,7 +1557,7 @@ const handlers = (s: Setup) => {
         saveStep({ ...entry, endedAt: ended, line });
         note(`round ${round}: host ${line.outcome}, head ${hosted.head.slice(0, 8)}: ${line.reason.slice(0, 200)}`);
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }),
     // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
     // `ci-required` at that head only; the merge is GitHub's, later, and nothing here waits for it.
     land: (cmd: { pr: number }) =>
@@ -1566,11 +1565,6 @@ const handlers = (s: Setup) => {
         const minutes = yield* QueueMinutes;
         note(`queue: PR ${cmd.pr}, waiting up to ${minutes} minutes for ${Queue.REQUIRED}`);
         s.beats.enter("land", null);
-        const services = Layer.mergeAll(
-          PushesProcess.layer(HERE),
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          ChecksGh.layer(env.GH_REPO),
-        );
         const added = yield* Queue.add({
           dir: env.MAIN,
           pr: cmd.pr,
@@ -1578,7 +1572,6 @@ const handlers = (s: Setup) => {
         }).pipe(
           Effect.map((a) => ({ ok: true, detail: Queue.line(a), at: a._tag })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: e.reason, at: null })),
-          Effect.provide(Layer.provide(services, NodeServices.layer)),
         );
         note(`queue: ${added.detail}`);
         const now = new Date().toISOString();
@@ -1845,6 +1838,14 @@ const unpinned = (reason: string, quest?: string) => {
  * answers its exit code, and removes the pin when it ends; a SIGINT or SIGTERM stops the pinned
  * process first.
  */
+/** Every service the quest's steps call (git and GitHub, on Node), composed once at the entry point. */
+const services = (env: Env) =>
+  Layer.mergeAll(
+    PushesProcess.layer(HERE),
+    PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+    ChecksGh.layer(env.GH_REPO),
+  ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
+
 const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
   NodeRuntime.runMain(
     Effect.gen(function* () {
@@ -1887,6 +1888,7 @@ const main = () => {
         process.exitCode = exitOf(end);
       }),
     ).pipe(
+      Effect.provide(services(env)),
       overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
       overridden(MaxWaits, "CHAIN_WAITS"),
       overridden(MaxStucks, "CHAIN_STUCKS"),

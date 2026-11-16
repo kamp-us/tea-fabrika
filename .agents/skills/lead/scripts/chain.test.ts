@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { Effect, Schema } from "effect";
 import fc from "fast-check";
@@ -1172,7 +1173,8 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
       };
     });
   // Vitest awaits the Promise a test hands back: the one place a law's Effect is run.
-  const ran = <A>(law: Effect.Effect<A>) => law.pipe(Effect.runPromise);
+  const ran = <A>(law: Effect.Effect<A, never, NodeServices.NodeServices>) =>
+    law.pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 
   it("the last message is the report, its JSON object is the typed answer, and every update is one event line", () =>
     ran(

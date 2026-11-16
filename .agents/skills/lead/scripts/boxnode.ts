@@ -24,7 +24,6 @@
 // shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
-import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -119,4 +118,4 @@ export const boxEnv = (main: string, parent: Env) =>
 
     const pnpm = pnpmBin(yield* said(main, "volta", ["which", "pnpm"]));
     return { ...parent, PATH: firstOnPath(parent.PATH ?? "", pnpm === null ? [node] : [node, pnpm]) };
-  }).pipe(Effect.provide(nodeServices));
+  });

@@ -2,7 +2,8 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
+import { Effect, Fiber, FileSystem, Layer, Option, Ref, type Scope } from "effect";
+import { Digest } from "effect/crypto";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -20,9 +21,9 @@ import {
 } from "./host.ts";
 import * as Step from "./Step.ts";
 
-const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
+const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Digest.Digest | Scope.Scope>) =>
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
-  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(Layer.merge(NodeServices.layer, Digest.layerWebCrypto))));
 
 const options = { seed: 119120, numRuns: 200 };
 

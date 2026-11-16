@@ -19,11 +19,11 @@
 // `codex-exec-read` run the installed `codex exec` plainly, on the user's own Codex config
 // (./codexexec.ts): a turn there retries on a capacity error and asks once more for a missing answer.
 
-import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 
@@ -150,7 +150,9 @@ export class AdaptersMissing extends Schema.TaggedError<AdaptersMissing>()("Adap
 }) {}
 
 /** How the install ran: its exit code and its last lines. */
-export type Install = (folder: string) => Effect.Effect<{ readonly code: number; readonly said: string }>;
+export type Install = (
+  folder: string,
+) => Effect.Effect<{ readonly code: number; readonly said: string }, never, ChildProcessSpawner.ChildProcessSpawner>;
 
 /** The documented install (adapters/package.json): pinned, apart from the workspace, from its lockfile. */
 const pnpmInstall: Install = (folder) =>
@@ -172,7 +174,6 @@ const pnpmInstall: Install = (folder) =>
   }).pipe(
     Effect.scoped,
     Effect.catch(() => Effect.succeed({ code: 127, said: "pnpm could not start" })),
-    Effect.provide(nodeServices),
   );
 
 /**
@@ -203,7 +204,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
     if (still.length > 0) {
       return yield* new AdaptersMissing({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
     }
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /**
  * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
@@ -224,7 +225,7 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
       claude: yield* acpAdapter("claude", env),
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /** Tokens into a `Spent`, adding this update's tool call when it is one. */
 const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
@@ -264,7 +265,10 @@ const appendTo = (events: string, line: object) =>
  * so running out ends the turn `over_time` and the agent's commands are reaped with it. A
  * `codex-exec` row adds its retries and its one ask for a missing answer (`execTurn`).
  */
-export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>> =>
+export const runTurn = <A>(
+  agents: typeof Agent.Agents.Service,
+  ask: TurnAsk<A>,
+): Effect.Effect<Turned<A>, never, NodeServices> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -275,7 +279,7 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
     const { turned, said } = yield* turnOnce(agents, ask, ask.prompt, ask.minutes * 60);
     yield* fs.writeFileString(ask.report, said).pipe(Effect.ignore);
     return turned;
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /** A message that is one JSON object and nothing else: the typed answer, sent alone. */
 const ALONE = /^\{[\s\S]*\}$/;

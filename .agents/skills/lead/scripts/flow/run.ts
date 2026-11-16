@@ -16,6 +16,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import { Digest } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
 import { runners as hosting } from "./host.ts";
@@ -103,7 +104,12 @@ const flowCommand = Command.make(
 if (import.meta.main) {
   NodeRuntime.runMain(
     Command.runWith(flowCommand, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-      Effect.provide(Layer.provideMerge(Runners.layer({ ...landing, ...hosting }), NodeServices.layer)),
+      Effect.provide(
+        Layer.provideMerge(
+          Runners.layer({ ...landing, ...hosting }),
+          Layer.merge(NodeServices.layer, Digest.layerWebCrypto),
+        ),
+      ),
     ),
     { disableErrorReporting: true },
   );
